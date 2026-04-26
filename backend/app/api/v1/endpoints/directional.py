@@ -102,7 +102,7 @@ async def _watchlist_item(inst, adapter) -> WatchlistItem:
         regime = compute_regime(c4h)
         signal = compute_signal(c1h)
         setup = evaluate_setup(regime, signal)
-        ivr = await compute_ivr(adapter, inst)
+        ivr = await compute_ivr(adapter, inst, c1h)
         from app.engines.directional.policy_engine import apply_policy
         policy = apply_policy(setup.direction, inst, ivr)
         return WatchlistItem(
@@ -358,7 +358,7 @@ async def snapshot(
     signal = compute_signal(c1h)
     setup = evaluate_setup(regime, signal)
     exec_timing = assess_timing(c15m, signal)
-    ivr = await compute_ivr(adapter, inst)
+    ivr = await compute_ivr(adapter, inst, c1h)
 
     from app.engines.directional.policy_engine import apply_policy
     policy = apply_policy(setup.direction, inst, ivr)
@@ -427,7 +427,7 @@ async def _sse_generator(
             regime = compute_regime(c4h)
             signal = compute_signal(c1h)
             setup = evaluate_setup(regime, signal)
-            ivr = await compute_ivr(adapter, inst)
+            ivr = await compute_ivr(adapter, inst, c1h)
             spot = await adapter.get_index_price(inst)
             now_ms = int(time.time() * 1000)
             payload = {

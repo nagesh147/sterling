@@ -1,6 +1,9 @@
 import time
-from typing import Optional
+from typing import Optional, List
 
+import numpy as np
+
+from app.schemas.market import Candle
 from app.schemas.instruments import InstrumentMeta
 from app.schemas.directional import TradeState, Direction, ExecMode, IVRBand
 from app.schemas.execution import RunOnceResponse, PreviewResponse, SizedTrade
@@ -21,17 +24,50 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 
-async def compute_ivr(
-    adapter: BaseExchangeAdapter, instrument: InstrumentMeta
-) -> Optional[float]:
-    history = await adapter.get_dvol_history(instrument, days=30)
-    current = await adapter.get_dvol(instrument)
-    if not history or current is None:
+def _compute_hv_ivr(candles_1h: List[Candle]) -> Optional[float]:
+    """
+    Realized-volatility IVR fallback for instruments without a DVOL index.
+    Computes annualized HV over 24-hour windows for 30 days,
+    then returns the percentile rank of the latest window (0-100).
+    """
+    if len(candles_1h) < 50:
         return None
-    lo, hi = min(history), max(history)
+    closes = np.array([c.close for c in candles_1h], dtype=np.float64)
+    log_rets = np.diff(np.log(closes + 1e-10))
+    window = 24  # bars per day (1H resolution)
+    hvs: List[float] = []
+    for end in range(window, len(log_rets) + 1, window):
+        seg = log_rets[max(0, end - window): end]
+        if len(seg) >= 12:
+            hv = float(np.std(seg) * np.sqrt(252 * 24) * 100)
+            hvs.append(hv)
+    if len(hvs) < 3:
+        return None
+    lo, hi = min(hvs), max(hvs)
     if hi <= lo:
         return None
-    return round((current - lo) / (hi - lo) * 100.0, 2)
+    return round((hvs[-1] - lo) / (hi - lo) * 100.0, 2)
+
+
+async def compute_ivr(
+    adapter: BaseExchangeAdapter,
+    instrument: InstrumentMeta,
+    candles_1h: Optional[List[Candle]] = None,
+) -> Optional[float]:
+    """
+    Compute IVR from DVOL if available, falling back to realized-vol percentile.
+    Pass candles_1h to enable the HV fallback for non-DVOL instruments.
+    """
+    history = await adapter.get_dvol_history(instrument, days=30)
+    current = await adapter.get_dvol(instrument)
+    if history and current is not None:
+        lo, hi = min(history), max(history)
+        if hi > lo:
+            return round((current - lo) / (hi - lo) * 100.0, 2)
+    # Fallback: realized vol from 1H candles
+    if candles_1h:
+        return _compute_hv_ivr(candles_1h)
+    return None
 
 
 async def run_once(
@@ -79,7 +115,7 @@ async def run_once(
         )
 
     exec_timing = assess_timing(candles_15m, signal)
-    ivr = await compute_ivr(adapter, instrument)
+    ivr = await compute_ivr(adapter, instrument, candles_1h)
     policy = apply_policy(setup.direction, instrument, ivr)
 
     try:
@@ -178,7 +214,7 @@ async def preview(
     regime = compute_regime(candles_4h)
     signal = compute_signal(candles_1h)
     setup = evaluate_setup(regime, signal)
-    ivr = await compute_ivr(adapter, instrument)
+    ivr = await compute_ivr(adapter, instrument, candles_1h)
     policy = apply_policy(setup.direction, instrument, ivr)
 
     if setup.direction == Direction.NEUTRAL:
