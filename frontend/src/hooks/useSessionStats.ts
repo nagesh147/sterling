@@ -12,6 +12,7 @@ export interface SessionStats {
   confirmed_long_setups: number;
   confirmed_short_setups: number;
   paper_positions_open: number;
+  paper_positions_partially_closed: number;
   paper_positions_closed: number;
   underlyings_with_arrows: string[];
   timestamp_ms: number;

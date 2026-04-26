@@ -85,8 +85,15 @@ def close_position(
     structure = pos.sized_trade.structure
     spot_move = exit_spot_price - pos.entry_spot_price
     direction_sign = 1 if structure.direction.value == "long" else -1
-    delta = abs(structure.legs[0].delta) if structure.legs else 0.0
-    estimated_pnl = round(spot_move * direction_sign * pos.sized_trade.contracts * delta, 2)
+    leg = structure.legs[0] if structure.legs else None
+    delta = abs(leg.delta) if leg else 0.0
+    raw_pnl = spot_move * direction_sign * pos.sized_trade.contracts * delta
+    max_risk = pos.sized_trade.max_risk_usd
+    max_gain = structure.max_gain
+    bounded = max(-max_risk, raw_pnl)
+    if max_gain is not None:
+        bounded = min(max_gain * pos.sized_trade.contracts, bounded)
+    estimated_pnl = round(bounded, 2)
 
     return update_position(
         pos_id,

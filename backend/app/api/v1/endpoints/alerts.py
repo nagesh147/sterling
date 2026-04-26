@@ -70,7 +70,8 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             alert_store.rearm_if_cooldown_elapsed(a.id)
 
     active_alerts = [a for a in alert_store.list_alerts() if a.status == AlertStatus.ACTIVE]
-    adapter = request.app.state.adapter
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or request.app.state.adapter
     results: list[AlertCheckResult] = []
     newly_triggered = 0
 

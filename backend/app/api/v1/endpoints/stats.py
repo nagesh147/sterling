@@ -24,6 +24,7 @@ class SessionStats(BaseModel):
     confirmed_long_setups: int
     confirmed_short_setups: int
     paper_positions_open: int
+    paper_positions_partially_closed: int
     paper_positions_closed: int
     underlyings_with_arrows: List[str]
     timestamp_ms: int
@@ -70,7 +71,8 @@ async def session_stats() -> SessionStats:
         run_once_total=run_once_total,
         confirmed_long_setups=confirmed_long,
         confirmed_short_setups=confirmed_short,
-        paper_positions_open=sum(1 for p in positions if p.status.value == "open"),
+        paper_positions_open=sum(1 for p in positions if p.status.value in ("open", "partially_closed")),
+        paper_positions_partially_closed=sum(1 for p in positions if p.status.value == "partially_closed"),
         paper_positions_closed=sum(1 for p in positions if p.status.value == "closed"),
         underlyings_with_arrows=sorted(underlyings_with_arrows),
         timestamp_ms=now_ms,

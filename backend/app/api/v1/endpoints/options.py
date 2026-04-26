@@ -28,7 +28,8 @@ async def option_chain(
     if not inst.has_options:
         raise HTTPException(status_code=400, detail=f"{sym} has no options on {inst.exchange}")
 
-    adapter = request.app.state.adapter
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or request.app.state.adapter
     try:
         spot = await adapter.get_index_price(inst)
         raw_chain = await adapter.get_option_chain(inst)
