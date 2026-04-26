@@ -150,7 +150,7 @@ export function RunOnceResult({ underlying }: Props) {
               ['EXEC', data.exec_mode.toUpperCase()],
               data.ivr != null ? ['IVR', `${data.ivr.toFixed(1)}% · ${data.ivr_band.toUpperCase()}`] : null,
               ['NO-TRADE SCORE', fmtN(data.no_trade_score, 1)],
-            ].filter(Boolean).map(([k, v]) => (
+            ].filter((x): x is [string, string] => Boolean(x)).map(([k, v]) => (
               <span key={k as string} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 3, padding: '3px 8px', fontSize: 11 }}>
                 <span style={{ color: '#555' }}>{k} </span>
                 <span style={{ color: '#ccc' }}>{v}</span>

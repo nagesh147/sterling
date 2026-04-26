@@ -4,6 +4,7 @@ import { useMonitorPosition } from '../hooks/useMonitorPosition';
 import type { MonitorResult } from '../hooks/useMonitorPosition';
 import type { PaperPosition, PositionStatus } from '../types';
 import { fmtN, fmtUSD } from '../utils/fmt';
+import { api } from '../utils/api';
 import { downloadCSV } from '../hooks/useDownload';
 import { PnLSparkline } from './PnLSparkline';
 
