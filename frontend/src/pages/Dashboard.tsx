@@ -24,6 +24,7 @@ import { AlertBadge } from '../components/AlertBadge';
 import { PositionSizingCalc } from '../components/PositionSizingCalc';
 import { GreeksPanel } from '../components/GreeksPanel';
 import { OptionChainViewer } from '../components/OptionChainViewer';
+import { VolatilityScanPanel } from '../components/VolatilityScanPanel';
 import { WebhookManager } from '../components/WebhookManager';
 import { SessionExport } from '../components/SessionExport';
 import { SessionStatsPanel } from '../components/SessionStatsPanel';
@@ -108,7 +109,10 @@ export function Dashboard() {
         </>
       )}
       {activeTab === 'chain' && (
-        <OptionChainViewer underlying={selectedUnderlying} />
+        <>
+          <OptionChainViewer underlying={selectedUnderlying} />
+          <VolatilityScanPanel underlying={selectedUnderlying} />
+        </>
       )}
       {activeTab === 'account' && (
         <>

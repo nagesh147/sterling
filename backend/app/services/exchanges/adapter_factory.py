@@ -27,6 +27,14 @@ def create_account_adapter(cfg: ExchangeConfig) -> AuthenticatedExchangeAdapter:
             is_paper=cfg.is_paper,
         )
 
+    if name == "binance":
+        from app.services.exchanges.adapters.binance import BinanceAdapter
+        return BinanceAdapter(
+            api_key=cfg.api_key,
+            api_secret=cfg.api_secret,
+            is_paper=cfg.is_paper,
+        )
+
     if name == "deribit":
         from app.services.exchanges.adapters.deribit import DeribitAdapter
         return DeribitAdapter()
