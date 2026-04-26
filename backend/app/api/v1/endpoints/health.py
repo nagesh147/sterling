@@ -3,14 +3,21 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from typing import Optional
 from app.core.config import settings
-from app.services import paper_store
+from app.services import paper_store, alert_store
 
 router = APIRouter()
+
+_start_ms = int(time.time() * 1000)
 
 
 class PositionsSummaryHealth(BaseModel):
     open: int
     closed: int
+
+
+class AlertsSummaryHealth(BaseModel):
+    active: int
+    triggered: int
 
 
 class HealthResponse(BaseModel):
@@ -23,14 +30,16 @@ class HealthResponse(BaseModel):
     exchange_adapter: str
     exchange_reachable: Optional[bool] = None
     positions: PositionsSummaryHealth
+    alerts: AlertsSummaryHealth
     cache_keys: Optional[int] = None
+    uptime_seconds: int
+    background_checker: str  # "running" | "disabled"
     timestamp_ms: int
 
 
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
     now_ms = int(time.time() * 1000)
-
     adapter = getattr(request.app.state, "adapter", None)
     exchange_ok = None
     cache_keys = None
@@ -40,11 +49,8 @@ async def health(request: Request) -> HealthResponse:
             exchange_ok = await adapter.ping()
         except Exception:
             exchange_ok = False
-
-        # CachingAdapter exposes _cache
-        inner = adapter
-        if hasattr(inner, "_cache"):
-            cache_keys = len(inner._cache)
+        if hasattr(adapter, "_cache"):
+            cache_keys = len(adapter._cache)
 
     return HealthResponse(
         status="ok",
@@ -59,6 +65,12 @@ async def health(request: Request) -> HealthResponse:
             open=paper_store.open_count(),
             closed=paper_store.closed_count(),
         ),
+        alerts=AlertsSummaryHealth(
+            active=alert_store.active_count(),
+            triggered=alert_store.triggered_count(),
+        ),
         cache_keys=cache_keys,
+        uptime_seconds=int((now_ms - _start_ms) / 1000),
+        background_checker="running",
         timestamp_ms=now_ms,
     )

@@ -89,6 +89,18 @@ export function SystemInfoPanel() {
           GREEN = options available · GRAY = spot/perp only
         </div>
       </div>
+
+      <div style={{ marginTop: 10, display: 'flex', gap: 16, alignItems: 'center' }}>
+        <a
+          href="https://github.com/nagesh147/sterling"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: '#555', fontSize: 10, textDecoration: 'none' }}
+        >
+          ↗ github.com/nagesh147/sterling
+        </a>
+        <span style={{ color: '#333', fontSize: 10 }}>MIT License · Paper trading only</span>
+      </div>
     </div>
   );
 }
