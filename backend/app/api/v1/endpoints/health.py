@@ -40,7 +40,8 @@ class HealthResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
     now_ms = int(time.time() * 1000)
-    adapter = getattr(request.app.state, "adapter", None)
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or getattr(request.app.state, "adapter", None)
     exchange_ok = None
     cache_keys = None
 
@@ -54,12 +55,12 @@ async def health(request: Request) -> HealthResponse:
 
     return HealthResponse(
         status="ok",
-        version="0.3.0",
+        version="0.4.0",
         environment=settings.environment,
         paper_trading=settings.paper_trading,
         real_public_data=settings.real_public_data,
         default_underlying=settings.default_underlying,
-        exchange_adapter=settings.exchange_adapter,
+        exchange_adapter=_adm.get_data_source(),
         exchange_reachable=exchange_ok,
         positions=PositionsSummaryHealth(
             open=paper_store.open_count(),

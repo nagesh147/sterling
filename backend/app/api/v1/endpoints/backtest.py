@@ -16,7 +16,8 @@ async def run_backtest_endpoint(
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
-    adapter = request.app.state.adapter
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or request.app.state.adapter
 
     # Fetch enough historical candles for the lookback window
     limit_1h = min(body.lookback_days * 24, 720)  # cap at 720 bars (~30 days)

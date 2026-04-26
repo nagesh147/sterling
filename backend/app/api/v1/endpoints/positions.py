@@ -9,6 +9,37 @@ import math
 import time
 from datetime import datetime, timezone
 from typing import Optional
+
+from app.schemas.execution import CandidateContract
+
+
+def _dte_from_expiry(expiry_date: str) -> int:
+    """Compute current DTE from Deribit-style expiry string like '27DEC24'."""
+    try:
+        dt = datetime.strptime(expiry_date, "%d%b%y").replace(tzinfo=timezone.utc)
+        return max(0, (dt - datetime.now(timezone.utc)).days)
+    except Exception:
+        return -1
+
+
+def _estimate_pnl(
+    leg: Optional[CandidateContract],
+    spot_move: float,
+    direction_sign: int,
+    contracts: int,
+    max_risk_usd: float,
+    max_gain_usd: Optional[float],
+) -> float:
+    """Delta-approximated P&L capped by defined risk bounds."""
+    if leg is None:
+        return 0.0
+    delta = abs(leg.delta) or 0.0
+    raw = spot_move * direction_sign * contracts * delta
+    # Defined-risk structures: cap at max_loss and max_gain
+    bounded = max(-max_risk_usd, raw)
+    if max_gain_usd is not None:
+        bounded = min(max_gain_usd * contracts, bounded)
+    return round(bounded, 2)
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
@@ -218,12 +249,19 @@ async def monitor_all(request: Request) -> MonitorAllResult:
             signal = compute_signal(c1h)
             current_spot = await adapter.get_index_price(inst)
             leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
-            days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
-            current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
+            dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
+            if dte_from_expiry >= 0:
+                current_dte = dte_from_expiry
+            else:
+                days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
+                current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
             spot_move = current_spot - pos.entry_spot_price
             direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
-            estimated_pnl = round(
-                spot_move * direction_sign * pos.sized_trade.contracts * abs(leg.delta if leg else 0), 2
+            estimated_pnl = _estimate_pnl(
+                leg, spot_move, direction_sign,
+                pos.sized_trade.contracts,
+                pos.sized_trade.max_risk_usd,
+                pos.sized_trade.structure.max_gain,
             )
             exit_signal = check_exits(
                 pos.sized_trade, signal, estimated_pnl, current_dte,
@@ -328,12 +366,19 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
         raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}")
 
     leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
-    days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
-    current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
+    dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
+    if dte_from_expiry >= 0:
+        current_dte = dte_from_expiry
+    else:
+        days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
+        current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
     spot_move = current_spot - pos.entry_spot_price
     direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
-    estimated_pnl = round(
-        spot_move * direction_sign * pos.sized_trade.contracts * abs(leg.delta if leg else 0), 2
+    estimated_pnl = _estimate_pnl(
+        leg, spot_move, direction_sign,
+        pos.sized_trade.contracts,
+        pos.sized_trade.max_risk_usd,
+        pos.sized_trade.structure.max_gain,
     )
     from app.api.v1.endpoints.config import get_runtime_risk
     risk = get_runtime_risk()

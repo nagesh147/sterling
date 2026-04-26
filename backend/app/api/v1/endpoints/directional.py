@@ -132,11 +132,40 @@ async def _watchlist_item(inst, adapter) -> WatchlistItem:
 
 @router.get("/watchlist", response_model=WatchlistResponse)
 async def watchlist(request: Request) -> WatchlistResponse:
+    from app.services import adapter_manager as _adm
+    current_source = _adm.get_data_source()
+
+    # Exchange compatibility map: which adapters can serve each exchange's instruments
+    _exchange_sources: dict[str, list[str]] = {
+        "deribit":     ["deribit", "okx"],
+        "okx":         ["okx", "deribit"],
+        "binance":     ["binance", "deribit", "okx"],
+        "zerodha":     ["zerodha"],
+        "delta_india": ["delta_india", "deribit", "binance"],
+    }
+
+    def _is_compatible(inst) -> bool:
+        compatible = _exchange_sources.get(inst.exchange, [inst.exchange])
+        return current_source in compatible
+
     instruments = registry.list_instruments()
     adapter = _adapter(request)
     now_ms = int(time.time() * 1000)
+
+    async def _item_or_skip(inst) -> WatchlistItem:
+        if not _is_compatible(inst):
+            return WatchlistItem(
+                underlying=inst.underlying,
+                has_options=inst.has_options,
+                state=TradeState.IDLE,
+                direction=Direction.NEUTRAL,
+                error=f"Not available on {current_source} (requires {inst.exchange})",
+                timestamp_ms=now_ms,
+            )
+        return await _watchlist_item(inst, adapter)
+
     results = await asyncio.gather(
-        *[_watchlist_item(inst, adapter) for inst in instruments],
+        *[_item_or_skip(inst) for inst in instruments],
         return_exceptions=False,
     )
     items = list(results)

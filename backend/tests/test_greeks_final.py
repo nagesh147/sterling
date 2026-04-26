@@ -176,7 +176,7 @@ class TestFullPipeline:
     def test_health_shows_all_fields(self, client):
         data = client.get("/health").json()
         assert data["status"] == "ok"
-        assert data["version"] == "0.3.0"
+        assert data["version"] == "0.4.0"
         assert data["paper_trading"] is True
         assert "positions" in data
         assert "exchange_adapter" in data
