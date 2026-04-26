@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - sterling_data:/app/data
+    environment:
+      - ENVIRONMENT=production
+      - PAPER_TRADING=true
+      - REAL_PUBLIC_DATA=true
+      - DEFAULT_UNDERLYING=BTC
+      - EXCHANGE_ADAPTER=deribit
+      - LOG_LEVEL=INFO
+      - CORS_ORIGINS=http://localhost:3000,http://frontend
+      - STERLING_DB_PATH=/app/data/sterling_paper.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sterling_data:
+    driver: local
