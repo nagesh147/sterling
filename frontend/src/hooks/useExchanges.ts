@@ -9,6 +9,7 @@ export interface ExchangeConfigResponse {
   is_paper: boolean;
   is_active: boolean;
   supported: boolean;
+  has_credentials: boolean;
   extra: Record<string, unknown>;
 }
 
@@ -21,6 +22,14 @@ export interface ExchangeListResponse {
 export interface SupportedExchange {
   name: string;
   display_name: string;
+}
+
+export interface DataSourceResponse {
+  exchange: string;
+  display_name: string;
+  reachable: boolean;
+  adapter_stack: string;
+  timestamp_ms: number;
 }
 
 export function useExchanges() {
@@ -36,6 +45,51 @@ export function useSupportedExchanges() {
     queryKey: ['exchanges-supported'],
     queryFn: () => api.get<{ exchanges: SupportedExchange[] }>('/api/v1/exchanges/supported'),
     staleTime: 300_000,
+  });
+}
+
+export function useDataSource() {
+  return useQuery<DataSourceResponse>({
+    queryKey: ['data-source'],
+    queryFn: () => api.get<DataSourceResponse>('/api/v1/config/data-source'),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useSetDataSource() {
+  const qc = useQueryClient();
+  return useMutation<DataSourceResponse, Error, { exchange: string; api_key?: string; api_secret?: string }>({
+    mutationFn: (body) => api.post<DataSourceResponse>('/api/v1/config/data-source', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['data-source'] });
+      qc.invalidateQueries({ queryKey: ['config-info'] });
+    },
+  });
+}
+
+export function useActivateDataSource() {
+  const qc = useQueryClient();
+  return useMutation<{ message: string; reachable: boolean }, Error, string>({
+    mutationFn: (id) =>
+      api.post<{ message: string; reachable: boolean }>(`/api/v1/exchanges/${id}/activate-data-source`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['data-source'] });
+      qc.invalidateQueries({ queryKey: ['config-info'] });
+    },
+  });
+}
+
+export function useInvalidateCache() {
+  const qc = useQueryClient();
+  return useMutation<{ cleared: boolean }, Error, void>({
+    mutationFn: () => api.post<{ cleared: boolean }>('/api/v1/config/data-source/invalidate-cache'),
+    onSuccess: () => {
+      // Refetch all market data
+      qc.invalidateQueries({ queryKey: ['snapshot'] });
+      qc.invalidateQueries({ queryKey: ['watchlist'] });
+      qc.invalidateQueries({ queryKey: ['market-snapshot'] });
+    },
   });
 }
 

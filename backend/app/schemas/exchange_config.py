@@ -2,11 +2,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
 SUPPORTED_EXCHANGES = {
+    "deribit":     "Deribit (options + perps)",
+    "binance":     "Binance USDT-M Futures",
+    "okx":         "OKX",
     "delta_india": "Delta Exchange India",
-    "zerodha": "Zerodha Kite (India)",
-    "binance": "Binance USDT-M Futures",
-    "deribit": "Deribit",
-    "okx": "OKX",
+    "zerodha":     "Zerodha Kite (India)",
 }
 
 
@@ -37,6 +37,7 @@ class ExchangeConfigResponse(BaseModel):
     is_paper: bool
     is_active: bool
     supported: bool
+    has_credentials: bool = False
     extra: Dict[str, Any]
 
 

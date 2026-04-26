@@ -99,6 +99,18 @@ def close_position(
     )
 
 
+def partial_close_position(pos_id: str) -> Optional[PaperPosition]:
+    """Transition OPEN → PARTIALLY_CLOSED when a partial-profit signal fires."""
+    pos = _positions.get(pos_id)
+    if not pos or pos.status != PositionStatus.OPEN:
+        return None
+    return update_position(
+        pos_id,
+        status=PositionStatus.PARTIALLY_CLOSED,
+        run_once_state=TradeState.PARTIALLY_REDUCED,
+    )
+
+
 def delete_position(pos_id: str) -> bool:
     if pos_id not in _positions:
         return False

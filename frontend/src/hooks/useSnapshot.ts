@@ -14,6 +14,7 @@ export interface DirectionalSnapshot {
   green_arrow: boolean;
   red_arrow: boolean;
   st_trends: number[];
+  st_values: number[];
   score_long: number;
   score_short: number;
   close_1h: number;

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useConfigInfo } from '../hooks/useConfigInfo';
+import { useSetDataSource, useDataSource, useInvalidateCache } from '../hooks/useExchanges';
 
-const styles: Record<string, React.CSSProperties> = {
+const S: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
   title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 14 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 14 },
@@ -20,86 +21,159 @@ const styles: Record<string, React.CSSProperties> = {
   },
   chipGreen: {
     padding: '2px 8px', borderRadius: 3, fontSize: 11,
-    background: '#44cc88' + '18', border: '1px solid #44cc88' + '44', color: '#44cc88',
+    background: '#44cc8818', border: '1px solid #44cc8844', color: '#44cc88',
   },
+  dsRow: {
+    display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+    background: '#0d0d1a', border: '1px solid #1a1a3a', borderRadius: 4,
+    padding: '10px 12px', marginBottom: 12,
+  },
+  select: {
+    background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a',
+    borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12, flex: 1,
+  },
+  btn: {
+    background: '#1a1a2a', color: '#88aaff', border: '1px solid #334',
+    padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+  },
+  btnPurple: {
+    background: '#1a1a2a', color: '#aa88ff', border: '1px solid #aa88ff',
+    padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+  },
+  btnOrange: {
+    background: '#1a1500', color: '#f0a500', border: '1px solid #f0a500',
+    padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+  },
+  status: { fontSize: 11, color: '#666' },
+  success: { fontSize: 11, color: '#44cc88' },
+  error: { fontSize: 11, color: '#cc4444' },
 };
 
 export function SystemInfoPanel() {
   const { data, isLoading } = useConfigInfo();
+  const { data: dsData } = useDataSource();
+  const setDs = useSetDataSource();
+  const invalidate = useInvalidateCache();
+  const [selectedDs, setSelectedDs] = useState('');
+  const [dsMsg, setDsMsg] = useState('');
 
-  if (isLoading) return <div style={styles.card}><div style={{ color: '#444', fontSize: 12 }}>Loading system info…</div></div>;
+  const currentDs = dsData?.exchange ?? data?.active_data_source ?? '';
+  const sources = data?.supported_data_sources ?? {};
+
+  const handleSwitchDs = () => {
+    const target = selectedDs || currentDs;
+    if (!target) return;
+    setDs.mutate(
+      { exchange: target },
+      {
+        onSuccess: (r) => {
+          setDsMsg(`✓ Switched to ${r.display_name} — ${r.reachable ? 'reachable' : 'unreachable'}`);
+          setTimeout(() => setDsMsg(''), 4000);
+        },
+        onError: (e) => setDsMsg(`✗ ${e.message}`),
+      }
+    );
+  };
+
+  const handleInvalidate = () => {
+    invalidate.mutate(undefined, {
+      onSuccess: () => {
+        setDsMsg('✓ Cache cleared — next requests fetch live data');
+        setTimeout(() => setDsMsg(''), 3000);
+      },
+    });
+  };
+
+  if (isLoading) return (
+    <div style={S.card}><div style={{ color: '#444', fontSize: 12 }}>Loading system info…</div></div>
+  );
   if (!data) return null;
 
   return (
-    <div style={styles.card}>
-      <div style={styles.title}>SYSTEM INFO</div>
+    <div style={S.card}>
+      <div style={S.title}>SYSTEM INFO</div>
 
-      <div style={styles.grid}>
-        <div style={styles.cell}>
-          <span style={styles.key}>VERSION</span>
-          <span style={styles.val}>{data.version}</span>
+      {/* Data source switcher */}
+      <div style={{ ...S.key, marginBottom: 6 }}>MARKET DATA SOURCE</div>
+      <div style={S.dsRow}>
+        <select
+          style={S.select}
+          value={selectedDs || currentDs}
+          onChange={e => setSelectedDs(e.target.value)}
+        >
+          {Object.entries(sources).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <button style={S.btnPurple} onClick={handleSwitchDs} disabled={setDs.isPending}>
+          {setDs.isPending ? 'SWITCHING…' : 'SWITCH'}
+        </button>
+        <button style={S.btnOrange} onClick={handleInvalidate} disabled={invalidate.isPending}
+          title="Clear cache — next requests fetch live data from exchange">
+          {invalidate.isPending ? '…' : 'CLEAR CACHE'}
+        </button>
+        {dsData && (
+          <span style={{ color: dsData.reachable ? '#44cc88' : '#cc4444', fontSize: 11 }}>
+            {dsData.reachable ? '● live' : '● unreachable'}
+          </span>
+        )}
+      </div>
+      {dsMsg && (
+        <div style={dsMsg.startsWith('✓') ? S.success : S.error}>{dsMsg}</div>
+      )}
+
+      <div style={S.grid}>
+        <div style={S.cell}>
+          <span style={S.key}>VERSION</span>
+          <span style={S.val}>{data.version}</span>
         </div>
-        <div style={styles.cell}>
-          <span style={styles.key}>ENVIRONMENT</span>
-          <span style={{ ...styles.val, color: data.environment === 'production' ? '#f0a500' : '#44cc88' }}>
+        <div style={S.cell}>
+          <span style={S.key}>ENVIRONMENT</span>
+          <span style={{ ...S.val, color: data.environment === 'production' ? '#f0a500' : '#44cc88' }}>
             {data.environment.toUpperCase()}
           </span>
         </div>
-        <div style={styles.cell}>
-          <span style={styles.key}>EXCHANGE</span>
-          <span style={{ ...styles.val, color: '#88aaff' }}>
-            {data.exchange_adapter.toUpperCase()}
+        <div style={S.cell}>
+          <span style={S.key}>ACTIVE SOURCE</span>
+          <span style={{ ...S.val, color: '#aa88ff' }}>
+            {data.active_data_source.toUpperCase()}
           </span>
         </div>
-        <div style={styles.cell}>
-          <span style={styles.key}>MODE</span>
-          <span style={{ ...styles.val, color: data.paper_trading ? '#44cc88' : '#cc4444' }}>
-            {data.paper_trading ? '📄 PAPER' : '⚡ LIVE'}
+        <div style={S.cell}>
+          <span style={S.key}>MODE</span>
+          <span style={{ ...S.val, color: data.paper_trading ? '#44cc88' : '#cc4444' }}>
+            {data.paper_trading ? 'PAPER' : 'LIVE'}
           </span>
         </div>
-        <div style={styles.cell}>
-          <span style={styles.key}>DEFAULT UNDERLYING</span>
-          <span style={styles.val}>{data.default_underlying}</span>
+        <div style={S.cell}>
+          <span style={S.key}>DEFAULT UNDERLYING</span>
+          <span style={S.val}>{data.default_underlying}</span>
         </div>
-        <div style={styles.cell}>
-          <span style={styles.key}>DB PATH</span>
-          <span style={{ ...styles.val, fontSize: 11, color: '#666', fontFamily: 'monospace' }}>
+        <div style={S.cell}>
+          <span style={S.key}>DB</span>
+          <span style={{ ...S.val, fontSize: 11, color: '#666', fontFamily: 'monospace' }}>
             {data.db_path.split('/').pop()}
           </span>
         </div>
       </div>
 
-      <div style={{ ...styles.key, marginBottom: 6 }}>ADAPTER STACK</div>
-      <div style={styles.stack}>{data.adapter_stack}</div>
+      <div style={{ ...S.key, marginBottom: 6 }}>ADAPTER STACK</div>
+      <div style={S.stack}>{data.adapter_stack}</div>
 
       <div style={{ marginBottom: 8 }}>
-        <div style={{ ...styles.key, marginBottom: 6 }}>SUPPORTED UNDERLYINGS</div>
-        <div style={styles.row}>
+        <div style={{ ...S.key, marginBottom: 6 }}>SUPPORTED UNDERLYINGS</div>
+        <div style={S.row}>
           {data.supported_underlyings.map(u => (
             <span
               key={u}
-              style={data.underlyings_with_options.includes(u) ? styles.chipGreen : styles.chip}
+              style={data.underlyings_with_options.includes(u) ? S.chipGreen : S.chip}
               title={data.underlyings_with_options.includes(u) ? 'Options available' : 'No options'}
             >
               {u}
             </span>
           ))}
         </div>
-        <div style={{ ...styles.key, marginTop: 4 }}>
-          GREEN = options available · GRAY = spot/perp only
-        </div>
-      </div>
-
-      <div style={{ marginTop: 10, display: 'flex', gap: 16, alignItems: 'center' }}>
-        <a
-          href="https://github.com/nagesh147/sterling"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: '#555', fontSize: 10, textDecoration: 'none' }}
-        >
-          ↗ github.com/nagesh147/sterling
-        </a>
-        <span style={{ color: '#333', fontSize: 10 }}>MIT License · Paper trading only</span>
+        <div style={{ ...S.key, marginTop: 4 }}>GREEN = options · GRAY = spot/perp only</div>
       </div>
     </div>
   );

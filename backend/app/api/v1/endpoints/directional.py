@@ -37,7 +37,9 @@ router = APIRouter(prefix="/directional", tags=["directional"])
 
 
 def _adapter(request: Request):
-    return request.app.state.adapter
+    from app.services import adapter_manager
+    ad = adapter_manager.get_adapter()
+    return ad if ad is not None else request.app.state.adapter
 
 
 def _sym(underlying: Optional[str]) -> str:
@@ -345,6 +347,7 @@ async def snapshot(
         green_arrow=signal.green_arrow,
         red_arrow=signal.red_arrow,
         st_trends=signal.st_trends,
+        st_values=signal.st_values,
         score_long=signal.score_long,
         score_short=signal.score_short,
         close_1h=signal.close_1h,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { usePositions, useEnterPosition, useClosePosition, useDeletePosition } from '../hooks/usePositions';
-import { useMonitorPosition } from '../hooks/useMonitorPosition';
+import { useMonitorPosition, useMonitorAll } from '../hooks/useMonitorPosition';
 import type { MonitorResult } from '../hooks/useMonitorPosition';
 import type { PaperPosition, PositionStatus } from '../types';
 import { fmtN, fmtUSD } from '../utils/fmt';
@@ -141,7 +141,7 @@ function PositionCard({ pos }: { pos: PaperPosition }) {
 
       {monitor.data && <MonitorResultInline result={monitor.data} />}
 
-      {pos.status === 'open' && (
+      {(pos.status === 'open' || pos.status === 'partially_closed') && (
         <div style={styles.actions}>
           <button
             style={{ ...styles.deleteBtn, color: '#88aaff', borderColor: '#88aaff33' }}
@@ -224,6 +224,7 @@ interface Props { underlying: string }
 export function PositionsPanel({ underlying }: Props) {
   const { data, isLoading } = usePositions();
   const enter = useEnterPosition();
+  const monitorAll = useMonitorAll();
 
   return (
     <div style={styles.card}>
@@ -248,6 +249,14 @@ export function PositionsPanel({ underlying }: Props) {
             disabled={enter.isPending}
           >
             {enter.isPending ? 'EVALUATING…' : `▶ PAPER ENTER — ${underlying}`}
+          </button>
+          <button
+            style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+            onClick={() => monitorAll.mutate()}
+            disabled={monitorAll.isPending}
+            title="Check all open/partial positions for exit signals"
+          >
+            {monitorAll.isPending ? '…' : '⟳ MONITOR ALL'}
           </button>
           <button
             style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}

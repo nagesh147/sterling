@@ -4,10 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
-from app.services.cache import CachingAdapter
-from app.services.retry import RetryingAdapter
 from app.services import paper_store
 from app.services import exchange_account_store
+from app.services import adapter_manager
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.instruments import router as instruments_router
 from app.api.v1.endpoints.directional import router as directional_router
@@ -38,11 +37,10 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
     while True:
         await asyncio.sleep(interval)
         try:
-            adapter = getattr(app.state, "adapter", None)
-            if not adapter:
+            ad = adapter_manager.get_adapter()
+            if not ad:
                 continue
 
-            # Rearm expired cooldowns
             for a in _alert_store_svc.list_alerts():
                 _alert_store_svc.rearm_if_cooldown_elapsed(a.id)
 
@@ -55,10 +53,10 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
                 if not inst:
                     continue
                 try:
-                    spot = await adapter.get_index_price(inst)
-                    ivr = await compute_ivr(adapter, inst)
-                    c4h = await adapter.get_candles(inst, "4H", limit=100)
-                    c1h = await adapter.get_candles(inst, "1H", limit=200)
+                    spot = await ad.get_index_price(inst)
+                    ivr = await compute_ivr(ad, inst)
+                    c4h = await ad.get_candles(inst, "4H", limit=100)
+                    c1h = await ad.get_candles(inst, "1H", limit=200)
                     regime = compute_regime(c4h)
                     signal = compute_signal(c1h)
                     setup = evaluate_setup(regime, signal)
@@ -80,28 +78,8 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
                             log.info("Background alert fired: %s %s", alert.id, result.message)
                 except Exception as exc:
                     log.debug("Background alert check failed for %s: %s", sym, exc)
-        except asyncio.CancelledError:
-            break
         except Exception as exc:
             log.warning("Background alert checker error: %s", exc)
-
-
-def _build_raw_adapter():
-    if settings.exchange_adapter.lower() == "okx":
-        from app.services.exchanges.adapters.okx import OKXAdapter
-        log.info("Market data: OKX")
-        return OKXAdapter()
-    if settings.exchange_adapter.lower() == "delta_india":
-        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
-        log.info("Market data: Delta Exchange India")
-        return DeltaIndiaAdapter(is_paper=True)
-    if settings.exchange_adapter.lower() == "binance":
-        from app.services.exchanges.adapters.binance import BinanceAdapter
-        log.info("Market data: Binance USDT-M Futures")
-        return BinanceAdapter(is_paper=True)
-    from app.services.exchanges.adapters.deribit import DeribitAdapter
-    log.info("Market data: Deribit")
-    return DeribitAdapter(base_url=settings.deribit_base_url)
 
 
 @asynccontextmanager
@@ -110,18 +88,28 @@ async def lifespan(app: FastAPI):
     paper_store.bootstrap()
     exchange_account_store.bootstrap()
 
+    # Build market data adapter (use pre-injected adapter in tests, else build fresh)
     if not getattr(app.state, "adapter", None):
-        raw = _build_raw_adapter()
-        app.state.adapter = CachingAdapter(RetryingAdapter(raw))
+        exchange = settings.exchange_adapter.lower()
+        # If active exchange config has keys, use them for data adapters that need auth
+        active_cfg = exchange_account_store.get_active()
+        api_key = active_cfg.api_key if active_cfg and active_cfg.name == exchange else ""
+        api_secret = active_cfg.api_secret if active_cfg and active_cfg.name == exchange else ""
+        ad = await adapter_manager.init(exchange, api_key, api_secret)
+        app.state.adapter = ad
+    else:
+        # Tests inject adapter — sync adapter_manager so it matches
+        adapter_manager._adapter = app.state.adapter
+        adapter_manager._data_source = settings.exchange_adapter.lower()
 
-    adapter = app.state.adapter
     from app.services.exchanges import instrument_registry as registry
-    reachable = await adapter.ping()
+    ad = adapter_manager.get_adapter()
+    reachable = await ad.ping()
     active_ex = exchange_account_store.get_active()
     log.info(
-        "Sterling v0.3 | env=%s | market=%s [%s] | account=%s | instruments=%d | positions=%d",
+        "Sterling v0.4 | env=%s | data=%s [%s] | account=%s | instruments=%d | positions=%d",
         settings.environment,
-        settings.exchange_adapter,
+        adapter_manager.get_data_source(),
         "OK" if reachable else "UNREACHABLE",
         active_ex.display_name if active_ex else "none",
         len(registry.list_instruments()),
@@ -139,9 +127,9 @@ async def lifespan(app: FastAPI):
     bg_task.cancel()
     try:
         await bg_task
-    except asyncio.CancelledError:
+    except (Exception, BaseException):
         pass
-    await adapter.close()
+    await adapter_manager.close_current()
     log.info("Sterling shutdown complete")
 
 
@@ -149,7 +137,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Sterling",
         description="Universal crypto options platform — paper trading, engine-driven",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
 

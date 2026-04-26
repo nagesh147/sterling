@@ -5,6 +5,8 @@ export interface SystemInfo {
   version: string;
   environment: string;
   exchange_adapter: string;
+  active_data_source: string;
+  data_source_display: string;
   paper_trading: boolean;
   real_public_data: boolean;
   default_underlying: string;
@@ -12,6 +14,7 @@ export interface SystemInfo {
   underlyings_with_options: string[];
   adapter_stack: string;
   db_path: string;
+  supported_data_sources: Record<string, string>;
   timestamp_ms: number;
 }
 
@@ -19,6 +22,7 @@ export function useConfigInfo() {
   return useQuery<SystemInfo>({
     queryKey: ['config-info'],
     queryFn: () => api.get<SystemInfo>('/api/v1/config/info'),
-    staleTime: 300_000,  // 5min — doesn't change at runtime
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 }
