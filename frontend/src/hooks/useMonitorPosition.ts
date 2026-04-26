@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 
 export interface ExitSignal {
@@ -21,8 +21,27 @@ export interface MonitorResult {
 }
 
 export function useMonitorPosition() {
+  const qc = useQueryClient();
   return useMutation<MonitorResult, Error, string>({
     mutationFn: (posId) =>
       api.post<MonitorResult>(`/api/v1/positions/${posId}/monitor`),
+    onSuccess: (data) => {
+      // Auto-refresh positions list if exit was triggered or partial applied
+      if (data.exit_signal.should_exit || data.exit_signal.partial) {
+        qc.invalidateQueries({ queryKey: ['positions'] });
+        qc.invalidateQueries({ queryKey: ['portfolio-summary'] });
+      }
+    },
+  });
+}
+
+export function useMonitorAll() {
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, void>({
+    mutationFn: () => api.post('/api/v1/positions/monitor-all'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['positions'] });
+      qc.invalidateQueries({ queryKey: ['portfolio-summary'] });
+    },
   });
 }

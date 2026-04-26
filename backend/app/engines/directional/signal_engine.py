@@ -30,9 +30,9 @@ def compute_signal(candles_1h: List[Candle]) -> SignalResult:
     prev_trends: List[int] = []
 
     for period, mult in _ST_CONFIGS:
-        _, trend = compute_supertrend(ha_h, ha_l, ha_c, period, mult)
+        supertrend_line, trend = compute_supertrend(ha_h, ha_l, ha_c, period, mult)
         st_trends.append(int(trend[-1]))
-        st_values.append(0.0)  # placeholder; line value not needed here
+        st_values.append(float(supertrend_line[-1]))
         prev_trends.append(int(trend[-2]) if len(trend) >= 2 else 0)
 
     all_green_now = all(t == 1 for t in st_trends)

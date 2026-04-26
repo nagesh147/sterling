@@ -40,20 +40,28 @@ function IVRMini({ ivr, band }: { ivr: number | null | undefined; band: string }
   );
 }
 
-function STTrends({ trends }: { trends: number[] }) {
+function STTrends({ trends, values, spot }: { trends: number[]; values?: number[]; spot: number }) {
   const labels = ['7,3', '14,2', '21,1'];
   return (
     <div style={S.cell}>
       <span style={S.key}>ST TRENDS</span>
       <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
         {(trends ?? []).map((t, i) => (
-          <span key={i} style={{
-            fontSize: 11, padding: '2px 5px', borderRadius: 2,
+          <span key={i} title={values?.[i] ? `Level: ${values[i].toLocaleString('en-US', { maximumFractionDigits: 0 })}` : undefined} style={{
+            fontSize: 11, padding: '2px 5px', borderRadius: 2, cursor: values?.[i] ? 'help' : 'default',
             background: t === 1 ? '#44cc8822' : t === -1 ? '#cc444422' : '#333',
             color: t === 1 ? '#44cc88' : t === -1 ? '#cc4444' : '#555',
           }}>{labels[i]}</span>
         ))}
       </div>
+      {values?.[0] != null && values[0] > 0 && (
+        <div style={{ fontSize: 10, color: '#555', marginTop: 3 }}>
+          ST(7,3): <span style={{ color: spot > values[0] ? '#44cc88' : '#cc4444' }}>
+            ${values[0].toLocaleString('en-US', { maximumFractionDigits: 0 })}
+          </span>
+          {' '}({spot > values[0] ? `+${((spot - values[0]) / spot * 100).toFixed(2)}%` : `-${((values[0] - spot) / spot * 100).toFixed(2)}%`})
+        </div>
+      )}
     </div>
   );
 }
@@ -89,7 +97,7 @@ export function SnapshotPanel({ underlying }: { underlying: string }) {
             {data.all_green ? '▲ ALL GREEN' : data.all_red ? '▼ ALL RED' : '~ MIXED'}
           </span>
         </div>
-        <STTrends trends={data.st_trends} />
+        <STTrends trends={data.st_trends} values={data.st_values} spot={data.spot_price} />
         <IVRMini ivr={data.ivr} band={data.ivr_band} />
       </div>
 

@@ -18,6 +18,7 @@ class DirectionalSnapshot(BaseModel):
     green_arrow: bool
     red_arrow: bool
     st_trends: List[int]
+    st_values: List[float]
     score_long: float
     score_short: float
     close_1h: float

@@ -1,14 +1,15 @@
 """
 Runtime risk config — adjust sizing params without restart.
-Single-process in-memory; survives only until process exit.
+Data source switching — hot-swap market data adapter.
 """
 import time
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from app.schemas.risk import RiskParams
 from app.core.config import settings
 from app.services.exchanges import instrument_registry as registry
+from app.services import adapter_manager as _adm
 
 router = APIRouter(prefix="/config", tags=["config"])
 
@@ -23,19 +24,7 @@ def get_runtime_risk() -> RiskParams:
     return _risk
 
 
-class SystemInfo(BaseModel):
-    version: str
-    environment: str
-    exchange_adapter: str
-    paper_trading: bool
-    real_public_data: bool
-    default_underlying: str
-    supported_underlyings: List[str]
-    underlyings_with_options: List[str]
-    adapter_stack: str
-    db_path: str
-    timestamp_ms: int
-
+# ─── Risk config ──────────────────────────────────────────────────────────────
 
 @router.get("/risk", response_model=RiskParams)
 async def get_risk_config() -> RiskParams:
@@ -60,21 +49,112 @@ async def reset_risk_config() -> RiskParams:
     return _risk
 
 
+# ─── Data source ──────────────────────────────────────────────────────────────
+
+class DataSourceRequest(BaseModel):
+    exchange: str
+    api_key: str = ""
+    api_secret: str = ""
+
+
+class DataSourceResponse(BaseModel):
+    exchange: str
+    display_name: str
+    reachable: bool
+    adapter_stack: str
+    timestamp_ms: int
+
+
+@router.get("/data-source", response_model=DataSourceResponse)
+async def get_data_source() -> DataSourceResponse:
+    name = _adm.get_data_source()
+    ad = _adm.get_adapter()
+    reachable = False
+    if ad:
+        try:
+            reachable = await ad.ping()
+        except Exception:
+            pass
+    return DataSourceResponse(
+        exchange=name,
+        display_name=_adm.SUPPORTED_DATA_SOURCES.get(name, name),
+        reachable=reachable,
+        adapter_stack=f"CachingAdapter > RetryingAdapter > {name.title().replace('_', '')}Adapter",
+        timestamp_ms=int(time.time() * 1000),
+    )
+
+
+@router.post("/data-source", response_model=DataSourceResponse)
+async def set_data_source(body: DataSourceRequest, request: Request) -> DataSourceResponse:
+    exchange = body.exchange.lower()
+    if exchange not in _adm.SUPPORTED_DATA_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported exchange: {exchange!r}. Supported: {list(_adm.SUPPORTED_DATA_SOURCES)}",
+        )
+    try:
+        new_adapter = await _adm.switch(exchange, body.api_key, body.api_secret)
+        # Keep app.state.adapter in sync for legacy code that reads it directly
+        request.app.state.adapter = new_adapter
+        reachable = await new_adapter.ping()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to connect to {exchange}: {exc}")
+
+    return DataSourceResponse(
+        exchange=exchange,
+        display_name=_adm.SUPPORTED_DATA_SOURCES.get(exchange, exchange),
+        reachable=reachable,
+        adapter_stack=f"CachingAdapter > RetryingAdapter > {exchange.title().replace('_', '')}Adapter",
+        timestamp_ms=int(time.time() * 1000),
+    )
+
+
+@router.post("/data-source/invalidate-cache")
+async def invalidate_cache() -> dict:
+    """Force-clear the market data cache so the next request fetches live data."""
+    ad = _adm.get_adapter()
+    if ad and hasattr(ad, "invalidate"):
+        ad.invalidate()  # type: ignore[attr-defined]
+    return {"cleared": True, "timestamp_ms": int(time.time() * 1000)}
+
+
+# ─── System info ──────────────────────────────────────────────────────────────
+
+class SystemInfo(BaseModel):
+    version: str
+    environment: str
+    exchange_adapter: str
+    active_data_source: str
+    data_source_display: str
+    paper_trading: bool
+    real_public_data: bool
+    default_underlying: str
+    supported_underlyings: List[str]
+    underlyings_with_options: List[str]
+    adapter_stack: str
+    db_path: str
+    supported_data_sources: dict
+    timestamp_ms: int
+
+
 @router.get("/info", response_model=SystemInfo)
 async def system_info() -> SystemInfo:
     import os
     instruments = registry.list_instruments()
+    ds = _adm.get_data_source()
     return SystemInfo(
-        version="0.3.0",
+        version="0.4.0",
         environment=settings.environment,
         exchange_adapter=settings.exchange_adapter,
+        active_data_source=ds,
+        data_source_display=_adm.SUPPORTED_DATA_SOURCES.get(ds, ds),
         paper_trading=settings.paper_trading,
         real_public_data=settings.real_public_data,
         default_underlying=settings.default_underlying,
         supported_underlyings=[i.underlying for i in instruments],
         underlyings_with_options=[i.underlying for i in instruments if i.has_options],
-        adapter_stack="CachingAdapter > RetryingAdapter > "
-                      + ("DeribitAdapter" if settings.exchange_adapter == "deribit" else "OKXAdapter"),
+        adapter_stack=f"CachingAdapter > RetryingAdapter > {ds.title().replace('_', '')}Adapter",
         db_path=os.environ.get("STERLING_DB_PATH", "sterling_paper.db"),
+        supported_data_sources=_adm.SUPPORTED_DATA_SOURCES,
         timestamp_ms=int(time.time() * 1000),
     )

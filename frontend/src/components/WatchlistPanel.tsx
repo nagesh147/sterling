@@ -4,6 +4,7 @@ import type { WatchlistItem } from '../hooks/useWatchlist';
 import { useStore } from '../store/useStore';
 import { fmtN, fmtUSD, ivrColor, ivrWidth } from '../utils/fmt';
 import { useQueryClient } from '@tanstack/react-query';
+import { useEnterPosition } from '../hooks/usePositions';
 import { api } from '../utils/api';
 
 const REGIME_COLOR: Record<string, string> = {
@@ -47,6 +48,9 @@ function Row({ item }: { item: WatchlistItem }) {
   const isSelected = selectedUnderlying === item.underlying;
   const stateColor = STATE_URGENCY[item.state] ?? '#444';
   const regime = item.macro_regime ?? 'neutral';
+  const enter = useEnterPosition();
+  const isActionable = item.has_options &&
+    ['CONFIRMED_SETUP_ACTIVE', 'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION'].includes(item.state);
 
   return (
     <tr
@@ -60,14 +64,10 @@ function Row({ item }: { item: WatchlistItem }) {
         {!item.has_options && <span style={{ color: '#444', fontSize: 10, marginLeft: 6 }}>no opts</span>}
       </td>
       <td style={styles.td}>
-        {item.spot_price != null
-          ? `$${fmtUSD(item.spot_price)}`
-          : '—'}
+        {item.spot_price != null ? `$${fmtUSD(item.spot_price)}` : '—'}
       </td>
       <td style={styles.td}>
-        <span style={{ color: REGIME_COLOR[regime] ?? '#888' }}>
-          {regime.toUpperCase()}
-        </span>
+        <span style={{ color: REGIME_COLOR[regime] ?? '#888' }}>{regime.toUpperCase()}</span>
       </td>
       <td style={styles.td}>
         {item.signal_trend === 1
@@ -76,9 +76,7 @@ function Row({ item }: { item: WatchlistItem }) {
           ? <span style={{ color: '#cc4444' }}>▼ BEAR</span>
           : <span style={{ color: '#555' }}>~ MIX</span>}
       </td>
-      <td style={styles.td}>
-        <IVRBar ivr={item.ivr} />
-      </td>
+      <td style={styles.td}><IVRBar ivr={item.ivr} /></td>
       <td style={styles.td}>
         <span style={{ ...styles.badge, background: stateColor + '18', color: stateColor }}>
           {item.state.replace(/_/g, ' ')}
@@ -93,7 +91,25 @@ function Row({ item }: { item: WatchlistItem }) {
           ? <span style={{ color: '#cc4444' }}>{item.score_short.toFixed(0)}S</span>
           : <span style={{ color: '#555' }}>—S</span>}
       </td>
-      {item.error && <td style={styles.td}><span style={styles.error}>{item.error}</span></td>}
+      <td style={{ ...styles.td }} onClick={e => e.stopPropagation()}>
+        {isActionable ? (
+          <button
+            style={{
+              background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc8866',
+              padding: '3px 8px', borderRadius: 3, cursor: enter.isPending ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
+              opacity: enter.isPending ? 0.5 : 1,
+            }}
+            onClick={() => enter.mutate({ underlying: item.underlying })}
+            disabled={enter.isPending}
+            title="Paper enter position"
+          >
+            {enter.isPending ? '…' : '+ ENTER'}
+          </button>
+        ) : (
+          <span style={{ color: '#333', fontSize: 10 }}>—</span>
+        )}
+      </td>
     </tr>
   );
 }
@@ -137,7 +153,7 @@ export function WatchlistPanel() {
         <table style={styles.table}>
           <thead>
             <tr>
-              {['ASSET', 'SPOT', 'MACRO', '1H SIGNAL', 'IVR', 'STATE', 'SCORES'].map(h => (
+              {['ASSET', 'SPOT', 'MACRO', '1H SIGNAL', 'IVR', 'STATE', 'SCORES', ''].map(h => (
                 <th key={h} style={styles.th}>{h}</th>
               ))}
             </tr>

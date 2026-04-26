@@ -3,7 +3,6 @@ from typing import List
 from app.schemas.market import Candle
 from app.schemas.directional import ExecTimingResult, ExecMode, SignalResult
 from app.engines.indicators.atr import compute_atr
-from app.engines.indicators.supertrend import compute_supertrend
 
 
 def assess_timing(
@@ -23,61 +22,78 @@ def assess_timing(
     c = np.array([c.close for c in candles_15m], dtype=np.float64)
 
     atr = compute_atr(h, l, c, 14)
-    _, st_fast = compute_supertrend(h, l, c, 7, 3.0)
-
     current_close = c[-1]
     current_atr = atr[-1]
-    st_level = 0.0
 
-    # Estimate ST(7,3) support/resistance level
-    # Approximate: find the trend value and extrapolate from recent closes
-    st_trend = int(st_fast[-1])
+    # 1H ST(7,3) level from signal (support for long, resistance for short)
+    st_73_level = signal.st_values[0] if signal.st_values and signal.st_values[0] > 0 else 0.0
 
-    # Pullback: close within 1 ATR of fast ST line (use low for longs, high for shorts)
-    recent_range = h[-5:] - l[-5:]
-    avg_range = float(np.mean(recent_range)) if len(recent_range) > 0 else current_atr
-
-    # Continuation: price extending beyond recent range + ATR
-    prev_5_high = float(np.max(h[-6:-1])) if len(h) >= 6 else h[-1]
-    prev_5_low = float(np.min(l[-6:-1])) if len(l) >= 6 else l[-1]
+    # Continuation breakout parameters
+    prev_5_high = float(np.max(h[-6:-1])) if len(h) >= 6 else float(h[-1])
+    prev_5_low = float(np.min(l[-6:-1])) if len(l) >= 6 else float(l[-1])
     atr_extension = atr_multiplier * current_atr
 
     if signal.trend == 1:
-        # Bullish: pullback = price retracing toward ST support
-        distance_from_recent_low = current_close - float(np.min(l[-5:]))
-        is_pullback = distance_from_recent_low < current_atr * 1.2
-        is_continuation = current_close > prev_5_high + atr_extension * 0.3
+        # Bullish: ST(7,3) is below price acting as support
+        if st_73_level > 0:
+            distance_above_st = current_close - st_73_level
+            # Pullback: within 1.5 ATR of ST support AND still above it (hold confirmation)
+            if 0 <= distance_above_st < current_atr * 1.5:
+                conf = round(max(0.0, min(1.0, 1.0 - distance_above_st / (current_atr * 1.5))), 2)
+                return ExecTimingResult(
+                    mode=ExecMode.PULLBACK,
+                    confidence=conf,
+                    reason=f"Pullback to ST(7,3) support {st_73_level:.0f}; distance {distance_above_st:.0f}; hold confirmed",
+                )
+        else:
+            # Fallback: price near recent 5-bar low
+            distance_from_recent_low = current_close - float(np.min(l[-5:]))
+            if distance_from_recent_low < current_atr * 1.2:
+                conf = round(min(1.0, 1.0 - distance_from_recent_low / (current_atr * 2)), 2)
+                return ExecTimingResult(
+                    mode=ExecMode.PULLBACK,
+                    confidence=conf,
+                    reason="Price near 15m low; pullback toward ST support",
+                )
 
-        if is_pullback:
-            return ExecTimingResult(
-                mode=ExecMode.PULLBACK,
-                confidence=round(min(1.0, 1.0 - distance_from_recent_low / (current_atr * 2)), 2),
-                reason="Price near 15m low; pullback toward ST support",
-            )
-        if is_continuation:
-            conf = min(1.0, (current_close - prev_5_high) / atr_extension)
+        # Continuation: breakout above 5-bar range + ATR extension
+        if current_close > prev_5_high + atr_extension * 0.3:
+            conf = round(min(1.0, (current_close - prev_5_high) / atr_extension), 2)
             return ExecTimingResult(
                 mode=ExecMode.CONTINUATION,
-                confidence=round(conf, 2),
+                confidence=conf,
                 reason="Bullish breakout above 5-bar range",
             )
 
     elif signal.trend == -1:
-        distance_from_recent_high = float(np.max(h[-5:])) - current_close
-        is_pullback = distance_from_recent_high < current_atr * 1.2
-        is_continuation = current_close < prev_5_low - atr_extension * 0.3
+        # Bearish: ST(7,3) is above price acting as resistance
+        if st_73_level > 0:
+            distance_below_st = st_73_level - current_close
+            # Pullback: within 1.5 ATR of ST resistance AND still below it (hold confirmation)
+            if 0 <= distance_below_st < current_atr * 1.5:
+                conf = round(max(0.0, min(1.0, 1.0 - distance_below_st / (current_atr * 1.5))), 2)
+                return ExecTimingResult(
+                    mode=ExecMode.PULLBACK,
+                    confidence=conf,
+                    reason=f"Pullback to ST(7,3) resistance {st_73_level:.0f}; distance {distance_below_st:.0f}; hold confirmed",
+                )
+        else:
+            # Fallback: price near recent 5-bar high
+            distance_from_recent_high = float(np.max(h[-5:])) - current_close
+            if distance_from_recent_high < current_atr * 1.2:
+                conf = round(min(1.0, 1.0 - distance_from_recent_high / (current_atr * 2)), 2)
+                return ExecTimingResult(
+                    mode=ExecMode.PULLBACK,
+                    confidence=conf,
+                    reason="Price near 15m high; pullback toward ST resistance",
+                )
 
-        if is_pullback:
-            return ExecTimingResult(
-                mode=ExecMode.PULLBACK,
-                confidence=round(min(1.0, 1.0 - distance_from_recent_high / (current_atr * 2)), 2),
-                reason="Price near 15m high; pullback toward ST resistance",
-            )
-        if is_continuation:
-            conf = min(1.0, (prev_5_low - current_close) / atr_extension)
+        # Continuation: breakdown below 5-bar range
+        if current_close < prev_5_low - atr_extension * 0.3:
+            conf = round(min(1.0, (prev_5_low - current_close) / atr_extension), 2)
             return ExecTimingResult(
                 mode=ExecMode.CONTINUATION,
-                confidence=round(conf, 2),
+                confidence=conf,
                 reason="Bearish breakdown below 5-bar range",
             )
 

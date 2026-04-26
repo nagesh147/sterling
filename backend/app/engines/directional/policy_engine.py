@@ -21,15 +21,17 @@ def _allowed_structures(
     ivr_band: IVRBand,
 ) -> List[str]:
     if direction == Direction.LONG:
-        base = ["naked_call", "bull_call_spread", "bull_put_spread"]
+        if ivr_band == IVRBand.HIGH:
+            # >80 IVR: avoid long premium — credit spread only
+            return ["bull_put_spread"]
+        return ["naked_call", "bull_call_spread", "bull_put_spread"]
     elif direction == Direction.SHORT:
-        base = ["naked_put", "bear_put_spread", "bear_call_spread"]
+        if ivr_band == IVRBand.HIGH:
+            # >80 IVR: avoid long premium — credit spread only
+            return ["bear_call_spread"]
+        return ["naked_put", "bear_put_spread", "bear_call_spread"]
     else:
         return ["no_trade"]
-
-    if ivr_band == IVRBand.HIGH:
-        return [s for s in base if "spread" in s] or ["no_trade"]
-    return base
 
 
 def apply_policy(

@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
 from app.schemas.positions import (
-    PaperPosition, PositionListResponse,
+    PaperPosition, PositionListResponse, PositionStatus,
     EnterPositionRequest, ClosePositionRequest,
     MonitorResult, MonitorAllResult, PortfolioSummary,
     TradeAnalytics,
@@ -168,8 +168,9 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
-    adapter = request.app.state.adapter
+    from app.services import adapter_manager as _adm
     from app.api.v1.endpoints.config import get_runtime_risk
+    adapter = _adm.get_adapter() or request.app.state.adapter
     result = await engine_run_once(inst, adapter, get_runtime_risk())
 
     if result.recommendation == "no_trade" or not result.ranked_structures:
@@ -195,14 +196,24 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
 @router.post("/monitor-all", response_model=MonitorAllResult)
 async def monitor_all(request: Request) -> MonitorAllResult:
     now_ms = int(time.time() * 1000)
-    open_positions = [p for p in paper_store.list_positions() if p.status.value == "open"]
+    # Include partially_closed positions — still need monitoring
+    active_positions = [
+        p for p in paper_store.list_positions()
+        if p.status.value in ("open", "partially_closed")
+    ]
+
+    from app.api.v1.endpoints.config import get_runtime_risk
+    risk = get_runtime_risk()
+
+    from app.services import adapter_manager as _adm
+    _live_adapter = _adm.get_adapter() or request.app.state.adapter
 
     async def _monitor_one(pos: PaperPosition) -> Optional[MonitorResult]:
         try:
             inst = registry.get_instrument(pos.underlying)
             if not inst:
                 return None
-            adapter = request.app.state.adapter
+            adapter = _live_adapter
             c1h = await adapter.get_candles(inst, "1H", limit=200)
             signal = compute_signal(c1h)
             current_spot = await adapter.get_index_price(inst)
@@ -215,9 +226,21 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                 spot_move * direction_sign * pos.sized_trade.contracts * abs(leg.delta if leg else 0), 2
             )
             exit_signal = check_exits(
-                pos.sized_trade, signal, estimated_pnl, current_dte, inst.force_exit_dte
+                pos.sized_trade, signal, estimated_pnl, current_dte,
+                force_exit_dte=inst.force_exit_dte,
+                financial_stop_pct=risk.financial_stop_pct,
+                partial_profit_r1=risk.partial_profit_r1,
+                partial_profit_r2=risk.partial_profit_r2,
             )
             pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
+
+            # Auto-execute: full exit → close position
+            if exit_signal.should_exit and not exit_signal.partial:
+                paper_store.close_position(pos.id, float(current_spot))
+            # Auto-execute: partial → transition to PARTIALLY_CLOSED
+            elif exit_signal.partial and pos.status == PositionStatus.OPEN:
+                paper_store.partial_close_position(pos.id)
+
             return MonitorResult(
                 position_id=pos.id, underlying=pos.underlying,
                 exit_signal=exit_signal, current_spot=current_spot,
@@ -227,13 +250,13 @@ async def monitor_all(request: Request) -> MonitorAllResult:
         except Exception:
             return None
 
-    raw = await asyncio.gather(*[_monitor_one(p) for p in open_positions])
+    raw = await asyncio.gather(*[_monitor_one(p) for p in active_positions])
     results = [r for r in raw if r is not None]
     exit_ids = [r.position_id for r in results if r.exit_signal.should_exit and not r.exit_signal.partial]
     partial_ids = [r.position_id for r in results if r.exit_signal.partial]
 
     return MonitorAllResult(
-        open_positions_checked=len(open_positions),
+        open_positions_checked=len(active_positions),
         exit_recommended=exit_ids,
         partial_recommended=partial_ids,
         results=results,
@@ -286,14 +309,15 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     pos = paper_store.get_position(pos_id.upper())
     if not pos:
         raise HTTPException(status_code=404, detail=f"Position {pos_id} not found")
-    if pos.status.value != "open":
-        raise HTTPException(status_code=409, detail="Position already closed")
+    if pos.status.value not in ("open", "partially_closed"):
+        raise HTTPException(status_code=409, detail="Position already fully closed")
 
     inst = registry.get_instrument(pos.underlying)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {pos.underlying}")
 
-    adapter = request.app.state.adapter
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or request.app.state.adapter
     now_ms = int(time.time() * 1000)
 
     try:
@@ -311,12 +335,25 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     estimated_pnl = round(
         spot_move * direction_sign * pos.sized_trade.contracts * abs(leg.delta if leg else 0), 2
     )
+    from app.api.v1.endpoints.config import get_runtime_risk
+    risk = get_runtime_risk()
     exit_signal = check_exits(
-        pos.sized_trade, signal, estimated_pnl, current_dte, inst.force_exit_dte
+        pos.sized_trade, signal, estimated_pnl, current_dte,
+        force_exit_dte=inst.force_exit_dte,
+        financial_stop_pct=risk.financial_stop_pct,
+        partial_profit_r1=risk.partial_profit_r1,
+        partial_profit_r2=risk.partial_profit_r2,
     )
 
     # Record P&L snapshot for session history
     pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
+
+    # Auto-execute: full exit → close position
+    if exit_signal.should_exit and not exit_signal.partial:
+        paper_store.close_position(pos.id, float(current_spot))
+    # Auto-execute: partial → transition to PARTIALLY_CLOSED
+    elif exit_signal.partial and pos.status == PositionStatus.OPEN:
+        paper_store.partial_close_position(pos.id)
 
     return MonitorResult(
         position_id=pos.id, underlying=pos.underlying,

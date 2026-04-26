@@ -24,6 +24,8 @@ def _new_id() -> str:
 # ─── SQLite persistence ───────────────────────────────────────────────────────
 
 def _init_table() -> None:
+    """Ensure exchange_configs table exists. Table is also created in db._create_tables()
+    but this is kept as a safety net in case db.init() ran before this module loaded."""
     from app.services import db
     if not db._available:
         return
@@ -48,6 +50,7 @@ def _init_table() -> None:
 def _persist(cfg: ExchangeConfig) -> None:
     from app.services import db
     if not db._available:
+        log.warning("DB unavailable — exchange config %s not persisted (in-memory only)", cfg.id)
         return
     try:
         with db._conn() as c:
@@ -61,8 +64,9 @@ def _persist(cfg: ExchangeConfig) -> None:
                 int(cfg.is_paper), int(cfg.is_active),
                 json.dumps(cfg.extra),
             ))
+        log.debug("exchange_config persisted: %s (%s)", cfg.id, cfg.name)
     except Exception as exc:
-        log.warning("exchange_config persist failed: %s", exc)
+        log.warning("exchange_config persist failed for %s: %s", cfg.id, exc)
 
 
 def _delete_db(config_id: str) -> None:
@@ -164,7 +168,8 @@ def update_exchange(config_id: str, **kwargs) -> Optional[ExchangeConfig]:
     cfg = _configs.get(config_id)
     if not cfg:
         return None
-    updated = cfg.model_copy(update={k: v for k, v in kwargs.items() if v is not None})
+    # Apply all provided kwargs (endpoint already filters None-unset fields)
+    updated = cfg.model_copy(update=kwargs)
     _configs[config_id] = updated
     _persist(updated)
     return updated

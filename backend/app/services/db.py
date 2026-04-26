@@ -30,6 +30,18 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             updated_ts  INTEGER NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS exchange_configs (
+            id           TEXT PRIMARY KEY,
+            name         TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            api_key      TEXT NOT NULL DEFAULT '',
+            api_secret   TEXT NOT NULL DEFAULT '',
+            is_paper     INTEGER NOT NULL DEFAULT 1,
+            is_active    INTEGER NOT NULL DEFAULT 0,
+            extra        TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
     conn.commit()
 
 

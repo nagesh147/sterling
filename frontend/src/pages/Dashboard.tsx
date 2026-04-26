@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
+import { useConfigInfo } from '../hooks/useConfigInfo';
 import { InstrumentSelector } from '../components/InstrumentSelector';
 import { SnapshotPanel } from '../components/SnapshotPanel';
 import { MarketSnapshot } from '../components/MarketSnapshot';
@@ -73,6 +74,7 @@ const TABS: [Tab, string][] = [
 export function Dashboard() {
   const { selectedUnderlying } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
+  const { data: sysInfo } = useConfigInfo();
 
   return (
     <div style={page}>
@@ -82,7 +84,9 @@ export function Dashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div>
             <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: '#e0e0e0' }}>STERLING</span>
-            <span style={{ fontSize: 11, color: '#444', marginLeft: 12, letterSpacing: 1 }}>v0.3 · PAPER</span>
+            <span style={{ fontSize: 11, color: '#444', marginLeft: 12, letterSpacing: 1 }}>
+              v{sysInfo?.version ?? '0.4'} · {sysInfo?.paper_trading !== false ? 'PAPER' : 'LIVE'} · {(sysInfo?.active_data_source ?? 'deribit').toUpperCase()}
+            </span>
           </div>
           <StreamBadge underlying={selectedUnderlying} />
           <ExchangeBadge />

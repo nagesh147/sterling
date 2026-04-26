@@ -6,9 +6,10 @@ GET  /exchanges/{id} — get single
 PUT  /exchanges/{id} — update credentials/settings
 DELETE /exchanges/{id} — remove
 POST /exchanges/{id}/activate — set as active account exchange
+POST /exchanges/{id}/activate-data-source — switch market data to this exchange
 POST /exchanges/{id}/test — test API credentials
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.schemas.exchange_config import (
     ExchangeConfig, ExchangeConfigCreate, ExchangeConfigResponse,
     ExchangeListResponse, ExchangeUpdateRequest, SUPPORTED_EXCHANGES,
@@ -28,6 +29,10 @@ def _to_response(cfg: ExchangeConfig) -> ExchangeConfigResponse:
         is_paper=cfg.is_paper,
         is_active=cfg.is_active,
         supported=cfg.name in SUPPORTED_EXCHANGES,
+        has_credentials=bool(
+            cfg.api_key and not cfg.api_key.startswith("DUMMY")
+            and cfg.api_secret and not cfg.api_secret.startswith("DUMMY")
+        ),
         extra=cfg.extra,
     )
 
@@ -69,13 +74,43 @@ async def get_exchange(exchange_id: str) -> ExchangeConfigResponse:
 
 @router.put("/{exchange_id}", response_model=ExchangeConfigResponse)
 async def update_exchange(exchange_id: str, body: ExchangeUpdateRequest) -> ExchangeConfigResponse:
-    updated = store.update_exchange(
-        exchange_id,
-        **{k: v for k, v in body.model_dump().items() if v is not None},
-    )
+    # Only pass fields explicitly set by the caller (exclude unset None defaults)
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updated = store.update_exchange(exchange_id, **updates)
     if not updated:
         raise HTTPException(status_code=404, detail=f"Exchange {exchange_id} not found")
     return _to_response(updated)
+
+
+@router.post("/{exchange_id}/activate-data-source")
+async def activate_data_source(exchange_id: str, request: Request) -> dict:
+    """Hot-swap the market data adapter to use this exchange's adapter."""
+    from app.services import adapter_manager
+    cfg = store.get_exchange(exchange_id)
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"Exchange {exchange_id} not found")
+    if cfg.name not in adapter_manager.SUPPORTED_DATA_SOURCES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{cfg.name!r} is not supported as a market data source",
+        )
+    try:
+        new_adapter = await adapter_manager.switch(
+            cfg.name,
+            api_key=cfg.api_key,
+            api_secret=cfg.api_secret,
+        )
+        request.app.state.adapter = new_adapter
+        reachable = await new_adapter.ping()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to switch data source: {exc}")
+    return {
+        "exchange_id": exchange_id,
+        "exchange_name": cfg.name,
+        "display_name": cfg.display_name,
+        "reachable": reachable,
+        "message": f"Market data now sourced from {cfg.display_name}",
+    }
 
 
 @router.delete("/{exchange_id}", status_code=204)
