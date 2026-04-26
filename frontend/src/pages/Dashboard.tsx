@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useConfigInfo } from '../hooks/useConfigInfo';
 import { InstrumentSelector } from '../components/InstrumentSelector';
@@ -46,36 +46,58 @@ const TAB_BAR: React.CSSProperties = {
   borderBottom: '1px solid #1e1e1e', paddingBottom: 0,
 };
 
-function TabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function TabBtn({ label, shortcut, active, onClick }: {
+  label: string; shortcut: string; active: boolean; onClick: () => void;
+}) {
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} title={`Press ${shortcut} to switch`} style={{
       background: 'none', border: 'none', cursor: 'pointer',
       fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
       color: active ? '#e0e0e0' : '#555',
       padding: '8px 14px',
       borderBottom: active ? '2px solid #44cc88' : '2px solid transparent',
       marginBottom: -1,
+      display: 'flex', alignItems: 'center', gap: 5,
     }}>
       {label}
+      <span style={{ fontSize: 9, color: active ? '#44cc8866' : '#333', fontWeight: 400 }}>{shortcut}</span>
     </button>
   );
 }
 
-const TABS: [Tab, string][] = [
-  ['analysis', 'ANALYSIS'],
-  ['chain', 'OPTION CHAIN'],
-  ['account', 'ACCOUNT'],
-  ['alerts', 'ALERTS'],
-  ['backtest', 'BACKTEST'],
-  ['positions', 'POSITIONS'],
-  ['watchlist', 'WATCHLIST'],
-  ['config', 'CONFIG'],
+const TABS: [Tab, string, string][] = [
+  ['analysis',  'ANALYSIS',     '1'],
+  ['chain',     'OPTION CHAIN', '2'],
+  ['account',   'ACCOUNT',      '3'],
+  ['alerts',    'ALERTS',       '4'],
+  ['backtest',  'BACKTEST',     '5'],
+  ['positions', 'POSITIONS',    '6'],
+  ['watchlist', 'WATCHLIST',    '7'],
+  ['config',    'CONFIG',       '8'],
 ];
+
+const TAB_KEYS: Record<string, Tab> = {
+  '1': 'analysis', '2': 'chain', '3': 'account', '4': 'alerts',
+  '5': 'backtest', '6': 'positions', '7': 'watchlist', '8': 'config',
+};
 
 export function Dashboard() {
   const { selectedUnderlying } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const { data: sysInfo } = useConfigInfo();
+
+  // Keyboard shortcuts: 1-8 switch tabs, skip if typing in an input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const tab = TAB_KEYS[e.key];
+      if (tab) setActiveTab(tab);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   return (
     <div style={page}>
@@ -99,8 +121,14 @@ export function Dashboard() {
       </div>
 
       <div style={TAB_BAR}>
-        {TABS.map(([tab, label]) => (
-          <TabBtn key={tab} label={label} active={activeTab === tab} onClick={() => setActiveTab(tab)} />
+        {TABS.map(([tab, label, key]) => (
+          <TabBtn
+            key={tab}
+            label={`${label}`}
+            shortcut={key}
+            active={activeTab === tab}
+            onClick={() => setActiveTab(tab)}
+          />
         ))}
       </div>
 

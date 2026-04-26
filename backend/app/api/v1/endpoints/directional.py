@@ -31,14 +31,14 @@ from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services import adapter_manager as _adm
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
 
 
 def _adapter(request: Request):
-    from app.services import adapter_manager
-    ad = adapter_manager.get_adapter()
+    ad = _adm.get_adapter()
     return ad if ad is not None else request.app.state.adapter
 
 
@@ -132,7 +132,6 @@ async def _watchlist_item(inst, adapter) -> WatchlistItem:
 
 @router.get("/watchlist", response_model=WatchlistResponse)
 async def watchlist(request: Request) -> WatchlistResponse:
-    from app.services import adapter_manager as _adm
     current_source = _adm.get_data_source()
 
     # Exchange compatibility map: which adapters can serve each exchange's instruments
@@ -211,7 +210,7 @@ async def market_snapshot(
         candles_1h_count=len(c1h),
         candles_15m_count=len(c15m),
         dvol=dvol, ivr=ivr,
-        data_source=f"deribit_public/{inst.index_name}",
+        data_source=f"{_adm.get_data_source()}/{inst.index_name}",
         timestamp_ms=now_ms,
     )
 

@@ -1,7 +1,6 @@
 import React from 'react';
 import { useRunOnce } from '../hooks/useRunOnce';
-import { useEnterPosition } from '../hooks/usePositions';
-// useEnterPosition is also used inside TradeCard
+import { useEnterPosition } from '../hooks/usePositions'; // used inside TradeCard
 import type { SizedTrade } from '../types';
 import { fmtN } from '../utils/fmt';
 
@@ -105,9 +104,6 @@ interface Props { underlying: string }
 
 export function RunOnceResult({ underlying }: Props) {
   const { mutate, data, isPending, error } = useRunOnce();
-  // Note: enter buttons are per-structure in TradeCard; this hook kept for enter.data display
-  const enter = useEnterPosition();
-  const canEnter = data && data.recommendation !== 'no_trade' && data.ranked_structures.length > 0;
 
   const recColor = data
     ? data.recommendation === 'no_trade' ? '#cc4444' : '#44cc88'
@@ -128,28 +124,6 @@ export function RunOnceResult({ underlying }: Props) {
         >
           {isPending ? 'EVALUATING…' : `▶ RUN ONCE — ${underlying}`}
         </button>
-        {canEnter && (
-          <button
-            style={{
-              background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88',
-              padding: '8px 18px', borderRadius: 4, cursor: enter.isPending ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
-              opacity: enter.isPending ? 0.5 : 1,
-            }}
-            onClick={() => enter.mutate({ underlying })}
-            disabled={enter.isPending}
-          >
-            {enter.isPending ? 'ENTERING…' : '+ PAPER ENTER'}
-          </button>
-        )}
-        {enter.data && (
-          <span style={{ color: '#44cc88', fontSize: 11 }}>
-            Position {enter.data.id} created ✓
-          </span>
-        )}
-        {enter.error && (
-          <span style={{ color: '#cc4444', fontSize: 11 }}>{(enter.error as Error).message}</span>
-        )}
       </div>
 
       {error && <div style={styles.error}>{(error as Error).message}</div>}
