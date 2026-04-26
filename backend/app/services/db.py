@@ -68,7 +68,7 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             triggered_at_ms  INTEGER,
             trigger_value    REAL,
             created_at_ms    INTEGER NOT NULL,
-            last_triggered_ms INTEGER
+            fire_count       INTEGER NOT NULL DEFAULT 0
         )
     """)
     conn.commit()

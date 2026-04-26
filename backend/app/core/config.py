@@ -21,7 +21,14 @@ class Settings(BaseSettings):
     @classmethod
     def _parse_cors(cls, v):
         if isinstance(v, str):
-            return [s.strip() for s in v.split(",") if s.strip()]
+            stripped = v.strip()
+            if stripped.startswith("["):
+                import json
+                try:
+                    return json.loads(stripped)
+                except Exception:
+                    pass
+            return [s.strip().strip('"\'') for s in stripped.split(",") if s.strip()]
         return v
 
     model_config = {

@@ -11,6 +11,8 @@ async def run_backtest_endpoint(
     body: BacktestRequest,
     request: Request,
 ) -> BacktestResult:
+    from app.core.rate_limit import check_backtest
+    check_backtest(request)
     sym = body.underlying.upper()
     inst = registry.get_instrument(sym)
     if not inst:

@@ -15,10 +15,12 @@ export interface Alert {
   condition: AlertCondition;
   threshold: number | null;
   target_state: string | null;
+  cooldown_hours: number;
   notes: string;
   status: AlertStatus;
   triggered_at_ms: number | null;
   trigger_value: number | null;
+  fire_count: number;
   created_at_ms: number;
 }
 
