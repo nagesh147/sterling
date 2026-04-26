@@ -48,3 +48,4 @@ backend/sterling_paper.db
 
 # Package lock (optional — include if reproducibility needed)
 # package-lock.json
+.gstack/
