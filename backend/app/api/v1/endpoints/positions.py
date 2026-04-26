@@ -74,7 +74,7 @@ async def list_positions(
         positions = [p for p in positions if p.status.value == status.lower()]
     return PositionListResponse(
         positions=positions,
-        open_count=sum(1 for p in positions if p.status.value == "open"),
+        open_count=sum(1 for p in positions if p.status.value in ("open", "partially_closed")),
         closed_count=sum(1 for p in positions if p.status.value == "closed"),
     )
 
@@ -83,7 +83,8 @@ async def list_positions(
 async def portfolio_summary() -> PortfolioSummary:
     now_ms = int(time.time() * 1000)
     positions = paper_store.list_positions()
-    open_positions = [p for p in positions if p.status.value == "open"]
+    # partially_closed positions still carry open risk — include them
+    open_positions = [p for p in positions if p.status.value in ("open", "partially_closed")]
     closed_positions = [p for p in positions if p.status.value == "closed"]
 
     total_open_risk = sum(p.sized_trade.max_risk_usd for p in open_positions)

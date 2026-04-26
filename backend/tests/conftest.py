@@ -57,8 +57,11 @@ def reset_global_stores():
     eval_history.clear()
     arrow_store.clear()
     alert_store.clear()
+    alert_store._loaded = True
     pnl_history.clear()
+    pnl_history._loaded = True
     webhook_store.clear()
+    webhook_store._loaded = True
     eas._configs.clear()
     eas._loaded = False
     config_ep._risk = _default_risk()
