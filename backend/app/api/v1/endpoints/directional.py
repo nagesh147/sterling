@@ -560,3 +560,97 @@ async def regime_trend(
         ))
 
     return RegimeTrendResponse(underlying=sym, bars=bars, count=len(bars))
+
+
+# ─── /volatility-scan ────────────────────────────────────────────────────────
+
+@router.post("/volatility-scan")
+async def volatility_scan(
+    underlying: Optional[str] = Query(None),
+    request: Request = None,
+):
+    """
+    Straddle + strangle analysis — direction-agnostic volatility structures.
+    Finds ATM straddle and nearest OTM strangle. Returns IV stats + health.
+    Use when signal is mixed but expecting a big move.
+    """
+    sym = _sym(underlying)
+    inst = registry.get_instrument(sym)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    if not inst.has_options:
+        raise HTTPException(status_code=400, detail=f"{sym} has no options")
+
+    adapter = _adapter(request)
+    now_ms = int(time.time() * 1000)
+
+    try:
+        spot = await adapter.get_index_price(inst)
+        chain = await adapter.get_option_chain(inst)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Data fetch failed: {exc}")
+
+    from app.engines.directional.contract_health_engine import assess_contract_health
+    from app.schemas.directional import PolicyResult, IVRBand
+
+    # Filter to healthy contracts, prefer 10-20 DTE
+    healthy = [assess_contract_health(o, min_dte=inst.min_dte) for o in chain
+               if 5 <= o.dte <= 45]
+    healthy = [c for c in healthy if c.healthy]
+
+    calls = sorted([c for c in healthy if c.option_type == "call"], key=lambda x: abs(x.strike - spot))
+    puts  = sorted([c for c in healthy if c.option_type == "put"],  key=lambda x: abs(x.strike - spot))
+
+    structures = []
+
+    # ATM Straddle: nearest call + same-strike put
+    if calls and puts:
+        atm_call = calls[0]
+        atm_put = next((p for p in puts if p.strike == atm_call.strike and p.expiry_date == atm_call.expiry_date), None)
+        if atm_put:
+            debit = atm_call.ask + atm_put.ask
+            structures.append({
+                "structure_type": "long_straddle",
+                "legs": [atm_call.model_dump(), atm_put.model_dump()],
+                "strike": atm_call.strike,
+                "expiry_date": atm_call.expiry_date,
+                "dte": atm_call.dte,
+                "net_debit": round(debit, 4),
+                "max_loss": round(debit, 4),
+                "breakeven_up": round(atm_call.strike + debit, 2),
+                "breakeven_down": round(atm_call.strike - debit, 2),
+                "avg_iv": round((atm_call.mark_iv + atm_put.mark_iv) / 2, 2),
+                "health_score": round((atm_call.health_score + atm_put.health_score) / 2, 2),
+            })
+
+    # OTM Strangle: OTM call (strike > spot * 1.02) + OTM put (strike < spot * 0.98)
+    otm_calls = [c for c in calls if c.strike > spot * 1.01]
+    otm_puts  = [p for p in puts  if p.strike < spot * 0.99]
+    if otm_calls and otm_puts:
+        sc = otm_calls[0]
+        sp = otm_puts[0]
+        debit = sc.ask + sp.ask
+        if sc.expiry_date == sp.expiry_date:
+            structures.append({
+                "structure_type": "long_strangle",
+                "legs": [sc.model_dump(), sp.model_dump()],
+                "call_strike": sc.strike,
+                "put_strike": sp.strike,
+                "expiry_date": sc.expiry_date,
+                "dte": sc.dte,
+                "net_debit": round(debit, 4),
+                "max_loss": round(debit, 4),
+                "breakeven_up": round(sc.strike + debit, 2),
+                "breakeven_down": round(sp.strike - debit, 2),
+                "avg_iv": round((sc.mark_iv + sp.mark_iv) / 2, 2),
+                "health_score": round((sc.health_score + sp.health_score) / 2, 2),
+            })
+
+    return {
+        "underlying": sym,
+        "spot_price": float(spot),
+        "structures": structures,
+        "healthy_candidates": len(healthy),
+        "note": "Use straddle/strangle when expecting large move but uncertain direction.",
+        "timestamp_ms": now_ms,
+    }

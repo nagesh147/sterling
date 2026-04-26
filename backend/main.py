@@ -95,6 +95,10 @@ def _build_raw_adapter():
         from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
         log.info("Market data: Delta Exchange India")
         return DeltaIndiaAdapter(is_paper=True)
+    if settings.exchange_adapter.lower() == "binance":
+        from app.services.exchanges.adapters.binance import BinanceAdapter
+        log.info("Market data: Binance USDT-M Futures")
+        return BinanceAdapter(is_paper=True)
     from app.services.exchanges.adapters.deribit import DeribitAdapter
     log.info("Market data: Deribit")
     return DeribitAdapter(base_url=settings.deribit_base_url)

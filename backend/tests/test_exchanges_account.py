@@ -223,8 +223,8 @@ class TestExchangesAPI:
 
     def test_add_unsupported_exchange_400(self, client):
         resp = client.post("/api/v1/exchanges", json={
-            "name": "binance",
-            "display_name": "Binance",
+            "name": "bybit",
+            "display_name": "Bybit",
             "api_key": "",
             "api_secret": "",
             "is_paper": True,

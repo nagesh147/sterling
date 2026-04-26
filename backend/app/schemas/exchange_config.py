@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 SUPPORTED_EXCHANGES = {
     "delta_india": "Delta Exchange India",
     "zerodha": "Zerodha Kite (India)",
+    "binance": "Binance USDT-M Futures",
     "deribit": "Deribit",
     "okx": "OKX",
 }
