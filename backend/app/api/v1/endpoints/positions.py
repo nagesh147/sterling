@@ -163,6 +163,85 @@ async def paper_portfolio_greeks():
     }
 
 
+@router.get("/pnl-live")
+async def live_pnl(request: Request):
+    """
+    Lightweight current P&L for all active positions.
+    Uses latest spot price from cache — no candle fetch, no exit evaluation.
+    """
+    from app.services import adapter_manager as _adm
+    now_ms = int(time.time() * 1000)
+    active = [
+        p for p in paper_store.list_positions()
+        if p.status.value in ("open", "partially_closed")
+    ]
+    if not active:
+        return {"positions": [], "total_estimated_pnl_usd": 0.0, "timestamp_ms": now_ms}
+
+    adapter = _adm.get_adapter() or request.app.state.adapter
+    from app.services.exchanges import instrument_registry as registry
+
+    results = []
+    total_pnl = 0.0
+
+    # Fetch spot prices in parallel
+    insts = {p.underlying: registry.get_instrument(p.underlying) for p in active}
+    spots: dict = {}
+    import asyncio as _asyncio
+
+    async def _fetch_spot(sym: str, inst):
+        try:
+            spots[sym] = float(await adapter.get_index_price(inst))
+        except Exception:
+            spots[sym] = None
+
+    await _asyncio.gather(*[
+        _fetch_spot(sym, inst)
+        for sym, inst in insts.items()
+        if inst is not None
+    ])
+
+    for pos in active:
+        spot = spots.get(pos.underlying)
+        leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+        dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
+        if dte_from_expiry >= 0:
+            current_dte = dte_from_expiry
+        else:
+            days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
+            current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
+
+        pnl = None
+        if spot is not None:
+            spot_move = spot - pos.entry_spot_price
+            direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
+            pnl = _estimate_pnl(
+                leg, spot_move, direction_sign,
+                pos.sized_trade.contracts,
+                pos.sized_trade.max_risk_usd,
+                pos.sized_trade.structure.max_gain,
+            )
+            total_pnl += pnl
+
+        results.append({
+            "position_id": pos.id,
+            "underlying": pos.underlying,
+            "status": pos.status.value,
+            "current_spot": spot,
+            "entry_spot": pos.entry_spot_price,
+            "estimated_pnl_usd": pnl,
+            "current_dte": current_dte,
+            "max_risk_usd": pos.sized_trade.max_risk_usd,
+            "capital_at_risk_pct": pos.sized_trade.capital_at_risk_pct,
+        })
+
+    return {
+        "positions": results,
+        "total_estimated_pnl_usd": round(total_pnl, 2),
+        "timestamp_ms": now_ms,
+    }
+
+
 @router.get("/export")
 async def export_positions_csv(status: str = Query(default="")) -> StreamingResponse:
     """Export paper positions as CSV."""

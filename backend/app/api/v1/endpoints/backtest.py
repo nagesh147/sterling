@@ -19,9 +19,10 @@ async def run_backtest_endpoint(
     from app.services import adapter_manager as _adm
     adapter = _adm.get_adapter() or request.app.state.adapter
 
-    # Fetch enough historical candles for the lookback window
-    limit_1h = min(body.lookback_days * 24, 720)  # cap at 720 bars (~30 days)
-    limit_4h = min(body.lookback_days * 6 + 60, 300)  # extra buffer for EMA50 warmup
+    # Fetch enough historical candles — extra 100 bars for EMA50 warmup
+    # 1H: Deribit typically returns up to 5000 bars per request
+    limit_1h = min(body.lookback_days * 24 + 100, 5000)
+    limit_4h = min(body.lookback_days * 6 + 100, 1000)
 
     try:
         candles_4h = await adapter.get_candles(inst, "4H", limit=limit_4h)

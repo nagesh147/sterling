@@ -35,6 +35,7 @@ export interface SignalResult {
   green_arrow: boolean;
   red_arrow: boolean;
   st_trends: number[];
+  st_values: number[];
   close_1h: number;
   score_long: number;
   score_short: number;

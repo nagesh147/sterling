@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { usePositions, useEnterPosition, useClosePosition, useDeletePosition } from '../hooks/usePositions';
 import { useMonitorPosition, useMonitorAll } from '../hooks/useMonitorPosition';
+import { useLivePnl } from '../hooks/useLivePnl';
 import type { MonitorResult } from '../hooks/useMonitorPosition';
 import type { PaperPosition, PositionStatus } from '../types';
 import { fmtN, fmtUSD } from '../utils/fmt';
@@ -77,7 +78,7 @@ function MonitorResultInline({ result }: { result: MonitorResult }) {
   );
 }
 
-function PositionCard({ pos }: { pos: PaperPosition }) {
+function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number | null }) {
   const [closePrice, setClosePrice] = useState('');
   const [showClose, setShowClose] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -94,13 +95,23 @@ function PositionCard({ pos }: { pos: PaperPosition }) {
         <span style={styles.posType}>
           {pos.underlying} · {s.structure_type}
         </span>
-        <span style={{
-          ...styles.statusBadge,
-          background: STATUS_COLOR[pos.status] + '22',
-          color: STATUS_COLOR[pos.status],
-        }}>
-          {pos.status.toUpperCase()}
-        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {livePnl != null && (
+            <span style={{
+              fontSize: 12, fontWeight: 700,
+              color: livePnl >= 0 ? '#44cc88' : '#cc4444',
+            }}>
+              {livePnl >= 0 ? '+' : ''}{fmtN(livePnl, 2)}
+            </span>
+          )}
+          <span style={{
+            ...styles.statusBadge,
+            background: STATUS_COLOR[pos.status] + '22',
+            color: STATUS_COLOR[pos.status],
+          }}>
+            {pos.status.toUpperCase()}
+          </span>
+        </div>
       </div>
 
       <div style={styles.posGrid}>
@@ -225,6 +236,11 @@ export function PositionsPanel({ underlying }: Props) {
   const { data, isLoading } = usePositions();
   const enter = useEnterPosition();
   const monitorAll = useMonitorAll();
+  const hasOpen = (data?.open_count ?? 0) > 0;
+  const { data: livePnlData } = useLivePnl(hasOpen);
+  const livePnlMap = Object.fromEntries(
+    (livePnlData?.positions ?? []).map(p => [p.position_id, p.estimated_pnl_usd])
+  );
 
   return (
     <div style={styles.card}>
@@ -276,7 +292,9 @@ export function PositionsPanel({ underlying }: Props) {
         <div style={styles.noPos}>No paper positions. Run evaluation and enter to create one.</div>
       )}
 
-      {data?.positions.map(pos => <PositionCard key={pos.id} pos={pos} />)}
+      {data?.positions.map(pos => (
+        <PositionCard key={pos.id} pos={pos} livePnl={livePnlMap[pos.id]} />
+      ))}
     </div>
   );
 }
