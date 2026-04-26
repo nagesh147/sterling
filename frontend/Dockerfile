@@ -1,6 +1,13 @@
 FROM node:20-alpine AS builder
 
 WORKDIR /app
+
+# Accept optional VITE_API_BASE_URL build arg
+# Empty string = use nginx proxy (recommended for Docker deployment)
+# Set to http://your-backend-host:8000 for custom deployments
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 COPY package.json package-lock.json* ./
 RUN npm ci --silent
 COPY . .
@@ -13,4 +20,4 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=5s \
-  CMD wget -q -O- http://localhost/health || exit 1
+  CMD wget -q -O- http://localhost/ || exit 1

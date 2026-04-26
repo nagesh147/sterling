@@ -237,6 +237,8 @@ async def run_once_endpoint(
     underlying: Optional[str] = Query(None),
     request: Request = None,
 ) -> RunOnceResponse:
+    from app.core.rate_limit import check_run_once
+    check_run_once(request)
     sym = _sym(underlying)
     inst = registry.get_instrument(sym)
     if not inst:
@@ -279,6 +281,8 @@ async def run_all_endpoint(request: Request):
     Parallel run-once for ALL instruments that have options.
     Returns results dict keyed by underlying.
     """
+    from app.core.rate_limit import check_run_all
+    check_run_all(request)
     from app.api.v1.endpoints.config import get_runtime_risk
     instruments = [i for i in registry.list_instruments() if i.has_options]
     adapter = _adapter(request)

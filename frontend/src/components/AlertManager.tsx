@@ -56,6 +56,12 @@ function AlertRow({ alert }: { alert: Alert }) {
           {alert.target_state ? ` ${alert.target_state}` : ''}
           {isFired && alert.trigger_value != null ? ` → fired at ${fmtN(alert.trigger_value, 2)}` : ''}
         </span>
+        {alert.fire_count > 0 && (
+          <span style={{ color: '#666', fontSize: 10 }}>
+            Fired {alert.fire_count}×
+            {alert.cooldown_hours > 0 && ` · cooldown ${alert.cooldown_hours}h`}
+          </span>
+        )}
         {alert.notes && <span style={{ color: '#555', fontSize: 10 }}>{alert.notes}</span>}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

@@ -90,7 +90,7 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             regime = compute_regime(c4h)
             signal = compute_signal(c1h)
             setup = evaluate_setup(regime, signal)
-            ivr = await compute_ivr(adapter, inst)
+            ivr = await compute_ivr(adapter, inst, c1h)
             snapshots[sym] = {
                 "spot": spot,
                 "ivr": ivr,

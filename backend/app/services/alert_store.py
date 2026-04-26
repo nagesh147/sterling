@@ -31,15 +31,14 @@ def _persist(alert: Alert) -> None:
                 INSERT OR REPLACE INTO alerts
                     (id, underlying, condition, threshold, target_state,
                      cooldown_hours, notes, status, triggered_at_ms, trigger_value,
-                     created_at_ms, last_triggered_ms)
+                     created_at_ms, fire_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 alert.id, alert.underlying, alert.condition.value,
                 alert.threshold, alert.target_state,
                 alert.cooldown_hours, alert.notes,
                 alert.status.value, alert.triggered_at_ms, alert.trigger_value,
-                alert.created_at_ms,
-                alert.triggered_at_ms,
+                alert.created_at_ms, alert.fire_count,
             ))
     except Exception as exc:
         log.warning("alert persist failed: %s", exc)
@@ -78,6 +77,7 @@ def _load_from_db() -> List[Alert]:
                     triggered_at_ms=r["triggered_at_ms"],
                     trigger_value=r["trigger_value"],
                     created_at_ms=r["created_at_ms"],
+                    fire_count=r["fire_count"] or 0,
                 ))
             except Exception:
                 continue

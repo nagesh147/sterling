@@ -56,9 +56,9 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
                     continue
                 try:
                     spot = await ad.get_index_price(inst)
-                    ivr = await compute_ivr(ad, inst)
                     c4h = await ad.get_candles(inst, "4H", limit=100)
                     c1h = await ad.get_candles(inst, "1H", limit=200)
+                    ivr = await compute_ivr(ad, inst, c1h)
                     regime = compute_regime(c4h)
                     signal = compute_signal(c1h)
                     setup = evaluate_setup(regime, signal)

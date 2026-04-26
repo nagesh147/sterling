@@ -1,4 +1,6 @@
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
+// Docker: VITE_API_BASE_URL="" → relative paths, nginx proxies /api/ to backend
+// Dev: unset → fallback to localhost:8000
+const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const resp = await fetch(`${BASE_URL}${path}`, options);
