@@ -29,6 +29,7 @@ class PaperPosition(BaseModel):
 class EnterPositionRequest(BaseModel):
     underlying: str
     notes: str = ""
+    structure_rank: int = 0  # 0 = top-ranked, 1 = second, etc.
 
 
 class ClosePositionRequest(BaseModel):

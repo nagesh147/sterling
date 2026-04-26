@@ -29,6 +29,7 @@ import { VolatilityScanPanel } from '../components/VolatilityScanPanel';
 import { WebhookManager } from '../components/WebhookManager';
 import { SessionExport } from '../components/SessionExport';
 import { SessionStatsPanel } from '../components/SessionStatsPanel';
+import { PanelBoundary } from '../components/PanelBoundary';
 
 type Tab = 'analysis' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -45,7 +46,7 @@ const TAB_BAR: React.CSSProperties = {
   borderBottom: '1px solid #1e1e1e', paddingBottom: 0,
 };
 
-function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function TabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} style={{
       background: 'none', border: 'none', cursor: 'pointer',
@@ -78,7 +79,9 @@ export function Dashboard() {
 
   return (
     <div style={page}>
-      <ArrowAlert underlying={selectedUnderlying} />
+      <PanelBoundary title="ARROW ALERT">
+        <ArrowAlert underlying={selectedUnderlying} />
+      </PanelBoundary>
 
       <div style={header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -88,59 +91,65 @@ export function Dashboard() {
               v{sysInfo?.version ?? '0.4'} · {sysInfo?.paper_trading !== false ? 'PAPER' : 'LIVE'} · {(sysInfo?.active_data_source ?? 'deribit').toUpperCase()}
             </span>
           </div>
-          <StreamBadge underlying={selectedUnderlying} />
-          <ExchangeBadge />
-          <AlertBadge />
+          <PanelBoundary><StreamBadge underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary><ExchangeBadge /></PanelBoundary>
+          <PanelBoundary><AlertBadge /></PanelBoundary>
         </div>
         <InstrumentSelector />
       </div>
 
       <div style={TAB_BAR}>
         {TABS.map(([tab, label]) => (
-          <Tab key={tab} label={label} active={activeTab === tab} onClick={() => setActiveTab(tab)} />
+          <TabBtn key={tab} label={label} active={activeTab === tab} onClick={() => setActiveTab(tab)} />
         ))}
       </div>
 
       {activeTab === 'analysis' && (
         <>
-          <SessionStatsPanel />
-          <SnapshotPanel underlying={selectedUnderlying} />
-          <MarketSnapshot underlying={selectedUnderlying} />
-          <ArrowHistoryPanel underlying={selectedUnderlying} />
-          <PreviewCandidates underlying={selectedUnderlying} />
-          <RunOnceResult underlying={selectedUnderlying} />
-          <EvalHistoryPanel underlying={selectedUnderlying} />
+          <PanelBoundary title="SESSION"><SessionStatsPanel /></PanelBoundary>
+          <PanelBoundary title="SNAPSHOT"><SnapshotPanel underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="MARKET"><MarketSnapshot underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="ARROWS"><ArrowHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="PREVIEW"><PreviewCandidates underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="RUN-ONCE"><RunOnceResult underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="EVAL HISTORY"><EvalHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
         </>
       )}
       {activeTab === 'chain' && (
         <>
-          <OptionChainViewer underlying={selectedUnderlying} />
-          <VolatilityScanPanel underlying={selectedUnderlying} />
+          <PanelBoundary title="OPTION CHAIN"><OptionChainViewer underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="VOL SCAN"><VolatilityScanPanel underlying={selectedUnderlying} /></PanelBoundary>
         </>
       )}
       {activeTab === 'account' && (
         <>
-          <AccountPanel underlying={selectedUnderlying} />
-          <ExchangeManager />
+          <PanelBoundary title="ACCOUNT"><AccountPanel underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="EXCHANGES"><ExchangeManager /></PanelBoundary>
         </>
       )}
-      {activeTab === 'alerts' && <AlertManager />}
-      {activeTab === 'backtest' && <BacktestPanel underlying={selectedUnderlying} />}
+      {activeTab === 'alerts' && (
+        <PanelBoundary title="ALERTS"><AlertManager /></PanelBoundary>
+      )}
+      {activeTab === 'backtest' && (
+        <PanelBoundary title="BACKTEST"><BacktestPanel underlying={selectedUnderlying} /></PanelBoundary>
+      )}
       {activeTab === 'positions' && (
         <>
-          <PortfolioSummary />
-          <GreeksPanel />
-          <AnalyticsPanel />
-          <PositionsPanel underlying={selectedUnderlying} />
+          <PanelBoundary title="PORTFOLIO"><PortfolioSummary /></PanelBoundary>
+          <PanelBoundary title="GREEKS"><GreeksPanel /></PanelBoundary>
+          <PanelBoundary title="ANALYTICS"><AnalyticsPanel /></PanelBoundary>
+          <PanelBoundary title="POSITIONS"><PositionsPanel underlying={selectedUnderlying} /></PanelBoundary>
         </>
       )}
-      {activeTab === 'watchlist' && <WatchlistPanel />}
+      {activeTab === 'watchlist' && (
+        <PanelBoundary title="WATCHLIST"><WatchlistPanel /></PanelBoundary>
+      )}
       {activeTab === 'config' && (
         <>
-          <SystemInfoPanel />
-          <PositionSizingCalc />
-          <RiskConfigPanel />
-          <WebhookManager />
+          <PanelBoundary title="SYSTEM"><SystemInfoPanel /></PanelBoundary>
+          <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
+          <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
+          <PanelBoundary title="WEBHOOKS"><WebhookManager /></PanelBoundary>
           <SessionExport />
         </>
       )}

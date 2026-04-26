@@ -335,7 +335,8 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
             detail=f"No trade recommended for {sym}: {result.reason}",
         )
 
-    best_sized = result.ranked_structures[0]
+    rank = max(0, min(body.structure_rank, len(result.ranked_structures) - 1))
+    best_sized = result.ranked_structures[rank]
     try:
         spot_price = await adapter.get_index_price(inst)
     except Exception:

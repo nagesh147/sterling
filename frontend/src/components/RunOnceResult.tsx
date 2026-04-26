@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRunOnce } from '../hooks/useRunOnce';
 import { useEnterPosition } from '../hooks/usePositions';
+// useEnterPosition is also used inside TradeCard
 import type { SizedTrade } from '../types';
 import { fmtN } from '../utils/fmt';
 
@@ -58,16 +59,32 @@ function ScoreBreakdown({ bd }: { bd: Record<string, number> }) {
   );
 }
 
-function TradeCard({ t }: { t: SizedTrade }) {
+function TradeCard({ t, rank, underlying }: { t: SizedTrade; rank: number; underlying: string }) {
   const s = t.structure;
   const leg = s.legs[0];
+  const enter = useEnterPosition();
   return (
     <div style={styles.tradeRow}>
       <div style={styles.tradeHeader}>
         <span style={styles.structType}>{s.structure_type}</span>
-        <span style={{ ...styles.score, color: s.score >= 70 ? '#44cc88' : s.score >= 50 ? '#f0c040' : '#cc4444' }}>
-          {fmtN(s.score, 1)}
-        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ ...styles.score, color: s.score >= 70 ? '#44cc88' : s.score >= 50 ? '#f0c040' : '#cc4444' }}>
+            {fmtN(s.score, 1)}
+          </span>
+          <button
+            style={{
+              background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc8866',
+              padding: '3px 8px', borderRadius: 3, cursor: enter.isPending ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
+              opacity: enter.isPending ? 0.5 : 1,
+            }}
+            onClick={() => enter.mutate({ underlying, structure_rank: rank })}
+            disabled={enter.isPending}
+            title={`Enter this structure (rank #${rank + 1})`}
+          >
+            {enter.isPending ? '…' : '+ ENTER'}
+          </button>
+        </div>
       </div>
       <div style={styles.tradeGrid}>
         <div style={styles.cell}><span style={styles.key}>STRIKE</span><span style={styles.val}>{leg?.strike.toLocaleString()}</span></div>
@@ -88,7 +105,8 @@ interface Props { underlying: string }
 
 export function RunOnceResult({ underlying }: Props) {
   const { mutate, data, isPending, error } = useRunOnce();
-  const enter = useEnterPosition();  // hook already invalidates ['positions'] on success
+  // Note: enter buttons are per-structure in TradeCard; this hook kept for enter.data display
+  const enter = useEnterPosition();
   const canEnter = data && data.recommendation !== 'no_trade' && data.ranked_structures.length > 0;
 
   const recColor = data
@@ -160,8 +178,10 @@ export function RunOnceResult({ underlying }: Props) {
 
           {data.ranked_structures.length > 0 && (
             <>
-              <div style={{ color: '#555', fontSize: 11, letterSpacing: 1, marginBottom: 8 }}>RANKED STRUCTURES</div>
-              {data.ranked_structures.map((t, i) => <TradeCard key={i} t={t} />)}
+              <div style={{ color: '#555', fontSize: 11, letterSpacing: 1, marginBottom: 8 }}>RANKED STRUCTURES · click + ENTER to paper-enter that structure</div>
+              {data.ranked_structures.map((t, i) => (
+                <TradeCard key={i} t={t} rank={i} underlying={underlying} />
+              ))}
             </>
           )}
         </div>
