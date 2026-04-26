@@ -1,18 +1,105 @@
 """
-In-memory alert store. Alerts are checked against snapshot data.
+In-memory alert store + SQLite persistence.
+Alerts are checked against snapshot data.
 """
 import time
 import uuid
 from typing import Dict, List, Optional
 
 from app.schemas.alerts import Alert, AlertCreate, AlertCondition, AlertStatus, AlertCheckResult
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
 
 _alerts: Dict[str, Alert] = {}
+_loaded = False
 
 
 def _new_id() -> str:
     return uuid.uuid4().hex[:8].upper()
 
+
+# ─── SQLite persistence ───────────────────────────────────────────────────────
+
+def _persist(alert: Alert) -> None:
+    from app.services import db
+    if not db._available:
+        return
+    try:
+        with db._conn() as c:
+            c.execute("""
+                INSERT OR REPLACE INTO alerts
+                    (id, underlying, condition, threshold, target_state,
+                     cooldown_hours, notes, status, triggered_at_ms, trigger_value,
+                     created_at_ms, last_triggered_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                alert.id, alert.underlying, alert.condition.value,
+                alert.threshold, alert.target_state,
+                alert.cooldown_hours, alert.notes,
+                alert.status.value, alert.triggered_at_ms, alert.trigger_value,
+                alert.created_at_ms,
+                alert.triggered_at_ms,
+            ))
+    except Exception as exc:
+        log.warning("alert persist failed: %s", exc)
+
+
+def _delete_db(alert_id: str) -> None:
+    from app.services import db
+    if not db._available:
+        return
+    try:
+        with db._conn() as c:
+            c.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
+    except Exception as exc:
+        log.warning("alert delete failed: %s", exc)
+
+
+def _load_from_db() -> List[Alert]:
+    from app.services import db
+    if not db._available:
+        return []
+    try:
+        with db._conn() as c:
+            rows = c.execute("SELECT * FROM alerts").fetchall()
+        result = []
+        for r in rows:
+            try:
+                result.append(Alert(
+                    id=r["id"],
+                    underlying=r["underlying"],
+                    condition=AlertCondition(r["condition"]),
+                    threshold=r["threshold"],
+                    target_state=r["target_state"],
+                    cooldown_hours=r["cooldown_hours"] or 0.0,
+                    notes=r["notes"] or "",
+                    status=AlertStatus(r["status"]),
+                    triggered_at_ms=r["triggered_at_ms"],
+                    trigger_value=r["trigger_value"],
+                    created_at_ms=r["created_at_ms"],
+                ))
+            except Exception:
+                continue
+        return result
+    except Exception as exc:
+        log.warning("alert load failed: %s", exc)
+        return []
+
+
+def bootstrap() -> None:
+    """Load persisted alerts from DB at startup."""
+    global _loaded
+    if _loaded:
+        return
+    for alert in _load_from_db():
+        _alerts[alert.id] = alert
+    if _alerts:
+        log.info("Loaded %d alerts from DB", len(_alerts))
+    _loaded = True
+
+
+# ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 def add_alert(data: AlertCreate) -> Alert:
     alert = Alert(
@@ -27,6 +114,7 @@ def add_alert(data: AlertCreate) -> Alert:
         created_at_ms=int(time.time() * 1000),
     )
     _alerts[alert.id] = alert
+    _persist(alert)
     return alert
 
 
@@ -47,6 +135,7 @@ def dismiss_alert(alert_id: str) -> Optional[Alert]:
         return None
     updated = alert.model_copy(update={"status": AlertStatus.DISMISSED})
     _alerts[alert_id] = updated
+    _persist(updated)
     return updated
 
 
@@ -54,6 +143,7 @@ def delete_alert(alert_id: str) -> bool:
     if alert_id not in _alerts:
         return False
     del _alerts[alert_id]
+    _delete_db(alert_id)
     return True
 
 
@@ -135,6 +225,7 @@ def fire_alert(alert_id: str, trigger_value: Optional[float] = None) -> Optional
         "fire_count": alert.fire_count + 1,
     })
     _alerts[alert_id] = updated
+    _persist(updated)
     return updated
 
 
@@ -152,7 +243,9 @@ def rearm_if_cooldown_elapsed(alert_id: str) -> bool:
         return False
     elapsed_hours = (int(time.time() * 1000) - alert.triggered_at_ms) / 3_600_000
     if elapsed_hours >= alert.cooldown_hours:
-        _alerts[alert_id] = alert.model_copy(update={"status": AlertStatus.ACTIVE})
+        updated = alert.model_copy(update={"status": AlertStatus.ACTIVE})
+        _alerts[alert_id] = updated
+        _persist(updated)
         return True
     return False
 

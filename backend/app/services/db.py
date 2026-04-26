@@ -55,6 +55,22 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             trigger_count    INTEGER NOT NULL DEFAULT 0
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS alerts (
+            id               TEXT PRIMARY KEY,
+            underlying       TEXT NOT NULL,
+            condition        TEXT NOT NULL,
+            threshold        REAL,
+            target_state     TEXT,
+            cooldown_hours   REAL NOT NULL DEFAULT 0,
+            notes            TEXT NOT NULL DEFAULT '',
+            status           TEXT NOT NULL DEFAULT 'active',
+            triggered_at_ms  INTEGER,
+            trigger_value    REAL,
+            created_at_ms    INTEGER NOT NULL,
+            last_triggered_ms INTEGER
+        )
+    """)
     conn.commit()
 
 
