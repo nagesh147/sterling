@@ -45,6 +45,10 @@ export function ArrowAlert({ underlying }: Props) {
         message: data.green_arrow ? '▲ BULLISH ARROW' : '▼ BEARISH ARROW',
         ts: data.timestamp_ms,
       });
+      // Refresh arrow history panel
+      qc.invalidateQueries({ queryKey: ['arrows', underlying] });
+      qc.invalidateQueries({ queryKey: ['arrows-all'] });
+      qc.invalidateQueries({ queryKey: ['session-stats'] });
       const t = setTimeout(() => setNotif(null), 12_000);
       return () => clearTimeout(t);
     }

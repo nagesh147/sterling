@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 export interface AlertFired {
   id: string;
@@ -28,13 +28,25 @@ export interface StreamPayload {
 
 export type StreamStatus = 'connecting' | 'connected' | 'disconnected';
 
+const BASE_DELAY_MS = 2_000;
+const MAX_DELAY_MS = 30_000;
+
 export function useSignalStream(underlying: string, intervalSec = 30) {
   const [data, setData] = useState<StreamPayload | null>(null);
   const [status, setStatus] = useState<StreamStatus>('disconnected');
   const esRef = useRef<EventSource | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const delayRef = useRef(BASE_DELAY_MS);
+  const activeRef = useRef(true); // tracks whether effect is still mounted
 
-  useEffect(() => {
-    if (!underlying) return;
+  const connect = useCallback(() => {
+    if (!underlying || !activeRef.current) return;
+
+    // Close existing connection cleanly
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
 
     const base = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8000';
     const url = `${base}/api/v1/directional/stream/${underlying}?interval=${intervalSec}`;
@@ -43,29 +55,50 @@ export function useSignalStream(underlying: string, intervalSec = 30) {
     const es = new EventSource(url);
     esRef.current = es;
 
-    es.onopen = () => setStatus('connected');
+    es.onopen = () => {
+      if (!activeRef.current) return;
+      setStatus('connected');
+      delayRef.current = BASE_DELAY_MS; // reset backoff on success
+    };
 
     es.onmessage = (e) => {
+      if (!activeRef.current) return;
       try {
         const payload = JSON.parse(e.data) as StreamPayload;
         setData(payload);
         setStatus('connected');
-      } catch {
-        // ignore parse error
-      }
+      } catch { /* ignore parse errors */ }
     };
 
     es.onerror = () => {
+      if (!activeRef.current) return;
       setStatus('disconnected');
-      es.close();
-    };
-
-    return () => {
       es.close();
       esRef.current = null;
-      setStatus('disconnected');
+
+      // Exponential backoff reconnect
+      const delay = delayRef.current;
+      delayRef.current = Math.min(delay * 2, MAX_DELAY_MS);
+      reconnectRef.current = setTimeout(() => {
+        if (activeRef.current) connect();
+      }, delay);
     };
   }, [underlying, intervalSec]);
+
+  useEffect(() => {
+    activeRef.current = true;
+    connect();
+
+    return () => {
+      activeRef.current = false;
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+      setStatus('disconnected');
+    };
+  }, [connect]);
 
   return { data, status };
 }

@@ -42,6 +42,19 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             extra        TEXT NOT NULL DEFAULT '{}'
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS webhooks (
+            id               TEXT PRIMARY KEY,
+            name             TEXT NOT NULL,
+            webhook_type     TEXT NOT NULL,
+            url              TEXT NOT NULL,
+            extra            TEXT NOT NULL DEFAULT '{}',
+            active           INTEGER NOT NULL DEFAULT 1,
+            created_at_ms    INTEGER NOT NULL,
+            last_triggered_ms INTEGER,
+            trigger_count    INTEGER NOT NULL DEFAULT 0
+        )
+    """)
     conn.commit()
 
 

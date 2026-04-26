@@ -1,5 +1,5 @@
 """
-In-memory webhook store + async delivery.
+In-memory webhook store + async delivery + SQLite persistence.
 Supports: Discord, Telegram, generic HTTP POST.
 """
 import json
@@ -15,11 +15,87 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 _webhooks: Dict[str, WebhookConfig] = {}
+_loaded = False
 
 
 def _new_id() -> str:
     return uuid.uuid4().hex[:8].upper()
 
+
+# ─── SQLite persistence ───────────────────────────────────────────────────────
+
+def _persist(wh: WebhookConfig) -> None:
+    from app.services import db
+    if not db._available:
+        return
+    try:
+        with db._conn() as c:
+            c.execute("""
+                INSERT OR REPLACE INTO webhooks
+                    (id, name, webhook_type, url, extra, active,
+                     created_at_ms, last_triggered_ms, trigger_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                wh.id, wh.name, wh.webhook_type.value, wh.url,
+                json.dumps(wh.extra), int(wh.active),
+                wh.created_at_ms, wh.last_triggered_ms, wh.trigger_count,
+            ))
+    except Exception as exc:
+        log.warning("webhook persist failed: %s", exc)
+
+
+def _delete_db(wh_id: str) -> None:
+    from app.services import db
+    if not db._available:
+        return
+    try:
+        with db._conn() as c:
+            c.execute("DELETE FROM webhooks WHERE id = ?", (wh_id,))
+    except Exception as exc:
+        log.warning("webhook delete failed: %s", exc)
+
+
+def _load_from_db() -> List[WebhookConfig]:
+    from app.services import db
+    if not db._available:
+        return []
+    try:
+        with db._conn() as c:
+            rows = c.execute("SELECT * FROM webhooks").fetchall()
+        result = []
+        for r in rows:
+            try:
+                result.append(WebhookConfig(
+                    id=r["id"], name=r["name"],
+                    webhook_type=WebhookType(r["webhook_type"]),
+                    url=r["url"],
+                    extra=json.loads(r["extra"] or "{}"),
+                    active=bool(r["active"]),
+                    created_at_ms=r["created_at_ms"],
+                    last_triggered_ms=r["last_triggered_ms"],
+                    trigger_count=r["trigger_count"] or 0,
+                ))
+            except Exception:
+                continue
+        return result
+    except Exception as exc:
+        log.warning("webhook load failed: %s", exc)
+        return []
+
+
+def bootstrap() -> None:
+    """Load persisted webhooks from DB at startup."""
+    global _loaded
+    if _loaded:
+        return
+    for wh in _load_from_db():
+        _webhooks[wh.id] = wh
+    if _webhooks:
+        log.info("Loaded %d webhooks from DB", len(_webhooks))
+    _loaded = True
+
+
+# ─── CRUD ─────────────────────────────────────────────────────────────────────
 
 def add_webhook(data: WebhookCreate) -> WebhookConfig:
     wh = WebhookConfig(
@@ -32,6 +108,7 @@ def add_webhook(data: WebhookCreate) -> WebhookConfig:
         created_at_ms=int(time.time() * 1000),
     )
     _webhooks[wh.id] = wh
+    _persist(wh)
     return wh
 
 
@@ -47,6 +124,7 @@ def delete_webhook(wh_id: str) -> bool:
     if wh_id not in _webhooks:
         return False
     del _webhooks[wh_id]
+    _delete_db(wh_id)
     return True
 
 
@@ -56,12 +134,15 @@ def update_webhook(wh_id: str, **kwargs) -> Optional[WebhookConfig]:
         return None
     updated = wh.model_copy(update=kwargs)
     _webhooks[wh_id] = updated
+    _persist(updated)
     return updated
 
 
 def clear() -> None:
     _webhooks.clear()
 
+
+# ─── Delivery ─────────────────────────────────────────────────────────────────
 
 async def deliver(wh_id: str, subject: str, message: str, data: dict = None) -> bool:
     wh = _webhooks.get(wh_id)
@@ -70,10 +151,12 @@ async def deliver(wh_id: str, subject: str, message: str, data: dict = None) -> 
     try:
         ok = await _send(wh, subject, message, data or {})
         now_ms = int(time.time() * 1000)
-        _webhooks[wh_id] = wh.model_copy(update={
+        updated = wh.model_copy(update={
             "last_triggered_ms": now_ms,
             "trigger_count": wh.trigger_count + 1,
         })
+        _webhooks[wh_id] = updated
+        _persist(updated)
         return ok
     except Exception as exc:
         log.warning("Webhook delivery failed %s: %s", wh_id, exc)

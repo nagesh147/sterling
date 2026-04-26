@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { usePositions, useEnterPosition, useClosePosition, useDeletePosition } from '../hooks/usePositions';
+import { usePositions, useEnterPosition, useClosePosition, useDeletePosition, useCloseAll } from '../hooks/usePositions';
 import { useMonitorPosition, useMonitorAll } from '../hooks/useMonitorPosition';
 import { useLivePnl } from '../hooks/useLivePnl';
 import type { MonitorResult } from '../hooks/useMonitorPosition';
@@ -236,6 +236,8 @@ export function PositionsPanel({ underlying }: Props) {
   const { data, isLoading } = usePositions();
   const enter = useEnterPosition();
   const monitorAll = useMonitorAll();
+  const closeAll = useCloseAll();
+  const [showCloseAllConfirm, setShowCloseAllConfirm] = useState(false);
   const hasOpen = (data?.open_count ?? 0) > 0;
   const { data: livePnlData } = useLivePnl(hasOpen);
   const livePnlMap = Object.fromEntries(
@@ -274,6 +276,30 @@ export function PositionsPanel({ underlying }: Props) {
           >
             {monitorAll.isPending ? '…' : '⟳ MONITOR ALL'}
           </button>
+          {!showCloseAllConfirm ? (
+            <button
+              style={{ background: '#2a1a1a', color: '#cc6644', border: '1px solid #cc664433', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+              onClick={() => setShowCloseAllConfirm(true)}
+              disabled={(data?.open_count ?? 0) === 0}
+              title="Close all open positions at current market price"
+            >
+              ✕ CLOSE ALL
+            </button>
+          ) : (
+            <>
+              <button
+                style={{ background: '#2a0d0d', color: '#cc4444', border: '1px solid #cc4444', padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+                onClick={() => { closeAll.mutate(); setShowCloseAllConfirm(false); }}
+                disabled={closeAll.isPending}
+              >
+                {closeAll.isPending ? 'CLOSING…' : 'CONFIRM CLOSE ALL'}
+              </button>
+              <button
+                style={{ background: '#1a1a1a', color: '#555', border: '1px solid #333', padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+                onClick={() => setShowCloseAllConfirm(false)}
+              >CANCEL</button>
+            </>
+          )}
           <button
             style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
             onClick={() => downloadCSV('/api/v1/positions/export', 'sterling_paper_positions.csv')}

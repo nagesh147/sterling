@@ -35,3 +35,15 @@ export function useDeletePosition() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['positions'] }),
   });
 }
+
+export function useCloseAll() {
+  const qc = useQueryClient();
+  return useMutation<{ closed_count: number; total_realized_pnl_usd: number }, Error, void>({
+    mutationFn: () => api.post('/api/v1/positions/close-all'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['positions'] });
+      qc.invalidateQueries({ queryKey: ['portfolio-summary'] });
+      qc.invalidateQueries({ queryKey: ['live-pnl'] });
+    },
+  });
+}

@@ -18,25 +18,31 @@ interface Props { underlying: string }
 export function StreamBadge({ underlying }: Props) {
   const { data, status } = useSignalStream(underlying, 30);
 
+  const dotColor = DOT[status];
+  const label = status === 'connected' ? 'LIVE'
+    : status === 'connecting' ? (data ? 'RECONNECTING' : 'CONNECTING')
+    : 'STREAM OFF';
+
   return (
     <div style={styles}>
       <span style={{
         width: 7, height: 7, borderRadius: '50%',
-        background: DOT[status],
-        boxShadow: status === 'connected' ? `0 0 6px ${DOT[status]}` : 'none',
+        background: dotColor,
+        boxShadow: status === 'connected' ? `0 0 6px ${dotColor}` : 'none',
         display: 'inline-block',
-        animation: status === 'connecting' ? 'pulse 1s infinite' : 'none',
       }} />
-      <span style={{ color: '#666' }}>LIVE</span>
-      {data && !data.error && (
+      <span style={{ color: status === 'connected' ? '#666' : status === 'connecting' ? '#888' : '#444' }}>
+        {label}
+      </span>
+      {data && !data.error && status === 'connected' && (
         <>
-          <span style={{ color: '#444', margin: '0 2px' }}>|</span>
+          <span style={{ color: '#333', margin: '0 2px' }}>|</span>
           <span style={{ color: data.signal_trend === 1 ? '#44cc88' : data.signal_trend === -1 ? '#cc4444' : '#888' }}>
             {data.signal_trend === 1 ? '▲' : data.signal_trend === -1 ? '▼' : '~'}
           </span>
           {data.green_arrow && <span style={{ color: '#44cc88', fontWeight: 700 }}>↑ ARROW</span>}
           {data.red_arrow && <span style={{ color: '#cc4444', fontWeight: 700 }}>↓ ARROW</span>}
-          <span style={{ color: '#444', margin: '0 2px' }}>|</span>
+          <span style={{ color: '#333', margin: '0 2px' }}>|</span>
           <span style={{ color: '#888' }}>${(data.spot_price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
         </>
       )}

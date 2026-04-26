@@ -124,27 +124,37 @@ class OKXAdapter(BaseExchangeAdapter):
             raise ValueError(f"Unsupported resolution: {resolution}")
 
         perp = instrument.okx_perp_symbol or f"{instrument.underlying}-USDT-SWAP"
-        data = await self._get(
-            "/api/v5/market/candles",
-            {"instId": perp, "bar": bar, "limit": str(min(limit, 300))},
-        )
+        # OKX max 300 per call — paginate via `after` (older than ts) for large requests
+        all_rows: list = []
+        after: Optional[str] = None
+        per_page = 300
+
+        while len(all_rows) < limit:
+            params: dict = {"instId": perp, "bar": bar, "limit": str(per_page)}
+            if after:
+                params["after"] = after
+            data = await self._get("/api/v5/market/history-candles", params)
+            if not isinstance(data, list) or not data:
+                break
+            all_rows.extend(data)
+            if len(data) < per_page:
+                break
+            after = str(data[-1][0])  # oldest ts in this page → next page
 
         candles: List[Candle] = []
-        if isinstance(data, list):
-            for row in data:
-                try:
-                    # row: [ts, open, high, low, close, vol, volCcy, volCcyQuote, confirm]
-                    ts = _normalize_ts_ms(int(row[0]))
-                    candles.append(Candle(
-                        timestamp_ms=ts,
-                        open=float(row[1]),
-                        high=float(row[2]),
-                        low=float(row[3]),
-                        close=float(row[4]),
-                        volume=float(row[5]),
-                    ))
-                except (IndexError, ValueError, TypeError):
-                    continue
+        for row in all_rows[:limit]:
+            try:
+                ts = _normalize_ts_ms(int(row[0]))
+                candles.append(Candle(
+                    timestamp_ms=ts,
+                    open=float(row[1]),
+                    high=float(row[2]),
+                    low=float(row[3]),
+                    close=float(row[4]),
+                    volume=float(row[5]),
+                ))
+            except (IndexError, ValueError, TypeError):
+                continue
 
         # OKX returns newest first — reverse for chronological order
         return list(reversed(candles))
@@ -210,13 +220,12 @@ class OKXAdapter(BaseExchangeAdapter):
                 ts_raw = t.get("ts") or now_ms
 
                 smry = summary_by_id.get(inst_id, {})
-                iv = float(smry.get("markVol") or 0.0)
+                iv = float(smry.get("markVol") or smry.get("realVol") or 0.0)
                 delta = float(smry.get("delta") or 0.0)
-                mark = float(smry.get("fwdPx") or last or (bid + ask) / 2)
+                mark = float(smry.get("markPx") or smry.get("fwdPx") or last or (bid + ask) / 2)
                 mid = (bid + ask) / 2 if bid > 0 and ask > 0 else mark
-
-                # OKX OI: not in tickers/opt-summary, set to 0 and let health engine filter
-                oi = 0.0
+                # OKX opt-summary provides open interest in contracts
+                oi = float(smry.get("oi") or smry.get("oiUsd") or 0.0)
 
                 options.append(OptionSummary(
                     instrument_name=inst_id,

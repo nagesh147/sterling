@@ -7,6 +7,7 @@ from app.core.logging import setup_logging, get_logger
 from app.services import paper_store
 from app.services import exchange_account_store
 from app.services import adapter_manager
+from app.services import webhook_store as _webhook_store_svc
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.instruments import router as instruments_router
 from app.api.v1.endpoints.directional import router as directional_router
@@ -87,6 +88,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     paper_store.bootstrap()
     exchange_account_store.bootstrap()
+    _webhook_store_svc.bootstrap()
 
     # Build market data adapter (use pre-injected adapter in tests, else build fresh)
     if not getattr(app.state, "adapter", None):
