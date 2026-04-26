@@ -1,6 +1,6 @@
 import React from 'react';
 import { useEvalHistory } from '../hooks/useEvalHistory';
-import { fmtN } from '../utils/fmt';
+import { fmtN, fmtDateTime } from '../utils/fmt';
 
 const styles: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
@@ -41,7 +41,7 @@ export function EvalHistoryPanel({ underlying }: Props) {
           <tbody>
             {[...data.history].reverse().map((item, i) => (
               <tr key={i}>
-                <td style={styles.td}>{new Date(item.timestamp_ms).toLocaleTimeString()}</td>
+                <td style={styles.td}>{fmtDateTime(item.timestamp_ms)}</td>
                 <td style={styles.td}>{item.state}</td>
                 <td style={styles.td}>{item.direction.toUpperCase()}</td>
                 <td style={{ ...styles.td, color: recColor(item.recommendation), fontWeight: 600 }}>

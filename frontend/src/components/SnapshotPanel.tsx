@@ -1,7 +1,8 @@
 import React from 'react';
 import { useSnapshot } from '../hooks/useSnapshot';
-import { fmtN, ivrColor, ivrWidth } from '../utils/fmt';
+import { fmtN, ivrColor, ivrWidth, fmtAge } from '../utils/fmt';
 import { RegimeSparkline } from './RegimeSparkline';
+import { useInstruments } from '../hooks/useInstruments';
 
 const STATE_COLOR: Record<string, string> = {
   CONFIRMED_SETUP_ACTIVE: '#f0c040',
@@ -25,11 +26,12 @@ const S: Record<string, React.CSSProperties> = {
   reason: { color: '#555', fontSize: 11 },
 };
 
-function IVRMini({ ivr, band }: { ivr: number | null | undefined; band: string }) {
+function IVRMini({ ivr, band, hasDvol }: { ivr: number | null | undefined; band: string; hasDvol?: boolean }) {
   const color = ivrColor(ivr);
+  const source = ivr != null ? (hasDvol ? 'DVOL' : 'HV') : 'N/A';
   return (
     <div style={S.cell}>
-      <span style={S.key}>IVR · {band.toUpperCase()}</span>
+      <span style={S.key}>IVR · {band.toUpperCase()} · <span style={{ color: hasDvol ? '#88aaff' : '#f0a500', fontSize: 9 }}>{source}</span></span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <div style={{ width: 50, height: 5, background: '#1e1e1e', borderRadius: 3 }}>
           <div style={{ width: `${ivrWidth(ivr)}%`, height: '100%', background: color, borderRadius: 3 }} />
@@ -68,7 +70,10 @@ function STTrends({ trends, values, spot }: { trends: number[]; values?: number[
 
 export function SnapshotPanel({ underlying }: { underlying: string }) {
   const { data, isLoading, dataUpdatedAt } = useSnapshot(underlying);
-  const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : '—';
+  const { data: instruments } = useInstruments();
+  const updatedAt = dataUpdatedAt ? fmtAge(dataUpdatedAt) : '—';
+  const inst = instruments?.instruments.find(i => i.underlying === underlying);
+  const hasDvol = !!inst?.dvol_symbol;
 
   if (isLoading) return <div style={S.card}><span style={{ color: '#444', fontSize: 12 }}>Snapshot loading…</span></div>;
   if (!data) return null;
@@ -98,7 +103,7 @@ export function SnapshotPanel({ underlying }: { underlying: string }) {
           </span>
         </div>
         <STTrends trends={data.st_trends} values={data.st_values} spot={data.spot_price} />
-        <IVRMini ivr={data.ivr} band={data.ivr_band} />
+        <IVRMini ivr={data.ivr} band={data.ivr_band} hasDvol={hasDvol} />
       </div>
 
       {(data.green_arrow || data.red_arrow) && (

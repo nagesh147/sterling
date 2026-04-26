@@ -12,9 +12,9 @@ export function usePositions() {
 
 export function useEnterPosition() {
   const qc = useQueryClient();
-  return useMutation<PaperPosition, Error, { underlying: string; notes?: string }>({
-    mutationFn: ({ underlying, notes = '' }) =>
-      api.post<PaperPosition>('/api/v1/positions/enter', { underlying, notes }),
+  return useMutation<PaperPosition, Error, { underlying: string; notes?: string; structure_rank?: number }>({
+    mutationFn: ({ underlying, notes = '', structure_rank = 0 }) =>
+      api.post<PaperPosition>('/api/v1/positions/enter', { underlying, notes, structure_rank }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['positions'] }),
   });
 }
