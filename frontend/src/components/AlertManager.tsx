@@ -5,6 +5,7 @@ import {
 } from '../hooks/useAlerts';
 import type { Alert, AlertCondition } from '../hooks/useAlerts';
 import { fmtN } from '../utils/fmt';
+import { useInstruments } from '../hooks/useInstruments';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
@@ -75,6 +76,8 @@ function AlertRow({ alert }: { alert: Alert }) {
 }
 
 function AddAlertForm({ onDone }: { onDone: () => void }) {
+  const { data: instrumentData } = useInstruments();
+  const underlyings = (instrumentData?.instruments ?? []).map(i => i.underlying);
   const [underlying, setUnderlying] = useState('BTC');
   const [condition, setCondition] = useState<AlertCondition>('price_above');
   const [threshold, setThreshold] = useState('');
@@ -100,7 +103,9 @@ function AddAlertForm({ onDone }: { onDone: () => void }) {
         <div style={S.field}>
           <label style={S.label}>UNDERLYING</label>
           <select style={S.select} value={underlying} onChange={e => setUnderlying(e.target.value)}>
-            {['BTC', 'ETH', 'SOL', 'XRP'].map(u => <option key={u}>{u}</option>)}
+            {(underlyings.length > 0 ? underlyings : ['BTC', 'ETH', 'SOL', 'XRP']).map(u => (
+              <option key={u}>{u}</option>
+            ))}
           </select>
         </div>
         <div style={S.field}>
