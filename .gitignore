@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.db
+.env
+*.log
+
+# pytest / coverage
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Node
+node_modules/
+dist/
+.cache/
+
+# IDE & editors
+.vscode/
+.idea/
+.cursor/
+.kiro/
+.windsurfrules
+.cursorrules
+.opencode.json
+.mcp.json
+*.swp
+*.swo
+
+# Claude Code / AI tools
+.claude/
+.agent/
+CLAUDE.md
+GEMINI.md
+AGENTS.md
+.github/copilot-instructions.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sterling runtime data
+sterling_paper.db
+backend/sterling_paper.db
+
+# Package lock (optional — include if reproducibility needed)
+# package-lock.json
