@@ -242,6 +242,52 @@ async def live_pnl(request: Request):
     }
 
 
+@router.post("/close-all")
+async def close_all_positions(request: Request) -> dict:
+    """
+    Close all open/partially_closed positions using current spot prices.
+    Returns count of positions closed and total realized P&L.
+    """
+    from app.services import adapter_manager as _adm
+    now_ms = int(time.time() * 1000)
+    active = [
+        p for p in paper_store.list_positions()
+        if p.status.value in ("open", "partially_closed")
+    ]
+    if not active:
+        return {"closed_count": 0, "total_realized_pnl_usd": 0.0, "timestamp_ms": now_ms}
+
+    adapter = _adm.get_adapter() or request.app.state.adapter
+    from app.services.exchanges import instrument_registry as registry
+    import asyncio as _asyncio
+
+    spots: dict = {}
+    async def _fetch(sym: str, inst):
+        try:
+            spots[sym] = float(await adapter.get_index_price(inst))
+        except Exception:
+            spots[sym] = None
+
+    insts = {p.underlying: registry.get_instrument(p.underlying) for p in active}
+    await _asyncio.gather(*[_fetch(sym, inst) for sym, inst in insts.items() if inst])
+
+    closed_count = 0
+    total_pnl = 0.0
+    for pos in active:
+        spot = spots.get(pos.underlying) or pos.entry_spot_price
+        closed = paper_store.close_position(pos.id, float(spot))
+        if closed:
+            closed_count += 1
+            if closed.realized_pnl_usd is not None:
+                total_pnl += closed.realized_pnl_usd
+
+    return {
+        "closed_count": closed_count,
+        "total_realized_pnl_usd": round(total_pnl, 2),
+        "timestamp_ms": now_ms,
+    }
+
+
 @router.get("/export")
 async def export_positions_csv(status: str = Query(default="")) -> StreamingResponse:
     """Export paper positions as CSV."""
