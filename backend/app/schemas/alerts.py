@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from enum import Enum
 
@@ -22,10 +22,24 @@ class AlertStatus(str, Enum):
 class AlertCreate(BaseModel):
     underlying: str
     condition: AlertCondition
-    threshold: Optional[float] = None       # for price/IVR conditions
-    target_state: Optional[str] = None     # for state_is condition
-    cooldown_hours: float = Field(default=0.0, ge=0.0, le=168.0)  # 0 = fire once; >0 = auto-rearm after N hours
+    threshold: Optional[float] = None
+    target_state: Optional[str] = None
+    cooldown_hours: float = Field(default=0.0, ge=0.0, le=168.0)
     notes: str = ""
+
+    @model_validator(mode="after")
+    def validate_threshold(self) -> "AlertCreate":
+        price_conds = {AlertCondition.PRICE_ABOVE, AlertCondition.PRICE_BELOW}
+        ivr_conds = {AlertCondition.IVR_ABOVE, AlertCondition.IVR_BELOW}
+        if self.condition in price_conds:
+            if self.threshold is None or self.threshold <= 0:
+                raise ValueError(f"{self.condition.value} requires threshold > 0")
+        if self.condition in ivr_conds:
+            if self.threshold is None or not (0 <= self.threshold <= 100):
+                raise ValueError(f"{self.condition.value} requires threshold 0–100")
+        if self.condition == AlertCondition.STATE_IS and not self.target_state:
+            raise ValueError("state_is requires target_state")
+        return self
 
 
 class Alert(AlertCreate):
