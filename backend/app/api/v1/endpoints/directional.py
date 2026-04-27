@@ -65,6 +65,15 @@ async def directional_status(
             state=TradeState.IDLE, timestamp_ms=now_ms,
         )
 
+    if not _adapter_can_serve(inst, _adm.get_data_source()):
+        return DirectionalStatusResponse(
+            underlying=sym, loaded=False, paper_mode=settings.paper_trading,
+            real_public_data=settings.real_public_data,
+            exchange_status=f"not_available_on_{_adm.get_data_source()}",
+            has_options=inst.has_options,
+            state=TradeState.IDLE, timestamp_ms=now_ms,
+        )
+
     adapter = _adapter(request)
     exchange_ok = await adapter.ping()
     regime = signal = None
@@ -130,35 +139,44 @@ async def _watchlist_item(inst, adapter) -> WatchlistItem:
         )
 
 
+def _adapter_can_serve(inst, source: str) -> bool:
+    """
+    Check whether the active data source can serve market data for an instrument.
+    Uses instrument-specific symbol fields rather than inst.exchange label,
+    since most crypto instruments are multi-exchange.
+    """
+    if source == "zerodha":
+        return inst.exchange == "zerodha"
+    if source == "delta_india":
+        # Delta India can serve any instrument that has a delta_perp_symbol
+        return inst.delta_perp_symbol is not None
+    if source == "okx":
+        return inst.okx_perp_symbol is not None
+    if source == "binance":
+        # Binance can serve all non-zerodha crypto instruments
+        return inst.exchange != "zerodha"
+    if source == "deribit":
+        # Deribit serves its own instruments; zerodha instruments not available
+        return inst.exchange != "zerodha"
+    # Unknown source: attempt and let the adapter fail gracefully
+    return inst.exchange != "zerodha"
+
+
 @router.get("/watchlist", response_model=WatchlistResponse)
 async def watchlist(request: Request) -> WatchlistResponse:
     current_source = _adm.get_data_source()
-
-    # Exchange compatibility map: which adapters can serve each exchange's instruments
-    _exchange_sources: dict[str, list[str]] = {
-        "deribit":     ["deribit", "okx"],
-        "okx":         ["okx", "deribit"],
-        "binance":     ["binance", "deribit", "okx"],
-        "zerodha":     ["zerodha"],
-        "delta_india": ["delta_india", "deribit", "binance"],
-    }
-
-    def _is_compatible(inst) -> bool:
-        compatible = _exchange_sources.get(inst.exchange, [inst.exchange])
-        return current_source in compatible
-
     instruments = registry.list_instruments()
     adapter = _adapter(request)
     now_ms = int(time.time() * 1000)
 
     async def _item_or_skip(inst) -> WatchlistItem:
-        if not _is_compatible(inst):
+        if not _adapter_can_serve(inst, current_source):
             return WatchlistItem(
                 underlying=inst.underlying,
                 has_options=inst.has_options,
                 state=TradeState.IDLE,
                 direction=Direction.NEUTRAL,
-                error=f"Not available on {current_source} (requires {inst.exchange})",
+                error=f"{inst.underlying} not available on {current_source}",
                 timestamp_ms=now_ms,
             )
         return await _watchlist_item(inst, adapter)
@@ -183,6 +201,13 @@ async def market_snapshot(
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
+
     adapter = _adapter(request)
     now_ms = int(time.time() * 1000)
 
@@ -196,12 +221,8 @@ async def market_snapshot(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Market data fetch failed: {exc}")
 
-    dvol_hist = await adapter.get_dvol_history(inst, days=30)
-    ivr = None
-    if dvol and dvol_hist:
-        lo, hi = min(dvol_hist), max(dvol_hist)
-        if hi > lo:
-            ivr = round((dvol - lo) / (hi - lo) * 100.0, 2)
+    # Compute IVR: DVOL-based if available, HV-based fallback for non-DVOL sources
+    ivr = await compute_ivr(adapter, inst, c1h)
 
     return MarketSnapshotResponse(
         underlying=sym,
@@ -210,7 +231,7 @@ async def market_snapshot(
         candles_1h_count=len(c1h),
         candles_15m_count=len(c15m),
         dvol=dvol, ivr=ivr,
-        data_source=f"{_adm.get_data_source()}/{inst.index_name}",
+        data_source=f"{src}/{inst.underlying}",
         timestamp_ms=now_ms,
     )
 
@@ -226,6 +247,12 @@ async def preview(
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
     return await engine_preview(inst, _adapter(request))
 
 
@@ -242,6 +269,12 @@ async def run_once_endpoint(
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
 
     from app.api.v1.endpoints.config import get_runtime_risk
     result = await engine_run_once(inst, _adapter(request), get_runtime_risk())
@@ -283,7 +316,11 @@ async def run_all_endpoint(request: Request):
     from app.core.rate_limit import check_run_all
     check_run_all(request)
     from app.api.v1.endpoints.config import get_runtime_risk
-    instruments = [i for i in registry.list_instruments() if i.has_options]
+    src = _adm.get_data_source()
+    instruments = [
+        i for i in registry.list_instruments()
+        if i.has_options and _adapter_can_serve(i, src)
+    ]
     adapter = _adapter(request)
     risk = get_runtime_risk()
     now_ms = int(time.time() * 1000)
@@ -342,6 +379,13 @@ async def snapshot(
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
 
     adapter = _adapter(request)
     now_ms = int(time.time() * 1000)

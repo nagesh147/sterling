@@ -221,5 +221,11 @@ class TestRunAllComplete:
     def test_run_all_instruments_evaluated(self, client):
         data = client.post("/api/v1/directional/run-all").json()
         from app.services.exchanges import instrument_registry as registry
-        expected = sum(1 for i in registry.list_instruments() if i.has_options)
+        from app.api.v1.endpoints.directional import _adapter_can_serve
+        from app.services import adapter_manager as _adm
+        src = _adm.get_data_source()
+        expected = sum(
+            1 for i in registry.list_instruments()
+            if i.has_options and _adapter_can_serve(i, src)
+        )
         assert data["instruments_evaluated"] == expected
