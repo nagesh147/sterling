@@ -92,6 +92,7 @@ async def list_positions(
     return PositionListResponse(
         positions=positions,
         open_count=sum(1 for p in positions if p.status.value in ("open", "partially_closed")),
+        partially_closed_count=sum(1 for p in positions if p.status.value == "partially_closed"),
         closed_count=sum(1 for p in positions if p.status.value == "closed"),
     )
 

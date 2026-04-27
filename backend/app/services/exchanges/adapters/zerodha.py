@@ -10,9 +10,11 @@ Store in ExchangeConfig:
 
 Docs: https://kite.trade/docs/connect/v3/
 """
+import csv
+import io
 import time
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 
@@ -213,11 +215,151 @@ class ZerodhaAdapter(AuthenticatedExchangeAdapter):
 
         return candles[-limit:]
 
+    # ─── NFO option chain ──────────────────────────────────────────────────────
+    # Instruments CSV is cached per-instance for 1 hour (refreshed after market open)
+    _nfo_cache: Optional[List[Dict]] = None
+    _nfo_cache_ts: float = 0.0
+    _NFO_CACHE_TTL = 3600.0  # 1 hour
+
+    async def _load_nfo_instruments(self) -> List[Dict]:
+        """Fetch and cache NFO instruments CSV from Kite."""
+        now = time.monotonic()
+        if self._nfo_cache is not None and (now - self._nfo_cache_ts) < self._NFO_CACHE_TTL:
+            return self._nfo_cache
+
+        client = await self._get_client()
+        try:
+            resp = await client.get("/instruments/NFO")
+            resp.raise_for_status()
+            reader = csv.DictReader(io.StringIO(resp.text))
+            rows = [row for row in reader]
+            self._nfo_cache = rows
+            self._nfo_cache_ts = now
+            log.info("Loaded %d NFO instruments from Kite", len(rows))
+            return rows
+        except Exception as exc:
+            log.warning("NFO instruments fetch failed: %s", exc)
+            return self._nfo_cache or []
+
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:
-        # NFO option chain requires fetching instruments CSV and pricing — complex flow
-        # Returning empty until full NFO integration is implemented
-        log.info("Zerodha option chain not yet implemented for %s", instrument.underlying)
-        return []
+        if not instrument.has_options:
+            return []
+        if self._is_paper:
+            return []  # no mock option chain for paper mode
+
+        spot = await self.get_index_price(instrument)
+        if spot <= 0:
+            return []
+
+        name_filter = instrument.underlying  # "NIFTY" or "BANKNIFTY"
+        now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        now_ms = int(time.time() * 1000)
+
+        try:
+            all_instruments = await self._load_nfo_instruments()
+        except Exception:
+            return []
+
+        # Filter options: correct name, correct segment, strike within 20% of spot
+        max_strike_delta = spot * 0.20
+        filtered: List[Dict] = []
+        for row in all_instruments:
+            if row.get("name", "").upper() != name_filter:
+                continue
+            if row.get("instrument_type", "") not in ("CE", "PE"):
+                continue
+            if row.get("segment", "") != "NFO-OPT":
+                continue
+            try:
+                strike = float(row["strike"])
+                if abs(strike - spot) > max_strike_delta:
+                    continue
+                expiry_str = row.get("expiry", "")
+                if not expiry_str:
+                    continue
+                dt_expiry = datetime.strptime(expiry_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                dte = (dt_expiry - now.replace(tzinfo=timezone.utc)).days
+                if dte < instrument.min_dte or dte > 60:
+                    continue
+                filtered.append({**row, "_dte": dte, "_strike": strike})
+            except (ValueError, TypeError):
+                continue
+
+        if not filtered:
+            return []
+
+        # Keep nearest 3 expiries to limit quote API call size
+        expiries = sorted({r["expiry"] for r in filtered})[:3]
+        filtered = [r for r in filtered if r["expiry"] in expiries]
+
+        # Build Kite symbol strings for quote API: "NFO:NIFTY25JAN25000CE"
+        symbols = [f"NFO:{r['tradingsymbol']}" for r in filtered[:400]]
+        if not symbols:
+            return []
+
+        try:
+            # Batch quote request
+            params: Dict = {}
+            for i, sym in enumerate(symbols):
+                params[f"i"] = sym  # Kite accepts repeated 'i' params
+            # Build query string manually for repeated params
+            qs = "&".join(f"i={sym}" for sym in symbols)
+            client = await self._get_client()
+            resp = await client.get(f"/quote?{qs}")
+            resp.raise_for_status()
+            body = resp.json()
+            if body.get("status") == "error":
+                log.warning("Kite quote error: %s", body.get("message"))
+                return []
+            quotes: Dict = body.get("data", {})
+        except Exception as exc:
+            log.warning("NFO quote fetch failed: %s", exc)
+            return []
+
+        options: List[OptionSummary] = []
+        for row in filtered:
+            sym_key = f"NFO:{row['tradingsymbol']}"
+            q = quotes.get(sym_key, {})
+            if not q:
+                continue
+            try:
+                depth = q.get("depth", {})
+                buy_side = depth.get("buy", [{}])
+                sell_side = depth.get("sell", [{}])
+                bid = float((buy_side[0] if buy_side else {}).get("price") or 0.0)
+                ask = float((sell_side[0] if sell_side else {}).get("price") or 0.0)
+                ltp = float(q.get("last_price") or 0.0)
+                mark = ltp
+                mid = (bid + ask) / 2 if bid > 0 and ask > 0 else mark
+                oi = float(q.get("oi") or 0.0)
+                vol = float(q.get("volume") or 0.0)
+                iv = float(q.get("implied_volatility") or 0.0) / 100.0  # Kite gives percent
+                # Delta not available from basic quote — approximate from moneyness
+                opt_type = "call" if row["instrument_type"] == "CE" else "put"
+                strike = row["_strike"]
+                moneyness = (spot - strike) / spot
+                delta = max(0.01, min(0.99, 0.5 + moneyness * 2)) if opt_type == "call" else max(-0.99, min(-0.01, -0.5 + moneyness * 2))
+                options.append(OptionSummary(
+                    instrument_name=row["tradingsymbol"],
+                    underlying=instrument.underlying,
+                    strike=strike,
+                    expiry_date=row["expiry"],
+                    dte=row["_dte"],
+                    option_type=opt_type,
+                    bid=bid,
+                    ask=ask,
+                    mark_price=mark,
+                    mid_price=mid,
+                    mark_iv=iv * 100,  # store as percent like Deribit/OKX
+                    delta=delta,
+                    open_interest=oi,
+                    volume_24h=vol,
+                    last_updated_ms=now_ms,
+                ))
+            except (ValueError, TypeError, KeyError):
+                continue
+
+        return options
 
     async def get_dvol(self, instrument: InstrumentMeta) -> Optional[float]:
         """India VIX as DVOL proxy for NIFTY/BANKNIFTY."""
