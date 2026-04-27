@@ -39,7 +39,8 @@ class ClosePositionRequest(BaseModel):
 
 class PositionListResponse(BaseModel):
     positions: List[PaperPosition]
-    open_count: int
+    open_count: int           # open + partially_closed
+    partially_closed_count: int = 0
     closed_count: int
 
 

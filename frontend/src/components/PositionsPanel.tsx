@@ -253,6 +253,11 @@ export function PositionsPanel({ underlying }: Props) {
             <div style={styles.counts}>
               <span style={{ ...styles.countBadge, color: '#44cc88' }}>
                 {data.open_count} OPEN
+                {data.partially_closed_count > 0 && (
+                  <span style={{ color: '#f0c040', marginLeft: 4, fontSize: 10 }}>
+                    ({data.partially_closed_count} partial)
+                  </span>
+                )}
               </span>
               <span style={{ ...styles.countBadge, color: '#888' }}>
                 {data.closed_count} CLOSED

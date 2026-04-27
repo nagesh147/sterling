@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useWebhooks, useAddWebhook, useDeleteWebhook, useToggleWebhook, useTestWebhook } from '../hooks/useWebhooks';
-import type { WebhookType } from '../hooks/useWebhooks';
+import type { WebhookConfig, WebhookType } from '../hooks/useWebhooks';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
@@ -34,7 +34,7 @@ const TYPE_HINT: Record<WebhookType, string> = {
   generic: 'Any URL that accepts POST JSON',
 };
 
-function WebhookRow({ wh }: { wh: any }) {
+function WebhookRow({ wh }: { wh: WebhookConfig }) {
   const del = useDeleteWebhook();
   const toggle = useToggleWebhook();
   const test = useTestWebhook();

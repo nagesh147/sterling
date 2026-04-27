@@ -143,7 +143,8 @@ export interface PaperPosition {
 
 export interface PositionListResponse {
   positions: PaperPosition[];
-  open_count: number;
+  open_count: number;           // includes partially_closed
+  partially_closed_count: number;
   closed_count: number;
 }
 
