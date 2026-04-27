@@ -38,7 +38,7 @@ async def export_session():
             if pnl_history.get_history(p.id)
         },
         "summary": {
-            "positions_open": sum(1 for p in positions if p.status.value == "open"),
+            "positions_open": sum(1 for p in positions if p.status.value in ("open", "partially_closed")),
             "positions_closed": sum(1 for p in positions if p.status.value == "closed"),
             "alerts_active": alert_store.active_count(),
             "alerts_triggered": alert_store.triggered_count(),

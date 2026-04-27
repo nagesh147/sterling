@@ -1,7 +1,8 @@
 import React from 'react';
 import { usePreview } from '../hooks/usePreview';
+import { useRunOnce } from '../hooks/useRunOnce';
 import type { TradeStructure } from '../types';
-import { fmtN } from '../utils/fmt';
+import { fmtN, fmtAge } from '../utils/fmt';
 
 const styles: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
@@ -69,13 +70,29 @@ function StructureRow({ s }: { s: TradeStructure }) {
 interface Props { underlying: string }
 
 export function PreviewCandidates({ underlying }: Props) {
-  const { data, isLoading, error } = usePreview(underlying);
+  const { data, isLoading, error, dataUpdatedAt } = usePreview(underlying);
+  const runOnce = useRunOnce();
+  const updatedAt = dataUpdatedAt ? fmtAge(dataUpdatedAt) : '—';
 
   if (isLoading) return <div style={styles.card}><div style={styles.title}>PREVIEW CANDIDATES — loading…</div></div>;
 
   return (
     <div style={styles.card}>
-      <div style={styles.title}>PREVIEW CANDIDATES · {underlying}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={styles.title}>PREVIEW CANDIDATES · {underlying} · {updatedAt}</div>
+        <button
+          style={{
+            background: '#1a1a2a', color: '#88aaff', border: '1px solid #88aaff',
+            padding: '4px 12px', borderRadius: 3, cursor: runOnce.isPending ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit', fontSize: 11, letterSpacing: 1, opacity: runOnce.isPending ? 0.5 : 1,
+          }}
+          onClick={() => runOnce.mutate(underlying)}
+          disabled={runOnce.isPending}
+          title="Run full evaluation with sizing — scroll down for results"
+        >
+          {runOnce.isPending ? 'EVALUATING…' : '▶ RUN ONCE'}
+        </button>
+      </div>
 
       {error && <div style={{ color: '#cc4444', fontSize: 12 }}>{(error as Error).message}</div>}
 
