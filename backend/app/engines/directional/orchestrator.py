@@ -63,7 +63,8 @@ async def compute_ivr(
     if history and current is not None:
         lo, hi = min(history), max(history)
         if hi > lo:
-            return round((current - lo) / (hi - lo) * 100.0, 2)
+            raw = (current - lo) / (hi - lo) * 100.0
+            return round(max(0.0, min(100.0, raw)), 2)  # clamp [0,100]
     # Fallback: realized vol from 1H candles
     if candles_1h:
         return _compute_hv_ivr(candles_1h)
