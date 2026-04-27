@@ -27,6 +27,10 @@ class InstrumentMeta(BaseModel):
     # Delta Exchange India-specific
     delta_perp_symbol: Optional[str] = None        # e.g. "BTCUSD" or "BTCUSDT"
     delta_option_underlying: Optional[str] = None  # e.g. "BTC" for option chain
+    # Zerodha Kite-specific
+    zerodha_token: Optional[int] = None            # instrument token for historical data
+    zerodha_index_symbol: Optional[str] = None     # e.g. "NSE:NIFTY 50" for LTP/quote
+    zerodha_vix_token: Optional[int] = None        # India VIX token (264969) for DVOL proxy
 
 
 class InstrumentListResponse(BaseModel):

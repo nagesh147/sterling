@@ -50,10 +50,9 @@ async def export_session():
 @router.delete("/reset", status_code=204)
 async def reset_session():
     """
-    Clear all in-memory session state.
-    Paper positions in SQLite are NOT affected — only in-memory eval/arrow/alert history.
+    Clear in-memory session state (eval history, arrows, P&L snapshots).
+    Alerts and paper positions persist — only transient data is cleared.
     """
     eval_history.clear()
     arrow_store.clear()
-    alert_store.clear()
     pnl_history.clear()

@@ -65,13 +65,15 @@ class TestSessionEndpoints:
         resp = client.delete("/api/v1/session/reset")
         assert resp.status_code == 204
 
-    def test_reset_clears_alerts(self, client):
+    def test_reset_preserves_alerts(self, client):
+        """Alerts now persist across session reset (they have SQLite persistence)."""
         client.post("/api/v1/alerts", json={
             "underlying": "BTC", "condition": "price_above", "threshold": 40000.0
         })
         assert client.get("/api/v1/alerts").json()["active_count"] == 1
         client.delete("/api/v1/session/reset")
-        assert client.get("/api/v1/alerts").json()["active_count"] == 0
+        # Alerts survive reset — they're persistent config, not ephemeral session data
+        assert client.get("/api/v1/alerts").json()["active_count"] == 1
 
     def test_export_captures_alerts(self, client):
         client.post("/api/v1/alerts", json={
