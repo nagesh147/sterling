@@ -69,13 +69,21 @@ function STTrends({ trends, values, spot }: { trends: number[]; values?: number[
 }
 
 export function SnapshotPanel({ underlying }: { underlying: string }) {
-  const { data, isLoading, dataUpdatedAt } = useSnapshot(underlying);
+  const { data, isLoading, isError, error, dataUpdatedAt } = useSnapshot(underlying);
   const { data: instruments } = useInstruments();
   const updatedAt = dataUpdatedAt ? fmtAge(dataUpdatedAt) : '—';
   const inst = instruments?.instruments.find(i => i.underlying === underlying);
   const hasDvol = !!inst?.dvol_symbol;
 
   if (isLoading) return <div style={S.card}><span style={{ color: '#444', fontSize: 12 }}>Snapshot loading…</span></div>;
+  if (isError) return (
+    <div style={S.card}>
+      <div style={{ color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 8 }}>SNAPSHOT · {underlying}</div>
+      <div style={{ color: '#cc4444', fontSize: 11 }}>
+        {(error as Error)?.message ?? 'Market data unavailable'}
+      </div>
+    </div>
+  );
   if (!data) return null;
 
   const regimeColor = { bullish: '#44cc88', bearish: '#cc4444', neutral: '#888' }[data.macro_regime] ?? '#888';

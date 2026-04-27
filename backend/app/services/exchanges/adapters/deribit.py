@@ -11,7 +11,38 @@ from app.core.logging import get_logger
 
 log = get_logger(__name__)
 
-_RESOLUTION_MAP = {"15m": 15, "1H": 60, "4H": 240}
+# Deribit valid resolutions: 1,3,5,10,15,30,60,120,180,360,720,1D
+# 240 NOT valid — 4H fetched as 1H bars and aggregated client-side
+_RESOLUTION_MAP = {"15m": 15, "1H": 60, "4H": 60}
+
+
+def _aggregate_4h(candles: List[Candle]) -> List[Candle]:
+    """Group 1H candles into 4H buckets (4 bars → 1 bar)."""
+    result: List[Candle] = []
+    buf: List[Candle] = []
+    for c in candles:
+        buf.append(c)
+        if len(buf) == 4:
+            result.append(Candle(
+                timestamp_ms=buf[0].timestamp_ms,
+                open=buf[0].open,
+                high=max(x.high for x in buf),
+                low=min(x.low for x in buf),
+                close=buf[-1].close,
+                volume=sum(x.volume for x in buf),
+            ))
+            buf = []
+    # Include partial trailing group (current incomplete 4H candle)
+    if buf:
+        result.append(Candle(
+            timestamp_ms=buf[0].timestamp_ms,
+            open=buf[0].open,
+            high=max(x.high for x in buf),
+            low=min(x.low for x in buf),
+            close=buf[-1].close,
+            volume=sum(x.volume for x in buf),
+        ))
+    return result
 
 
 def _normalize_ts_ms(ts: int | float) -> int:
@@ -104,8 +135,12 @@ class DeribitAdapter(BaseExchangeAdapter):
         if res_min is None:
             raise ValueError(f"Unsupported resolution: {resolution}")
 
+        # 4H: fetch 4× 1H bars then aggregate — Deribit has no resolution=240
+        want_4h = resolution == "4H"
+        fetch_limit = limit * 4 if want_4h else limit
+
         now_ms = int(time.time() * 1000)
-        start_ms = now_ms - limit * res_min * 60 * 1000
+        start_ms = now_ms - fetch_limit * res_min * 60 * 1000
 
         result = await self._get(
             "/public/get_tradingview_chart_data",
@@ -140,7 +175,12 @@ class DeribitAdapter(BaseExchangeAdapter):
             except (IndexError, ValueError, TypeError):
                 continue
 
-        return sorted(candles, key=lambda c: c.timestamp_ms)
+        candles = sorted(candles, key=lambda c: c.timestamp_ms)
+
+        if want_4h:
+            candles = _aggregate_4h(candles)
+
+        return candles[-limit:]
 
     async def get_option_chain(
         self, instrument: InstrumentMeta
