@@ -1,3 +1,4 @@
+import math
 import time
 import httpx
 from typing import List, Optional
@@ -14,6 +15,25 @@ log = get_logger(__name__)
 # Deribit valid resolutions: 1,3,5,10,15,30,60,120,180,360,720,1D
 # 240 NOT valid — 4H fetched as 1H bars and aggregated client-side
 _RESOLUTION_MAP = {"15m": 15, "1H": 60, "4H": 60}
+
+
+def _norm_cdf(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _bs_delta(S: float, K: float, T_years: float, sigma: float, opt_type: str) -> float:
+    """Black-Scholes delta. sigma as decimal (0.40=40%), T in years.
+    Returns +delta for calls (0..1), -delta for puts (-1..0).
+    Falls back to 0.0 on bad inputs.
+    """
+    if T_years <= 0 or sigma <= 0 or S <= 0 or K <= 0:
+        return 0.0
+    try:
+        d1 = (math.log(S / K) + 0.5 * sigma ** 2 * T_years) / (sigma * math.sqrt(T_years))
+        nd1 = _norm_cdf(d1)
+        return nd1 if opt_type == "call" else nd1 - 1.0
+    except (ValueError, ZeroDivisionError, OverflowError):
+        return 0.0
 
 
 def _aggregate_4h(candles: List[Candle]) -> List[Candle]:
@@ -215,7 +235,14 @@ class DeribitAdapter(BaseExchangeAdapter):
                 mark = float(s.get("mark_price") or 0.0)
                 mid = (bid + ask) / 2.0 if bid > 0 and ask > 0 else mark
                 iv = float(s.get("mark_iv") or 0.0)
-                delta = float(s.get("delta") or 0.0)
+                # Deribit book_summary has no greeks — compute delta via BS
+                spot_s = float(s.get("underlying_price") or 0.0)
+                T = max(0.0, dte / 365.0)
+                sigma = iv / 100.0 if iv > 0 else 0.0
+                if spot_s > 0 and T > 0 and sigma > 0:
+                    delta = _bs_delta(spot_s, strike, T, sigma, opt_type)
+                else:
+                    delta = float(s.get("delta") or 0.0)
                 oi = float(s.get("open_interest") or 0.0)
                 vol = float(s.get("volume") or 0.0)
                 ts_raw = s.get("creation_timestamp") or now_ms
@@ -245,36 +272,48 @@ class DeribitAdapter(BaseExchangeAdapter):
         return options
 
     async def get_dvol(self, instrument: InstrumentMeta) -> Optional[float]:
+        """Fetch current DVOL via get_volatility_index_data (latest 1H close)."""
         if not instrument.dvol_symbol:
             return None
         try:
+            currency = instrument.dvol_symbol.split("-")[0].upper()
+            now_ms = int(time.time() * 1000)
             result = await self._get(
-                "/public/ticker",
-                {"instrument_name": instrument.dvol_symbol},
+                "/public/get_volatility_index_data",
+                {
+                    "currency": currency,
+                    "start_timestamp": now_ms - 2 * 3600 * 1000,
+                    "end_timestamp": now_ms,
+                    "resolution": "3600",
+                },
             )
-            return float(result.get("last_price") or result.get("mark_price") or 0.0) or None
+            data = result.get("data", [])
+            return float(data[-1][4]) if data else None  # [ts, o, h, l, close]
         except Exception:
             return None
 
     async def get_dvol_history(
         self, instrument: InstrumentMeta, days: int = 30
     ) -> List[float]:
+        """Fetch DVOL history via /public/get_volatility_index_data."""
         if not instrument.dvol_symbol:
             return []
         try:
+            currency = instrument.dvol_symbol.split("-")[0].upper()  # BTC or ETH
             now_ms = int(time.time() * 1000)
             start_ms = now_ms - days * 24 * 60 * 60 * 1000
             result = await self._get(
-                "/public/get_tradingview_chart_data",
+                "/public/get_volatility_index_data",
                 {
-                    "instrument_name": instrument.dvol_symbol,
+                    "currency": currency,
                     "start_timestamp": start_ms,
                     "end_timestamp": now_ms,
-                    "resolution": "1D",
+                    "resolution": "86400",  # 1-day in seconds
                 },
             )
-            closes = result.get("close", [])
-            return [float(c) for c in closes if c is not None]
+            # Response: {"data": [[ts, open, high, low, close], ...]}
+            data = result.get("data", [])
+            return [float(row[4]) for row in data if len(row) >= 5 and row[4] is not None]
         except Exception:
             return []
 
