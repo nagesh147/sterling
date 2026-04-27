@@ -463,11 +463,16 @@ async def _sse_generator(
         yield f"data: {json.dumps({'error': f'Unknown underlying: {sym}'})}\n\n"
         return
 
-    adapter = _adapter(request)
-
     while True:
         if await request.is_disconnected():
             break
+        # Re-fetch adapter each iteration — handles hot-swap of data source
+        adapter = _adapter(request)
+        src = _adm.get_data_source()
+        if not _adapter_can_serve(inst, src):
+            yield f"data: {json.dumps({'underlying': sym, 'error': f'{sym} not available on {src}', 'timestamp_ms': int(time.time() * 1000)})}\n\n"
+            await asyncio.sleep(interval)
+            continue
         try:
             c4h = await adapter.get_candles(inst, "4H", limit=100)
             c1h = await adapter.get_candles(inst, "1H", limit=200)
@@ -598,6 +603,9 @@ async def regime_trend(
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(status_code=400, detail=f"{sym} not available on {src}")
 
     adapter = _adapter(request)
     try:
@@ -659,6 +667,9 @@ async def volatility_scan(
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(status_code=400, detail=f"{sym} not available on {src}")
     if not inst.has_options:
         raise HTTPException(status_code=400, detail=f"{sym} has no options")
 
