@@ -85,9 +85,18 @@ def close_position(
     structure = pos.sized_trade.structure
     spot_move = exit_spot_price - pos.entry_spot_price
     direction_sign = 1 if structure.direction.value == "long" else -1
-    leg = structure.legs[0] if structure.legs else None
-    delta = abs(leg.delta) if leg else 0.0
-    raw_pnl = spot_move * direction_sign * pos.sized_trade.contracts * delta
+    # Net delta accounts for both legs in spreads
+    _credit = frozenset({"bull_put_spread", "bear_call_spread"})
+    legs = structure.legs
+    if len(legs) == 0:
+        net_delta = 0.0
+    elif len(legs) == 1:
+        net_delta = abs(legs[0].delta)
+    elif structure.structure_type in _credit:
+        net_delta = max(0.0, abs(legs[1].delta) - abs(legs[0].delta))
+    else:
+        net_delta = max(0.0, abs(legs[0].delta) - abs(legs[1].delta))
+    raw_pnl = spot_move * direction_sign * pos.sized_trade.contracts * net_delta
     max_risk = pos.sized_trade.max_risk_usd
     max_gain = structure.max_gain
     bounded = max(-max_risk, raw_pnl)

@@ -22,20 +22,46 @@ def _dte_from_expiry(expiry_date: str) -> int:
         return -1
 
 
+_CREDIT_SPREADS = frozenset({"bull_put_spread", "bear_call_spread"})
+
+def _net_delta(sized_trade) -> float:
+    """
+    Compute net delta for a trade structure accounting for long/short legs.
+
+    Leg ordering convention (structure_selector.py):
+    - Debit spreads (bull_call, bear_put): legs[0]=long, legs[1]=short
+    - Credit spreads (bull_put, bear_call): legs[0]=short, legs[1]=long
+    - Naked: legs[0]=long only
+
+    Delta signs from exchange: calls positive, puts negative.
+    """
+    s = sized_trade.structure
+    legs = s.legs
+    if not legs:
+        return 0.0
+    if len(legs) == 1:
+        return abs(legs[0].delta)
+    # Two-leg spread
+    if s.structure_type in _CREDIT_SPREADS:
+        # legs[0]=short, legs[1]=long → net = long - short
+        net = abs(legs[1].delta) - abs(legs[0].delta)
+    else:
+        # legs[0]=long, legs[1]=short → net = long - short
+        net = abs(legs[0].delta) - abs(legs[1].delta)
+    return max(0.0, net)  # clamp to 0 in degenerate cases
+
+
 def _estimate_pnl(
-    leg: Optional[CandidateContract],
+    sized_trade,
     spot_move: float,
     direction_sign: int,
-    contracts: int,
     max_risk_usd: float,
     max_gain_usd: Optional[float],
 ) -> float:
-    """Delta-approximated P&L capped by defined risk bounds."""
-    if leg is None:
-        return 0.0
-    delta = abs(leg.delta) or 0.0
-    raw = spot_move * direction_sign * contracts * delta
-    # Defined-risk structures: cap at max_loss and max_gain
+    """Net-delta-approximated P&L capped by defined risk bounds."""
+    contracts = sized_trade.contracts
+    net_delta = _net_delta(sized_trade)
+    raw = spot_move * direction_sign * contracts * net_delta
     bounded = max(-max_risk_usd, raw)
     if max_gain_usd is not None:
         bounded = min(max_gain_usd * contracts, bounded)
@@ -217,8 +243,7 @@ async def live_pnl(request: Request):
             spot_move = spot - pos.entry_spot_price
             direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
             pnl = _estimate_pnl(
-                leg, spot_move, direction_sign,
-                pos.sized_trade.contracts,
+                pos.sized_trade, spot_move, direction_sign,
                 pos.sized_trade.max_risk_usd,
                 pos.sized_trade.structure.max_gain,
             )
@@ -385,8 +410,7 @@ async def monitor_all(request: Request) -> MonitorAllResult:
             spot_move = current_spot - pos.entry_spot_price
             direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
             estimated_pnl = _estimate_pnl(
-                leg, spot_move, direction_sign,
-                pos.sized_trade.contracts,
+                pos.sized_trade, spot_move, direction_sign,
                 pos.sized_trade.max_risk_usd,
                 pos.sized_trade.structure.max_gain,
             )
@@ -502,8 +526,7 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     spot_move = current_spot - pos.entry_spot_price
     direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
     estimated_pnl = _estimate_pnl(
-        leg, spot_move, direction_sign,
-        pos.sized_trade.contracts,
+        pos.sized_trade, spot_move, direction_sign,
         pos.sized_trade.max_risk_usd,
         pos.sized_trade.structure.max_gain,
     )

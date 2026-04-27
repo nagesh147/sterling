@@ -609,6 +609,8 @@ async def volatility_scan(
     Finds ATM straddle and nearest OTM strangle. Returns IV stats + health.
     Use when signal is mixed but expecting a big move.
     """
+    from app.core.rate_limit import check_run_once
+    check_run_once(request)
     sym = _sym(underlying)
     inst = registry.get_instrument(sym)
     if not inst:
