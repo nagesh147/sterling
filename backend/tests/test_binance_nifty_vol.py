@@ -116,6 +116,55 @@ class TestBinanceAdapterPaper:
         assert candles[1].close == pytest.approx(41800.0)
 
     @pytest.mark.asyncio
+    async def test_get_candles_pagination_large_limit(self):
+        """Pagination: limit > 1500 triggers multiple requests."""
+        adapter = BinanceAdapter(is_paper=True)
+        now = int(time.time() * 1000)
+        call_count = [0]
+
+        # Each call returns exactly 1500 rows (max per page)
+        def make_rows(count, base_ts):
+            return [[base_ts - i * 3600000, "41000", "41500", "40800", "41200", "100"] + ["0"] * 6
+                    for i in range(count)]
+
+        async def mock_get(base, path, params=None):
+            call_count[0] += 1
+            per_page = (params or {}).get("limit", 1500)
+            base_ts = (params or {}).get("endTime", now) or now
+            rows = make_rows(per_page, base_ts)
+            return rows
+
+        adapter._public_get = AsyncMock(side_effect=mock_get)
+        candles = await adapter.get_candles(get_instrument("BTC"), "1H", limit=2000)
+        # Should have made more than 1 API call (2000 > 1500)
+        assert call_count[0] >= 2
+        assert len(candles) <= 2000
+        # All timestamps should be unique and sorted ascending
+        ts_list = [c.timestamp_ms for c in candles]
+        assert ts_list == sorted(ts_list)
+        assert len(set(ts_list)) == len(ts_list)
+
+    @pytest.mark.asyncio
+    async def test_get_candles_stops_when_empty_page(self):
+        """Stops pagination when API returns empty list."""
+        adapter = BinanceAdapter(is_paper=True)
+        now = int(time.time() * 1000)
+        call_count = [0]
+
+        async def mock_get(base, path, params=None):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # First call: 200 rows (less than limit 1500)
+                return [[now - i * 3600000, "41000", "41500", "40800", "41200", "100"] + ["0"] * 6
+                        for i in range(200)]
+            return []  # No more history
+
+        adapter._public_get = AsyncMock(side_effect=mock_get)
+        candles = await adapter.get_candles(get_instrument("BTC"), "1H", limit=2000)
+        assert call_count[0] == 1  # Stops after first page (200 < 1500)
+        assert len(candles) == 200
+
+    @pytest.mark.asyncio
     async def test_live_mode_requires_credentials(self):
         adapter = BinanceAdapter(is_paper=False, api_key="", api_secret="")
         with pytest.raises(RuntimeError, match="api_key"):
