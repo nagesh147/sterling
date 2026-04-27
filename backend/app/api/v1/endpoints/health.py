@@ -12,6 +12,7 @@ _start_ms = int(time.time() * 1000)
 
 class PositionsSummaryHealth(BaseModel):
     open: int
+    partially_closed: int = 0
     closed: int
 
 
@@ -64,6 +65,7 @@ async def health(request: Request) -> HealthResponse:
         exchange_reachable=exchange_ok,
         positions=PositionsSummaryHealth(
             open=paper_store.open_count(),
+            partially_closed=sum(1 for p in paper_store.list_positions() if p.status.value == "partially_closed"),
             closed=paper_store.closed_count(),
         ),
         alerts=AlertsSummaryHealth(

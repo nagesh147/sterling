@@ -44,11 +44,11 @@ export function MarketSnapshot({ underlying }: Props) {
           <span style={styles.val}>${fmtUSD(data.perp_price)}</span>
         </div>
         <div style={styles.cell}>
-          <span style={styles.key}>DVOL</span>
-          <span style={styles.val}>{fmtN(data.dvol, 1)}</span>
+          <span style={styles.key}>{data.dvol != null ? 'DVOL' : 'VOL INDEX'}</span>
+          <span style={styles.val}>{data.dvol != null ? fmtN(data.dvol, 1) : '—'}</span>
         </div>
         <div style={styles.cell}>
-          <span style={styles.key}>IVR (30D)</span>
+          <span style={styles.key}>IVR {data.dvol == null ? '(HV)' : '(DVOL)'}</span>
           <span style={{ ...styles.val, color: ivColor }}>
             {data.ivr != null ? `${data.ivr.toFixed(1)}%` : '—'}
           </span>

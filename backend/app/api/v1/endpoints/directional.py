@@ -280,12 +280,20 @@ async def run_once_endpoint(
     result = await engine_run_once(inst, _adapter(request), get_runtime_risk())
 
     # Record in eval history
+    sig = result.signal or {}
     hist_store.record(sym, {
         "state": result.state.value,
         "direction": result.direction.value,
         "recommendation": result.recommendation,
         "no_trade_score": result.no_trade_score,
         "ivr": result.ivr,
+        "ivr_band": result.ivr_band.value if result.ivr_band else None,
+        "exec_mode": result.exec_mode.value if result.exec_mode else None,
+        "signal_trend": sig.get("trend") if isinstance(sig, dict) else None,
+        "top_structure": (
+            result.ranked_structures[0].structure.structure_type
+            if result.ranked_structures else None
+        ),
         "timestamp_ms": result.timestamp_ms,
     })
 
@@ -336,12 +344,20 @@ async def run_all_endpoint(request: Request):
             results[inst.underlying] = {"error": str(r)}
         else:
             # Record in eval history
+            sig_r = r.signal or {}
             hist_store.record(inst.underlying, {
                 "state": r.state.value,
                 "direction": r.direction.value,
                 "recommendation": r.recommendation,
                 "no_trade_score": r.no_trade_score,
                 "ivr": r.ivr,
+                "ivr_band": r.ivr_band.value if r.ivr_band else None,
+                "exec_mode": r.exec_mode.value if r.exec_mode else None,
+                "signal_trend": sig_r.get("trend") if isinstance(sig_r, dict) else None,
+                "top_structure": (
+                    r.ranked_structures[0].structure.structure_type
+                    if r.ranked_structures else None
+                ),
                 "timestamp_ms": r.timestamp_ms,
             })
             results[inst.underlying] = {

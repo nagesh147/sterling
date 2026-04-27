@@ -6,7 +6,11 @@ export interface EvalHistoryItem {
   direction: string;
   recommendation: string;
   no_trade_score: number;
-  ivr?: number;
+  ivr?: number | null;
+  ivr_band?: string | null;
+  exec_mode?: string | null;
+  signal_trend?: number | null;
+  top_structure?: string | null;
   timestamp_ms: number;
 }
 
