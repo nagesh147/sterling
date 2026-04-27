@@ -62,12 +62,30 @@ class TestDeltaHelpers:
     def test_ts_ms_milliseconds(self):
         assert _ts_ms(1_700_000_000_000) == 1_700_000_000_000
 
-    def test_dte_future(self):
+    def test_ts_ms_iso_string(self):
+        ts = _ts_ms("2024-01-15T12:00:00Z")
+        assert ts > 1_700_000_000_000
+
+    def test_dte_abbreviated_month(self):
+        """DDMMMYY format (original Delta style) — e.g. 27DEC24."""
         dte = _delta_dte("31DEC35")  # 2035
+        assert dte > 0
+
+    def test_dte_numeric_ddmmyy(self):
+        """Numeric DDMMYY format — e.g. 271224 = Dec 27, 2024."""
+        dte = _delta_dte("311235")  # Dec 31, 2035
+        assert dte > 0
+
+    def test_dte_iso_format(self):
+        """ISO date format from settlement_time field."""
+        dte = _delta_dte("2035-12-31")
         assert dte > 0
 
     def test_dte_invalid(self):
         assert _delta_dte("BADDATE") == -1
+
+    def test_dte_empty(self):
+        assert _delta_dte("") == -1
 
 
 # ─── Delta India adapter (mocked HTTP) ───────────────────────────────────────
