@@ -79,9 +79,16 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
     underlyings = list({a.underlying for a in active_alerts})
     snapshots: dict = {}
 
+    from app.api.v1.endpoints.directional import _adapter_can_serve
+    src_name = adapter.__class__.__name__.lower()
     for sym in underlyings:
         inst = registry.get_instrument(sym)
         if not inst:
+            continue
+        # Skip instruments not servable by current adapter
+        from app.services import adapter_manager as _adm_alerts
+        if not _adapter_can_serve(inst, _adm_alerts.get_data_source()):
+            snapshots[sym] = {}
             continue
         try:
             spot = await adapter.get_index_price(inst)
