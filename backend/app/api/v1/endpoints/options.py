@@ -29,6 +29,13 @@ async def option_chain(
         raise HTTPException(status_code=400, detail=f"{sym} has no options on {inst.exchange}")
 
     from app.services import adapter_manager as _adm
+    from app.api.v1.endpoints.directional import _adapter_can_serve
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} option chain is not available on {src} data source",
+        )
     adapter = _adm.get_adapter() or request.app.state.adapter
     try:
         spot = await adapter.get_index_price(inst)
