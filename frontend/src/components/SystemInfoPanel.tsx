@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useConfigInfo } from '../hooks/useConfigInfo';
 import { useSetDataSource, useDataSource, useInvalidateCache } from '../hooks/useExchanges';
 
@@ -56,9 +56,18 @@ export function SystemInfoPanel() {
   const invalidate = useInvalidateCache();
   const [selectedDs, setSelectedDs] = useState('');
   const [dsMsg, setDsMsg] = useState('');
+  const dsMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentDs = dsData?.exchange ?? data?.active_data_source ?? '';
   const sources = data?.supported_data_sources ?? {};
+
+  useEffect(() => () => { if (dsMsgTimer.current) clearTimeout(dsMsgTimer.current); }, []);
+
+  const setTimedMsg = (msg: string, ms = 4000) => {
+    setDsMsg(msg);
+    if (dsMsgTimer.current) clearTimeout(dsMsgTimer.current);
+    dsMsgTimer.current = setTimeout(() => setDsMsg(''), ms);
+  };
 
   const handleSwitchDs = () => {
     const target = selectedDs || currentDs;
@@ -66,21 +75,15 @@ export function SystemInfoPanel() {
     setDs.mutate(
       { exchange: target },
       {
-        onSuccess: (r) => {
-          setDsMsg(`✓ Switched to ${r.display_name} — ${r.reachable ? 'reachable' : 'unreachable'}`);
-          setTimeout(() => setDsMsg(''), 4000);
-        },
-        onError: (e) => setDsMsg(`✗ ${e.message}`),
+        onSuccess: (r) => setTimedMsg(`✓ Switched to ${r.display_name} — ${r.reachable ? 'reachable' : 'unreachable'}`),
+        onError: (e) => setTimedMsg(`✗ ${e.message}`, 6000),
       }
     );
   };
 
   const handleInvalidate = () => {
     invalidate.mutate(undefined, {
-      onSuccess: () => {
-        setDsMsg('✓ Cache cleared — next requests fetch live data');
-        setTimeout(() => setDsMsg(''), 3000);
-      },
+      onSuccess: () => setTimedMsg('✓ Cache cleared — next requests fetch live data', 3000),
     });
   };
 

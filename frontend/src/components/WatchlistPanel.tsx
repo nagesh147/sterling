@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import type { WatchlistItem } from '../hooks/useWatchlist';
 import { useStore } from '../store/useStore';
-import { fmtN, fmtUSD, ivrColor, ivrWidth } from '../utils/fmt';
-import { useQueryClient } from '@tanstack/react-query';
+import { fmtN, fmtUSD, ivrColor, ivrWidth, fmtAge } from '../utils/fmt';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useEnterPosition } from '../hooks/usePositions';
 import { api } from '../utils/api';
 
@@ -116,20 +116,17 @@ function Row({ item }: { item: WatchlistItem }) {
 
 export function WatchlistPanel() {
   const { data, isLoading, dataUpdatedAt } = useWatchlist();
-  const updatedAt = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : '—';
+  const updatedAt = dataUpdatedAt ? fmtAge(dataUpdatedAt) : '—';
   const qc = useQueryClient();
-  const [runningAll, setRunningAll] = useState(false);
 
-  const handleRunAll = async () => {
-    setRunningAll(true);
-    try {
-      await api.post('/api/v1/directional/run-all');
+  const runAll = useMutation({
+    mutationFn: () => api.post<{ instruments_evaluated: number }>('/api/v1/directional/run-all'),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['eval-history'] });
       qc.invalidateQueries({ queryKey: ['session-stats'] });
-    } catch { /* ignore */ } finally {
-      setRunningAll(false);
-    }
-  };
+      qc.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+  });
 
   return (
     <div style={styles.card}>
@@ -137,15 +134,17 @@ export function WatchlistPanel() {
         <div style={styles.title}>WATCHLIST · ALL INSTRUMENTS · {updatedAt}</div>
         <button
           style={{
-            background: runningAll ? '#1a1a1a' : '#1a1a2a', color: runningAll ? '#444' : '#88aaff',
-            border: `1px solid ${runningAll ? '#333' : '#88aaff'}`, padding: '5px 14px',
-            borderRadius: 3, cursor: runningAll ? 'not-allowed' : 'pointer',
+            background: runAll.isPending ? '#1a1a1a' : '#1a1a2a',
+            color: runAll.isPending ? '#444' : '#88aaff',
+            border: `1px solid ${runAll.isPending ? '#333' : '#88aaff'}`,
+            padding: '5px 14px', borderRadius: 3,
+            cursor: runAll.isPending ? 'not-allowed' : 'pointer',
             fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
           }}
-          onClick={handleRunAll}
-          disabled={runningAll}
+          onClick={() => runAll.mutate()}
+          disabled={runAll.isPending}
         >
-          {runningAll ? '▶ RUNNING…' : '▶ RUN ALL'}
+          {runAll.isPending ? '▶ RUNNING…' : '▶ RUN ALL'}
         </button>
       </div>
       {isLoading && <div style={{ color: '#444', fontSize: 12 }}>Loading…</div>}

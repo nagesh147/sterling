@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   useExchanges, useAddExchange, useUpdateExchange, useActivateExchange,
   useDeleteExchange, useTestConnection, useSupportedExchanges,
@@ -51,7 +51,11 @@ function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; cu
   const [extraJson, setExtraJson] = useState(JSON.stringify(ex.extra ?? {}));
   const [isPaper, setIsPaper] = useState(ex.is_paper);
   const [saveMsg, setSaveMsg] = useState('');
+  const saveMsgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activate = useActivateExchange();
+
+  // Cleanup timer on unmount
+  useEffect(() => () => { if (saveMsgTimer.current) clearTimeout(saveMsgTimer.current); }, []);
   const activateDs = useActivateDataSource();
   const del = useDeleteExchange();
   const update = useUpdateExchange();
@@ -76,7 +80,8 @@ function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; cu
           setShowEdit(false);
           setApiKey('');
           setApiSecret('');
-          setTimeout(() => setSaveMsg(''), 3000);
+          if (saveMsgTimer.current) clearTimeout(saveMsgTimer.current);
+          saveMsgTimer.current = setTimeout(() => setSaveMsg(''), 3000);
         },
         onError: (err) => setSaveMsg(`✗ Save failed: ${err.message}`),
       }

@@ -133,11 +133,30 @@ class BinanceAdapter(AuthenticatedExchangeAdapter):
         if not interval:
             raise ValueError(f"Unsupported resolution: {resolution}")
         sym = f"{instrument.underlying}USDT"
-        rows = await self._public_get("fapi", "/fapi/v1/klines", {
-            "symbol": sym, "interval": interval, "limit": min(limit, 1500)
-        })
+        per_page = 1500  # Binance hard limit per request
+        all_rows: list = []
+        end_time: Optional[int] = None  # None = current time
+
+        while len(all_rows) < limit:
+            params: dict = {
+                "symbol": sym,
+                "interval": interval,
+                "limit": min(per_page, limit - len(all_rows)),
+            }
+            if end_time is not None:
+                params["endTime"] = end_time
+
+            rows = await self._public_get("fapi", "/fapi/v1/klines", params)
+            if not rows:
+                break
+            all_rows = list(rows) + all_rows  # prepend (older first)
+            if len(rows) < params["limit"]:
+                break  # no more history
+            # Next page: fetch bars older than the oldest we have
+            end_time = int(rows[0][0]) - 1  # oldest open_time - 1ms
+
         candles = []
-        for row in rows:
+        for row in all_rows:
             try:
                 candles.append(Candle(
                     timestamp_ms=_ts_ms(row[0]),
@@ -147,7 +166,14 @@ class BinanceAdapter(AuthenticatedExchangeAdapter):
                 ))
             except (IndexError, ValueError, TypeError):
                 continue
-        return candles  # Binance returns oldest first ✓
+        # Deduplicate and sort ascending (Binance returns oldest first per page)
+        seen: set = set()
+        unique = []
+        for c in candles:
+            if c.timestamp_ms not in seen:
+                seen.add(c.timestamp_ms)
+                unique.append(c)
+        return sorted(unique, key=lambda c: c.timestamp_ms)[-limit:]
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:
         log.info("Binance COIN-M options not implemented — returning empty chain")
