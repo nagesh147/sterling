@@ -22,33 +22,24 @@ def _dte_from_expiry(expiry_date: str) -> int:
         return -1
 
 
-_CREDIT_SPREADS = frozenset({"bull_put_spread", "bear_call_spread"})
-
 def _net_delta(sized_trade) -> float:
     """
-    Compute net delta for a trade structure accounting for long/short legs.
+    Net delta magnitude for P&L approximation.
 
-    Leg ordering convention (structure_selector.py):
-    - Debit spreads (bull_call, bear_put): legs[0]=long, legs[1]=short
-    - Credit spreads (bull_put, bear_call): legs[0]=short, legs[1]=long
-    - Naked: legs[0]=long only
+    All spread types in structure_selector.py place the higher-delta leg first:
+      bull_call_spread  → legs[0]=long lower call (Δ≈0.45), legs[1]=short higher call (Δ≈0.30)
+      bear_put_spread   → legs[0]=long higher put (|Δ|≈0.45), legs[1]=short lower put (|Δ|≈0.25)
+      bull_put_spread   → legs[0]=short higher put (|Δ|≈0.40), legs[1]=long lower put (|Δ|≈0.20)
+      bear_call_spread  → legs[0]=short lower call (Δ≈0.40), legs[1]=long higher call (Δ≈0.20)
 
-    Delta signs from exchange: calls positive, puts negative.
+    Net = abs(legs[0].delta) - abs(legs[1].delta) for all spreads.
     """
-    s = sized_trade.structure
-    legs = s.legs
+    legs = sized_trade.structure.legs
     if not legs:
         return 0.0
     if len(legs) == 1:
         return abs(legs[0].delta)
-    # Two-leg spread
-    if s.structure_type in _CREDIT_SPREADS:
-        # legs[0]=short, legs[1]=long → net = long - short
-        net = abs(legs[1].delta) - abs(legs[0].delta)
-    else:
-        # legs[0]=long, legs[1]=short → net = long - short
-        net = abs(legs[0].delta) - abs(legs[1].delta)
-    return max(0.0, net)  # clamp to 0 in degenerate cases
+    return max(0.0, abs(legs[0].delta) - abs(legs[1].delta))
 
 
 def _estimate_pnl(
