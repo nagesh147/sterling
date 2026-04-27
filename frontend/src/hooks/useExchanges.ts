@@ -57,14 +57,23 @@ export function useDataSource() {
   });
 }
 
+function _invalidateMarketData(qc: ReturnType<typeof useQueryClient>) {
+  // Invalidate all market-data-dependent queries after source switch
+  qc.invalidateQueries({ queryKey: ['data-source'] });
+  qc.invalidateQueries({ queryKey: ['config-info'] });
+  qc.invalidateQueries({ queryKey: ['snapshot'] });
+  qc.invalidateQueries({ queryKey: ['watchlist'] });
+  qc.invalidateQueries({ queryKey: ['market-snapshot'] });
+  qc.invalidateQueries({ queryKey: ['preview'] });
+  qc.invalidateQueries({ queryKey: ['eval-history'] });
+  qc.invalidateQueries({ queryKey: ['regime-trend'] });
+}
+
 export function useSetDataSource() {
   const qc = useQueryClient();
   return useMutation<DataSourceResponse, Error, { exchange: string; api_key?: string; api_secret?: string }>({
     mutationFn: (body) => api.post<DataSourceResponse>('/api/v1/config/data-source', body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['data-source'] });
-      qc.invalidateQueries({ queryKey: ['config-info'] });
-    },
+    onSuccess: () => _invalidateMarketData(qc),
   });
 }
 
@@ -73,10 +82,7 @@ export function useActivateDataSource() {
   return useMutation<{ message: string; reachable: boolean }, Error, string>({
     mutationFn: (id) =>
       api.post<{ message: string; reachable: boolean }>(`/api/v1/exchanges/${id}/activate-data-source`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['data-source'] });
-      qc.invalidateQueries({ queryKey: ['config-info'] });
-    },
+    onSuccess: () => _invalidateMarketData(qc),
   });
 }
 

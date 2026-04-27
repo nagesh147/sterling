@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useInstruments } from '../hooks/useInstruments';
+import { useDataSource } from '../hooks/useExchanges';
 import { useStore } from '../store/useStore';
 
 const styles: Record<string, React.CSSProperties> = {
@@ -14,16 +15,42 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11, padding: '2px 6px', borderRadius: 3,
     background: '#2a2a2a', color: '#aaa',
   },
+  incompatibleBadge: {
+    fontSize: 11, padding: '2px 6px', borderRadius: 3,
+    background: '#2a1a1a', color: '#cc6644',
+  },
 };
 
 export function InstrumentSelector() {
   const { data, isLoading } = useInstruments();
+  const { data: dsData } = useDataSource();
   const { selectedUnderlying, setSelectedUnderlying } = useStore();
+
+  const activeSource = dsData?.exchange ?? 'deribit';
+  const instruments = data?.instruments ?? [];
+
+  // Partition into compatible and incompatible for current source
+  const compatible = instruments.filter(i =>
+    (i.compatible_sources ?? []).includes(activeSource)
+  );
+  const incompatible = instruments.filter(i =>
+    !(i.compatible_sources ?? []).includes(activeSource)
+  );
+
+  // Auto-switch to first compatible instrument when source changes and
+  // current selection is no longer compatible
+  useEffect(() => {
+    if (!compatible.length) return;
+    const currentOk = compatible.some(i => i.underlying === selectedUnderlying);
+    if (!currentOk) {
+      setSelectedUnderlying(compatible[0].underlying);
+    }
+  }, [activeSource, compatible.length]);
 
   if (isLoading) return <div style={styles.label}>Loading instruments…</div>;
 
-  const instruments = data?.instruments ?? [];
   const selected = instruments.find(i => i.underlying === selectedUnderlying);
+  const selectedCompatible = (selected?.compatible_sources ?? []).includes(activeSource);
 
   return (
     <div style={styles.container}>
@@ -33,16 +60,30 @@ export function InstrumentSelector() {
         value={selectedUnderlying}
         onChange={e => setSelectedUnderlying(e.target.value)}
       >
-        {instruments.map(inst => (
-          <option key={inst.underlying} value={inst.underlying}>
-            {inst.underlying} {!inst.has_options ? '(no options)' : ''}
-          </option>
-        ))}
+        {compatible.length > 0 && (
+          <optgroup label={`Available on ${activeSource.toUpperCase()}`}>
+            {compatible.map(inst => (
+              <option key={inst.underlying} value={inst.underlying}>
+                {inst.underlying}{!inst.has_options ? ' (no options)' : ''}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {incompatible.length > 0 && (
+          <optgroup label={`Other sources only`}>
+            {incompatible.map(inst => (
+              <option key={inst.underlying} value={inst.underlying} disabled>
+                {inst.underlying} — requires {inst.compatible_sources.join('/')}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
       {selected && (
-        <span style={styles.badge}>
+        <span style={selectedCompatible ? styles.badge : styles.incompatibleBadge}>
           {selected.exchange.toUpperCase()} · {selected.quote_currency}
           {selected.has_options ? ' · OPTIONS' : ' · SPOT ONLY'}
+          {!selectedCompatible && ` ⚠ not on ${activeSource}`}
         </span>
       )}
     </div>

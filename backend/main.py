@@ -51,10 +51,13 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
             if not active:
                 continue
 
+            from app.api.v1.endpoints.directional import _adapter_can_serve
             for sym in {a.underlying for a in active}:
                 inst = registry.get_instrument(sym)
                 if not inst:
                     continue
+                if not _adapter_can_serve(inst, adapter_manager.get_data_source()):
+                    continue  # skip instruments not servable by current adapter
                 try:
                     spot = await ad.get_index_price(inst)
                     c4h = await ad.get_candles(inst, "4H", limit=100)

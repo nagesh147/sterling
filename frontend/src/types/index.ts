@@ -14,6 +14,7 @@ export interface InstrumentMeta {
   index_name: string;
   dvol_symbol: string | null;
   description: string;
+  compatible_sources: string[];
 }
 
 export interface InstrumentListResponse {

@@ -344,6 +344,13 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
 
     from app.services import adapter_manager as _adm
     from app.api.v1.endpoints.config import get_runtime_risk
+    from app.api.v1.endpoints.directional import _adapter_can_serve
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
     adapter = _adm.get_adapter() or request.app.state.adapter
     result = await engine_run_once(inst, adapter, get_runtime_risk())
 

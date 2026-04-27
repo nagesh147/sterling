@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from typing import Optional, Tuple, List
 
 
@@ -31,6 +31,19 @@ class InstrumentMeta(BaseModel):
     zerodha_token: Optional[int] = None            # instrument token for historical data
     zerodha_index_symbol: Optional[str] = None     # e.g. "NSE:NIFTY 50" for LTP/quote
     zerodha_vix_token: Optional[int] = None        # India VIX token (264969) for DVOL proxy
+
+    @computed_field
+    @property
+    def compatible_sources(self) -> List[str]:
+        """Data sources that can provide market data for this instrument."""
+        if self.exchange == "zerodha":
+            return ["zerodha"]
+        sources = ["deribit", "binance"]  # most crypto available on deribit + binance
+        if self.delta_perp_symbol:
+            sources.append("delta_india")
+        if self.okx_perp_symbol:
+            sources.append("okx")
+        return sources
 
 
 class InstrumentListResponse(BaseModel):

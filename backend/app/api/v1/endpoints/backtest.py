@@ -19,6 +19,13 @@ async def run_backtest_endpoint(
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
     from app.services import adapter_manager as _adm
+    from app.api.v1.endpoints.directional import _adapter_can_serve
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
     adapter = _adm.get_adapter() or request.app.state.adapter
 
     # Fetch enough historical candles — extra 100 bars for EMA50 warmup
