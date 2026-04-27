@@ -11,7 +11,7 @@ Store in ExchangeConfig:
 Docs: https://kite.trade/docs/connect/v3/
 """
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 import httpx
@@ -28,10 +28,52 @@ log = get_logger(__name__)
 
 _BASE = "https://api.kite.trade"
 
+# Zerodha interval names
+_RESOLUTION_MAP = {
+    "15m": "15minute",
+    "1H":  "60minute",
+    "4H":  "60minute",   # aggregate 4 × 60min bars → 4H on client side
+    "1D":  "day",
+}
+
+# India VIX daily close (approx 30-day data)
+_INDIA_VIX_TOKEN = 264969
+
 
 def _ts_ms(ts) -> int:
     ts_int = int(ts)
     return ts_int * 1000 if ts_int < 1_000_000_000_000 else ts_int
+
+
+def _parse_kite_ts(ts_str: str) -> int:
+    """Parse Zerodha timestamp '2024-01-15 09:15:00+0530' → epoch ms."""
+    try:
+        # Kite returns '2024-01-15 09:15:00+0530'
+        dt = datetime.fromisoformat(ts_str.replace("+0530", "+05:30"))
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return int(time.time() * 1000)
+
+
+def _aggregate_4h(candles_1h: List[Candle]) -> List[Candle]:
+    """Group 1H candles into 4H buckets."""
+    if not candles_1h:
+        return []
+    result: List[Candle] = []
+    buf: List[Candle] = []
+    for c in candles_1h:
+        buf.append(c)
+        if len(buf) == 4:
+            result.append(Candle(
+                timestamp_ms=buf[0].timestamp_ms,
+                open=buf[0].open,
+                high=max(x.high for x in buf),
+                low=min(x.low for x in buf),
+                close=buf[-1].close,
+                volume=sum(x.volume for x in buf),
+            ))
+            buf = []
+    return result
 
 
 class ZerodhaAdapter(AuthenticatedExchangeAdapter):
@@ -102,11 +144,10 @@ class ZerodhaAdapter(AuthenticatedExchangeAdapter):
             return False
 
     async def get_index_price(self, instrument: InstrumentMeta) -> float:
-        # Kite LTP for NSE index (e.g., NSE:NIFTY 50)
-        sym = f"NSE:{instrument.underlying}"
+        sym = instrument.zerodha_index_symbol or f"NSE:{instrument.index_name}"
         try:
-            data = await self._auth_get(f"/quote/ltp", params={"i": sym})
-            return float(data.get(sym, {}).get("last_price") or 0.0)
+            data = await self._auth_get("/quote/ltp", params={"i": sym})
+            return float((data.get(sym) or {}).get("last_price") or 0.0)
         except Exception:
             return 0.0
 
@@ -122,20 +163,91 @@ class ZerodhaAdapter(AuthenticatedExchangeAdapter):
         resolution: str,
         limit: int = 200,
     ) -> List[Candle]:
-        # Zerodha candles need instrument token (numeric ID)
-        # Instrument discovery is a separate lookup — stub for now
-        log.warning("Zerodha candle fetch not yet implemented (requires instrument token lookup)")
-        return []
+        token = instrument.zerodha_token
+        if not token:
+            log.warning("No zerodha_token for %s — cannot fetch candles", instrument.underlying)
+            return []
+
+        want_4h = resolution == "4H"
+        interval = _RESOLUTION_MAP.get(resolution, "60minute")
+
+        # Compute date range — Zerodha requires from/to as dates
+        now = datetime.now(timezone(timedelta(hours=5, minutes=30)))  # IST
+        n_bars = limit * 4 if want_4h else limit
+        # 60min: ~1 bar/hr trading hours; use calendar days with buffer
+        days_needed = max(2, int(n_bars / 6) + 5)
+        from_dt = now - timedelta(days=days_needed)
+        from_str = from_dt.strftime("%Y-%m-%d %H:%M:%S")
+        to_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        try:
+            data = await self._auth_get(
+                f"/instruments/historical/{token}/{interval}",
+                params={"from": from_str, "to": to_str, "continuous": 0},
+            )
+            raw = data.get("candles", [])
+        except Exception as exc:
+            log.error("Zerodha candle fetch failed for %s: %s", instrument.underlying, exc)
+            return []
+
+        candles: List[Candle] = []
+        for row in raw:
+            try:
+                # [timestamp_str, open, high, low, close, volume, oi]
+                candles.append(Candle(
+                    timestamp_ms=_parse_kite_ts(str(row[0])),
+                    open=float(row[1]),
+                    high=float(row[2]),
+                    low=float(row[3]),
+                    close=float(row[4]),
+                    volume=float(row[5]) if len(row) > 5 else 0.0,
+                ))
+            except (IndexError, ValueError, TypeError):
+                continue
+
+        # Sort ascending
+        candles.sort(key=lambda c: c.timestamp_ms)
+
+        if want_4h:
+            candles = _aggregate_4h(candles)
+
+        return candles[-limit:]
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:
-        log.warning("Zerodha option chain fetch not yet implemented (requires NFO instrument list)")
+        # NFO option chain requires fetching instruments CSV and pricing — complex flow
+        # Returning empty until full NFO integration is implemented
+        log.info("Zerodha option chain not yet implemented for %s", instrument.underlying)
         return []
 
     async def get_dvol(self, instrument: InstrumentMeta) -> Optional[float]:
-        return None
+        """India VIX as DVOL proxy for NIFTY/BANKNIFTY."""
+        vix_token = instrument.zerodha_vix_token or _INDIA_VIX_TOKEN
+        try:
+            data = await self._auth_get(
+                f"/quote/ltp", params={"i": f"NSE:INDIA VIX"}
+            )
+            vix = (data.get("NSE:INDIA VIX") or {}).get("last_price")
+            return float(vix) if vix else None
+        except Exception:
+            return None
 
     async def get_dvol_history(self, instrument: InstrumentMeta, days: int = 30) -> List[float]:
-        return []
+        """India VIX daily history for IVR computation."""
+        vix_token = instrument.zerodha_vix_token or _INDIA_VIX_TOKEN
+        now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        from_dt = now - timedelta(days=days + 5)
+        try:
+            data = await self._auth_get(
+                f"/instruments/historical/{vix_token}/day",
+                params={
+                    "from": from_dt.strftime("%Y-%m-%d"),
+                    "to": now.strftime("%Y-%m-%d"),
+                    "continuous": 0,
+                },
+            )
+            return [float(row[4]) for row in data.get("candles", []) if len(row) >= 5]
+        except Exception:
+            return []
 
     # ─── AuthenticatedExchangeAdapter ──────────────────────────────────────
 
