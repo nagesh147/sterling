@@ -115,8 +115,10 @@ async def portfolio_summary() -> PortfolioSummary:
         if open_positions else 0.0
     )
 
+    partially_closed = [p for p in positions if p.status.value == "partially_closed"]
     return PortfolioSummary(
         open_count=len(open_positions),
+        partially_closed_count=len(partially_closed),
         closed_count=len(closed_positions),
         total_positions=len(positions),
         total_open_risk_usd=round(total_open_risk, 2),

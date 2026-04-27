@@ -128,6 +128,10 @@ class EvalHistoryItem(BaseModel):
     recommendation: str
     no_trade_score: float
     ivr: Optional[float]
+    ivr_band: Optional[str] = None
+    exec_mode: Optional[str] = None      # pullback | continuation | wait
+    signal_trend: Optional[int] = None   # 1=bull, -1=bear, 0=mixed
+    top_structure: Optional[str] = None  # best ranked structure type
     timestamp_ms: int
 
 

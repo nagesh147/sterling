@@ -64,7 +64,8 @@ class MonitorAllResult(BaseModel):
 
 
 class PortfolioSummary(BaseModel):
-    open_count: int
+    open_count: int           # fully open + partially_closed
+    partially_closed_count: int = 0
     closed_count: int
     total_positions: int
     total_open_risk_usd: float

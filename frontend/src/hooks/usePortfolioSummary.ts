@@ -3,6 +3,7 @@ import { api } from '../utils/api';
 
 export interface PortfolioSummary {
   open_count: number;
+  partially_closed_count: number;
   closed_count: number;
   total_positions: number;
   total_open_risk_usd: number;

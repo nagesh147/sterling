@@ -48,6 +48,11 @@ export function PortfolioSummary() {
           <span style={styles.key}>OPEN POSITIONS</span>
           <span style={{ ...styles.val, color: data.open_count > 0 ? '#f0c040' : '#555' }}>
             {data.open_count}
+            {data.partially_closed_count > 0 && (
+              <span style={{ color: '#f0c040', fontSize: 11, marginLeft: 4 }}>
+                ({data.partially_closed_count}½)
+              </span>
+            )}
           </span>
         </div>
         <div style={styles.cell}>
