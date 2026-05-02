@@ -3,16 +3,26 @@ from app.schemas.directional import PolicyResult, IVRBand, Direction
 from app.schemas.instruments import InstrumentMeta
 
 
-def _ivr_band(ivr: Optional[float]) -> IVRBand:
+def _ivr_band(ivr: Optional[float], underlying: Optional[str] = None) -> IVRBand:
     if ivr is None:
-        # Unknown IV — fail closed: treat as elevated so naked options are excluded
-        # and debit spreads are preferred over naked long premium.
         return IVRBand.ELEVATED
-    if ivr < 40:
+
+    # Try IV percentile first when underlying is known
+    if underlying:
+        try:
+            from app.services.eval_history import get_ivr_percentile
+            pct = get_ivr_percentile(underlying, ivr)
+            rank = pct if pct is not None else ivr
+        except Exception:
+            rank = ivr
+    else:
+        rank = ivr
+
+    if rank < 30:
         return IVRBand.LOW
-    if ivr < 60:
+    if rank < 55:
         return IVRBand.NORMAL
-    if ivr <= 80:
+    if rank < 75:
         return IVRBand.ELEVATED
     return IVRBand.HIGH
 
@@ -41,7 +51,7 @@ def apply_policy(
     instrument: InstrumentMeta,
     ivr: Optional[float],
 ) -> PolicyResult:
-    band = _ivr_band(ivr)
+    band = _ivr_band(ivr, underlying=instrument.underlying if instrument else None)
     naked_allowed = band in (IVRBand.LOW, IVRBand.NORMAL)
     debit_preferred = band == IVRBand.ELEVATED
     avoid_long_premium = band == IVRBand.HIGH

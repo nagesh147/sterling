@@ -34,3 +34,9 @@ class DirectionalSnapshot(BaseModel):
     exec_confidence: float
     exec_reason: str
     timestamp_ms: int
+    # Indicator lines for charting
+    st1_line: List[dict] = []
+    st2_line: List[dict] = []
+    st3_line: List[dict] = []
+    ema50_line: List[dict] = []
+    vwap_line: Optional[List[dict]] = None

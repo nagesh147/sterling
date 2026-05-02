@@ -21,6 +21,13 @@ class MacroRegime(str, Enum):
     BULLISH = "bullish"
     BEARISH = "bearish"
     NEUTRAL = "neutral"
+    BULL_TRENDING = "bull_trending"
+    BULL_WEAK = "bull_weak"
+    BULL_RANGING = "bull_ranging"
+    BEAR_TRENDING = "bear_trending"
+    BEAR_WEAK = "bear_weak"
+    BEAR_RANGING = "bear_ranging"
+    CHOPPY = "choppy"
 
 
 class Direction(str, Enum):

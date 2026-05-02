@@ -188,6 +188,26 @@ async def reset_scoring_weights() -> ScoringWeights:
     return _scoring_weights
 
 
+# ─── Circuit breaker ─────────────────────────────────────────────────────────
+
+@router.get("/circuit-breaker")
+async def get_circuit_breaker(request: Request) -> dict:
+    cb = getattr(request.app.state, "circuit_breaker", None)
+    if cb is None:
+        return {"state": "ok", "halted": False, "size_multiplier": 1.0}
+    from app.services.execution.circuit_breaker import CircuitState
+    state = "halted" if cb.halted else "ok"
+    return {"state": state, "halted": cb.halted, "size_multiplier": cb.size_multiplier}
+
+
+@router.post("/circuit-breaker/reset")
+async def reset_circuit_breaker(request: Request) -> dict:
+    cb = getattr(request.app.state, "circuit_breaker", None)
+    if cb is not None:
+        cb.reset()
+    return {"state": "ok", "halted": False, "size_multiplier": 1.0}
+
+
 # ─── Eval history cap ─────────────────────────────────────────────────────────
 
 class EvalHistoryCapResponse(BaseModel):

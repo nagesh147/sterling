@@ -385,6 +385,21 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
+    # Circuit breaker check
+    cb = getattr(request.app.state, "circuit_breaker", None)
+    if cb is not None:
+        mode = getattr(request.app.state, "trading_mode", None)
+        max_conc = mode.max_concurrent if mode else 5
+        from app.services.execution.circuit_breaker import CircuitState
+        check = await cb.check(
+            daily_pnl_pct=0.0,
+            free_margin_pct=1.0,
+            open_count=paper_store.open_count(),
+            mode_max_concurrent=max_conc,
+        )
+        if check.state in (CircuitState.HALTED, CircuitState.NO_NEW_ENTRIES):
+            raise HTTPException(status_code=503, detail=check.reason)
+
     from app.services import adapter_manager as _adm
     from app.api.v1.endpoints.config import get_runtime_risk
     from app.api.v1.endpoints.directional import _adapter_can_serve
@@ -499,6 +514,36 @@ async def monitor_all(request: Request) -> MonitorAllResult:
 
 
 # ─── Single-position endpoints (path param LAST) ─────────────────────────────
+
+@router.get("/{pos_id}/trail-stop")
+async def get_trail_stop(pos_id: str) -> dict:
+    """Return current trailing stop state for a position."""
+    pos = paper_store.get_position(pos_id.upper())
+    if not pos:
+        raise HTTPException(status_code=404, detail=f"Position {pos_id} not found")
+    raw = getattr(pos, "trail_stop_json", None)
+    if not raw:
+        return {
+            "stop": None, "mode": None, "highest_seen": None,
+            "partial_25_done": False, "partial_50_done": False,
+            "stop_moved_last_check": False,
+        }
+    try:
+        from app.engines.directional.trailing_stop import TrailState
+        state = TrailState.from_json(raw)
+        return {
+            "stop": state.current_stop,
+            "mode": state.mode.value,
+            "highest_seen": state.highest_seen,
+            "partial_25_done": state.partial_25_done,
+            "partial_50_done": state.partial_50_done,
+            "stop_moved_last_check": False,
+        }
+    except Exception:
+        return {"stop": None, "mode": None, "highest_seen": None,
+                "partial_25_done": False, "partial_50_done": False,
+                "stop_moved_last_check": False}
+
 
 @router.get("/{pos_id}/pnl-history")
 async def get_pnl_history(pos_id: str):
