@@ -79,7 +79,7 @@ def score_structure(
     # Normalize weights so scores stay in [0, 100] regardless of user customization
     w_sum = (w.regime + w.signal + w.execution + w.health + w.dte + w.risk_reward) or 1.0
 
-    total = (
+    base = (
         s_regime * w.regime
         + s_signal * w.signal
         + s_exec * w.execution
@@ -87,6 +87,16 @@ def score_structure(
         + s_dte * w.dte
         + s_rr * w.risk_reward
     ) / w_sum
+
+    # Interaction terms
+    if s_signal > 70 and s_health < 35:
+        base *= 0.75
+    if s_regime < 30 and s_signal > 70:
+        base *= 0.80
+    if s_signal > 75 and s_health > 70 and s_exec > 65:
+        base *= 1.12
+
+    total = min(round(base, 1), 100.0)
 
     breakdown = {
         "regime": round(s_regime, 2),
@@ -98,7 +108,7 @@ def score_structure(
         "total": round(total, 2),
     }
 
-    return structure.model_copy(update={"score": round(total, 2), "score_breakdown": breakdown})
+    return structure.model_copy(update={"score": total, "score_breakdown": breakdown})
 
 
 def score_no_trade(regime: RegimeResult, signal: SignalResult, policy: PolicyResult) -> float:

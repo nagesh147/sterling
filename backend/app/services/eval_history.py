@@ -86,6 +86,28 @@ def get_history(underlying: str) -> List[dict]:
     return list(_history.get(underlying, []))
 
 
+def record_iv(underlying: str, ivr: float) -> None:
+    """Store a daily IVR snapshot for IV percentile computation."""
+    from app.services import db
+    db.record_iv(underlying, ivr)
+
+
+def get_ivr_percentile(underlying: str, current_ivr: float) -> float | None:
+    """
+    Returns 0-100 percentile of current_ivr in last 252 daily records.
+    Returns None if fewer than 30 records exist.
+    """
+    from app.services import db
+    history = db.get_iv_history(underlying, limit=252)
+    if len(history) < 30:
+        return None
+    try:
+        from scipy.stats import percentileofscore
+        return round(float(percentileofscore(history, current_ivr)), 2)
+    except Exception:
+        return None
+
+
 def clear(underlying: str | None = None) -> None:
     if underlying:
         _history.pop(underlying, None)

@@ -82,6 +82,34 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_signal_history_underlying ON signal_history(underlying)"
     )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS system_config (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    conn.execute("INSERT OR IGNORE INTO system_config VALUES ('trading_mode', 'swing')")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS iv_history (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying TEXT NOT NULL,
+            ivr        REAL NOT NULL,
+            ts         REAL NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_iv_history_und ON iv_history(underlying, ts)"
+    )
+    # Add trail stop columns to positions (idempotent)
+    for stmt in [
+        "ALTER TABLE positions ADD COLUMN trail_stop_json TEXT",
+        "ALTER TABLE positions ADD COLUMN trail_mode TEXT",
+        "ALTER TABLE positions ADD COLUMN entry_price_real REAL",
+    ]:
+        try:
+            conn.execute(stmt)
+        except Exception:
+            pass
     conn.commit()
 
 
@@ -143,6 +171,75 @@ def remove(pos_id: str) -> None:
             c.execute("DELETE FROM positions WHERE id = ?", (pos_id,))
     except Exception as exc:
         log.warning("DB delete failed: %s", exc)
+
+
+def get_trading_mode() -> str:
+    if not _available:
+        return "swing"
+    try:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT value FROM system_config WHERE key='trading_mode'"
+            ).fetchone()
+        return row["value"] if row else "swing"
+    except Exception:
+        return "swing"
+
+
+def set_trading_mode(name: str) -> None:
+    if not _available:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO system_config (key, value) VALUES ('trading_mode', ?)",
+                (name,),
+            )
+    except Exception as exc:
+        log.warning("DB set_trading_mode failed: %s", exc)
+
+
+def record_iv(underlying: str, ivr: float) -> None:
+    if not _available:
+        return
+    import time
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO iv_history (underlying, ivr, ts) VALUES (?, ?, ?)",
+                (underlying, ivr, time.time()),
+            )
+    except Exception as exc:
+        log.warning("DB record_iv failed: %s", exc)
+
+
+def get_iv_history(underlying: str, limit: int = 252) -> list:
+    if not _available:
+        return []
+    try:
+        with _conn() as c:
+            rows = c.execute(
+                "SELECT ivr FROM iv_history WHERE underlying=? ORDER BY ts DESC LIMIT ?",
+                (underlying, limit),
+            ).fetchall()
+        return [r["ivr"] for r in rows]
+    except Exception:
+        return []
+
+
+def get_recent_closed_trades(n: int = 5) -> list:
+    if not _available:
+        return []
+    try:
+        with _conn() as c:
+            rows = c.execute(
+                "SELECT data FROM positions WHERE status='closed' ORDER BY updated_ts DESC LIMIT ?",
+                (n,),
+            ).fetchall()
+        import json as _json
+        return [_json.loads(r["data"]) for r in rows]
+    except Exception:
+        return []
 
 
 def load_all() -> List[dict]:

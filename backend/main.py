@@ -23,6 +23,8 @@ from app.api.v1.endpoints.webhooks import router as webhooks_router
 from app.api.v1.endpoints.options import router as options_router
 from app.api.v1.endpoints.stats import router as stats_router
 from app.api.v1.endpoints.session import router as session_router
+from app.api.v1.endpoints.trading_mode import router as trading_mode_router
+from app.api.v1.endpoints.candles import router as candles_router
 from app.services import alert_store as _alert_store_svc
 
 log = get_logger(__name__)
@@ -116,6 +118,17 @@ async def lifespan(app: FastAPI):
     from app.services import eval_history as _eval_history_svc
     _eval_history_svc.bootstrap()
 
+    from app.core.trading_mode import MODES, DEFAULT_MODE
+    from app.services.db import get_trading_mode
+    mode_name = get_trading_mode() or DEFAULT_MODE
+    if mode_name not in MODES:
+        mode_name = DEFAULT_MODE
+    app.state.trading_mode = MODES[mode_name]
+
+    from app.services.execution.circuit_breaker import CircuitBreaker
+    from app.services.notifications import telegram as _telegram_svc
+    app.state.circuit_breaker = CircuitBreaker(telegram=_telegram_svc)
+
     # Build market data adapter (use pre-injected adapter in tests, else build fresh)
     if not getattr(app.state, "adapter", None):
         exchange = settings.exchange_adapter.lower()
@@ -202,6 +215,8 @@ def create_app() -> FastAPI:
     app.include_router(options_router, prefix="/api/v1")
     app.include_router(stats_router, prefix="/api/v1")
     app.include_router(session_router, prefix="/api/v1")
+    app.include_router(trading_mode_router, prefix="/api/v1")
+    app.include_router(candles_router, prefix="/api/v1")
 
     return app
 
