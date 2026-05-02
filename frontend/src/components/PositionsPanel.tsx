@@ -238,6 +238,15 @@ export function PositionsPanel({ underlying }: Props) {
   const monitorAll = useMonitorAll();
   const closeAll = useCloseAll();
   const [showCloseAllConfirm, setShowCloseAllConfirm] = useState(false);
+  const monitorDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleMonitorAll = () => {
+    if (monitorAll.isPending) return;
+    if (monitorDebounceRef.current) clearTimeout(monitorDebounceRef.current);
+    monitorDebounceRef.current = setTimeout(() => monitorAll.mutate(), 400);
+  };
+  const [closeAllResult, setCloseAllResult] = useState<{ count: number; pnl: number } | null>(null);
+  const [closeAllError, setCloseAllError] = useState<string | null>(null);
   const hasOpen = (data?.open_count ?? 0) > 0;
   const { data: livePnlData } = useLivePnl(hasOpen);
   const livePnlMap = Object.fromEntries(
@@ -275,11 +284,11 @@ export function PositionsPanel({ underlying }: Props) {
           </button>
           <button
             style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
-            onClick={() => monitorAll.mutate()}
+            onClick={handleMonitorAll}
             disabled={monitorAll.isPending}
             title="Check all open/partial positions for exit signals"
           >
-            {monitorAll.isPending ? '…' : '⟳ MONITOR ALL'}
+            {monitorAll.isPending ? '…' : '⟳ REFRESH ALL POSITIONS'}
           </button>
           {!showCloseAllConfirm ? (
             <button
@@ -294,7 +303,21 @@ export function PositionsPanel({ underlying }: Props) {
             <>
               <button
                 style={{ background: '#2a0d0d', color: '#cc4444', border: '1px solid #cc4444', padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
-                onClick={() => { closeAll.mutate(); setShowCloseAllConfirm(false); }}
+                onClick={() => {
+                  closeAll.mutate(undefined, {
+                    onSuccess: (d) => {
+                      setShowCloseAllConfirm(false);
+                      setCloseAllResult({ count: d.closed_count, pnl: d.total_realized_pnl_usd });
+                      setCloseAllError(null);
+                      setTimeout(() => setCloseAllResult(null), 5000);
+                    },
+                    onError: (e) => {
+                      setShowCloseAllConfirm(false);
+                      setCloseAllError((e as Error).message);
+                      setTimeout(() => setCloseAllError(null), 5000);
+                    },
+                  });
+                }}
                 disabled={closeAll.isPending}
               >
                 {closeAll.isPending ? 'CLOSING…' : 'CONFIRM CLOSE ALL'}
@@ -304,6 +327,16 @@ export function PositionsPanel({ underlying }: Props) {
                 onClick={() => setShowCloseAllConfirm(false)}
               >CANCEL</button>
             </>
+          )}
+          {closeAllResult && (
+            <div style={{ background: '#0d1a0d', border: '1px solid #44cc8844', borderRadius: 4, padding: '6px 12px', fontSize: 11, color: '#44cc88', marginTop: 6 }}>
+              ✓ Closed {closeAllResult.count} position{closeAllResult.count !== 1 ? 's' : ''} · P&L {closeAllResult.pnl >= 0 ? '+' : ''}${closeAllResult.pnl.toFixed(2)}
+            </div>
+          )}
+          {closeAllError && (
+            <div style={{ background: '#1a0d0d', border: '1px solid #cc444444', borderRadius: 4, padding: '6px 12px', fontSize: 11, color: '#cc4444', marginTop: 6 }}>
+              Close all failed: {closeAllError}
+            </div>
           )}
           <button
             style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}

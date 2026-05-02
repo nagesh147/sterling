@@ -71,6 +71,17 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             fire_count       INTEGER NOT NULL DEFAULT 0
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS signal_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying  TEXT NOT NULL,
+            data        TEXT NOT NULL,
+            timestamp_ms INTEGER NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_signal_history_underlying ON signal_history(underlying)"
+    )
     conn.commit()
 
 

@@ -28,14 +28,22 @@ from app.services import alert_store as _alert_store_svc
 log = get_logger(__name__)
 
 
-async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
-    """Check alerts every `interval` seconds in the background."""
+async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
+    """
+    Poll instruments with active alerts every `interval` seconds.
+
+    Reuses snapshot_cache entries written by live SSE streams — no duplicate
+    exchange calls when the UI is open.  Falls back to a full candle fetch
+    only on cache miss (UI closed or stream not running for this instrument).
+    """
     import asyncio
     from app.engines.directional.regime_engine import compute_regime
     from app.engines.directional.signal_engine import compute_signal
     from app.engines.directional.setup_engine import evaluate_setup
     from app.engines.directional.orchestrator import compute_ivr
     from app.services.exchanges import instrument_registry as registry
+    from app.services import snapshot_cache as _snap_cache
+    from app.services import alert_service as _alert_svc
 
     while True:
         await asyncio.sleep(interval)
@@ -43,9 +51,6 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
             ad = adapter_manager.get_adapter()
             if not ad:
                 continue
-
-            for a in _alert_store_svc.list_alerts():
-                _alert_store_svc.rearm_if_cooldown_elapsed(a.id)
 
             active = [a for a in _alert_store_svc.list_alerts() if a.status.value == "active"]
             if not active:
@@ -57,8 +62,23 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
                 if not inst:
                     continue
                 if not _adapter_can_serve(inst, adapter_manager.get_data_source()):
-                    continue  # skip instruments not servable by current adapter
+                    continue
+
                 try:
+                    cached = _snap_cache.get(sym)
+                    if cached:
+                        # SSE already fetched this — reuse without exchange call
+                        await _alert_svc.check_and_fire(
+                            sym=sym,
+                            spot_price=cached.spot_price,
+                            ivr=cached.ivr,
+                            green_arrow=cached.green_arrow,
+                            red_arrow=cached.red_arrow,
+                            current_state=cached.current_state,
+                        )
+                        continue
+
+                    # Cache miss — UI not streaming; fetch fresh
                     spot = await ad.get_index_price(inst)
                     c4h = await ad.get_candles(inst, "4H", limit=100)
                     c1h = await ad.get_candles(inst, "1H", limit=200)
@@ -66,24 +86,21 @@ async def _background_alert_checker(app: FastAPI, interval: int = 300) -> None:
                     regime = compute_regime(c4h)
                     signal = compute_signal(c1h)
                     setup = evaluate_setup(regime, signal)
-                    for alert in active:
-                        if alert.underlying != sym:
-                            continue
-                        result = _alert_store_svc.check_alert(
-                            alert, spot_price=float(spot), ivr=ivr,
-                            green_arrow=signal.green_arrow, red_arrow=signal.red_arrow,
-                            current_state=setup.state.value,
-                        )
-                        if result.triggered:
-                            _alert_store_svc.fire_alert(alert.id, trigger_value=result.current_value)
-                            from app.services import webhook_store
-                            await webhook_store.deliver_all(
-                                f"{sym} Alert: {alert.condition.value}", result.message,
-                                {"underlying": sym, "value": result.current_value}
-                            )
-                            log.info("Background alert fired: %s %s", alert.id, result.message)
+
+                    snap_kwargs = dict(
+                        sym=sym,
+                        spot_price=float(spot),
+                        ivr=ivr,
+                        green_arrow=signal.green_arrow,
+                        red_arrow=signal.red_arrow,
+                        current_state=setup.state.value,
+                    )
+                    _snap_cache.put(**snap_kwargs)
+                    await _alert_svc.check_and_fire(**snap_kwargs)
+
                 except Exception as exc:
                     log.debug("Background alert check failed for %s: %s", sym, exc)
+
         except Exception as exc:
             log.warning("Background alert checker error: %s", exc)
 
@@ -96,6 +113,8 @@ async def lifespan(app: FastAPI):
     _webhook_store_svc.bootstrap()
     _alert_store_bootstrap.bootstrap()
     _pnl_history_svc.bootstrap()
+    from app.services import eval_history as _eval_history_svc
+    _eval_history_svc.bootstrap()
 
     # Build market data adapter (use pre-injected adapter in tests, else build fresh)
     if not getattr(app.state, "adapter", None):
@@ -128,8 +147,8 @@ async def lifespan(app: FastAPI):
         log.warning("Market data exchange unreachable at startup — will retry on request")
 
     import asyncio
-    bg_task = asyncio.create_task(_background_alert_checker(app, interval=300))
-    log.info("Background alert checker started (every 300s)")
+    bg_task = asyncio.create_task(_background_alert_checker(app, interval=30))
+    log.info("Background alert checker started (every 30s)")
 
     yield
 
@@ -157,6 +176,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def _security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # CSP: API-only server — no scripts/styles served
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; frame-ancestors 'none'"
+        )
+        return response
 
     app.include_router(health_router)
     app.include_router(instruments_router, prefix="/api/v1")

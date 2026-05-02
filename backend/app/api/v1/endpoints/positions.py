@@ -167,19 +167,60 @@ async def trade_analytics() -> TradeAnalytics:
 
 @router.get("/greeks")
 async def paper_portfolio_greeks():
-    """Aggregate delta from open paper positions — net directional exposure."""
-    open_pos = [p for p in paper_store.list_positions() if p.status.value == "open"]
+    """
+    Aggregate net Greeks from open paper positions.
+    Delta uses stored per-leg value; gamma/vega/theta are computed via BS
+    using the entry IV (mark_iv) and remaining DTE.
+    """
+    from app.engines.backtest.bs_pricing import bs_gamma, bs_vega, bs_theta
+    open_pos = [p for p in paper_store.list_positions() if p.status.value in ("open", "partially_closed")]
     total_delta = 0.0
+    total_gamma = 0.0
+    total_vega = 0.0
+    total_theta = 0.0
+    per_position = []
+
     for pos in open_pos:
         direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
+        contracts = pos.sized_trade.contracts
+        pos_delta = pos_gamma = pos_vega = pos_theta = 0.0
+
         for leg in pos.sized_trade.structure.legs:
-            total_delta += (leg.delta or 0.0) * pos.sized_trade.contracts * direction_sign
-    total_delta = round(total_delta, 4)
+            n = contracts * direction_sign
+            spot = pos.entry_spot_price
+            strike = leg.strike
+            dte = max(1, _dte_from_expiry(leg.expiry_date) if _dte_from_expiry(leg.expiry_date) >= 0 else leg.dte)
+            iv = (leg.mark_iv or 0.0) / 100.0 if (leg.mark_iv or 0.0) > 1.0 else (leg.mark_iv or 0.0)
+            opt_type = leg.option_type if hasattr(leg, "option_type") else "call"
+
+            pos_delta += (leg.delta or 0.0) * n
+            if iv > 0 and spot > 0 and strike > 0:
+                pos_gamma += bs_gamma(spot, strike, dte, iv) * n
+                pos_vega  += bs_vega(spot, strike, dte, iv) * n
+                pos_theta += bs_theta(spot, strike, dte, iv, opt_type) * n
+
+        total_delta += pos_delta
+        total_gamma += pos_gamma
+        total_vega  += pos_vega
+        total_theta += pos_theta
+        per_position.append({
+            "id": pos.id,
+            "underlying": pos.underlying,
+            "delta": round(pos_delta, 4),
+            "gamma": round(pos_gamma, 6),
+            "vega": round(pos_vega, 6),
+            "theta": round(pos_theta, 6),
+        })
+
     exposure = "bullish" if total_delta > 0.05 else ("bearish" if total_delta < -0.05 else "neutral")
     return {
-        "total_delta": total_delta,
+        "total_delta": round(total_delta, 4),
+        "total_gamma": round(total_gamma, 6),
+        "total_vega": round(total_vega, 6),
+        "total_theta": round(total_theta, 6),
         "net_directional_exposure": exposure,
         "open_positions": len(open_pos),
+        "per_position": per_position,
         "timestamp_ms": int(time.time() * 1000),
     }
 
@@ -392,53 +433,56 @@ async def monitor_all(request: Request) -> MonitorAllResult:
     from app.services import adapter_manager as _adm
     _live_adapter = _adm.get_adapter() or request.app.state.adapter
 
+    _sem = asyncio.Semaphore(3)  # cap concurrent adapter calls
+
     async def _monitor_one(pos: PaperPosition) -> Optional[MonitorResult]:
-        try:
-            inst = registry.get_instrument(pos.underlying)
-            if not inst:
+        async with _sem:
+            try:
+                inst = registry.get_instrument(pos.underlying)
+                if not inst:
+                    return None
+                adapter = _live_adapter
+                c1h = await adapter.get_candles(inst, "1H", limit=200)
+                signal = compute_signal(c1h)
+                current_spot = await adapter.get_index_price(inst)
+                leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+                dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
+                if dte_from_expiry >= 0:
+                    current_dte = dte_from_expiry
+                else:
+                    days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
+                    current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
+                spot_move = current_spot - pos.entry_spot_price
+                direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
+                estimated_pnl = _estimate_pnl(
+                    pos.sized_trade, spot_move, direction_sign,
+                    pos.sized_trade.max_risk_usd,
+                    pos.sized_trade.structure.max_gain,
+                )
+                exit_signal = check_exits(
+                    pos.sized_trade, signal, estimated_pnl, current_dte,
+                    force_exit_dte=inst.force_exit_dte,
+                    financial_stop_pct=risk.financial_stop_pct,
+                    partial_profit_r1=risk.partial_profit_r1,
+                    partial_profit_r2=risk.partial_profit_r2,
+                )
+                pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
+
+                # Auto-execute: full exit → close position
+                if exit_signal.should_exit and not exit_signal.partial:
+                    paper_store.close_position(pos.id, float(current_spot))
+                # Auto-execute: partial → transition to PARTIALLY_CLOSED
+                elif exit_signal.partial and pos.status == PositionStatus.OPEN:
+                    paper_store.partial_close_position(pos.id)
+
+                return MonitorResult(
+                    position_id=pos.id, underlying=pos.underlying,
+                    exit_signal=exit_signal, current_spot=current_spot,
+                    estimated_pnl_usd=estimated_pnl, current_dte=current_dte,
+                    current_signal_trend=signal.trend, timestamp_ms=now_ms,
+                )
+            except Exception:
                 return None
-            adapter = _live_adapter
-            c1h = await adapter.get_candles(inst, "1H", limit=200)
-            signal = compute_signal(c1h)
-            current_spot = await adapter.get_index_price(inst)
-            leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
-            dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
-            if dte_from_expiry >= 0:
-                current_dte = dte_from_expiry
-            else:
-                days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
-                current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
-            spot_move = current_spot - pos.entry_spot_price
-            direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
-            estimated_pnl = _estimate_pnl(
-                pos.sized_trade, spot_move, direction_sign,
-                pos.sized_trade.max_risk_usd,
-                pos.sized_trade.structure.max_gain,
-            )
-            exit_signal = check_exits(
-                pos.sized_trade, signal, estimated_pnl, current_dte,
-                force_exit_dte=inst.force_exit_dte,
-                financial_stop_pct=risk.financial_stop_pct,
-                partial_profit_r1=risk.partial_profit_r1,
-                partial_profit_r2=risk.partial_profit_r2,
-            )
-            pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
-
-            # Auto-execute: full exit → close position
-            if exit_signal.should_exit and not exit_signal.partial:
-                paper_store.close_position(pos.id, float(current_spot))
-            # Auto-execute: partial → transition to PARTIALLY_CLOSED
-            elif exit_signal.partial and pos.status == PositionStatus.OPEN:
-                paper_store.partial_close_position(pos.id)
-
-            return MonitorResult(
-                position_id=pos.id, underlying=pos.underlying,
-                exit_signal=exit_signal, current_spot=current_spot,
-                estimated_pnl_usd=estimated_pnl, current_dte=current_dte,
-                current_signal_trend=signal.trend, timestamp_ms=now_ms,
-            )
-        except Exception:
-            return None
 
     raw = await asyncio.gather(*[_monitor_one(p) for p in active_positions])
     results = [r for r in raw if r is not None]

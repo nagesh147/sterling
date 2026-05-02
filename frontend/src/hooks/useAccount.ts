@@ -97,6 +97,7 @@ export function useAccountSummary() {
     queryKey: ['account', 'summary'],
     queryFn: () => api.get<AccountSummary>('/api/v1/account/summary'),
     refetchInterval: 30_000,
+    retry: false,
   });
 }
 
@@ -105,6 +106,7 @@ export function useAccountBalances() {
     queryKey: ['account', 'balances'],
     queryFn: () => api.get('/api/v1/account/balances'),
     refetchInterval: 30_000,
+    retry: false,
   });
 }
 
@@ -113,6 +115,7 @@ export function useAccountPositions(underlying = '') {
     queryKey: ['account', 'positions', underlying],
     queryFn: () => api.get(`/api/v1/account/positions${underlying ? `?underlying=${underlying}` : ''}`),
     refetchInterval: 15_000,
+    retry: false,
   });
 }
 
@@ -121,6 +124,7 @@ export function useAccountOrders(underlying = '') {
     queryKey: ['account', 'orders', underlying],
     queryFn: () => api.get(`/api/v1/account/orders${underlying ? `?underlying=${underlying}` : ''}`),
     refetchInterval: 15_000,
+    retry: false,
   });
 }
 
@@ -129,5 +133,6 @@ export function useAccountFills(limit = 50) {
     queryKey: ['account', 'fills', limit],
     queryFn: () => api.get(`/api/v1/account/fills?limit=${limit}`),
     refetchInterval: 30_000,
+    retry: false,
   });
 }

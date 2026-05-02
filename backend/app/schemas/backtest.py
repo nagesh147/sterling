@@ -6,6 +6,10 @@ class BacktestRequest(BaseModel):
     underlying: str
     lookback_days: int = Field(default=30, ge=7, le=365)
     sample_every_n_bars: int = Field(default=4, ge=1, le=24)
+    # Optional Black-Scholes pricing — pass current ATM IV (e.g. 0.80 = 80%)
+    # to get theoretical option P&L alongside candle returns.
+    atm_iv: Optional[float] = Field(default=None, ge=0.01, le=5.0)
+    option_dte: int = Field(default=30, ge=7, le=90)
 
 
 class BacktestBarResult(BaseModel):
@@ -20,13 +24,18 @@ class BacktestBarResult(BaseModel):
     green_arrow: bool
     red_arrow: bool
     st_trends: List[int]
-    st_values: List[float] = []   # [ST(7,3), ST(14,2), ST(21,1)] line levels
+    st_values: List[float] = []
     state: str
     direction: str
-    # Forward returns (% change) from this bar — None if insufficient future data
-    fwd_return_4h: Optional[float] = None    # 4 bars ahead (4H)
-    fwd_return_12h: Optional[float] = None   # 12 bars ahead (12H)
-    fwd_return_24h: Optional[float] = None   # 24 bars ahead (1D)
+    # Spot forward returns (% change)
+    fwd_return_4h: Optional[float] = None
+    fwd_return_12h: Optional[float] = None
+    fwd_return_24h: Optional[float] = None
+    # Black-Scholes option P&L (% of entry premium) — only when atm_iv supplied
+    bs_entry_premium: Optional[float] = None   # theoretical entry cost per lot
+    bs_fwd_pnl_4h: Optional[float] = None      # option P&L % at 4H exit
+    bs_fwd_pnl_12h: Optional[float] = None
+    bs_fwd_pnl_24h: Optional[float] = None
 
 
 class BacktestStats(BaseModel):
@@ -45,18 +54,23 @@ class BacktestStats(BaseModel):
     early_short_setups: int
     filtered_bars: int
     idle_bars: int
-    # Signal quality metrics (4H forward horizon)
-    arrow_long_win_rate_4h: Optional[float] = None   # % green arrows where 4H return > 0
-    arrow_short_win_rate_4h: Optional[float] = None  # % red arrows where 4H return < 0
-    setup_long_avg_return_4h: Optional[float] = None # avg 4H return on confirmed long setups
+    # Signal quality — 4H horizon
+    arrow_long_win_rate_4h: Optional[float] = None
+    arrow_short_win_rate_4h: Optional[float] = None
+    setup_long_avg_return_4h: Optional[float] = None
     setup_short_avg_return_4h: Optional[float] = None
-    signal_accuracy_long_4h: Optional[float] = None  # % all_green bars where 4H return > 0
+    signal_accuracy_long_4h: Optional[float] = None
     signal_accuracy_short_4h: Optional[float] = None
     # 12H horizon
     arrow_long_win_rate_12h: Optional[float] = None
     arrow_short_win_rate_12h: Optional[float] = None
     setup_long_avg_return_12h: Optional[float] = None
     setup_short_avg_return_12h: Optional[float] = None
+    # BS option P&L stats — present only when atm_iv was supplied
+    bs_arrow_long_avg_pnl_4h: Optional[float] = None   # avg option P&L % on green arrows
+    bs_arrow_short_avg_pnl_4h: Optional[float] = None
+    bs_arrow_long_win_rate_4h: Optional[float] = None  # % profitable at 4H
+    bs_arrow_short_win_rate_4h: Optional[float] = None
 
 
 class BacktestResult(BaseModel):
@@ -68,3 +82,6 @@ class BacktestResult(BaseModel):
     bars: List[BacktestBarResult]
     stats: BacktestStats
     timestamp_ms: int
+    # Echoed back so UI can label the results
+    atm_iv_used: Optional[float] = None
+    option_dte_used: Optional[int] = None

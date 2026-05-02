@@ -92,11 +92,18 @@ def bootstrap() -> None:
     global _loaded
     if _loaded:
         return
-    for alert in _load_from_db():
-        _alerts[alert.id] = alert
-    if _alerts:
-        log.info("Loaded %d alerts from DB", len(_alerts))
-    _loaded = True
+    try:
+        loaded = _load_from_db()
+        for alert in loaded:
+            _alerts[alert.id] = alert
+        if loaded:
+            log.info("Loaded %d alerts from DB", len(loaded))
+        else:
+            log.debug("Alert store bootstrap: no persisted alerts found")
+    except Exception as exc:
+        log.warning("Alert bootstrap failed, starting empty: %s", exc)
+    finally:
+        _loaded = True
 
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────

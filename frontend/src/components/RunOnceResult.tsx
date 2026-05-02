@@ -2,7 +2,7 @@ import React from 'react';
 import { useRunOnce } from '../hooks/useRunOnce';
 import { useEnterPosition } from '../hooks/usePositions'; // used inside TradeCard
 import type { SizedTrade } from '../types';
-import { fmtN } from '../utils/fmt';
+import { fmtN, fmtStructure, fmtState } from '../utils/fmt';
 
 const styles: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
@@ -34,38 +34,58 @@ const styles: Record<string, React.CSSProperties> = {
   paperBadge: { display: 'inline-block', background: '#1a2a1a', color: '#44cc88', padding: '2px 8px', borderRadius: 3, fontSize: 11, marginLeft: 8 },
 };
 
-const SCORE_LABELS: Record<string, string> = {
-  regime: 'REGIME', signal: 'SIGNAL', exec_timing: 'EXEC',
-  health: 'HEALTH', dte: 'DTE', rr: 'R/R',
+const SCORE_META: Record<string, { label: string; tooltip: string }> = {
+  regime:     { label: 'Macro trend',    tooltip: 'Price vs 50-bar EMA on 4H chart. High = strong trend alignment with trade direction.' },
+  signal:     { label: '1H signal',      tooltip: 'SuperTrend agreement across 3 periods (7,3 · 14,2 · 21,1) on Heikin-Ashi candles. 100 = all three aligned.' },
+  exec_timing:{ label: 'Entry timing',   tooltip: 'Pullback into support scores highest (60–100). Continuation breakout scores 50–90. Waiting scores 20.' },
+  health:     { label: 'Contract quality', tooltip: 'Bid-ask spread, open interest, volume, and quote freshness. Low score = wide spread or thin market — avoid.' },
+  dte:        { label: 'Days to expiry', tooltip: 'Preferred 10–15 DTE scores 100. Below 5 DTE = veto. Above 15 DTE loses time-value efficiency.' },
+  rr:         { label: 'Risk / reward',  tooltip: 'Max gain ÷ max loss. 2:1 scores 80, 3:1 scores 100. Naked calls/puts have undefined RR — scored 40.' },
 };
 
-function ScoreBreakdown({ bd }: { bd: Record<string, number> }) {
+function ScoreBreakdown({ bd, ivr }: { bd: Record<string, number>; ivr?: number | null }) {
   const entries = Object.entries(bd).filter(([k]) => k !== 'total');
   if (!entries.length) return null;
   return (
     <div style={{ marginTop: 8, borderTop: '1px solid #1a1a1a', paddingTop: 8 }}>
-      <div style={{ color: '#444', fontSize: 10, letterSpacing: 1, marginBottom: 4 }}>SCORE BREAKDOWN</div>
-      {entries.map(([key, val]) => (
-        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-          <span style={{ color: '#444', fontSize: 10, width: 60 }}>{SCORE_LABELS[key] ?? key.toUpperCase()}</span>
-          <div style={{ flex: 1, height: 4, background: '#1a1a1a', borderRadius: 2 }}>
-            <div style={{ width: `${Math.min(100, val)}%`, height: '100%', background: val >= 70 ? '#44cc88' : val >= 50 ? '#f0c040' : '#cc4444', borderRadius: 2 }} />
+      <div style={{ color: '#444', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>SCORE BREAKDOWN</div>
+      {entries.map(([key, val]) => {
+        const meta = SCORE_META[key];
+        const color = val >= 70 ? '#44cc88' : val >= 50 ? '#f0c040' : '#cc4444';
+        return (
+          <div key={key} title={meta?.tooltip} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, cursor: 'help' }}>
+            <span style={{ color: '#555', fontSize: 10, width: 90, flexShrink: 0 }}>
+              {meta?.label ?? key}
+            </span>
+            <div style={{ flex: 1, height: 4, background: '#1a1a1a', borderRadius: 2 }}>
+              <div style={{ width: `${Math.min(100, val)}%`, height: '100%', background: color, borderRadius: 2 }} />
+            </div>
+            <span style={{ color, fontSize: 10, fontWeight: 600, width: 28, textAlign: 'right' as const }}>{fmtN(val, 0)}</span>
           </div>
-          <span style={{ color: '#666', fontSize: 10, width: 28, textAlign: 'right' }}>{fmtN(val, 0)}</span>
+        );
+      })}
+      {ivr != null && ivr > 60 && (
+        <div style={{ marginTop: 6, fontSize: 10, color: '#f0a500' }}>
+          ⚠ IV Rank {ivr.toFixed(0)} — elevated premium cost. Spreads provide better defined risk than naked calls/puts.
         </div>
-      ))}
+      )}
+      {ivr == null && (
+        <div style={{ marginTop: 6, fontSize: 10, color: '#888' }}>
+          IV data unavailable — prefer defined-risk spreads.
+        </div>
+      )}
     </div>
   );
 }
 
-function TradeCard({ t, rank, underlying }: { t: SizedTrade; rank: number; underlying: string }) {
+function TradeCard({ t, rank, underlying, ivr }: { t: SizedTrade; rank: number; underlying: string; ivr?: number | null }) {
   const s = t.structure;
   const leg = s.legs[0];
   const enter = useEnterPosition();
   return (
     <div style={styles.tradeRow}>
       <div style={styles.tradeHeader}>
-        <span style={styles.structType}>{s.structure_type}</span>
+        <span style={styles.structType}>{fmtStructure(s.structure_type)}</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span style={{ ...styles.score, color: s.score >= 70 ? '#44cc88' : s.score >= 50 ? '#f0c040' : '#cc4444' }}>
             {fmtN(s.score, 1)}
@@ -95,7 +115,7 @@ function TradeCard({ t, rank, underlying }: { t: SizedTrade; rank: number; under
         <div style={styles.cell}><span style={styles.key}>CAPITAL AT RISK</span><span style={styles.val}>{t.capital_at_risk_pct.toFixed(2)}%</span></div>
         <div style={styles.cell}><span style={styles.key}>IV</span><span style={styles.val}>{leg?.mark_iv?.toFixed(1)}%</span></div>
       </div>
-      <ScoreBreakdown bd={s.score_breakdown} />
+      <ScoreBreakdown bd={s.score_breakdown} ivr={ivr} />
     </div>
   );
 }
@@ -131,17 +151,17 @@ export function RunOnceResult({ underlying }: Props) {
       {data && (
         <div style={styles.result}>
           <div style={{ ...styles.recommend, color: recColor }}>
-            {data.recommendation === 'no_trade' ? '✗ NO TRADE' : `✓ ${data.recommendation.toUpperCase()}`}
+            {data.recommendation === 'no_trade' ? '✗ No trade' : `✓ ${fmtStructure(data.recommendation)}`}
           </div>
           <div style={styles.reason}>{data.reason}</div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
             {[
-              ['STATE', data.state],
-              ['DIRECTION', data.direction.toUpperCase()],
-              ['EXEC', data.exec_mode.toUpperCase()],
-              data.ivr != null ? ['IVR', `${data.ivr.toFixed(1)}% · ${data.ivr_band.toUpperCase()}`] : null,
-              ['NO-TRADE SCORE', fmtN(data.no_trade_score, 1)],
+              ['Status', fmtState(data.state)],
+              ['Direction', data.direction === 'long' ? 'Bullish' : data.direction === 'short' ? 'Bearish' : 'Neutral'],
+              ['Entry', data.exec_mode === 'pullback' ? 'Pullback' : data.exec_mode === 'continuation' ? 'Breakout' : 'Wait'],
+              data.ivr != null ? ['IV Rank', `${data.ivr.toFixed(0)} · ${data.ivr_band}`] : ['IV Rank', 'Unknown'],
+              ['No-trade score', fmtN(data.no_trade_score, 1)],
             ].filter((x): x is [string, string] => Boolean(x)).map(([k, v]) => (
               <span key={k as string} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 3, padding: '3px 8px', fontSize: 11 }}>
                 <span style={{ color: '#555' }}>{k} </span>
@@ -154,7 +174,7 @@ export function RunOnceResult({ underlying }: Props) {
             <>
               <div style={{ color: '#555', fontSize: 11, letterSpacing: 1, marginBottom: 8 }}>RANKED STRUCTURES · click + ENTER to paper-enter that structure</div>
               {data.ranked_structures.map((t, i) => (
-                <TradeCard key={i} t={t} rank={i} underlying={underlying} />
+                <TradeCard key={i} t={t} rank={i} underlying={underlying} ivr={data.ivr} />
               ))}
             </>
           )}

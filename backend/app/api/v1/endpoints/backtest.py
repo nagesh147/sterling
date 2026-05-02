@@ -45,4 +45,6 @@ async def run_backtest_endpoint(
         candles_1h=candles_1h,
         lookback_days=body.lookback_days,
         sample_every_n_bars=body.sample_every_n_bars,
+        atm_iv=body.atm_iv,
+        option_dte=body.option_dte,
     )

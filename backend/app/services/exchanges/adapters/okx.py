@@ -249,14 +249,79 @@ class OKXAdapter(BaseExchangeAdapter):
 
         return options
 
+    async def _get_atm_iv(self, instrument: InstrumentMeta) -> Optional[float]:
+        """
+        Return ATM 30-DTE call markVol from OKX opt-summary as a proxy for DVOL.
+        Picks the call whose (DTE distance from 30) + (10x moneyness) is smallest.
+        """
+        if not instrument.okx_underlying or not instrument.has_options:
+            return None
+        try:
+            spot = await self.get_index_price(instrument)
+            data = await self._get(
+                "/api/v5/market/opt-summary",
+                {"uly": instrument.okx_underlying},
+            )
+        except Exception:
+            return None
+        if not isinstance(data, list) or not data:
+            return None
+        best_score = float("inf")
+        best_iv: Optional[float] = None
+        for item in data:
+            inst_id: str = item.get("instId", "")
+            if not inst_id.endswith("-C"):
+                continue
+            dte = _okx_dte(_okx_expiry_str(inst_id))
+            strike = _okx_strike(inst_id)
+            if strike is None or dte < 5:
+                continue
+            iv = float(item.get("markVol") or 0.0)
+            if iv <= 0:
+                continue
+            moneyness = abs(strike - spot) / spot if spot > 0 else 1.0
+            score = abs(dte - 30) + moneyness * 10.0
+            if score < best_score:
+                best_score = score
+                best_iv = iv
+        return best_iv
+
     async def get_dvol(self, instrument: InstrumentMeta) -> Optional[float]:
-        # OKX has no direct DVOL index equivalent — return None
-        return None
+        """Return current ATM option IV as a DVOL proxy for OKX instruments."""
+        return await self._get_atm_iv(instrument)
 
     async def get_dvol_history(
         self, instrument: InstrumentMeta, days: int = 30
     ) -> List[float]:
-        return []
+        """
+        Return synthetic daily-HV series from 1H candles as IVR distribution.
+        The orchestrator percentile-ranks the current ATM IV (from get_dvol)
+        against this distribution to produce IVR.
+        """
+        try:
+            candles = await self.get_candles(instrument, "1H", limit=days * 24 + 1)
+            if len(candles) < 25:
+                return []
+            import math
+            closes = [c.close for c in candles]
+            log_rets = [
+                math.log(closes[i + 1] / closes[i])
+                for i in range(len(closes) - 1)
+                if closes[i] > 0 and closes[i + 1] > 0
+            ]
+            window = 24
+            hvs: List[float] = []
+            for end in range(window, len(log_rets) + 1, window):
+                seg = log_rets[max(0, end - window): end]
+                if len(seg) < 12:
+                    continue
+                mean = sum(seg) / len(seg)
+                variance = sum((r - mean) ** 2 for r in seg) / len(seg)
+                hv = (variance ** 0.5) * (252 * 24) ** 0.5 * 100.0
+                hvs.append(round(hv, 4))
+            return hvs
+        except Exception:
+            return []
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:

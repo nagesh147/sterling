@@ -22,3 +22,11 @@ export const useStore = create<StoreState>((set) => ({
     set({ selectedUnderlying: u });
   },
 }));
+
+// Selector hooks — subscribe only to the field you need so unrelated
+// state changes do not trigger re-renders in every consumer.
+export const useSelectedUnderlying = () =>
+  useStore((s) => s.selectedUnderlying);
+
+export const useSetSelectedUnderlying = () =>
+  useStore((s) => s.setSelectedUnderlying);

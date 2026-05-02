@@ -1,12 +1,13 @@
-# === Graphify generated artifacts ===
-graphify-out/cache/
-graphify-out/tmp/
-graphify-out/*.bak
+# === Graphify generated artifacts (all ignored — generated on demand) ===
+graphify-out/
 
-# Keep useful Graphify outputs tracked
-!graphify-out/graph.json
-!graphify-out/GRAPH_REPORT.md
-!graphify-out/graph.html
+# Root-level Graphify dumps (use graphify-out/ instead)
+/GRAPH_REPORT.md
+/graph.json
+
+# Personal utility / experiment files
+sys-verify.sh
+mistral_colab.ipynb
 
 # === Node / Bun / Package artifacts ===
 node_modules/

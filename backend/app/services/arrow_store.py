@@ -1,12 +1,15 @@
 """
-Session-scoped arrow event store.
+Session-scoped arrow event store with TTL pruning.
 Records green/red arrow events from SSE stream and run-once evaluations.
 """
+import os
+import time
 from collections import deque
 from typing import Dict, Deque, List, Optional
 from pydantic import BaseModel
 
 MAX_ARROWS = 200
+_ARROW_TTL_HOURS = int(os.environ.get("ARROW_TTL_HOURS", "168"))  # 7-day default
 
 
 class ArrowEvent(BaseModel):
@@ -20,6 +23,15 @@ class ArrowEvent(BaseModel):
 
 
 _store: Dict[str, Deque[ArrowEvent]] = {}
+
+
+def _prune(underlying: str) -> None:
+    """Remove events older than ARROW_TTL_HOURS for one underlying."""
+    if underlying not in _store:
+        return
+    cutoff_ms = int((time.time() - _ARROW_TTL_HOURS * 3_600) * 1_000)
+    kept = [e for e in _store[underlying] if e.timestamp_ms >= cutoff_ms]
+    _store[underlying] = deque(kept, maxlen=MAX_ARROWS)
 
 
 def record(
@@ -44,13 +56,17 @@ def record(
             timestamp_ms=timestamp_ms,
         )
     )
+    _prune(underlying)
 
 
 def get_arrows(underlying: str) -> List[ArrowEvent]:
+    _prune(underlying)
     return list(reversed(list(_store.get(underlying, []))))  # newest first
 
 
 def get_all() -> List[ArrowEvent]:
+    for sym in list(_store.keys()):
+        _prune(sym)
     all_arrows = []
     for events in _store.values():
         all_arrows.extend(events)

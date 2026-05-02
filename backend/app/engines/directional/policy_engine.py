@@ -5,7 +5,9 @@ from app.schemas.instruments import InstrumentMeta
 
 def _ivr_band(ivr: Optional[float]) -> IVRBand:
     if ivr is None:
-        return IVRBand.NORMAL
+        # Unknown IV — fail closed: treat as elevated so naked options are excluded
+        # and debit spreads are preferred over naked long premium.
+        return IVRBand.ELEVATED
     if ivr < 40:
         return IVRBand.LOW
     if ivr < 60:

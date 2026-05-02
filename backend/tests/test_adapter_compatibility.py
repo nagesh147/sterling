@@ -154,20 +154,25 @@ class TestDeltaAdapterDataFlow:
 
     @pytest.mark.asyncio
     async def test_option_chain_greeks_nested(self):
-        """Option chain with greeks in nested dict."""
+        """Option chain with greeks in nested dict; deduplication prevents double-count."""
         from unittest.mock import AsyncMock
         from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
         from app.services.exchanges.instrument_registry import get_instrument
         adapter = DeltaIndiaAdapter()
-        adapter._public_get = AsyncMock(return_value={
-            "success": True,
-            "result": [{
-                "symbol": "C-BTC-43000-27DEC26",
-                "bid": "500", "ask": "520", "mark_price": "510",
-                "oi": "200", "volume": "50",
-                "greeks": {"delta": "0.45", "iv": "0.65"},
-            }]
-        })
+        CALL_ITEM = {
+            "symbol": "C-BTC-43000-27DEC26",
+            "bid": "500", "ask": "520", "mark_price": "510",
+            "oi": "200", "volume": "50",
+            "greeks": {"delta": "0.45", "iv": "0.65"},
+        }
+
+        async def mock_get(path, params=None):
+            ct = (params or {}).get("contract_type", "")
+            if "put" in ct:
+                return {"success": True, "result": []}
+            return {"success": True, "result": [CALL_ITEM]}
+
+        adapter._public_get = AsyncMock(side_effect=mock_get)
         chain = await adapter.get_option_chain(get_instrument("BTC"))
         assert len(chain) == 1
         assert chain[0].delta == pytest.approx(0.45)
@@ -182,15 +187,20 @@ class TestDeltaAdapterDataFlow:
         from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
         from app.services.exchanges.instrument_registry import get_instrument
         adapter = DeltaIndiaAdapter()
-        adapter._public_get = AsyncMock(return_value={
-            "success": True,
-            "result": [{
-                "symbol": "P-ETH-2800-31DEC26",
-                "bid": "100", "ask": "110", "mark_price": "105",
-                "mark_iv": "0.70", "delta": "-0.38",
-                "oi": "150", "volume": "30",
-            }]
-        })
+        PUT_ITEM = {
+            "symbol": "P-ETH-2800-31DEC26",
+            "bid": "100", "ask": "110", "mark_price": "105",
+            "mark_iv": "0.70", "delta": "-0.38",
+            "oi": "150", "volume": "30",
+        }
+
+        async def mock_get(path, params=None):
+            ct = (params or {}).get("contract_type", "")
+            if "call" in ct:
+                return {"success": True, "result": []}
+            return {"success": True, "result": [PUT_ITEM]}
+
+        adapter._public_get = AsyncMock(side_effect=mock_get)
         chain = await adapter.get_option_chain(get_instrument("ETH"))
         assert len(chain) == 1
         assert chain[0].option_type == "put"
@@ -199,23 +209,18 @@ class TestDeltaAdapterDataFlow:
 
     @pytest.mark.asyncio
     async def test_option_chain_fallback_to_tickers(self):
-        """When /v2/options/chain fails, falls back to /v2/tickers."""
+        """Option chain uses /v2/tickers with contract_type=call_options/put_options."""
         from unittest.mock import AsyncMock
         from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
         from app.services.exchanges.instrument_registry import get_instrument
-        import httpx
 
         adapter = DeltaIndiaAdapter()
         call_count = [0]
 
         async def mock_get(path, params=None):
             call_count[0] += 1
-            if "/v2/options/chain" in path:
-                raise httpx.HTTPStatusError("404", request=None, response=None)
-            # call_options returns one call; put_options returns empty
-            params_list = list(params) if isinstance(params, list) else []
-            is_put = any("put_options" in str(v) for _, v in params_list)
-            if is_put:
+            ct = (params or {}).get("contract_type", "")
+            if "put" in ct:
                 return {"success": True, "result": []}
             return {
                 "success": True,
@@ -223,7 +228,7 @@ class TestDeltaAdapterDataFlow:
                     "symbol": "C-BTC-43000-27DEC26",
                     "bid": "500", "ask": "520", "mark_price": "510",
                     "oi": "200", "volume": "50",
-                    "product": {"underlying_asset": {"symbol": "BTC"}},
+                    "underlying_asset_symbol": "BTC",
                     "greeks": {"delta": "0.45", "iv": "0.65"},
                 }]
             }
@@ -231,7 +236,7 @@ class TestDeltaAdapterDataFlow:
         adapter._public_get = AsyncMock(side_effect=mock_get)
         chain = await adapter.get_option_chain(get_instrument("BTC"))
         assert len(chain) == 1
-        assert call_count[0] >= 2  # tried options/chain + at least one tickers call
+        assert call_count[0] >= 2  # call_options + put_options calls
 
     @pytest.mark.asyncio
     async def test_ping_uses_time_endpoint(self):

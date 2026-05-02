@@ -94,14 +94,25 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         ).hexdigest()
         return sig, ts
 
+    def _validate_response(self, data, path: str) -> dict:
+        """Raise a clear error for all bad response shapes: None, non-dict, success=false."""
+        if data is None:
+            raise RuntimeError(f"Delta API returned null response for {path}")
+        if isinstance(data, list):
+            # Some Delta endpoints return a bare list — wrap it so callers use .get()
+            return {"result": data}
+        if not isinstance(data, dict):
+            raise RuntimeError(f"Delta API returned unexpected type {type(data).__name__} for {path}")
+        if data.get("success") is False:
+            raise RuntimeError(f"Delta API error for {path}: {data.get('error', data)}")
+        return data
+
     async def _public_get(self, path: str, params: Union[dict, list, None] = None) -> dict:
         client = await self._get_client()
         resp = await client.get(path, params=params or {})
         resp.raise_for_status()
         data = resp.json()
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"Delta API error: {data.get('error', data)}")
-        return data
+        return self._validate_response(data, path)
 
     async def _auth_get(self, path, params=None):
         if self._is_paper or not self._api_key or not self._api_secret:
@@ -113,9 +124,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             headers={"api-key": self._api_key, "timestamp": str(ts), "signature": sig})
         resp.raise_for_status()
         data = resp.json()
-        if isinstance(data, dict) and data.get("success") is False:
-            raise RuntimeError(f"Delta auth error: {data.get('error', data)}")
-        return data
+        return self._validate_response(data, path)
 
     # ─── BaseExchangeAdapter ──────────────────────────────────────────────
 
@@ -132,91 +141,108 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
     async def get_index_price(self, instrument: InstrumentMeta) -> float:
         sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
-        try:
-            data = await self._public_get(f"/v2/tickers/{sym}")
-            t = data.get("result", {})
-            return float(t.get("spot_price") or t.get("index_price") or t.get("mark_price") or 0.0)
-        except Exception:
-            return 0.0
+        data = await self._public_get(f"/v2/tickers/{sym}")
+        t = (data or {}).get("result") or {}
+        price = (
+            t.get("spot_price") or
+            t.get("index_price") or
+            t.get("mark_price") or
+            t.get("close") or
+            t.get("last_price")
+        )
+        if not price:
+            raise RuntimeError(f"No price field in Delta ticker response for {sym}: {list(t.keys())}")
+        v = float(price)
+        if v <= 0:
+            raise RuntimeError(f"Delta ticker returned non-positive price {v} for {sym}")
+        return v
 
     async def get_spot_price(self, instrument: InstrumentMeta) -> float:
         return await self.get_index_price(instrument)
 
     async def get_perp_price(self, instrument: InstrumentMeta) -> float:
         sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
-        try:
-            data = await self._public_get(f"/v2/tickers/{sym}")
-            t = data.get("result", {})
-            return float(t.get("mark_price") or t.get("close") or t.get("last_price") or 0.0)
-        except Exception:
-            return 0.0
+        data = await self._public_get(f"/v2/tickers/{sym}")
+        t = (data or {}).get("result") or {}
+        price = t.get("mark_price") or t.get("close") or t.get("last_price") or t.get("spot_price")
+        if not price:
+            raise RuntimeError(f"No price in Delta perp ticker for {sym}")
+        return float(price)
 
     async def get_candles(self, instrument: InstrumentMeta,
                           resolution: str, limit: int = 200) -> List[Candle]:
         delta_res = _RESOLUTION_MAP.get(resolution)
         if not delta_res:
             raise ValueError(f"Unsupported resolution: {resolution}")
-        sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
-        now = int(time.time())
-        res_sec = {"15m": 900, "1h": 3600, "4h": 14400}[delta_res]
-        start = now - limit * res_sec
-        data = await self._public_get(
-            "/v2/history/candles",
-            params={"symbol": sym, "resolution": delta_res, "start": start, "end": now},
-        )
-        candles = []
-        for row in data.get("result", []):
-            try:
-                if isinstance(row, (list, tuple)):
-                    ts_ms = _ts_ms(row[0])
-                    o, h, l, c = float(row[1]), float(row[2]), float(row[3]), float(row[4])
-                    vol = float(row[5]) if len(row) > 5 else 0.0
-                else:
-                    ts_ms = _ts_ms(row["time"])
-                    o, h, l, c = float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"])
-                    vol = float(row.get("volume", 0.0))
-                candles.append(Candle(timestamp_ms=ts_ms, open=o, high=h, low=l, close=c, volume=vol))
-            except (KeyError, ValueError, TypeError, IndexError):
-                continue
-        return sorted(candles, key=lambda c: c.timestamp_ms)
+        try:
+            sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
+            now = int(time.time())
+            res_sec = {"15m": 900, "1h": 3600, "4h": 14400}[delta_res]
+            start = now - limit * res_sec
+            data = await self._public_get(
+                "/v2/history/candles",
+                params={"symbol": sym, "resolution": delta_res, "start": start, "end": now},
+            )
+            candles = []
+            for row in ((data or {}).get("result") or []):
+                try:
+                    if isinstance(row, (list, tuple)):
+                        ts_ms = _ts_ms(row[0])
+                        o, h, l, c = float(row[1]), float(row[2]), float(row[3]), float(row[4])
+                        vol = float(row[5]) if len(row) > 5 else 0.0
+                    else:
+                        ts_ms = _ts_ms(row["time"])
+                        o, h, l, c = float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"])
+                        vol = float(row.get("volume", 0.0))
+                    candles.append(Candle(timestamp_ms=ts_ms, open=o, high=h, low=l, close=c, volume=vol))
+                except (KeyError, ValueError, TypeError, IndexError):
+                    continue
+            return sorted(candles, key=lambda c: c.timestamp_ms)
+        except Exception as exc:
+            log.error("Delta candles fetch failed for %s %s: %s", instrument.delta_perp_symbol, resolution, exc)
+            raise
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:
         if not instrument.has_options:
             return []
         ul = instrument.delta_option_underlying or instrument.underlying
         now_ms = int(time.time() * 1000)
+        seen: set = set()
         items: List[dict] = []
 
-        # Strategy 1: dedicated endpoint
-        try:
-            data = await self._public_get("/v2/options/chain",
-                                          params={"underlying_asset_symbol": ul})
-            items = data.get("result", [])
-        except Exception:
-            pass
-
-        # Strategy 2: filter tickers by contract type
-        if not items:
+        # Fetch call and put tickers using singular contract_type param (array form → 500)
+        for ct in ("call_options", "put_options"):
             try:
-                cd = await self._public_get("/v2/tickers",
-                                            params=[("contract_types[]", "call_options")])
-                pd = await self._public_get("/v2/tickers",
-                                            params=[("contract_types[]", "put_options")])
-                for t in cd.get("result", []) + pd.get("result", []):
-                    asset = ((t.get("product") or {}).get("underlying_asset") or {})
-                    if (asset.get("symbol", "").upper() == ul.upper()
-                            or ul.upper() in t.get("symbol", "").upper()):
-                        items.append(t)
+                data = await self._public_get("/v2/tickers",
+                                              params={"contract_type": ct, "page_size": 500})
+                rows = (data or {}).get("result") or []
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    sym = str(row.get("symbol") or "")
+                    if sym in seen:
+                        continue
+                    ua_sym = str(row.get("underlying_asset_symbol") or "")
+                    # Filter to this underlying — Delta symbol format: C-BTC-79400-050526
+                    if (ua_sym.upper() == ul.upper()
+                            or sym.startswith(f"C-{ul.upper()}-")
+                            or sym.startswith(f"P-{ul.upper()}-")):
+                        seen.add(sym)
+                        items.append(row)
             except Exception as exc:
-                log.warning("Delta option chain failed for %s: %s", ul, exc)
-                return []
+                log.debug("Delta option tickers fetch (%s, %s): %s", ul, ct, exc)
+
+        if not items:
+            log.info("Delta option chain: no items for %s (options may not be live)", ul)
+            return []
 
         options: List[OptionSummary] = []
         for item in items:
             try:
                 symbol = item.get("symbol", "")
+                # Delta symbol: C-BTC-79400-050526 or P-ETH-3200-280625
                 parts = symbol.split("-")
-                if len(parts) != 4:
+                if len(parts) != 4 or parts[0] not in ("C", "P"):
                     continue
                 opt_type = "call" if parts[0] == "C" else "put"
                 strike = float(parts[2])
@@ -224,17 +250,25 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                 dte = _delta_dte(expiry_str)
                 if dte < 0:
                     continue
-                bid = float(item.get("bid") or 0.0)
-                ask = float(item.get("ask") or 0.0)
+
                 mark = float(item.get("mark_price") or item.get("close") or 0.0)
+                # bid/ask live in nested quotes dict
+                quotes = item.get("quotes") or {}
+                bid = float(quotes.get("best_bid") or item.get("bid") or 0.0)
+                ask = float(quotes.get("best_ask") or item.get("ask") or 0.0)
                 mid = (bid + ask) / 2 if bid > 0 and ask > 0 else mark
+
                 greeks = item.get("greeks") or {}
-                iv = float(item.get("mark_iv") or greeks.get("iv") or greeks.get("mark_iv")
-                           or item.get("implied_volatility") or 0.0)
+                iv = float(
+                    item.get("mark_vol") or
+                    item.get("mark_iv") or
+                    greeks.get("iv") or
+                    0.0
+                )
                 delta_val = float(greeks.get("delta") or item.get("delta") or 0.0)
-                oi = float(item.get("oi") or item.get("open_interest") or 0.0)
-                vol = float(item.get("volume") or 0.0)
-                ts_raw = item.get("created_at") or item.get("timestamp") or now_ms
+                oi = float(item.get("oi") or item.get("oi_contracts") or 0.0)
+                vol = float(item.get("volume") or item.get("turnover") or 0.0)
+                ts_raw = item.get("timestamp") or item.get("time") or now_ms
                 options.append(OptionSummary(
                     instrument_name=symbol, underlying=instrument.underlying,
                     strike=strike, expiry_date=expiry_str, dte=dte,
@@ -267,7 +301,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             return _paper_balances()
         data = await self._auth_get("/v2/wallet/balances")
         balances = []
-        for w in data.get("result", []):
+        for w in ((data or {}).get("result") or []):
             try:
                 balances.append(AssetBalance(
                     asset=str(w.get("asset_symbol") or (w.get("asset") or {}).get("symbol", "?")),
@@ -284,7 +318,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             return []
         data = await self._auth_get("/v2/positions/margined")
         positions = []
-        for p in data.get("result", []):
+        for p in ((data or {}).get("result") or []):
             try:
                 size = float(p.get("size") or 0.0)
                 if size == 0:
@@ -314,7 +348,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             params["underlying_asset_symbol"] = underlying
         data = await self._auth_get("/v2/orders", params=params)
         orders = []
-        for o in data.get("result", []):
+        for o in ((data or {}).get("result") or []):
             try:
                 orders.append(AccountOrder(
                     order_id=str(o.get("id") or ""), symbol=str(o.get("product_symbol") or ""),
@@ -334,7 +368,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             return []
         data = await self._auth_get("/v2/fills", params={"page_size": min(limit, 100)})
         fills = []
-        for f in data.get("result", []):
+        for f in ((data or {}).get("result") or []):
             try:
                 fills.append(AccountFill(
                     fill_id=str(f.get("id") or ""), order_id=str(f.get("order_id") or ""),

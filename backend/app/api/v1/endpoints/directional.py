@@ -21,6 +21,8 @@ from app.services.exchanges import instrument_registry as registry
 from app.services import eval_history as hist_store
 from app.services import arrow_store
 from app.services import alert_store as _alert_store
+from app.services import snapshot_cache as _snap_cache
+from app.services import alert_service as _alert_service
 from app.engines.directional.orchestrator import (
     run_once as engine_run_once,
     preview as engine_preview,
@@ -523,27 +525,28 @@ async def _sse_generator(
                 arrow_store.record(sym, "red", float(spot), setup.direction.value,
                                    setup.state.value, now_ms, "stream")
 
-            # Rearm cooldown-expired alerts, then check all active ones
-            for a in _alert_store.list_alerts(sym):
-                _alert_store.rearm_if_cooldown_elapsed(a.id)
+            # Update snapshot cache so the background poller can skip a fetch
+            _snap_cache.put(
+                sym=sym,
+                spot_price=float(spot),
+                ivr=ivr,
+                green_arrow=signal.green_arrow,
+                red_arrow=signal.red_arrow,
+                current_state=setup.state.value,
+            )
 
-            for alert in _alert_store.list_alerts(sym):
-                if alert.status.value != "active":
-                    continue
-                result = _alert_store.check_alert(
-                    alert,
-                    spot_price=float(spot),
-                    ivr=ivr,
-                    green_arrow=signal.green_arrow,
-                    red_arrow=signal.red_arrow,
-                    current_state=setup.state.value,
-                )
-                if result.triggered:
-                    _alert_store.fire_alert(alert.id, trigger_value=result.current_value)
-                    payload["alert_fired"] = {
-                        "id": alert.id, "condition": alert.condition.value,
-                        "message": result.message,
-                    }
+            # Check and fire all triggered alerts; deliver webhooks (non-blocking)
+            fired = await _alert_service.check_and_fire(
+                sym=sym,
+                spot_price=float(spot),
+                ivr=ivr,
+                green_arrow=signal.green_arrow,
+                red_arrow=signal.red_arrow,
+                current_state=setup.state.value,
+            )
+            if fired:
+                payload["alert_fired"] = fired[0]   # first fired alert shown in SSE payload
+                payload["alerts_fired"] = fired      # all fired alerts
 
         except Exception as exc:
             payload = {"underlying": sym, "error": str(exc), "timestamp_ms": int(time.time() * 1000)}

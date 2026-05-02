@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useInstruments } from '../hooks/useInstruments';
 import { useDataSource } from '../hooks/useExchanges';
-import { useStore } from '../store/useStore';
+import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useStore';
 
 const styles: Record<string, React.CSSProperties> = {
   container: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' },
@@ -24,7 +24,8 @@ const styles: Record<string, React.CSSProperties> = {
 export function InstrumentSelector() {
   const { data, isLoading } = useInstruments();
   const { data: dsData } = useDataSource();
-  const { selectedUnderlying, setSelectedUnderlying } = useStore();
+  const selectedUnderlying = useSelectedUnderlying();
+  const setSelectedUnderlying = useSetSelectedUnderlying();
 
   const activeSource = dsData?.exchange ?? 'deribit';
   const instruments = data?.instruments ?? [];

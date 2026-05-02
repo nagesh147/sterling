@@ -1,7 +1,6 @@
 """
-Indicator-only historical replay engine with forward-return signal quality metrics.
-No options data needed — replays regime + signal over historical candle windows.
-Uses only candles already fetched; no additional API calls inside this module.
+Historical replay engine: indicator signals + optional Black-Scholes option P&L.
+No additional API calls — runs entirely on pre-fetched candles.
 """
 import time
 from typing import List, Optional
@@ -12,6 +11,7 @@ from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.schemas.directional import TradeState
+from app.engines.backtest.bs_pricing import bs_price, atm_option_pnl_pct
 
 _MIN_4H_WINDOW = 55  # need at least 55 4H bars for EMA50
 _MIN_1H_WINDOW = 30  # minimum 1H bars for SuperTrend
@@ -34,6 +34,8 @@ def run_backtest(
     candles_1h: List[Candle],
     lookback_days: int,
     sample_every_n_bars: int = 4,
+    atm_iv: Optional[float] = None,
+    option_dte: int = 30,
 ) -> BacktestResult:
     now_ms = int(time.time() * 1000)
     bars: List[BacktestBarResult] = []
@@ -56,8 +58,11 @@ def run_backtest(
     for i in sampled_indices:
         current_ts = candles_1h[i].timestamp_ms
 
-        # Slice 4H candles to only those <= current bar (no look-ahead)
-        c4h_slice = [c for c in candles_4h if c.timestamp_ms <= current_ts]
+        # Include only 4H bars whose CLOSE time is <= current bar timestamp.
+        # A 4H bar that OPENS at T closes at T + 4h; using <= T would include
+        # a bar whose close price is 4 hours in the future (look-ahead bias).
+        _4H_MS = 4 * 3_600_000
+        c4h_slice = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= current_ts]
         if len(c4h_slice) < _MIN_4H_WINDOW:
             continue
 
@@ -86,10 +91,12 @@ def run_backtest(
                 fwd_return_4h=_fwd_return(candles_1h, i, 4),
                 fwd_return_12h=_fwd_return(candles_1h, i, 12),
                 fwd_return_24h=_fwd_return(candles_1h, i, 24),
+                **_bs_fields(candles_1h, i, signal.close_1h, setup.direction.value,
+                             atm_iv, option_dte),
             )
         )
 
-    stats = _compute_stats(bars)
+    stats = _compute_stats(bars, atm_iv is not None)
     return BacktestResult(
         underlying=underlying,
         lookback_days=lookback_days,
@@ -99,7 +106,41 @@ def run_backtest(
         bars=bars,
         stats=stats,
         timestamp_ms=now_ms,
+        atm_iv_used=atm_iv,
+        option_dte_used=option_dte if atm_iv is not None else None,
     )
+
+
+def _bs_fields(
+    candles: List[Candle],
+    idx: int,
+    spot_entry: float,
+    direction: str,
+    atm_iv: Optional[float],
+    option_dte: int,
+) -> dict:
+    """Compute BS entry premium and forward P&L % for ATM option at this bar."""
+    if atm_iv is None or spot_entry <= 0:
+        return {}
+    opt_type = "call" if direction == "long" else "put"
+    entry_premium = bs_price(spot_entry, spot_entry, option_dte, atm_iv, opt_type)
+    if entry_premium is None:
+        return {}
+
+    def _pnl(n_bars: int) -> Optional[float]:
+        to_idx = idx + n_bars
+        if to_idx >= len(candles):
+            return None
+        spot_exit = candles[to_idx].close
+        dte_exit = max(0, option_dte - round(n_bars / 24))
+        return atm_option_pnl_pct(spot_entry, spot_exit, option_dte, dte_exit, atm_iv, opt_type)
+
+    return {
+        "bs_entry_premium": round(entry_premium, 4),
+        "bs_fwd_pnl_4h": _pnl(4),
+        "bs_fwd_pnl_12h": _pnl(12),
+        "bs_fwd_pnl_24h": _pnl(24),
+    }
 
 
 def _zero_stats() -> BacktestStats:
@@ -127,7 +168,7 @@ def _avg(values: List[float]) -> Optional[float]:
     return round(sum(values) / len(values), 4)
 
 
-def _compute_stats(bars: List[BacktestBarResult]) -> BacktestStats:
+def _compute_stats(bars: List[BacktestBarResult], has_bs: bool = False) -> BacktestStats:
     if not bars:
         return _zero_stats()
 
@@ -188,4 +229,17 @@ def _compute_stats(bars: List[BacktestBarResult]) -> BacktestStats:
         arrow_short_win_rate_12h=_win_rate(red_arrow_12h, lambda v: v < 0),
         setup_long_avg_return_12h=_avg(conf_long_12h),
         setup_short_avg_return_12h=_avg([abs(v) for v in conf_short_12h]),
+        # BS stats — only populated when atm_iv was supplied
+        **(_bs_stats(bars) if has_bs else {}),
     )
+
+
+def _bs_stats(bars: List[BacktestBarResult]) -> dict:
+    ga_pnl = [b.bs_fwd_pnl_4h for b in bars if b.green_arrow and b.bs_fwd_pnl_4h is not None]
+    ra_pnl = [b.bs_fwd_pnl_4h for b in bars if b.red_arrow and b.bs_fwd_pnl_4h is not None]
+    return {
+        "bs_arrow_long_avg_pnl_4h": _avg(ga_pnl),
+        "bs_arrow_short_avg_pnl_4h": _avg(ra_pnl),
+        "bs_arrow_long_win_rate_4h": _win_rate(ga_pnl, lambda v: v > 0),
+        "bs_arrow_short_win_rate_4h": _win_rate(ra_pnl, lambda v: v > 0),
+    }

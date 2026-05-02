@@ -70,6 +70,14 @@ class CachingAdapter(BaseExchangeAdapter):
             return hit  # type: ignore[return-value]
         return self._put(key, await self._inner.get_perp_price(instrument))
 
+    # Canonical fetch sizes per resolution — callers that request fewer bars reuse
+    # the larger cached result rather than issuing a separate exchange call.
+    _CANON_LIMIT: Dict[str, int] = {
+        "15m": 100,
+        "1H":  200,
+        "4H":  150,
+    }
+
     async def get_candles(
         self,
         instrument: InstrumentMeta,
@@ -78,11 +86,17 @@ class CachingAdapter(BaseExchangeAdapter):
     ) -> List[Candle]:
         ttl_key = f"candles_{resolution}"
         ttl = self._TTL.get(ttl_key, 60.0)
-        key = f"candles:{instrument.underlying}:{resolution}:{limit}"
+        # Normalise to canonical size so requests for e.g. 100 bars reuse the
+        # 200-bar cache entry instead of fetching separately.
+        canon = max(limit, self._CANON_LIMIT.get(resolution, limit))
+        key = f"candles:{instrument.underlying}:{resolution}:{canon}"
         hit = self._hit(key, ttl)
         if hit is not _SENTINEL:
-            return hit  # type: ignore[return-value]
-        return self._put(key, await self._inner.get_candles(instrument, resolution, limit))
+            cached: List[Candle] = hit  # type: ignore[assignment]
+            return cached[-limit:] if limit < len(cached) else cached
+        result = await self._inner.get_candles(instrument, resolution, canon)
+        self._put(key, result)
+        return result[-limit:] if limit < len(result) else result
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:
         key = f"chain:{instrument.underlying}"

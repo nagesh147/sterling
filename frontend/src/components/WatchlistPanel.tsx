@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import type { WatchlistItem } from '../hooks/useWatchlist';
 import { useStore } from '../store/useStore';
-import { fmtN, fmtUSD, ivrColor, ivrWidth, fmtAge } from '../utils/fmt';
+import { fmtN, fmtUSD, ivrColor, ivrWidth, fmtAge, fmtState, fmtDirection } from '../utils/fmt';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useEnterPosition } from '../hooks/usePositions';
 import { api } from '../utils/api';
@@ -79,7 +79,7 @@ function Row({ item }: { item: WatchlistItem }) {
       <td style={styles.td}><IVRBar ivr={item.ivr} /></td>
       <td style={styles.td}>
         <span style={{ ...styles.badge, background: stateColor + '18', color: stateColor }}>
-          {item.state.replace(/_/g, ' ')}
+          {fmtState(item.state)}
         </span>
       </td>
       <td style={styles.td}>
@@ -152,7 +152,7 @@ export function WatchlistPanel() {
         <table style={styles.table}>
           <thead>
             <tr>
-              {['ASSET', 'SPOT', 'MACRO', '1H SIGNAL', 'IVR', 'STATE', 'SCORES', ''].map(h => (
+              {['ASSET', 'SPOT', 'MACRO', '1H SIGNAL', 'IV RANK', 'STATUS', 'SCORES', ''].map(h => (
                 <th key={h} style={styles.th}>{h}</th>
               ))}
             </tr>
