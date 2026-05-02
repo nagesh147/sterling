@@ -1,0 +1,27 @@
+# Claude aliases and helpers
+alias claude='/home/nageshmadaram/.bun/bin/bun "/home/nageshmadaram/.claude/cli/claude.cjs"'
+alias claude-json='claude --mode json'
+alias claude-plain='claude --mode plain'
+alias claude-status='claude --status'
+
+# Graphify wrapper
+graphify() { command graphify "$@" || echo "[WARN] Graphify failed"; }
+
+# Prompt style (statusline integration)
+PS1='
+
+\[\e[1;32m\]
+
+\u@\h
+
+\[\e[0m\]
+
+:
+
+\[\e[1;34m\]
+
+\w
+
+\[\e[0m\]
+
+\$ '
