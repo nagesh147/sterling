@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 
 
@@ -18,3 +18,17 @@ class ExitSignal(BaseModel):
     exit_type: Optional[str] = None  # "thesis","time","financial","partial","expiry"
     partial: bool = False
     partial_ratio: float = 0.0
+
+
+class ScoringWeights(BaseModel):
+    regime: float = 0.20
+    signal: float = 0.20
+    execution: float = 0.15
+    dte: float = 0.15
+    health: float = 0.20
+    risk_reward: float = 0.10
+
+    @field_validator("regime", "signal", "execution", "dte", "health", "risk_reward", mode="before")
+    @classmethod
+    def _clamp(cls, v: float) -> float:
+        return round(max(0.0, min(1.0, float(v))), 4)

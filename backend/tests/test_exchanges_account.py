@@ -142,18 +142,21 @@ class TestDeltaAdapterPublic:
     async def test_option_chain_parses(self):
         adapter = DeltaIndiaAdapter()
         now = int(time.time())
-        adapter._public_get = AsyncMock(return_value={
-            "success": True,
-            "result": [
-                {
-                    "symbol": "C-BTC-43000-31DEC35",
-                    "bid": 500.0, "ask": 520.0, "mark_price": 510.0,
-                    "mark_iv": 60.0, "delta": 0.45, "oi": 100.0,
-                    "volume": 10.0, "created_at": now,
-                },
-                {"symbol": "BAD", "bid": 0, "ask": 0},  # malformed — should be skipped
-            ],
-        })
+        CALL_ITEM = {
+            "symbol": "C-BTC-43000-31DEC35",
+            "bid": 500.0, "ask": 520.0, "mark_price": 510.0,
+            "mark_iv": 60.0, "delta": 0.45, "oi": 100.0,
+            "volume": 10.0, "timestamp": now,
+        }
+        BAD_ITEM = {"symbol": "BAD", "bid": 0, "ask": 0}  # malformed — skipped
+
+        async def mock_get(path, params=None):
+            ct = (params or {}).get("contract_type", "")
+            if "put" in ct:
+                return {"success": True, "result": [BAD_ITEM]}
+            return {"success": True, "result": [CALL_ITEM, BAD_ITEM]}
+
+        adapter._public_get = AsyncMock(side_effect=mock_get)
         chain = await adapter.get_option_chain(get_instrument("BTC"))
         assert len(chain) == 1
         assert chain[0].option_type == "call"

@@ -51,10 +51,10 @@ const CONDITION_LABELS: Record<AlertCondition, string> = {
 
 export { CONDITION_LABELS };
 
-export function useAlerts(underlying = '') {
+export function useAlerts(qs = '') {
   return useQuery<AlertListResponse>({
-    queryKey: ['alerts', underlying],
-    queryFn: () => api.get<AlertListResponse>(`/api/v1/alerts${underlying ? `?underlying=${underlying}` : ''}`),
+    queryKey: ['alerts', qs],
+    queryFn: () => api.get<AlertListResponse>(`/api/v1/alerts${qs}`),
     refetchInterval: 15_000,
   });
 }

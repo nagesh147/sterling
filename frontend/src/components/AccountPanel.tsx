@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  useAccountSummary, useAccountBalances,
+  useAccountInfo, useAccountSummary, useAccountBalances,
   useAccountPositions, useAccountOrders, useAccountFills,
 } from '../hooks/useAccount';
 import { fmtN, fmtUSD } from '../utils/fmt';
@@ -130,11 +130,36 @@ type Tab = 'overview' | 'balances' | 'positions' | 'orders' | 'fills';
 interface Props { underlying?: string }
 
 export function AccountPanel({ underlying = '' }: Props) {
-  const { data: summary, isLoading } = useAccountSummary();
+  const { data: info } = useAccountInfo();
+  const { data: summary, isLoading, isError } = useAccountSummary();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
+  // No exchange configured at all
+  if (info && !info.active) {
+    return (
+      <div style={S.card}>
+        <div style={S.title}>ACCOUNT</div>
+        <div style={{ color: '#666', fontSize: 12, lineHeight: 1.7 }}>
+          No exchange account configured.<br />
+          Go to <span style={{ color: '#88aaff' }}>Account → Exchanges</span> tab, click
+          <strong style={{ color: '#e0e0e0' }}> + ADD EXCHANGE</strong>, then set it as active.
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) return <div style={S.card}><div style={{ color: '#444', fontSize: 12 }}>Loading account…</div></div>;
-  if (!summary) return null;
+
+  if (isError || !summary) {
+    return (
+      <div style={S.card}>
+        <div style={S.title}>ACCOUNT</div>
+        <div style={{ color: '#cc4444', fontSize: 12 }}>
+          Failed to load account data. Check exchange credentials in the Exchanges tab.
+        </div>
+      </div>
+    );
+  }
 
   const pf = summary.portfolio;
   const unrColor = (pf?.unrealized_pnl_usd ?? 0) >= 0 ? '#44cc88' : '#cc4444';

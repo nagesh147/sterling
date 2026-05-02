@@ -44,16 +44,19 @@ def assess_contract_health(
 
     healthy = veto_reason is None
 
-    # Health score 0–100
+    # Health score 0–100 (four additive components, each 0–25)
+    # spread:    0  = perfect (25 pts),  15% = worst passing (0 pts)
+    # liquidity: OI ≥ 100 = full (25 pts),   OI = 10 = min (2.5 pts)
+    # volume:    vol ≥ 10  = full (25 pts),   vol = 1  = min (2.5 pts)
+    # freshness: staleness = 0 = full (25 pts), at 5 min = 0 pts
     if not healthy:
         health_score = 0.0
     else:
-        score = 100.0
-        score -= spread_pct / _MAX_SPREAD_PCT * 30.0
-        oi_score = min(30.0, option.open_interest / 100.0 * 30.0)
-        vol_score = min(20.0, option.volume_24h / 10.0 * 20.0)
-        fresh_score = max(0.0, 20.0 - staleness_sec / _MAX_STALENESS_SEC * 20.0)
-        health_score = round(max(0.0, min(100.0, score + oi_score + vol_score + fresh_score - 70.0)), 2)
+        spread_pts  = max(0.0, 25.0 - spread_pct / _MAX_SPREAD_PCT * 25.0)
+        oi_pts      = min(25.0, option.open_interest / 100.0 * 25.0)
+        vol_pts     = min(25.0, option.volume_24h / 10.0 * 25.0)
+        fresh_pts   = max(0.0, 25.0 * (1.0 - staleness_sec / _MAX_STALENESS_SEC))
+        health_score = round(min(100.0, spread_pts + oi_pts + vol_pts + fresh_pts), 2)
 
     return CandidateContract(
         instrument_name=option.instrument_name,

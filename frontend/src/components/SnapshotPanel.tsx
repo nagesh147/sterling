@@ -31,7 +31,7 @@ function IVRMini({ ivr, band, hasDvol }: { ivr: number | null | undefined; band:
   const source = ivr != null ? (hasDvol ? 'DVOL' : 'HV') : 'N/A';
   return (
     <div style={S.cell}>
-      <span style={S.key}>IVR · {band.toUpperCase()} · <span style={{ color: hasDvol ? '#88aaff' : '#f0a500', fontSize: 9 }}>{source}</span></span>
+      <span style={S.key}>IV RANK · {band.toUpperCase()} · <span style={{ color: hasDvol ? '#88aaff' : '#f0a500', fontSize: 9 }}>{source}</span></span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <div style={{ width: 50, height: 5, background: '#1e1e1e', borderRadius: 3 }}>
           <div style={{ width: `${ivrWidth(ivr)}%`, height: '100%', background: color, borderRadius: 3 }} />

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEvalHistory } from '../hooks/useEvalHistory';
 import type { EvalHistoryItem } from '../hooks/useEvalHistory';
-import { fmtN, fmtDateTime, ivrColor } from '../utils/fmt';
+import { fmtN, fmtDateTime, ivrColor, fmtState, fmtDirection, fmtStructure } from '../utils/fmt';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
@@ -39,8 +39,8 @@ function HistRow({ item }: { item: EvalHistoryItem }) {
   return (
     <tr>
       <td style={S.td}>{fmtDateTime(item.timestamp_ms)}</td>
-      <td style={{ ...S.td, color: sc, fontSize: 10 }}>{item.state.replace(/_/g, ' ')}</td>
-      <td style={{ ...S.td, color: dc, fontWeight: 600 }}>{item.direction.slice(0,1).toUpperCase()}</td>
+      <td style={{ ...S.td, color: sc, fontSize: 10 }}>{fmtState(item.state)}</td>
+      <td style={{ ...S.td, color: dc, fontWeight: 600 }}>{fmtDirection(item.direction).slice(0,4)}</td>
       <td style={S.td}>
         <span style={{ color: item.signal_trend === 1 ? '#44cc88' : item.signal_trend === -1 ? '#cc4444' : '#888', fontWeight: 700 }}>
           {item.signal_trend === 1 ? '▲' : item.signal_trend === -1 ? '▼' : '~'}
@@ -52,7 +52,7 @@ function HistRow({ item }: { item: EvalHistoryItem }) {
         {item.ivr_band && <span style={{ color: '#444', fontSize: 9 }}> {item.ivr_band.slice(0,3)}</span>}
       </td>
       <td style={{ ...S.td, fontSize: 10, color: item.top_structure ? '#aaddff' : '#444' }}>
-        {item.top_structure ?? item.recommendation}
+        {fmtStructure(item.top_structure ?? item.recommendation)}
       </td>
       <td style={{ ...S.td, color: item.no_trade_score > 50 ? '#cc4444' : '#44cc88', fontSize: 10 }}>
         {fmtN(item.no_trade_score, 0)}
@@ -65,7 +65,7 @@ export function EvalHistoryPanel({ underlying }: { underlying: string }) {
   const { data, isLoading } = useEvalHistory(underlying);
   return (
     <div style={S.card}>
-      <div style={S.title}>EVAL HISTORY · {underlying} · {data?.count ?? 0} runs</div>
+      <div style={S.title}>SIGNAL HISTORY · {underlying} · {data?.count ?? 0} runs</div>
       {isLoading && <div style={S.noData}>Loading…</div>}
       {!isLoading && data?.count === 0 && (
         <div style={S.noData}>No evaluations. Click ▶ RUN ONCE to record history.</div>

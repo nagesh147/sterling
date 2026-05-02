@@ -1,6 +1,37 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(python3 -m pytest --tb=no -q)",
+      "Bash(npm run *)",
+      "Bash(python3 -m pytest tests/test_adapter.py --tb=short -q)",
+      "Bash(pip3 show *)",
+      "Bash(pip3 list *)",
+      "Bash(pip3 install *)",
+      "Bash(python3 -m pytest --tb=short -q)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|HACK\\\\|XXX\\\\|NotImplemented\\\\|pass$\\\\|raise NotImplementedError\" /home/nageshmadaram/Sterling/backend/app --include=\"*.py\" -n)",
+      "Bash(timeout 5 python3 *)",
+      "Bash(python3 -m pytest --tb=no -q --co)",
+      "Bash(python3 -m pytest tests/test_final.py::TestRetryTimeout::test_retries_on_timeout_error tests/test_final_endpoints.py::TestAlertCRUDComplete::test_bulk_delete_empty_no_error -v --tb=short)",
+      "Bash(awk -F: '{sum += $2} END {print \"Total test functions:\", sum}')",
+      "Bash(timeout 8 python3 -c ' *)",
+      "Bash(grep -v \"^$\\\\|WARNING\\\\|INFO\")",
+      "Bash(bash /home/nageshmadaram/Sterling/claude-verify.sh)",
+      "Bash(grep -v \"^$\\\\|WARNING\")",
+      "Bash(npm outdated *)",
+      "Bash(npm update *)",
+      "Bash(npm audit *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); pkgs=d.get\\('packages',{}\\); print\\('\\\\n'.join\\(f'{n.replace\\(\\\\\"node_modules/\\\\\",\\\\\"\\\\\"\\)}: {v[\\\\\"version\\\\\"]}' for n,v in pkgs.items\\(\\) if n and 'node_modules/' in n and n.count\\('/'\\)==1\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(python3 -m pytest backend/tests/ -x -q --tb=short)",
+      "Bash(python3 -m pytest -x -q --tb=short)",
+      "Bash(python3 *)",
+      "Bash(grep -v \"^$\\\\|INFO\\\\|WARNING\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('react',p.dependencies.react\\); console.log\\('vite',p.devDependencies.vite\\); console.log\\('ts',p.devDependencies.typescript\\); console.log\\('zustand',p.dependencies.zustand\\); console.log\\('react-query',p.dependencies['@tanstack/react-query']\\)\")"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "code-review-graph"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

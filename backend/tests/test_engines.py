@@ -118,6 +118,9 @@ class TestPolicyEngine:
         policy = apply_policy(Direction.SHORT, _INST, ivr=65.0)
         assert policy.debit_preferred
 
-    def test_none_ivr_defaults_normal(self):
+    def test_none_ivr_defaults_elevated(self):
+        """Unknown IV is treated as ELEVATED (fail-closed) so naked options are excluded."""
         policy = apply_policy(Direction.LONG, _INST, ivr=None)
-        assert policy.ivr_band == IVRBand.NORMAL
+        assert policy.ivr_band == IVRBand.ELEVATED
+        assert not policy.naked_allowed   # fail-closed: don't allow naked when IV unknown
+        assert policy.debit_preferred     # prefer defined-risk spreads

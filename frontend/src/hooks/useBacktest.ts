@@ -19,6 +19,11 @@ export interface BacktestBarResult {
   fwd_return_4h?: number | null;
   fwd_return_12h?: number | null;
   fwd_return_24h?: number | null;
+  // Black-Scholes option P&L (present when atm_iv supplied)
+  bs_entry_premium?: number | null;
+  bs_fwd_pnl_4h?: number | null;
+  bs_fwd_pnl_12h?: number | null;
+  bs_fwd_pnl_24h?: number | null;
 }
 
 export interface BacktestStats {
@@ -37,7 +42,7 @@ export interface BacktestStats {
   early_short_setups: number;
   filtered_bars: number;
   idle_bars: number;
-  // Signal quality
+  // Spot returns
   arrow_long_win_rate_4h?: number | null;
   arrow_short_win_rate_4h?: number | null;
   setup_long_avg_return_4h?: number | null;
@@ -48,6 +53,11 @@ export interface BacktestStats {
   arrow_short_win_rate_12h?: number | null;
   setup_long_avg_return_12h?: number | null;
   setup_short_avg_return_12h?: number | null;
+  // BS option P&L (present when atm_iv supplied)
+  bs_arrow_long_avg_pnl_4h?: number | null;
+  bs_arrow_short_avg_pnl_4h?: number | null;
+  bs_arrow_long_win_rate_4h?: number | null;
+  bs_arrow_short_win_rate_4h?: number | null;
 }
 
 export interface BacktestResult {
@@ -59,12 +69,16 @@ export interface BacktestResult {
   bars: BacktestBarResult[];
   stats: BacktestStats;
   timestamp_ms: number;
+  atm_iv_used?: number | null;
+  option_dte_used?: number | null;
 }
 
 export interface BacktestRequest {
   underlying: string;
   lookback_days: number;
   sample_every_n_bars: number;
+  atm_iv?: number;
+  option_dte?: number;
 }
 
 export function useBacktest() {

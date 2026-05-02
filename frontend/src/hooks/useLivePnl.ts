@@ -23,7 +23,8 @@ export function useLivePnl(enabled = true) {
   return useQuery<LivePnlResponse>({
     queryKey: ['live-pnl'],
     queryFn: () => api.get<LivePnlResponse>('/api/v1/positions/pnl-live'),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
     enabled,
   });
 }

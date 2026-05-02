@@ -193,9 +193,12 @@ interface Props { underlying: string }
 export function BacktestPanel({ underlying }: Props) {
   const [lookback, setLookback] = useState(30);
   const [sampleEvery, setSampleEvery] = useState(4);
+  const [atmIv, setAtmIv] = useState('');
+  const [optionDte, setOptionDte] = useState(30);
   const { mutate, data, isPending, error } = useBacktest();
   const s = data?.stats;
   const totalBars = s?.total_bars_evaluated || 1;
+  const hasBS = data?.atm_iv_used != null;
 
   return (
     <div style={S.card}>
@@ -212,9 +215,27 @@ export function BacktestPanel({ underlying }: Props) {
           <input style={S.input} type="number" min={1} max={24}
             value={sampleEvery} onChange={e => setSampleEvery(parseInt(e.target.value) || 4)} />
         </div>
+        <div style={S.field}>
+          <label style={S.label}>ATM IV % (optional BS)</label>
+          <input style={{ ...S.input, width: 70 }} type="number" min={1} max={500} step={1}
+            placeholder="e.g. 80" value={atmIv}
+            onChange={e => setAtmIv(e.target.value)}
+            title="Current ATM IV in % (e.g. 80 = 80%). Enables theoretical option P&L." />
+        </div>
+        <div style={S.field}>
+          <label style={S.label}>OPTION DTE</label>
+          <input style={{ ...S.input, width: 55 }} type="number" min={7} max={90}
+            value={optionDte} onChange={e => setOptionDte(parseInt(e.target.value) || 30)} />
+        </div>
         <button
           style={isPending ? { ...S.runBtn, opacity: 0.5, cursor: 'not-allowed' } : S.runBtn}
-          onClick={() => mutate({ underlying, lookback_days: lookback, sample_every_n_bars: sampleEvery })}
+          onClick={() => mutate({
+            underlying,
+            lookback_days: lookback,
+            sample_every_n_bars: sampleEvery,
+            atm_iv: atmIv ? parseFloat(atmIv) / 100.0 : undefined,
+            option_dte: optionDte,
+          })}
           disabled={isPending}
         >
           {isPending ? 'RUNNING…' : `▶ RUN BACKTEST — ${underlying}`}
@@ -263,8 +284,39 @@ export function BacktestPanel({ underlying }: Props) {
 
           <QualityPanel s={s} bars={data.bars} />
 
+          {hasBS && (
+            <>
+              <div style={S.sectionTitle}>
+                OPTION P&L (BS) — IV {((data.atm_iv_used ?? 0) * 100).toFixed(0)}% · {data.option_dte_used}d DTE
+              </div>
+              <div style={S.grid4}>
+                <StatCard
+                  label="CALL WIN RATE 4H"
+                  value={s.bs_arrow_long_win_rate_4h != null ? `${s.bs_arrow_long_win_rate_4h.toFixed(0)}%` : '—'}
+                  color={s.bs_arrow_long_win_rate_4h != null && s.bs_arrow_long_win_rate_4h >= 50 ? '#44cc88' : '#cc4444'}
+                  sub="on green arrows" />
+                <StatCard
+                  label="PUT WIN RATE 4H"
+                  value={s.bs_arrow_short_win_rate_4h != null ? `${s.bs_arrow_short_win_rate_4h.toFixed(0)}%` : '—'}
+                  color={s.bs_arrow_short_win_rate_4h != null && s.bs_arrow_short_win_rate_4h >= 50 ? '#44cc88' : '#cc4444'}
+                  sub="on red arrows" />
+                <StatCard
+                  label="AVG CALL P&L 4H"
+                  value={s.bs_arrow_long_avg_pnl_4h != null ? `${s.bs_arrow_long_avg_pnl_4h.toFixed(1)}%` : '—'}
+                  color={s.bs_arrow_long_avg_pnl_4h != null && s.bs_arrow_long_avg_pnl_4h >= 0 ? '#44cc88' : '#cc4444'}
+                  sub="% of premium" />
+                <StatCard
+                  label="AVG PUT P&L 4H"
+                  value={s.bs_arrow_short_avg_pnl_4h != null ? `${s.bs_arrow_short_avg_pnl_4h.toFixed(1)}%` : '—'}
+                  color={s.bs_arrow_short_avg_pnl_4h != null && s.bs_arrow_short_avg_pnl_4h >= 0 ? '#44cc88' : '#cc4444'}
+                  sub="% of premium" />
+              </div>
+            </>
+          )}
+
           <div style={S.meta}>
             {data.total_1h_candles} × 1H bars · {data.total_4h_candles} × 4H bars · {data.lookback_days}d window · {totalBars} sampled bars
+            {hasBS && ` · BS IV ${((data.atm_iv_used ?? 0) * 100).toFixed(0)}%`}
           </div>
         </>
       )}

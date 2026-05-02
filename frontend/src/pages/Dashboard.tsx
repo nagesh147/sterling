@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useStore } from '../store/useStore';
+import { useSelectedUnderlying } from '../store/useStore';
 import { useConfigInfo } from '../hooks/useConfigInfo';
 import { InstrumentSelector } from '../components/InstrumentSelector';
 import { SnapshotPanel } from '../components/SnapshotPanel';
@@ -28,6 +28,7 @@ import { OptionChainViewer } from '../components/OptionChainViewer';
 import { VolatilityScanPanel } from '../components/VolatilityScanPanel';
 import { WebhookManager } from '../components/WebhookManager';
 import { SessionExport } from '../components/SessionExport';
+import { ScoringWeightsPanel } from '../components/ScoringWeightsPanel';
 import { SessionStatsPanel } from '../components/SessionStatsPanel';
 import { PanelBoundary } from '../components/PanelBoundary';
 
@@ -82,7 +83,7 @@ const TAB_KEYS: Record<string, Tab> = {
 };
 
 export function Dashboard() {
-  const { selectedUnderlying } = useStore();
+  const selectedUnderlying = useSelectedUnderlying();
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const { data: sysInfo } = useConfigInfo();
 
@@ -101,7 +102,7 @@ export function Dashboard() {
 
   return (
     <div style={page}>
-      <PanelBoundary title="ARROW ALERT">
+      <PanelBoundary title="NEW SIGNAL ALERT">
         <ArrowAlert underlying={selectedUnderlying} />
       </PanelBoundary>
 
@@ -140,7 +141,7 @@ export function Dashboard() {
           <PanelBoundary title="ARROWS"><ArrowHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
           <PanelBoundary title="PREVIEW"><PreviewCandidates underlying={selectedUnderlying} /></PanelBoundary>
           <PanelBoundary title="RUN-ONCE"><RunOnceResult underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="EVAL HISTORY"><EvalHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="SIGNAL HISTORY"><EvalHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
         </>
       )}
       {activeTab === 'chain' && (
@@ -177,6 +178,7 @@ export function Dashboard() {
           <PanelBoundary title="SYSTEM"><SystemInfoPanel /></PanelBoundary>
           <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
           <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
+          <PanelBoundary title="SCORING WEIGHTS"><ScoringWeightsPanel /></PanelBoundary>
           <PanelBoundary title="WEBHOOKS"><WebhookManager /></PanelBoundary>
           <SessionExport />
         </>

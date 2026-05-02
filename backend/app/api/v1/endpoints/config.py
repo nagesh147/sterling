@@ -6,7 +6,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Optional
-from app.schemas.risk import RiskParams
+from app.schemas.risk import RiskParams, ScoringWeights
 from app.core.config import settings
 from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
@@ -22,6 +22,13 @@ _risk = RiskParams(
 
 def get_runtime_risk() -> RiskParams:
     return _risk
+
+
+_scoring_weights = ScoringWeights()
+
+
+def get_scoring_weights() -> ScoringWeights:
+    return _scoring_weights
 
 
 # ─── Risk config ──────────────────────────────────────────────────────────────
@@ -158,3 +165,43 @@ async def system_info() -> SystemInfo:
         supported_data_sources=_adm.SUPPORTED_DATA_SOURCES,
         timestamp_ms=int(time.time() * 1000),
     )
+
+
+# ─── Scoring weights ──────────────────────────────────────────────────────────
+
+@router.get("/scoring-weights", response_model=ScoringWeights)
+async def get_scoring_weights_endpoint() -> ScoringWeights:
+    return _scoring_weights
+
+
+@router.put("/scoring-weights", response_model=ScoringWeights)
+async def update_scoring_weights(body: ScoringWeights) -> ScoringWeights:
+    global _scoring_weights
+    _scoring_weights = body
+    return _scoring_weights
+
+
+@router.post("/scoring-weights/reset", response_model=ScoringWeights)
+async def reset_scoring_weights() -> ScoringWeights:
+    global _scoring_weights
+    _scoring_weights = ScoringWeights()
+    return _scoring_weights
+
+
+# ─── Eval history cap ─────────────────────────────────────────────────────────
+
+class EvalHistoryCapResponse(BaseModel):
+    cap: int
+
+
+@router.get("/eval-history-cap", response_model=EvalHistoryCapResponse)
+async def get_eval_history_cap() -> EvalHistoryCapResponse:
+    from app.services import eval_history
+    return EvalHistoryCapResponse(cap=eval_history.get_cap())
+
+
+@router.put("/eval-history-cap", response_model=EvalHistoryCapResponse)
+async def set_eval_history_cap(cap: int = 50) -> EvalHistoryCapResponse:
+    from app.services import eval_history
+    eval_history.set_cap(cap)
+    return EvalHistoryCapResponse(cap=eval_history.get_cap())

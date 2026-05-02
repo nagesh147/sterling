@@ -28,8 +28,18 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
 @router.get("", response_model=AlertListResponse)
-async def list_alerts(underlying: str = Query(default="")) -> AlertListResponse:
+async def list_alerts(
+    underlying: str = Query(default=""),
+    status: str = Query(default=""),
+    days: Optional[int] = Query(default=None, ge=1, le=365),
+) -> AlertListResponse:
     alerts = alert_store.list_alerts(underlying=underlying.strip() or None)
+    if status:
+        alerts = [a for a in alerts if a.status.value == status]
+    if days is not None:
+        cutoff_ms = int((time.time() - days * 86400) * 1000)
+        alerts = [a for a in alerts if a.created_at_ms >= cutoff_ms
+                  or (a.triggered_at_ms is not None and a.triggered_at_ms >= cutoff_ms)]
     return AlertListResponse(
         alerts=alerts,
         active_count=alert_store.active_count(),

@@ -18,6 +18,7 @@ export function usePortfolioSummary() {
   return useQuery<PortfolioSummary>({
     queryKey: ['portfolio-summary'],
     queryFn: () => api.get<PortfolioSummary>('/api/v1/positions/summary'),
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   });
 }

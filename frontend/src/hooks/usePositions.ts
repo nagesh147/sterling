@@ -6,7 +6,8 @@ export function usePositions() {
   return useQuery<PositionListResponse>({
     queryKey: ['positions'],
     queryFn: () => api.get<PositionListResponse>('/api/v1/positions'),
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
+    refetchOnWindowFocus: true,
   });
 }
 
