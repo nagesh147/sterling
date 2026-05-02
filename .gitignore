@@ -1,17 +1,39 @@
-# Ignore build artifacts and generated files
-graph.json
-GRAPH_REPORT.md
+# === Graphify generated artifacts ===
+graphify-out/cache/
+graphify-out/tmp/
+graphify-out/*.bak
 
-# Ignore notebooks and local experiments
-*.ipynb
+# Keep useful Graphify outputs tracked
+!graphify-out/graph.json
+!graphify-out/GRAPH_REPORT.md
+!graphify-out/graph.html
 
-# Ignore backup files
-*.backup
+# === Node / Bun / Package artifacts ===
+node_modules/
+bun.lockb
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === System / Editor files ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+
+# === Backup files ===
 *.bak
+*.old
 *~
 
-# Ignore system verification scripts if not needed
-sys-verify.sh
+# === Repo-specific backups ===
+backups/*.bak
+backups/*.tmp
 
-# Keep skill repos tracked (frontend-design, superpowers, statusline, etc.)
-# Do NOT ignore these directories
+# === Skill repos (always tracked) ===
+!security-review/
+!skills/
+!superpowers/
+!ui-ux-pro-max-skill/
