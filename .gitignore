@@ -13,12 +13,5 @@ GRAPH_REPORT.md
 # Ignore system verification scripts if not needed
 sys-verify.sh
 
-# Ignore local skill repos (keep only if you want them tracked)
-awesome-claude-code/
-claude-mem/
-code-review/
-frontend-design/
-security-review/
-statusline/
-superpowers/
-ui-ux-pro-max-skill/
+# Keep skill repos tracked (frontend-design, superpowers, statusline, etc.)
+# Do NOT ignore these directories
