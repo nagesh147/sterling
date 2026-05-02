@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(git *)",
       "Bash(python3 -m pytest --tb=no -q)",
@@ -27,7 +28,8 @@
       "Bash(python3 -m pytest -x -q --tb=short)",
       "Bash(python3 *)",
       "Bash(grep -v \"^$\\\\|INFO\\\\|WARNING\")",
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('react',p.dependencies.react\\); console.log\\('vite',p.devDependencies.vite\\); console.log\\('ts',p.devDependencies.typescript\\); console.log\\('zustand',p.dependencies.zustand\\); console.log\\('react-query',p.dependencies['@tanstack/react-query']\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('react',p.dependencies.react\\); console.log\\('vite',p.devDependencies.vite\\); console.log\\('ts',p.devDependencies.typescript\\); console.log\\('zustand',p.dependencies.zustand\\); console.log\\('react-query',p.dependencies['@tanstack/react-query']\\)\")",
+      "Skill(update-config)"
     ]
   },
   "enableAllProjectMcpServers": true,
