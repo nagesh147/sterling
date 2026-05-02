@@ -1,89 +1,62 @@
 #!/bin/bash
+# Bootstrap Claude setup for Sterling repo
+
 set -e
 
-echo "=== Claude Setup Script ==="
+GREEN="\033[1;32m"
+BLUE="\033[1;34m"
+RESET="\033[0m"
 
-# Backup existing bashrc
-cp ~/.bashrc ~/.bashrc.backup.$(date +%Y%m%d%H%M%S)
+echo -e "${BLUE}=== Sterling Claude Setup ===${RESET}"
 
-# Copy project bashrc into place (if provided)
-if [ -f ./bashrc.backup ]; then
-  cp ./bashrc.backup ~/.bashrc
-  source ~/.bashrc
+# 1. Create Sterling workspace
+mkdir -p ~/Sterling
+cd ~/Sterling
+
+# 2. Clone skill repos (if not already present)
+repos=(
+  "https://github.com/obra/superpowers.git"
+  "https://github.com/anthropics/skills.git"
+  "https://github.com/your-org/security-review.git"
+  "https://github.com/your-org/ui-ux-pro-max-skill.git"
+)
+
+for repo in "${repos[@]}"; do
+  name=$(basename "$repo" .git)
+  if [[ ! -d "$name" ]]; then
+    echo -e "${GREEN}[CLONE] $name${RESET}"
+    git clone "$repo"
+  else
+    echo -e "${GREEN}[SKIP] $name already present${RESET}"
+  fi
+done
+
+# 3. Update ~/.claude/settings.json with skill paths
+echo -e "${BLUE}--- Updating Claude settings ---${RESET}"
+mkdir -p ~/.claude
+settings=~/.claude/settings.json
+tmpfile=$(mktemp)
+
+jq '.skills += {
+  "frontend-design":{"path":"'$PWD'/skills/skills/frontend-design","default":true},
+  "superpowers":{"path":"'$PWD'/superpowers","default":true},
+  "security-review":{"path":"'$PWD'/security-review","default":true},
+  "ui-ux-pro-max-skill":{"path":"'$PWD'/ui-ux-pro-max-skill","default":true}
+}' "$settings" > "$tmpfile" && mv "$tmpfile" "$settings"
+
+# 4. Build Graphify artifacts
+echo -e "${BLUE}--- Building Graphify ---${RESET}"
+graphify update ~/Sterling
+
+# 5. Install Caveman Ultra alias
+echo -e "${BLUE}--- Wiring Caveman Ultra ---${RESET}"
+if ! grep -q "claude_graphify md-ultra" ~/.bashrc; then
+  echo "alias claude_graphify='graphify run'" >> ~/.bashrc
+  echo "alias claude='~/Sterling/claude-verify.sh'" >> ~/.bashrc
 fi
 
-# Ensure ~/.claude/settings.json exists
-mkdir -p ~/.claude
-echo '{"skills":{}}' > ~/.claude/settings.json
-
-# Clone/update repos
-mkdir -p ~/Sterling && cd ~/Sterling
-for repo in \
-  "https://github.com/obra/superpowers.git superpowers" \
-  "https://github.com/anthropics/skills.git frontend-design" \
-  "https://github.com/thedotmack/claude-mem.git claude-mem" \
-  "https://github.com/anthropics/claude-code.git code-review" \
-  "https://github.com/anthropics/claude-code-security-review.git security-review" \
-  "https://github.com/garrytan/gstack.git ~/.claude/skills/gstack" \
-  "https://github.com/anthropics/awesome-claude-code.git awesome-claude-code" \
-  "https://github.com/anthropics/ui-ux-pro-max-skill.git ui-ux-pro-max-skill"
-do
-  set -- $repo
-  url=$1
-  target=$2
-  if [ -d "$target/.git" ]; then
-    echo "Updating $target..."
-    git -C "$target" pull --ff-only
-  else
-    echo "Cloning $url into $target..."
-    git clone "$url" "$target"
-  fi
-done
-
-# Statusline skill
-mkdir -p ~/Sterling/statusline
-cat > ~/Sterling/statusline/SKILL.md <<'EOT'
-# Statusline Skill
-Provides live runtime metrics (tokens, mode, context economics, active skills).
-EOT
-
-# Update settings.json
-tmp=$(mktemp)
-jq '.skills["claude-mem"]={"path":"~/Sterling/claude-mem","commands":["/mem-search","/get_observations"]}
-    | .skills["superpowers"]={"path":"~/Sterling/superpowers","commands":["/superpowers"]}
-    | .skills["frontend-design"]={"path":"~/Sterling/frontend-design","commands":["/frontend-design"]}
-    | .skills["code-review"]={"path":"~/Sterling/code-review","commands":["/review"]}
-    | .skills["security-review"]={"path":"~/Sterling/security-review","commands":["/sec-review"]}
-    | .skills["gstack"]={"path":"~/.claude/skills/gstack","commands":["/gstack"]}
-    | .skills["awesome-claude-code"]={"path":"~/Sterling/awesome-claude-code","commands":["/awesome"]}
-    | .skills["ui-ux-pro-max-skill"]={"path":"~/Sterling/ui-ux-pro-max-skill","commands":["/uiux"]}
-    | .skills["statusline"]={"path":"~/Sterling/statusline","commands":["/statusline"]}' \
-    ~/.claude/settings.json > "$tmp" && mv "$tmp" ~/.claude/settings.json
-
-# Rebuild Graphify artifacts (skip HTML viz)
-graphify update ~/Sterling --no-viz || echo "[WARN] Graphify rebuild failed, but JSON/MD may still exist."
-
-# Install claude-verify.sh
-cat > ~/Sterling/claude-verify.sh <<'VERIFY'
-#!/bin/bash
-echo "=== Registered Claude Skills ==="
-jq '.skills | to_entries | map({name: .key, commands: .value.commands})' ~/.claude/settings.json
-
-echo "=== Checking Graphify Artifacts ==="
-for f in ~/Sterling/graph.json ~/Sterling/GRAPH_REPORT.md; do
-  if [ -f "$f" ]; then
-    echo "[OK] Found $f"
-    stat -c "Last updated: %y" "$f"
-  else
-    echo "[MISSING] $f not found"
-  fi
-done
-
-echo "=== Launching Claude with Statusline ==="
-claude <<'INNER'
-/statusline
-INNER
-VERIFY
+# 6. Verification script already in repo
 chmod +x ~/Sterling/claude-verify.sh
 
-echo "=== Setup Complete ==="
+echo -e "${GREEN}=== Setup Complete ===${RESET}"
+echo -e "${GREEN}Run 'source ~/.bashrc' then 'claude' to verify and launch.${RESET}"
