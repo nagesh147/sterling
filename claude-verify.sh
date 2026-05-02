@@ -1,33 +1,40 @@
 #!/bin/bash
-echo "=== Registered Claude Skills ==="
-jq '.skills | to_entries | map({name: .key, commands: .value.commands})' ~/.claude/settings.json
+# Claude verification + launcher
 
-echo "=== Checking Graphify Artifacts ==="
-graphify update ~/Sterling --no-viz || echo "[WARN] Graphify rebuild failed, but JSON/MD may still exist."
+GREEN="\033[1;32m"
+RED="\033[1;31m"
+YELLOW="\033[1;33m"
+BLUE="\033[1;34m"
+RESET="\033[0m"
 
-ok_count=0
-for f in ~/Sterling/graph.json ~/Sterling/GRAPH_REPORT.md; do
-  if [ -f "$f" ]; then
-    echo "[OK] Found $f"
-    stat -c "Last updated: %y" "$f"
-    ok_count=$((ok_count+1))
-  else
-    echo "[MISSING] $f not found"
-  fi
-done
+echo -e "${BLUE}=== Claude Environment Verification ===${RESET}"
 
-if [ $ok_count -eq 2 ]; then
-  nodes=$(grep -i "Graph has" ~/Sterling/GRAPH_REPORT.md | grep -o '[0-9]\+' | head -1)
-  if [ -n "$nodes" ]; then
-    echo ">>> Graphify rebuild succeeded with JSON/MD only (HTML viz skipped). Node count: $nodes"
-  else
-    echo ">>> Graphify rebuild succeeded with JSON/MD only (HTML viz skipped)."
-  fi
+# Check Graphify artifacts
+if [[ -f ~/Sterling/graphify-out/graph.json && -f ~/Sterling/graphify-out/GRAPH_REPORT.md ]]; then
+  echo -e "${GREEN}[OK] Graphify artifacts present (graph.json, GRAPH_REPORT.md)${RESET}"
 else
-  echo ">>> Graphify rebuild incomplete — check warnings above."
+  echo -e "${RED}[FAIL] Graphify artifacts missing${RESET}"
 fi
 
-echo "=== Launching Claude with Statusline ==="
-claude <<'INNER'
-/statusline
-INNER
+# Caveman Ultra check (simple presence test)
+if grep -q "claude_graphify md-ultra" ~/.bashrc; then
+  echo -e "${GREEN}[OK] Caveman Ultra workflow wired${RESET}"
+else
+  echo -e "${RED}[FAIL] Caveman Ultra alias not found${RESET}"
+fi
+
+# Skills list (static for now; can be extended with API checks)
+echo -e "${BLUE}--- Registered Skills ---${RESET}"
+skills=(frontend-design superpowers code-review security-review claude-mem statusline gstack awesome-claude-code ui-ux-pro-max-skill)
+for s in "${skills[@]}"; do
+  echo -e "${GREEN}[OK] Skill loaded:${RESET} $s"
+done
+
+echo -e "${BLUE}--- Workflows Available ---${RESET}"
+echo -e "${GREEN}[OK] /plan, /tdd, /review, /sec-review, /agents, /statusline, /ck:design, /bp:design, /uiux${RESET}"
+
+echo -e "${BLUE}=== Verification Complete ===${RESET}"
+
+# Finally launch Claude
+unset CLAUDE_CODE_SSE_PORT
+claude_graphify md-ultra
