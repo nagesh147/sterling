@@ -1,0 +1,532 @@
+# ~/.bashrc — Sterling Workspace Edition (Vibe Build)
+# Optimized for project creation and vibe coding with per-skill token strategy
+
+# ============================================================
+# 1. CORE BASH CONFIG
+# ============================================================
+
+case $- in *i*) ;; *) return ;; esac
+HISTCONTROL=ignoreboth; HISTSIZE=1000; HISTFILESIZE=2000
+shopt -s histappend checkwinsize
+
+CLR_RST='\033[0m'; CLR_BLD='\033[1m'; CLR_RED='\033[0;31m'
+CLR_GRN='\033[0;32m'; CLR_YLW='\033[0;33m'
+CLR_CYN='\033[0;36m'; CLR_MGN='\033[0;35m'
+
+[ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null && color_prompt=yes
+if [ "$color_prompt" = yes ]; then
+    PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+else
+    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
+fi
+unset color_prompt
+
+# ============================================================
+# 2. STREAM UTILITIES
+# ============================================================
+
+compact_stream() { sed '/^[[:space:]]*$/d; s/^[[:space:]]*//; s/[[:space:]]*$//'; }
+export -f compact_stream
+
+json_minify() { command -v jq >/dev/null 2>&1 && jq -c . 2>/dev/null || cat; }
+export -f json_minify
+
+# Strip markdown formatting — saves 15-25% tokens from SKILL.md files.
+# Removes: headers, bold, italic, bullets, code fences, badges, links, rules.
+strip_markdown() {
+    sed \
+        -e 's/^#{1,6}[[:space:]]*//' \
+        -e 's/\*\*//g; s/__//g; s/\*//g; s/_//g' \
+        -e '/^```/d' \
+        -e '/^\[!\[/d' \
+        -e '/^<!--/,/-->/d' \
+        -e '/^[-=]\{3,\}$/d' \
+        -e 's/\[.\{1,\}\](.\{1,\})//' \
+        -e '/^[[:space:]]*$/d' \
+        -e 's/^[[:space:]]*//'
+}
+export -f strip_markdown
+
+# Deduplicate lines — removes cross-skill repeated rules.
+dedup_lines() { awk '!seen[$0]++'; }
+export -f dedup_lines
+
+# Extract only lines containing imperative directive verbs.
+# Used for rules-only skills — drops prose, examples, and commentary.
+extract_directives() {
+    grep -iE '(always|never|must|should|avoid|prefer|use |flag|check|ensure|do not|don'"'"'t|require|enforce|output|return|emit|include|exclude|start|run|apply|keep|make|write|build)' \
+    | grep -vE '^(>|```)' \
+    | head -n "$1"
+}
+export -f extract_directives
+
+# ============================================================
+# 3. SKILL CONFIGURATION
+#
+# PER-SKILL STRATEGY — the core of this build:
+#
+#   full  → strip markdown, keep all meaningful lines, higher cap
+#           Used for skills where CONTEXT matters alongside the rule.
+#           superpowers:      /plan, /tdd, /agents need their descriptions
+#                             to be useful — a bare command name is useless.
+#           frontend-design:  design patterns need explanation to apply correctly.
+#           ui-ux-pro-max:    UX heuristics need enough context to act on.
+#
+#   rules → strip markdown, extract directive lines only, tight cap
+#           Used for skills that are pure rule lists — context adds nothing.
+#           claude-mem:       "persist decisions" — self-explanatory rule.
+#           awesome-claude-code: coding conventions, directive lists.
+#           code-review:      flag patterns — no context needed.
+#           security-review:  OWASP keywords — no context needed.
+#           gstack:           infra validation rules.
+#
+# VIBE MODE skills — forced regardless of file pattern detection:
+#   Always loads the creative/generative skills.
+#   Never loads review/security/infra (wrong phase for new projects).
+#
+# ============================================================
+
+CLAUDE_SKILLS_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+CLAUDE_MEM_FILE="${CLAUDE_MEM_FILE:-$HOME/.claude/memory.md}"
+
+# Per-skill read strategy: full | rules
+declare -A SKILL_STRATEGY=(
+    ["superpowers"]="full"
+    ["frontend-design"]="full"
+    ["ui-ux-pro-max-skill"]="full"
+    ["claude-mem"]="rules"
+    ["awesome-claude-code"]="rules"
+    ["code-review"]="rules"
+    ["security-review"]="rules"
+    ["gstack"]="rules"
+)
+
+# Line caps per strategy per mode
+#              strategy  smart  ultra
+# full:                   50     80    (need enough to understand the command)
+# rules:                  12     20    (directive lines only — tight)
+declare -A CAP_FULL=(  ["smart"]=50  ["ultra"]=80  ["vibe"]=60  )
+declare -A CAP_RULES=( ["smart"]=12  ["ultra"]=20  ["vibe"]=12  )
+
+# Vibe mode forced skill set — creative/generative only
+VIBE_SKILLS="superpowers frontend-design ui-ux-pro-max-skill claude-mem awesome-claude-code"
+
+# Monorepo subdirectory map: clone_name → subdir with actual skill
+declare -A SKILL_SUBDIR_MAP=(
+    ["frontend-design"]="frontend-design"
+    ["ui-ux-pro-max-skill"]="ui-ux-pro-max-skill"
+)
+
+# ============================================================
+# 4. JIT REPO ENGINE
+# ============================================================
+
+get_project_context() {
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null) && echo "$root" && return
+    [[ -d ./graphify-out || -f ./claude-verify.sh ]] && pwd && return
+    echo "$HOME/Sterling"
+}
+export -f get_project_context
+
+# Detect if this is a new/empty project (< 5 commits or no git at all)
+is_new_project() {
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo "yes"; return; }
+    local count
+    count=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+    [[ "$count" -lt 5 ]] && echo "yes" || echo "no"
+}
+export -f is_new_project
+
+sync_graph_cached() {
+    mkdir -p "$1/graphify-out"
+    graphify update "$1" --no-viz >/dev/null 2>&1 \
+        && echo -e " ${CLR_GRN}↑${CLR_RST}" \
+        || echo -e " ${CLR_YLW}–${CLR_RST}"
+}
+export -f sync_graph_cached
+
+# Dynamic skill detection from file patterns.
+# Vibe mode bypasses this entirely and uses VIBE_SKILLS directly.
+get_dynamic_skills() {
+    local dir="$1" mode="${2:-smart}"
+
+    # Vibe mode: fixed creative skill set, skip detection
+    [[ "$mode" == "vibe" ]] && echo "$VIBE_SKILLS" && return
+
+    # Base: superpowers (workflows) + claude-mem (memory) always on
+    local skills="superpowers claude-mem"
+    local files
+    files=$(git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+        && git ls-files \
+        || find "$dir" -maxdepth 2 -not -path '*/.*')
+
+    # Frontend — includes UI/UX skill as a pair
+    echo "$files" | grep -qE '\.(tsx|jsx|vue|svelte)$|tailwind|postcss' \
+        && skills+=" frontend-design ui-ux-pro-max-skill"
+
+    # General JS/TS — code quality skills
+    echo "$files" | grep -qE '\.(ts|js)$' \
+        && skills+=" awesome-claude-code code-review"
+
+    # Infra
+    echo "$files" | grep -qE 'docker|prisma|\.sql$|compose|k8s' \
+        && skills+=" gstack"
+
+    # Auth/security
+    echo "$files" | grep -qE 'auth|jwt|crypto|security|cargo\.toml|go\.mod' \
+        && skills+=" security-review"
+
+    echo "$skills"
+}
+export -f get_dynamic_skills
+
+# ============================================================
+# 5. SKILL READER — Per-skill strategy
+# ============================================================
+
+_resolve_skill_dir() {
+    local name="$1"
+    local base="$CLAUDE_SKILLS_DIR/$name"
+    local sub="${SKILL_SUBDIR_MAP[$name]:-}"
+    [[ -n "$sub" && -d "$base/$sub" ]] && echo "$base/$sub" && return
+    echo "$base"
+}
+export -f _resolve_skill_dir
+
+_find_skill_entry() {
+    for candidate in \
+        "$1/SKILL.md" "$1/README.md" \
+        "$1/skill.md" "$1/index.md"; do
+        [[ -f "$candidate" ]] && echo "$candidate" && return
+    done
+}
+export -f _find_skill_entry
+
+read_skill_content() {
+    local skill_name="$1" mode="${2:-smart}"
+    local dir entry
+    dir=$(_resolve_skill_dir "$skill_name")
+    entry=$(_find_skill_entry "$dir")
+    [[ -z "$entry" ]] && return
+
+    local strategy="${SKILL_STRATEGY[$skill_name]:-rules}"
+
+    # Resolve cap based on strategy + mode
+    local cap
+    case "$strategy" in
+        full)  cap="${CAP_FULL[$mode]:-50}"  ;;
+        rules) cap="${CAP_RULES[$mode]:-12}" ;;
+    esac
+
+    case "$strategy" in
+        full)
+            # Strip markdown, keep all meaningful content, cap at full budget.
+            # These skills need their descriptions intact — command context matters.
+            strip_markdown < "$entry" \
+                | grep -v '^\s*$' \
+                | head -n "$cap"
+            ;;
+        rules)
+            # Strip markdown, extract directive lines only, tight cap.
+            # Pure rule lists — the verb is the signal, prose adds nothing.
+            strip_markdown < "$entry" \
+                | extract_directives "$cap"
+            ;;
+    esac
+}
+export -f read_skill_content
+
+# ============================================================
+# 6. MEMORY LOADER
+# Takes last 20 lines — recency-weighted.
+# claude-mem writes decisions here; older entries lose relevance.
+# ============================================================
+
+load_claude_mem() {
+    [[ ! -f "$CLAUDE_MEM_FILE" ]] && return
+    [[ $(wc -l < "$CLAUDE_MEM_FILE") -lt 2 ]] && return
+    printf '<m>\n'
+    tail -n 20 "$CLAUDE_MEM_FILE" | strip_markdown | dedup_lines
+    printf '</m>\n'
+}
+export -f load_claude_mem
+
+# ============================================================
+# 7. CONTEXT BUILDER
+#
+# Token budget per mode (realistic worst-case with all skills active):
+#
+# MODE    SKILLS LOADED           SKILL TOKENS  GRAPH  MEM  TOTAL EST.
+# vibe    5 (3 full + 2 rules)    ~180L         0L*    20L  ~600 tok
+# smart   up to 8 (mixed)         ~180L         30L    20L  ~700 tok
+# ultra   up to 8 (mixed)         ~300L         100L   20L  ~1300 tok
+# verify  none                    0L            0L     20L  ~80 tok
+#
+# * vibe skips graph on new projects (< 5 commits) — nothing useful there yet
+# ============================================================
+
+build_context() {
+    local dir="$1" skills="$2" mode="${3:-smart}"
+    local report="$dir/graphify-out/GRAPH_REPORT.md"
+    local meta="$dir/graphify-out/context.json"
+
+    printf '<ctx:%s>\n' "$mode"
+
+    # Skills — skipped in verify (verify script owns its own context)
+    if [[ "$mode" != "verify" ]]; then
+        local skill_tmp
+        skill_tmp=$(mktemp)
+
+        for skill in $skills; do
+            local content
+            content=$(read_skill_content "$skill" "$mode")
+            [[ -n "$content" ]] && printf '%s\n' "$content" >> "$skill_tmp"
+        done
+
+        if [[ -s "$skill_tmp" ]]; then
+            printf '<s>\n'
+            # Global dedup — removes lines repeated across multiple skills
+            dedup_lines < "$skill_tmp"
+            printf '</s>\n'
+        fi
+        rm -f "$skill_tmp"
+    fi
+
+    # Persistent memory
+    load_claude_mem
+
+    # Graph — skipped for vibe on new projects (no graph worth sending yet)
+    if [[ -f "$report" ]]; then
+        local new_proj
+        new_proj=$(is_new_project)
+        if [[ "$mode" == "vibe" && "$new_proj" == "yes" ]]; then
+            : # skip — no graph signal on a fresh project
+        else
+            printf '<g>\n'
+            case "$mode" in
+                ultra) compact_stream < "$report" | head -n 100 ;;
+                vibe)  awk '/^## God Nodes/{p=1;next} /^## /{p=0} p' "$report" \
+                           | compact_stream | head -n 20 ;;
+                smart) awk '/^## God Nodes/{p=1;next} /^## /{p=0} p' "$report" \
+                           | compact_stream | head -n 30 ;;
+            esac
+            printf '</g>\n'
+        fi
+    fi
+
+    # Metadata — only if meaningfully populated
+    if [[ -f "$meta" ]]; then
+        local minified key_count
+        minified=$(json_minify < "$meta")
+        key_count=$(echo "$minified" | jq 'length' 2>/dev/null || echo 0)
+        [[ "$key_count" -gt 1 ]] && printf '<meta>%s</meta>\n' "$minified"
+    fi
+
+    printf '</ctx>\n'
+}
+export -f build_context
+
+# ============================================================
+# 8. INVOCATION — stdin vs --system (cached per session)
+# ============================================================
+
+_detect_claude_ctx_mode() {
+    [[ -n "$CLAUDE_CTX_MODE" ]] && return
+    claude_real --help 2>&1 | grep -q '\-\-system' \
+        && export CLAUDE_CTX_MODE="system-flag" \
+        || export CLAUDE_CTX_MODE="stdin"
+}
+export -f _detect_claude_ctx_mode
+
+_invoke_claude() {
+    local ctx="$1"; shift
+    _detect_claude_ctx_mode
+    case "$CLAUDE_CTX_MODE" in
+        system-flag) claude_real --system "$ctx" "$@" ;;
+        stdin)       printf '%s\n' "$ctx" | claude_real "$@" ;;
+    esac
+}
+export -f _invoke_claude
+
+# ============================================================
+# 9. LEGACY HOOKS
+# ============================================================
+
+claude_real() { command claude "$@"; }
+export -f claude_real
+
+claude_graphify() { local m="${1:-smart}"; shift; claude "$m" "$@"; }
+export -f claude_graphify
+
+# ============================================================
+# 10. UNIFIED DISPATCHER
+#
+# Modes:
+#   claude          → verify  (default, runs claude-verify.sh)
+#   claude vibe     → vibe    (project creation, UI work — USE THIS for vibe coding)
+#   claude smart    → smart   (existing project, god-nodes graph)
+#   claude ultra    → ultra   (deep work, full graph)
+#
+# Aliases: cv=vibe  cs=smart  cu=ultra  caveman=ultra
+# ============================================================
+
+claude() {
+    local mode="verify"
+    local proj_dir
+    proj_dir=$(get_project_context)
+
+    case "$1" in
+        vibe|-v)          mode="vibe";   shift ;;
+        smart|-s)         mode="smart";  shift ;;
+        ultra|-u|caveman) mode="ultra";  shift ;;
+    esac
+
+    clear
+    echo -e "${CLR_CYN}┌────────────────────────────────────────────────────────┐${CLR_RST}"
+    echo -e "${CLR_CYN}│${CLR_RST}  ${CLR_BLD}CLAUDE AI${CLR_RST} × ${CLR_MGN}STERLING WORKSPACE ENGINE${CLR_RST}             ${CLR_CYN}│${CLR_RST}"
+    echo -e "${CLR_CYN}└────────────────────────────────────────────────────────┘${CLR_RST}"
+
+    local active_skills new_proj
+    active_skills=$(get_dynamic_skills "$proj_dir" "$mode")
+    new_proj=$(is_new_project)
+    export ACTIVE_SKILLS="$active_skills"
+
+    echo -e "${CLR_CYN}» Workspace:${CLR_RST}  ${CLR_BLD}$proj_dir${CLR_RST}"
+    echo -e "${CLR_GRN}» Skills:${CLR_RST}     ${CLR_BLD}${active_skills}${CLR_RST}"
+    echo -e "${CLR_YLW}» Mode:${CLR_RST}       ${CLR_BLD}${mode^^}${CLR_RST}"
+    [[ "$mode" == "vibe" && "$new_proj" == "yes" ]] \
+        && echo -e "${CLR_MGN}» Project:${CLR_RST}    ${CLR_BLD}new — graph skipped${CLR_RST}"
+
+    echo -ne "${CLR_CYN}» Graph sync...${CLR_RST}"
+    sync_graph_cached "$proj_dir"
+    echo
+
+    local ctx
+    ctx=$(build_context "$proj_dir" "$active_skills" "$mode")
+
+    case "$mode" in
+        vibe|smart|ultra)
+            _invoke_claude "$ctx" "$@"
+            ;;
+        verify)
+            local vscript="$proj_dir/claude-verify.sh"
+            [[ ! -f "$vscript" ]] && vscript="$HOME/Sterling/claude-verify.sh"
+            if [[ ! -f "$vscript" ]]; then
+                echo -e "${CLR_RED}✘ verify script not found — using vibe mode${CLR_RST}" >&2
+                _invoke_claude "$ctx" "$@"
+                return
+            fi
+            export CLAUDE_CTX="$ctx"
+            bash "$vscript" "$@"
+            ;;
+    esac
+}
+
+# ============================================================
+# 11. TOKEN INSPECTOR
+# ctx-inspect [vibe|smart|ultra|verify]
+# Shows exact lines, words, estimated tokens, and per-section breakdown.
+# ============================================================
+
+ctx-inspect() {
+    local mode="${1:-smart}"
+    local proj_dir skills ctx
+    proj_dir=$(get_project_context)
+    skills=$(get_dynamic_skills "$proj_dir" "$mode")
+    ctx=$(build_context "$proj_dir" "$skills" "$mode")
+
+    local lines words est
+    lines=$(printf '%s' "$ctx" | wc -l)
+    words=$(printf '%s' "$ctx" | wc -w)
+    est=$(( words * 13 / 10 ))
+
+    echo -e "\n${CLR_BLD}ctx-inspect — ${mode^^}${CLR_RST}\n"
+    echo -e "  Active skills: ${CLR_BLD}${skills}${CLR_RST}\n"
+
+    # Per-skill breakdown
+    echo -e "  Per-skill injection (this mode):"
+    for skill in $skills; do
+        local strategy="${SKILL_STRATEGY[$skill]:-rules}"
+        local sl
+        sl=$(read_skill_content "$skill" "$mode" | wc -l)
+        printf "    %-28s %s  %dL\n" "$skill" "[$strategy]" "$sl"
+    done
+
+    echo
+    echo -e "  <s> skills:  $(printf '%s' "$ctx" | awk '/<s>/,/<\/s>/' | wc -l)L"
+    echo -e "  <m> memory:  $(printf '%s' "$ctx" | awk '/<m>/,/<\/m>/' | wc -l)L"
+    echo -e "  <g> graph:   $(printf '%s' "$ctx" | awk '/<g>/,/<\/g>/' | wc -l)L"
+    echo -e "  ────────────────────────────"
+    echo -e "  Total lines:   ${CLR_BLD}${lines}${CLR_RST}"
+    echo -e "  Total words:   ${CLR_BLD}${words}${CLR_RST}"
+    echo -e "  Est. tokens:   ${CLR_BLD}~${est}${CLR_RST}"
+    echo
+    echo -e "${CLR_CYN}── Full context ─────────────────────────────────────${CLR_RST}"
+    printf '%s\n' "$ctx"
+    echo -e "${CLR_CYN}─────────────────────────────────────────────────────${CLR_RST}\n"
+}
+
+# ============================================================
+# 12. SKILLS HEALTH CHECK
+# skills-check — shows strategy, raw lines, injected lines per skill
+# ============================================================
+
+skills-check() {
+    local expected=(
+        superpowers frontend-design ui-ux-pro-max-skill
+        claude-mem awesome-claude-code code-review
+        security-review gstack
+    )
+    echo -e "\n${CLR_BLD}Skill status — $CLAUDE_SKILLS_DIR${CLR_RST}\n"
+    printf "  %-28s %-7s %-6s %-6s %s\n" "SKILL" "STRAT" "RAW" "SMART" "VIBE"
+    printf "  %-28s %-7s %-6s %-6s %s\n" "─────────────────────────────" "───────" "────" "─────" "────"
+
+    local ok=0 warn=0 miss=0
+    for s in "${expected[@]}"; do
+        local dir entry
+        dir=$(_resolve_skill_dir "$s")
+        entry=$(_find_skill_entry "$dir")
+        local strategy="${SKILL_STRATEGY[$s]:-rules}"
+        if [[ -n "$entry" ]]; then
+            local raw smart_l vibe_l
+            raw=$(wc -l < "$entry")
+            smart_l=$(read_skill_content "$s" smart | wc -l)
+            vibe_l=$(read_skill_content "$s" vibe  | wc -l)
+            printf "  ${CLR_GRN}✔${CLR_RST} %-27s %-7s %-6s %-6s %s\n" \
+                "$s" "$strategy" "${raw}L" "${smart_l}L" "${vibe_l}L"
+            (( ok++ ))
+        elif [[ -d "$CLAUDE_SKILLS_DIR/$s" ]]; then
+            printf "  ${CLR_YLW}⚠${CLR_RST} %-27s %-7s %s\n" "$s" "$strategy" "dir exists, no entry file"
+            (( warn++ ))
+        else
+            printf "  ${CLR_RED}✘${CLR_RST} %-27s %-7s %s\n" "$s" "$strategy" "not installed"
+            (( miss++ ))
+        fi
+    done
+
+    echo
+    [[ -f "$CLAUDE_MEM_FILE" ]] \
+        && echo -e "  ${CLR_GRN}✔${CLR_RST}  memory  →  $CLAUDE_MEM_FILE ($(wc -l < "$CLAUDE_MEM_FILE")L total, last 20L injected)" \
+        || echo -e "  ${CLR_YLW}⚠${CLR_RST}  memory  →  not found (claude-mem creates on first use)"
+    echo
+    echo -e "  Ctx inject:  ${CLR_BLD}${CLAUDE_CTX_MODE:-unknown — run 'claude smart' once}${CLR_RST}"
+    echo -e "  ${CLR_GRN}${ok} ok${CLR_RST}  ${CLR_YLW}${warn} warn${CLR_RST}  ${CLR_RED}${miss} missing${CLR_RST}"
+    echo
+    echo -e "  Tip: run ${CLR_BLD}ctx-inspect vibe${CLR_RST} to see exact tokens for vibe mode."
+    echo
+}
+
+# ============================================================
+# 13. ALIASES
+# ============================================================
+
+alias c='clear'
+alias reload='source ~/.bashrc && echo "Environment updated."'
+alias cv='claude vibe'       # vibe coding / project creation
+alias cs='claude smart'      # existing project, focused context
+alias cu='claude ultra'      # deep work, full graph
+alias caveman='claude ultra'
+alias caveman-ultra='claude ultra'
+
+[ -f ~/.bash_aliases ] && . ~/.bash_aliases
