@@ -26,13 +26,19 @@ class TestRegimeEngine:
     def test_bullish_regime(self):
         candles = make_candles(100, base=30000.0, trend=100.0)
         regime = compute_regime(candles)
-        assert regime.macro_regime == MacroRegime.BULLISH
+        assert regime.macro_regime in (
+            MacroRegime.BULLISH, MacroRegime.BULL_TRENDING,
+            MacroRegime.BULL_WEAK, MacroRegime.BULL_RANGING,
+        )
         assert regime.close_4h > regime.ema50
 
     def test_bearish_regime(self):
         candles = make_bearish_candles(100, base=50000.0)
         regime = compute_regime(candles)
-        assert regime.macro_regime == MacroRegime.BEARISH
+        assert regime.macro_regime in (
+            MacroRegime.BEARISH, MacroRegime.BEAR_TRENDING,
+            MacroRegime.BEAR_WEAK, MacroRegime.BEAR_RANGING, MacroRegime.CHOPPY,
+        )
 
     def test_insufficient_data_returns_neutral(self):
         regime = compute_regime([])

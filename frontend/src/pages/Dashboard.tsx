@@ -31,8 +31,14 @@ import { SessionExport } from '../components/SessionExport';
 import { ScoringWeightsPanel } from '../components/ScoringWeightsPanel';
 import { SessionStatsPanel } from '../components/SessionStatsPanel';
 import { PanelBoundary } from '../components/PanelBoundary';
+import { TradingModeSelector } from '../components/TradingModeSelector';
+import { MultiPaneChart } from '../components/charts/MultiPaneChart';
+import { PositionHeatmap } from '../components/PositionHeatmap';
+import { EquityCurve } from '../components/EquityCurve';
+import { useTradingMode } from '../hooks/useTradingMode';
+import { usePositions } from '../hooks/usePositions';
 
-type Tab = 'analysis' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
+type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
 const page: React.CSSProperties = { maxWidth: 1200, margin: '0 auto', padding: '0 20px 40px' };
 
@@ -45,6 +51,7 @@ const header: React.CSSProperties = {
 const TAB_BAR: React.CSSProperties = {
   display: 'flex', gap: 4, marginBottom: 20,
   borderBottom: '1px solid #1e1e1e', paddingBottom: 0,
+  flexWrap: 'wrap',
 };
 
 function TabBtn({ label, shortcut, active, onClick }: {
@@ -68,26 +75,30 @@ function TabBtn({ label, shortcut, active, onClick }: {
 
 const TABS: [Tab, string, string][] = [
   ['analysis',  'ANALYSIS',     '1'],
-  ['chain',     'OPTION CHAIN', '2'],
-  ['account',   'ACCOUNT',      '3'],
-  ['alerts',    'ALERTS',       '4'],
-  ['backtest',  'BACKTEST',     '5'],
-  ['positions', 'POSITIONS',    '6'],
-  ['watchlist', 'WATCHLIST',    '7'],
-  ['config',    'CONFIG',       '8'],
+  ['charts',    'CHARTS',       '2'],
+  ['chain',     'OPTION CHAIN', '3'],
+  ['account',   'ACCOUNT',      '4'],
+  ['alerts',    'ALERTS',       '5'],
+  ['backtest',  'BACKTEST',     '6'],
+  ['positions', 'POSITIONS',    '7'],
+  ['watchlist', 'WATCHLIST',    '8'],
+  ['config',    'CONFIG',       '9'],
 ];
 
 const TAB_KEYS: Record<string, Tab> = {
-  '1': 'analysis', '2': 'chain', '3': 'account', '4': 'alerts',
-  '5': 'backtest', '6': 'positions', '7': 'watchlist', '8': 'config',
+  '1': 'analysis', '2': 'charts', '3': 'chain', '4': 'account',
+  '5': 'alerts', '6': 'backtest', '7': 'positions', '8': 'watchlist', '9': 'config',
 };
 
 export function Dashboard() {
   const selectedUnderlying = useSelectedUnderlying();
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const { data: sysInfo } = useConfigInfo();
+  const { data: modeData } = useTradingMode();
+  const { data: posData } = usePositions();
 
-  // Keyboard shortcuts: 1-8 switch tabs, skip if typing in an input
+  const defaultTf = modeData?.config?.execution_tf ?? '15m';
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -117,6 +128,7 @@ export function Dashboard() {
           <PanelBoundary><StreamBadge underlying={selectedUnderlying} /></PanelBoundary>
           <PanelBoundary><ExchangeBadge /></PanelBoundary>
           <PanelBoundary><AlertBadge /></PanelBoundary>
+          <PanelBoundary><TradingModeSelector /></PanelBoundary>
         </div>
         <InstrumentSelector />
       </div>
@@ -125,7 +137,7 @@ export function Dashboard() {
         {TABS.map(([tab, label, key]) => (
           <TabBtn
             key={tab}
-            label={`${label}`}
+            label={label}
             shortcut={key}
             active={activeTab === tab}
             onClick={() => setActiveTab(tab)}
@@ -143,6 +155,11 @@ export function Dashboard() {
           <PanelBoundary title="RUN-ONCE"><RunOnceResult underlying={selectedUnderlying} /></PanelBoundary>
           <PanelBoundary title="SIGNAL HISTORY"><EvalHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
         </>
+      )}
+      {activeTab === 'charts' && (
+        <PanelBoundary title="CHARTS">
+          <MultiPaneChart underlying={selectedUnderlying} tf={defaultTf} />
+        </PanelBoundary>
       )}
       {activeTab === 'chain' && (
         <>
@@ -164,7 +181,15 @@ export function Dashboard() {
       )}
       {activeTab === 'positions' && (
         <>
-          <PanelBoundary title="PORTFOLIO"><PortfolioSummary /></PanelBoundary>
+          <PanelBoundary title="EQUITY CURVE">
+            <EquityCurve />
+          </PanelBoundary>
+          <PanelBoundary title="PORTFOLIO">
+            <PositionHeatmap
+              positions={posData?.positions ?? []}
+            />
+            <PortfolioSummary />
+          </PanelBoundary>
           <PanelBoundary title="GREEKS"><GreeksPanel /></PanelBoundary>
           <PanelBoundary title="ANALYTICS"><AnalyticsPanel /></PanelBoundary>
           <PanelBoundary title="POSITIONS"><PositionsPanel underlying={selectedUnderlying} /></PanelBoundary>
@@ -176,6 +201,12 @@ export function Dashboard() {
       {activeTab === 'config' && (
         <>
           <PanelBoundary title="SYSTEM"><SystemInfoPanel /></PanelBoundary>
+          <PanelBoundary title="TRADING MODE">
+            <TradingModeCard />
+          </PanelBoundary>
+          <PanelBoundary title="CIRCUIT BREAKER">
+            <CircuitBreakerCard />
+          </PanelBoundary>
           <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
           <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
           <PanelBoundary title="SCORING WEIGHTS"><ScoringWeightsPanel /></PanelBoundary>
@@ -183,6 +214,80 @@ export function Dashboard() {
           <SessionExport />
         </>
       )}
+    </div>
+  );
+}
+
+function TradingModeCard() {
+  const { data: modeData } = useTradingMode();
+  const cfg = modeData?.config;
+  return (
+    <div>
+      <div style={{ marginBottom: 12 }}><TradingModeSelector /></div>
+      {cfg && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, fontSize: 11, color: '#888' }}>
+          {[
+            ['Macro TF', cfg.macro_tf], ['Signal TF', cfg.signal_tf], ['Exec TF', cfg.execution_tf],
+            ['DTE range', `${cfg.dte_min}–${cfg.dte_max}d`], ['Position %', `${(cfg.position_pct * 100).toFixed(1)}%`],
+            ['Max positions', String(cfg.max_concurrent)], ['Stop mult', `${cfg.stop_atr_mult}×ATR`],
+            ['Trail mode', cfg.trail_mode], ['Poll', `${cfg.poll_interval_s}s`],
+          ].map(([k, v]) => (
+            <div key={k as string}>
+              <div style={{ color: '#444', fontSize: 10 }}>{k}</div>
+              <div style={{ color: '#ccc' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CircuitBreakerCard() {
+  const [data, setData] = React.useState<{ state: string; halted: boolean; size_multiplier: number } | null>(null);
+  const { api: _api } = { api: null as any };
+
+  React.useEffect(() => {
+    fetch('/api/v1/config/circuit-breaker')
+      .then((r) => r.json())
+      .then(setData)
+      .catch(() => {});
+  }, []);
+
+  const reset = () => {
+    fetch('/api/v1/config/circuit-breaker/reset', { method: 'POST' })
+      .then((r) => r.json())
+      .then(setData)
+      .catch(() => {});
+  };
+
+  if (!data) return <div style={{ color: '#444', fontSize: 11 }}>Loading…</div>;
+
+  const stateColor = data.halted ? '#cc4444' : '#44cc88';
+  return (
+    <div style={{ fontSize: 11 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <span style={{
+          background: `${stateColor}22`, color: stateColor,
+          border: `1px solid ${stateColor}55`,
+          borderRadius: 3, padding: '2px 10px', fontWeight: 700, letterSpacing: 1,
+        }}>
+          {data.state.toUpperCase()}
+        </span>
+        <span style={{ color: '#666' }}>Size: {(data.size_multiplier * 100).toFixed(0)}%</span>
+        {data.halted && (
+          <button
+            onClick={reset}
+            style={{
+              background: '#1a1a2a', color: '#4499cc', border: '1px solid #4499cc',
+              borderRadius: 3, padding: '3px 12px', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 11,
+            }}
+          >
+            Reset
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -13,6 +13,8 @@ function loadUnderlying(): string {
 interface StoreState {
   selectedUnderlying: string;
   setSelectedUnderlying: (u: string) => void;
+  tradingMode: string;
+  setTradingMode: (mode: string) => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -21,12 +23,18 @@ export const useStore = create<StoreState>((set) => ({
     try { localStorage.setItem(STORAGE_KEY, u); } catch { /* ignore */ }
     set({ selectedUnderlying: u });
   },
+  tradingMode: 'swing',
+  setTradingMode: (mode) => set({ tradingMode: mode }),
 }));
 
-// Selector hooks — subscribe only to the field you need so unrelated
-// state changes do not trigger re-renders in every consumer.
 export const useSelectedUnderlying = () =>
   useStore((s) => s.selectedUnderlying);
 
 export const useSetSelectedUnderlying = () =>
   useStore((s) => s.setSelectedUnderlying);
+
+export const useTradingModeStore = () =>
+  useStore((s) => s.tradingMode);
+
+export const useSetTradingModeStore = () =>
+  useStore((s) => s.setTradingMode);
