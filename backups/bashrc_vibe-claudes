@@ -403,7 +403,9 @@ claude() {
     echo
 
     local ctx
-    ctx=$(build_context "$proj_dir" "$active_skills" "$mode")
+    local ctx_mode="$mode"
+    [[ "$mode" == "verify" ]] && ctx_mode="ultra"
+    ctx=$(build_context "$proj_dir" "$active_skills" "$ctx_mode")
 
     case "$mode" in
         vibe|smart|ultra)
