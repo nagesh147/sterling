@@ -35,6 +35,7 @@ import { TradingModeSelector } from '../components/TradingModeSelector';
 import { MultiPaneChart } from '../components/charts/MultiPaneChart';
 import { PositionHeatmap } from '../components/PositionHeatmap';
 import { EquityCurve } from '../components/EquityCurve';
+import { TelegramConfigPanel } from '../components/TelegramConfigPanel';
 import { useTradingMode } from '../hooks/useTradingMode';
 import { usePositions } from '../hooks/usePositions';
 import { useTheme, useToggleTheme } from '../store/useStore';
@@ -234,6 +235,9 @@ export function Dashboard() {
           <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
           <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
           <PanelBoundary title="SCORING WEIGHTS"><ScoringWeightsPanel /></PanelBoundary>
+          <PanelBoundary title="TELEGRAM">
+            <TelegramConfigPanel />
+          </PanelBoundary>
           <PanelBoundary title="WEBHOOKS"><WebhookManager /></PanelBoundary>
           <SessionExport />
         </>

@@ -188,6 +188,85 @@ async def reset_scoring_weights() -> ScoringWeights:
     return _scoring_weights
 
 
+# ─── Telegram config ─────────────────────────────────────────────────────────
+
+class TelegramConfigRequest(BaseModel):
+    bot_token: str = ""
+    chat_id: str = ""
+    enabled: bool = True
+
+
+class TelegramConfigResponse(BaseModel):
+    bot_token_set: bool
+    bot_token_hint: str     # last 6 chars only — never expose full token
+    chat_id: str
+    enabled: bool
+    reachable: bool = False
+
+
+@router.get("/telegram", response_model=TelegramConfigResponse)
+async def get_telegram_config() -> TelegramConfigResponse:
+    import app.services.notifications.telegram as _tg
+    token = _tg.TELEGRAM_TOKEN
+    chat  = _tg.TELEGRAM_CHAT_ID
+    return TelegramConfigResponse(
+        bot_token_set=bool(token),
+        bot_token_hint=f"…{token[-6:]}" if len(token) >= 6 else ("set" if token else ""),
+        chat_id=chat,
+        enabled=bool(token and chat),
+    )
+
+
+@router.put("/telegram", response_model=TelegramConfigResponse)
+async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResponse:
+    import app.services.notifications.telegram as _tg
+    import os
+
+    # Apply at runtime
+    _tg.TELEGRAM_TOKEN   = body.bot_token.strip()
+    _tg.TELEGRAM_CHAT_ID = body.chat_id.strip()
+
+    # Persist to environment for current process
+    os.environ["TELEGRAM_BOT_TOKEN"] = _tg.TELEGRAM_TOKEN
+    os.environ["TELEGRAM_CHAT_ID"]   = _tg.TELEGRAM_CHAT_ID
+
+    # Test reachability
+    reachable = False
+    if body.bot_token and body.chat_id:
+        try:
+            reachable = await _tg.send("✓ Sterling Telegram connected", parse_mode="HTML")
+        except Exception:
+            pass
+
+    token = _tg.TELEGRAM_TOKEN
+    return TelegramConfigResponse(
+        bot_token_set=bool(token),
+        bot_token_hint=f"…{token[-6:]}" if len(token) >= 6 else ("set" if token else ""),
+        chat_id=_tg.TELEGRAM_CHAT_ID,
+        enabled=bool(token and _tg.TELEGRAM_CHAT_ID),
+        reachable=reachable,
+    )
+
+
+@router.post("/telegram/test", response_model=TelegramConfigResponse)
+async def test_telegram() -> TelegramConfigResponse:
+    import app.services.notifications.telegram as _tg
+    reachable = False
+    if _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID:
+        reachable = await _tg.send(
+            "<b>Sterling test message</b>\nTelegram notifications are working.",
+            parse_mode="HTML",
+        )
+    token = _tg.TELEGRAM_TOKEN
+    return TelegramConfigResponse(
+        bot_token_set=bool(token),
+        bot_token_hint=f"…{token[-6:]}" if len(token) >= 6 else ("set" if token else ""),
+        chat_id=_tg.TELEGRAM_CHAT_ID,
+        enabled=bool(token and _tg.TELEGRAM_CHAT_ID),
+        reachable=reachable,
+    )
+
+
 # ─── Circuit breaker ─────────────────────────────────────────────────────────
 
 @router.get("/circuit-breaker")

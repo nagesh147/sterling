@@ -54,18 +54,25 @@ export function ArrowHistoryPanel({ underlying }: Props) {
 
   return (
     <div style={styles.card}>
-      <div style={styles.title}>
-        ARROW EVENTS · {underlying}
-        {data && data.count > 0 && (
-          <span style={{ color: '#555', fontWeight: 400, marginLeft: 8 }}>({data.count})</span>
-        )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div style={styles.title} >
+          ARROW EVENTS · {underlying}
+          {data && data.count > 0 && (
+            <span style={{ color: '#555', fontWeight: 400, marginLeft: 8 }}>({data.count})</span>
+          )}
+        </div>
+        <div style={{ fontSize: 10, color: '#444', maxWidth: 260, lineHeight: 1.5, textAlign: 'right' }}>
+          Arrow popup = signal detected by live stream.
+          To see it in <strong style={{ color: '#555' }}>Alerts tab</strong>, add a{' '}
+          <em>signal_green_arrow</em> rule via ⚡ QUICK.
+        </div>
       </div>
 
       {isLoading && <div style={styles.noData}>Loading…</div>}
 
       {!isLoading && (!data || data.count === 0) && (
         <div style={styles.noData}>
-          No arrows recorded. Arrows fire when all Supertrend indicators align and flip direction.
+          No arrows recorded. Arrows fire when Supertrend indicators align with the macro regime.
         </div>
       )}
 
