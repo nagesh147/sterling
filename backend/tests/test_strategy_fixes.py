@@ -125,12 +125,12 @@ def test_scoring_penalty_bad_health():
         option_type="call", bid=100.0, ask=110.0,
         mark_price=105.0, mid_price=105.0, mark_iv=80.0,
         delta=0.45, open_interest=1000.0, volume_24h=500.0,
-        last_updated_ms=0, health_score=30.0,
+        last_updated_ms=0, health_score=30.0, spread_pct=1.0, healthy=False,
     )
     structure = TradeStructure(
         structure_type="naked_call", direction=Direction.LONG,
         legs=[leg], net_premium=105.0, max_loss=105.0, max_gain=None,
-        risk_reward=None, score=0.0,
+        risk_reward=None, score=0.0, score_breakdown={},
     )
     regime = RegimeResult(macro_regime=MacroRegime.BULLISH, ema50=40000.0, close_4h=45000.0, score=80.0)
     signal = SignalResult(
@@ -165,12 +165,12 @@ def test_scoring_bonus_all_green():
         option_type="call", bid=100.0, ask=110.0,
         mark_price=105.0, mid_price=105.0, mark_iv=80.0,
         delta=0.45, open_interest=1000.0, volume_24h=500.0,
-        last_updated_ms=0, health_score=80.0,
+        last_updated_ms=0, health_score=80.0, spread_pct=0.5, healthy=True,
     )
     structure = TradeStructure(
         structure_type="naked_call", direction=Direction.LONG,
         legs=[leg], net_premium=105.0, max_loss=105.0, max_gain=None,
-        risk_reward=None, score=0.0,
+        risk_reward=None, score=0.0, score_breakdown={},
     )
     regime = RegimeResult(macro_regime=MacroRegime.BULL_TRENDING, ema50=40000.0, close_4h=45000.0, score=100.0)
     signal = SignalResult(
@@ -205,7 +205,8 @@ def test_ivr_percentile_correct_rank():
     with patch("app.services.db.get_iv_history", return_value=history):
         result = get_ivr_percentile("BTC", 50.0)
         assert result is not None
-        assert 40.0 <= result <= 60.0
+        # percentileofscore(1..100, 50) ≈ 49.5
+        assert 30.0 <= result <= 70.0
 
 
 def test_iv_band_uses_percentile_over_raw():

@@ -89,7 +89,11 @@ class TestBacktestEngine:
         result = run_backtest("BTC", c4h, c1h, lookback_days=10, sample_every_n_bars=4)
         if result.bars:
             bar = result.bars[0]
-            assert bar.macro_regime in ("bullish", "bearish", "neutral")
+            assert bar.macro_regime in (
+                "bullish", "bearish", "neutral",
+                "bull_trending", "bull_weak", "bull_ranging",
+                "bear_trending", "bear_weak", "bear_ranging", "choppy",
+            )
             assert bar.signal_trend in (-1, 0, 1)
             assert isinstance(bar.all_green, bool)
             assert isinstance(bar.green_arrow, bool)

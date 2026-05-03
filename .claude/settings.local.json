@@ -1,6 +1,5 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(git *)",
       "Bash(python3 -m pytest --tb=no -q)",
@@ -29,8 +28,19 @@
       "Bash(python3 *)",
       "Bash(grep -v \"^$\\\\|INFO\\\\|WARNING\")",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('react',p.dependencies.react\\); console.log\\('vite',p.devDependencies.vite\\); console.log\\('ts',p.devDependencies.typescript\\); console.log\\('zustand',p.dependencies.zustand\\); console.log\\('react-query',p.dependencies['@tanstack/react-query']\\)\")",
-      "Skill(update-config)"
-    ]
+      "Skill(update-config)",
+      "Bash(python -m pytest tests/test_trading_mode.py tests/test_trailing_stop.py tests/test_strategy_fixes.py tests/test_circuit_breaker.py tests/test_candles_endpoint.py tests/test_telegram.py -v --tb=short -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_trading_mode.py tests/test_trailing_stop.py tests/test_strategy_fixes.py tests/test_circuit_breaker.py tests/test_candles_endpoint.py tests/test_telegram.py -v --tb=short)",
+      "Bash(.venv/bin/python -m pytest tests/test_strategy_fixes.py::test_scoring_penalty_bad_health tests/test_strategy_fixes.py::test_ivr_percentile_correct_rank tests/test_circuit_breaker.py::test_positions_enter_returns_503_when_halted -v --tb=long)",
+      "Bash(.venv/bin/python -m pytest tests/test_trading_mode.py tests/test_trailing_stop.py tests/test_strategy_fixes.py tests/test_circuit_breaker.py tests/test_candles_endpoint.py tests/test_telegram.py -v --tb=short -q)",
+      "Bash(.venv/bin/python -m pytest tests/test_strategy_fixes.py::test_scoring_penalty_bad_health -v --tb=long)",
+      "Bash(.venv/bin/python -m pytest tests/test_strategy_fixes.py::test_ivr_percentile_correct_rank tests/test_circuit_breaker.py::test_positions_enter_returns_503_when_halted -v --tb=short)",
+      "Bash(.venv/bin/python -m pytest tests/test_strategy_fixes.py::test_ivr_percentile_correct_rank -v --tb=long)",
+      "Bash(.venv/bin/python *)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(npx tsc *)"
+    ],
+    "defaultMode": "bypassPermissions"
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
