@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { usePositions, useEnterPosition, useClosePosition, useDeletePosition, useCloseAll } from '../hooks/usePositions';
 import { useMonitorPosition, useMonitorAll } from '../hooks/useMonitorPosition';
 import { useLivePnl } from '../hooks/useLivePnl';
+import { useTrailStop } from '../hooks/useTrailStop';
 import type { MonitorResult } from '../hooks/useMonitorPosition';
 import type { PaperPosition, PositionStatus } from '../types';
 import { fmtN, fmtUSD } from '../utils/fmt';
@@ -56,6 +57,55 @@ const styles: Record<string, React.CSSProperties> = {
 function fmt(n?: number, d = 2) {
   if (n === undefined || n === null) return '—';
   return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function TrailStopRow({ posId, entrySpot, currentSpot }: {
+  posId: string; entrySpot: number; currentSpot?: number | null;
+}) {
+  const { data: trail } = useTrailStop(posId);
+  if (!trail?.stop) return null;
+
+  const stopDistPct = currentSpot && currentSpot > 0
+    ? ((currentSpot - trail.stop) / currentSpot * 100)
+    : null;
+
+  return (
+    <div style={{
+      background: '#0d0d0d', border: '1px solid #cc444433',
+      borderRadius: 4, padding: '6px 10px', marginTop: 6,
+      display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, flexWrap: 'wrap',
+    }}>
+      <div>
+        <span style={{ color: '#555' }}>TRAIL STOP </span>
+        <span style={{ color: '#cc6644', fontWeight: 700, fontFamily: 'monospace' }}>
+          ${trail.stop.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+        </span>
+        <span style={{ color: '#444', marginLeft: 4, fontSize: 10 }}>({trail.mode})</span>
+      </div>
+      {stopDistPct != null && (
+        <div>
+          <span style={{ color: '#555' }}>DIST </span>
+          <span style={{ color: stopDistPct > 5 ? '#44cc88' : stopDistPct > 2 ? '#f0c040' : '#cc4444' }}>
+            {stopDistPct.toFixed(2)}%
+          </span>
+        </div>
+      )}
+      {trail.partial_25_done && (
+        <span style={{
+          background: '#44cc8822', color: '#44cc88',
+          border: '1px solid #44cc8844', borderRadius: 3,
+          padding: '1px 6px', fontSize: 10, fontWeight: 600,
+        }}>25% LOCKED</span>
+      )}
+      {trail.partial_50_done && (
+        <span style={{
+          background: '#4499cc22', color: '#4499cc',
+          border: '1px solid #4499cc44', borderRadius: 3,
+          padding: '1px 6px', fontSize: 10, fontWeight: 600,
+        }}>50% LOCKED</span>
+      )}
+    </div>
+  );
 }
 
 function MonitorResultInline({ result }: { result: MonitorResult }) {
@@ -143,6 +193,14 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           </div>
         )}
       </div>
+
+      {(pos.status === 'open' || pos.status === 'partially_closed') && (
+        <TrailStopRow
+          posId={pos.id}
+          entrySpot={pos.entry_spot_price}
+          currentSpot={livePnl != null ? pos.entry_spot_price + livePnl / Math.max(0.01, pos.sized_trade.contracts) : null}
+        />
+      )}
 
       {pos.status === 'open' && (
         <div style={{ marginTop: 8 }}>

@@ -2,7 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSignalStream } from '../hooks/useSignalStream';
 import { useQueryClient } from '@tanstack/react-query';
 
-type NotifType = 'arrow_green' | 'arrow_red' | 'alert';
+type NotifType = 'arrow_green' | 'arrow_red' | 'alert' | 'state_armed';
+
+const ACTIONABLE_STATES = new Set([
+  'CONFIRMED_SETUP_ACTIVE',
+  'ENTRY_ARMED_PULLBACK',
+  'ENTRY_ARMED_CONTINUATION',
+  'EARLY_SETUP_ACTIVE',
+]);
 
 interface Notification {
   type: NotifType;
@@ -18,12 +25,14 @@ export function ArrowAlert({ underlying }: Props) {
   const { data } = useSignalStream(underlying, 30);
   const [notif, setNotif] = useState<Notification | null>(null);
   const lastTs = useRef<number>(0);
+  const lastState = useRef<string>('');
   const qc = useQueryClient();
 
   useEffect(() => {
     if (!data || data.timestamp_ms === lastTs.current) return;
     lastTs.current = data.timestamp_ms;
 
+    // Configured alert fired
     if (data.alert_fired) {
       setNotif({
         type: 'alert',
@@ -37,6 +46,7 @@ export function ArrowAlert({ underlying }: Props) {
       return () => clearTimeout(t);
     }
 
+    // Arrow transition — highest priority signal
     if (data.green_arrow || data.red_arrow) {
       const isGreen = data.green_arrow;
       setNotif({
@@ -46,7 +56,6 @@ export function ArrowAlert({ underlying }: Props) {
         message: isGreen ? '▲ Bullish signal' : '▼ Bearish signal',
         ts: data.timestamp_ms,
       });
-      // Refresh arrow history + snapshot so UI reflects new state immediately
       qc.invalidateQueries({ queryKey: ['arrows', underlying] });
       qc.invalidateQueries({ queryKey: ['arrows-all'] });
       qc.invalidateQueries({ queryKey: ['session-stats'] });
@@ -54,14 +63,33 @@ export function ArrowAlert({ underlying }: Props) {
       const t = setTimeout(() => setNotif(null), 12_000);
       return () => clearTimeout(t);
     }
-  }, [data?.timestamp_ms, data?.green_arrow, data?.red_arrow, data?.alert_fired, underlying]);
+
+    // State transitioned INTO an actionable state (e.g. IDLE → ENTRY_ARMED)
+    const prevState = lastState.current;
+    const currState = data.state ?? '';
+    lastState.current = currState;
+    if (ACTIONABLE_STATES.has(currState) && !ACTIONABLE_STATES.has(prevState) && prevState !== '') {
+      const isLong = data.direction === 'long';
+      setNotif({
+        type: 'state_armed',
+        underlying,
+        spot: data.spot_price ?? 0,
+        message: `${isLong ? '▲' : '▼'} Setup active — ${currState.replace(/_/g, ' ')}`,
+        ts: data.timestamp_ms,
+      });
+      qc.invalidateQueries({ queryKey: ['snapshot', underlying] });
+      const t = setTimeout(() => setNotif(null), 20_000);
+      return () => clearTimeout(t);
+    }
+  }, [data?.timestamp_ms, data?.green_arrow, data?.red_arrow, data?.alert_fired, data?.state, underlying]);
 
   if (!notif) return null;
 
-  const isGreen = notif.type === 'arrow_green';
-  const isAlert = notif.type === 'alert';
-  const color = isGreen ? '#44cc88' : isAlert ? '#f0a500' : '#cc4444';
-  const bg    = isGreen ? '#0d1f0d' : isAlert ? '#1f1500' : '#1f0d0d';
+  const isGreen  = notif.type === 'arrow_green';
+  const isAlert  = notif.type === 'alert';
+  const isArmed  = notif.type === 'state_armed';
+  const color = isGreen ? '#44cc88' : isAlert ? '#f0a500' : isArmed ? '#4499cc' : '#cc4444';
+  const bg    = isGreen ? '#0d1f0d' : isAlert ? '#1f1500' : isArmed ? '#0d1525' : '#1f0d0d';
   const ivr   = data?.ivr;
   const state = data?.state;
 
@@ -80,11 +108,16 @@ export function ArrowAlert({ underlying }: Props) {
         {underlying} · ${(notif.spot ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}
         {ivr != null && <span style={{ color: ivr > 60 ? '#f0a500' : '#666', marginLeft: 8 }}>IV Rank {ivr.toFixed(0)}</span>}
       </div>
-      {!isAlert && state && (
+      {(isGreen || notif.type === 'arrow_red') && state && (
         <div style={{ fontSize: 11, color: '#555', marginTop: 3 }}>
           {ivr != null && ivr > 60
             ? 'High IV — consider defined-risk spread over naked long premium'
-            : 'Setup activation — confirm before entry'}
+            : 'Confirm before entry'}
+        </div>
+      )}
+      {isArmed && (
+        <div style={{ fontSize: 11, color: '#4499cc88', marginTop: 3 }}>
+          Signal aligned — evaluate entry conditions
         </div>
       )}
       {isAlert && (

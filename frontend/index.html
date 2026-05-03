@@ -6,7 +6,44 @@
     <title>Sterling — Crypto Options Platform</title>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Courier New', Courier, monospace; background: #0d0d0d; color: #e0e0e0; min-height: 100vh; }
+
+      :root, [data-theme="dark"] {
+        --bg:           #0d0d0d;
+        --bg-card:      #141414;
+        --bg-input:     #1a1a1a;
+        --border:       #1e1e1e;
+        --border-light: #2a2a2a;
+        --text-primary: #e0e0e0;
+        --text-muted:   #888;
+        --text-dim:     #555;
+        --text-faint:   #333;
+        --accent:       #44cc88;
+        --danger:       #cc4444;
+        --warning:      #f0c040;
+      }
+
+      [data-theme="light"] {
+        --bg:           #f5f5f5;
+        --bg-card:      #ffffff;
+        --bg-input:     #efefef;
+        --border:       #d0d0d0;
+        --border-light: #e0e0e0;
+        --text-primary: #111111;
+        --text-muted:   #555555;
+        --text-dim:     #888888;
+        --text-faint:   #aaaaaa;
+        --accent:       #22aa66;
+        --danger:       #bb2222;
+        --warning:      #cc8800;
+      }
+
+      body {
+        font-family: 'Courier New', Courier, monospace;
+        background: var(--bg);
+        color: var(--text-primary);
+        min-height: 100vh;
+        transition: background 0.2s, color 0.2s;
+      }
     </style>
   </head>
   <body>

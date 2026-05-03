@@ -48,10 +48,17 @@ export function InstrumentSelector() {
     }
   }, [activeSource, compatible.length]);
 
-  if (isLoading) return <div style={styles.label}>Loading instruments…</div>;
+  // Fallback: show default instruments if API failed or hasn't loaded yet
+  const FALLBACK = ['BTC', 'ETH', 'SOL', 'XRP'];
+  const displayList = compatible.length > 0
+    ? compatible
+    : isLoading
+      ? []
+      : FALLBACK.map(u => ({ underlying: u, has_options: true, compatible_sources: [activeSource] } as any));
+
+  if (isLoading) return <div style={styles.label}>Loading…</div>;
 
   const selected = instruments.find(i => i.underlying === selectedUnderlying);
-  const selectedCompatible = (selected?.compatible_sources ?? []).includes(activeSource);
 
   return (
     <div style={styles.container}>
@@ -61,30 +68,24 @@ export function InstrumentSelector() {
         value={selectedUnderlying}
         onChange={e => setSelectedUnderlying(e.target.value)}
       >
-        {compatible.length > 0 && (
-          <optgroup label={`Available on ${activeSource.toUpperCase()}`}>
-            {compatible.map(inst => (
-              <option key={inst.underlying} value={inst.underlying}>
-                {inst.underlying}{!inst.has_options ? ' (no options)' : ''}
-              </option>
-            ))}
-          </optgroup>
-        )}
+        {displayList.map(inst => (
+          <option key={inst.underlying} value={inst.underlying}>
+            {inst.underlying}{inst.has_options === false ? ' (spot)' : ''}
+          </option>
+        ))}
         {incompatible.length > 0 && (
-          <optgroup label={`Other sources only`}>
+          <optgroup label="Other sources only">
             {incompatible.map(inst => (
               <option key={inst.underlying} value={inst.underlying} disabled>
-                {inst.underlying} — requires {inst.compatible_sources.join('/')}
+                {inst.underlying} — {inst.compatible_sources?.join('/')}
               </option>
             ))}
           </optgroup>
         )}
       </select>
       {selected && (
-        <span style={selectedCompatible ? styles.badge : styles.incompatibleBadge}>
-          {selected.exchange.toUpperCase()} · {selected.quote_currency}
-          {selected.has_options ? ' · OPTIONS' : ' · SPOT ONLY'}
-          {!selectedCompatible && ` ⚠ not on ${activeSource}`}
+        <span style={styles.badge}>
+          {selected.exchange?.toUpperCase()} · {selected.has_options ? 'OPTIONS' : 'SPOT'}
         </span>
       )}
     </div>

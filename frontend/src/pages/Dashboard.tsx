@@ -37,6 +37,7 @@ import { PositionHeatmap } from '../components/PositionHeatmap';
 import { EquityCurve } from '../components/EquityCurve';
 import { useTradingMode } from '../hooks/useTradingMode';
 import { usePositions } from '../hooks/usePositions';
+import { useTheme, useToggleTheme } from '../store/useStore';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -96,6 +97,8 @@ export function Dashboard() {
   const { data: sysInfo } = useConfigInfo();
   const { data: modeData } = useTradingMode();
   const { data: posData } = usePositions();
+  const theme = useTheme();
+  const toggleTheme = useToggleTheme();
 
   const defaultTf = modeData?.config?.execution_tf ?? '15m';
 
@@ -129,6 +132,27 @@ export function Dashboard() {
           <PanelBoundary><ExchangeBadge /></PanelBoundary>
           <PanelBoundary><AlertBadge /></PanelBoundary>
           <PanelBoundary><TradingModeSelector /></PanelBoundary>
+          {/* Paper/Live badge */}
+          <span style={{
+            fontSize: 10, padding: '2px 8px', borderRadius: 3, letterSpacing: 1,
+            background: sysInfo?.paper_trading !== false ? '#1a1a2a' : '#1a2a1a',
+            color: sysInfo?.paper_trading !== false ? '#88aaff' : '#44cc88',
+            border: `1px solid ${sysInfo?.paper_trading !== false ? '#88aaff44' : '#44cc8844'}`,
+          }}>
+            {sysInfo?.paper_trading !== false ? 'PAPER' : 'LIVE'}
+          </span>
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{
+              background: 'none', border: '1px solid #333', borderRadius: 3,
+              color: '#555', cursor: 'pointer', padding: '3px 8px',
+              fontFamily: 'inherit', fontSize: 11,
+            }}
+          >
+            {theme === 'dark' ? '☀' : '◑'}
+          </button>
         </div>
         <InstrumentSelector />
       </div>

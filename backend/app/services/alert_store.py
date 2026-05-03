@@ -88,7 +88,7 @@ def _load_from_db() -> List[Alert]:
 
 
 def bootstrap() -> None:
-    """Load persisted alerts from DB at startup."""
+    """Load persisted alerts from DB at startup, then seed defaults if none exist."""
     global _loaded
     if _loaded:
         return
@@ -99,11 +99,49 @@ def bootstrap() -> None:
         if loaded:
             log.info("Loaded %d alerts from DB", len(loaded))
         else:
-            log.debug("Alert store bootstrap: no persisted alerts found")
+            log.debug("Alert store bootstrap: no persisted alerts found — seeding defaults")
+            _seed_default_alerts()
     except Exception as exc:
         log.warning("Alert bootstrap failed, starting empty: %s", exc)
     finally:
         _loaded = True
+
+
+def _seed_default_alerts() -> None:
+    """
+    Create default green/red arrow alerts for all instruments with options.
+    Called once on first startup when no alerts exist.
+    Cooldown=4h so they re-arm automatically after each fire.
+    """
+    try:
+        from app.services.exchanges.instrument_registry import list_instruments
+        instruments = [i for i in list_instruments() if i.has_options]
+    except Exception:
+        instruments = []
+
+    # Fallback: seed for BTC and ETH even if registry unavailable
+    underlyings = [i.underlying for i in instruments] if instruments else ["BTC", "ETH"]
+
+    for sym in underlyings:
+        for condition, notes in [
+            (AlertCondition.SIGNAL_GREEN_ARROW, "Auto: bullish signal — all ST aligned ▲"),
+            (AlertCondition.SIGNAL_RED_ARROW,   "Auto: bearish signal — all ST aligned ▼"),
+        ]:
+            alert = Alert(
+                id=_new_id(),
+                underlying=sym,
+                condition=condition,
+                threshold=None,
+                target_state=None,
+                cooldown_hours=4.0,
+                notes=notes,
+                status=AlertStatus.ACTIVE,
+                created_at_ms=int(time.time() * 1000),
+            )
+            _alerts[alert.id] = alert
+            _persist(alert)
+
+    log.info("Seeded %d default signal alerts", len(_alerts))
 
 
 # ─── CRUD ─────────────────────────────────────────────────────────────────────

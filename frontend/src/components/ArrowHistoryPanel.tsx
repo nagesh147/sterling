@@ -33,7 +33,16 @@ function Row({ e }: { e: ArrowEvent }) {
       </td>
       <td style={{ ...styles.td, color: '#555', fontSize: 10 }}>{e.state}</td>
       <td style={styles.td}><span style={styles.sourceBadge}>{e.source}</span></td>
-      <td style={{ ...styles.td, color: '#555' }}>{new Date(e.timestamp_ms).toLocaleTimeString()}</td>
+      <td style={{ ...styles.td, color: '#555' }}>
+        {(() => {
+          const d = new Date(e.timestamp_ms);
+          const now = new Date();
+          const sameDay = d.toDateString() === now.toDateString();
+          if (sameDay) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+                 ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        })()}
+      </td>
     </tr>
   );
 }
@@ -56,7 +65,7 @@ export function ArrowHistoryPanel({ underlying }: Props) {
 
       {!isLoading && (!data || data.count === 0) && (
         <div style={styles.noData}>
-          No arrows recorded this session. Arrows fire when all ST trends align and flip.
+          No arrows recorded. Arrows fire when all Supertrend indicators align and flip direction.
         </div>
       )}
 

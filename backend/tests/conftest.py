@@ -56,6 +56,7 @@ def reset_global_stores():
     paper_store._loaded = True
     eval_history.clear()
     arrow_store.clear()
+    arrow_store._bootstrapped = True
     alert_store.clear()
     alert_store._loaded = True
     pnl_history.clear()
@@ -71,6 +72,7 @@ def reset_global_stores():
     paper_store._positions.clear()
     eval_history.clear()
     arrow_store.clear()
+    arrow_store._bootstrapped = False
     alert_store.clear()
     pnl_history.clear()
     webhook_store.clear()

@@ -83,6 +83,21 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_signal_history_underlying ON signal_history(underlying)"
     )
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS arrows (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying   TEXT    NOT NULL,
+            arrow_type   TEXT    NOT NULL,
+            spot_price   REAL    NOT NULL,
+            direction    TEXT    NOT NULL,
+            state        TEXT    NOT NULL,
+            source       TEXT    NOT NULL,
+            timestamp_ms INTEGER NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_arrows_und ON arrows(underlying, timestamp_ms)"
+    )
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS system_config (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -224,6 +239,54 @@ def get_iv_history(underlying: str, limit: int = 252) -> list:
             ).fetchall()
         return [r["ivr"] for r in rows]
     except Exception:
+        return []
+
+
+def persist_arrow(
+    underlying: str,
+    arrow_type: str,
+    spot_price: float,
+    direction: str,
+    state: str,
+    source: str,
+    timestamp_ms: int,
+) -> None:
+    if not _available:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                """INSERT INTO arrows
+                   (underlying, arrow_type, spot_price, direction, state, source, timestamp_ms)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (underlying, arrow_type, spot_price, direction, state, source, timestamp_ms),
+            )
+    except Exception as exc:
+        log.warning("DB persist_arrow failed: %s", exc)
+
+
+def load_arrows(underlying: str | None = None, limit: int = 500, ttl_hours: int = 168) -> list:
+    if not _available:
+        return []
+    import time as _time
+    cutoff_ms = int((_time.time() - ttl_hours * 3600) * 1000)
+    try:
+        with _conn() as c:
+            if underlying:
+                rows = c.execute(
+                    "SELECT * FROM arrows WHERE underlying=? AND timestamp_ms >= ?"
+                    " ORDER BY timestamp_ms DESC LIMIT ?",
+                    (underlying, cutoff_ms, limit),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT * FROM arrows WHERE timestamp_ms >= ?"
+                    " ORDER BY timestamp_ms DESC LIMIT ?",
+                    (cutoff_ms, limit),
+                ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        log.warning("DB load_arrows failed: %s", exc)
         return []
 
 

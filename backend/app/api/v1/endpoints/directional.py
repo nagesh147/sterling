@@ -39,6 +39,41 @@ log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
 
 
+def _build_indicator_lines(candles):
+    """
+    Compute supertrend and EMA50 line arrays for chart overlays.
+    Returns (st1_line, st2_line, st3_line, ema50_line) — each a list of {time, value}.
+    """
+    import numpy as np
+    from app.engines.indicators.supertrend import compute_supertrend
+    from app.engines.indicators.heikin_ashi import compute_heikin_ashi
+    from app.engines.indicators.ema import compute_ema
+
+    if not candles:
+        return [], [], [], []
+
+    o = np.array([c.open for c in candles], dtype=np.float64)
+    h = np.array([c.high for c in candles], dtype=np.float64)
+    l = np.array([c.low for c in candles], dtype=np.float64)
+    c = np.array([c.close for c in candles], dtype=np.float64)
+    times = [can.timestamp_ms // 1000 for can in candles]
+
+    ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
+    st1, _ = compute_supertrend(ha_h, ha_l, ha_c, 7, 3.0)
+    st2, _ = compute_supertrend(h, l, c, 14, 2.0)
+    st3, _ = compute_supertrend(h, l, c, 21, 1.0)
+    ema50 = compute_ema(c, 50)
+
+    def _to_line(values):
+        return [
+            {"time": t, "value": round(float(v), 4)}
+            for t, v in zip(times, values)
+            if v != 0.0
+        ]
+
+    return _to_line(st1), _to_line(st2), _to_line(st3), _to_line(ema50)
+
+
 def _adapter(request: Request):
     ad = _adm.get_adapter()
     return ad if ad is not None else request.app.state.adapter
@@ -81,11 +116,12 @@ async def directional_status(
     regime = signal = None
     state = TradeState.IDLE
 
+    _mode = getattr(request.app.state, "trading_mode", None) if request else None
     try:
         c4h = await adapter.get_candles(inst, "4H", limit=100)
         c1h = await adapter.get_candles(inst, "1H", limit=200)
-        regime = compute_regime(c4h)
-        signal = compute_signal(c1h)
+        regime = compute_regime(c4h, macro_filter=_mode.macro_filter if _mode else "adx_4h")
+        signal = compute_signal(c1h, st_threshold=_mode.st_threshold if _mode else 3)
         setup = evaluate_setup(regime, signal)
         state = setup.state
     except Exception as exc:
@@ -104,14 +140,18 @@ async def directional_status(
 
 # ─── /watchlist ───────────────────────────────────────────────────────────────
 
-async def _watchlist_item(inst, adapter) -> WatchlistItem:
+async def _watchlist_item(
+    inst, adapter,
+    macro_filter: str = "adx_4h",
+    st_threshold: int = 3,
+) -> WatchlistItem:
     now_ms = int(time.time() * 1000)
     try:
         spot = await adapter.get_index_price(inst)
         c4h = await adapter.get_candles(inst, "4H", limit=100)
         c1h = await adapter.get_candles(inst, "1H", limit=200)
-        regime = compute_regime(c4h)
-        signal = compute_signal(c1h)
+        regime = compute_regime(c4h, macro_filter=macro_filter)
+        signal = compute_signal(c1h, st_threshold=st_threshold)
         setup = evaluate_setup(regime, signal)
         ivr = await compute_ivr(adapter, inst, c1h)
         from app.engines.directional.policy_engine import apply_policy
@@ -170,6 +210,9 @@ async def watchlist(request: Request) -> WatchlistResponse:
     instruments = registry.list_instruments()
     adapter = _adapter(request)
     now_ms = int(time.time() * 1000)
+    _wl_mode = getattr(request.app.state, "trading_mode", None)
+    _macro_f = _wl_mode.macro_filter if _wl_mode else "adx_4h"
+    _st_thr = _wl_mode.st_threshold if _wl_mode else 3
 
     async def _item_or_skip(inst) -> WatchlistItem:
         if not _adapter_can_serve(inst, current_source):
@@ -181,7 +224,8 @@ async def watchlist(request: Request) -> WatchlistResponse:
                 error=f"{inst.underlying} not available on {current_source}",
                 timestamp_ms=now_ms,
             )
-        return await _watchlist_item(inst, adapter)
+        return await _watchlist_item(inst, adapter,
+                                     macro_filter=_macro_f, st_threshold=_st_thr)
 
     results = await asyncio.gather(
         *[_item_or_skip(inst) for inst in instruments],
@@ -255,7 +299,11 @@ async def preview(
             status_code=400,
             detail=f"{sym} is not available on {src} data source",
         )
-    return await engine_preview(inst, _adapter(request))
+    mode = getattr(request.app.state, "trading_mode", None) if request else None
+    return await engine_preview(
+        inst, _adapter(request),
+        macro_filter=mode.macro_filter if mode else "adx_4h",
+    )
 
 
 # ─── /run-once ────────────────────────────────────────────────────────────────
@@ -279,7 +327,11 @@ async def run_once_endpoint(
         )
 
     from app.api.v1.endpoints.config import get_runtime_risk
-    result = await engine_run_once(inst, _adapter(request), get_runtime_risk())
+    _mode = getattr(request.app.state, "trading_mode", None) if request else None
+    result = await engine_run_once(
+        inst, _adapter(request), get_runtime_risk(),
+        macro_filter=_mode.macro_filter if _mode else "adx_4h",
+    )
 
     # Record in eval history
     sig = result.signal or {}
@@ -419,14 +471,21 @@ async def snapshot(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}")
 
-    regime = compute_regime(c4h)
-    signal = compute_signal(c1h)
+    mode = getattr(request.app.state, "trading_mode", None) if request else None
+    macro_filter = mode.macro_filter if mode else "adx_4h"
+    st_threshold = mode.st_threshold if mode else 3
+
+    regime = compute_regime(c4h, macro_filter=macro_filter)
+    signal = compute_signal(c1h, st_threshold=st_threshold)
     setup = evaluate_setup(regime, signal)
     exec_timing = assess_timing(c15m, signal)
     ivr = await compute_ivr(adapter, inst, c1h)
 
     from app.engines.directional.policy_engine import apply_policy
     policy = apply_policy(setup.direction, inst, ivr)
+
+    # Build indicator lines for the chart overlay
+    st1_line, st2_line, st3_line, ema50_line = _build_indicator_lines(c1h)
 
     return DirectionalSnapshot(
         underlying=sym,
@@ -454,6 +513,10 @@ async def snapshot(
         exec_confidence=exec_timing.confidence,
         exec_reason=exec_timing.reason,
         timestamp_ms=now_ms,
+        st1_line=st1_line,
+        st2_line=st2_line,
+        st3_line=st3_line,
+        ema50_line=ema50_line,
     )
 
 
@@ -481,6 +544,12 @@ async def _sse_generator(
         yield f"data: {json.dumps({'error': f'Unknown underlying: {sym}'})}\n\n"
         return
 
+    # Track previous alert state across iterations for rising-edge detection.
+    # Without this, a sustained all_green condition fires alerts every 30s
+    # but never records an arrow because signal.green_arrow (transition) is False.
+    _prev_alert_green = False
+    _prev_alert_red = False
+
     while True:
         if await request.is_disconnected():
             break
@@ -492,10 +561,14 @@ async def _sse_generator(
             await asyncio.sleep(interval)
             continue
         try:
+            _mode = getattr(request.app.state, "trading_mode", None)
+            _macro_filter = _mode.macro_filter if _mode else "adx_4h"
+            _st_threshold = _mode.st_threshold if _mode else 3
+
             c4h = await adapter.get_candles(inst, "4H", limit=100)
             c1h = await adapter.get_candles(inst, "1H", limit=200)
-            regime = compute_regime(c4h)
-            signal = compute_signal(c1h)
+            regime = compute_regime(c4h, macro_filter=_macro_filter)
+            signal = compute_signal(c1h, st_threshold=_st_threshold)
             setup = evaluate_setup(regime, signal)
             ivr = await compute_ivr(adapter, inst, c1h)
             spot = await adapter.get_index_price(inst)
@@ -517,21 +590,58 @@ async def _sse_generator(
                 "spot_price": float(spot),
                 "timestamp_ms": now_ms,
             }
-            # Record arrows from live stream
-            if signal.green_arrow:
+            # Expanded alert condition: transition OR sustained alignment in actionable state.
+            # This ensures signal_green_arrow alerts fire even when the user missed
+            # the exact transition bar (e.g. stream started mid-trend).
+            _actionable = {
+                "CONFIRMED_SETUP_ACTIVE", "ENTRY_ARMED_PULLBACK",
+                "ENTRY_ARMED_CONTINUATION", "EARLY_SETUP_ACTIVE",
+            }
+            _alert_green = signal.green_arrow or (signal.all_green and setup.state.value in _actionable)
+            _alert_red   = signal.red_arrow   or (signal.all_red   and setup.state.value in _actionable)
+
+            # Record arrow on the RISING EDGE of the expanded condition.
+            # Without previous-state tracking, sustained all_green fires alerts
+            # every 30s but records zero arrows — FIRED counter and ARROWS counter diverge.
+            if _alert_green and not _prev_alert_green:
                 arrow_store.record(sym, "green", float(spot), setup.direction.value,
                                    setup.state.value, now_ms, "stream")
-            elif signal.red_arrow:
+            elif _alert_red and not _prev_alert_red:
                 arrow_store.record(sym, "red", float(spot), setup.direction.value,
                                    setup.state.value, now_ms, "stream")
+            _prev_alert_green = _alert_green
+            _prev_alert_red   = _alert_red
 
-            # Update snapshot cache so the background poller can skip a fetch
+            # Also expose the expanded condition in the payload so ArrowAlert popup
+            # and the frontend know a live signal is active.
+            payload["green_arrow"] = _alert_green
+            payload["red_arrow"]   = _alert_red
+            payload["signal_active"] = _alert_green or _alert_red
+
+            # Record actionable states to eval_history (not IDLE/FILTERED) so
+            # EvalHistoryPanel fills up from the live stream, not just run-once.
+            if setup.state.value not in ("IDLE", "FILTERED"):
+                hist_store.record(sym, {
+                    "state": setup.state.value,
+                    "direction": setup.direction.value,
+                    "recommendation": "stream",
+                    "no_trade_score": 0.0,
+                    "ivr": ivr,
+                    "ivr_band": None,
+                    "exec_mode": None,
+                    "signal_trend": signal.trend,
+                    "top_structure": None,
+                    "timestamp_ms": now_ms,
+                })
+
+            # Update snapshot cache using expanded condition so background poller
+            # fires alerts consistently with the SSE stream.
             _snap_cache.put(
                 sym=sym,
                 spot_price=float(spot),
                 ivr=ivr,
-                green_arrow=signal.green_arrow,
-                red_arrow=signal.red_arrow,
+                green_arrow=_alert_green,
+                red_arrow=_alert_red,
                 current_state=setup.state.value,
             )
 
@@ -540,13 +650,13 @@ async def _sse_generator(
                 sym=sym,
                 spot_price=float(spot),
                 ivr=ivr,
-                green_arrow=signal.green_arrow,
-                red_arrow=signal.red_arrow,
+                green_arrow=_alert_green,
+                red_arrow=_alert_red,
                 current_state=setup.state.value,
             )
             if fired:
-                payload["alert_fired"] = fired[0]   # first fired alert shown in SSE payload
-                payload["alerts_fired"] = fired      # all fired alerts
+                payload["alert_fired"] = fired[0]
+                payload["alerts_fired"] = fired
 
         except Exception as exc:
             payload = {"underlying": sym, "error": str(exc), "timestamp_ms": int(time.time() * 1000)}

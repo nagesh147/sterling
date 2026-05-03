@@ -425,11 +425,14 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
     except Exception:
         spot_price = best_sized.structure.legs[0].mark_price if best_sized.structure.legs else 0.0
 
+    mode = getattr(request.app.state, "trading_mode", None)
     return paper_store.add_position(
         underlying=sym,
         sized_trade=best_sized,
         entry_spot_price=spot_price,
         notes=body.notes,
+        trail_mode_name=mode.name if mode else None,
+        trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
     )
 
 
@@ -632,6 +635,42 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
 
     # Record P&L snapshot for session history
     pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
+
+    # Update trailing stop state
+    if pos.trail_stop_json and pos.status.value in ("open", "partially_closed"):
+        try:
+            from app.engines.directional.trailing_stop import TrailState, TrailingStopEngine
+            from app.core.trading_mode import MODES, DEFAULT_MODE
+            trail_state = TrailState.from_json(pos.trail_stop_json)
+            mode_obj = getattr(request.app.state, "trading_mode", None) or MODES[DEFAULT_MODE]
+            direction_str = "bullish" if direction_sign == 1 else "bearish"
+            st_val = signal.st_values[0] if signal.st_values else 0.0
+            trail_update = TrailingStopEngine().update(
+                state=trail_state,
+                candles=c1h[-30:],
+                st_value=st_val,
+                direction=direction_str,
+                entry_price=pos.entry_price_real or pos.entry_spot_price,
+                mode=mode_obj,
+            )
+            # Persist updated trail state
+            paper_store.update_position(
+                pos.id,
+                trail_stop_json=trail_state.to_json(),
+            )
+            # Telegram notifications
+            from app.services.notifications import telegram as _tg
+            from app.services.notifications.formatters import fmt_trail_update, fmt_partial_exit, fmt_position_closed
+            if trail_update.stop_moved and trail_update.new_stop:
+                gain_pct = (float(current_spot) - (pos.entry_price_real or pos.entry_spot_price)) / max(pos.entry_price_real or pos.entry_spot_price, 1)
+                await _tg.send(fmt_trail_update(pos, trail_update.new_stop, gain_pct))
+            if trail_update.partial:
+                await _tg.send(fmt_partial_exit(pos, trail_update.partial))
+            if trail_update.stopped_out and not exit_signal.should_exit:
+                paper_store.close_position(pos.id, float(current_spot))
+                await _tg.send(fmt_position_closed(pos, estimated_pnl, "Trail stop hit"))
+        except Exception:
+            pass
 
     # Auto-execute: full exit → close position
     if exit_signal.should_exit and not exit_signal.partial:

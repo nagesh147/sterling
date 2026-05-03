@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from typing import List, Optional
 from app.schemas.market import Candle
@@ -46,12 +47,16 @@ def calc_adx(candles: List[Candle], period: int = 14) -> List[Optional[float]]:
     mdm14 = _wilder(minus_dm)
 
     # DI+ / DI-
-    di_plus = np.where(atr14 > 0, 100.0 * pdm14 / atr14, 0.0)
-    di_minus = np.where(atr14 > 0, 100.0 * mdm14 / atr14, 0.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        di_plus = np.where(atr14 > 0, 100.0 * pdm14 / atr14, 0.0)
+        di_minus = np.where(atr14 > 0, 100.0 * mdm14 / atr14, 0.0)
 
     # DX
     di_sum = di_plus + di_minus
-    dx = np.where(di_sum > 0, 100.0 * np.abs(di_plus - di_minus) / di_sum, 0.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        dx = np.where(di_sum > 0, 100.0 * np.abs(di_plus - di_minus) / di_sum, 0.0)
 
     # ADX = Wilder EMA of DX
     adx = np.zeros(n)

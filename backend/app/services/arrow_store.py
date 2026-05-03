@@ -23,6 +23,37 @@ class ArrowEvent(BaseModel):
 
 
 _store: Dict[str, Deque[ArrowEvent]] = {}
+_bootstrapped = False
+
+
+def bootstrap() -> None:
+    """Load persisted arrows from SQLite into the in-memory store on startup."""
+    global _bootstrapped
+    if _bootstrapped:
+        return
+    _bootstrapped = True
+    try:
+        from app.services import db
+        rows = db.load_arrows(limit=500, ttl_hours=_ARROW_TTL_HOURS)
+        for r in rows:
+            try:
+                evt = ArrowEvent(
+                    underlying=r["underlying"],
+                    arrow_type=r["arrow_type"],
+                    spot_price=r["spot_price"],
+                    direction=r["direction"],
+                    state=r["state"],
+                    source=r["source"],
+                    timestamp_ms=r["timestamp_ms"],
+                )
+                und = r["underlying"]
+                if und not in _store:
+                    _store[und] = deque(maxlen=MAX_ARROWS)
+                _store[und].append(evt)
+            except Exception:
+                continue
+    except Exception:
+        pass
 
 
 def _prune(underlying: str) -> None:
@@ -45,8 +76,21 @@ def record(
 ) -> None:
     if underlying not in _store:
         _store[underlying] = deque(maxlen=MAX_ARROWS)
-    _store[underlying].append(
-        ArrowEvent(
+    evt = ArrowEvent(
+        underlying=underlying,
+        arrow_type=arrow_type,
+        spot_price=spot_price,
+        direction=direction,
+        state=state,
+        source=source,
+        timestamp_ms=timestamp_ms,
+    )
+    _store[underlying].append(evt)
+    _prune(underlying)
+    # Persist to SQLite so history survives restarts
+    try:
+        from app.services import db
+        db.persist_arrow(
             underlying=underlying,
             arrow_type=arrow_type,
             spot_price=spot_price,
@@ -55,8 +99,8 @@ def record(
             source=source,
             timestamp_ms=timestamp_ms,
         )
-    )
-    _prune(underlying)
+    except Exception:
+        pass
 
 
 def get_arrows(underlying: str) -> List[ArrowEvent]:

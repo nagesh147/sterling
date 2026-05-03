@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useTradingMode, useSetTradingMode, useAllTradingModes } from '../hooks/useTradingMode';
+import { useTradingMode, useSetTradingMode } from '../hooks/useTradingMode';
 
 const MODE_COLOR: Record<string, string> = {
   scalping: '#ff7f6e',
@@ -8,117 +8,141 @@ const MODE_COLOR: Record<string, string> = {
   positional: '#aa88ff',
 };
 
-const wrapStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
+const MODES = ['scalping', 'intraday', 'swing', 'positional'];
 
 function badgeStyle(name: string): React.CSSProperties {
+  const color = MODE_COLOR[name] ?? '#555';
   return {
     display: 'inline-block', padding: '2px 8px', borderRadius: 3,
     fontSize: 10, fontWeight: 700, letterSpacing: 1,
-    background: `${MODE_COLOR[name] ?? '#555'}22`,
-    color: MODE_COLOR[name] ?? '#888',
-    border: `1px solid ${MODE_COLOR[name] ?? '#555'}55`,
+    background: `${color}22`, color, border: `1px solid ${color}55`,
   };
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  wrap: wrapStyle,
-  select: {
-    background: '#111', color: '#ccc', border: '1px solid #333',
-    borderRadius: 3, padding: '4px 8px', fontFamily: 'inherit',
-    fontSize: 11, cursor: 'pointer',
-  },
-  modal: {
-    position: 'fixed', inset: 0, background: '#000000aa',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 1000,
-  },
-  dialog: {
-    background: '#141414', border: '1px solid #333', borderRadius: 6,
-    padding: 24, minWidth: 340, maxWidth: 460,
-  },
-  title: { color: '#e0e0e0', fontWeight: 700, fontSize: 14, marginBottom: 12 },
-  row: { display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', color: '#888' },
-  val: { color: '#ccc' },
-  btns: { display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' },
-  confirmBtn: {
-    background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88',
-    borderRadius: 3, padding: '6px 16px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12,
-  },
-  cancelBtn: {
-    background: '#1a1a1a', color: '#555', border: '1px solid #333',
-    borderRadius: 3, padding: '6px 16px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12,
-  },
-  toast: {
-    position: 'fixed', bottom: 24, right: 24,
-    background: '#1a2a1a', color: '#44cc88',
-    border: '1px solid #44cc88', borderRadius: 4,
-    padding: '8px 16px', fontSize: 12, zIndex: 2000,
-  },
-};
-
 export function TradingModeSelector() {
   const { data: current } = useTradingMode();
-  const { data: allModes } = useAllTradingModes();
   const setMode = useSetTradingMode();
   const [pending, setPending] = useState<string | null>(null);
   const [toast, setToast] = useState('');
 
+  const currentName = current?.name ?? 'swing';
+
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const name = e.target.value;
-    if (name !== current?.name) setPending(name);
+    if (name !== currentName) setPending(name);
   };
 
   const confirm = () => {
     if (!pending) return;
-    setMode.mutate({ name: pending }, {
-      onSuccess: (data) => {
-        setToast(`Switched to ${data.config.display} mode`);
-        setTimeout(() => setToast(''), 3000);
-        setPending(null);
+    setMode.mutate(
+      { name: pending },
+      {
+        onSuccess: (data) => {
+          setToast(`Switched to ${data.config?.display ?? pending} mode`);
+          setTimeout(() => setToast(''), 3000);
+          setPending(null);
+        },
+        onError: (err) => {
+          setToast(`Error: ${err.message}`);
+          setTimeout(() => setToast(''), 4000);
+          setPending(null);
+        },
       },
-    });
+    );
   };
 
-  const currentName = current?.name ?? 'swing';
-  const pendingCfg = pending && allModes ? allModes[pending] : null;
-  const currentCfg = current?.config;
-
   return (
-    <div style={styles.wrap}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <span style={badgeStyle(currentName)}>{currentName.toUpperCase()}</span>
-      <select style={styles.select} value={currentName} onChange={handleChange}>
-        {['scalping', 'intraday', 'swing', 'positional'].map((m) => (
+      <select
+        style={{
+          background: '#111', color: '#ccc', border: '1px solid #333',
+          borderRadius: 3, padding: '4px 8px', fontFamily: 'inherit',
+          fontSize: 11, cursor: 'pointer',
+        }}
+        value={currentName}
+        onChange={handleChange}
+        disabled={setMode.isPending}
+      >
+        {MODES.map((m) => (
           <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
         ))}
       </select>
 
-      {pending && pendingCfg && currentCfg && (
-        <div style={styles.modal} onClick={() => setPending(null)}>
-          <div style={styles.dialog} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.title}>Switch to {pendingCfg.display} mode?</div>
-            <div style={{ color: '#666', fontSize: 11, marginBottom: 12 }}>Changes:</div>
-            {[
-              ['DTE range', `${currentCfg.dte_min}–${currentCfg.dte_max}d → ${pendingCfg.dte_min}–${pendingCfg.dte_max}d`],
-              ['Position size', `${(currentCfg.position_pct * 100).toFixed(1)}% → ${(pendingCfg.position_pct * 100).toFixed(1)}%`],
-              ['Stop ATR mult', `${currentCfg.stop_atr_mult}× → ${pendingCfg.stop_atr_mult}×`],
-              ['Max positions', `${currentCfg.max_concurrent} → ${pendingCfg.max_concurrent}`],
-            ].map(([label, val]) => (
-              <div key={label as string} style={styles.row}>
-                <span>{label}</span>
-                <span style={styles.val}>{val}</span>
-              </div>
-            ))}
-            <div style={styles.btns}>
-              <button style={styles.cancelBtn} onClick={() => setPending(null)}>Cancel</button>
-              <button style={styles.confirmBtn} onClick={confirm}>
-                {setMode.isPending ? 'Switching…' : 'Confirm'}
+      {/* Confirmation — renders as soon as pending is set, no query deps */}
+      {pending && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: '#000000aa',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+          onClick={() => setPending(null)}
+        >
+          <div
+            style={{
+              background: '#141414', border: '1px solid #333', borderRadius: 6,
+              padding: 24, minWidth: 300,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ color: '#e0e0e0', fontWeight: 700, fontSize: 14, marginBottom: 8 }}>
+              Switch to {pending.charAt(0).toUpperCase() + pending.slice(1)} mode?
+            </div>
+            <div style={{ color: '#555', fontSize: 11, marginBottom: 16 }}>
+              {currentName.toUpperCase()} → {pending.toUpperCase()}
+              {current?.config && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    ['Current DTE', `${current.config.dte_min}–${current.config.dte_max}d`],
+                    ['Current position %', `${(current.config.position_pct * 100).toFixed(1)}%`],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#444' }}>{k}</span>
+                      <span style={{ color: '#888' }}>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setPending(null)}
+                style={{
+                  background: '#1a1a1a', color: '#555', border: '1px solid #333',
+                  borderRadius: 3, padding: '6px 16px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 12,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirm}
+                disabled={setMode.isPending}
+                style={{
+                  background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88',
+                  borderRadius: 3, padding: '6px 16px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 12,
+                  opacity: setMode.isPending ? 0.5 : 1,
+                }}
+              >
+                {setMode.isPending ? 'Saving…' : 'Confirm'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div style={styles.toast}>{toast}</div>}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24,
+          background: toast.startsWith('Error') ? '#2a1a1a' : '#1a2a1a',
+          color: toast.startsWith('Error') ? '#cc4444' : '#44cc88',
+          border: `1px solid ${toast.startsWith('Error') ? '#cc4444' : '#44cc88'}`,
+          borderRadius: 4, padding: '8px 16px', fontSize: 12, zIndex: 2000,
+        }}>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

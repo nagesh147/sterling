@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List
+from typing import Generator, List
 from app.schemas.market import Candle
 from app.schemas.directional import SignalResult
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
@@ -8,10 +8,11 @@ from app.engines.indicators.supertrend import compute_supertrend
 _ST_CONFIGS = [(7, 3.0), (14, 2.0), (21, 1.0)]
 
 
-def _to_vwap_candles(candles: List[Candle]) -> List[Candle]:
+def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
     """
     Replace close with cumulative VWAP per session (reset at 00:00 UTC).
-    Open/high/low remain real.
+    H/L/Open are shifted by the same VWAP offset so ATR stays proportional
+    and the supertrend is not distorted by VWAP lag relative to real price.
     """
     sessions: dict = {}
     for c in candles:
@@ -26,10 +27,15 @@ def _to_vwap_candles(candles: List[Candle]) -> List[Candle]:
             if sessions[day_key]["cum_vol"] > 0
             else c.close
         )
+        # Shift all OHLC by (vwap - close) so spread is preserved around VWAP
+        offset = vwap - c.close
         yield Candle(
             timestamp_ms=c.timestamp_ms,
-            open=c.open, high=c.high, low=c.low,
-            close=vwap, volume=c.volume,
+            open=c.open + offset,
+            high=c.high + offset,
+            low=c.low + offset,
+            close=vwap,
+            volume=c.volume,
         )
 
 
@@ -50,16 +56,20 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
 
     ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
 
-    # ST1: on Heikin-Ashi candles
+    # ST1: Heikin-Ashi — smoothed, filters noise
     st1_line, st1_trend = compute_supertrend(ha_h, ha_l, ha_c, 7, 3.0)
 
-    # ST2: on real candles
+    # ST2: Real candles — medium sensitivity
     st2_line, st2_trend = compute_supertrend(h, l, c, 14, 2.0)
 
-    # ST3: on VWAP candles
+    # ST3: VWAP-adjusted candles — slower, trend-anchored perspective
+    # H/L/O shifted by (vwap - close) so the candle is centred on VWAP
+    # while preserving relative spread; avoids ATR distortion from raw VWAP lag
     vwap_candles = list(_to_vwap_candles(candles_1h))
+    vwap_h = np.array([v.high for v in vwap_candles], dtype=np.float64)
+    vwap_l = np.array([v.low for v in vwap_candles], dtype=np.float64)
     vwap_c = np.array([v.close for v in vwap_candles], dtype=np.float64)
-    st3_line, st3_trend = compute_supertrend(h, l, vwap_c, 21, 1.0)
+    st3_line, st3_trend = compute_supertrend(vwap_h, vwap_l, vwap_c, 21, 2.0)
 
     st_trends = [int(st1_trend[-1]), int(st2_trend[-1]), int(st3_trend[-1])]
     st_values = [float(st1_line[-1]), float(st2_line[-1]), float(st3_line[-1])]
@@ -71,18 +81,22 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
 
     green_count = st_trends.count(1)
     red_count = st_trends.count(-1)
+    prev_green_count = prev_trends.count(1)
+    prev_red_count = prev_trends.count(-1)
 
-    all_green_now = all(t == 1 for t in st_trends)
-    all_red_now = all(t == -1 for t in st_trends)
-    all_green_prev = all(t == 1 for t in prev_trends)
-    all_red_prev = all(t == -1 for t in prev_trends)
+    # all_green / all_red respect the mode threshold (e.g. intraday needs 2/3, swing 3/3)
+    all_green_now = green_count >= st_threshold
+    all_red_now = red_count >= st_threshold
+    all_green_prev = prev_green_count >= st_threshold
+    all_red_prev = prev_red_count >= st_threshold
 
+    # Arrow fires on the bar where threshold is first crossed
     green_arrow = all_green_now and not all_green_prev
     red_arrow = all_red_now and not all_red_prev
 
-    if green_count >= st_threshold:
+    if all_green_now:
         trend_val = 1
-    elif red_count >= st_threshold:
+    elif all_red_now:
         trend_val = -1
     else:
         trend_val = 0

@@ -24,6 +24,10 @@ class PaperPosition(BaseModel):
     realized_pnl_usd: Optional[float] = None
     notes: str = ""
     run_once_state: TradeState = TradeState.ENTERED
+    # Trailing stop state
+    trail_stop_json: Optional[str] = None
+    trail_mode: Optional[str] = None
+    entry_price_real: Optional[float] = None
 
 
 class EnterPositionRequest(BaseModel):

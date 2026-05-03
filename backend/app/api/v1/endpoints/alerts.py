@@ -90,13 +90,15 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
     snapshots: dict = {}
 
     from app.api.v1.endpoints.directional import _adapter_can_serve
-    src_name = adapter.__class__.__name__.lower()
+    from app.services import adapter_manager as _adm_alerts
+    _mode = getattr(request.app.state, "trading_mode", None)
+    _macro_filter = _mode.macro_filter if _mode else "adx_4h"
+    _st_threshold = _mode.st_threshold if _mode else 3
+
     for sym in underlyings:
         inst = registry.get_instrument(sym)
         if not inst:
             continue
-        # Skip instruments not servable by current adapter
-        from app.services import adapter_manager as _adm_alerts
         if not _adapter_can_serve(inst, _adm_alerts.get_data_source()):
             snapshots[sym] = {}
             continue
@@ -104,18 +106,34 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             spot = await adapter.get_index_price(inst)
             c4h = await adapter.get_candles(inst, "4H", limit=100)
             c1h = await adapter.get_candles(inst, "1H", limit=200)
-            regime = compute_regime(c4h)
-            signal = compute_signal(c1h)
+            regime = compute_regime(c4h, macro_filter=_macro_filter)
+            signal = compute_signal(c1h, st_threshold=_st_threshold)
             setup = evaluate_setup(regime, signal)
             ivr = await compute_ivr(adapter, inst, c1h)
+
+            # For manual check: green/red arrow fires on transition OR on
+            # sustained directional alignment — so clicking "CHECK NOW" during
+            # an active trend still matches signal_green_arrow / signal_red_arrow.
+            from app.schemas.directional import TradeState
+            actionable_states = {
+                TradeState.CONFIRMED_SETUP_ACTIVE.value,
+                TradeState.ENTRY_ARMED_PULLBACK.value,
+                TradeState.ENTRY_ARMED_CONTINUATION.value,
+                TradeState.EARLY_SETUP_ACTIVE.value,
+            }
+            green_signal = signal.green_arrow or (signal.all_green and setup.state.value in actionable_states)
+            red_signal   = signal.red_arrow   or (signal.all_red   and setup.state.value in actionable_states)
+
             snapshots[sym] = {
                 "spot": spot,
                 "ivr": ivr,
-                "green_arrow": signal.green_arrow,
-                "red_arrow": signal.red_arrow,
+                "green_arrow": green_signal,
+                "red_arrow": red_signal,
                 "state": setup.state.value,
             }
-        except Exception:
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("alert check failed for %s: %s", sym, exc)
             snapshots[sym] = {}
 
     for alert in active_alerts:

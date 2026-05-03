@@ -85,8 +85,15 @@ async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
                     c4h = await ad.get_candles(inst, "4H", limit=100)
                     c1h = await ad.get_candles(inst, "1H", limit=200)
                     ivr = await compute_ivr(ad, inst, c1h)
-                    regime = compute_regime(c4h)
-                    signal = compute_signal(c1h)
+                    _bg_mode = getattr(app.state, "trading_mode", None)
+                    regime = compute_regime(
+                        c4h,
+                        macro_filter=_bg_mode.macro_filter if _bg_mode else "adx_4h",
+                    )
+                    signal = compute_signal(
+                        c1h,
+                        st_threshold=_bg_mode.st_threshold if _bg_mode else 3,
+                    )
                     setup = evaluate_setup(regime, signal)
 
                     snap_kwargs = dict(
@@ -117,6 +124,8 @@ async def lifespan(app: FastAPI):
     _pnl_history_svc.bootstrap()
     from app.services import eval_history as _eval_history_svc
     _eval_history_svc.bootstrap()
+    from app.services import arrow_store as _arrow_store_svc
+    _arrow_store_svc.bootstrap()
 
     from app.core.trading_mode import MODES, DEFAULT_MODE
     from app.services.db import get_trading_mode

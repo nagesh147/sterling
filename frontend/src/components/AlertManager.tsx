@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useAlerts, useCreateAlert, useCheckAlerts, useDismissAlert, useDeleteAlert,
   useBulkClearDismissed, CONDITION_LABELS,
@@ -218,10 +219,55 @@ function AddAlertForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function QuickAddBar({ onDone }: { onDone: () => void }) {
+  const create = useCreateAlert();
+  const { data: instrumentData } = useInstruments();
+  const underlyings = (instrumentData?.instruments ?? [])
+    .filter((i: any) => i.has_options)
+    .map((i: any) => i.underlying as string);
+
+  const quick = (underlying: string, condition: AlertCondition, label: string) =>
+    create.mutate({ underlying, condition, cooldown_hours: 4, notes: `Quick: ${label}` },
+      { onSuccess: onDone });
+
+  if (!underlyings.length) return null;
+
+  return (
+    <div style={{
+      background: '#0a0f0a', border: '1px solid #44cc8833',
+      borderRadius: 4, padding: '10px 12px', marginBottom: 10,
+      fontSize: 11,
+    }}>
+      <div style={{ color: '#44cc8888', marginBottom: 8, letterSpacing: 1 }}>
+        QUICK ADD — 4h cooldown, auto re-arms
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {underlyings.slice(0, 4).map(sym => (
+          <React.Fragment key={sym}>
+            <button
+              style={{ background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc8844',
+                borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 10 }}
+              onClick={() => quick(sym, 'signal_green_arrow', `${sym} ▲`)}
+            >▲ {sym}</button>
+            <button
+              style={{ background: '#2a1a1a', color: '#cc4444', border: '1px solid #cc444444',
+                borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 10 }}
+              onClick={() => quick(sym, 'signal_red_arrow', `${sym} ▼`)}
+            >▼ {sym}</button>
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function AlertManager() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [dayFilter, setDayFilter]       = useState<DayFilter>(0);
   const [showAdd, setShowAdd]           = useState(false);
+  const [showQuick, setShowQuick]       = useState(false);
 
   const queryParams = new URLSearchParams();
   if (statusFilter !== 'all') queryParams.set('status', statusFilter);
@@ -231,8 +277,10 @@ export function AlertManager() {
   const { data, isLoading } = useAlerts(qs);
   const check     = useCheckAlerts();
   const bulkClear = useBulkClearDismissed();
+  const qc        = useQueryClient();
 
   const hasDismissed = data?.alerts.some(a => a.status === 'dismissed') ?? false;
+  const isEmpty = !isLoading && (!data || data.alerts.length === 0);
 
   return (
     <div style={S.card}>
@@ -247,7 +295,7 @@ export function AlertManager() {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             style={check.isPending ? { ...S.checkBtn, opacity: 0.5 } : S.checkBtn}
             onClick={() => check.mutate()} disabled={check.isPending}
@@ -262,7 +310,13 @@ export function AlertManager() {
               CLEAR DISMISSED
             </button>
           )}
-          <button style={S.addBtn} onClick={() => setShowAdd(!showAdd)}>
+          <button
+            style={{ ...S.btn, color: '#44cc8888', borderColor: '#44cc8833' }}
+            onClick={() => { setShowQuick(!showQuick); setShowAdd(false); }}
+          >
+            ⚡ QUICK
+          </button>
+          <button style={S.addBtn} onClick={() => { setShowAdd(!showAdd); setShowQuick(false); }}>
             {showAdd ? 'CANCEL' : '+ ADD'}
           </button>
         </div>
@@ -291,12 +345,19 @@ export function AlertManager() {
         </div>
       </div>
 
-      {check.data && check.data.newly_triggered > 0 && (
-        <div style={S.checkResult}>
-          ✓ Checked {check.data.checked} alerts — {check.data.newly_triggered} newly triggered
+      {check.data && (
+        <div style={{
+          ...S.checkResult,
+          borderColor: check.data.newly_triggered > 0 ? '#44cc8844' : '#1e1e1e',
+        }}>
+          ✓ Checked {check.data.checked} alerts —{' '}
+          {check.data.newly_triggered > 0
+            ? <span style={{ color: '#44cc88' }}>{check.data.newly_triggered} newly triggered</span>
+            : <span style={{ color: '#555' }}>none triggered</span>}
         </div>
       )}
 
+      {showQuick && <QuickAddBar onDone={() => { setShowQuick(false); qc.invalidateQueries({ queryKey: ['alerts'] }); }} />}
       {showAdd && <AddAlertForm onDone={() => setShowAdd(false)} />}
 
       {isLoading ? (
@@ -304,11 +365,22 @@ export function AlertManager() {
       ) : !data || data.alerts.length === 0 ? (
         <div style={S.noData}>
           {statusFilter === 'all' && dayFilter === 0 ? (
-            <div style={{ color: '#444', fontSize: 12, padding: '20px 0', textAlign: 'center' as const }}>
-              No alerts configured.<br />
-              <span style={{ fontSize: 11, color: '#333' }}>
-                Click <strong style={{ color: '#44cc88' }}>+ ADD</strong> to create a price, IV rank, or signal alert.
-                Alerts fire webhooks even when this tab is closed.
+            <div style={{ color: '#555', fontSize: 12, padding: '20px 0', textAlign: 'center' as const, lineHeight: 1.8 }}>
+              No alerts configured.
+              <br />
+              <span style={{ fontSize: 11, color: '#444' }}>
+                Click{' '}
+                <button
+                  onClick={() => { setShowQuick(true); setShowAdd(false); }}
+                  style={{ background: 'none', border: 'none', color: '#44cc88', cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: 11, padding: 0 }}
+                >
+                  ⚡ QUICK
+                </button>
+                {' '}to add signal alerts for all instruments in one click,
+                or{' '}
+                <strong style={{ color: '#44cc88' }}>+ ADD</strong>
+                {' '}to create a custom price, IVR, or state alert.
               </span>
             </div>
           ) : (

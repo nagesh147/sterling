@@ -75,6 +75,7 @@ async def run_once(
     instrument: InstrumentMeta,
     adapter: BaseExchangeAdapter,
     risk_params: Optional[RiskParams] = None,
+    macro_filter: str = "adx_4h",
 ) -> RunOnceResponse:
     now_ms = int(time.time() * 1000)
     risk = risk_params or RiskParams()
@@ -102,7 +103,7 @@ async def run_once(
             timestamp_ms=now_ms,
         )
 
-    regime = compute_regime(candles_4h)
+    regime = compute_regime(candles_4h, macro_filter=macro_filter)
     signal = compute_signal(candles_1h)
     setup = evaluate_setup(regime, signal)
 
@@ -190,6 +191,7 @@ async def run_once(
 async def preview(
     instrument: InstrumentMeta,
     adapter: BaseExchangeAdapter,
+    macro_filter: str = "adx_4h",
 ) -> PreviewResponse:
     now_ms = int(time.time() * 1000)
 
@@ -212,7 +214,7 @@ async def preview(
             timestamp_ms=now_ms,
         )
 
-    regime = compute_regime(candles_4h)
+    regime = compute_regime(candles_4h, macro_filter=macro_filter)
     signal = compute_signal(candles_1h)
     setup = evaluate_setup(regime, signal)
     ivr = await compute_ivr(adapter, instrument, candles_1h)

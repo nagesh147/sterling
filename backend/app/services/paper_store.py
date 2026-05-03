@@ -39,7 +39,22 @@ def add_position(
     sized_trade: SizedTrade,
     entry_spot_price: float,
     notes: str = "",
+    trail_mode_name: str | None = None,
+    trail_atr_mult: float = 2.0,
 ) -> PaperPosition:
+    from app.core.trading_mode import MODES, DEFAULT_MODE, TrailMode
+    from app.engines.directional.trailing_stop import TrailState
+
+    mode_name = trail_mode_name or DEFAULT_MODE
+    mode = MODES.get(mode_name, MODES[DEFAULT_MODE])
+    trail_state = TrailState(
+        mode=mode.trail_mode,
+        current_stop=entry_spot_price * 0.95,  # initial: 5% below entry
+        highest_seen=entry_spot_price,
+        lowest_seen=entry_spot_price,
+        trail_mult=mode.trail_atr_mult,
+    )
+
     pos = PaperPosition(
         id=_new_id(),
         underlying=underlying,
@@ -49,6 +64,9 @@ def add_position(
         entry_spot_price=entry_spot_price,
         notes=notes,
         run_once_state=TradeState.ENTERED,
+        trail_stop_json=trail_state.to_json(),
+        trail_mode=mode.trail_mode.value,
+        entry_price_real=entry_spot_price,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())

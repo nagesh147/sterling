@@ -38,7 +38,8 @@
       "Bash(.venv/bin/python -m pytest tests/test_strategy_fixes.py::test_ivr_percentile_correct_rank -v --tb=long)",
       "Bash(.venv/bin/python *)",
       "Bash(.venv/bin/pip install *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
     ],
     "defaultMode": "bypassPermissions"
   },

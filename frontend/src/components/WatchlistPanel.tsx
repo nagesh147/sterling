@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import type { WatchlistItem } from '../hooks/useWatchlist';
 import { useStore } from '../store/useStore';
+import { SignalStrengthGauge } from './SignalStrengthGauge';
 import { fmtN, fmtUSD, ivrColor, ivrWidth, fmtAge, fmtState, fmtDirection } from '../utils/fmt';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { useEnterPosition } from '../hooks/usePositions';
@@ -70,11 +71,21 @@ function Row({ item }: { item: WatchlistItem }) {
         <span style={{ color: REGIME_COLOR[regime] ?? '#888' }}>{regime.toUpperCase()}</span>
       </td>
       <td style={styles.td}>
-        {item.signal_trend === 1
-          ? <span style={{ color: '#44cc88' }}>▲ BULL</span>
-          : item.signal_trend === -1
-          ? <span style={{ color: '#cc4444' }}>▼ BEAR</span>
-          : <span style={{ color: '#555' }}>~ MIX</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {item.signal_trend === 1
+            ? <span style={{ color: '#44cc88', fontSize: 10 }}>▲</span>
+            : item.signal_trend === -1
+            ? <span style={{ color: '#cc4444', fontSize: 10 }}>▼</span>
+            : <span style={{ color: '#555', fontSize: 10 }}>~</span>}
+          <SignalStrengthGauge
+            strength={item.signal_trend === 1
+              ? (item.score_long ?? 0)
+              : item.signal_trend === -1
+              ? (item.score_short ?? 0)
+              : 0}
+            size="sm"
+          />
+        </div>
       </td>
       <td style={styles.td}><IVRBar ivr={item.ivr} /></td>
       <td style={styles.td}>
