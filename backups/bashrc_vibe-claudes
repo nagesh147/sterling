@@ -404,7 +404,7 @@ claude() {
 
     local ctx
     local ctx_mode="$mode"
-    [[ "$mode" == "verify" ]] && ctx_mode="ultra"
+    [[ "$mode" == "verify" ]] && ctx_mode="smart"
     ctx=$(build_context "$proj_dir" "$active_skills" "$ctx_mode")
 
     case "$mode" in
