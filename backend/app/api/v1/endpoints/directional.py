@@ -473,10 +473,26 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             current_state=setup.state.value,
         )
 
+        spot_f = float(spot)
+        st_vals = signal.st_values or []
+        st_stop = float(st_vals[0]) if st_vals else None
+
+        # Compute stop and target from ST(7,3) level
+        stop_price  = st_stop
+        target_price = None
+        if st_stop and spot_f:
+            risk = abs(spot_f - st_stop)
+            if setup.direction.value == 'long':
+                target_price = round(spot_f + risk * 2, 2)
+                stop_price   = round(st_stop, 2)
+            elif setup.direction.value == 'short':
+                target_price = round(spot_f - risk * 2, 2)
+                stop_price   = round(st_stop, 2)
+
         return {
             'underlying': sym,
             'has_options': inst.has_options,
-            'spot_price': float(spot),
+            'spot_price': spot_f,
             'ivr': ivr,
             'green_arrow': signal.green_arrow,
             'red_arrow': signal.red_arrow,
@@ -486,6 +502,14 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             'score_long': round(signal.score_long, 1),
             'score_short': round(signal.score_short, 1),
             'exec_mode': exec_timing.mode.value,
+            'exec_confidence': round(exec_timing.confidence, 2),
+            'stop_price': stop_price,
+            'target_price': target_price,
+            'st_values': [round(v, 2) for v in st_vals[:3]],
+            'atr_percentile': round(regime.atr_percentile, 1),
+            'adx': round(regime.adx, 1),
+            'rsi': round(getattr(signal, 'rsi', 50.0), 1),
+            'squeezed': getattr(signal, 'squeezed', False),
             'fresh': True,
             'timestamp_ms': now_ms,
         }

@@ -14,6 +14,14 @@ export interface SignalItem {
   score_long: number;
   score_short: number;
   exec_mode: string | null;
+  exec_confidence?: number;
+  stop_price?: number | null;
+  target_price?: number | null;
+  st_values?: number[];
+  atr_percentile?: number;
+  adx?: number;
+  rsi?: number;
+  squeezed?: boolean;
   fresh: boolean;
   timestamp_ms: number;
 }
