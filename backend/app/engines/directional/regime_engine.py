@@ -43,14 +43,13 @@ def compute_regime(
     cur_adx = float(adx_arr[-1])
     cur_atr_pct = _atr_pct_at(atr_arr, n - 1, 100)
 
-    # Cooldown: IDLE if any of the 3 prior bars had ATR pct < 30
-    cooldown_active = False
-    for offset in range(1, 4):
-        pos = n - 1 - offset
-        if pos >= 0:
-            if _atr_pct_at(atr_arr, pos, 100) < 30:
-                cooldown_active = True
-                break
+    # Cooldown: IDLE only when current AND previous bar both have ATR pct < 30.
+    # A single quiet bar used to pause the strategy for 4 bars — too aggressive.
+    cooldown_active = (
+        n >= 2
+        and _atr_pct_at(atr_arr, n - 1, 100) < 30
+        and _atr_pct_at(atr_arr, n - 2, 100) < 30
+    )
 
     if cur_ema21 == 0.0 or cur_ema55 == 0.0:
         return RegimeResult(

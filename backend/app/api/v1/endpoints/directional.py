@@ -308,7 +308,9 @@ def _adapter_can_serve(inst, source: str) -> bool:
         # Binance can serve all non-zerodha crypto instruments
         return inst.exchange != "zerodha"
     if source == "deribit":
-        # Deribit serves its own instruments; zerodha instruments not available
+        # XRP-PERPETUAL returns 400 on Deribit (delisted / never listed)
+        if inst.underlying == "XRP":
+            return False
         return inst.exchange != "zerodha"
     # Unknown source: attempt and let the adapter fail gracefully
     return inst.exchange != "zerodha"

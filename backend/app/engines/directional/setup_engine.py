@@ -126,13 +126,19 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
     # ── Full alignment: check for arrow confirmation ──────────────────────────
     has_arrow = signal.green_arrow if direction == Direction.LONG else signal.red_arrow
 
+    # Strong confluence can confirm even without a fresh arrow:
+    # all STs aligned + signal_score >= 15/20 avoids waiting for a flip
+    # that may never arrive in strong continuation moves.
+    strong_confluence = getattr(signal, 'signal_score', 0) >= 15.0
+
     if signal.all_green or signal.all_red:
-        if has_arrow:
+        if has_arrow or strong_confluence:
             state  = TradeState.CONFIRMED_SETUP_ACTIVE
-            reason = "Arrow + full directional alignment — entry armed"
+            reason = ("Arrow + alignment" if has_arrow else
+                      f"Strong confluence ({signal.signal_score:.0f}/20) — no arrow needed")
         else:
             state  = TradeState.EARLY_SETUP_ACTIVE
-            reason = "All ST aligned, no fresh arrow (continuation in progress)"
+            reason = "All ST aligned, awaiting arrow or confluence build-up"
     else:
         state     = TradeState.IDLE
         reason    = "Mixed ST — monitoring"

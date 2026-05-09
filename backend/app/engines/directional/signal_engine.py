@@ -135,12 +135,12 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
     # ST flip
     st_flip = (green_arrow if trend_val == 1 else red_arrow) if trend_val != 0 else False
 
-    # RSI gate: widened for crypto (was 52-78 / 22-48 — too tight, blocked valid setups)
-    # LONG: 45-82 (momentum not yet exhausted), SHORT: 18-55
+    # RSI gate: 40-78 LONG (avoid overbought > 78), 22-60 SHORT (avoid oversold < 22)
+    # Upper bounds tightened from 82/55 to prevent late exhaustion-trend entries.
     if trend_val == 1:
-        rsi_ok = 45.0 < cur_rsi < 82.0
+        rsi_ok = 40.0 < cur_rsi < 78.0
     elif trend_val == -1:
-        rsi_ok = 18.0 < cur_rsi < 55.0
+        rsi_ok = 22.0 < cur_rsi < 60.0
     else:
         rsi_ok = False
 
