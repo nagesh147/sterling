@@ -7,7 +7,7 @@ TTL slightly exceeds the default SSE interval (30s) so a connected stream
 always provides fresh data for the poller.
 """
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 _TTL_MS = 45_000  # 45 s — fresh enough for 30 s SSE interval
@@ -22,6 +22,19 @@ class SnapshotEntry:
     red_arrow: bool
     current_state: str
     computed_at_ms: int
+    # Signal enrichment fields (populated by /signals live computation)
+    direction: str = "neutral"
+    regime: str = ""
+    score_long: float = 0.0
+    score_short: float = 0.0
+    exec_mode: Optional[str] = None
+    stop_price: Optional[float] = None
+    target_price: Optional[float] = None
+    atr: Optional[float] = None
+    adx: float = 0.0
+    rsi: float = 50.0
+    squeezed: bool = False
+    exec_confidence: float = 0.0
 
 
 _cache: Dict[str, SnapshotEntry] = {}
@@ -34,6 +47,19 @@ def put(
     green_arrow: bool,
     red_arrow: bool,
     current_state: str,
+    # Optional enrichment
+    direction: str = "neutral",
+    regime: str = "",
+    score_long: float = 0.0,
+    score_short: float = 0.0,
+    exec_mode: Optional[str] = None,
+    stop_price: Optional[float] = None,
+    target_price: Optional[float] = None,
+    atr: Optional[float] = None,
+    adx: float = 0.0,
+    rsi: float = 50.0,
+    squeezed: bool = False,
+    exec_confidence: float = 0.0,
 ) -> None:
     _cache[sym] = SnapshotEntry(
         sym=sym,
@@ -43,6 +69,18 @@ def put(
         red_arrow=red_arrow,
         current_state=current_state,
         computed_at_ms=int(time.time() * 1000),
+        direction=direction,
+        regime=regime,
+        score_long=score_long,
+        score_short=score_short,
+        exec_mode=exec_mode,
+        stop_price=stop_price,
+        target_price=target_price,
+        atr=atr,
+        adx=adx,
+        rsi=rsi,
+        squeezed=squeezed,
+        exec_confidence=exec_confidence,
     )
 
 

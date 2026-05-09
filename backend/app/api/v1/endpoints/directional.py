@@ -443,11 +443,19 @@ async def run_all_endpoint(request: Request):
 
 # ─── /signals (live multi-instrument summary) ────────────────────────────────
 
-async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: int) -> dict:
+async def _compute_signal_item(
+    inst, adapter,
+    macro_filter: str, st_threshold: int,
+    stop_mult: float = 2.0, rr: float = 2.0,
+) -> dict:
     """
     Compute a full signal row for one instrument.
     Updates snapshot_cache so subsequent calls (and SSE) benefit from this data.
+    stop_mult and rr come from the active TradingModeConfig (stop_atr_mult, rr_target).
     """
+    import numpy as _np
+    from app.engines.indicators.atr import compute_atr as _compute_atr
+
     sym = inst.underlying
     now_ms = int(time.time() * 1000)
     try:
@@ -457,51 +465,26 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             adapter.get_candles(inst, "1H", limit=200),
             adapter.get_candles(inst, "15m", limit=50),
         )
-        regime  = compute_regime(c4h, macro_filter=macro_filter)
-        signal  = compute_signal(c1h, st_threshold=st_threshold)
-        setup   = evaluate_setup(regime, signal)
-        ivr     = await compute_ivr(adapter, inst, c1h)
+        regime      = compute_regime(c4h, macro_filter=macro_filter)
+        signal      = compute_signal(c1h, st_threshold=st_threshold)
+        setup       = evaluate_setup(regime, signal)
+        ivr         = await compute_ivr(adapter, inst, c1h)
         exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
 
         from app.engines.directional.policy_engine import apply_policy
-        policy = apply_policy(setup.direction, inst, ivr)
+        apply_policy(setup.direction, inst, ivr)
 
-        # Write to snapshot cache so SSE and future fast-path calls benefit
-        _snap_cache.put(
-            sym=sym,
-            spot_price=float(spot),
-            ivr=ivr,
-            green_arrow=signal.green_arrow,
-            red_arrow=signal.red_arrow,
-            current_state=setup.state.value,
-        )
-
-        spot_f = float(spot)
+        spot_f  = float(spot)
         st_vals = signal.st_values or []
 
-        # Compute 14-period ATR from 4H candles for proper SL/TP sizing
-        import numpy as _np
-        from app.engines.indicators.atr import compute_atr as _compute_atr
-        from app.services import adapter_manager as _adm_local
-        _mode_local = None
-        try:
-            _mode_local = getattr(_adm_local, '_app_state_trading_mode', None)
-        except Exception:
-            pass
-
+        # ATR-based SL/TP — 14-period ATR on 4H bars
         highs_4h  = _np.array([c.high  for c in c4h], dtype=_np.float64)
         lows_4h   = _np.array([c.low   for c in c4h], dtype=_np.float64)
         closes_4h = _np.array([c.close for c in c4h], dtype=_np.float64)
         atr_arr   = _compute_atr(highs_4h, lows_4h, closes_4h, 14)
-        raw_atr = float(atr_arr[-1]) if len(atr_arr) > 0 and not _np.isnan(atr_arr[-1]) else 0.0
-        # Sanity: ATR must be 0.1%–15% of spot. Bad candle data gives 0 or extreme values.
-        atr_min = spot_f * 0.001
-        atr_max = spot_f * 0.15
-        atr_val = raw_atr if atr_min < raw_atr < atr_max else spot_f * 0.02
-
-        # Use mode's stop_atr_mult and rr_target
-        stop_mult = mode.stop_atr_mult if mode else 2.0
-        rr        = mode.rr_target     if mode else 2.0
+        raw_atr   = float(atr_arr[-1]) if len(atr_arr) > 0 and not _np.isnan(atr_arr[-1]) else 0.0
+        # Sanity: ATR must be 0.1%–15% of spot (bad Deribit candles give 0 or wild values)
+        atr_val   = raw_atr if spot_f * 0.001 < raw_atr < spot_f * 0.15 else spot_f * 0.02
 
         stop_price   = None
         target_price = None
@@ -544,6 +527,28 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             except Exception:
                 pass
 
+        # Write enriched data to cache so subsequent fast-path calls have SL/TP
+        _snap_cache.put(
+            sym=sym,
+            spot_price=spot_f,
+            ivr=ivr,
+            green_arrow=signal.green_arrow,
+            red_arrow=signal.red_arrow,
+            current_state=setup.state.value,
+            direction=setup.direction.value,
+            regime=regime.macro_regime.value,
+            score_long=round(signal.score_long, 1),
+            score_short=round(signal.score_short, 1),
+            exec_mode=exec_timing.mode.value,
+            stop_price=stop_price,
+            target_price=target_price,
+            atr=round(atr_val, 2),
+            adx=round(regime.adx, 1),
+            rsi=round(getattr(signal, 'rsi', 50.0), 1),
+            squeezed=getattr(signal, 'squeezed', False),
+            exec_confidence=round(exec_timing.confidence, 2),
+        )
+
         return {
             'underlying': sym,
             'has_options': inst.has_options,
@@ -571,7 +576,7 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             'timestamp_ms': now_ms,
         }
     except Exception as exc:
-        log.debug("signals compute failed for %s: %s", sym, exc)
+        log.warning("_compute_signal_item failed for %s: %r", sym, exc)
         return {
             'underlying': sym,
             'has_options': inst.has_options,
@@ -579,6 +584,7 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             'green_arrow': False, 'red_arrow': False,
             'state': 'IDLE', 'direction': 'neutral', 'regime': '',
             'score_long': 0.0, 'score_short': 0.0, 'exec_mode': None,
+            'stop_price': None, 'target_price': None, 'atr': None,
             'fresh': False, 'timestamp_ms': now_ms,
         }
 
@@ -594,6 +600,8 @@ async def all_signals(request: Request) -> dict:
     mode = getattr(request.app.state, "trading_mode", None)
     macro_filter  = mode.macro_filter  if mode else "adx_4h"
     st_threshold  = mode.st_threshold  if mode else 3
+    stop_mult     = mode.stop_atr_mult if mode else 2.0
+    rr_target     = mode.rr_target     if mode else 2.0
     current_source = _adm.get_data_source()
 
     instruments = registry.list_instruments()
@@ -611,13 +619,7 @@ async def all_signals(request: Request) -> dict:
         latest = history[-1] if history else None
 
         if snap is not None:
-            # Fresh cache — use it
-            state = latest.get('state', snap.current_state) if latest else snap.current_state
-            direction = latest.get('direction', 'neutral') if latest else 'neutral'
-            regime    = latest.get('macro_regime', '') if latest else ''
-            score_long  = float(latest.get('score_long') or 0.0) if latest else 0.0
-            score_short = float(latest.get('score_short') or 0.0) if latest else 0.0
-            exec_mode   = latest.get('exec_mode') if latest else None
+            # Fresh cache — serve enriched data written by _compute_signal_item
             cached_results.append({
                 'underlying': sym,
                 'has_options': inst.has_options,
@@ -625,12 +627,19 @@ async def all_signals(request: Request) -> dict:
                 'ivr': snap.ivr,
                 'green_arrow': snap.green_arrow,
                 'red_arrow': snap.red_arrow,
-                'state': state,
-                'direction': direction,
-                'regime': regime,
-                'score_long': round(score_long, 1),
-                'score_short': round(score_short, 1),
-                'exec_mode': exec_mode,
+                'state': snap.current_state,
+                'direction': snap.direction,
+                'regime': snap.regime,
+                'score_long': snap.score_long,
+                'score_short': snap.score_short,
+                'exec_mode': snap.exec_mode,
+                'exec_confidence': snap.exec_confidence,
+                'stop_price': snap.stop_price,
+                'target_price': snap.target_price,
+                'atr': snap.atr,
+                'adx': snap.adx,
+                'rsi': snap.rsi,
+                'squeezed': snap.squeezed,
                 'fresh': True,
                 'timestamp_ms': snap.computed_at_ms,
             })
@@ -652,7 +661,7 @@ async def all_signals(request: Request) -> dict:
     live_results: list[dict] = []
     if stale_insts:
         live_results = list(await asyncio.gather(
-            *[_compute_signal_item(inst, adapter, macro_filter, st_threshold)
+            *[_compute_signal_item(inst, adapter, macro_filter, st_threshold, stop_mult, rr_target)
               for inst in stale_insts],
         ))
 

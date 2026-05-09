@@ -130,8 +130,10 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
             if not ad:
                 continue
             mode = getattr(app.state, "trading_mode", None)
-            macro_filter = mode.macro_filter if mode else "adx_4h"
-            st_threshold = mode.st_threshold if mode else 3
+            macro_filter = mode.macro_filter  if mode else "adx_4h"
+            st_threshold = mode.st_threshold  if mode else 3
+            stop_mult    = mode.stop_atr_mult if mode else 2.0
+            rr_target    = mode.rr_target     if mode else 2.0
             current_source = adapter_manager.get_data_source()
             instruments = [
                 inst for inst in registry.list_instruments()
@@ -140,12 +142,12 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
             if not instruments:
                 continue
             results = await asyncio.gather(
-                *[_compute_signal_item(inst, ad, macro_filter, st_threshold)
+                *[_compute_signal_item(inst, ad, macro_filter, st_threshold, stop_mult, rr_target)
                   for inst in instruments],
                 return_exceptions=True,
             )
-            ok = sum(1 for r in results if isinstance(r, dict))
-            log.debug("Signal refresh: %d/%d instruments updated", ok, len(instruments))
+            ok = sum(1 for r in results if isinstance(r, dict) and r.get('fresh'))
+            log.info("Signal refresh: %d/%d instruments updated", ok, len(instruments))
         except Exception as exc:
             log.debug("Signal refresher error: %s", exc)
 
