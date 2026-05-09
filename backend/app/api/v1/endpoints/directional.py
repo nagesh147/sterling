@@ -438,57 +438,146 @@ async def run_all_endpoint(request: Request):
 
 # ─── /history/{underlying} ───────────────────────────────────────────────────
 
-# ─── /signals (cache-only multi-instrument summary) ──────────────────────────
+# ─── /signals (live multi-instrument summary) ────────────────────────────────
+
+async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: int) -> dict:
+    """
+    Compute a full signal row for one instrument.
+    Updates snapshot_cache so subsequent calls (and SSE) benefit from this data.
+    """
+    sym = inst.underlying
+    now_ms = int(time.time() * 1000)
+    try:
+        spot, c4h, c1h, c15m = await asyncio.gather(
+            adapter.get_index_price(inst),
+            adapter.get_candles(inst, "4H", limit=100),
+            adapter.get_candles(inst, "1H", limit=200),
+            adapter.get_candles(inst, "15m", limit=50),
+        )
+        regime  = compute_regime(c4h, macro_filter=macro_filter)
+        signal  = compute_signal(c1h, st_threshold=st_threshold)
+        setup   = evaluate_setup(regime, signal)
+        ivr     = await compute_ivr(adapter, inst, c1h)
+        exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
+
+        from app.engines.directional.policy_engine import apply_policy
+        policy = apply_policy(setup.direction, inst, ivr)
+
+        # Write to snapshot cache so SSE and future fast-path calls benefit
+        _snap_cache.put(
+            sym=sym,
+            spot_price=float(spot),
+            ivr=ivr,
+            green_arrow=signal.green_arrow,
+            red_arrow=signal.red_arrow,
+            current_state=setup.state.value,
+        )
+
+        return {
+            'underlying': sym,
+            'has_options': inst.has_options,
+            'spot_price': float(spot),
+            'ivr': ivr,
+            'green_arrow': signal.green_arrow,
+            'red_arrow': signal.red_arrow,
+            'state': setup.state.value,
+            'direction': setup.direction.value,
+            'regime': regime.macro_regime.value,
+            'score_long': round(signal.score_long, 1),
+            'score_short': round(signal.score_short, 1),
+            'exec_mode': exec_timing.mode.value,
+            'fresh': True,
+            'timestamp_ms': now_ms,
+        }
+    except Exception as exc:
+        log.debug("signals compute failed for %s: %s", sym, exc)
+        return {
+            'underlying': sym,
+            'has_options': inst.has_options,
+            'spot_price': None, 'ivr': None,
+            'green_arrow': False, 'red_arrow': False,
+            'state': 'IDLE', 'direction': 'neutral', 'regime': '',
+            'score_long': 0.0, 'score_short': 0.0, 'exec_mode': None,
+            'fresh': False, 'timestamp_ms': now_ms,
+        }
+
 
 @router.get("/signals")
-async def all_signals() -> dict:
+async def all_signals(request: Request) -> dict:
     """
-    Fast multi-instrument signal summary from in-memory caches only.
-    No exchange calls — returns immediately from snapshot_cache + eval_history.
-    Refreshes naturally as SSE streams write to the cache.
+    Live multi-instrument signal summary.
+    Uses snapshot_cache when fresh (< 45 s). Falls back to live exchange
+    calls for stale instruments and caches the result — so the first call
+    may take a few seconds but subsequent calls return instantly.
     """
+    mode = getattr(request.app.state, "trading_mode", None)
+    macro_filter  = mode.macro_filter  if mode else "adx_4h"
+    st_threshold  = mode.st_threshold  if mode else 3
+    current_source = _adm.get_data_source()
+
     instruments = registry.list_instruments()
-    results = []
+    adapter = _adapter(request)
+    now_ms = int(time.time() * 1000)
+
+    # Split into cached (fast) and stale (need live fetch)
+    cached_results: list[dict] = []
+    stale_insts: list = []
+
     for inst in instruments:
         sym = inst.underlying
-        snap = _snap_cache.get(sym)
+        snap = _snap_cache.get(sym)       # None when older than 45 s
         history = hist_store.get_history(sym)
         latest = history[-1] if history else None
 
-        state = 'IDLE'
-        direction = 'neutral'
-        regime = ''
-        score_long = 0.0
-        score_short = 0.0
-        exec_mode = None
-        if latest:
-            state = latest.get('state', 'IDLE')
-            direction = latest.get('direction', 'neutral')
-            regime = latest.get('macro_regime', '')
-            score_long = float(latest.get('score_long') or 0.0)
-            score_short = float(latest.get('score_short') or 0.0)
-            exec_mode = latest.get('exec_mode')
-        elif snap:
-            state = snap.current_state
+        if snap is not None:
+            # Fresh cache — use it
+            state = latest.get('state', snap.current_state) if latest else snap.current_state
+            direction = latest.get('direction', 'neutral') if latest else 'neutral'
+            regime    = latest.get('macro_regime', '') if latest else ''
+            score_long  = float(latest.get('score_long') or 0.0) if latest else 0.0
+            score_short = float(latest.get('score_short') or 0.0) if latest else 0.0
+            exec_mode   = latest.get('exec_mode') if latest else None
+            cached_results.append({
+                'underlying': sym,
+                'has_options': inst.has_options,
+                'spot_price': snap.spot_price,
+                'ivr': snap.ivr,
+                'green_arrow': snap.green_arrow,
+                'red_arrow': snap.red_arrow,
+                'state': state,
+                'direction': direction,
+                'regime': regime,
+                'score_long': round(score_long, 1),
+                'score_short': round(score_short, 1),
+                'exec_mode': exec_mode,
+                'fresh': True,
+                'timestamp_ms': snap.computed_at_ms,
+            })
+        elif _adapter_can_serve(inst, current_source):
+            stale_insts.append(inst)
+        else:
+            # Instrument not serveable on current source (e.g. Zerodha on Deribit)
+            cached_results.append({
+                'underlying': sym,
+                'has_options': inst.has_options,
+                'spot_price': None, 'ivr': None,
+                'green_arrow': False, 'red_arrow': False,
+                'state': 'IDLE', 'direction': 'neutral', 'regime': '',
+                'score_long': 0.0, 'score_short': 0.0, 'exec_mode': None,
+                'fresh': False, 'timestamp_ms': now_ms,
+            })
 
-        results.append({
-            'underlying': sym,
-            'has_options': inst.has_options,
-            'spot_price': snap.spot_price if snap else None,
-            'ivr': snap.ivr if snap else None,
-            'green_arrow': snap.green_arrow if snap else False,
-            'red_arrow': snap.red_arrow if snap else False,
-            'state': state,
-            'direction': direction,
-            'regime': regime,
-            'score_long': round(score_long, 1),
-            'score_short': round(score_short, 1),
-            'exec_mode': exec_mode,
-            'fresh': snap is not None,
-            'timestamp_ms': snap.computed_at_ms if snap else 0,
-        })
+    # Fetch live data for stale instruments in parallel
+    live_results: list[dict] = []
+    if stale_insts:
+        live_results = list(await asyncio.gather(
+            *[_compute_signal_item(inst, adapter, macro_filter, st_threshold)
+              for inst in stale_insts],
+        ))
 
-    # Sort: actionable states first
+    results = cached_results + live_results
+
+    # Sort: actionable first
     _ORDER = {
         'ENTRY_ARMED_PULLBACK': 0, 'ENTRY_ARMED_CONTINUATION': 1,
         'CONFIRMED_SETUP_ACTIVE': 2, 'EARLY_SETUP_ACTIVE': 3,
@@ -496,7 +585,7 @@ async def all_signals() -> dict:
     }
     results.sort(key=lambda r: _ORDER.get(r['state'], 6))
 
-    return {'signals': results, 'count': len(results), 'timestamp_ms': int(time.time() * 1000)}
+    return {'signals': results, 'count': len(results), 'timestamp_ms': now_ms}
 
 
 # ─── /snapshot ────────────────────────────────────────────────────────────────
