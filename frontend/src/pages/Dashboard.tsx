@@ -45,6 +45,7 @@ import { CorrelationHeatmap } from '../components/CorrelationHeatmap';
 import { GreeksBudgetGauge } from '../components/GreeksBudgetGauge';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { CalibrationPanel } from '../components/CalibrationPanel';
+import { SignalsBar } from '../components/SignalsBar';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -176,6 +177,8 @@ export function Dashboard() {
           />
         ))}
       </div>
+
+      <SignalsBar />
 
       {activeTab === 'analysis' && (
         <>

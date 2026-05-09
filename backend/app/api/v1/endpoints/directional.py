@@ -438,6 +438,67 @@ async def run_all_endpoint(request: Request):
 
 # ─── /history/{underlying} ───────────────────────────────────────────────────
 
+# ─── /signals (cache-only multi-instrument summary) ──────────────────────────
+
+@router.get("/signals")
+async def all_signals() -> dict:
+    """
+    Fast multi-instrument signal summary from in-memory caches only.
+    No exchange calls — returns immediately from snapshot_cache + eval_history.
+    Refreshes naturally as SSE streams write to the cache.
+    """
+    instruments = registry.list_instruments()
+    results = []
+    for inst in instruments:
+        sym = inst.underlying
+        snap = _snap_cache.get(sym)
+        history = hist_store.get_history(sym)
+        latest = history[-1] if history else None
+
+        state = 'IDLE'
+        direction = 'neutral'
+        regime = ''
+        score_long = 0.0
+        score_short = 0.0
+        exec_mode = None
+        if latest:
+            state = latest.get('state', 'IDLE')
+            direction = latest.get('direction', 'neutral')
+            regime = latest.get('macro_regime', '')
+            score_long = float(latest.get('score_long') or 0.0)
+            score_short = float(latest.get('score_short') or 0.0)
+            exec_mode = latest.get('exec_mode')
+        elif snap:
+            state = snap.current_state
+
+        results.append({
+            'underlying': sym,
+            'has_options': inst.has_options,
+            'spot_price': snap.spot_price if snap else None,
+            'ivr': snap.ivr if snap else None,
+            'green_arrow': snap.green_arrow if snap else False,
+            'red_arrow': snap.red_arrow if snap else False,
+            'state': state,
+            'direction': direction,
+            'regime': regime,
+            'score_long': round(score_long, 1),
+            'score_short': round(score_short, 1),
+            'exec_mode': exec_mode,
+            'fresh': snap is not None,
+            'timestamp_ms': snap.computed_at_ms if snap else 0,
+        })
+
+    # Sort: actionable states first
+    _ORDER = {
+        'ENTRY_ARMED_PULLBACK': 0, 'ENTRY_ARMED_CONTINUATION': 1,
+        'CONFIRMED_SETUP_ACTIVE': 2, 'EARLY_SETUP_ACTIVE': 3,
+        'FILTERED': 4, 'IDLE': 5,
+    }
+    results.sort(key=lambda r: _ORDER.get(r['state'], 6))
+
+    return {'signals': results, 'count': len(results), 'timestamp_ms': int(time.time() * 1000)}
+
+
 # ─── /snapshot ────────────────────────────────────────────────────────────────
 
 @router.get("/snapshot", response_model=DirectionalSnapshot)
