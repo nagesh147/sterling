@@ -216,11 +216,19 @@ function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => v
 
 // ── main component ────────────────────────────────────────────────────────────
 
+const ARMED_STATES = new Set([
+  'CONFIRMED_SETUP_ACTIVE', 'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
+]);
+
 export function ArrowAlert({ underlying }: { underlying: string }) {
   const { data } = useSignalStream(underlying, 30);
   const [notif, setNotif] = useState<TradeNotif | null>(null);
   const lastTs    = useRef<number>(0);
-  const lastState = useRef<string>('');
+  // Seed from sessionStorage so page refresh doesn't re-fire for pre-existing state
+  const stateKey  = `sterling_alert_state_${underlying}`;
+  const lastState = useRef<string>(
+    (() => { try { return sessionStorage.getItem(stateKey) ?? ''; } catch { return ''; } })()
+  );
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qc        = useQueryClient();
 
@@ -228,14 +236,19 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
     if (!data || data.timestamp_ms === lastTs.current) return;
     lastTs.current = data.timestamp_ms;
 
+    const curState = data.state ?? '';
+    const prev     = lastState.current;
+
+    // Fire only on a genuine transition into an armed state, or on a fresh arrow.
+    // Seeding lastState from sessionStorage prevents re-firing on page refresh
+    // when the state was already ARMED before the reload.
     const shouldFire =
       data.green_arrow || data.red_arrow ||
-      (
-        ['CONFIRMED_SETUP_ACTIVE', 'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION'].includes(data.state ?? '') &&
-        !['CONFIRMED_SETUP_ACTIVE', 'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION'].includes(lastState.current)
-      );
+      (ARMED_STATES.has(curState) && !ARMED_STATES.has(prev));
 
-    lastState.current = data.state ?? '';
+    lastState.current = curState;
+    try { sessionStorage.setItem(stateKey, curState); } catch { /* ignore */ }
+
     if (!shouldFire) return;
     if (data.direction === 'neutral') return;
 
