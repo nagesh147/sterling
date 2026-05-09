@@ -119,16 +119,16 @@ async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
 
 
 async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None:
-    """Refresh signals for all instruments every `interval` seconds."""
+    """Refresh signals for all instruments every `interval` seconds. Runs immediately at startup."""
     import asyncio
     from app.api.v1.endpoints.directional import _compute_signal_item, _adapter_can_serve
     from app.services.exchanges import instrument_registry as registry
 
     while True:
-        await asyncio.sleep(interval)
         try:
             ad = adapter_manager.get_adapter()
             if not ad:
+                await asyncio.sleep(interval)
                 continue
             mode = getattr(app.state, "trading_mode", None)
             macro_filter = mode.macro_filter  if mode else "adx_4h"
@@ -140,17 +140,17 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                 inst for inst in registry.list_instruments()
                 if _adapter_can_serve(inst, current_source)
             ]
-            if not instruments:
-                continue
-            results = await asyncio.gather(
-                *[_compute_signal_item(inst, ad, macro_filter, st_threshold, stop_mult, rr_target)
-                  for inst in instruments],
-                return_exceptions=True,
-            )
-            ok = sum(1 for r in results if isinstance(r, dict) and r.get('fresh'))
-            log.info("Signal refresh: %d/%d instruments updated", ok, len(instruments))
+            if instruments:
+                results = await asyncio.gather(
+                    *[_compute_signal_item(inst, ad, macro_filter, st_threshold, stop_mult, rr_target)
+                      for inst in instruments],
+                    return_exceptions=True,
+                )
+                ok = sum(1 for r in results if isinstance(r, dict) and r.get('fresh'))
+                log.info("Signal refresh: %d/%d instruments updated", ok, len(instruments))
         except Exception as exc:
             log.debug("Signal refresher error: %s", exc)
+        await asyncio.sleep(interval)  # sleep at end so first run is immediate
 
 
 @asynccontextmanager

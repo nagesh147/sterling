@@ -62,6 +62,7 @@ export function usePlaceOrder() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['positions'] });
       qc.invalidateQueries({ queryKey: ['live-pnl'] });
+      qc.invalidateQueries({ queryKey: ['signal-alerts'] });
     },
   });
 }

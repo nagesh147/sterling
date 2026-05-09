@@ -1,7 +1,11 @@
 import asyncio
 import json
 import time
+from collections import deque
 from typing import Optional, AsyncGenerator, List
+
+import numpy as _np
+from app.engines.indicators.atr import compute_atr as _compute_atr
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -38,10 +42,84 @@ from app.services import adapter_manager as _adm
 log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
 
-# Track previous signal states for Telegram alert edge detection
 _prev_states: dict[str, str] = {}
-_signal_alerts: list[dict] = []  # rolling last-50 professional alerts
-_MAX_ALERTS = 50
+_signal_alerts: deque = deque(maxlen=50)  # O(1) appendleft, bounded automatically
+_ALERT_STATES = frozenset({'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE'})
+
+_STATE_LABELS = {
+    'ENTRY_ARMED_PULLBACK':     '⚡ ARMED — Pullback Entry',
+    'ENTRY_ARMED_CONTINUATION': '⚡ ARMED — Continuation',
+    'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED Setup',
+}
+
+
+async def _fire_signal_alert(
+    sym: str, inst, setup, regime, signal,
+    spot_f: float, stop_price, target_price, atr_val: float, now_ms: int,
+) -> None:
+    """Build and store a professional signal alert; fire Telegram. Runs as a background task."""
+    import datetime
+    from app.services.notifications import telegram as _tg
+
+    try:
+        dir_str = setup.direction.value
+        state   = setup.state.value
+
+        # ATM options recommendation
+        opt_strike = opt_type = opt_expiry = opt_symbol = None
+        try:
+            step = 500 if spot_f > 10000 else (100 if spot_f > 1000 else 10)
+            opt_strike = round(spot_f / step) * step
+            opt_type   = 'CE' if dir_str == 'long' else 'PE'
+            today = datetime.date.today()
+            days_to_friday = (4 - today.weekday()) % 7 or 7
+            opt_expiry = (today + datetime.timedelta(days=days_to_friday)).strftime('%d%b%y').upper()
+            opt_symbol = f"{opt_type[0]}-{sym}-{opt_strike}-{opt_expiry}"
+        except Exception:
+            pass
+
+        adx_val    = regime.adx
+        rec_lev    = 5 if adx_val < 20 else (10 if adx_val < 30 else 20)
+        risk_pct   = abs(spot_f - (stop_price or spot_f)) / spot_f * 100
+        score      = signal.score_long if dir_str == 'long' else signal.score_short
+        state_label = _STATE_LABELS.get(state, state)
+
+        alert = {
+            'id': f"{sym}_{state}_{now_ms}",
+            'underlying': sym, 'state': state, 'state_label': state_label,
+            'direction': dir_str, 'regime': regime.macro_regime.value,
+            'entry': round(spot_f, 2), 'stop_loss': stop_price, 'take_profit': target_price,
+            'risk_pct': round(risk_pct, 2), 'score': round(score, 1),
+            'atr': round(atr_val, 2), 'adx': round(adx_val, 1),
+            'rsi': round(getattr(signal, 'rsi', 50.0), 1),
+            'futures_symbol': inst.delta_perp_symbol or f"{sym}USDT",
+            'rec_leverage': rec_lev,
+            'opt_strike': opt_strike, 'opt_type': opt_type,
+            'opt_expiry': opt_expiry, 'opt_symbol': opt_symbol,
+            'timestamp_ms': now_ms, 'fresh': True,
+        }
+        _signal_alerts.appendleft(alert)
+
+        side_tag = '🟢 BUY' if dir_str == 'long' else '🔴 SELL'
+        sl_str   = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
+        tp_str   = f"${target_price:,.2f}" if target_price else 'N/A'
+        msg = (
+            f"<b>{state_label}</b>\n"
+            f"<b>{sym}</b>  {side_tag}\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"📍 Entry:  <b>${spot_f:,.2f}</b>\n"
+            f"🛑 Stop:   <b>{sl_str}</b>  ({risk_pct:.1f}% risk)\n"
+            f"🎯 Target: <b>{tp_str}</b>  (2:1 R:R)\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"⚙️ Regime: {regime.macro_regime.value}  |  ADX {adx_val:.0f}\n"
+            f"📊 Score:  {round(score)}/100  |  RSI {round(getattr(signal, 'rsi', 50))}\n"
+            f"🔧 Futures: {inst.delta_perp_symbol or sym+'USDT'}  {rec_lev}× leverage\n"
+        )
+        if opt_symbol:
+            msg += f"📈 Options: {opt_type} {opt_strike} {opt_expiry}\n"
+        await _tg.send(msg)
+    except Exception as exc:
+        log.debug("Alert generation error for %s: %s", sym, exc)
 
 
 def _build_indicator_lines(candles):
@@ -455,9 +533,6 @@ async def _compute_signal_item(
     Updates snapshot_cache so subsequent calls (and SSE) benefit from this data.
     stop_mult and rr come from the active TradingModeConfig (stop_atr_mult, rr_target).
     """
-    import numpy as _np
-    from app.engines.indicators.atr import compute_atr as _compute_atr
-
     sym = inst.underlying
     now_ms = int(time.time() * 1000)
     try:
@@ -500,100 +575,14 @@ async def _compute_signal_item(
             target_price = round(spot_f - stop_dist * rr, 2)
 
         # Telegram alert on new actionable state transitions
-        _ALERT_STATES = {'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE'}
         prev_state = _prev_states.get(sym, 'IDLE')
         cur_state  = setup.state.value
         _prev_states[sym] = cur_state
 
         if cur_state in _ALERT_STATES and prev_state != cur_state:
-            try:
-                mode_obj = mode  # the stop_mult/rr params we have
-                dir_str = setup.direction.value  # 'long' or 'short'
-                side_tag = '🟢 BUY' if dir_str == 'long' else '🔴 SELL'
-
-                # Options recommendation: ATM strike rounded to nearest step
-                opt_strike = None
-                opt_type = None
-                opt_expiry = None
-                try:
-                    step = 500 if spot_f > 10000 else (100 if spot_f > 1000 else 10)
-                    opt_strike = round(spot_f / step) * step
-                    opt_type = 'CE' if dir_str == 'long' else 'PE'
-                    import datetime as _dt
-                    # Next weekly expiry (Friday)
-                    today = _dt.date.today()
-                    days_to_friday = (4 - today.weekday()) % 7 or 7
-                    expiry = today + _dt.timedelta(days=days_to_friday)
-                    opt_expiry = expiry.strftime('%d%b%y').upper()
-                except Exception:
-                    pass
-
-                # Leverage recommendation based on ADX strength
-                adx_val = regime.adx
-                rec_leverage = 5 if adx_val < 20 else (10 if adx_val < 30 else 20)
-
-                state_label = {
-                    'ENTRY_ARMED_PULLBACK':     '⚡ ARMED — Pullback Entry',
-                    'ENTRY_ARMED_CONTINUATION': '⚡ ARMED — Continuation',
-                    'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED Setup',
-                }[cur_state]
-
-                sl_str   = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
-                tp_str   = f"${target_price:,.2f}" if target_price else 'N/A'
-                risk_pct = abs(spot_f - (stop_price or spot_f)) / spot_f * 100
-
-                alert = {
-                    'id': f"{sym}_{cur_state}_{now_ms}",
-                    'underlying': sym,
-                    'state': cur_state,
-                    'state_label': state_label,
-                    'direction': dir_str,
-                    'regime': regime.macro_regime.value,
-                    'entry': round(spot_f, 2),
-                    'stop_loss': stop_price,
-                    'take_profit': target_price,
-                    'risk_pct': round(risk_pct, 2),
-                    'score': round(signal.score_long if dir_str == 'long' else signal.score_short, 1),
-                    'atr': round(atr_val, 2),
-                    'adx': round(regime.adx, 1),
-                    'rsi': round(getattr(signal, 'rsi', 50.0), 1),
-                    # Futures
-                    'futures_symbol': inst.delta_perp_symbol or f"{sym}USDT",
-                    'rec_leverage': rec_leverage,
-                    # Options
-                    'opt_strike': opt_strike,
-                    'opt_type': opt_type,
-                    'opt_expiry': opt_expiry,
-                    'opt_symbol': f"{opt_type[0]}-{sym}-{opt_strike}-{opt_expiry}" if all([opt_strike, opt_type, opt_expiry]) else None,
-                    'timestamp_ms': now_ms,
-                    'fresh': True,
-                }
-
-                _signal_alerts.insert(0, alert)
-                if len(_signal_alerts) > _MAX_ALERTS:
-                    _signal_alerts.pop()
-
-                # Telegram
-                from app.services.notifications import telegram as _tg
-                opt_line = f"Options: {opt_type} {opt_strike} {opt_expiry}" if opt_strike else ""
-                msg = (
-                    f"<b>{state_label}</b>\n"
-                    f"<b>{sym}</b>  {side_tag}\n"
-                    f"━━━━━━━━━━━━━━━━━━━\n"
-                    f"📍 Entry:  <b>${spot_f:,.2f}</b>\n"
-                    f"🛑 Stop:   <b>{sl_str}</b>  ({risk_pct:.1f}% risk)\n"
-                    f"🎯 Target: <b>{tp_str}</b>  (2:1 R:R)\n"
-                    f"━━━━━━━━━━━━━━━━━━━\n"
-                    f"⚙️ Regime: {regime.macro_regime.value}  |  ADX {regime.adx:.0f}\n"
-                    f"📊 Score:  {alert['score']:.0f}/100  |  RSI {alert['rsi']:.0f}\n"
-                    f"🔧 Futures: {inst.delta_perp_symbol or sym+'USDT'}  {rec_leverage}× leverage\n"
-                )
-                if opt_line:
-                    msg += f"📈 {opt_line}\n"
-                import asyncio as _aio
-                _aio.create_task(_tg.send(msg))
-            except Exception as _te:
-                log.debug("Alert generation error: %s", _te)
+            asyncio.create_task(
+                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms)
+            )
 
         # Write enriched data to cache so subsequent fast-path calls have SL/TP
         _snap_cache.put(
@@ -988,7 +977,7 @@ async def _sse_generator(
 async def get_signal_alerts(limit: int = 20) -> dict:
     """Return recent professional signal alerts."""
     return {
-        'alerts': _signal_alerts[:limit],
+        'alerts': list(_signal_alerts)[:limit],
         'count': len(_signal_alerts),
         'timestamp_ms': int(time.time() * 1000),
     }

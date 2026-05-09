@@ -75,6 +75,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         self._base = base_url
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
+        self._product_id_cache: dict[str, int] = {}  # symbol → product_id, lives for process lifetime
 
     async def _get_client(self):
         if self._client is None or self._client.is_closed:
@@ -154,16 +155,21 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         return self._validate_response(data, path)
 
     async def get_product_id(self, symbol: str) -> int:
-        """Resolve a Delta product symbol to its integer product_id."""
+        """Resolve a Delta product symbol to its integer product_id. Cached per-process."""
+        if symbol in self._product_id_cache:
+            return self._product_id_cache[symbol]
         data = await self._public_get("/v2/products", params={"contract_type": "perpetual_futures", "page_size": 200})
         for p in ((data or {}).get("result") or []):
             if str(p.get("symbol") or "") == symbol:
-                return int(p["id"])
-        # Fallback: search by name
+                pid = int(p["id"])
+                self._product_id_cache[symbol] = pid
+                return pid
         data2 = await self._public_get("/v2/products", params={"page_size": 200})
         for p in ((data2 or {}).get("result") or []):
             if str(p.get("symbol") or "") == symbol:
-                return int(p["id"])
+                pid = int(p["id"])
+                self._product_id_cache[symbol] = pid
+                return pid
         raise RuntimeError(f"Delta product not found for symbol: {symbol}")
 
     async def place_order(

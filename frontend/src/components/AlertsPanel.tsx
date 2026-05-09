@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 import { useSignalAlerts, usePlaceOrder } from '../hooks/useSignalAlerts';
 import type { SignalAlert } from '../hooks/useSignalAlerts';
+import { fmtN } from '../utils/fmt';
+
+// ── shared constants ──────────────────────────────────────────────────────────
+
+const DIR_COLOR = { long: '#44cc88', short: '#cc4444' } as const;
+const DIR_LABEL = { long: 'BUY', short: 'SELL' } as const;
+const STATE_COLOR: Record<string, string> = {
+  ENTRY_ARMED_PULLBACK: '#44aaff', ENTRY_ARMED_CONTINUATION: '#66ccff',
+  CONFIRMED_SETUP_ACTIVE: '#f0c040', EARLY_SETUP_ACTIVE: '#f0a500',
+};
 
 function fmtPrice(v: number | null | undefined): string {
   if (v == null) return '—';
@@ -16,6 +26,24 @@ function fmtAge(ms: number): string {
   return `${Math.floor(diff / 3_600_000)}h ago`;
 }
 
+function PriceGrid({ alert }: { alert: SignalAlert }) {
+  const cells: [string, number | null, string][] = [
+    ['ENTRY',       alert.entry,       'var(--text-primary)'],
+    ['STOP LOSS',   alert.stop_loss,   DIR_COLOR.short],
+    ['TAKE PROFIT', alert.take_profit, DIR_COLOR.long],
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+      {cells.map(([label, val, color]) => (
+        <div key={label} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '8px 6px', textAlign: 'center' }}>
+          <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 3 }}>{label}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{fmtPrice(val)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => void }) {
   const [instrType, setInstrType] = useState<'futures' | 'options'>('futures');
   const [leverage, setLeverage] = useState(alert.rec_leverage);
@@ -23,8 +51,8 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const { mutate: placeOrder, isPending } = usePlaceOrder();
 
-  const dirColor = alert.direction === 'long' ? '#44cc88' : '#cc4444';
-  const side = alert.direction === 'long' ? 'BUY' : 'SELL';
+  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? '#888';
+  const side = DIR_LABEL[alert.direction as keyof typeof DIR_LABEL] ?? alert.direction.toUpperCase();
 
   const handlePlace = () => {
     placeOrder({
@@ -62,19 +90,7 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 18 }}>✕</button>
         </div>
 
-        {/* prices */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-          {[
-            ['ENTRY', fmtPrice(alert.entry), 'var(--text-primary)'],
-            ['STOP LOSS', fmtPrice(alert.stop_loss), '#cc4444'],
-            ['TAKE PROFIT', fmtPrice(alert.take_profit), '#44cc88'],
-          ].map(([label, val, color]) => (
-            <div key={label as string} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '8px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: color as string, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
-            </div>
-          ))}
-        </div>
+        <PriceGrid alert={alert} />
 
         {/* instrument type toggle */}
         <div style={{ display: 'flex', gap: 0, marginBottom: 12, borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
@@ -177,9 +193,8 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
 
 function AlertCard({ alert }: { alert: SignalAlert }) {
   const [showOrder, setShowOrder] = useState(false);
-  const dirColor = alert.direction === 'long' ? '#44cc88' : '#cc4444';
-  const stateColor = alert.state === 'ENTRY_ARMED_PULLBACK' || alert.state === 'ENTRY_ARMED_CONTINUATION'
-    ? '#44aaff' : alert.state === 'CONFIRMED_SETUP_ACTIVE' ? '#f0c040' : '#f0a500';
+  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? '#888';
+  const stateColor = STATE_COLOR[alert.state] ?? '#f0a500';
 
   return (
     <>
@@ -198,21 +213,7 @@ function AlertCard({ alert }: { alert: SignalAlert }) {
           <div style={{ fontSize: 9, color: stateColor, marginTop: 2, letterSpacing: 0.5 }}>{alert.state_label.replace('⚡ ', '').replace('✅ ', '')}</div>
         </div>
 
-        {/* prices */}
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, minWidth: 240 }}>
-          {[
-            ['ENTRY', alert.entry, 'var(--text-primary)'],
-            ['STOP LOSS', alert.stop_loss, '#cc4444'],
-            ['TAKE PROFIT', alert.take_profit, '#44cc88'],
-          ].map(([label, val, color]) => (
-            <div key={label as string} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 6px', textAlign: 'center' as const }}>
-              <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>{label}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: color as string, fontVariantNumeric: 'tabular-nums' }}>
-                {val != null ? fmtPrice(val as number) : '—'}
-              </div>
-            </div>
-          ))}
-        </div>
+        <div style={{ flex: 1, minWidth: 240 }}><PriceGrid alert={alert} /></div>
 
         {/* meta */}
         <div style={{ fontSize: 10, color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 80 }}>
