@@ -50,6 +50,7 @@ import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SignalsBar } from '../components/SignalsBar';
 import { SignalsList } from '../components/SignalsList';
 import { AlertsPanel } from '../components/AlertsPanel';
+import { GoLivePanel } from '../components/GoLivePanel';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -187,14 +188,26 @@ export function Dashboard() {
       </div>
 
       {appMode === 'basic' ? (
-        // ── BASIC (SIMPLE) MODE ─────────────────────────────────────────────
+        // ── SIMPLE MODE ─────────────────────────────────────────────────────
         <>
+          {/* Go Live panel — shown when paper/no credentials */}
+          <GoLivePanel />
+
+          {/* Strategy mode strip — full width, prominent */}
+          <div style={{
+            marginBottom: 14, padding: '10px 14px',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 6, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: 2 }}>STRATEGY MODE</span>
+            <TradingModeSelector />
+            <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
+              Switch mode → signals recompute instantly
+            </span>
+          </div>
+
           <AlertsPanel />
           <SignalsList />
-          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: 'var(--text-faint)', fontSize: 10, letterSpacing: 1 }}>STRATEGY:</span>
-            <TradingModeSelector />
-          </div>
           <InstrumentDetailCard underlying={selectedUnderlying} />
           <PositionsStrip />
         </>
@@ -274,6 +287,7 @@ export function Dashboard() {
           {activeTab === 'config' && (
             <>
               <PanelBoundary title="SYSTEM"><SystemInfoPanel /></PanelBoundary>
+              <PanelBoundary title="LIVE TRADING"><GoLivePanel /></PanelBoundary>
               <PanelBoundary title="TRADING MODE"><TradingModeCard /></PanelBoundary>
               <PanelBoundary title="CIRCUIT BREAKER"><CircuitBreakerCard /></PanelBoundary>
               <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>

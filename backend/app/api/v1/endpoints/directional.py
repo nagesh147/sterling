@@ -994,6 +994,43 @@ async def get_signal_alerts(limit: int = 20) -> dict:
     }
 
 
+@router.post("/refresh-signals")
+async def refresh_signals_now(request: Request) -> dict:
+    """
+    Force immediate signal recomputation for all instruments using current mode.
+    Called after mode changes so the UI updates in seconds, not 30s.
+    """
+    mode = getattr(request.app.state, "trading_mode", None)
+    macro_filter = mode.macro_filter  if mode else "adx_4h"
+    st_threshold = mode.st_threshold  if mode else 3
+    stop_mult    = mode.stop_atr_mult if mode else 2.0
+    rr_target    = mode.rr_target     if mode else 2.0
+    current_source = _adm.get_data_source()
+
+    serveable = [
+        inst for inst in registry.list_instruments()
+        if _adapter_can_serve(inst, current_source)
+    ]
+    if not serveable:
+        return {'refreshed': 0, 'mode': mode.name if mode else 'unknown'}
+
+    adapter = _adapter(request)
+    results = await asyncio.gather(
+        *[_compute_signal_item(inst, adapter, macro_filter, st_threshold, stop_mult, rr_target)
+          for inst in serveable],
+        return_exceptions=True,
+    )
+    ok = sum(1 for r in results if isinstance(r, dict) and r.get('fresh'))
+    return {
+        'refreshed': ok,
+        'total': len(serveable),
+        'mode': mode.name if mode else 'unknown',
+        'macro_filter': macro_filter,
+        'stop_atr_mult': stop_mult,
+        'timestamp_ms': int(time.time() * 1000),
+    }
+
+
 @router.get("/stream/{underlying}")
 async def stream_directional(
     underlying: str,
