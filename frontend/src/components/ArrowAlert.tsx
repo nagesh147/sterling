@@ -3,6 +3,7 @@ import { useSignalStream } from '../hooks/useSignalStream';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import type { SignalsResponse } from '../hooks/useSignals';
+import { injectArrowEntry } from '../hooks/useSignalFeed';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -266,21 +267,36 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
     const leverage    = sig?.rec_leverage ?? 5;
     const score       = isLong ? (data.score_long ?? 0) : (data.score_short ?? 0);
 
-    // Derive option params if not from cache
-    const optStrike   = sig?.opt_strike ?? (spot > 0 ? Math.round(spot / (spot > 10000 ? 500 : 100)) * (spot > 10000 ? 500 : 100) : null);
-    const optType     = sig?.opt_type ?? (isLong ? 'CE' : 'PE');
-    const optExpiry   = sig?.opt_expiry ?? null;
-    const optSymbol   = sig?.opt_symbol ?? (optStrike && optExpiry ? `${optType![0]}-${underlying}-${optStrike}-${optExpiry}` : null);
+    // Always derive optType from LIVE direction (SSE), not from cache which may
+    // have been computed when direction was 'neutral' → stale 'PE' for a BUY signal.
+    const optType   = isLong ? 'CE' : 'PE';
+    const step      = spot > 10_000 ? 500 : 100;
+    const optStrike = sig?.opt_strike ?? (spot > 0 ? Math.round(spot / step) * step : null);
+    const optExpiry = sig?.opt_expiry ?? null;
+    const optSymbol = sig?.opt_symbol
+      ?? (optStrike && optExpiry ? `${optType[0]}-${underlying}-${optStrike}-${optExpiry}` : null);
+
+    const dir = data.direction as 'long' | 'short';
+    const regime = data.macro_regime ?? '';
+    const scoreVal = Math.round(score);
 
     setNotif({
-      underlying,
-      direction: data.direction,
+      underlying, direction: dir,
       spot, stopLoss, takeProfit, leverage,
-      regime: data.macro_regime ?? '',
-      score: Math.round(score),
+      regime: regime, score: scoreVal,
       optSymbol, optStrike, optType: optType ?? null, optExpiry,
       ts: data.timestamp_ms,
     });
+
+    // Inject into the feed immediately — don't wait for the 15s poll.
+    // Arrows are ephemeral (true for one candle only); by next poll the arrow
+    // is gone and the feed would miss this signal.
+    injectArrowEntry(
+      underlying, dir, spot, stopLoss, takeProfit, leverage,
+      sig?.futures_symbol ?? `${underlying}USDT`,
+      optSymbol, optStrike, optType ?? null, optExpiry,
+      regime, scoreVal,
+    );
 
     qc.invalidateQueries({ queryKey: ['signals-all'] });
     qc.invalidateQueries({ queryKey: ['snapshot', underlying] });

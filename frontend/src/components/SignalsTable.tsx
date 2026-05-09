@@ -172,8 +172,8 @@ function FeedRow({ entry, hasOpen, onDismiss }: {
             </div>
           ))}
 
-          {/* Live price */}
-          {entry.currentPrice && (
+          {/* Live price — only meaningful for futures (options premium ≠ spot price) */}
+          {isFutures && entry.currentPrice && (
             <div style={{
               background: 'var(--bg)', border: `1px solid ${livePnl != null && livePnl >= 0 ? '#00d4aa44' : '#ff475744'}`,
               borderRadius: 4, padding: '5px 8px', textAlign: 'center', minWidth: 70,

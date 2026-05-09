@@ -14,6 +14,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useSignals } from './useSignals';
 import type { SignalItem } from './useSignals';
 
+// Module-level registry so ArrowAlert can inject entries without prop drilling
+type ArrowParams = [string, 'long'|'short', number, number|null, number|null, number, string, string|null, number|null, 'CE'|'PE'|null, string|null, string, number];
+let _globalAddArrow: ((...args: ArrowParams) => void) | null = null;
+
+/** Call from ArrowAlert to instantly add an entry without waiting for the 15s poll. */
+export function injectArrowEntry(...args: ArrowParams) {
+  _globalAddArrow?.(...args);
+}
+
 export interface FeedEntry {
   id: string;
   underlying: string;
@@ -167,11 +176,14 @@ export function useSignalFeed() {
   const statesRef  = useRef<Record<string, string> | null>(null);
   if (statesRef.current === null) statesRef.current = loadStates();
 
-  // Persist feed to sessionStorage whenever it changes — PURE side effect,
-  // NOT inside setFeed updater (React calls updaters multiple times in concurrent mode)
+  // Persist feed whenever it changes (pure side effect, outside updater)
+  useEffect(() => { saveFeed(feed); }, [feed]);
+
+  // Register as the global handler so ArrowAlert can inject entries immediately
   useEffect(() => {
-    saveFeed(feed);
-  }, [feed]);
+    _globalAddArrow = addArrowEntry;
+    return () => { _globalAddArrow = null; };
+  }); // no deps — re-register on every render so addArrowEntry closure is fresh
 
   useEffect(() => {
     if (!data?.signals) return;
@@ -233,6 +245,58 @@ export function useSignalFeed() {
     }
   }, [data]);
 
+  // Called by ArrowAlert when a live arrow fires — injects an entry immediately
+  // without waiting for the 15s useSignals poll to pick up the ephemeral arrow.
+  const addArrowEntry = (
+    underlying: string, direction: 'long' | 'short', spot: number,
+    stopLoss: number | null, takeProfit: number | null,
+    leverage: number, futuresSymbol: string,
+    optSymbol: string | null, optStrike: number | null,
+    optType: 'CE' | 'PE' | null, optExpiry: string | null,
+    regime: string, score: number,
+  ) => {
+    const now = Date.now();
+    const newEntries: FeedEntry[] = [];
+
+    // Futures entry
+    newEntries.push({
+      id: `${underlying}_futures_arrow_${now}`,
+      underlying, direction, type: 'futures',
+      entry: spot, stopLoss, takeProfit,
+      leverage, futuresSymbol,
+      optSymbol: null, optStrike: null, optType: null, optExpiry: null, optDte: null,
+      state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50,
+      entryAt: now, currentPrice: spot, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
+    });
+
+    // Options entry (if available and liquid)
+    if (optSymbol && optStrike && optExpiry && spot * 0.01 >= 2) {
+      newEntries.push({
+        id: `${underlying}_options_arrow_${now}`,
+        underlying, direction, type: 'options',
+        entry: spot, stopLoss, takeProfit,
+        leverage: 1, futuresSymbol,
+        optSymbol, optStrike, optType, optExpiry, optDte: null,
+        state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50,
+        entryAt: now, currentPrice: null, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
+      });
+    }
+
+    // Update state tracker so this doesn't get re-added on the next poll
+    if (statesRef.current) {
+      statesRef.current[`${underlying}_futures`] = 'ENTRY_ARMED_PULLBACK';
+      statesRef.current[`${underlying}_options`] = 'ENTRY_ARMED_PULLBACK';
+      statesRef.current[`${underlying}_futures_dir`] = direction;
+      statesRef.current[`${underlying}_options_dir`] = direction;
+      saveStates(statesRef.current);
+    }
+
+    setFeed(prev => {
+      const next = [...newEntries, ...prev].slice(0, MAX_FEED);
+      return next;
+    });
+  };
+
   const dismiss = (id: string) =>
     setFeed(prev => prev.map(e => e.id === id ? { ...e, dismissed: true } : e));
 
@@ -243,5 +307,5 @@ export function useSignalFeed() {
     statesRef.current = {};
   };
 
-  return { feed, dismiss, clearAll };
+  return { feed, dismiss, clearAll, addArrowEntry };
 }
