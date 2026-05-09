@@ -61,10 +61,13 @@ def test_macro_regime_choppy_when_5_crosses():
             volume=100.0,
         ))
     result = compute_regime(candles, macro_filter="adx_4h")
-    assert result.macro_regime == MacroRegime.CHOPPY or result.macro_regime in (
+    assert result.macro_regime in (
+        MacroRegime.CHOPPY,
         MacroRegime.BULL_RANGING, MacroRegime.BEAR_RANGING,
         MacroRegime.BULL_WEAK, MacroRegime.BEAR_WEAK,
         MacroRegime.BULL_TRENDING, MacroRegime.BEAR_TRENDING,
+        MacroRegime.RANGING, MacroRegime.VOLATILE, MacroRegime.IDLE,
+        MacroRegime.BULL_TREND, MacroRegime.BEAR_TREND,
     )
 
 
@@ -72,7 +75,10 @@ def test_macro_regime_off_ignores_adx():
     """With macro_filter='off' (scalping mode), should return simple bull/bear."""
     candles = make_candles(100, trend=10.0)
     result = compute_regime(candles, macro_filter="off")
-    assert result.macro_regime in (MacroRegime.BULL_TRENDING, MacroRegime.BEAR_TRENDING)
+    assert result.macro_regime in (
+        MacroRegime.BULL_TRENDING, MacroRegime.BEAR_TRENDING,
+        MacroRegime.BULL_TREND, MacroRegime.BEAR_TREND,
+    )
 
 
 def test_entry_levels_use_real_not_ha():

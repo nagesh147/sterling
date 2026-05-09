@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
+from typing import Tuple
 
 
 def compute_ema(values: NDArray[np.float64], period: int) -> NDArray[np.float64]:
@@ -15,3 +16,10 @@ def compute_ema(values: NDArray[np.float64], period: int) -> NDArray[np.float64]
         ema[i] = values[i] * k + ema[i - 1] * (1.0 - k)
 
     return ema
+
+
+def ema_dual(
+    close: NDArray[np.float64], fast: int = 21, slow: int = 55
+) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Returns (ema_fast, ema_slow). Used for dual-EMA crossover regime."""
+    return compute_ema(close, fast), compute_ema(close, slow)

@@ -34,45 +34,62 @@ const styles: Record<string, React.CSSProperties> = {
   paperBadge: { display: 'inline-block', background: '#1a2a1a', color: '#44cc88', padding: '2px 8px', borderRadius: 3, fontSize: 11, marginLeft: 8 },
 };
 
-const SCORE_META: Record<string, { label: string; tooltip: string }> = {
-  regime:     { label: 'Macro trend',    tooltip: 'Price vs 50-bar EMA on 4H chart. High = strong trend alignment with trade direction.' },
-  signal:     { label: '1H signal',      tooltip: 'SuperTrend agreement across 3 periods (7,3 · 14,2 · 21,1) on Heikin-Ashi candles. 100 = all three aligned.' },
-  exec_timing:{ label: 'Entry timing',   tooltip: 'Pullback into support scores highest (60–100). Continuation breakout scores 50–90. Waiting scores 20.' },
-  health:     { label: 'Contract quality', tooltip: 'Bid-ask spread, open interest, volume, and quote freshness. Low score = wide spread or thin market — avoid.' },
-  dte:        { label: 'Days to expiry', tooltip: 'Preferred 10–15 DTE scores 100. Below 5 DTE = veto. Above 15 DTE loses time-value efficiency.' },
-  rr:         { label: 'Risk / reward',  tooltip: 'Max gain ÷ max loss. 2:1 scores 80, 3:1 scores 100. Naked calls/puts have undefined RR — scored 40.' },
+const SCORE_META: Record<string, { label: string; max: number; tooltip: string }> = {
+  // v2 keys
+  macro_trend:     { label: 'Macro trend',      max: 20, tooltip: 'Dual EMA (21/55) crossover + ADX strength. Max 20 pts.' },
+  signal:          { label: 'Signal strength',  max: 20, tooltip: 'Weighted confluence: ST flip, RSI, BB/KC squeeze, volume, HA body. Max 20 pts.' },
+  entry:           { label: 'Entry timing',     max: 15, tooltip: 'Mode A pullback (14 pts) or Mode B breakout (10 pts) with 2× volume. Max 15 pts.' },
+  contract_health: { label: 'Contract quality', max: 20, tooltip: 'Spread, OI tiers, funding rate penalty. Max 20 pts.' },
+  dte:             { label: 'Days to expiry',   max: 10, tooltip: '7-45 DTE sweet spot. < 7 DTE = veto. Max 10 pts.' },
+  rr:              { label: 'Risk / reward',    max: 15, tooltip: 'rr≥2.5→15 · rr≥2.0→11 · rr≥1.5→7 · rr<1.5→0. Max 15 pts.' },
+  // v1 legacy keys (backward compat)
+  regime:          { label: 'Macro trend',      max: 100, tooltip: 'Macro regime score.' },
+  exec_timing:     { label: 'Entry timing',     max: 100, tooltip: 'Entry timing score.' },
+  health:          { label: 'Contract quality', max: 100, tooltip: 'Contract health score.' },
 };
 
-function ScoreBreakdown({ bd, ivr }: { bd: Record<string, number>; ivr?: number | null }) {
-  const entries = Object.entries(bd).filter(([k]) => k !== 'total');
+function ScoreBreakdown({ bd, ivr }: { bd: Record<string, number | string>; ivr?: number | null }) {
+  const entries = Object.entries(bd).filter(([k]) => k !== 'total' && k !== 'veto_reason');
+  const vetoReason = bd['veto_reason'] as string | undefined;
   if (!entries.length) return null;
   return (
     <div style={{ marginTop: 8, borderTop: '1px solid #1a1a1a', paddingTop: 8 }}>
       <div style={{ color: '#444', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>SCORE BREAKDOWN</div>
-      {entries.map(([key, val]) => {
-        const meta = SCORE_META[key];
-        const color = val >= 70 ? '#44cc88' : val >= 50 ? '#f0c040' : '#cc4444';
-        return (
-          <div key={key} title={meta?.tooltip} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, cursor: 'help' }}>
-            <span style={{ color: '#555', fontSize: 10, width: 90, flexShrink: 0 }}>
-              {meta?.label ?? key}
-            </span>
-            <div style={{ flex: 1, height: 4, background: '#1a1a1a', borderRadius: 2 }}>
-              <div style={{ width: `${Math.min(100, val)}%`, height: '100%', background: color, borderRadius: 2 }} />
-            </div>
-            <span style={{ color, fontSize: 10, fontWeight: 600, width: 28, textAlign: 'right' as const }}>{fmtN(val, 0)}</span>
-          </div>
-        );
-      })}
+      {vetoReason && (
+        <div style={{ color: '#cc4444', fontSize: 10, marginBottom: 6 }}>✕ VETOED: {vetoReason}</div>
+      )}
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+        <thead>
+          <tr>
+            <th style={{ color: '#333', textAlign: 'left', padding: '2px 4px' }}>COMPONENT</th>
+            <th style={{ color: '#333', textAlign: 'right', padding: '2px 4px' }}>SCORE</th>
+            <th style={{ color: '#333', textAlign: 'right', padding: '2px 4px' }}>MAX</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([key, val]) => {
+            const meta = SCORE_META[key];
+            const numVal = typeof val === 'number' ? val : 0;
+            const maxVal = meta?.max ?? 100;
+            const pct = (numVal / maxVal) * 100;
+            const color = pct >= 70 ? '#44cc88' : pct >= 40 ? '#f0c040' : '#cc4444';
+            return (
+              <tr key={key} title={meta?.tooltip} style={{ cursor: meta?.tooltip ? 'help' : 'default' }}>
+                <td style={{ padding: '3px 4px', color: '#666' }}>{meta?.label ?? key}</td>
+                <td style={{ padding: '3px 4px', textAlign: 'right', color, fontWeight: 600 }}>{fmtN(numVal, 1)}</td>
+                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#333' }}>{maxVal}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
       {ivr != null && ivr > 60 && (
         <div style={{ marginTop: 6, fontSize: 10, color: '#f0a500' }}>
-          ⚠ IV Rank {ivr.toFixed(0)} — elevated premium cost. Spreads provide better defined risk than naked calls/puts.
+          ⚠ IV Rank {ivr.toFixed(0)} — elevated premium. Spreads preferred over naked.
         </div>
       )}
       {ivr == null && (
-        <div style={{ marginTop: 6, fontSize: 10, color: '#888' }}>
-          IV data unavailable — prefer defined-risk spreads.
-        </div>
+        <div style={{ marginTop: 6, fontSize: 10, color: '#888' }}>IV data unavailable — prefer defined-risk spreads.</div>
       )}
     </div>
   );

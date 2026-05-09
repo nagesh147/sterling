@@ -33,6 +33,23 @@ function ExecBadge({ mode }: { mode?: string | null }) {
   );
 }
 
+function RegimeBadge({ regime }: { regime?: string | null }) {
+  if (!regime) return <span style={{ color: '#333' }}>—</span>;
+  const upper = regime.toUpperCase();
+  const color = upper === 'VOLATILE' ? '#f0c040'
+    : upper === 'RANGING' || upper === 'CHOPPY' ? '#555'
+    : upper === 'IDLE' ? '#333'
+    : upper.includes('BULL') ? '#44cc88'
+    : upper.includes('BEAR') ? '#cc4444'
+    : '#888';
+  return (
+    <span style={{
+      color, background: color + '18', border: `1px solid ${color}33`,
+      padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700,
+    }}>{upper.slice(0, 7)}</span>
+  );
+}
+
 function HistRow({ item }: { item: EvalHistoryItem }) {
   const sc = STATE_COLOR[item.state] ?? '#444';
   const dc = item.direction === 'long' ? '#44cc88' : item.direction === 'short' ? '#cc4444' : '#888';
@@ -41,6 +58,7 @@ function HistRow({ item }: { item: EvalHistoryItem }) {
       <td style={S.td}>{fmtDateTime(item.timestamp_ms)}</td>
       <td style={{ ...S.td, color: sc, fontSize: 10 }}>{fmtState(item.state)}</td>
       <td style={{ ...S.td, color: dc, fontWeight: 600 }}>{fmtDirection(item.direction).slice(0,4)}</td>
+      <td style={S.td}><RegimeBadge regime={item.macro_regime} /></td>
       <td style={S.td}>
         <span style={{ color: item.signal_trend === 1 ? '#44cc88' : item.signal_trend === -1 ? '#cc4444' : '#888', fontWeight: 700 }}>
           {item.signal_trend === 1 ? '▲' : item.signal_trend === -1 ? '▼' : '~'}
@@ -73,7 +91,7 @@ export function EvalHistoryPanel({ underlying }: { underlying: string }) {
       {data && data.count > 0 && (
         <table style={S.table}>
           <thead>
-            <tr>{['TIME','STATE','D','SIG','EXEC','IVR','TOP STRUCTURE','NT'].map(h=>(
+            <tr>{['TIME','STATE','D','REGIME','SIG','EXEC','IVR','TOP STRUCTURE','NT'].map(h=>(
               <th key={h} style={S.th}>{h}</th>
             ))}</tr>
           </thead>

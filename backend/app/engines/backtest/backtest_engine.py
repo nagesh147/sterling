@@ -197,13 +197,13 @@ def _compute_stats(bars: List[BacktestBarResult], has_bs: bool = False) -> Backt
     return BacktestStats(
         total_bars_evaluated=len(bars),
         bullish_regime_bars=sum(1 for b in bars if b.macro_regime in (
-            "bullish", "bull_trending", "bull_weak", "bull_ranging"
+            "bullish", "bull_trending", "bull_weak", "bull_ranging", "BULL_TREND",
         )),
         bearish_regime_bars=sum(1 for b in bars if b.macro_regime in (
-            "bearish", "bear_trending", "bear_weak", "bear_ranging"
+            "bearish", "bear_trending", "bear_weak", "bear_ranging", "BEAR_TREND",
         )),
         neutral_regime_bars=sum(1 for b in bars if b.macro_regime in (
-            "neutral", "choppy"
+            "neutral", "choppy", "RANGING", "VOLATILE", "IDLE",
         )),
         bullish_signal_bars=sum(1 for b in bars if b.signal_trend == 1),
         bearish_signal_bars=sum(1 for b in bars if b.signal_trend == -1),

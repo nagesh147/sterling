@@ -127,6 +127,9 @@ async def directional_status(
     except Exception as exc:
         log.warning("Status compute failed for %s: %s", sym, exc)
 
+    atr_pct = regime.atr_percentile if regime else 0.0
+    adx_val = regime.adx if regime else 0.0
+
     return DirectionalStatusResponse(
         underlying=sym, loaded=True,
         paper_mode=settings.paper_trading,
@@ -135,6 +138,8 @@ async def directional_status(
         has_options=inst.has_options,
         regime=regime, signal=signal, state=state,
         timestamp_ms=now_ms,
+        atr_percentile=atr_pct,
+        adx=adx_val,
     )
 
 
@@ -478,7 +483,7 @@ async def snapshot(
     regime = compute_regime(c4h, macro_filter=macro_filter)
     signal = compute_signal(c1h, st_threshold=st_threshold)
     setup = evaluate_setup(regime, signal)
-    exec_timing = assess_timing(c15m, signal)
+    exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
     ivr = await compute_ivr(adapter, inst, c1h)
 
     from app.engines.directional.policy_engine import apply_policy
@@ -513,6 +518,8 @@ async def snapshot(
         exec_confidence=exec_timing.confidence,
         exec_reason=exec_timing.reason,
         timestamp_ms=now_ms,
+        atr_percentile=regime.atr_percentile,
+        adx=regime.adx,
         st1_line=st1_line,
         st2_line=st2_line,
         st3_line=st3_line,

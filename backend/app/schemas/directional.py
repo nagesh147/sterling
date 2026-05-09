@@ -28,6 +28,12 @@ class MacroRegime(str, Enum):
     BEAR_WEAK = "bear_weak"
     BEAR_RANGING = "bear_ranging"
     CHOPPY = "choppy"
+    # v2 regimes
+    IDLE = "IDLE"
+    VOLATILE = "VOLATILE"
+    RANGING = "RANGING"
+    BULL_TREND = "BULL_TREND"
+    BEAR_TREND = "BEAR_TREND"
 
 
 class Direction(str, Enum):
@@ -54,6 +60,11 @@ class RegimeResult(BaseModel):
     ema50: float
     close_4h: float
     score: float
+    # v2 fields
+    atr_percentile: float = 0.0
+    adx: float = 0.0
+    ema21: float = 0.0
+    ema55: float = 0.0
 
 
 class SignalResult(BaseModel):
@@ -67,6 +78,11 @@ class SignalResult(BaseModel):
     close_1h: float
     score_long: float
     score_short: float
+    # v2 fields
+    signal_strength: str = "NONE"   # "STRONG", "SIGNAL", "NONE"
+    signal_score: float = 0.0       # 0-20
+    rsi: float = 50.0
+    squeezed: bool = False
 
 
 class SetupResult(BaseModel):
@@ -92,6 +108,7 @@ class ExecTimingResult(BaseModel):
     mode: ExecMode
     confidence: float
     reason: str
+    exec_score: float = 0.0  # v2: 0-15 points for scoring
 
 
 class DirectionalStatusResponse(BaseModel):
@@ -105,6 +122,8 @@ class DirectionalStatusResponse(BaseModel):
     signal: Optional[SignalResult] = None
     state: TradeState = TradeState.IDLE
     timestamp_ms: int
+    atr_percentile: float = 0.0
+    adx: float = 0.0
 
 
 class WatchlistItem(BaseModel):

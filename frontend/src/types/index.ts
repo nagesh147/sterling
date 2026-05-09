@@ -23,10 +23,14 @@ export interface InstrumentListResponse {
 }
 
 export interface RegimeResult {
-  macro_regime: 'bullish' | 'bearish' | 'neutral';
+  macro_regime: string;
   ema50: number;
   close_4h: number;
   score: number;
+  atr_percentile?: number;
+  adx?: number;
+  ema21?: number;
+  ema55?: number;
 }
 
 export interface SignalResult {
@@ -40,6 +44,21 @@ export interface SignalResult {
   close_1h: number;
   score_long: number;
   score_short: number;
+  signal_strength?: string;
+  signal_score?: number;
+  rsi?: number;
+  squeezed?: boolean;
+}
+
+export interface ScoreBreakdown {
+  macro_trend?: number;
+  signal?: number;
+  entry?: number;
+  contract_health?: number;
+  dte?: number;
+  rr?: number;
+  total?: number;
+  veto_reason?: string;
 }
 
 export type TradeState =
@@ -71,6 +90,8 @@ export interface DirectionalStatusResponse {
   signal?: SignalResult;
   state: TradeState;
   timestamp_ms: number;
+  atr_percentile?: number;
+  adx?: number;
 }
 
 export interface MarketSnapshotResponse {

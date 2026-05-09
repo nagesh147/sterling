@@ -11,6 +11,7 @@ export interface EvalHistoryItem {
   exec_mode?: string | null;
   signal_trend?: number | null;
   top_structure?: string | null;
+  macro_regime?: string | null;
   timestamp_ms: number;
 }
 

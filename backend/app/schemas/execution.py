@@ -59,6 +59,8 @@ class RunOnceResponse(BaseModel):
     recommendation: str = ""
     reason: str = ""
     timestamp_ms: int = 0
+    score_breakdown: Optional[dict] = None
+    funding_rate: Optional[float] = None
 
 
 class PreviewResponse(BaseModel):

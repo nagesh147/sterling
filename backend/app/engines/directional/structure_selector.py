@@ -1,6 +1,61 @@
-from typing import List
+from typing import List, Optional
 from app.schemas.execution import CandidateContract, TradeStructure
 from app.schemas.directional import Direction, PolicyResult
+
+_LEV_SCALE = {50: 0.15, 25: 0.30, 10: 0.50, 5: 0.75, 3: 0.85, 1: 1.0}
+
+
+def select_leverage(score: float, signal_strength: str) -> int:
+    """Returns futures leverage. Hard cap 50x; STRONG required for >= 10x."""
+    if score >= 95 and signal_strength == "STRONG":
+        return 50
+    if score >= 90 and signal_strength == "STRONG":
+        return 25
+    if score >= 85 and signal_strength == "STRONG":
+        return 10
+    if score >= 80:
+        lev = 5
+    elif score >= 75:
+        lev = 3
+    else:
+        lev = 1
+    if lev >= 10 and signal_strength != "STRONG":
+        lev = 5
+    return lev
+
+
+def route_by_ivr(
+    ivr: Optional[float],
+    score: float,
+    signal_strength: str,
+    oi: float,
+    spread_pct: float,
+) -> str:
+    """Returns recommended structure category based on IVR routing table."""
+    if ivr is None:
+        return "futures"
+
+    if ivr < 30:
+        if score < 75:
+            return "no_trade"
+        if score >= 92 and signal_strength == "STRONG":
+            return "naked"
+        return "debit_spread"
+
+    if 30 <= ivr <= 70:
+        if score >= 85:
+            return "debit_spread"
+        return "no_trade"
+
+    # IVR > 70
+    if score >= 85:
+        if oi > 200 and spread_pct < 0.03 and score >= 90:
+            return "naked_short"
+        if oi > 100:
+            return "credit_spread"
+        return "futures"
+
+    return "no_trade"
 
 
 def _net_debit(long_leg: CandidateContract, short_leg: CandidateContract) -> float:

@@ -10,6 +10,7 @@ class RiskParams(BaseModel):
     partial_profit_r2: float = 2.0
     time_stop_dte: int = 3
     financial_stop_pct: float = 0.50
+    win_rate: float = 0.52  # for Kelly sizing
 
 
 class ExitSignal(BaseModel):

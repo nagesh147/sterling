@@ -27,6 +27,10 @@ export interface DirectionalSnapshot {
   exec_confidence: number;
   exec_reason: string;
   timestamp_ms: number;
+  atr_percentile?: number;
+  adx?: number;
+  funding_rate?: number | null;
+  score_breakdown?: Record<string, number | string> | null;
 }
 
 export function useSnapshot(underlying: string) {

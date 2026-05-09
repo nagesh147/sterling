@@ -93,6 +93,7 @@ class TestBacktestEngine:
                 "bullish", "bearish", "neutral",
                 "bull_trending", "bull_weak", "bull_ranging",
                 "bear_trending", "bear_weak", "bear_ranging", "choppy",
+                "BULL_TREND", "BEAR_TREND", "RANGING", "VOLATILE", "IDLE",
             )
             assert bar.signal_trend in (-1, 0, 1)
             assert isinstance(bar.all_green, bool)

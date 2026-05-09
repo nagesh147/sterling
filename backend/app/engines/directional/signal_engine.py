@@ -2,8 +2,11 @@ import numpy as np
 from typing import Generator, List
 from app.schemas.market import Candle
 from app.schemas.directional import SignalResult
-from app.engines.indicators.heikin_ashi import compute_heikin_ashi
+from app.engines.indicators.heikin_ashi import compute_heikin_ashi, ha_body_bull
 from app.engines.indicators.supertrend import compute_supertrend
+from app.engines.indicators.rsi import rsi as compute_rsi
+from app.engines.indicators.bollinger import bollinger_bands
+from app.engines.indicators.keltner import keltner
 
 _ST_CONFIGS = [(7, 3.0), (14, 2.0), (21, 1.0)]
 
@@ -27,7 +30,6 @@ def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
             if sessions[day_key]["cum_vol"] > 0
             else c.close
         )
-        # Shift all OHLC by (vwap - close) so spread is preserved around VWAP
         offset = vwap - c.close
         yield Candle(
             timestamp_ms=c.timestamp_ms,
@@ -53,6 +55,7 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
     h = np.array([c.high for c in candles_1h], dtype=np.float64)
     l = np.array([c.low for c in candles_1h], dtype=np.float64)
     c = np.array([c.close for c in candles_1h], dtype=np.float64)
+    volume = np.array([candle.volume for candle in candles_1h], dtype=np.float64)
 
     ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
 
@@ -63,8 +66,6 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
     st2_line, st2_trend = compute_supertrend(h, l, c, 14, 2.0)
 
     # ST3: VWAP-adjusted candles — slower, trend-anchored perspective
-    # H/L/O shifted by (vwap - close) so the candle is centred on VWAP
-    # while preserving relative spread; avoids ATR distortion from raw VWAP lag
     vwap_candles = list(_to_vwap_candles(candles_1h))
     vwap_h = np.array([v.high for v in vwap_candles], dtype=np.float64)
     vwap_l = np.array([v.low for v in vwap_candles], dtype=np.float64)
@@ -84,13 +85,11 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
     prev_green_count = prev_trends.count(1)
     prev_red_count = prev_trends.count(-1)
 
-    # all_green / all_red respect the mode threshold (e.g. intraday needs 2/3, swing 3/3)
     all_green_now = green_count >= st_threshold
     all_red_now = red_count >= st_threshold
     all_green_prev = prev_green_count >= st_threshold
     all_red_prev = prev_red_count >= st_threshold
 
-    # Arrow fires on the bar where threshold is first crossed
     green_arrow = all_green_now and not all_green_prev
     red_arrow = all_red_now and not all_red_prev
 
@@ -104,6 +103,68 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
     score_long = round(green_count / 3.0 * 100.0, 2)
     score_short = round(red_count / 3.0 * 100.0, 2)
 
+    # ── v2 confluence scoring ──────────────────────────────────────────────
+    rsi_vals = compute_rsi(c, 14)
+    cur_rsi = float(rsi_vals[-1])
+
+    # Volume: median (spike-resistant). Spike = > 1.5x median
+    vol_median = float(np.median(volume[-20:])) if len(volume) >= 20 else float(np.median(volume))
+    vol_spike = bool(volume[-1] > 1.5 * vol_median) if vol_median > 0 else False
+
+    # BB + KC squeeze (LazyBear method)
+    squeezed = False
+    breakout_long = False
+    breakout_short = False
+    if len(c) >= 22:
+        bb_lo, _, bb_hi = bollinger_bands(c, 20, 2.0)
+        kc_lo, _, kc_hi = keltner(h, l, c, 20, 10, 1.5)
+        squeezed = bool(bb_lo[-2] > kc_lo[-2] and bb_hi[-2] < kc_hi[-2])
+        breakout_long = bool(c[-1] > bb_hi[-1])
+        breakout_short = bool(c[-1] < bb_lo[-1])
+    squeeze_ok = squeezed and (breakout_long or breakout_short)
+
+    # HA body direction
+    ha_bull_arr = ha_body_bull(o, h, l, c)
+    if trend_val == 1:
+        ha_aligned = bool(ha_bull_arr[-1])
+    elif trend_val == -1:
+        ha_aligned = not bool(ha_bull_arr[-1])
+    else:
+        ha_aligned = False
+
+    # ST flip
+    st_flip = (green_arrow if trend_val == 1 else red_arrow) if trend_val != 0 else False
+
+    # RSI gate: LONG 52-78, SHORT 22-48
+    if trend_val == 1:
+        rsi_ok = 52.0 < cur_rsi < 78.0
+    elif trend_val == -1:
+        rsi_ok = 22.0 < cur_rsi < 48.0
+    else:
+        rsi_ok = False
+
+    weights = {"st_flip": 3, "rsi": 3, "squeeze": 5, "volume": 4, "ha_aligned": 5}
+    flags = {
+        "st_flip": st_flip,
+        "rsi": rsi_ok,
+        "squeeze": squeeze_ok,
+        "volume": vol_spike,
+        "ha_aligned": ha_aligned,
+    }
+    total_weight = sum(weights.values())  # 20
+    earned = sum(w for k, w in weights.items() if flags[k])
+    pct = earned / total_weight
+
+    if pct >= 0.75:
+        signal_strength = "STRONG"
+    elif pct >= 0.35:
+        signal_strength = "SIGNAL"
+    else:
+        signal_strength = "NONE"
+
+    signal_score = round(pct * 20, 2)
+    # ─────────────────────────────────────────────────────────────────────
+
     return SignalResult(
         trend=trend_val,
         all_green=all_green_now,
@@ -115,4 +176,8 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
         close_1h=float(c[-1]),
         score_long=score_long,
         score_short=score_short,
+        signal_strength=signal_strength,
+        signal_score=signal_score,
+        rsi=round(cur_rsi, 2),
+        squeezed=squeezed,
     )

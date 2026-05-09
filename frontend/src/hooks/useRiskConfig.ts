@@ -9,6 +9,7 @@ export interface RiskParams {
   partial_profit_r2: number;
   time_stop_dte: number;
   financial_stop_pct: number;
+  win_rate: number;
 }
 
 export function useRiskConfig() {

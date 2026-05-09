@@ -25,7 +25,7 @@ const styles: Record<string, React.CSSProperties> = {
   saved: { color: '#44cc88', fontSize: 11, marginTop: 6 },
 };
 
-const FIELDS: Array<{ key: keyof RiskParams; label: string; step: number }> = [
+const FIELDS: Array<{ key: keyof RiskParams; label: string; step: number; min?: number; max?: number }> = [
   { key: 'capital', label: 'CAPITAL (USD)', step: 1000 },
   { key: 'max_position_pct', label: 'MAX POSITION %', step: 0.01 },
   { key: 'max_contracts', label: 'MAX CONTRACTS', step: 1 },
@@ -33,6 +33,7 @@ const FIELDS: Array<{ key: keyof RiskParams; label: string; step: number }> = [
   { key: 'partial_profit_r2', label: 'PARTIAL PROFIT R2', step: 0.1 },
   { key: 'time_stop_dte', label: 'TIME STOP DTE', step: 1 },
   { key: 'financial_stop_pct', label: 'FINANCIAL STOP %', step: 0.05 },
+  { key: 'win_rate', label: 'ESTIMATED WIN RATE (Kelly sizing)', step: 0.01, min: 0.30, max: 0.80 },
 ];
 
 export function RiskConfigPanel() {
@@ -73,14 +74,16 @@ export function RiskConfigPanel() {
     <div style={styles.card}>
       <div style={styles.title}>RISK CONFIG</div>
       <div style={styles.grid}>
-        {FIELDS.map(({ key, label, step }) => (
+        {FIELDS.map(({ key, label, step, min, max }) => (
           <div key={key} style={styles.fieldWrap}>
             <label style={styles.label}>{label}</label>
             <input
               style={styles.input}
               type="number"
               step={step}
-              value={form[key]}
+              min={min}
+              max={max}
+              value={form[key] ?? (key === 'win_rate' ? 0.52 : 0)}
               onChange={e => handleChange(key, e.target.value)}
             />
           </div>

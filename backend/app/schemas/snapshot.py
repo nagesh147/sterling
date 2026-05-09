@@ -34,6 +34,11 @@ class DirectionalSnapshot(BaseModel):
     exec_confidence: float
     exec_reason: str
     timestamp_ms: int
+    # v2 fields
+    atr_percentile: float = 0.0
+    adx: float = 0.0
+    funding_rate: Optional[float] = None
+    score_breakdown: Optional[dict] = None
     # Indicator lines for charting
     st1_line: List[dict] = []
     st2_line: List[dict] = []

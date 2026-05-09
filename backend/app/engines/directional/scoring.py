@@ -1,3 +1,4 @@
+import datetime as _dt
 from typing import List, Optional
 from app.schemas.execution import TradeStructure, CandidateContract
 from app.schemas.risk import ScoringWeights
@@ -5,53 +6,118 @@ from app.schemas.directional import (
     RegimeResult, SignalResult, ExecTimingResult,
     PolicyResult, ExecMode, IVRBand,
 )
-from app.engines.directional.option_translation_engine import dte_score
-
-_DEFAULT_WEIGHTS = ScoringWeights()
 
 
-def _weights() -> ScoringWeights:
-    """Return runtime scoring weights (set via config API)."""
-    try:
-        from app.api.v1.endpoints.config import get_scoring_weights
-        return get_scoring_weights()
-    except Exception:
-        return _DEFAULT_WEIGHTS
+def _score_macro_regime(regime: RegimeResult) -> float:
+    """Returns 0-20 points."""
+    return min(20.0, max(0.0, float(regime.score)))
 
+
+def _score_signal_v2(signal: SignalResult, direction: str) -> float:
+    """Returns 0-20 points based on confluence signal_score."""
+    return min(20.0, max(0.0, float(signal.signal_score)))
+
+
+def _score_exec_timing_v2(exec_timing: ExecTimingResult) -> float:
+    """Returns 0-15 points."""
+    return min(15.0, max(0.0, float(exec_timing.exec_score)))
+
+
+def _score_contract_health_v2(
+    structure: TradeStructure,
+    funding_rate: Optional[float] = None,
+) -> float:
+    """Returns 0-20 points."""
+    if not structure.legs:
+        return 0.0
+    leg = structure.legs[0]
+    spread_pct = getattr(leg, "spread_pct", 0.0)
+    oi = getattr(leg, "open_interest", 0.0)
+
+    score = 20.0
+    score -= min(spread_pct * 120, 10.0)
+    if oi < 200:
+        score -= 5.0
+    if oi < 100:
+        score -= 5.0
+    if funding_rate is not None:
+        score -= min(abs(funding_rate) * 300, 5.0)
+    return max(0.0, round(score, 2))
+
+
+def _score_dte_v2(structure: TradeStructure) -> float:
+    """Returns 0-10 points using DTE curve."""
+    if not structure.legs:
+        return 0.0
+    if structure.structure_type == "futures":
+        return 10.0
+    dte = structure.legs[0].dte
+    if dte < 7:
+        return 0.0
+    if dte < 14:
+        return 3.0
+    if dte <= 45:
+        return 10.0
+    if dte <= 60:
+        return 7.0
+    return 5.0
+
+
+def _score_rr_v2(structure: TradeStructure) -> float:
+    """Returns 0-15 points based on risk:reward."""
+    if structure.risk_reward is None:
+        return 0.0
+    rr = structure.risk_reward
+    if rr < 1.5:
+        return 0.0
+    if rr < 2.0:
+        return 7.0
+    if rr < 2.5:
+        return 11.0
+    return 15.0
+
+
+def _check_hard_vetoes(
+    structure: TradeStructure,
+    funding_rate: Optional[float] = None,
+) -> Optional[str]:
+    if not structure.legs:
+        return "no legs"
+    leg = structure.legs[0]
+    spread_pct = getattr(leg, "spread_pct", 0.0)
+    oi = getattr(leg, "open_interest", 0.0)
+
+    if spread_pct > 0.10:
+        return f"spread {spread_pct:.1%} > 10%"
+    if oi < 50:
+        return f"OI {oi:.0f} < 50"
+
+    hour_utc = _dt.datetime.now(_dt.timezone.utc).hour
+    if hour_utc in {2, 3, 4, 5}:
+        return f"hour {hour_utc}:00 UTC in dead zone"
+
+    if funding_rate is not None and abs(funding_rate) > 0.025:
+        return f"funding_rate {funding_rate:.4f} exceeds 0.025 threshold"
+
+    return None
+
+
+# ── Backward-compat aliases used by existing tests / endpoints ─────────────
 
 def score_macro_regime(regime: RegimeResult) -> float:
-    return regime.score
+    return _score_macro_regime(regime)
 
 
 def score_signal(signal: SignalResult, direction: str) -> float:
-    if direction == "long":
-        return signal.score_long
-    if direction == "short":
-        return signal.score_short
-    return 0.0
+    return _score_signal_v2(signal, direction)
 
 
 def score_exec_timing(exec_timing: ExecTimingResult) -> float:
-    if exec_timing.mode == ExecMode.PULLBACK:
-        return 60.0 + exec_timing.confidence * 40.0
-    if exec_timing.mode == ExecMode.CONTINUATION:
-        return 50.0 + exec_timing.confidence * 40.0
-    return 20.0
+    return _score_exec_timing_v2(exec_timing)
 
 
 def score_structure_rr(structure: TradeStructure) -> float:
-    if structure.risk_reward is None:
-        return 40.0
-    rr = structure.risk_reward
-    if rr >= 3.0:
-        return 100.0
-    if rr >= 2.0:
-        return 80.0
-    if rr >= 1.5:
-        return 65.0
-    if rr >= 1.0:
-        return 50.0
-    return max(0.0, rr * 50.0)
+    return _score_rr_v2(structure)
 
 
 def score_structure(
@@ -61,48 +127,34 @@ def score_structure(
     exec_timing: ExecTimingResult,
     policy: PolicyResult,
     weights: Optional[ScoringWeights] = None,
+    funding_rate: Optional[float] = None,
 ) -> TradeStructure:
-    w = weights or _weights()
     direction = structure.direction.value
 
-    s_regime = score_macro_regime(regime)
-    s_signal = score_signal(signal, direction)
-    s_exec = score_exec_timing(exec_timing)
-    s_health = float(
-        sum(l.health_score for l in structure.legs) / max(1, len(structure.legs))
-    )
-    s_dte = float(
-        sum(dte_score(l.dte, policy) for l in structure.legs) / max(1, len(structure.legs))
-    )
-    s_rr = score_structure_rr(structure)
+    veto = _check_hard_vetoes(structure, funding_rate)
+    if veto:
+        breakdown = {
+            "macro_trend": 0.0, "signal": 0.0, "entry": 0.0,
+            "contract_health": 0.0, "dte": 0.0, "rr": 0.0,
+            "total": 0.0, "veto_reason": veto,
+        }
+        return structure.model_copy(update={"score": 0.0, "score_breakdown": breakdown})
 
-    # Normalize weights so scores stay in [0, 100] regardless of user customization
-    w_sum = (w.regime + w.signal + w.execution + w.health + w.dte + w.risk_reward) or 1.0
+    s_macro = _score_macro_regime(regime)
+    s_signal = _score_signal_v2(signal, direction)
+    s_exec = _score_exec_timing_v2(exec_timing)
+    s_health = _score_contract_health_v2(structure, funding_rate)
+    s_dte = _score_dte_v2(structure)
+    s_rr = _score_rr_v2(structure)
 
-    base = (
-        s_regime * w.regime
-        + s_signal * w.signal
-        + s_exec * w.execution
-        + s_health * w.health
-        + s_dte * w.dte
-        + s_rr * w.risk_reward
-    ) / w_sum
-
-    # Interaction terms
-    if s_signal > 70 and s_health < 35:
-        base *= 0.75
-    if s_regime < 30 and s_signal > 70:
-        base *= 0.80
-    if s_signal > 75 and s_health > 70 and s_exec > 65:
-        base *= 1.12
-
-    total = min(round(base, 1), 100.0)
+    # Max = 20+20+15+20+10+15 = 100
+    total = min(round(s_macro + s_signal + s_exec + s_health + s_dte + s_rr, 1), 100.0)
 
     breakdown = {
-        "regime": round(s_regime, 2),
+        "macro_trend": round(s_macro, 2),
         "signal": round(s_signal, 2),
-        "exec_timing": round(s_exec, 2),
-        "health": round(s_health, 2),
+        "entry": round(s_exec, 2),
+        "contract_health": round(s_health, 2),
         "dte": round(s_dte, 2),
         "rr": round(s_rr, 2),
         "total": round(total, 2),
@@ -117,9 +169,8 @@ def score_no_trade(regime: RegimeResult, signal: SignalResult, policy: PolicyRes
         base += 40.0
     if signal.trend == 0:
         base += 20.0
-    if regime.score < 40.0:
+    if regime.score < 5.0:
         base += 20.0
-    # Penalise unknown IV — we can't reliably price premium without IV data
     if policy.ivr is None:
         base += 15.0
     return min(100.0, base)
@@ -132,10 +183,10 @@ def rank_structures(
     exec_timing: ExecTimingResult,
     policy: PolicyResult,
     weights: Optional[ScoringWeights] = None,
+    funding_rate: Optional[float] = None,
 ) -> List[TradeStructure]:
-    w = weights or _weights()
     scored = [
-        score_structure(s, regime, signal, exec_timing, policy, w)
+        score_structure(s, regime, signal, exec_timing, policy, weights, funding_rate)
         for s in structures
     ]
     return sorted(scored, key=lambda s: s.score, reverse=True)

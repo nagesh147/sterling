@@ -198,13 +198,17 @@ class TestMonitorEngine2R:
 
 class TestExecutionEnginePullback:
     def test_pullback_detected_when_close_near_st73_support(self):
-        """Long: price just above ST(7,3) support → PULLBACK."""
-        candles = _make_flat_candles(50, base=41000.0)
-        # ST(7,3) at 40500, close at 41000 → 500 above ST; ATR ~100 → within 1.5*ATR=150? No.
-        # Make ATR larger by using wider candles
-        for i, c in enumerate(candles):
-            candles[i] = c.model_copy(update={"high": 41500.0, "low": 40000.0, "close": 40600.0})
-        signal = _make_signal(trend=1, st_values=[40500.0, 0.0, 0.0], close_1h=40600.0)
+        """Long: price just above ST(7,3) support → PULLBACK. EMA20 must be below close."""
+        # Create candles trending up so EMA20 lags below current close
+        candles = []
+        for i in range(50):
+            base_p = 38000.0 + i * 55  # uptrend from 38000 → ~40650
+            candles.append(Candle(
+                timestamp_ms=1_700_000_000_000 + i * 900_000,
+                open=base_p, high=base_p + 500.0, low=base_p - 1000.0, close=base_p + 5.0,
+                volume=100.0,
+            ))
+        signal = _make_signal(trend=1, st_values=[40500.0, 0.0, 0.0], close_1h=candles[-1].close)
         result = assess_timing(candles, signal)
         assert result.mode == ExecMode.PULLBACK
 
@@ -228,13 +232,18 @@ class TestExecutionEnginePullback:
         assert result.mode in (ExecMode.PULLBACK, ExecMode.WAIT)
 
     def test_short_pullback_detected_near_st73_resistance(self):
-        """Short: price just below ST(7,3) resistance → PULLBACK."""
-        candles = _make_flat_candles(50, base=40000.0)
-        for i, c in enumerate(candles):
-            candles[i] = c.model_copy(update={"high": 40500.0, "low": 39500.0, "close": 40400.0})
-        # ST(7,3) resistance at 40500, close at 40400 → distance 100 < 1.5*ATR
+        """Short: price just below ST(7,3) resistance → PULLBACK. EMA20 must be above close."""
+        # Create candles trending down so EMA20 lags above current close
+        candles = []
+        for i in range(50):
+            base_p = 43000.0 - i * 55  # downtrend from 43000 → ~40250
+            candles.append(Candle(
+                timestamp_ms=1_700_000_000_000 + i * 900_000,
+                open=base_p, high=base_p + 1000.0, low=base_p - 500.0, close=base_p - 5.0,
+                volume=100.0,
+            ))
         signal = _make_signal(trend=-1, all_green=False, all_red=True,
-                              st_values=[40500.0, 0.0, 0.0], close_1h=40400.0)
+                              st_values=[40500.0, 0.0, 0.0], close_1h=candles[-1].close)
         result = assess_timing(candles, signal)
         assert result.mode == ExecMode.PULLBACK
 

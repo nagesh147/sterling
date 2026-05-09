@@ -2,31 +2,19 @@ import numpy as np
 from typing import List
 from app.schemas.market import Candle
 from app.schemas.directional import RegimeResult, MacroRegime
-from app.engines.indicators.ema import compute_ema
-from app.engines.indicators.adx import calc_adx
-
-_MACRO_SCORES = {
-    MacroRegime.BULL_TRENDING: 100.0,
-    MacroRegime.BULLISH: 75.0,
-    MacroRegime.BULL_WEAK: 60.0,
-    MacroRegime.BULL_RANGING: 40.0,
-    MacroRegime.NEUTRAL: 50.0,
-    MacroRegime.CHOPPY: 0.0,
-    MacroRegime.BEAR_RANGING: 40.0,
-    MacroRegime.BEAR_WEAK: 60.0,
-    MacroRegime.BEARISH: 75.0,
-    MacroRegime.BEAR_TRENDING: 100.0,
-}
+from app.engines.indicators.ema import compute_ema, ema_dual
+from app.engines.indicators.atr import compute_atr
+from app.engines.indicators.adx import adx as compute_adx_arr
 
 
-def _count_ema_crosses(candles: List[Candle], ema: List[float]) -> int:
-    crosses = 0
-    for i in range(1, len(candles)):
-        prev_above = candles[i - 1].close > ema[i - 1]
-        curr_above = candles[i].close > ema[i]
-        if prev_above != curr_above:
-            crosses += 1
-    return crosses
+def _atr_pct_at(atr_arr: np.ndarray, pos: int, lookback: int = 100) -> float:
+    """ATR percentile for a specific position in the array."""
+    start = max(0, pos - lookback + 1)
+    recent = atr_arr[start:pos + 1]
+    valid = recent[~np.isnan(recent)]
+    if len(valid) < 5 or np.isnan(atr_arr[pos]):
+        return 50.0
+    return float(np.sum(atr_arr[pos] > valid) / len(valid) * 100)
 
 
 def compute_regime(
@@ -37,67 +25,88 @@ def compute_regime(
     if not candles_4h:
         return RegimeResult(
             macro_regime=MacroRegime.NEUTRAL,
-            ema50=0.0,
-            close_4h=0.0,
-            score=0.0,
+            ema50=0.0, close_4h=0.0, score=0.0,
         )
 
+    highs = np.array([c.high for c in candles_4h], dtype=np.float64)
+    lows = np.array([c.low for c in candles_4h], dtype=np.float64)
     closes = np.array([c.close for c in candles_4h], dtype=np.float64)
-    ema = compute_ema(closes, ema_period)
-    current_close = closes[-1]
-    current_ema = ema[-1]
 
-    if current_ema == 0.0:
+    ema21_arr, ema55_arr = ema_dual(closes, 21, 55)
+    atr_arr = compute_atr(highs, lows, closes, 14)
+    adx_arr = compute_adx_arr(highs, lows, closes, 14)
+
+    n = len(closes)
+    cur_close = float(closes[-1])
+    cur_ema21 = float(ema21_arr[-1])
+    cur_ema55 = float(ema55_arr[-1])
+    cur_adx = float(adx_arr[-1])
+    cur_atr_pct = _atr_pct_at(atr_arr, n - 1, 100)
+
+    # Cooldown: IDLE if any of the 3 prior bars had ATR pct < 30
+    cooldown_active = False
+    for offset in range(1, 4):
+        pos = n - 1 - offset
+        if pos >= 0:
+            if _atr_pct_at(atr_arr, pos, 100) < 30:
+                cooldown_active = True
+                break
+
+    if cur_ema21 == 0.0 or cur_ema55 == 0.0:
         return RegimeResult(
             macro_regime=MacroRegime.NEUTRAL,
-            ema50=float(current_ema),
-            close_4h=float(current_close),
-            score=50.0,
+            ema50=cur_ema21, close_4h=cur_close, score=0.0,
+            atr_percentile=round(cur_atr_pct, 2),
+            adx=round(cur_adx, 4),
+            ema21=round(cur_ema21, 4),
+            ema55=round(cur_ema55, 4),
         )
 
+    # Scalping mode: simple direction without ADX/cooldown gates
     if macro_filter == "off":
-        # scalping mode — simple EMA filter
-        regime = MacroRegime.BULL_TRENDING if current_close > current_ema else MacroRegime.BEAR_TRENDING
-        score = _MACRO_SCORES[regime]
+        regime = MacroRegime.BULL_TREND if cur_close > cur_ema21 else MacroRegime.BEAR_TREND
+        adx_c = min(cur_adx / 40.0, 1.0) * 12
+        atr_c = min(cur_atr_pct / 80.0, 1.0) * 8
+        score = round(adx_c + atr_c, 2)
         return RegimeResult(
             macro_regime=regime,
-            ema50=float(current_ema),
-            close_4h=float(current_close),
-            score=round(score, 2),
+            ema50=cur_ema21, close_4h=cur_close, score=score,
+            atr_percentile=round(cur_atr_pct, 2),
+            adx=round(cur_adx, 4),
+            ema21=round(cur_ema21, 4),
+            ema55=round(cur_ema55, 4),
         )
 
-    adx_vals = calc_adx(candles_4h, 14)
-    current_adx = next((v for v in reversed(adx_vals) if v is not None), None)
-
-    ema_list = ema.tolist()
-    ema50_slope = (ema[-1] - ema[-5]) / ema[-5] if len(ema) >= 5 and ema[-5] > 0 else 0.0
-    recent_candles = candles_4h[-20:]
-    recent_ema = ema_list[-20:]
-    crosses = _count_ema_crosses(recent_candles, recent_ema)
-
-    adx_v = current_adx if current_adx is not None else 0.0
-
-    if current_close > current_ema:
-        if adx_v > 20 and ema50_slope > 0.0005 and crosses < 3:
-            regime = MacroRegime.BULL_TRENDING
-        elif adx_v < 20:
-            regime = MacroRegime.BULL_RANGING
-        elif crosses >= 3:
-            regime = MacroRegime.CHOPPY
-        else:
-            regime = MacroRegime.BULL_WEAK
+    if cooldown_active:
+        regime = MacroRegime.IDLE
+        score = 0.0
+    elif cur_atr_pct > 65 and cur_adx < 25:
+        regime = MacroRegime.VOLATILE
+        score = 8.0
+    elif cur_adx < 25:
+        regime = MacroRegime.RANGING
+        score = 0.0
+    elif cur_ema21 > cur_ema55 and cur_close > cur_ema21 and cur_adx >= 25:
+        regime = MacroRegime.BULL_TREND
+        adx_component = min(cur_adx / 40.0, 1.0) * 12
+        atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
+        score = round(adx_component + atr_component, 2)
+    elif cur_ema21 < cur_ema55 and cur_close < cur_ema21 and cur_adx >= 25:
+        regime = MacroRegime.BEAR_TREND
+        adx_component = min(cur_adx / 40.0, 1.0) * 12
+        atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
+        score = round(adx_component + atr_component, 2)
     else:
-        if adx_v > 20 and ema50_slope < -0.0005 and crosses < 3:
-            regime = MacroRegime.BEAR_TRENDING
-        elif adx_v < 20:
-            regime = MacroRegime.BEAR_RANGING
-        else:
-            regime = MacroRegime.BEAR_WEAK
+        regime = MacroRegime.RANGING
+        score = 0.0
 
-    score = _MACRO_SCORES.get(regime, 50.0)
     return RegimeResult(
         macro_regime=regime,
-        ema50=float(current_ema),
-        close_4h=float(current_close),
-        score=round(score, 2),
+        ema50=cur_ema21,          # kept for backward compat
+        close_4h=cur_close,
+        score=score,
+        atr_percentile=round(cur_atr_pct, 2),
+        adx=round(cur_adx, 4),
+        ema21=round(cur_ema21, 4),
+        ema55=round(cur_ema55, 4),
     )

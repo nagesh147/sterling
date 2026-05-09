@@ -116,7 +116,7 @@ async def run_once(
             timestamp_ms=now_ms,
         )
 
-    exec_timing = assess_timing(candles_15m, signal)
+    exec_timing = assess_timing(candles_15m, signal, atr_pct=regime.atr_percentile)
     ivr = await compute_ivr(adapter, instrument, candles_1h)
     policy = apply_policy(setup.direction, instrument, ivr)
 
@@ -175,6 +175,8 @@ async def run_once(
             f"<= no-trade {no_trade_scr:.1f}"
         )
 
+    top_breakdown = ranked[0].score_breakdown if ranked else None
+
     return RunOnceResponse(
         underlying=instrument.underlying, paper_mode=True,
         state=state_final, direction=setup.direction,
@@ -185,6 +187,7 @@ async def run_once(
         no_trade_score=no_trade_scr,
         recommendation=recommendation, reason=reason,
         timestamp_ms=now_ms,
+        score_breakdown=top_breakdown,
     )
 
 

@@ -125,8 +125,47 @@ export function SnapshotPanel({ underlying }: { underlying: string }) {
         </div>
       )}
 
+      {(data.atr_percentile != null || data.adx != null) && (
+        <div style={{ display: 'flex', gap: 16, marginTop: 10, alignItems: 'center' }}>
+          {data.atr_percentile != null && (() => {
+            const atrPct = data.atr_percentile;
+            const atrColor = atrPct < 30 ? '#555' : atrPct > 65 ? '#f0c040' : '#88aaff';
+            const atrLabel = atrPct < 30 ? 'CONTRACTED' : atrPct > 65 ? 'VOLATILE' : 'NORMAL';
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ ...S.key }}>ATR%</span>
+                <span style={{
+                  background: atrColor + '22', color: atrColor, border: `1px solid ${atrColor}44`,
+                  padding: '1px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                }}>{atrPct.toFixed(0)} · {atrLabel}</span>
+              </div>
+            );
+          })()}
+          {data.adx != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ ...S.key }}>ADX</span>
+              <div style={{ position: 'relative', width: 80 }}>
+                <div style={{ height: 5, background: '#1e1e1e', borderRadius: 3 }}>
+                  <div style={{
+                    width: `${Math.min(100, data.adx)}%`, height: '100%',
+                    background: data.adx >= 25 ? '#44cc88' : '#888', borderRadius: 3,
+                  }} />
+                </div>
+                <div style={{
+                  position: 'absolute', top: -2, left: '25%',
+                  width: 1, height: 9, background: '#f0c04080',
+                }} />
+              </div>
+              <span style={{ fontSize: 10, color: data.adx >= 25 ? '#44cc88' : '#888' }}>
+                {data.adx.toFixed(0)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ marginTop: 12, marginBottom: 4 }}>
-        <div style={{ ...S.key, marginBottom: 4 }}>4H REGIME TREND (price vs EMA50)</div>
+        <div style={{ ...S.key, marginBottom: 4 }}>4H REGIME TREND (EMA21 + EMA55)</div>
         <RegimeSparkline underlying={underlying} />
       </div>
 
