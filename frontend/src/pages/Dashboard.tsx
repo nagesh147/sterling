@@ -40,6 +40,7 @@ import { useTradingMode } from '../hooks/useTradingMode';
 import { usePositions } from '../hooks/usePositions';
 import { useTheme, useToggleTheme, useAppMode, useSetAppMode } from '../store/useStore';
 import { InstrumentDetailCard } from '../components/InstrumentDetailCard';
+import { TradingTicket } from '../components/TradingTicket';
 import { PositionsStrip } from '../components/PositionsStrip';
 import { WalkForwardPanel } from '../components/WalkForwardPanel';
 import { SensitivityPanel } from '../components/SensitivityPanel';
@@ -208,7 +209,7 @@ export function Dashboard() {
 
           <AlertsPanel />
           <SignalsList />
-          <InstrumentDetailCard underlying={selectedUnderlying} />
+          <TradingTicket underlying={selectedUnderlying} />
           <PositionsStrip />
         </>
       ) : (
@@ -230,6 +231,7 @@ export function Dashboard() {
 
           {activeTab === 'analysis' && (
             <>
+              <PanelBoundary title="TRADING TICKET"><TradingTicket underlying={selectedUnderlying} /></PanelBoundary>
               <PanelBoundary title="TRADING ALERTS"><AlertsPanel /></PanelBoundary>
               <PanelBoundary title="SESSION"><SessionStatsPanel /></PanelBoundary>
               <PanelBoundary title="SNAPSHOT"><SnapshotPanel underlying={selectedUnderlying} /></PanelBoundary>
