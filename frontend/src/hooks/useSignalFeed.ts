@@ -137,17 +137,25 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number): 
 export function useSignalFeed() {
   const { data } = useSignals();
 
-  // Feed loaded from sessionStorage on mount — survives page refresh
+  // Lazy initializer — runs exactly once on mount, not on every render
   const [feed, setFeed] = useState<FeedEntry[]>(() => loadFeed());
 
-  // State tracker persisted to sessionStorage — key = 'BTC_futures' / 'ETH_options'
-  const statesRef = useRef<Record<string, string>>(loadStates());
+  // useRef with lazy pattern: store the loaded value in a ref that is
+  // only computed once (via a flag check), avoiding repeated sessionStorage reads
+  const statesRef  = useRef<Record<string, string> | null>(null);
+  if (statesRef.current === null) statesRef.current = loadStates();
+
+  // Persist feed to sessionStorage whenever it changes — PURE side effect,
+  // NOT inside setFeed updater (React calls updaters multiple times in concurrent mode)
+  useEffect(() => {
+    saveFeed(feed);
+  }, [feed]);
 
   useEffect(() => {
     if (!data?.signals) return;
 
-    const now    = Date.now();
-    const states = statesRef.current;
+    const now        = Date.now();
+    const states     = { ...statesRef.current! }; // copy — don't mutate during loop
     const newEntries: FeedEntry[] = [];
     let statesChanged = false;
 
@@ -155,23 +163,18 @@ export function useSignalFeed() {
       if (!sig.fresh || sig.direction === 'neutral') continue;
 
       for (const type of ['futures', 'options'] as const) {
-        // Options: only for liquid instruments (premium >= $2)
         if (type === 'options' && (!sig.has_options || (sig.spot_price ?? 0) * 0.01 < 2)) continue;
 
-        const key       = `${sig.underlying}_${type}`;
-        const prevState = states[key] ?? 'IDLE';
-        const curState  = sig.state;
-        const dirKey    = `${key}_dir`;
+        const key      = `${sig.underlying}_${type}`;
+        const dirKey   = `${key}_dir`;
+        const prevState = states[key]    ?? 'IDLE';
         const prevDir   = states[dirKey] ?? '';
+        const curState  = sig.state;
 
-        // Track state and direction
-        if (states[key] !== curState) { states[key] = curState; statesChanged = true; }
-        if (prevDir !== sig.direction) { states[dirKey] = sig.direction; statesChanged = true; }
+        // Update state tracker
+        if (states[key] !== curState)         { states[key]    = curState;      statesChanged = true; }
+        if (states[dirKey] !== sig.direction) { states[dirKey] = sig.direction; statesChanged = true; }
 
-        // Add new entry on:
-        //  1. Transition into an actionable state (including between actionable states)
-        //  2. Direction flip
-        //  3. Fresh arrow
         const stateTransition = ACTIONABLE.has(curState) && curState !== prevState;
         const dirFlip         = ACTIONABLE.has(curState) && prevDir !== '' && prevDir !== sig.direction;
         const arrow           = sig.green_arrow || sig.red_arrow;
@@ -182,10 +185,14 @@ export function useSignalFeed() {
       }
     }
 
-    if (statesChanged) saveStates(states);
+    // Commit state changes after the loop — not mid-loop
+    if (statesChanged) {
+      statesRef.current = states;
+      saveStates(states);
+    }
 
+    // Pure updater — no side effects inside
     setFeed(prev => {
-      // Update currentPrice + currentState in existing entries (no reorder)
       const updated = prev.map(e => {
         const match = data.signals.find(s => s.underlying === e.underlying && s.fresh);
         if (!match) return e;
@@ -194,22 +201,13 @@ export function useSignalFeed() {
         if (cp === e.currentPrice && cs === e.currentState) return e;
         return { ...e, currentPrice: cp, currentState: cs };
       });
-
       if (newEntries.length === 0) return updated;
-
-      // Prepend new entries, cap total
-      const next = [...newEntries, ...updated].slice(0, MAX_FEED);
-      saveFeed(next);
-      return next;
+      return [...newEntries, ...updated].slice(0, MAX_FEED);
     });
   }, [data]);
 
   const dismiss = (id: string) =>
-    setFeed(prev => {
-      const next = prev.map(e => e.id === id ? { ...e, dismissed: true } : e);
-      saveFeed(next);
-      return next;
-    });
+    setFeed(prev => prev.map(e => e.id === id ? { ...e, dismissed: true } : e));
 
   const clearAll = () => {
     setFeed([]);
