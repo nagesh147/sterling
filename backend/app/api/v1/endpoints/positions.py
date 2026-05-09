@@ -165,6 +165,54 @@ async def trade_analytics() -> TradeAnalytics:
     )
 
 
+@router.get("/analytics/performance")
+async def trade_analytics_performance() -> dict:
+    """Extended performance metrics: Sharpe, Calmar, Sortino, max DD, regime breakdown."""
+    import numpy as np
+    from app.services import db as _db
+    from app.engines.analytics.performance import full_report
+
+    closed = _db.get_closed_positions_for()
+    snapshots = _db.get_equity_snapshots(limit=1000)
+
+    trades = []
+    for pos in closed:
+        pnl = pos.get('realized_pnl_usd', 0.0) or 0.0
+        entry_spot = pos.get('entry_spot_price', 1.0) or 1.0
+        pnl_pct = pnl / max(entry_spot * 10, 1.0)
+        regime = pos.get('regime', 'unknown') or 'unknown'
+        trades.append({'pnl_pct': float(pnl_pct), 'regime': str(regime)})
+
+    vals = [s.get('portfolio_value', 1.0) for s in reversed(snapshots) if s.get('portfolio_value')]
+    if len(vals) < 2:
+        equity_curve = np.array([1.0, 1.0])
+    else:
+        base = vals[0]
+        equity_curve = np.array([v / base for v in vals])
+
+    if len(trades) < 2:
+        return {
+            'total_trades': len(trades),
+            'message': 'Insufficient closed trades for performance metrics',
+            'sharpe': 0.0, 'calmar': 0.0, 'sortino': 0.0, 'max_drawdown': 0.0,
+            'win_rate': 0.0, 'regime_breakdown': {},
+        }
+
+    report = full_report(equity_curve, trades)
+    return {
+        'sharpe': round(report.sharpe, 4),
+        'calmar': round(report.calmar, 4),
+        'sortino': round(report.sortino, 4),
+        'max_drawdown': round(report.max_drawdown, 4),
+        'win_rate': round(report.win_rate, 4),
+        'avg_rr': round(report.avg_rr, 4),
+        'profit_factor': round(report.profit_factor, 4),
+        'total_trades': report.total_trades,
+        'regime_breakdown': report.regime_breakdown,
+        'slippage_adjusted': True,
+    }
+
+
 @router.get("/greeks")
 async def paper_portfolio_greeks():
     """
@@ -577,12 +625,32 @@ async def get_position(pos_id: str) -> PaperPosition:
 
 
 @router.post("/{pos_id}/close", response_model=PaperPosition)
-async def close_position(pos_id: str, body: ClosePositionRequest) -> PaperPosition:
+async def close_position(pos_id: str, body: ClosePositionRequest, request: Request) -> PaperPosition:
+    pos = paper_store.get_position(pos_id.upper())
     updated = paper_store.close_position(pos_id.upper(), body.exit_spot_price, body.notes)
     if not updated:
         raise HTTPException(
             status_code=404, detail=f"Position {pos_id} not found or already closed"
         )
+    # Record calibration trade on close
+    if pos and updated.realized_pnl_usd is not None:
+        svc = getattr(request.app.state, 'calibration_service', None)
+        if svc:
+            entry_spot = pos.entry_spot_price or 1.0
+            pnl_pct = updated.realized_pnl_usd / max(entry_spot * 10, 1.0)
+            regime = getattr(pos, 'regime', 'unknown') or 'unknown'
+            svc.record_trade(float(pnl_pct), str(regime))
+        # Record equity snapshot
+        from app.services import db as _db
+        all_pos = paper_store.list_positions()
+        open_pos = [p for p in all_pos if p.status.value in ('open', 'partially_closed')]
+        pv = sum(p.sized_trade.max_risk_usd for p in open_pos) + sum(
+            p.realized_pnl_usd for p in all_pos
+            if p.status.value == 'closed' and p.realized_pnl_usd
+        )
+        dd_breaker = getattr(request.app.state, 'dd_circuit_breaker', None)
+        cb_state = dd_breaker.state.value if dd_breaker else None
+        _db.record_equity_snapshot(pv, cb_state=cb_state)
     return updated
 
 

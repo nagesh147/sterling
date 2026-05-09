@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,8 @@ from app.api.v1.endpoints.stats import router as stats_router
 from app.api.v1.endpoints.session import router as session_router
 from app.api.v1.endpoints.trading_mode import router as trading_mode_router
 from app.api.v1.endpoints.candles import router as candles_router
+from app.api.v1.endpoints.analytics import router as analytics_router
+from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
 from app.services import alert_store as _alert_store_svc
 
 log = get_logger(__name__)
@@ -138,6 +141,21 @@ async def lifespan(app: FastAPI):
     from app.services.notifications import telegram as _telegram_svc
     app.state.circuit_breaker = CircuitBreaker(telegram=_telegram_svc)
 
+    # v3 singletons
+    from app.engines.risk.circuit_breaker import DrawdownCircuitBreaker, CircuitBreakerConfig
+    from app.engines.analytics.correlation import CorrelationTracker
+    from app.services.calibration import CalibrationService
+    from app.services import db as _db
+
+    dd_cfg = CircuitBreakerConfig(
+        warn_dd=float(os.environ.get('STERLING_DD_WARN', '0.05')),
+        halt_dd=float(os.environ.get('STERLING_DD_HALT', '0.10')),
+        reset_dd=float(os.environ.get('STERLING_DD_RESET', '0.15')),
+    )
+    app.state.dd_circuit_breaker = DrawdownCircuitBreaker(dd_cfg, portfolio_value=100_000.0)
+    app.state.correlation_tracker = CorrelationTracker(assets=['BTC', 'ETH', 'SOL'])
+    app.state.calibration_service = CalibrationService(db_path=_db._DB_PATH)
+
     # Build market data adapter (use pre-injected adapter in tests, else build fresh)
     if not getattr(app.state, "adapter", None):
         exchange = settings.exchange_adapter.lower()
@@ -226,6 +244,8 @@ def create_app() -> FastAPI:
     app.include_router(session_router, prefix="/api/v1")
     app.include_router(trading_mode_router, prefix="/api/v1")
     app.include_router(candles_router, prefix="/api/v1")
+    app.include_router(analytics_router, prefix="/api/v1")
+    app.include_router(risk_dashboard_router, prefix="/api/v1")
 
     return app
 
