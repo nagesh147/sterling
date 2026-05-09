@@ -63,9 +63,18 @@ const ACTIONABLE = new Set([
 
 // ── sessionStorage helpers ────────────────────────────────────────────────────
 
-// Purge old keys written by previous buggy versions on first load
-const OLD_KEYS = ['sterling_signal_feed', 'sterling_signal_states'];
-try { OLD_KEYS.forEach(k => sessionStorage.removeItem(k)); } catch { /* ignore */ }
+// Purge ALL legacy sterling_* keys written by previous versions on first load
+try {
+  const toRemove: string[] = [];
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const k = sessionStorage.key(i);
+    // Keep only the current versioned keys; remove everything else
+    if (k && k.startsWith('sterling_') && k !== FEED_KEY && k !== STATES_KEY) {
+      toRemove.push(k);
+    }
+  }
+  toRemove.forEach(k => sessionStorage.removeItem(k));
+} catch { /* ignore */ }
 
 function isFeedEntry(x: unknown): x is FeedEntry {
   if (!x || typeof x !== 'object') return false;
@@ -92,9 +101,16 @@ function loadFeed(): FeedEntry[] {
   } catch { return []; }
 }
 
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 function saveFeed(feed: FeedEntry[]) {
-  try { sessionStorage.setItem(FEED_KEY, JSON.stringify(feed.slice(0, MAX_FEED))); }
-  catch { try { sessionStorage.removeItem(FEED_KEY); } catch { /* ignore */ } }
+  // Debounce: skip if a write is already scheduled within 5s.
+  // Prevents 4-6 synchronous 40-100KB JSON.stringify calls per minute.
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    try { sessionStorage.setItem(FEED_KEY, JSON.stringify(feed.slice(0, MAX_FEED))); }
+    catch { try { sessionStorage.removeItem(FEED_KEY); } catch { /* ignore */ } }
+  }, 5_000);
 }
 
 function loadStates(): Record<string, string> {
@@ -224,16 +240,23 @@ export function useSignalFeed() {
       saveStates(states);
     }
 
-    // Pure updater — no side effects inside
     setFeed(prev => {
+      // Update live price/state per entry — return SAME object reference if unchanged
+      // so React bails out of re-rendering that row.
+      let anyChanged = false;
       const updated = prev.map(e => {
         const match = data.signals.find(s => s.underlying === e.underlying && s.fresh);
         if (!match) return e;
         const cp = match.spot_price ?? e.currentPrice;
         const cs = match.state;
         if (cp === e.currentPrice && cs === e.currentState) return e;
+        anyChanged = true;
         return { ...e, currentPrice: cp, currentState: cs };
       });
+
+      // No new entries and no price changes → return SAME array reference.
+      // React uses Object.is() comparison; same ref = skip re-render entirely.
+      if (newEntries.length === 0 && !anyChanged) return prev;
       if (newEntries.length === 0) return updated;
       return [...newEntries, ...updated].slice(0, MAX_FEED);
     });

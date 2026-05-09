@@ -4,7 +4,7 @@
  * New signals appear at the top; existing rows never reorder.
  * Scroll down to see older signals. Works like an Instagram feed.
  */
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSignalFeed } from '../hooks/useSignalFeed';
 import type { FeedEntry } from '../hooks/useSignalFeed';
@@ -67,7 +67,10 @@ function useDirectEntry() {
 
 // ── single feed row ───────────────────────────────────────────────────────────
 
-function FeedRow({ entry, hasOpen, onDismiss }: {
+// memo: skip re-render when entry object reference, hasOpen, and onDismiss are unchanged.
+// Combined with the setFeed same-ref optimisation, this eliminates re-renders of
+// unchanged rows on every 15s poll — the main GC pressure source.
+const FeedRow = memo(function FeedRow({ entry, hasOpen, onDismiss }: {
   entry: FeedEntry;
   hasOpen: boolean;
   onDismiss: () => void;
@@ -245,7 +248,7 @@ function FeedRow({ entry, hasOpen, onDismiss }: {
       </div>
     </div>
   );
-}
+});
 
 const sBtn: React.CSSProperties = {
   width: 20, height: 20, borderRadius: 3, border: '1px solid var(--border)',

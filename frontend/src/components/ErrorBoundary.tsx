@@ -3,12 +3,18 @@ import React, { ReactNode } from 'react';
 interface State { error: Error | null; errorInfo: string }
 interface Props { children: ReactNode }
 
-const SESSION_KEYS_TO_CLEAR = [
-  'sterling_signal_feed_v2', 'sterling_signal_states_v2',
-  'sterling_signal_feed',    'sterling_signal_states',
-  'sterling_alert_state_BTC', 'sterling_alert_state_ETH',
-  'sterling_alert_state_SOL', 'sterling_alert_state_XRP',
-];
+function clearAllSterlingStorage() {
+  try {
+    // Remove ALL sterling_* keys — avoids hardcoded list going stale when
+    // new keys are added (e.g. new underlyings, new versions).
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('sterling_')) keys.push(k);
+    }
+    keys.forEach(k => sessionStorage.removeItem(k));
+  } catch { /* ignore quota/security errors */ }
+}
 
 export class ErrorBoundary extends React.Component<Props, State> {
   state: State = { error: null, errorInfo: '' };
@@ -16,7 +22,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   static getDerivedStateFromError(error: Error): State {
     // Clear all potentially corrupted sessionStorage keys so next retry is clean
     try {
-      SESSION_KEYS_TO_CLEAR.forEach(k => sessionStorage.removeItem(k));
+      clearAllSterlingStorage();
     } catch { /* ignore quota errors */ }
     return { error, errorInfo: '' };
   }
@@ -29,7 +35,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   handleRetry = () => {
     // Also clear sessionStorage before retry
     try {
-      SESSION_KEYS_TO_CLEAR.forEach(k => sessionStorage.removeItem(k));
+      clearAllSterlingStorage();
     } catch { /* ignore */ }
     this.setState({ error: null, errorInfo: '' });
   };

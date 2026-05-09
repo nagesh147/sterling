@@ -298,7 +298,9 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
       regime, scoreVal,
     );
 
-    qc.invalidateQueries({ queryKey: ['signals-all'] });
+    // Don't invalidate signals-all here — injectArrowEntry already adds the
+    // entry to the feed immediately. Forcing a refetch would double the exchange
+    // API load on every arrow and race with the 15s background poll.
     qc.invalidateQueries({ queryKey: ['snapshot', underlying] });
     qc.invalidateQueries({ queryKey: ['arrows', underlying] });
 
