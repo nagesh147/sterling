@@ -74,7 +74,8 @@ function isFeedEntry(x: unknown): x is FeedEntry {
     && typeof e.underlying === 'string'
     && typeof e.entryAt === 'number'
     && typeof e.entry === 'number'
-    && (e.direction === 'long' || e.direction === 'short');
+    && (e.direction === 'long' || e.direction === 'short')
+    && (e.type === 'futures' || e.type === 'options');
 }
 
 function loadFeed(): FeedEntry[] {
@@ -179,11 +180,8 @@ export function useSignalFeed() {
   // Persist feed whenever it changes (pure side effect, outside updater)
   useEffect(() => { saveFeed(feed); }, [feed]);
 
-  // Register as the global handler so ArrowAlert can inject entries immediately
-  useEffect(() => {
-    _globalAddArrow = addArrowEntry;
-    return () => { _globalAddArrow = null; };
-  }); // no deps — re-register on every render so addArrowEntry closure is fresh
+  // Stable ref for the global registration (declared after addArrowEntry below)
+  const addArrowRef = useRef<typeof addArrowEntry | null>(null);
 
   useEffect(() => {
     if (!data?.signals) return;
@@ -296,6 +294,17 @@ export function useSignalFeed() {
       return next;
     });
   };
+
+  // Keep ref in sync (runs every render, no effect needed — just assignment)
+  addArrowRef.current = addArrowEntry;
+
+  // Register global ONCE on mount using the ref so the closure is always fresh
+  // without needing to re-run the effect on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    _globalAddArrow = (...args: ArrowParams) => addArrowRef.current?.(...args);
+    return () => { _globalAddArrow = null; };
+  }, []);
 
   const dismiss = (id: string) =>
     setFeed(prev => prev.map(e => e.id === id ? { ...e, dismissed: true } : e));
