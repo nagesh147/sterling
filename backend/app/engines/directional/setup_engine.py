@@ -3,11 +3,13 @@ from app.schemas.directional import (
     TradeState, MacroRegime, Direction,
 )
 
+# v1 + v2 bullish regimes — BULL_TREND was added in v2 but not included here (bug fix)
 _BULLISH_REGIMES = {
     MacroRegime.BULLISH,
     MacroRegime.BULL_TRENDING,
     MacroRegime.BULL_WEAK,
     MacroRegime.BULL_RANGING,
+    MacroRegime.BULL_TREND,      # v2 regime engine output
 }
 
 _BEARISH_REGIMES = {
@@ -15,13 +17,17 @@ _BEARISH_REGIMES = {
     MacroRegime.BEAR_TRENDING,
     MacroRegime.BEAR_WEAK,
     MacroRegime.BEAR_RANGING,
+    MacroRegime.BEAR_TREND,      # v2 regime engine output
 }
 
-_VETO_REGIMES = {MacroRegime.CHOPPY}
+# Ranging/neutral: allow signals when STs have 2/3 agreement (lower confidence)
+_RANGING_REGIMES = {MacroRegime.RANGING, MacroRegime.NEUTRAL}
 
-# Minimum STs that must agree with the regime direction to allow partial alignment.
-# Full threshold (3/3) is required for arrows/confirmed state; partial (2/3) allows
-# the pipeline to run so candidates are generated with appropriately lower scores.
+# Volatile: allow signals in direction of ST majority — volatility favours momentum
+_VOLATILE_REGIMES = {MacroRegime.VOLATILE}
+
+_VETO_REGIMES = {MacroRegime.CHOPPY, MacroRegime.IDLE}
+
 _PARTIAL_ST_MIN = 2
 
 
@@ -31,34 +37,30 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
     green_count = signal.st_trends.count(1)
     red_count   = signal.st_trends.count(-1)
 
-    # Hard veto: choppy market blocks all entries regardless of signal
+    # Hard veto: choppy / idle market blocks all entries
     if macro in _VETO_REGIMES:
         return SetupResult(
             state=TradeState.FILTERED,
             direction=Direction.NEUTRAL,
-            reason="Choppy regime — hard veto",
+            reason=f"{macro.value} regime — hard veto",
             macro_regime=macro,
             signal_trend=trend,
         )
 
-    # ── Full alignment (all STs meet threshold) ──────────────────────────────
+    # ── Full alignment — trending regime + all STs agree ─────────────────────
     if macro in _BULLISH_REGIMES and trend == 1:
         direction = Direction.LONG
     elif macro in _BEARISH_REGIMES and trend == -1:
         direction = Direction.SHORT
 
-    # ── Partial alignment (2/3 STs + strong regime) ──────────────────────────
-    # Regime is clearly directional but the signal hasn't hit the full threshold.
-    # Return EARLY_SETUP_ACTIVE so the pipeline proceeds and scores structures —
-    # the scoring engine penalises lower score_long automatically (66 vs 100).
+    # ── Partial alignment — trending regime, 2/3 STs agree ───────────────────
     elif macro in _BULLISH_REGIMES and green_count >= _PARTIAL_ST_MIN:
         return SetupResult(
             state=TradeState.EARLY_SETUP_ACTIVE,
             direction=Direction.LONG,
             reason=(
-                f"Partial bull signal — {green_count}/3 ST aligned, "
-                f"regime {macro.value} (score={regime.score:.0f}). "
-                f"Waiting for full {signal.st_trends.count(1)+1}/3 confirmation."
+                f"Partial bull — {green_count}/3 ST aligned, "
+                f"{macro.value} regime. Awaiting full alignment."
             ),
             macro_regime=macro,
             signal_trend=trend,
@@ -68,10 +70,45 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
             state=TradeState.EARLY_SETUP_ACTIVE,
             direction=Direction.SHORT,
             reason=(
-                f"Partial bear signal — {red_count}/3 ST aligned, "
-                f"regime {macro.value} (score={regime.score:.0f}). "
-                f"Waiting for full {signal.st_trends.count(-1)+1}/3 confirmation."
+                f"Partial bear — {red_count}/3 ST aligned, "
+                f"{macro.value} regime. Awaiting full alignment."
             ),
+            macro_regime=macro,
+            signal_trend=trend,
+        )
+
+    # ── Ranging — allow when 2/3 STs strongly aligned ────────────────────────
+    elif macro in _RANGING_REGIMES and green_count >= _PARTIAL_ST_MIN and trend == 1:
+        return SetupResult(
+            state=TradeState.EARLY_SETUP_ACTIVE,
+            direction=Direction.LONG,
+            reason=f"Ranging regime, {green_count}/3 ST bullish — lower confidence.",
+            macro_regime=macro,
+            signal_trend=trend,
+        )
+    elif macro in _RANGING_REGIMES and red_count >= _PARTIAL_ST_MIN and trend == -1:
+        return SetupResult(
+            state=TradeState.EARLY_SETUP_ACTIVE,
+            direction=Direction.SHORT,
+            reason=f"Ranging regime, {red_count}/3 ST bearish — lower confidence.",
+            macro_regime=macro,
+            signal_trend=trend,
+        )
+
+    # ── Volatile — momentum direction when all STs agree ─────────────────────
+    elif macro in _VOLATILE_REGIMES and trend == 1:
+        return SetupResult(
+            state=TradeState.EARLY_SETUP_ACTIVE,
+            direction=Direction.LONG,
+            reason="Volatile regime, all STs bullish — momentum long.",
+            macro_regime=macro,
+            signal_trend=trend,
+        )
+    elif macro in _VOLATILE_REGIMES and trend == -1:
+        return SetupResult(
+            state=TradeState.EARLY_SETUP_ACTIVE,
+            direction=Direction.SHORT,
+            reason="Volatile regime, all STs bearish — momentum short.",
             macro_regime=macro,
             signal_trend=trend,
         )
@@ -81,24 +118,24 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
         return SetupResult(
             state=TradeState.FILTERED,
             direction=Direction.NEUTRAL,
-            reason=f"Macro {macro.value} / signal trend {trend}: misaligned or neutral",
+            reason=f"Macro {macro.value} / signal trend {trend}: misaligned",
             macro_regime=macro,
             signal_trend=trend,
         )
 
-    # ── Full-alignment: check for arrow confirmation ──────────────────────────
+    # ── Full alignment: check for arrow confirmation ──────────────────────────
     has_arrow = signal.green_arrow if direction == Direction.LONG else signal.red_arrow
 
     if signal.all_green or signal.all_red:
         if has_arrow:
             state  = TradeState.CONFIRMED_SETUP_ACTIVE
-            reason = "Arrow + confirmed directional alignment"
+            reason = "Arrow + full directional alignment — entry armed"
         else:
             state  = TradeState.EARLY_SETUP_ACTIVE
             reason = "All ST aligned, no fresh arrow (continuation in progress)"
     else:
         state     = TradeState.IDLE
-        reason    = "Mixed ST — no setup"
+        reason    = "Mixed ST — monitoring"
         direction = Direction.NEUTRAL
 
     return SetupResult(

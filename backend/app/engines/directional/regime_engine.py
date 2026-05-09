@@ -77,21 +77,27 @@ def compute_regime(
             ema55=round(cur_ema55, 4),
         )
 
+    # ADX thresholds: crypto markets trend at lower ADX than FX/equities.
+    # Strong trend: ADX >= 20 (was 25 — too strict, blocked most crypto signals)
+    # Moderate trend: ADX >= 15 → RANGING (allow partial signals via setup_engine)
+    ADX_TREND = 20
+    ADX_WEAK  = 15
+
     if cooldown_active:
         regime = MacroRegime.IDLE
         score = 0.0
-    elif cur_atr_pct > 65 and cur_adx < 25:
+    elif cur_atr_pct > 65 and cur_adx < ADX_TREND:
         regime = MacroRegime.VOLATILE
         score = 8.0
-    elif cur_adx < 25:
+    elif cur_adx < ADX_WEAK:
         regime = MacroRegime.RANGING
         score = 0.0
-    elif cur_ema21 > cur_ema55 and cur_close > cur_ema21 and cur_adx >= 25:
+    elif cur_ema21 > cur_ema55 and cur_close > cur_ema21 and cur_adx >= ADX_WEAK:
         regime = MacroRegime.BULL_TREND
         adx_component = min(cur_adx / 40.0, 1.0) * 12
         atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
         score = round(adx_component + atr_component, 2)
-    elif cur_ema21 < cur_ema55 and cur_close < cur_ema21 and cur_adx >= 25:
+    elif cur_ema21 < cur_ema55 and cur_close < cur_ema21 and cur_adx >= ADX_WEAK:
         regime = MacroRegime.BEAR_TREND
         adx_component = min(cur_adx / 40.0, 1.0) * 12
         atr_component = min(cur_atr_pct / 80.0, 1.0) * 8

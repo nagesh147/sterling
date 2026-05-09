@@ -475,19 +475,29 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
 
         spot_f = float(spot)
         st_vals = signal.st_values or []
-        st_stop = float(st_vals[0]) if st_vals else None
 
-        # Compute stop and target from ST(7,3) level
-        stop_price  = st_stop
+        # Stop = closest ST level on the correct side of price
+        # Long: stop must be BELOW spot; Short: stop must be ABOVE spot
+        stop_price   = None
         target_price = None
-        if st_stop and spot_f:
-            risk = abs(spot_f - st_stop)
+        if st_vals and spot_f:
             if setup.direction.value == 'long':
+                below = [v for v in st_vals if 0 < v < spot_f]
+                raw_stop = max(below) if below else spot_f * 0.97
+                # Sanity: stop must not be more than 15% away (bad candle data)
+                if raw_stop < spot_f * 0.85:
+                    raw_stop = spot_f * 0.97
+                stop_price = round(raw_stop, 2)
+                risk = spot_f - stop_price
                 target_price = round(spot_f + risk * 2, 2)
-                stop_price   = round(st_stop, 2)
             elif setup.direction.value == 'short':
+                above = [v for v in st_vals if v > spot_f]
+                raw_stop = min(above) if above else spot_f * 1.03
+                if raw_stop > spot_f * 1.15:
+                    raw_stop = spot_f * 1.03
+                stop_price = round(raw_stop, 2)
+                risk = stop_price - spot_f
                 target_price = round(spot_f - risk * 2, 2)
-                stop_price   = round(st_stop, 2)
 
         return {
             'underlying': sym,
