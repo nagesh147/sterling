@@ -39,6 +39,12 @@ import { TelegramConfigPanel } from '../components/TelegramConfigPanel';
 import { useTradingMode } from '../hooks/useTradingMode';
 import { usePositions } from '../hooks/usePositions';
 import { useTheme, useToggleTheme } from '../store/useStore';
+import { WalkForwardPanel } from '../components/WalkForwardPanel';
+import { SensitivityPanel } from '../components/SensitivityPanel';
+import { CorrelationHeatmap } from '../components/CorrelationHeatmap';
+import { GreeksBudgetGauge } from '../components/GreeksBudgetGauge';
+import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
+import { CalibrationPanel } from '../components/CalibrationPanel';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -117,6 +123,7 @@ export function Dashboard() {
 
   return (
     <div style={page}>
+      <DrawdownBreakerBadge />
       <PanelBoundary title="NEW SIGNAL ALERT">
         <ArrowAlert underlying={selectedUnderlying} />
       </PanelBoundary>
@@ -202,7 +209,11 @@ export function Dashboard() {
         <PanelBoundary title="ALERTS"><AlertManager /></PanelBoundary>
       )}
       {activeTab === 'backtest' && (
-        <PanelBoundary title="BACKTEST"><BacktestPanel underlying={selectedUnderlying} /></PanelBoundary>
+        <>
+          <PanelBoundary title="BACKTEST"><BacktestPanel underlying={selectedUnderlying} /></PanelBoundary>
+          <PanelBoundary title="WALK-FORWARD"><WalkForwardPanel /></PanelBoundary>
+          <PanelBoundary title="SENSITIVITY"><SensitivityPanel /></PanelBoundary>
+        </>
       )}
       {activeTab === 'positions' && (
         <>
@@ -216,6 +227,8 @@ export function Dashboard() {
             <PortfolioSummary />
           </PanelBoundary>
           <PanelBoundary title="GREEKS"><GreeksPanel /></PanelBoundary>
+          <PanelBoundary title="CORRELATION"><CorrelationHeatmap /></PanelBoundary>
+          <PanelBoundary title="GREEKS BUDGET"><GreeksBudgetGauge /></PanelBoundary>
           <PanelBoundary title="ANALYTICS"><AnalyticsPanel /></PanelBoundary>
           <PanelBoundary title="POSITIONS"><PositionsPanel underlying={selectedUnderlying} /></PanelBoundary>
         </>
@@ -234,6 +247,7 @@ export function Dashboard() {
           </PanelBoundary>
           <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
           <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
+          <PanelBoundary title="CALIBRATION"><CalibrationPanel /></PanelBoundary>
           <PanelBoundary title="SCORING WEIGHTS"><ScoringWeightsPanel /></PanelBoundary>
           <PanelBoundary title="TELEGRAM">
             <TelegramConfigPanel />
