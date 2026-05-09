@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTradingMode, useSetTradingMode } from '../hooks/useTradingMode';
+import { clearSignalFeedState } from '../hooks/useSignalFeed';
 import { api } from '../utils/api';
 
 const MODE_COLOR: Record<string, string> = {
@@ -38,6 +39,12 @@ export function TradingModeSelector() {
         const display = data.config?.display ?? name;
         setToast(`⚡ Switched to ${display} — refreshing signals…`);
         qc.invalidateQueries({ queryKey: ['trading-mode'] });
+
+        // Reset the signal feed state tracker so the next poll generates
+        // fresh entries with the new mode's SL/TP/leverage parameters.
+        // Without this, statesRef keeps old states (e.g. EARLY===EARLY) and
+        // no new feed entries appear even though the signal params changed.
+        clearSignalFeedState();
 
         // Immediately recompute signals with new mode settings
         setRefreshing(true);

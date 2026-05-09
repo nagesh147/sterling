@@ -23,6 +23,15 @@ export function injectArrowEntry(...args: ArrowParams) {
   _globalAddArrow?.(...args);
 }
 
+// Called by TradingModeSelector after mode switch so the next poll generates
+// fresh entries with the new mode's parameters (new SL/TP/leverage).
+// Without this, the state tracker says EARLY===EARLY → no new entry added.
+let _globalClearState: (() => void) | null = null;
+
+export function clearSignalFeedState() {
+  _globalClearState?.();
+}
+
 export interface FeedEntry {
   id: string;
   underlying: string;
@@ -321,12 +330,17 @@ export function useSignalFeed() {
   // Keep ref in sync (runs every render, no effect needed — just assignment)
   addArrowRef.current = addArrowEntry;
 
-  // Register global ONCE on mount using the ref so the closure is always fresh
-  // without needing to re-run the effect on every render.
+  // Register globals ONCE on mount (stable ref wrapper pattern)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    _globalAddArrow = (...args: ArrowParams) => addArrowRef.current?.(...args);
-    return () => { _globalAddArrow = null; };
+    _globalAddArrow   = (...args: ArrowParams) => addArrowRef.current?.(...args);
+    _globalClearState = () => {
+      // Reset state tracker → next poll treats every signal as a fresh transition,
+      // generating new feed entries with the new mode's SL/TP/leverage parameters.
+      statesRef.current = {};
+      saveStates({});
+    };
+    return () => { _globalAddArrow = null; _globalClearState = null; };
   }, []);
 
   const dismiss = (id: string) =>
