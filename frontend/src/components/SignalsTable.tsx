@@ -34,7 +34,7 @@ const STATE_PRIORITY: Record<string, number> = {
 };
 
 const DIR = {
-  color: (d: string) => d === 'long' ? '#44cc88' : d === 'short' ? '#cc4444' : 'var(--text-faint)',
+  color: (d: string) => d === 'long' ? 'var(--accent)' : d === 'short' ? 'var(--danger)' : 'var(--text-faint)',
   label: (d: string) => d === 'long' ? 'BUY' : d === 'short' ? 'SELL' : '—',
   arrow: (d: string) => d === 'long' ? '▲' : d === 'short' ? '▼' : '',
 };
@@ -245,9 +245,9 @@ function TipRow({ row, hasOpen }: { row: TradeRow; hasOpen: boolean }) {
                 disabled={hasOpen || placing || signal.direction === 'neutral'}
                 style={{
                   padding: '7px 14px',
-                  background: hasOpen ? 'var(--bg)' : signal.direction === 'long' ? '#0f2a0f' : '#2a0f0f',
+                  background: hasOpen ? 'var(--bg)' : signal.direction === 'long' ? '#003d2e' : '#3d0014',
                   color: hasOpen ? 'var(--text-faint)' : dirColor,
-                  border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + '88'}`,
+                  border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + 'cc'}`,
                   borderRadius: 4, cursor: hasOpen || placing ? 'default' : 'pointer',
                   fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
                   opacity: signal.direction === 'neutral' ? 0.3 : 1,
@@ -283,16 +283,39 @@ export function SignalsTable() {
       openByUnderlying[p.underlying] = (openByUnderlying[p.underlying] ?? 0) + 1;
   });
 
-  // Build rows: filter actionable signals, generate futures + options rows
+  // Build rows: show actionable signals + any signal with a fresh arrow
   const rows: TradeRow[] = [];
   const signals = (data?.signals ?? [])
-    .filter(s => s.fresh && s.direction !== 'neutral' && STATE_PRIORITY[s.state] !== undefined)
-    .sort((a, b) => (STATE_PRIORITY[a.state] ?? 9) - (STATE_PRIORITY[b.state] ?? 9));
+    .filter(s => s.fresh && s.direction !== 'neutral' && (
+      STATE_PRIORITY[s.state] !== undefined ||   // actionable state
+      s.green_arrow || s.red_arrow               // OR fresh arrow fired
+    ))
+    .sort((a, b) => {
+      // Arrow signals without an actionable state get priority 2.5 (between CONFIRMED and EARLY)
+      const pa = STATE_PRIORITY[a.state] ?? (a.green_arrow || a.red_arrow ? 2.5 : 9);
+      const pb = STATE_PRIORITY[b.state] ?? (b.green_arrow || b.red_arrow ? 2.5 : 9);
+      return pa - pb;
+    });
 
   for (const s of signals) {
     rows.push({ id: `${s.underlying}_futures`, signal: s, type: 'futures' });
-    if (s.has_options && s.opt_symbol) {
-      rows.push({ id: `${s.underlying}_options`, signal: s, type: 'options' });
+    // Options: show when instrument has options AND we can compute a symbol
+    // If backend didn't send opt_symbol, derive it locally
+    const optSym = s.opt_symbol ?? (() => {
+      if (!s.has_options || !s.spot_price) return null;
+      const step = s.spot_price > 10000 ? 500 : 100;
+      const strike = Math.round(s.spot_price / step) * step;
+      const type = s.direction === 'long' ? 'CE' : 'PE';
+      const today = new Date();
+      const daysToFri = ((5 - today.getDay()) + 7) % 7 || 7;
+      const exp = new Date(today.getTime() + daysToFri * 86400000);
+      const expStr = exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '').toUpperCase();
+      return `${type[0]}-${s.underlying}-${strike}-${expStr}`;
+    })();
+
+    if (s.has_options && optSym) {
+      const enriched = { ...s, opt_symbol: optSym };
+      rows.push({ id: `${s.underlying}_options`, signal: enriched, type: 'options' });
     }
   }
 
@@ -305,7 +328,7 @@ export function SignalsTable() {
 
       {/* header */}
       <div style={{
-        background: '#14291a', borderBottom: '1px solid #1e3a22',
+        background: 'linear-gradient(90deg, #071a14, #0a1f2e)', borderBottom: '1px solid var(--border)',
         padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

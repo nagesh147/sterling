@@ -40,7 +40,7 @@ function actionLevel(state: string): ActionLevel {
 }
 
 const ACTION_CFG: Record<ActionLevel, { label: string; bg: string; color: string; border: string }> = {
-  enter:    { label: 'BUY / ENTER',  bg: '#0f2a0f', color: '#44cc88', border: '#44cc88' },
+  enter:    { label: 'BUY / ENTER',  bg: '#003d2e', color: 'var(--accent)', border: 'var(--accent)' },
   ready:    { label: 'ENTER NOW',    bg: '#2a2000', color: '#f0c040', border: '#f0c040' },
   early:    { label: 'ENTER EARLY',  bg: '#1a1200', color: '#f0a500', border: '#f0a500' },
   watching: { label: 'WATCHING',     bg: 'transparent', color: 'var(--text-faint)', border: 'var(--border-light)' },
@@ -49,8 +49,8 @@ const ACTION_CFG: Record<ActionLevel, { label: string; bg: string; color: string
 // ── asset icon/badge ──────────────────────────────────────────────────────────
 
 function AssetBadge({ sym, direction }: { sym: string; direction: string }) {
-  const color = direction === 'long' ? '#44cc88' : direction === 'short' ? '#cc4444' : 'var(--text-dim)';
-  const bg    = direction === 'long' ? '#0f2a0f' : direction === 'short' ? '#2a0f0f' : 'var(--bg-input)';
+  const color = direction === 'long' ? 'var(--accent)' : direction === 'short' ? 'var(--danger)' : 'var(--text-dim)';
+  const bg    = direction === 'long' ? '#003d2e' : direction === 'short' ? '#3d0014' : 'var(--bg-input)';
   return (
     <div style={{
       width: 44, height: 44, borderRadius: 8, flexShrink: 0,
@@ -74,7 +74,7 @@ function PriceCell({
       <div style={{
         padding: '6px 8px', borderRadius: 4,
         background: highlight ? '#1a2e1a' : dimmed ? 'var(--bg)' : 'var(--bg-input)',
-        border: `1px solid ${highlight ? '#44cc8833' : 'var(--border)'}`,
+        border: `1px solid ${highlight ? '#00d4aa33' : 'var(--border)'}`,
         fontSize: 14, fontWeight: 700,
         color: dimmed ? 'var(--text-faint)' : highlight ? 'var(--accent)' : 'var(--text-muted)',
         fontVariantNumeric: 'tabular-nums',
@@ -89,14 +89,14 @@ function PriceCell({
 // ── stop/target cells use direction colour ────────────────────────────────────
 
 function LevelCell({ label, value, type }: { label: string; value: string; type: 'stop' | 'target' }) {
-  const color = type === 'stop' ? '#cc4444' : '#44cc88';
+  const color = type === 'stop' ? 'var(--danger)' : 'var(--accent)';
   const isNA = value === 'N/A';
   return (
     <div style={{ flex: 1, textAlign: 'center' as const }}>
       <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
       <div style={{
         padding: '6px 8px', borderRadius: 4,
-        background: isNA ? 'var(--bg)' : type === 'stop' ? '#2a0f0f' : '#0f2a0f',
+        background: isNA ? 'var(--bg)' : type === 'stop' ? '#3d0014' : '#003d2e',
         border: `1px solid ${isNA ? 'var(--border)' : color + '33'}`,
         fontSize: 14, fontWeight: 700,
         color: isNA ? 'var(--border-light)' : color,
@@ -121,7 +121,7 @@ function SignalRow({
 }) {
   const level   = actionLevel(item.state);
   const actCfg  = ACTION_CFG[level];
-  const dirColor = item.direction === 'long' ? '#44cc88' : item.direction === 'short' ? '#cc4444' : 'var(--text-faint)';
+  const dirColor = item.direction === 'long' ? 'var(--accent)' : item.direction === 'short' ? 'var(--danger)' : 'var(--text-faint)';
   const score   = item.direction === 'short' ? item.score_short : item.score_long;
   const isActionable = level !== 'watching';
   const { mutate: enterDirect, isPending: entering } = useDirectEntry();
@@ -174,7 +174,7 @@ function SignalRow({
               {level === 'enter' ? 'Active' : level === 'ready' ? 'Confirmed' : level === 'early' ? 'Forming' : 'Watching'}
             </span>
             {hasOpenPosition && (
-              <span style={{ fontSize: 9, color: '#44cc88', background: '#44cc8818', border: '1px solid #44cc8833', borderRadius: 3, padding: '0 4px' }}>OPEN</span>
+              <span style={{ fontSize: 9, color: 'var(--accent)', background: '#00d4aa18', border: '1px solid #44cc8833', borderRadius: 3, padding: '0 4px' }}>OPEN</span>
             )}
           </div>
           {item.regime ? (
@@ -248,8 +248,8 @@ function SignalRow({
         </button>
         {(item.green_arrow || item.red_arrow) && (
           <div style={{ textAlign: 'center' as const, marginTop: 4, fontSize: 10 }}>
-            {item.green_arrow && <span style={{ color: '#44cc88' }}>▲ </span>}
-            {item.red_arrow   && <span style={{ color: '#cc4444' }}>▼ </span>}
+            {item.green_arrow && <span style={{ color: 'var(--accent)' }}>▲ </span>}
+            {item.red_arrow   && <span style={{ color: 'var(--danger)' }}>▼ </span>}
             <span style={{ color: 'var(--text-faint)' }}>arrow</span>
           </div>
         )}
@@ -285,14 +285,14 @@ export function SignalsList() {
 
       {/* header bar */}
       <div style={{
-        background: '#14291a',
+        background: '#071a14',
         borderBottom: '1px solid #1e3a22',
         padding: '10px 16px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{
-            fontSize: 12, fontWeight: 900, color: '#44cc88', letterSpacing: 2,
+            fontSize: 12, fontWeight: 900, color: 'var(--accent)', letterSpacing: 2,
           }}>
             ● LIVE SIGNALS
           </span>
@@ -309,7 +309,7 @@ export function SignalsList() {
             </span>
           )}
         </div>
-        <span style={{ fontSize: 9, color: '#1e3a22', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ fontSize: 9, color: 'var(--border)', fontVariantNumeric: 'tabular-nums' }}>
           {isLoading ? 'refreshing…' : ts}
         </span>
       </div>
