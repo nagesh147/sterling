@@ -273,6 +273,17 @@ const sizeBtn: React.CSSProperties = {
 
 // ── main table ────────────────────────────────────────────────────────────────
 
+// Compute next Friday expiry string — pure function, stable per day
+function nextFridayExpiry(): string {
+  const today = new Date();
+  const daysToFri = ((5 - today.getDay()) + 7) % 7 || 7;
+  const exp = new Date(today.getTime() + daysToFri * 86400000);
+  return exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+    .replace(/ /g, '').toUpperCase();
+}
+
+const NEXT_EXPIRY = nextFridayExpiry(); // computed once per module load, stable within a day
+
 export function SignalsTable() {
   const { data, isLoading } = useSignals();
   const { data: posData } = usePositions();
@@ -287,14 +298,16 @@ export function SignalsTable() {
   const rows: TradeRow[] = [];
   const signals = (data?.signals ?? [])
     .filter(s => s.fresh && s.direction !== 'neutral' && (
-      STATE_PRIORITY[s.state] !== undefined ||   // actionable state
-      s.green_arrow || s.red_arrow               // OR fresh arrow fired
+      STATE_PRIORITY[s.state] !== undefined ||
+      s.green_arrow || s.red_arrow
     ))
     .sort((a, b) => {
-      // Arrow signals without an actionable state get priority 2.5 (between CONFIRMED and EARLY)
       const pa = STATE_PRIORITY[a.state] ?? (a.green_arrow || a.red_arrow ? 2.5 : 9);
       const pb = STATE_PRIORITY[b.state] ?? (b.green_arrow || b.red_arrow ? 2.5 : 9);
-      return pa - pb;
+      // Secondary sort: alphabetical by underlying — prevents row reordering
+      // between polls when two instruments share the same state priority.
+      if (pa !== pb) return pa - pb;
+      return a.underlying.localeCompare(b.underlying);
     });
 
   for (const s of signals) {
@@ -305,12 +318,8 @@ export function SignalsTable() {
       if (!s.has_options || !s.spot_price) return null;
       const step = s.spot_price > 10000 ? 500 : 100;
       const strike = Math.round(s.spot_price / step) * step;
-      const type = s.direction === 'long' ? 'CE' : 'PE';
-      const today = new Date();
-      const daysToFri = ((5 - today.getDay()) + 7) % 7 || 7;
-      const exp = new Date(today.getTime() + daysToFri * 86400000);
-      const expStr = exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '').toUpperCase();
-      return `${type[0]}-${s.underlying}-${strike}-${expStr}`;
+      const optType = s.direction === 'long' ? 'C' : 'P';
+      return `${optType}-${s.underlying}-${strike}-${NEXT_EXPIRY}`;
     })();
 
     if (s.has_options && optSym) {

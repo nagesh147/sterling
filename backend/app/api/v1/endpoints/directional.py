@@ -752,13 +752,16 @@ async def all_signals(request: Request) -> dict:
 
     results = cached_results + live_results
 
-    # Sort: actionable first
+    # Sort: actionable first, then alphabetically by underlying as stable tiebreaker.
+    # Without the tiebreaker, same-state instruments swap position each poll because
+    # cached_results + live_results concatenation order is non-deterministic (depends
+    # on which instruments were in the 45s cache vs needing a fresh fetch).
     _ORDER = {
         'ENTRY_ARMED_PULLBACK': 0, 'ENTRY_ARMED_CONTINUATION': 1,
         'CONFIRMED_SETUP_ACTIVE': 2, 'EARLY_SETUP_ACTIVE': 3,
         'FILTERED': 4, 'IDLE': 5,
     }
-    results.sort(key=lambda r: _ORDER.get(r['state'], 6))
+    results.sort(key=lambda r: (_ORDER.get(r['state'], 6), r['underlying']))
 
     return {'signals': results, 'count': len(results), 'timestamp_ms': now_ms}
 
