@@ -53,6 +53,7 @@ import { SignalsList } from '../components/SignalsList';
 import { AlertsPanel } from '../components/AlertsPanel';
 import { GoLivePanel } from '../components/GoLivePanel';
 import { SignalsTable } from '../components/SignalsTable';
+import { PaperLiveToggle } from '../components/PaperLiveToggle';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -161,6 +162,9 @@ export function Dashboard() {
           {/* Pro mode: instrument selector */}
           {appMode === 'pro' && <InstrumentSelector />}
 
+          {/* Paper / Live toggle — always visible */}
+          <PaperLiveToggle />
+
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
@@ -194,17 +198,6 @@ export function Dashboard() {
       {appMode === 'basic' ? (
         // ── SIMPLE MODE ─────────────────────────────────────────────────────
         <>
-          <PanelBoundary title="GO LIVE"><GoLivePanel /></PanelBoundary>
-          <div style={{
-            marginBottom: 12, padding: '8px 14px',
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          }}>
-            <TradingModeSelector />
-            <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
-              Mode switch → signals refresh instantly
-            </span>
-          </div>
           <PanelBoundary title="LIVE SIGNALS"><SignalsTable /></PanelBoundary>
           <PanelBoundary title="POSITIONS"><PositionsStrip /></PanelBoundary>
         </>
