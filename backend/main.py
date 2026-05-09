@@ -28,6 +28,7 @@ from app.api.v1.endpoints.trading_mode import router as trading_mode_router
 from app.api.v1.endpoints.candles import router as candles_router
 from app.api.v1.endpoints.analytics import router as analytics_router
 from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
+from app.api.v1.endpoints.trading import router as trading_router
 from app.services import alert_store as _alert_store_svc
 
 log = get_logger(__name__)
@@ -288,6 +289,7 @@ def create_app() -> FastAPI:
     app.include_router(candles_router, prefix="/api/v1")
     app.include_router(analytics_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
+    app.include_router(trading_router, prefix="/api/v1")
 
     return app
 

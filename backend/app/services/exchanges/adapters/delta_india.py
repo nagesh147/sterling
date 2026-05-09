@@ -126,6 +126,123 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         data = resp.json()
         return self._validate_response(data, path)
 
+    async def _auth_post(self, path: str, body: dict) -> dict:
+        if self._is_paper or not self._api_key or not self._api_secret:
+            raise RuntimeError("Live trading requires valid Delta Exchange API credentials")
+        import json as _json
+        body_str = _json.dumps(body, separators=(',', ':'))
+        sig, ts = self._sign("POST", path, body=body_str)
+        client = await self._get_client()
+        resp = await client.post(path, content=body_str,
+            headers={
+                "api-key": self._api_key, "timestamp": str(ts), "signature": sig,
+                "Content-Type": "application/json",
+            })
+        resp.raise_for_status()
+        data = resp.json()
+        return self._validate_response(data, path)
+
+    async def _auth_delete(self, path: str) -> dict:
+        if self._is_paper or not self._api_key or not self._api_secret:
+            raise RuntimeError("Live trading requires valid Delta Exchange API credentials")
+        sig, ts = self._sign("DELETE", path)
+        client = await self._get_client()
+        resp = await client.delete(path,
+            headers={"api-key": self._api_key, "timestamp": str(ts), "signature": sig})
+        resp.raise_for_status()
+        data = resp.json()
+        return self._validate_response(data, path)
+
+    async def get_product_id(self, symbol: str) -> int:
+        """Resolve a Delta product symbol to its integer product_id."""
+        data = await self._public_get("/v2/products", params={"contract_type": "perpetual_futures", "page_size": 200})
+        for p in ((data or {}).get("result") or []):
+            if str(p.get("symbol") or "") == symbol:
+                return int(p["id"])
+        # Fallback: search by name
+        data2 = await self._public_get("/v2/products", params={"page_size": 200})
+        for p in ((data2 or {}).get("result") or []):
+            if str(p.get("symbol") or "") == symbol:
+                return int(p["id"])
+        raise RuntimeError(f"Delta product not found for symbol: {symbol}")
+
+    async def place_order(
+        self,
+        symbol: str,
+        side: str,           # "buy" or "sell"
+        size: float,
+        order_type: str = "market_order",  # "market_order" or "limit_order"
+        limit_price: float | None = None,
+        leverage: float | None = None,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+        reduce_only: bool = False,
+    ) -> dict:
+        """
+        Place an order on Delta Exchange India.
+        Returns the order dict from the API.
+        """
+        product_id = await self.get_product_id(symbol)
+        body: dict = {
+            "product_id": product_id,
+            "size": int(size),           # Delta uses integer contract size
+            "side": side,                # "buy" / "sell"
+            "order_type": order_type,
+            "reduce_only": reduce_only,
+        }
+        if order_type == "limit_order" and limit_price is not None:
+            body["limit_price"] = str(round(limit_price, 2))
+        if leverage is not None:
+            body["leverage"] = str(int(leverage))
+        if stop_loss is not None:
+            body["bracket_stop_loss_price"] = str(round(stop_loss, 2))
+            body["bracket_stop_loss_limit_price"] = str(round(stop_loss * 0.999, 2))  # 0.1% slip
+        if take_profit is not None:
+            body["bracket_take_profit_price"] = str(round(take_profit, 2))
+            body["bracket_take_profit_limit_price"] = str(round(take_profit * 0.999, 2))
+        data = await self._auth_post("/v2/orders", body)
+        return (data or {}).get("result") or {}
+
+    async def cancel_order(self, order_id: str, product_id: int) -> dict:
+        """Cancel an open order by ID."""
+        data = await self._auth_delete(f"/v2/orders/{order_id}")
+        return (data or {}).get("result") or {}
+
+    async def place_order_option(
+        self,
+        option_symbol: str,  # e.g. "C-BTC-80000-050626"
+        side: str,
+        size: float,
+        order_type: str = "market_order",
+        limit_price: float | None = None,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
+    ) -> dict:
+        """Place an options order using the option contract symbol."""
+        # Resolve product_id for this option
+        data = await self._public_get("/v2/products", params={"contract_types": "call_options,put_options", "page_size": 500})
+        product_id = None
+        for p in ((data or {}).get("result") or []):
+            if str(p.get("symbol") or "") == option_symbol:
+                product_id = int(p["id"])
+                break
+        if product_id is None:
+            raise RuntimeError(f"Option contract not found: {option_symbol}")
+        body: dict = {
+            "product_id": product_id,
+            "size": int(size),
+            "side": side,
+            "order_type": order_type,
+        }
+        if order_type == "limit_order" and limit_price is not None:
+            body["limit_price"] = str(round(limit_price, 6))
+        if stop_loss is not None:
+            body["bracket_stop_loss_price"] = str(round(stop_loss, 6))
+        if take_profit is not None:
+            body["bracket_take_profit_price"] = str(round(take_profit, 6))
+        result = await self._auth_post("/v2/orders", body)
+        return (result or {}).get("result") or {}
+
     # ─── BaseExchangeAdapter ──────────────────────────────────────────────
 
     async def ping(self) -> bool:

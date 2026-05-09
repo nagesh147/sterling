@@ -79,6 +79,20 @@ export function PositionsStrip() {
               <div style={{ fontSize: 15, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
                 {pnlUsd != null ? `${pnlUsd >= 0 ? '+' : ''}$${Math.abs(pnlUsd).toFixed(0)}` : '—'}
               </div>
+              {/* Trailing stop */}
+              {(pos as any).trail_stop_json && (() => {
+                try {
+                  const ts = JSON.parse((pos as any).trail_stop_json);
+                  const stopVal = ts.current_stop ? '$' + Number(ts.current_stop).toLocaleString('en-US', { maximumFractionDigits: 0 }) : null;
+                  const mode = ts.mode || 'atr';
+                  if (!stopVal) return null;
+                  return (
+                    <div style={{ fontSize: 9, color: '#f0c040', marginTop: 2 }}>
+                      Trail SL: {stopVal} ({mode})
+                    </div>
+                  );
+                } catch { return null; }
+              })()}
               <button
                 disabled={closing}
                 onClick={() => closePos({ id: pos.id, exit_spot_price: spot ?? pos.entry_spot_price })}

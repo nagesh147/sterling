@@ -49,6 +49,7 @@ import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SignalsBar } from '../components/SignalsBar';
 import { SignalsList } from '../components/SignalsList';
+import { AlertsPanel } from '../components/AlertsPanel';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -188,6 +189,7 @@ export function Dashboard() {
       {appMode === 'basic' ? (
         // ── BASIC (SIMPLE) MODE ─────────────────────────────────────────────
         <>
+          <AlertsPanel />
           <SignalsList />
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: 'var(--text-faint)', fontSize: 10, letterSpacing: 1 }}>STRATEGY:</span>
@@ -215,6 +217,7 @@ export function Dashboard() {
 
           {activeTab === 'analysis' && (
             <>
+              <PanelBoundary title="TRADING ALERTS"><AlertsPanel /></PanelBoundary>
               <PanelBoundary title="SESSION"><SessionStatsPanel /></PanelBoundary>
               <PanelBoundary title="SNAPSHOT"><SnapshotPanel underlying={selectedUnderlying} /></PanelBoundary>
               <PanelBoundary title="MARKET"><MarketSnapshot underlying={selectedUnderlying} /></PanelBoundary>

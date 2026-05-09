@@ -40,6 +40,8 @@ router = APIRouter(prefix="/directional", tags=["directional"])
 
 # Track previous signal states for Telegram alert edge detection
 _prev_states: dict[str, str] = {}
+_signal_alerts: list[dict] = []  # rolling last-50 professional alerts
+_MAX_ALERTS = 50
 
 
 def _build_indicator_lines(candles):
@@ -505,27 +507,93 @@ async def _compute_signal_item(
 
         if cur_state in _ALERT_STATES and prev_state != cur_state:
             try:
-                from app.services.notifications import telegram as _tg
-                dir_tag = '🟢 LONG' if setup.direction.value == 'long' else '🔴 SHORT'
+                mode_obj = mode  # the stop_mult/rr params we have
+                dir_str = setup.direction.value  # 'long' or 'short'
+                side_tag = '🟢 BUY' if dir_str == 'long' else '🔴 SELL'
+
+                # Options recommendation: ATM strike rounded to nearest step
+                opt_strike = None
+                opt_type = None
+                opt_expiry = None
+                try:
+                    step = 500 if spot_f > 10000 else (100 if spot_f > 1000 else 10)
+                    opt_strike = round(spot_f / step) * step
+                    opt_type = 'CE' if dir_str == 'long' else 'PE'
+                    import datetime as _dt
+                    # Next weekly expiry (Friday)
+                    today = _dt.date.today()
+                    days_to_friday = (4 - today.weekday()) % 7 or 7
+                    expiry = today + _dt.timedelta(days=days_to_friday)
+                    opt_expiry = expiry.strftime('%d%b%y').upper()
+                except Exception:
+                    pass
+
+                # Leverage recommendation based on ADX strength
+                adx_val = regime.adx
+                rec_leverage = 5 if adx_val < 20 else (10 if adx_val < 30 else 20)
+
                 state_label = {
-                    'ENTRY_ARMED_PULLBACK':     '⚡ ENTRY ARMED (Pullback)',
-                    'ENTRY_ARMED_CONTINUATION': '⚡ ENTRY ARMED (Continuation)',
-                    'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED SETUP',
+                    'ENTRY_ARMED_PULLBACK':     '⚡ ARMED — Pullback Entry',
+                    'ENTRY_ARMED_CONTINUATION': '⚡ ARMED — Continuation',
+                    'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED Setup',
                 }[cur_state]
-                stop_str   = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
-                target_str = f"${target_price:,.2f}" if target_price else 'N/A'
+
+                sl_str   = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
+                tp_str   = f"${target_price:,.2f}" if target_price else 'N/A'
+                risk_pct = abs(spot_f - (stop_price or spot_f)) / spot_f * 100
+
+                alert = {
+                    'id': f"{sym}_{cur_state}_{now_ms}",
+                    'underlying': sym,
+                    'state': cur_state,
+                    'state_label': state_label,
+                    'direction': dir_str,
+                    'regime': regime.macro_regime.value,
+                    'entry': round(spot_f, 2),
+                    'stop_loss': stop_price,
+                    'take_profit': target_price,
+                    'risk_pct': round(risk_pct, 2),
+                    'score': round(signal.score_long if dir_str == 'long' else signal.score_short, 1),
+                    'atr': round(atr_val, 2),
+                    'adx': round(regime.adx, 1),
+                    'rsi': round(getattr(signal, 'rsi', 50.0), 1),
+                    # Futures
+                    'futures_symbol': inst.delta_perp_symbol or f"{sym}USDT",
+                    'rec_leverage': rec_leverage,
+                    # Options
+                    'opt_strike': opt_strike,
+                    'opt_type': opt_type,
+                    'opt_expiry': opt_expiry,
+                    'opt_symbol': f"{opt_type[0]}-{sym}-{opt_strike}-{opt_expiry}" if all([opt_strike, opt_type, opt_expiry]) else None,
+                    'timestamp_ms': now_ms,
+                    'fresh': True,
+                }
+
+                _signal_alerts.insert(0, alert)
+                if len(_signal_alerts) > _MAX_ALERTS:
+                    _signal_alerts.pop()
+
+                # Telegram
+                from app.services.notifications import telegram as _tg
+                opt_line = f"Options: {opt_type} {opt_strike} {opt_expiry}" if opt_strike else ""
                 msg = (
                     f"<b>{state_label}</b>\n"
-                    f"<b>{sym}</b>  {dir_tag}\n"
-                    f"Entry: <b>${spot_f:,.2f}</b>  |  "
-                    f"Regime: {regime.macro_regime.value}\n"
-                    f"Stop: {stop_str}  |  Target: {target_str}\n"
-                    f"Score: {signal.score_long if setup.direction.value == 'long' else signal.score_short:.0f}/100"
+                    f"<b>{sym}</b>  {side_tag}\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"📍 Entry:  <b>${spot_f:,.2f}</b>\n"
+                    f"🛑 Stop:   <b>{sl_str}</b>  ({risk_pct:.1f}% risk)\n"
+                    f"🎯 Target: <b>{tp_str}</b>  (2:1 R:R)\n"
+                    f"━━━━━━━━━━━━━━━━━━━\n"
+                    f"⚙️ Regime: {regime.macro_regime.value}  |  ADX {regime.adx:.0f}\n"
+                    f"📊 Score:  {alert['score']:.0f}/100  |  RSI {alert['rsi']:.0f}\n"
+                    f"🔧 Futures: {inst.delta_perp_symbol or sym+'USDT'}  {rec_leverage}× leverage\n"
                 )
+                if opt_line:
+                    msg += f"📈 {opt_line}\n"
                 import asyncio as _aio
                 _aio.create_task(_tg.send(msg))
-            except Exception:
-                pass
+            except Exception as _te:
+                log.debug("Alert generation error: %s", _te)
 
         # Write enriched data to cache so subsequent fast-path calls have SL/TP
         _snap_cache.put(
@@ -914,6 +982,16 @@ async def _sse_generator(
 
         yield f"data: {json.dumps(payload)}\n\n"
         await asyncio.sleep(interval)
+
+
+@router.get("/signal-alerts")
+async def get_signal_alerts(limit: int = 20) -> dict:
+    """Return recent professional signal alerts."""
+    return {
+        'alerts': _signal_alerts[:limit],
+        'count': len(_signal_alerts),
+        'timestamp_ms': int(time.time() * 1000),
+    }
 
 
 @router.get("/stream/{underlying}")
