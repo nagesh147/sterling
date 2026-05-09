@@ -1,28 +1,27 @@
 /**
- * useSignalFeed — append-only signal feed, Instagram-style.
+ * useSignalFeed — append-only signal feed driven by STATE TRANSITIONS.
  *
- * Instead of replacing the list on every poll, we accumulate entries:
- * - New actionable signals are PREPENDED at the top.
- * - Existing entries are NEVER reordered — only their live price updates.
- * - Entries survive across polls, even when the underlying state goes back to IDLE.
- * - Persisted to sessionStorage so page refresh keeps history.
+ * A new row is added ONLY when:
+ *   1. State transitions from non-actionable → actionable (IDLE→EARLY, EARLY→CONFIRMED, etc.)
+ *   2. Direction flips (was LONG, now SHORT)
+ *   3. A fresh green/red arrow fires
+ *
+ * Existing rows are NEVER reordered — only their live price & state badge update.
+ * Both the feed and the state-tracker are persisted to sessionStorage so page
+ * refresh does NOT re-fire signals that are already in an armed state.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useSignals } from './useSignals';
 import type { SignalItem } from './useSignals';
 
 export interface FeedEntry {
-  id: string;               // unique: underlying + type + entryAt
+  id: string;
   underlying: string;
   direction: 'long' | 'short';
   type: 'futures' | 'options';
-
-  // Prices frozen at signal time
   entry: number;
   stopLoss: number | null;
   takeProfit: number | null;
-
-  // Instrument details frozen at signal time
   leverage: number;
   futuresSymbol: string;
   optSymbol: string | null;
@@ -30,158 +29,177 @@ export interface FeedEntry {
   optType: 'CE' | 'PE' | null;
   optExpiry: string | null;
   optDte: number | null;
-
-  // Signal context frozen at signal time
-  state: string;
+  state: string;        // state at time of signal
   regime: string;
   score: number;
   adx: number;
   rsi: number;
-  entryAt: number;          // timestamp when this entry was added to feed
-
-  // Live-updating fields (mutated in place, no reorder)
+  entryAt: number;
   currentPrice: number | null;
   currentState: string;
   dismissed: boolean;
 }
 
-const FEED_KEY   = 'sterling_signal_feed';
-const MAX_FEED   = 100;
-const DEDUP_MS   = 25 * 60 * 1000;   // don't add same instrument+type again within 25 min
-const EXPIRE_MS  = 8 * 60 * 60 * 1000; // remove entries older than 8 hours
+// ── persistence keys ──────────────────────────────────────────────────────────
+const FEED_KEY   = 'sterling_signal_feed_v2';
+const STATES_KEY = 'sterling_signal_states_v2';   // last-known state per key
+
+const MAX_FEED  = 100;
+const EXPIRE_MS = 8 * 60 * 60 * 1000;   // 8 hours
 
 const ACTIONABLE = new Set([
   'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
   'CONFIRMED_SETUP_ACTIVE', 'EARLY_SETUP_ACTIVE',
 ]);
 
-function load(): FeedEntry[] {
+// ── sessionStorage helpers ────────────────────────────────────────────────────
+function loadFeed(): FeedEntry[] {
   try {
     const raw = sessionStorage.getItem(FEED_KEY);
     if (!raw) return [];
-    const parsed: FeedEntry[] = JSON.parse(raw);
-    const cutoff = Date.now() - EXPIRE_MS;
-    return parsed.filter(e => e.entryAt > cutoff).slice(0, MAX_FEED);
+    const all: FeedEntry[] = JSON.parse(raw);
+    const cut = Date.now() - EXPIRE_MS;
+    return all.filter(e => e.entryAt > cut).slice(0, MAX_FEED);
   } catch { return []; }
 }
 
-function save(feed: FeedEntry[]) {
+function saveFeed(feed: FeedEntry[]) {
   try { sessionStorage.setItem(FEED_KEY, JSON.stringify(feed.slice(0, MAX_FEED))); }
-  catch { /* storage full — silent */ }
+  catch { /* quota exceeded */ }
 }
 
+function loadStates(): Record<string, string> {
+  try { return JSON.parse(sessionStorage.getItem(STATES_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function saveStates(m: Record<string, string>) {
+  try { sessionStorage.setItem(STATES_KEY, JSON.stringify(m)); }
+  catch { /* quota */ }
+}
+
+// ── option expiry ─────────────────────────────────────────────────────────────
 function nextFridayExpiry(): string {
-  const today = new Date();
-  const daysToFri = ((5 - today.getDay()) + 7) % 7 || 7;
-  const exp = new Date(today.getTime() + daysToFri * 86_400_000);
+  const d = new Date();
+  const daysToFri = ((5 - d.getDay()) + 7) % 7 || 7;
+  const exp = new Date(d.getTime() + daysToFri * 86_400_000);
   return exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
     .replace(/ /g, '').toUpperCase();
 }
-
 const NEXT_EXPIRY = nextFridayExpiry();
 
-function buildEntries(sig: SignalItem, now: number): FeedEntry[] {
-  const entries: FeedEntry[] = [];
+// ── build a FeedEntry from a SignalItem ───────────────────────────────────────
+function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number): FeedEntry {
   const dir  = sig.direction as 'long' | 'short';
   const spot = sig.spot_price ?? 0;
   const atr  = sig.atr ?? spot * 0.02;
   const mult = sig.stop_atr_mult ?? 2;
-  const sl   = sig.stop_price  ?? (dir === 'long' ? spot - atr * mult : spot + atr * mult);
+  const sl   = sig.stop_price   ?? (dir === 'long' ? spot - atr * mult : spot + atr * mult);
   const tp   = sig.target_price ?? (dir === 'long' ? spot + atr * mult * 2 : spot - atr * mult * 2);
   const lev  = sig.rec_leverage ?? 5;
-  const score = dir === 'long' ? sig.score_long : sig.score_short;
+  const score = Math.round(dir === 'long' ? sig.score_long : sig.score_short);
 
-  // Futures entry
-  entries.push({
-    id: `${sig.underlying}_futures_${now}`,
-    underlying: sig.underlying, direction: dir, type: 'futures',
-    entry: spot, stopLoss: sl, takeProfit: tp,
-    leverage: lev, futuresSymbol: sig.futures_symbol ?? `${sig.underlying}USDT`,
-    optSymbol: null, optStrike: null, optType: null, optExpiry: null, optDte: null,
-    state: sig.state, regime: sig.regime, score: Math.round(score),
-    adx: sig.adx ?? 0, rsi: sig.rsi ?? 50,
-    entryAt: now, currentPrice: spot, currentState: sig.state, dismissed: false,
-  });
+  const step    = spot > 10_000 ? 500 : 100;
+  const strike  = sig.opt_strike  ?? Math.round(spot / step) * step;
+  const optType = (sig.opt_type   ?? (dir === 'long' ? 'CE' : 'PE')) as 'CE' | 'PE';
+  const expiry  = sig.opt_expiry  ?? NEXT_EXPIRY;
+  const dte     = sig.opt_dte     ?? (((5 - new Date().getDay()) + 7) % 7 || 7);
+  const optSym  = sig.opt_symbol  ?? `${optType[0]}-${sig.underlying}-${strike}-${expiry}`;
 
-  // Options entry — only for liquid instruments (estimated premium >= $2)
-  const estPremium = spot * 0.01;
-  if (sig.has_options && estPremium >= 2) {
-    const step    = spot > 10_000 ? 500 : 100;
-    const strike  = sig.opt_strike  ?? Math.round(spot / step) * step;
-    const optType = (sig.opt_type  ?? (dir === 'long' ? 'CE' : 'PE')) as 'CE' | 'PE';
-    const expiry  = sig.opt_expiry  ?? NEXT_EXPIRY;
-    const dte     = sig.opt_dte     ?? ((5 - new Date().getDay() + 7) % 7 || 7);
-    const optSym  = sig.opt_symbol  ?? `${optType[0]}-${sig.underlying}-${strike}-${expiry}`;
-
-    entries.push({
-      id: `${sig.underlying}_options_${now}`,
-      underlying: sig.underlying, direction: dir, type: 'options',
-      entry: spot, stopLoss: sl, takeProfit: tp,
-      leverage: 1, futuresSymbol: sig.futures_symbol ?? `${sig.underlying}USDT`,
-      optSymbol: optSym, optStrike: strike, optType, optExpiry: expiry, optDte: dte,
-      state: sig.state, regime: sig.regime, score: Math.round(score),
-      adx: sig.adx ?? 0, rsi: sig.rsi ?? 50,
-      entryAt: now, currentPrice: spot, currentState: sig.state, dismissed: false,
-    });
-  }
-
-  return entries;
+  return {
+    id: `${sig.underlying}_${type}_${now}`,
+    underlying: sig.underlying,
+    direction: dir,
+    type,
+    entry: spot,
+    stopLoss: sl,
+    takeProfit: tp,
+    leverage: type === 'futures' ? lev : 1,
+    futuresSymbol: sig.futures_symbol ?? `${sig.underlying}USDT`,
+    optSymbol:  type === 'options' ? optSym   : null,
+    optStrike:  type === 'options' ? strike   : null,
+    optType:    type === 'options' ? optType  : null,
+    optExpiry:  type === 'options' ? expiry   : null,
+    optDte:     type === 'options' ? dte      : null,
+    state: sig.state,
+    regime: sig.regime,
+    score,
+    adx: sig.adx ?? 0,
+    rsi: sig.rsi ?? 50,
+    entryAt: now,
+    currentPrice: spot,
+    currentState: sig.state,
+    dismissed: false,
+  };
 }
 
+// ── main hook ─────────────────────────────────────────────────────────────────
 export function useSignalFeed() {
   const { data } = useSignals();
-  const [feed, setFeed] = useState<FeedEntry[]>(() => load());
-  const seenRef = useRef<Map<string, number>>(new Map()); // key → last seen ms
+
+  // Feed loaded from sessionStorage on mount — survives page refresh
+  const [feed, setFeed] = useState<FeedEntry[]>(() => loadFeed());
+
+  // State tracker persisted to sessionStorage — key = 'BTC_futures' / 'ETH_options'
+  const statesRef = useRef<Record<string, string>>(loadStates());
 
   useEffect(() => {
     if (!data?.signals) return;
-    const now = Date.now();
-    const fresh = data.signals.filter(
-      s => s.fresh && s.direction !== 'neutral' && ACTIONABLE.has(s.state)
-    );
-    if (fresh.length === 0) {
-      // Still update currentPrice + currentState in existing entries
-      setFeed(prev => {
-        let changed = false;
-        const next = prev.map(e => {
-          const match = data.signals.find(s => s.underlying === e.underlying && s.fresh);
-          if (!match) return e;
-          const cp = match.spot_price;
-          const cs = match.state;
-          if (cp === e.currentPrice && cs === e.currentState) return e;
-          changed = true;
-          return { ...e, currentPrice: cp, currentState: cs };
-        });
-        return changed ? next : prev;
-      });
-      return;
-    }
 
+    const now    = Date.now();
+    const states = statesRef.current;
     const newEntries: FeedEntry[] = [];
-    for (const sig of fresh) {
+    let statesChanged = false;
+
+    for (const sig of data.signals) {
+      if (!sig.fresh || sig.direction === 'neutral') continue;
+
       for (const type of ['futures', 'options'] as const) {
+        // Options: only for liquid instruments (premium >= $2)
         if (type === 'options' && (!sig.has_options || (sig.spot_price ?? 0) * 0.01 < 2)) continue;
-        const key = `${sig.underlying}_${type}`;
-        const lastSeen = seenRef.current.get(key) ?? 0;
-        if (now - lastSeen < DEDUP_MS) continue;   // skip: too recent
-        seenRef.current.set(key, now);
-        const built = buildEntries(sig, now).filter(e => e.type === type);
-        newEntries.push(...built);
+
+        const key       = `${sig.underlying}_${type}`;
+        const prevState = states[key] ?? 'IDLE';
+        const curState  = sig.state;
+        const dirKey    = `${key}_dir`;
+        const prevDir   = states[dirKey] ?? '';
+
+        // Track state and direction
+        if (states[key] !== curState) { states[key] = curState; statesChanged = true; }
+        if (prevDir !== sig.direction) { states[dirKey] = sig.direction; statesChanged = true; }
+
+        // Add new entry on:
+        //  1. Transition into an actionable state (including between actionable states)
+        //  2. Direction flip
+        //  3. Fresh arrow
+        const stateTransition = ACTIONABLE.has(curState) && curState !== prevState;
+        const dirFlip         = ACTIONABLE.has(curState) && prevDir !== '' && prevDir !== sig.direction;
+        const arrow           = sig.green_arrow || sig.red_arrow;
+
+        if (stateTransition || dirFlip || arrow) {
+          newEntries.push(buildEntry(sig, type, now));
+        }
       }
     }
 
+    if (statesChanged) saveStates(states);
+
     setFeed(prev => {
-      // Update current prices on all existing entries
+      // Update currentPrice + currentState in existing entries (no reorder)
       const updated = prev.map(e => {
         const match = data.signals.find(s => s.underlying === e.underlying && s.fresh);
         if (!match) return e;
-        return { ...e, currentPrice: match.spot_price, currentState: match.state };
+        const cp = match.spot_price ?? e.currentPrice;
+        const cs = match.state;
+        if (cp === e.currentPrice && cs === e.currentState) return e;
+        return { ...e, currentPrice: cp, currentState: cs };
       });
-      // Prepend genuinely new entries; cap at MAX_FEED
-      const next = newEntries.length > 0
-        ? [...newEntries, ...updated].slice(0, MAX_FEED)
-        : updated;
-      save(next);
+
+      if (newEntries.length === 0) return updated;
+
+      // Prepend new entries, cap total
+      const next = [...newEntries, ...updated].slice(0, MAX_FEED);
+      saveFeed(next);
       return next;
     });
   }, [data]);
@@ -189,14 +207,15 @@ export function useSignalFeed() {
   const dismiss = (id: string) =>
     setFeed(prev => {
       const next = prev.map(e => e.id === id ? { ...e, dismissed: true } : e);
-      save(next);
+      saveFeed(next);
       return next;
     });
 
   const clearAll = () => {
     setFeed([]);
     sessionStorage.removeItem(FEED_KEY);
-    seenRef.current.clear();
+    sessionStorage.removeItem(STATES_KEY);
+    statesRef.current = {};
   };
 
   return { feed, dismiss, clearAll };
