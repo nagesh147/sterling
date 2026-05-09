@@ -52,6 +52,7 @@ import { SignalsBar } from '../components/SignalsBar';
 import { SignalsList } from '../components/SignalsList';
 import { AlertsPanel } from '../components/AlertsPanel';
 import { GoLivePanel } from '../components/GoLivePanel';
+import { SignalsTable } from '../components/SignalsTable';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -189,27 +190,25 @@ export function Dashboard() {
       </div>
 
       {appMode === 'basic' ? (
-        // ── SIMPLE MODE ─────────────────────────────────────────────────────
+        // ── SIMPLE MODE — single signals table ──────────────────────────────
         <>
-          {/* Go Live panel — shown when paper/no credentials */}
+          {/* Go Live + mode strip */}
           <GoLivePanel />
-
-          {/* Strategy mode strip — full width, prominent */}
           <div style={{
-            marginBottom: 14, padding: '10px 14px',
+            marginBottom: 12, padding: '8px 14px',
             background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 6, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
           }}>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)', letterSpacing: 2 }}>STRATEGY MODE</span>
             <TradingModeSelector />
             <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>
-              Switch mode → signals recompute instantly
+              Mode switch → signals refresh instantly
             </span>
           </div>
 
-          <AlertsPanel />
-          <SignalsList />
-          <TradingTicket underlying={selectedUnderlying} />
+          {/* THE signals table — complete trade tips */}
+          <SignalsTable />
+
+          {/* Open positions */}
           <PositionsStrip />
         </>
       ) : (

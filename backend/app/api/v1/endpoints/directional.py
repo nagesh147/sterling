@@ -53,6 +53,28 @@ _STATE_LABELS = {
 }
 
 
+def _option_params(sym: str, spot: float, direction: str) -> dict:
+    """Compute ATM option parameters for a given instrument and spot price."""
+    import datetime
+    try:
+        step = 500 if spot > 10000 else (100 if spot > 1000 else 10)
+        strike = round(spot / step) * step
+        opt_type = 'CE' if direction == 'long' else 'PE'
+        today = datetime.date.today()
+        days_to_fri = (4 - today.weekday()) % 7 or 7
+        expiry = (today + datetime.timedelta(days=days_to_fri)).strftime('%d%b%y').upper()
+        dte = days_to_fri
+        return {
+            'opt_strike': strike,
+            'opt_type': opt_type,
+            'opt_expiry': expiry,
+            'opt_dte': dte,
+            'opt_symbol': f"{opt_type[0]}-{sym}-{strike}-{expiry}",
+        }
+    except Exception:
+        return {'opt_strike': None, 'opt_type': None, 'opt_expiry': None, 'opt_dte': None, 'opt_symbol': None}
+
+
 async def _fire_signal_alert(
     sym: str, inst, setup, regime, signal,
     spot_f: float, stop_price, target_price, atr_val: float, now_ms: int,
@@ -629,6 +651,10 @@ async def _compute_signal_item(
             'adx': round(regime.adx, 1),
             'rsi': round(getattr(signal, 'rsi', 50.0), 1),
             'squeezed': getattr(signal, 'squeezed', False),
+            # Actionable trade parameters
+            'rec_leverage': 5 if regime.adx < 20 else (10 if regime.adx < 30 else 20),
+            'futures_symbol': inst.delta_perp_symbol or f"{sym}USDT",
+            **_option_params(sym, spot_f, setup.direction.value),
             'fresh': True,
             'timestamp_ms': now_ms,
         }

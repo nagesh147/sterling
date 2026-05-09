@@ -24,6 +24,14 @@ export interface SignalItem {
   squeezed?: boolean;
   atr?: number;
   stop_atr_mult?: number;
+  // Actionable trade parameters
+  rec_leverage?: number;
+  futures_symbol?: string;
+  opt_strike?: number | null;
+  opt_type?: string | null;
+  opt_expiry?: string | null;
+  opt_dte?: number | null;
+  opt_symbol?: string | null;
   fresh: boolean;
   timestamp_ms: number;
 }
