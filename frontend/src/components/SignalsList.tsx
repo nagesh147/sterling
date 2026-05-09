@@ -1,9 +1,19 @@
 import React from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSignals } from '../hooks/useSignals';
 import type { SignalItem } from '../hooks/useSignals';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useStore';
 import { usePositions } from '../hooks/usePositions';
-import { useEnterPosition } from '../hooks/usePositions';
+import { api } from '../utils/api';
+
+function useDirectEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { underlying: string; direction: string; leverage: number; notes: string }) =>
+      api.post('/api/v1/positions/enter-direct', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['positions'] }),
+  });
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -114,12 +124,17 @@ function SignalRow({
   const dirColor = item.direction === 'long' ? '#44cc88' : item.direction === 'short' ? '#cc4444' : '#444';
   const score   = item.direction === 'short' ? item.score_short : item.score_long;
   const isActionable = level === 'enter' || level === 'ready';
-  const { mutate: enter, isPending: entering } = useEnterPosition();
+  const { mutate: enterDirect, isPending: entering } = useDirectEntry();
 
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (level === 'enter' && !hasOpenPosition) {
-      enter({ underlying: item.underlying, notes: `Signal entry — ${item.state}` });
+      enterDirect({
+        underlying: item.underlying,
+        direction: item.direction,
+        leverage: 1,
+        notes: `Signal entry — ${item.state}`,
+      });
     }
   };
 

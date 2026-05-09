@@ -22,6 +22,8 @@ export interface SignalItem {
   adx?: number;
   rsi?: number;
   squeezed?: boolean;
+  atr?: number;
+  stop_atr_mult?: number;
   fresh: boolean;
   timestamp_ms: number;
 }

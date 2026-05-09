@@ -173,21 +173,26 @@ export function Dashboard() {
             style={{
               background: appMode === 'pro' ? '#1a2a1a' : '#111',
               border: `1px solid ${appMode === 'pro' ? '#44cc8888' : '#333'}`,
-              borderRadius: 3, color: appMode === 'pro' ? '#44cc88' : '#555',
+              borderRadius: 3,
+              color: appMode === 'pro' ? '#44cc88' : '#555',
               cursor: 'pointer', padding: '3px 10px',
               fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
             }}
           >
-            {appMode === 'pro' ? 'PRO' : 'BASIC'}
+            {appMode === 'pro' ? '⚙ ADVANCED' : '◎ SIMPLE'}
           </button>
         </div>
         <InstrumentSelector />
       </div>
 
       {appMode === 'basic' ? (
-        // ── BASIC MODE ──────────────────────────────────────────────────────
+        // ── BASIC (SIMPLE) MODE ─────────────────────────────────────────────
         <>
           <SignalsList />
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#333', fontSize: 10, letterSpacing: 1 }}>STRATEGY:</span>
+            <TradingModeSelector />
+          </div>
           <InstrumentDetailCard underlying={selectedUnderlying} />
           <PositionsStrip />
         </>

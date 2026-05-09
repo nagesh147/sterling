@@ -38,6 +38,9 @@ from app.services import adapter_manager as _adm
 log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
 
+# Track previous signal states for Telegram alert edge detection
+_prev_states: dict[str, str] = {}
+
 
 def _build_indicator_lines(candles):
     """
@@ -476,28 +479,70 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
         spot_f = float(spot)
         st_vals = signal.st_values or []
 
-        # Stop = closest ST level on the correct side of price
-        # Long: stop must be BELOW spot; Short: stop must be ABOVE spot
+        # Compute 14-period ATR from 4H candles for proper SL/TP sizing
+        import numpy as _np
+        from app.engines.indicators.atr import compute_atr as _compute_atr
+        from app.services import adapter_manager as _adm_local
+        _mode_local = None
+        try:
+            _mode_local = getattr(_adm_local, '_app_state_trading_mode', None)
+        except Exception:
+            pass
+
+        highs_4h  = _np.array([c.high  for c in c4h], dtype=_np.float64)
+        lows_4h   = _np.array([c.low   for c in c4h], dtype=_np.float64)
+        closes_4h = _np.array([c.close for c in c4h], dtype=_np.float64)
+        atr_arr   = _compute_atr(highs_4h, lows_4h, closes_4h, 14)
+        raw_atr = float(atr_arr[-1]) if len(atr_arr) > 0 and not _np.isnan(atr_arr[-1]) else 0.0
+        # Sanity: ATR must be 0.1%–15% of spot. Bad candle data gives 0 or extreme values.
+        atr_min = spot_f * 0.001
+        atr_max = spot_f * 0.15
+        atr_val = raw_atr if atr_min < raw_atr < atr_max else spot_f * 0.02
+
+        # Use mode's stop_atr_mult and rr_target
+        stop_mult = mode.stop_atr_mult if mode else 2.0
+        rr        = mode.rr_target     if mode else 2.0
+
         stop_price   = None
         target_price = None
-        if st_vals and spot_f:
-            if setup.direction.value == 'long':
-                below = [v for v in st_vals if 0 < v < spot_f]
-                raw_stop = max(below) if below else spot_f * 0.97
-                # Sanity: stop must not be more than 15% away (bad candle data)
-                if raw_stop < spot_f * 0.85:
-                    raw_stop = spot_f * 0.97
-                stop_price = round(raw_stop, 2)
-                risk = spot_f - stop_price
-                target_price = round(spot_f + risk * 2, 2)
-            elif setup.direction.value == 'short':
-                above = [v for v in st_vals if v > spot_f]
-                raw_stop = min(above) if above else spot_f * 1.03
-                if raw_stop > spot_f * 1.15:
-                    raw_stop = spot_f * 1.03
-                stop_price = round(raw_stop, 2)
-                risk = stop_price - spot_f
-                target_price = round(spot_f - risk * 2, 2)
+        stop_dist = stop_mult * atr_val
+
+        if setup.direction.value == 'long':
+            stop_price   = round(spot_f - stop_dist, 2)
+            target_price = round(spot_f + stop_dist * rr, 2)
+        elif setup.direction.value == 'short':
+            stop_price   = round(spot_f + stop_dist, 2)
+            target_price = round(spot_f - stop_dist * rr, 2)
+
+        # Telegram alert on new actionable state transitions
+        _ALERT_STATES = {'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE'}
+        prev_state = _prev_states.get(sym, 'IDLE')
+        cur_state  = setup.state.value
+        _prev_states[sym] = cur_state
+
+        if cur_state in _ALERT_STATES and prev_state != cur_state:
+            try:
+                from app.services.notifications import telegram as _tg
+                dir_tag = '🟢 LONG' if setup.direction.value == 'long' else '🔴 SHORT'
+                state_label = {
+                    'ENTRY_ARMED_PULLBACK':     '⚡ ENTRY ARMED (Pullback)',
+                    'ENTRY_ARMED_CONTINUATION': '⚡ ENTRY ARMED (Continuation)',
+                    'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED SETUP',
+                }[cur_state]
+                stop_str   = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
+                target_str = f"${target_price:,.2f}" if target_price else 'N/A'
+                msg = (
+                    f"<b>{state_label}</b>\n"
+                    f"<b>{sym}</b>  {dir_tag}\n"
+                    f"Entry: <b>${spot_f:,.2f}</b>  |  "
+                    f"Regime: {regime.macro_regime.value}\n"
+                    f"Stop: {stop_str}  |  Target: {target_str}\n"
+                    f"Score: {signal.score_long if setup.direction.value == 'long' else signal.score_short:.0f}/100"
+                )
+                import asyncio as _aio
+                _aio.create_task(_tg.send(msg))
+            except Exception:
+                pass
 
         return {
             'underlying': sym,
@@ -515,6 +560,8 @@ async def _compute_signal_item(inst, adapter, macro_filter: str, st_threshold: i
             'exec_confidence': round(exec_timing.confidence, 2),
             'stop_price': stop_price,
             'target_price': target_price,
+            'atr': round(atr_val, 2),
+            'stop_atr_mult': stop_mult,
             'st_values': [round(v, 2) for v in st_vals[:3]],
             'atr_percentile': round(regime.atr_percentile, 1),
             'adx': round(regime.adx, 1),

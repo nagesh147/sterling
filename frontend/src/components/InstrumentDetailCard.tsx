@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnapshot } from '../hooks/useSnapshot';
-import { usePositions, useEnterPosition } from '../hooks/usePositions';
+import { usePositions } from '../hooks/usePositions';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { useInstruments } from '../hooks/useInstruments';
 import { fmtN, fmtUSD, ivrColor, fmtAge, fmtState } from '../utils/fmt';
+import { api } from '../utils/api';
+
+function useDirectEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { underlying: string; direction: string; leverage: number; notes: string }) =>
+      api.post('/api/v1/positions/enter-direct', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['positions'] });
+      qc.invalidateQueries({ queryKey: ['live-pnl'] });
+    },
+  });
+}
 
 const STATE_COLOR: Record<string, string> = {
   ENTRY_ARMED_PULLBACK: '#44aaff',
@@ -69,7 +83,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
   const { data: posData } = usePositions();
   const { data: pnlData } = useLivePnl();
   const { data: instruments } = useInstruments();
-  const { mutate: enterPos, isPending: entering, error: enterError } = useEnterPosition();
+  const { mutate: enterDirect, isPending: entering, error: enterError } = useDirectEntry();
   const [showBreakdown, setShowBreakdown] = useState(false);
 
   const inst = instruments?.instruments.find(i => i.underlying === underlying);
@@ -279,7 +293,12 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
           {enterError && <div style={{ color: '#cc4444', fontSize: 11, marginBottom: 6 }}>{(enterError as Error).message}</div>}
           <button
             disabled={entering}
-            onClick={() => enterPos({ underlying, notes: `Basic mode entry — ${data.state}` })}
+            onClick={() => enterDirect({
+              underlying,
+              direction: data.direction,
+              leverage: 1,
+              notes: `Signal entry — ${data.state}`,
+            })}
             style={{
               width: '100%', padding: '10px 0',
               background: isArmed ? '#1a2a1a' : '#1a1a2a',

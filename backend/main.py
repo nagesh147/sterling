@@ -117,6 +117,39 @@ async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
             log.warning("Background alert checker error: %s", exc)
 
 
+async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None:
+    """Refresh signals for all instruments every `interval` seconds."""
+    import asyncio
+    from app.api.v1.endpoints.directional import _compute_signal_item, _adapter_can_serve
+    from app.services.exchanges import instrument_registry as registry
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            ad = adapter_manager.get_adapter()
+            if not ad:
+                continue
+            mode = getattr(app.state, "trading_mode", None)
+            macro_filter = mode.macro_filter if mode else "adx_4h"
+            st_threshold = mode.st_threshold if mode else 3
+            current_source = adapter_manager.get_data_source()
+            instruments = [
+                inst for inst in registry.list_instruments()
+                if _adapter_can_serve(inst, current_source)
+            ]
+            if not instruments:
+                continue
+            results = await asyncio.gather(
+                *[_compute_signal_item(inst, ad, macro_filter, st_threshold)
+                  for inst in instruments],
+                return_exceptions=True,
+            )
+            ok = sum(1 for r in results if isinstance(r, dict))
+            log.debug("Signal refresh: %d/%d instruments updated", ok, len(instruments))
+        except Exception as exc:
+            log.debug("Signal refresher error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -189,12 +222,19 @@ async def lifespan(app: FastAPI):
     import asyncio
     bg_task = asyncio.create_task(_background_alert_checker(app, interval=30))
     log.info("Background alert checker started (every 30s)")
+    signal_refresh_task = asyncio.create_task(_background_signal_refresher(app, interval=30))
+    log.info("Background signal refresher started (every 30s)")
 
     yield
 
     bg_task.cancel()
     try:
         await bg_task
+    except (Exception, BaseException):
+        pass
+    signal_refresh_task.cancel()
+    try:
+        await signal_refresh_task
     except (Exception, BaseException):
         pass
     await adapter_manager.close_current()

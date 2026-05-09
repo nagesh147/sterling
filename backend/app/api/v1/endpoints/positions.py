@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
+from pydantic import BaseModel
 from app.schemas.execution import CandidateContract
 
 
@@ -423,6 +424,87 @@ async def export_positions_csv(status: str = Query(default="")) -> StreamingResp
         iter([buf.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="sterling_paper_positions.csv"'},
+    )
+
+
+class DirectEntryRequest(BaseModel):
+    underlying: str
+    direction: str   # "long" or "short"
+    leverage: int = 1
+    notes: str = ""
+
+
+@router.post("/enter-direct", response_model=PaperPosition)
+async def enter_direct_position(body: DirectEntryRequest, request: Request) -> PaperPosition:
+    """
+    Create a paper futures position directly from signal state.
+    Does not require options structures — creates a synthetic futures trade.
+    """
+    from app.schemas.execution import (
+        TradeStructure, SizedTrade, CandidateContract, Direction as ExecDir,
+    )
+    from app.engines.directional.sizing_engine import size_trade
+    from app.api.v1.endpoints.config import get_runtime_risk
+
+    sym = body.underlying.upper()
+    inst = registry.get_instrument(sym)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+
+    if body.direction not in ("long", "short"):
+        raise HTTPException(status_code=400, detail="direction must be 'long' or 'short'")
+
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or request.app.state.adapter
+    try:
+        spot_price = float(await adapter.get_index_price(inst))
+    except Exception:
+        spot_price = 0.0
+
+    # Synthetic futures leg
+    direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
+    leg = CandidateContract(
+        instrument_name=f"{sym}-PERP",
+        underlying=sym,
+        strike=spot_price,
+        expiry_date="",
+        option_type="future",
+        bid=spot_price,
+        ask=spot_price,
+        mark_price=spot_price,
+        mid_price=spot_price,
+        mark_iv=0.0,
+        delta=1.0 if body.direction == "long" else -1.0,
+        dte=0,
+        open_interest=0.0,
+        volume_24h=0.0,
+        spread_pct=0.0,
+        health_score=100.0,
+        healthy=True,
+    )
+    structure = TradeStructure(
+        structure_type="futures",
+        direction=direction,
+        legs=[leg],
+        net_premium=spot_price,
+        max_loss=spot_price * 0.03,
+        max_gain=None,
+        risk_reward=2.0,
+        score=0.0,
+        score_breakdown={},
+    )
+
+    risk = get_runtime_risk()
+    sized = size_trade(structure, risk, leverage=body.leverage)
+
+    mode = getattr(request.app.state, "trading_mode", None)
+    return paper_store.add_position(
+        underlying=sym,
+        sized_trade=sized,
+        entry_spot_price=spot_price,
+        notes=body.notes or f"Direct {body.direction.upper()} entry",
+        trail_mode_name=mode.name if mode else None,
+        trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
     )
 
 
