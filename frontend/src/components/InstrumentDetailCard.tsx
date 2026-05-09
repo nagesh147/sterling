@@ -24,7 +24,7 @@ const STATE_COLOR: Record<string, string> = {
   ENTRY_ARMED_CONTINUATION: '#66ccff',
   CONFIRMED_SETUP_ACTIVE: '#f0c040',
   EARLY_SETUP_ACTIVE: '#f0a500',
-  FILTERED: '#555', IDLE: '#333',
+  FILTERED: 'var(--text-dim)', IDLE: 'var(--text-faint)',
 };
 
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
@@ -32,10 +32,10 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
   return (
     <div style={{ flex: 1 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontSize: 10, color: '#555', letterSpacing: 1 }}>{label}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: 1 }}>{label}</span>
         <span style={{ fontSize: 16, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{value.toFixed(0)}</span>
       </div>
-      <div style={{ height: 6, background: '#1a1a1a', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ height: 6, background: 'var(--bg-input)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{
           width: `${pct}%`, height: '100%', borderRadius: 3,
           background: `linear-gradient(90deg, ${color}88, ${color})`,
@@ -48,11 +48,11 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
 
 function BreakdownBar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
-  const color = value >= max * 0.7 ? '#44cc88' : value >= max * 0.4 ? '#f0c040' : '#555';
+  const color = value >= max * 0.7 ? '#44cc88' : value >= max * 0.4 ? '#f0c040' : 'var(--text-dim)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-      <span style={{ color: '#444', fontSize: 9, width: 55, flexShrink: 0, letterSpacing: 0.5 }}>{label}</span>
-      <div style={{ flex: 1, height: 4, background: '#1a1a1a', borderRadius: 2 }}>
+      <span style={{ color: 'var(--text-faint)', fontSize: 9, width: 55, flexShrink: 0, letterSpacing: 0.5 }}>{label}</span>
+      <div style={{ flex: 1, height: 4, background: 'var(--bg-input)', borderRadius: 2 }}>
         <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2 }} />
       </div>
       <span style={{ fontSize: 10, color, width: 22, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -63,7 +63,7 @@ function BreakdownBar({ label, value, max }: { label: string; value: number; max
 }
 
 function STBadge({ trend, label, value, spot }: { trend: number; label: string; value?: number; spot: number }) {
-  const c = trend === 1 ? '#44cc88' : trend === -1 ? '#cc4444' : '#333';
+  const c = trend === 1 ? '#44cc88' : trend === -1 ? '#cc4444' : 'var(--text-faint)';
   const arrow = trend === 1 ? '▲' : trend === -1 ? '▼' : '·';
   const dist = value && spot ? `${((Math.abs(spot - value) / spot) * 100).toFixed(1)}%` : null;
   return (
@@ -71,9 +71,9 @@ function STBadge({ trend, label, value, spot }: { trend: number; label: string; 
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
       background: c + '14', border: `1px solid ${c}33`, borderRadius: 4, padding: '5px 8px',
     }}>
-      <span style={{ fontSize: 9, color: '#555' }}>{label}</span>
+      <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{label}</span>
       <span style={{ fontSize: 14, color: c, lineHeight: 1 }}>{arrow}</span>
-      {dist && <span style={{ fontSize: 9, color: '#444' }}>{dist}</span>}
+      {dist && <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>{dist}</span>}
     </div>
   );
 }
@@ -96,17 +96,19 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
   );
 
   if (isLoading && !data) return (
-    <div style={{ background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 20, marginBottom: 16 }}>
-      <span style={{ color: '#333', fontSize: 12 }}>Loading {underlying}…</span>
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6, padding: 20, marginBottom: 16 }}>
+      <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>Loading {underlying}…</span>
     </div>
   );
   if (isError || !data) return null;
 
-  const stateColor = STATE_COLOR[data.state] ?? '#444';
-  const dirColor = data.direction === 'long' ? '#44cc88' : data.direction === 'short' ? '#cc4444' : '#555';
-  const isArmed = data.state.startsWith('ENTRY_ARMED');
+  const stateColor = STATE_COLOR[data.state] ?? 'var(--text-faint)';
+  const dirColor = data.direction === 'long' ? '#44cc88' : data.direction === 'short' ? '#cc4444' : 'var(--text-dim)';
+  const isArmed     = data.state.startsWith('ENTRY_ARMED');
   const isConfirmed = data.state === 'CONFIRMED_SETUP_ACTIVE';
-  const canEnter = (isArmed || isConfirmed) && !openPositions.length;
+  const isEarly     = data.state === 'EARLY_SETUP_ACTIVE';
+  // Allow entry from any actionable state with a clear direction
+  const canEnter = (isArmed || isConfirmed || isEarly) && !openPositions.length && data.direction !== 'neutral';
 
   const stTriplet = (data.st_trends ?? []).map((t, i) => ({
     trend: t,
@@ -121,24 +123,24 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
   };
 
   return (
-    <div style={{ background: '#141414', border: `1px solid ${isArmed || isConfirmed ? stateColor + '44' : '#222'}`, borderRadius: 6, padding: 16, marginBottom: 12 }}>
+    <div style={{ background: 'var(--bg-card)', border: `1px solid ${isArmed || isConfirmed ? stateColor + '44' : 'var(--border)'}`, borderRadius: 6, padding: 16, marginBottom: 12 }}>
 
       {/* header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <span style={{ fontSize: 22, fontWeight: 900, letterSpacing: 2, color: '#e0e0e0' }}>{underlying}</span>
-            <span style={{ fontSize: 24, fontWeight: 700, color: '#e0e0e0', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 22, fontWeight: 900, letterSpacing: 2, color: 'var(--text-primary)' }}>{underlying}</span>
+            <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
               ${fmtUSD(data.spot_price)}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 5, flexWrap: 'wrap' as const }}>
-            <span style={{ fontSize: 10, color: '#888', letterSpacing: 1 }}>{data.macro_regime.toUpperCase()}</span>
-            <span style={{ color: '#333' }}>·</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 1 }}>{data.macro_regime.toUpperCase()}</span>
+            <span style={{ color: 'var(--text-faint)' }}>·</span>
             <span style={{ fontSize: 10, color: dirColor, letterSpacing: 1, fontWeight: 700 }}>{data.direction.toUpperCase()}</span>
-            {(data.adx ?? 0) > 0 && <span style={{ color: '#444', fontSize: 10 }}>ADX {(data.adx ?? 0).toFixed(0)}</span>}
+            {(data.adx ?? 0) > 0 && <span style={{ color: 'var(--text-faint)', fontSize: 10 }}>ADX {(data.adx ?? 0).toFixed(0)}</span>}
             {(data.atr_percentile ?? 0) > 0 && (
-              <span style={{ fontSize: 10, color: (data.atr_percentile ?? 0) > 65 ? '#f0c040' : '#555' }}>
+              <span style={{ fontSize: 10, color: (data.atr_percentile ?? 0) > 65 ? 'var(--warning)' : 'var(--text-dim)' }}>
                 ATR {(data.atr_percentile ?? 0).toFixed(0)}%{(data.atr_percentile ?? 0) > 65 ? ' volatile' : ''}
               </span>
             )}
@@ -152,14 +154,14 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
           }}>
             {fmtState(data.state).toUpperCase()}
           </div>
-          <div style={{ fontSize: 10, color: '#333' }}>{updatedAt}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-faint)' }}>{updatedAt}</div>
         </div>
       </div>
 
       {/* score bars */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
         <ScoreBar label="LONG SCORE" value={data.score_long} color="#44cc88" />
-        <div style={{ width: 1, background: '#1e1e1e', flexShrink: 0 }} />
+        <div style={{ width: 1, background: 'var(--border)', flexShrink: 0 }} />
         <ScoreBar label="SHORT SCORE" value={data.score_short} color="#cc4444" />
       </div>
 
@@ -191,24 +193,24 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
       )}
 
       {/* metrics row */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const, marginBottom: 12, padding: '8px 10px', background: '#111', borderRadius: 4 }}>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const, marginBottom: 12, padding: '8px 10px', background: 'var(--bg)', borderRadius: 4 }}>
         {data.ivr != null && (
           <div>
-            <div style={{ fontSize: 9, color: '#444', letterSpacing: 1 }}>IVR</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: ivrColor(data.ivr) }}>{data.ivr.toFixed(1)} <span style={{ fontSize: 9, color: '#555' }}>{data.ivr_band}</span></div>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>IVR</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: ivrColor(data.ivr) }}>{data.ivr.toFixed(1)} <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>{data.ivr_band}</span></div>
           </div>
         )}
         {data.rsi != null && (
           <div>
-            <div style={{ fontSize: 9, color: '#444', letterSpacing: 1 }}>RSI 14</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: (data.rsi ?? 50) > 70 ? '#cc4444' : (data.rsi ?? 50) < 30 ? '#44cc88' : '#e0e0e0' }}>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>RSI 14</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: (data.rsi ?? 50) > 70 ? 'var(--danger)' : (data.rsi ?? 50) < 30 ? 'var(--accent)' : 'var(--text-primary)' }}>
               {fmtN(data.rsi, 1)}
             </div>
           </div>
         )}
         {data.perp_price != null && (
           <div>
-            <div style={{ fontSize: 9, color: '#444', letterSpacing: 1 }}>PERP SPREAD</div>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>PERP SPREAD</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: (data.perp_price - data.spot_price) > 0 ? '#44cc88' : '#cc4444' }}>
               {(data.perp_price - data.spot_price) >= 0 ? '+' : ''}{fmtN(data.perp_price - data.spot_price, 0)}
             </div>
@@ -216,31 +218,31 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
         )}
         {data.funding_rate != null && (
           <div>
-            <div style={{ fontSize: 9, color: '#444', letterSpacing: 1 }}>FUNDING</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: data.funding_rate > 0.001 ? '#f0c040' : data.funding_rate < -0.001 ? '#44aaff' : '#888' }}>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>FUNDING</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: data.funding_rate > 0.001 ? 'var(--warning)' : data.funding_rate < -0.001 ? '#44aaff' : 'var(--text-muted)' }}>
               {(data.funding_rate * 100).toFixed(4)}%
             </div>
           </div>
         )}
         {data.squeezed != null && (
           <div>
-            <div style={{ fontSize: 9, color: '#444', letterSpacing: 1 }}>SQUEEZE</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: data.squeezed ? '#f0c040' : '#333' }}>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>SQUEEZE</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: data.squeezed ? 'var(--warning)' : 'var(--text-faint)' }}>
               {data.squeezed ? 'ACTIVE' : 'OFF'}
             </div>
           </div>
         )}
         <div>
-          <div style={{ fontSize: 9, color: '#444', letterSpacing: 1 }}>EXEC MODE</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: data.exec_mode === 'wait' ? '#444' : '#88aaff' }}>
-            {data.exec_mode.toUpperCase()} <span style={{ color: '#555', fontSize: 9 }}>{fmtN(data.exec_confidence * 100, 0)}%</span>
+          <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>EXEC MODE</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: data.exec_mode === 'wait' ? 'var(--text-faint)' : '#88aaff' }}>
+            {data.exec_mode.toUpperCase()} <span style={{ color: 'var(--text-dim)', fontSize: 9 }}>{fmtN(data.exec_confidence * 100, 0)}%</span>
           </div>
         </div>
       </div>
 
       {/* exec reason */}
       {data.exec_reason && data.exec_reason !== 'ok' && (
-        <div style={{ fontSize: 11, color: '#555', marginBottom: 10, fontStyle: 'italic' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 10, fontStyle: 'italic' }}>
           {data.exec_reason}
         </div>
       )}
@@ -250,7 +252,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
         <div style={{ marginBottom: 12 }}>
           <button
             onClick={() => setShowBreakdown(v => !v)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#444', fontSize: 10, letterSpacing: 1, padding: '2px 0', fontFamily: 'inherit' }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', fontSize: 10, letterSpacing: 1, padding: '2px 0', fontFamily: 'inherit' }}
           >
             SCORE BREAKDOWN {showBreakdown ? '▲' : '▼'}
           </button>
@@ -262,7 +264,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
                 return <BreakdownBar key={key} label={label} value={val} max={maxVal} />;
               })}
               {breakdown.veto_reason && (
-                <div style={{ fontSize: 10, color: '#cc4444', marginTop: 4 }}>Veto: {breakdown.veto_reason}</div>
+                <div style={{ fontSize: 10, color: 'var(--danger)', marginTop: 4 }}>Veto: {breakdown.veto_reason}</div>
               )}
             </div>
           )}
@@ -277,7 +279,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
             const pnl = pnlData?.positions?.find(p => p.position_id === pos.id);
             return (
               <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ color: '#888' }}>{pos.sized_trade?.structure?.structure_type?.replace(/_/g, ' ') ?? 'position'} · {pos.sized_trade?.contracts ?? '?'} contracts</span>
+                <span style={{ color: 'var(--text-muted)' }}>{pos.sized_trade?.structure?.structure_type?.replace(/_/g, ' ') ?? 'position'} · {pos.sized_trade?.contracts ?? '?'} contracts</span>
                 <span style={{ color: pnl?.estimated_pnl_usd != null && pnl.estimated_pnl_usd >= 0 ? '#44cc88' : '#cc4444', fontWeight: 700 }}>
                   {pnl?.estimated_pnl_usd != null ? `${pnl.estimated_pnl_usd >= 0 ? '+' : ''}$${Math.abs(pnl.estimated_pnl_usd).toFixed(0)}` : '—'}
                 </span>
@@ -290,7 +292,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
       {/* enter button */}
       {canEnter && (
         <div style={{ marginTop: 4 }}>
-          {enterError && <div style={{ color: '#cc4444', fontSize: 11, marginBottom: 6 }}>{(enterError as Error).message}</div>}
+          {enterError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 6 }}>{(enterError as Error).message}</div>}
           <button
             disabled={entering}
             onClick={() => enterDirect({
@@ -301,19 +303,19 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
             })}
             style={{
               width: '100%', padding: '10px 0',
-              background: isArmed ? '#1a2a1a' : '#1a1a2a',
-              color: isArmed ? '#44cc88' : '#88aaff',
-              border: `1px solid ${isArmed ? '#44cc88' : '#88aaff'}`,
+              background: isArmed ? '#1a2a1a' : isConfirmed ? '#2a2000' : '#1a1200',
+              color: isArmed ? '#44cc88' : isConfirmed ? '#f0c040' : '#f0a500',
+              border: `1px solid ${isArmed ? '#44cc88' : isConfirmed ? '#f0c040' : '#f0a500'}`,
               borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
               fontSize: 13, fontWeight: 700, letterSpacing: 1,
             }}
           >
-            {entering ? 'Entering…' : `ENTER ${data.direction.toUpperCase()} POSITION`}
+            {entering ? 'Entering…' : isArmed ? `▶ BUY ${data.direction.toUpperCase()}` : isConfirmed ? `▶ ENTER ${data.direction.toUpperCase()}` : `▶ ENTER EARLY ${data.direction.toUpperCase()}`}
           </button>
         </div>
       )}
       {openPositions.length > 0 && (
-        <div style={{ fontSize: 10, color: '#444', textAlign: 'center' as const, marginTop: 4 }}>
+        <div style={{ fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' as const, marginTop: 4 }}>
           Position already open — close it before entering a new one
         </div>
       )}

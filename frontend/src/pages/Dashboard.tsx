@@ -55,14 +55,14 @@ type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' |
 const page: React.CSSProperties = { maxWidth: 1200, margin: '0 auto', padding: '0 20px 40px' };
 
 const header: React.CSSProperties = {
-  borderBottom: '1px solid #1e1e1e', padding: '14px 0', marginBottom: 20,
+  borderBottom: '1px solid var(--border)', padding: '14px 0', marginBottom: 20,
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   flexWrap: 'wrap', gap: 10,
 };
 
 const TAB_BAR: React.CSSProperties = {
   display: 'flex', gap: 4, marginBottom: 20,
-  borderBottom: '1px solid #1e1e1e', paddingBottom: 0,
+  borderBottom: '1px solid var(--border)', paddingBottom: 0,
   flexWrap: 'wrap',
 };
 
@@ -73,14 +73,14 @@ function TabBtn({ label, shortcut, active, onClick }: {
     <button onClick={onClick} title={`Press ${shortcut} to switch`} style={{
       background: 'none', border: 'none', cursor: 'pointer',
       fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
-      color: active ? '#e0e0e0' : '#555',
+      color: active ? 'var(--text-primary)' : 'var(--text-dim)',
       padding: '8px 14px',
-      borderBottom: active ? '2px solid #44cc88' : '2px solid transparent',
+      borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
       marginBottom: -1,
       display: 'flex', alignItems: 'center', gap: 5,
     }}>
       {label}
-      <span style={{ fontSize: 9, color: active ? '#44cc8866' : '#333', fontWeight: 400 }}>{shortcut}</span>
+      <span style={{ fontSize: 9, color: active ? '#44cc8866' : 'var(--text-faint)', fontWeight: 400 }}>{shortcut}</span>
     </button>
   );
 }
@@ -137,8 +137,8 @@ export function Dashboard() {
       <div style={header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: '#e0e0e0' }}>STERLING</span>
-            <span style={{ fontSize: 11, color: '#444', marginLeft: 12, letterSpacing: 1 }}>
+            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: 'var(--text-primary)' }}>STERLING</span>
+            <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 12, letterSpacing: 1 }}>
               v{sysInfo?.version ?? '0.4'} · {sysInfo?.paper_trading !== false ? 'PAPER' : 'LIVE'} · {(sysInfo?.active_data_source ?? 'deribit').toUpperCase()}
             </span>
           </div>
@@ -160,8 +160,8 @@ export function Dashboard() {
             onClick={toggleTheme}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             style={{
-              background: 'none', border: '1px solid #333', borderRadius: 3,
-              color: '#555', cursor: 'pointer', padding: '3px 8px',
+              background: 'none', border: '1px solid var(--border)', borderRadius: 3,
+              color: 'var(--text-dim)', cursor: 'pointer', padding: '3px 8px',
               fontFamily: 'inherit', fontSize: 11,
             }}
           >
@@ -171,10 +171,10 @@ export function Dashboard() {
           <button
             onClick={() => setAppMode(appMode === 'basic' ? 'pro' : 'basic')}
             style={{
-              background: appMode === 'pro' ? '#1a2a1a' : '#111',
-              border: `1px solid ${appMode === 'pro' ? '#44cc8888' : '#333'}`,
+              background: appMode === 'pro' ? '#1a2a1a' : 'var(--bg)',
+              border: `1px solid ${appMode === 'pro' ? '#44cc8888' : 'var(--border)'}`,
               borderRadius: 3,
-              color: appMode === 'pro' ? '#44cc88' : '#555',
+              color: appMode === 'pro' ? 'var(--accent)' : 'var(--text-dim)',
               cursor: 'pointer', padding: '3px 10px',
               fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
             }}
@@ -190,7 +190,7 @@ export function Dashboard() {
         <>
           <SignalsList />
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#333', fontSize: 10, letterSpacing: 1 }}>STRATEGY:</span>
+            <span style={{ color: 'var(--text-faint)', fontSize: 10, letterSpacing: 1 }}>STRATEGY:</span>
             <TradingModeSelector />
           </div>
           <InstrumentDetailCard underlying={selectedUnderlying} />
@@ -295,7 +295,7 @@ function TradingModeCard() {
     <div>
       <div style={{ marginBottom: 12 }}><TradingModeSelector /></div>
       {cfg && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, fontSize: 11, color: '#888' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, fontSize: 11, color: 'var(--text-muted)' }}>
           {[
             ['Macro TF', cfg.macro_tf], ['Signal TF', cfg.signal_tf], ['Exec TF', cfg.execution_tf],
             ['DTE range', `${cfg.dte_min}–${cfg.dte_max}d`], ['Position %', `${(cfg.position_pct * 100).toFixed(1)}%`],
@@ -303,8 +303,8 @@ function TradingModeCard() {
             ['Trail mode', cfg.trail_mode], ['Poll', `${cfg.poll_interval_s}s`],
           ].map(([k, v]) => (
             <div key={k as string}>
-              <div style={{ color: '#444', fontSize: 10 }}>{k}</div>
-              <div style={{ color: '#ccc' }}>{v}</div>
+              <div style={{ color: 'var(--text-faint)', fontSize: 10 }}>{k}</div>
+              <div style={{ color: 'var(--text-primary)' }}>{v}</div>
             </div>
           ))}
         </div>
@@ -331,9 +331,9 @@ function CircuitBreakerCard() {
       .catch(() => {});
   };
 
-  if (!data) return <div style={{ color: '#444', fontSize: 11 }}>Loading…</div>;
+  if (!data) return <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>Loading…</div>;
 
-  const stateColor = data.halted ? '#cc4444' : '#44cc88';
+  const stateColor = data.halted ? 'var(--danger)' : 'var(--accent)';
   return (
     <div style={{ fontSize: 11 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -344,7 +344,7 @@ function CircuitBreakerCard() {
         }}>
           {data.state.toUpperCase()}
         </span>
-        <span style={{ color: '#666' }}>Size: {(data.size_multiplier * 100).toFixed(0)}%</span>
+        <span style={{ color: 'var(--text-dim)' }}>Size: {(data.size_multiplier * 100).toFixed(0)}%</span>
         {data.halted && (
           <button
             onClick={reset}

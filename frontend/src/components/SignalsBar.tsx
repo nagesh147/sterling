@@ -9,8 +9,8 @@ const STATE_META: Record<string, { color: string; label: string }> = {
   ENTRY_ARMED_CONTINUATION: { color: '#66ccff', label: 'ARMED·CT' },
   CONFIRMED_SETUP_ACTIVE:   { color: '#f0c040', label: 'CONFIRMED' },
   EARLY_SETUP_ACTIVE:       { color: '#f0a500', label: 'EARLY' },
-  FILTERED:                 { color: '#555',    label: 'FILTERED' },
-  IDLE:                     { color: '#333',    label: 'IDLE' },
+  FILTERED:                 { color: 'var(--text-dim)',   label: 'FILTERED' },
+  IDLE:                     { color: 'var(--text-faint)', label: 'IDLE' },
 };
 
 const REGIME_COLOR = (r: string) => {
@@ -18,11 +18,11 @@ const REGIME_COLOR = (r: string) => {
   if (u.includes('BULL')) return '#44cc88';
   if (u.includes('BEAR')) return '#cc4444';
   if (u === 'VOLATILE')   return '#f0c040';
-  return '#555';
+  return 'var(--text-dim)';
 };
 
 const DIR_COLOR = (d: string) =>
-  d === 'long' ? '#44cc88' : d === 'short' ? '#cc4444' : '#555';
+  d === 'long' ? '#44cc88' : d === 'short' ? '#cc4444' : 'var(--text-dim)';
 
 function ScoreMiniBar({ long, short }: { long: number; short: number }) {
   const total = 100;
@@ -30,11 +30,11 @@ function ScoreMiniBar({ long, short }: { long: number; short: number }) {
   const shortW = Math.min(50, (short / total) * 100);
   return (
     <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 4, width: '100%' }}>
-      <div style={{ flex: 1, background: '#111', borderRadius: 2, overflow: 'hidden', display: 'flex', justifyContent: 'flex-end' }}>
-        <div style={{ width: `${longW}%`, height: 4, background: '#44cc88', borderRadius: 2 }} />
+      <div style={{ flex: 1, background: 'var(--bg)', borderRadius: 2, overflow: 'hidden', display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ width: `${longW}%`, height: 4, background: 'var(--accent)', borderRadius: 2 }} />
       </div>
-      <div style={{ width: 1, height: 6, background: '#333', flexShrink: 0 }} />
-      <div style={{ flex: 1, background: '#111', borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ width: 1, height: 6, background: 'var(--text-faint)', flexShrink: 0 }} />
+      <div style={{ flex: 1, background: 'var(--bg)', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{ width: `${shortW}%`, height: 4, background: '#cc4444', borderRadius: 2 }} />
       </div>
     </div>
@@ -44,22 +44,22 @@ function ScoreMiniBar({ long, short }: { long: number; short: number }) {
 function SignalCard({
   item, selected, openCount, onClick,
 }: { item: SignalItem; selected: boolean; openCount: number; onClick: () => void }) {
-  const sm = STATE_META[item.state] ?? { color: '#444', label: item.state.slice(0, 8) };
+  const sm = STATE_META[item.state] ?? { color: 'var(--text-faint)', label: item.state.slice(0, 8) };
   const isActionable = item.state.startsWith('ENTRY_ARMED') || item.state === 'CONFIRMED_SETUP_ACTIVE';
   const score = item.direction === 'short' ? item.score_short : item.score_long;
-  const scoreColor = score >= 75 ? '#44cc88' : score >= 60 ? '#f0c040' : '#888';
+  const scoreColor = score >= 75 ? '#44cc88' : score >= 60 ? '#f0c040' : 'var(--text-muted)';
 
   return (
     <div onClick={onClick} style={{
       minWidth: 170, maxWidth: 195, flexShrink: 0, padding: '8px 10px',
-      background: selected ? '#16182a' : '#111',
-      border: `1px solid ${selected ? '#88aaff66' : isActionable ? sm.color + '55' : '#1e1e1e'}`,
+      background: selected ? '#16182a' : 'var(--bg)',
+      border: `1px solid ${selected ? '#88aaff66' : isActionable ? sm.color + '55' : 'var(--border)'}`,
       borderRadius: 5, cursor: 'pointer', position: 'relative',
       transition: 'border-color 0.15s',
     }}>
       {/* row 1: symbol + spot */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: selected ? '#88aaff' : '#e0e0e0' }}>
+        <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: selected ? '#88aaff' : 'var(--text-primary)' }}>
           {item.underlying}
         </span>
         <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
@@ -70,7 +70,7 @@ function SignalCard({
               borderRadius: 3, padding: '0 4px', lineHeight: '14px',
             }}>&#9679;{openCount}</span>
           )}
-          <span style={{ fontSize: 11, color: '#555', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
             {item.spot_price != null
               ? item.spot_price >= 1000 ? `$${(item.spot_price / 1000).toFixed(1)}k`
               : `$${item.spot_price.toFixed(2)}`
@@ -112,8 +112,8 @@ function SignalCard({
           {item.green_arrow && <span style={{ color: '#44cc88', fontSize: 11, lineHeight: 1 }}>▲</span>}
           {item.red_arrow   && <span style={{ color: '#cc4444', fontSize: 11, lineHeight: 1 }}>▼</span>}
           {score > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: scoreColor, fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(0)}</span>}
-          {item.ivr != null && <span style={{ fontSize: 9, color: '#444' }}>I{item.ivr.toFixed(0)}</span>}
-          {!item.fresh && <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2a2a2a', display: 'inline-block' }} title="Stale" />}
+          {item.ivr != null && <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>I{item.ivr.toFixed(0)}</span>}
+          {!item.fresh && <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--border-light)', display: 'inline-block' }} title="Stale" />}
         </div>
       </div>
     </div>
@@ -136,7 +136,7 @@ export function SignalsBar() {
 
   if (isLoading && !data) return (
     <div style={{ height: 88, display: 'flex', alignItems: 'center', paddingLeft: 4 }}>
-      <span style={{ color: '#2a2a2a', fontSize: 11 }}>Loading signals…</span>
+      <span style={{ color: 'var(--border-light)', fontSize: 11 }}>Loading signals…</span>
     </div>
   );
 
@@ -149,14 +149,14 @@ export function SignalsBar() {
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: '#333', fontSize: 10, letterSpacing: 2 }}>SIGNALS</span>
+          <span style={{ color: 'var(--text-faint)', fontSize: 10, letterSpacing: 2 }}>SIGNALS</span>
           {actionable.length > 0 && (
             <span style={{ fontSize: 10, color: '#f0c040', background: '#f0c04014', border: '1px solid #f0c04044', borderRadius: 3, padding: '1px 7px' }}>
               {actionable.length} actionable
             </span>
           )}
         </div>
-        <span style={{ color: '#222', fontSize: 9 }}>
+        <span style={{ color: 'var(--border)', fontSize: 9 }}>
           {data?.timestamp_ms ? new Date(data.timestamp_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
         </span>
       </div>

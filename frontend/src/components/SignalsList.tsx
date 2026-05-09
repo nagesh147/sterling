@@ -40,17 +40,17 @@ function actionLevel(state: string): ActionLevel {
 }
 
 const ACTION_CFG: Record<ActionLevel, { label: string; bg: string; color: string; border: string }> = {
-  enter:    { label: 'ENTER NOW',  bg: '#0f2a0f', color: '#44cc88', border: '#44cc88' },
-  ready:    { label: 'GET READY',  bg: '#2a2000', color: '#f0c040', border: '#f0c040' },
-  early:    { label: 'EARLY',      bg: '#1a1a00', color: '#f0a500', border: '#f0a500' },
-  watching: { label: 'WATCHING',   bg: 'transparent', color: '#333', border: '#2a2a2a' },
+  enter:    { label: 'BUY / ENTER',  bg: '#0f2a0f', color: '#44cc88', border: '#44cc88' },
+  ready:    { label: 'ENTER NOW',    bg: '#2a2000', color: '#f0c040', border: '#f0c040' },
+  early:    { label: 'ENTER EARLY',  bg: '#1a1200', color: '#f0a500', border: '#f0a500' },
+  watching: { label: 'WATCHING',     bg: 'transparent', color: 'var(--text-faint)', border: 'var(--border-light)' },
 };
 
 // ── asset icon/badge ──────────────────────────────────────────────────────────
 
 function AssetBadge({ sym, direction }: { sym: string; direction: string }) {
-  const color = direction === 'long' ? '#44cc88' : direction === 'short' ? '#cc4444' : '#555';
-  const bg    = direction === 'long' ? '#0f2a0f' : direction === 'short' ? '#2a0f0f' : '#1a1a1a';
+  const color = direction === 'long' ? '#44cc88' : direction === 'short' ? '#cc4444' : 'var(--text-dim)';
+  const bg    = direction === 'long' ? '#0f2a0f' : direction === 'short' ? '#2a0f0f' : 'var(--bg-input)';
   return (
     <div style={{
       width: 44, height: 44, borderRadius: 8, flexShrink: 0,
@@ -70,13 +70,13 @@ function PriceCell({
 }: { label: string; value: string; highlight?: boolean; dimmed?: boolean }) {
   return (
     <div style={{ flex: 1, textAlign: 'center' as const }}>
-      <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
       <div style={{
         padding: '6px 8px', borderRadius: 4,
-        background: highlight ? '#1a2e1a' : dimmed ? '#111' : '#131313',
-        border: `1px solid ${highlight ? '#44cc8833' : '#1e1e1e'}`,
+        background: highlight ? '#1a2e1a' : dimmed ? 'var(--bg)' : 'var(--bg-input)',
+        border: `1px solid ${highlight ? '#44cc8833' : 'var(--border)'}`,
         fontSize: 14, fontWeight: 700,
-        color: dimmed ? '#333' : highlight ? '#44cc88' : '#888',
+        color: dimmed ? 'var(--text-faint)' : highlight ? 'var(--accent)' : 'var(--text-muted)',
         fontVariantNumeric: 'tabular-nums',
         minWidth: 80,
       }}>
@@ -93,13 +93,13 @@ function LevelCell({ label, value, type }: { label: string; value: string; type:
   const isNA = value === 'N/A';
   return (
     <div style={{ flex: 1, textAlign: 'center' as const }}>
-      <div style={{ fontSize: 9, color: '#444', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
       <div style={{
         padding: '6px 8px', borderRadius: 4,
-        background: isNA ? '#111' : type === 'stop' ? '#2a0f0f' : '#0f2a0f',
-        border: `1px solid ${isNA ? '#1e1e1e' : color + '33'}`,
+        background: isNA ? 'var(--bg)' : type === 'stop' ? '#2a0f0f' : '#0f2a0f',
+        border: `1px solid ${isNA ? 'var(--border)' : color + '33'}`,
         fontSize: 14, fontWeight: 700,
-        color: isNA ? '#2a2a2a' : color,
+        color: isNA ? 'var(--border-light)' : color,
         fontVariantNumeric: 'tabular-nums',
         minWidth: 80,
       }}>
@@ -121,14 +121,14 @@ function SignalRow({
 }) {
   const level   = actionLevel(item.state);
   const actCfg  = ACTION_CFG[level];
-  const dirColor = item.direction === 'long' ? '#44cc88' : item.direction === 'short' ? '#cc4444' : '#444';
+  const dirColor = item.direction === 'long' ? '#44cc88' : item.direction === 'short' ? '#cc4444' : 'var(--text-faint)';
   const score   = item.direction === 'short' ? item.score_short : item.score_long;
-  const isActionable = level === 'enter' || level === 'ready';
+  const isActionable = level !== 'watching';
   const { mutate: enterDirect, isPending: entering } = useDirectEntry();
 
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (level === 'enter' && !hasOpenPosition) {
+    if (level !== 'watching' && !hasOpenPosition && item.direction !== 'neutral') {
       enterDirect({
         underlying: item.underlying,
         direction: item.direction,
@@ -148,9 +148,9 @@ function SignalRow({
       style={{
         display: 'flex', alignItems: 'center', gap: 14,
         padding: '14px 16px',
-        background: selected ? '#13131f' : '#141414',
+        background: selected ? '#13131f' : 'var(--bg-card)',
         borderLeft: `3px solid ${selected ? '#88aaff' : isActionable ? dirColor : 'transparent'}`,
-        borderBottom: '1px solid #1a1a1a',
+        borderBottom: '1px solid var(--bg-input)',
         cursor: 'pointer',
         transition: 'background 0.15s',
       }}
@@ -160,17 +160,17 @@ function SignalRow({
         <AssetBadge sym={item.underlying} direction={item.direction} />
         <div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#e0e0e0', letterSpacing: 0.5 }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
               {item.underlying}
             </span>
             {item.spot_price != null && (
-              <span style={{ fontSize: 11, color: '#555', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
                 ({fmtPrice(item.spot_price)})
               </span>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            <span style={{ fontSize: 10, color: '#444' }}>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>
               {level === 'enter' ? 'Active' : level === 'ready' ? 'Confirmed' : level === 'early' ? 'Forming' : 'Watching'}
             </span>
             {hasOpenPosition && (
@@ -178,7 +178,7 @@ function SignalRow({
             )}
           </div>
           {item.regime ? (
-            <div style={{ fontSize: 9, color: '#3a3a3a', marginTop: 2, letterSpacing: 0.3 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 2, letterSpacing: 0.3 }}>
               {item.regime.replace(/_/g, ' ')}
             </div>
           ) : null}
@@ -196,7 +196,7 @@ function SignalRow({
             {item.direction === 'long' ? 'BUY' : 'SELL'}
           </span>
         ) : (
-          <span style={{ color: '#2a2a2a', fontSize: 11 }}>—</span>
+          <span style={{ color: 'var(--border-light)', fontSize: 11 }}>—</span>
         )}
       </div>
 
@@ -216,10 +216,10 @@ function SignalRow({
       <div style={{ width: 50, flexShrink: 0, textAlign: 'center' as const }}>
         {score > 0 ? (
           <>
-            <div style={{ fontSize: 9, color: '#333', letterSpacing: 1, marginBottom: 4 }}>SCORE</div>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>SCORE</div>
             <div style={{
               fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-              color: score >= 75 ? '#44cc88' : score >= 55 ? '#f0c040' : '#555',
+              color: score >= 75 ? 'var(--accent)' : score >= 55 ? 'var(--warning)' : 'var(--text-dim)',
             }}>
               {score.toFixed(0)}
             </div>
@@ -231,25 +231,26 @@ function SignalRow({
       <div style={{ width: 110, flexShrink: 0 }}>
         <button
           onClick={handleAction}
-          disabled={level === 'watching' || level === 'early' || hasOpenPosition || entering}
+          disabled={level === 'watching' || hasOpenPosition || entering || item.direction === 'neutral'}
           style={{
             width: '100%', padding: '9px 0',
-            background: hasOpenPosition && level === 'enter' ? '#111' : actCfg.bg,
-            color: hasOpenPosition && level === 'enter' ? '#333' : actCfg.color,
-            border: `1px solid ${hasOpenPosition && level === 'enter' ? '#1e1e1e' : actCfg.border}`,
-            borderRadius: 5, cursor: level === 'enter' && !hasOpenPosition ? 'pointer' : 'default',
+            background: hasOpenPosition ? 'var(--bg)' : actCfg.bg,
+            color: hasOpenPosition ? 'var(--text-faint)' : actCfg.color,
+            border: `1px solid ${hasOpenPosition ? 'var(--border)' : actCfg.border}`,
+            borderRadius: 5,
+            cursor: level !== 'watching' && !hasOpenPosition && item.direction !== 'neutral' ? 'pointer' : 'default',
             fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
-            opacity: level === 'watching' ? 0.3 : 1,
+            opacity: level === 'watching' || item.direction === 'neutral' ? 0.25 : 1,
             transition: 'opacity 0.15s',
           }}
         >
-          {entering ? 'Entering…' : hasOpenPosition && level === 'enter' ? 'OPEN' : actCfg.label}
+          {entering ? 'Entering…' : hasOpenPosition ? 'OPEN' : actCfg.label}
         </button>
         {(item.green_arrow || item.red_arrow) && (
           <div style={{ textAlign: 'center' as const, marginTop: 4, fontSize: 10 }}>
             {item.green_arrow && <span style={{ color: '#44cc88' }}>▲ </span>}
             {item.red_arrow   && <span style={{ color: '#cc4444' }}>▼ </span>}
-            <span style={{ color: '#333' }}>arrow</span>
+            <span style={{ color: 'var(--text-faint)' }}>arrow</span>
           </div>
         )}
       </div>
@@ -272,14 +273,15 @@ export function SignalsList() {
     }
   });
 
-  const signals = data?.signals ?? [];
-  const actionable = signals.filter(s => STATE_RANK[s.state] <= 2);
+  // Only show instruments with live data — hide stale/unreachable ones (NIFTY, XRP on Deribit etc.)
+  const signals = (data?.signals ?? []).filter(s => s.fresh);
+  const actionable = signals.filter(s => STATE_RANK[s.state] <= 3);
   const ts = data?.timestamp_ms
     ? new Date(data.timestamp_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '';
 
   return (
-    <div style={{ marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid #1e1e1e' }}>
+    <div style={{ marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
 
       {/* header bar */}
       <div style={{
@@ -316,13 +318,13 @@ export function SignalsList() {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14,
         padding: '6px 16px 6px 19px',
-        background: '#0f0f0f', borderBottom: '1px solid #1a1a1a',
+        background: 'var(--bg)', borderBottom: '1px solid var(--bg-input)',
       }}>
-        <div style={{ width: 200, flexShrink: 0, fontSize: 9, color: '#2a2a2a', letterSpacing: 1 }}>INSTRUMENT</div>
-        <div style={{ width: 52, flexShrink: 0, fontSize: 9, color: '#2a2a2a', letterSpacing: 1, textAlign: 'center' as const }}>DIR</div>
+        <div style={{ width: 200, flexShrink: 0, fontSize: 9, color: 'var(--border-light)', letterSpacing: 1 }}>INSTRUMENT</div>
+        <div style={{ width: 52, flexShrink: 0, fontSize: 9, color: 'var(--border-light)', letterSpacing: 1, textAlign: 'center' as const }}>DIR</div>
         <div style={{ flex: 1, display: 'flex', gap: 8 }}>
           {['ENTRY PRICE', 'STOP LOSS', 'TAKE PROFIT'].map(h => (
-            <div key={h} style={{ flex: 1, textAlign: 'center' as const, fontSize: 9, color: '#2a2a2a', letterSpacing: 1 }}>{h}</div>
+            <div key={h} style={{ flex: 1, textAlign: 'center' as const, fontSize: 9, color: 'var(--border-light)', letterSpacing: 1 }}>{h}</div>
           ))}
         </div>
         <div style={{ width: 50, flexShrink: 0 }} />
@@ -331,11 +333,11 @@ export function SignalsList() {
 
       {/* rows */}
       {isLoading && signals.length === 0 ? (
-        <div style={{ padding: '24px 16px', background: '#141414', color: '#2a2a2a', fontSize: 12 }}>
+        <div style={{ padding: '24px 16px', background: 'var(--bg-card)', color: 'var(--border-light)', fontSize: 12 }}>
           Computing signals…
         </div>
       ) : signals.length === 0 ? (
-        <div style={{ padding: '24px 16px', background: '#141414', color: '#333', fontSize: 12 }}>
+        <div style={{ padding: '24px 16px', background: 'var(--bg-card)', color: 'var(--text-faint)', fontSize: 12 }}>
           No instruments found
         </div>
       ) : (
