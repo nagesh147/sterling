@@ -38,7 +38,9 @@ import { EquityCurve } from '../components/EquityCurve';
 import { TelegramConfigPanel } from '../components/TelegramConfigPanel';
 import { useTradingMode } from '../hooks/useTradingMode';
 import { usePositions } from '../hooks/usePositions';
-import { useTheme, useToggleTheme } from '../store/useStore';
+import { useTheme, useToggleTheme, useAppMode, useSetAppMode } from '../store/useStore';
+import { InstrumentDetailCard } from '../components/InstrumentDetailCard';
+import { PositionsStrip } from '../components/PositionsStrip';
 import { WalkForwardPanel } from '../components/WalkForwardPanel';
 import { SensitivityPanel } from '../components/SensitivityPanel';
 import { CorrelationHeatmap } from '../components/CorrelationHeatmap';
@@ -107,6 +109,8 @@ export function Dashboard() {
   const { data: posData } = usePositions();
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
+  const appMode = useAppMode();
+  const setAppMode = useSetAppMode();
 
   const defaultTf = modeData?.config?.execution_tf ?? '15m';
 
@@ -162,101 +166,116 @@ export function Dashboard() {
           >
             {theme === 'dark' ? '☀' : '◑'}
           </button>
+          {/* Mode toggle */}
+          <button
+            onClick={() => setAppMode(appMode === 'basic' ? 'pro' : 'basic')}
+            style={{
+              background: appMode === 'pro' ? '#1a2a1a' : '#111',
+              border: `1px solid ${appMode === 'pro' ? '#44cc8888' : '#333'}`,
+              borderRadius: 3, color: appMode === 'pro' ? '#44cc88' : '#555',
+              cursor: 'pointer', padding: '3px 10px',
+              fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
+            }}
+          >
+            {appMode === 'pro' ? 'PRO' : 'BASIC'}
+          </button>
         </div>
         <InstrumentSelector />
       </div>
 
-      <div style={TAB_BAR}>
-        {TABS.map(([tab, label, key]) => (
-          <TabBtn
-            key={tab}
-            label={label}
-            shortcut={key}
-            active={activeTab === tab}
-            onClick={() => setActiveTab(tab)}
-          />
-        ))}
-      </div>
+      {appMode === 'basic' ? (
+        // ── BASIC MODE ──────────────────────────────────────────────────────
+        <>
+          <SignalsBar />
+          <InstrumentDetailCard underlying={selectedUnderlying} />
+          <PositionsStrip />
+        </>
+      ) : (
+        // ── PRO MODE ────────────────────────────────────────────────────────
+        <>
+          <div style={TAB_BAR}>
+            {TABS.map(([tab, label, key]) => (
+              <TabBtn
+                key={tab}
+                label={label}
+                shortcut={key}
+                active={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
+              />
+            ))}
+          </div>
 
-      <SignalsBar />
+          <SignalsBar />
 
-      {activeTab === 'analysis' && (
-        <>
-          <PanelBoundary title="SESSION"><SessionStatsPanel /></PanelBoundary>
-          <PanelBoundary title="SNAPSHOT"><SnapshotPanel underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="MARKET"><MarketSnapshot underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="ARROWS"><ArrowHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="PREVIEW"><PreviewCandidates underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="RUN-ONCE"><RunOnceResult underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="SIGNAL HISTORY"><EvalHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
-        </>
-      )}
-      {activeTab === 'charts' && (
-        <PanelBoundary title="CHARTS">
-          <MultiPaneChart underlying={selectedUnderlying} tf={defaultTf} />
-        </PanelBoundary>
-      )}
-      {activeTab === 'chain' && (
-        <>
-          <PanelBoundary title="OPTION CHAIN"><OptionChainViewer underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="VOL SCAN"><VolatilityScanPanel underlying={selectedUnderlying} /></PanelBoundary>
-        </>
-      )}
-      {activeTab === 'account' && (
-        <>
-          <PanelBoundary title="ACCOUNT"><AccountPanel underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="EXCHANGES"><ExchangeManager /></PanelBoundary>
-        </>
-      )}
-      {activeTab === 'alerts' && (
-        <PanelBoundary title="ALERTS"><AlertManager /></PanelBoundary>
-      )}
-      {activeTab === 'backtest' && (
-        <>
-          <PanelBoundary title="BACKTEST"><BacktestPanel underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="WALK-FORWARD"><WalkForwardPanel /></PanelBoundary>
-          <PanelBoundary title="SENSITIVITY"><SensitivityPanel /></PanelBoundary>
-        </>
-      )}
-      {activeTab === 'positions' && (
-        <>
-          <PanelBoundary title="EQUITY CURVE">
-            <EquityCurve />
-          </PanelBoundary>
-          <PanelBoundary title="PORTFOLIO">
-            <PositionHeatmap
-              positions={posData?.positions ?? []}
-            />
-            <PortfolioSummary />
-          </PanelBoundary>
-          <PanelBoundary title="GREEKS"><GreeksPanel /></PanelBoundary>
-          <PanelBoundary title="CORRELATION"><CorrelationHeatmap /></PanelBoundary>
-          <PanelBoundary title="GREEKS BUDGET"><GreeksBudgetGauge /></PanelBoundary>
-          <PanelBoundary title="ANALYTICS"><AnalyticsPanel /></PanelBoundary>
-          <PanelBoundary title="POSITIONS"><PositionsPanel underlying={selectedUnderlying} /></PanelBoundary>
-        </>
-      )}
-      {activeTab === 'watchlist' && (
-        <PanelBoundary title="WATCHLIST"><WatchlistPanel /></PanelBoundary>
-      )}
-      {activeTab === 'config' && (
-        <>
-          <PanelBoundary title="SYSTEM"><SystemInfoPanel /></PanelBoundary>
-          <PanelBoundary title="TRADING MODE">
-            <TradingModeCard />
-          </PanelBoundary>
-          <PanelBoundary title="CIRCUIT BREAKER">
-            <CircuitBreakerCard />
-          </PanelBoundary>
-          <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
-          <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
-          <PanelBoundary title="CALIBRATION"><CalibrationPanel /></PanelBoundary>
-          <PanelBoundary title="SCORING WEIGHTS"><ScoringWeightsPanel /></PanelBoundary>
-          <PanelBoundary title="TELEGRAM">
-            <TelegramConfigPanel />
-          </PanelBoundary>
-          <PanelBoundary title="WEBHOOKS"><WebhookManager /></PanelBoundary>
-          <SessionExport />
+          {activeTab === 'analysis' && (
+            <>
+              <PanelBoundary title="SESSION"><SessionStatsPanel /></PanelBoundary>
+              <PanelBoundary title="SNAPSHOT"><SnapshotPanel underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="MARKET"><MarketSnapshot underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="ARROWS"><ArrowHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="PREVIEW"><PreviewCandidates underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="RUN-ONCE"><RunOnceResult underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="SIGNAL HISTORY"><EvalHistoryPanel underlying={selectedUnderlying} /></PanelBoundary>
+            </>
+          )}
+          {activeTab === 'charts' && (
+            <PanelBoundary title="CHARTS">
+              <MultiPaneChart underlying={selectedUnderlying} tf={defaultTf} />
+            </PanelBoundary>
+          )}
+          {activeTab === 'chain' && (
+            <>
+              <PanelBoundary title="OPTION CHAIN"><OptionChainViewer underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="VOL SCAN"><VolatilityScanPanel underlying={selectedUnderlying} /></PanelBoundary>
+            </>
+          )}
+          {activeTab === 'account' && (
+            <>
+              <PanelBoundary title="ACCOUNT"><AccountPanel underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="EXCHANGES"><ExchangeManager /></PanelBoundary>
+            </>
+          )}
+          {activeTab === 'alerts' && (
+            <PanelBoundary title="ALERTS"><AlertManager /></PanelBoundary>
+          )}
+          {activeTab === 'backtest' && (
+            <>
+              <PanelBoundary title="BACKTEST"><BacktestPanel underlying={selectedUnderlying} /></PanelBoundary>
+              <PanelBoundary title="WALK-FORWARD"><WalkForwardPanel /></PanelBoundary>
+              <PanelBoundary title="SENSITIVITY"><SensitivityPanel /></PanelBoundary>
+            </>
+          )}
+          {activeTab === 'positions' && (
+            <>
+              <PanelBoundary title="EQUITY CURVE"><EquityCurve /></PanelBoundary>
+              <PanelBoundary title="PORTFOLIO">
+                <PositionHeatmap positions={posData?.positions ?? []} />
+                <PortfolioSummary />
+              </PanelBoundary>
+              <PanelBoundary title="GREEKS"><GreeksPanel /></PanelBoundary>
+              <PanelBoundary title="CORRELATION"><CorrelationHeatmap /></PanelBoundary>
+              <PanelBoundary title="GREEKS BUDGET"><GreeksBudgetGauge /></PanelBoundary>
+              <PanelBoundary title="ANALYTICS"><AnalyticsPanel /></PanelBoundary>
+              <PanelBoundary title="POSITIONS"><PositionsPanel underlying={selectedUnderlying} /></PanelBoundary>
+            </>
+          )}
+          {activeTab === 'watchlist' && (
+            <PanelBoundary title="WATCHLIST"><WatchlistPanel /></PanelBoundary>
+          )}
+          {activeTab === 'config' && (
+            <>
+              <PanelBoundary title="SYSTEM"><SystemInfoPanel /></PanelBoundary>
+              <PanelBoundary title="TRADING MODE"><TradingModeCard /></PanelBoundary>
+              <PanelBoundary title="CIRCUIT BREAKER"><CircuitBreakerCard /></PanelBoundary>
+              <PanelBoundary title="SIZING"><PositionSizingCalc /></PanelBoundary>
+              <PanelBoundary title="RISK CONFIG"><RiskConfigPanel /></PanelBoundary>
+              <PanelBoundary title="CALIBRATION"><CalibrationPanel /></PanelBoundary>
+              <PanelBoundary title="SCORING WEIGHTS"><ScoringWeightsPanel /></PanelBoundary>
+              <PanelBoundary title="TELEGRAM"><TelegramConfigPanel /></PanelBoundary>
+              <PanelBoundary title="WEBHOOKS"><WebhookManager /></PanelBoundary>
+              <SessionExport />
+            </>
+          )}
         </>
       )}
     </div>

@@ -39,6 +39,8 @@ class DirectionalSnapshot(BaseModel):
     adx: float = 0.0
     funding_rate: Optional[float] = None
     score_breakdown: Optional[dict] = None
+    rsi: float = 50.0
+    squeezed: bool = False
     # Indicator lines for charting
     st1_line: List[dict] = []
     st2_line: List[dict] = []

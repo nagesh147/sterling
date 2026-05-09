@@ -2,8 +2,7 @@ import React from 'react';
 import { useSignals } from '../hooks/useSignals';
 import type { SignalItem } from '../hooks/useSignals';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useStore';
-
-// ── colour helpers ────────────────────────────────────────────────────────────
+import { usePositions } from '../hooks/usePositions';
 
 const STATE_META: Record<string, { color: string; label: string }> = {
   ENTRY_ARMED_PULLBACK:     { color: '#44aaff', label: 'ARMED·PB' },
@@ -19,195 +18,155 @@ const REGIME_COLOR = (r: string) => {
   if (u.includes('BULL')) return '#44cc88';
   if (u.includes('BEAR')) return '#cc4444';
   if (u === 'VOLATILE')   return '#f0c040';
-  if (u === 'RANGING' || u === 'CHOPPY') return '#888';
   return '#555';
 };
 
 const DIR_COLOR = (d: string) =>
   d === 'long' ? '#44cc88' : d === 'short' ? '#cc4444' : '#555';
 
-const SCORE_COLOR = (s: number) =>
-  s >= 75 ? '#44cc88' : s >= 60 ? '#f0c040' : '#666';
-
-// ── sub-components ────────────────────────────────────────────────────────────
-
-function Pill({ children, color }: { children: React.ReactNode; color: string }) {
+function ScoreMiniBar({ long, short }: { long: number; short: number }) {
+  const total = 100;
+  const longW = Math.min(50, (long / total) * 100);
+  const shortW = Math.min(50, (short / total) * 100);
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '1px 5px', borderRadius: 3,
-      background: color + '1a', border: `1px solid ${color}33`,
-      color, fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
-      lineHeight: '14px',
-    }}>
-      {children}
-    </span>
-  );
-}
-
-function Arrow({ type }: { type: 'green' | 'red' }) {
-  const color = type === 'green' ? '#44cc88' : '#cc4444';
-  return (
-    <span style={{ color, fontSize: 13, lineHeight: 1, fontWeight: 900 }}>
-      {type === 'green' ? '▲' : '▼'}
-    </span>
-  );
-}
-
-function SignalCard({ item, selected, onClick }: {
-  item: SignalItem;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  const sm = STATE_META[item.state] ?? { color: '#444', label: item.state.slice(0, 8) };
-  const score = item.direction === 'short' ? item.score_short : item.score_long;
-  const isActionable = item.state.startsWith('ENTRY_ARMED') || item.state === 'CONFIRMED_SETUP_ACTIVE';
-
-  return (
-    <div
-      onClick={onClick}
-      style={{
-        minWidth: 160, maxWidth: 180, flexShrink: 0,
-        padding: '8px 10px',
-        background: selected ? '#1a1a2a' : '#111',
-        border: `1px solid ${selected ? '#88aaff55' : isActionable ? sm.color + '44' : '#1e1e1e'}`,
-        borderRadius: 5,
-        cursor: 'pointer',
-        transition: 'border-color 0.15s, background 0.15s',
-        position: 'relative',
-      }}
-    >
-      {/* top row: symbol + spot */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-        <span style={{
-          fontSize: 13, fontWeight: 800, letterSpacing: 1,
-          color: selected ? '#88aaff' : '#e0e0e0',
-        }}>
-          {item.underlying}
-        </span>
-        <span style={{ fontSize: 11, color: '#666', fontVariantNumeric: 'tabular-nums' }}>
-          {item.spot_price != null
-            ? item.spot_price >= 1000
-              ? `$${(item.spot_price / 1000).toFixed(1)}k`
-              : `$${item.spot_price.toFixed(2)}`
-            : '—'}
-        </span>
+    <div style={{ display: 'flex', gap: 2, alignItems: 'center', height: 4, width: '100%' }}>
+      <div style={{ flex: 1, background: '#111', borderRadius: 2, overflow: 'hidden', display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ width: `${longW}%`, height: 4, background: '#44cc88', borderRadius: 2 }} />
       </div>
-
-      {/* middle row: regime + direction */}
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 5, flexWrap: 'wrap' }}>
-        {item.regime ? (
-          <Pill color={REGIME_COLOR(item.regime)}>
-            {item.regime.replace('_', ' ').slice(0, 10)}
-          </Pill>
-        ) : (
-          <span style={{ color: '#333', fontSize: 9 }}>—</span>
-        )}
-        {item.direction !== 'neutral' && (
-          <Pill color={DIR_COLOR(item.direction)}>
-            {item.direction.toUpperCase()}
-          </Pill>
-        )}
+      <div style={{ width: 1, height: 6, background: '#333', flexShrink: 0 }} />
+      <div style={{ flex: 1, background: '#111', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ width: `${shortW}%`, height: 4, background: '#cc4444', borderRadius: 2 }} />
       </div>
-
-      {/* bottom row: state + arrows + score */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 9, color: sm.color, fontWeight: 700, letterSpacing: 0.3 }}>
-          {sm.label}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {item.green_arrow && <Arrow type="green" />}
-          {item.red_arrow  && <Arrow type="red" />}
-          {score > 0 && (
-            <span style={{
-              fontSize: 11, fontWeight: 700, color: SCORE_COLOR(score),
-              fontVariantNumeric: 'tabular-nums',
-            }}>
-              {score.toFixed(0)}
-            </span>
-          )}
-          {item.ivr != null && (
-            <span style={{ fontSize: 9, color: '#555' }}>
-              IVR{item.ivr.toFixed(0)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* stale indicator */}
-      {!item.fresh && (
-        <div style={{
-          position: 'absolute', top: 3, right: 5,
-          width: 5, height: 5, borderRadius: '50%',
-          background: '#333',
-        }} title="No live data yet — open stream to refresh" />
-      )}
     </div>
   );
 }
 
-// ── main component ────────────────────────────────────────────────────────────
-
-export function SignalsBar() {
-  const { data, isLoading } = useSignals();
-  const selected = useSelectedUnderlying();
-  const setUnderlying = useSetSelectedUnderlying();
-
-  if (isLoading && !data) {
-    return (
-      <div style={{ height: 90, display: 'flex', alignItems: 'center', paddingLeft: 4 }}>
-        <span style={{ color: '#333', fontSize: 11 }}>Loading signals…</span>
-      </div>
-    );
-  }
-
-  const signals = data?.signals ?? [];
-  if (signals.length === 0) return null;
-
-  const actionable = signals.filter(s =>
-    s.state.startsWith('ENTRY_ARMED') || s.state === 'CONFIRMED_SETUP_ACTIVE'
-  );
+function SignalCard({
+  item, selected, openCount, onClick,
+}: { item: SignalItem; selected: boolean; openCount: number; onClick: () => void }) {
+  const sm = STATE_META[item.state] ?? { color: '#444', label: item.state.slice(0, 8) };
+  const isActionable = item.state.startsWith('ENTRY_ARMED') || item.state === 'CONFIRMED_SETUP_ACTIVE';
+  const score = item.direction === 'short' ? item.score_short : item.score_long;
+  const scoreColor = score >= 75 ? '#44cc88' : score >= 60 ? '#f0c040' : '#888';
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      {/* header row */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 8,
-      }}>
-        <span style={{ color: '#444', fontSize: 10, letterSpacing: 2 }}>
-          SIGNALS · {signals.length} instruments
+    <div onClick={onClick} style={{
+      minWidth: 170, maxWidth: 195, flexShrink: 0, padding: '8px 10px',
+      background: selected ? '#16182a' : '#111',
+      border: `1px solid ${selected ? '#88aaff66' : isActionable ? sm.color + '55' : '#1e1e1e'}`,
+      borderRadius: 5, cursor: 'pointer', position: 'relative',
+      transition: 'border-color 0.15s',
+    }}>
+      {/* row 1: symbol + spot */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: selected ? '#88aaff' : '#e0e0e0' }}>
+          {item.underlying}
         </span>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {actionable.length > 0 && (
+        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+          {openCount > 0 && (
             <span style={{
-              fontSize: 10, color: '#f0c040',
-              background: '#f0c04018', border: '1px solid #f0c04044',
-              borderRadius: 3, padding: '1px 7px',
-            }}>
-              {actionable.length} actionable
-            </span>
+              fontSize: 9, fontWeight: 700, color: '#44cc88',
+              background: '#44cc8822', border: '1px solid #44cc8844',
+              borderRadius: 3, padding: '0 4px', lineHeight: '14px',
+            }}>&#9679;{openCount}</span>
           )}
-          <span style={{ color: '#2a2a2a', fontSize: 9 }}>
-            {data?.timestamp_ms
-              ? new Date(data.timestamp_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-              : ''}
+          <span style={{ fontSize: 11, color: '#555', fontVariantNumeric: 'tabular-nums' }}>
+            {item.spot_price != null
+              ? item.spot_price >= 1000 ? `$${(item.spot_price / 1000).toFixed(1)}k`
+              : `$${item.spot_price.toFixed(2)}`
+              : '—'}
           </span>
         </div>
       </div>
 
-      {/* scrollable card strip */}
-      <div style={{
-        display: 'flex', gap: 8,
-        overflowX: 'auto',
-        paddingBottom: 4,
-        scrollbarWidth: 'none',
-      }}>
+      {/* row 2: regime + direction + exec */}
+      <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginBottom: 5, flexWrap: 'wrap' as const }}>
+        {item.regime ? (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: REGIME_COLOR(item.regime),
+            background: REGIME_COLOR(item.regime) + '18', border: `1px solid ${REGIME_COLOR(item.regime)}33`,
+            padding: '1px 4px', borderRadius: 3,
+          }}>{item.regime.replace(/_/g, ' ').slice(0, 9)}</span>
+        ) : null}
+        {item.direction !== 'neutral' && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: DIR_COLOR(item.direction),
+            background: DIR_COLOR(item.direction) + '18', border: `1px solid ${DIR_COLOR(item.direction)}33`,
+            padding: '1px 4px', borderRadius: 3,
+          }}>{item.direction === 'long' ? '↑ L' : '↓ S'}</span>
+        )}
+        {item.exec_mode && item.exec_mode !== 'wait' && (
+          <span style={{ fontSize: 9, color: '#88aaff', background: '#88aaff18', border: '1px solid #88aaff33', padding: '1px 4px', borderRadius: 3 }}>
+            {item.exec_mode === 'pullback' ? 'PB' : 'CT'}
+          </span>
+        )}
+      </div>
+
+      {/* score bar */}
+      <ScoreMiniBar long={item.score_long} short={item.score_short} />
+
+      {/* row 3: state + score + arrows + ivr */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 }}>
+        <span style={{ fontSize: 9, color: sm.color, fontWeight: 700, letterSpacing: 0.3 }}>{sm.label}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {item.green_arrow && <span style={{ color: '#44cc88', fontSize: 11, lineHeight: 1 }}>▲</span>}
+          {item.red_arrow   && <span style={{ color: '#cc4444', fontSize: 11, lineHeight: 1 }}>▼</span>}
+          {score > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: scoreColor, fontVariantNumeric: 'tabular-nums' }}>{score.toFixed(0)}</span>}
+          {item.ivr != null && <span style={{ fontSize: 9, color: '#444' }}>I{item.ivr.toFixed(0)}</span>}
+          {!item.fresh && <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2a2a2a', display: 'inline-block' }} title="Stale" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SignalsBar() {
+  const { data, isLoading } = useSignals();
+  const { data: posData } = usePositions();
+  const selected = useSelectedUnderlying();
+  const setUnderlying = useSetSelectedUnderlying();
+
+  // Build map: underlying -> open position count
+  const openByUnderlying: Record<string, number> = {};
+  (posData?.positions ?? []).forEach(p => {
+    if (p.status === 'open' || p.status === 'partially_closed') {
+      openByUnderlying[p.underlying] = (openByUnderlying[p.underlying] || 0) + 1;
+    }
+  });
+
+  if (isLoading && !data) return (
+    <div style={{ height: 88, display: 'flex', alignItems: 'center', paddingLeft: 4 }}>
+      <span style={{ color: '#2a2a2a', fontSize: 11 }}>Loading signals…</span>
+    </div>
+  );
+
+  const signals = data?.signals ?? [];
+  if (signals.length === 0) return null;
+
+  const actionable = signals.filter(s => s.state.startsWith('ENTRY_ARMED') || s.state === 'CONFIRMED_SETUP_ACTIVE');
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ color: '#333', fontSize: 10, letterSpacing: 2 }}>SIGNALS</span>
+          {actionable.length > 0 && (
+            <span style={{ fontSize: 10, color: '#f0c040', background: '#f0c04014', border: '1px solid #f0c04044', borderRadius: 3, padding: '1px 7px' }}>
+              {actionable.length} actionable
+            </span>
+          )}
+        </div>
+        <span style={{ color: '#222', fontSize: 9 }}>
+          {data?.timestamp_ms ? new Date(data.timestamp_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
         {signals.map(item => (
           <SignalCard
             key={item.underlying}
             item={item}
             selected={item.underlying === selected}
+            openCount={openByUnderlying[item.underlying] || 0}
             onClick={() => setUnderlying(item.underlying)}
           />
         ))}

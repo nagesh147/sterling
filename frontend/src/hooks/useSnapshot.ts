@@ -31,6 +31,8 @@ export interface DirectionalSnapshot {
   adx?: number;
   funding_rate?: number | null;
   score_breakdown?: Record<string, number | string> | null;
+  rsi?: number;
+  squeezed?: boolean;
 }
 
 export function useSnapshot(underlying: string) {

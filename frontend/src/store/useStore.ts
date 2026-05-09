@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 const STORAGE_KEY = 'sterling_underlying';
 const THEME_KEY = 'sterling_theme';
+const MODE_KEY = 'sterling_app_mode';
 
 function loadTheme(): 'dark' | 'light' {
   try { return (localStorage.getItem(THEME_KEY) as 'dark' | 'light') || 'dark'; }
@@ -16,6 +17,11 @@ function loadUnderlying(): string {
   }
 }
 
+function loadMode(): 'basic' | 'pro' {
+  try { return (localStorage.getItem(MODE_KEY) as 'basic' | 'pro') || 'basic'; }
+  catch { return 'basic'; }
+}
+
 interface StoreState {
   selectedUnderlying: string;
   setSelectedUnderlying: (u: string) => void;
@@ -23,6 +29,8 @@ interface StoreState {
   setTradingMode: (mode: string) => void;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
+  appMode: 'basic' | 'pro';
+  setAppMode: (m: 'basic' | 'pro') => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -40,6 +48,11 @@ export const useStore = create<StoreState>((set) => ({
     document.documentElement.setAttribute('data-theme', next);
     return { theme: next };
   }),
+  appMode: loadMode(),
+  setAppMode: (m) => {
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
+    set({ appMode: m });
+  },
 }));
 
 export const useSelectedUnderlying = () =>
@@ -56,3 +69,5 @@ export const useSetTradingModeStore = () =>
 
 export const useTheme = () => useStore((s) => s.theme);
 export const useToggleTheme = () => useStore((s) => s.toggleTheme);
+export const useAppMode = () => useStore((s) => s.appMode);
+export const useSetAppMode = () => useStore((s) => s.setAppMode);
