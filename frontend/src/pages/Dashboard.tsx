@@ -133,7 +133,7 @@ export function Dashboard() {
 
   return (
     <div style={page}>
-      <DrawdownBreakerBadge />
+      <PanelBoundary><DrawdownBreakerBadge /></PanelBoundary>
       <PanelBoundary title="NEW SIGNAL ALERT">
         <ArrowAlert underlying={selectedUnderlying} />
       </PanelBoundary>
@@ -190,10 +190,9 @@ export function Dashboard() {
       </div>
 
       {appMode === 'basic' ? (
-        // ── SIMPLE MODE — single signals table ──────────────────────────────
+        // ── SIMPLE MODE ─────────────────────────────────────────────────────
         <>
-          {/* Go Live + mode strip */}
-          <GoLivePanel />
+          <PanelBoundary title="GO LIVE"><GoLivePanel /></PanelBoundary>
           <div style={{
             marginBottom: 12, padding: '8px 14px',
             background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -204,12 +203,8 @@ export function Dashboard() {
               Mode switch → signals refresh instantly
             </span>
           </div>
-
-          {/* THE signals table — complete trade tips */}
-          <SignalsTable />
-
-          {/* Open positions */}
-          <PositionsStrip />
+          <PanelBoundary title="LIVE SIGNALS"><SignalsTable /></PanelBoundary>
+          <PanelBoundary title="POSITIONS"><PositionsStrip /></PanelBoundary>
         </>
       ) : (
         // ── PRO MODE ────────────────────────────────────────────────────────

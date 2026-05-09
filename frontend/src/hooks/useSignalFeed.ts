@@ -53,24 +53,46 @@ const ACTIONABLE = new Set([
 ]);
 
 // ── sessionStorage helpers ────────────────────────────────────────────────────
+
+// Purge old keys written by previous buggy versions on first load
+const OLD_KEYS = ['sterling_signal_feed', 'sterling_signal_states'];
+try { OLD_KEYS.forEach(k => sessionStorage.removeItem(k)); } catch { /* ignore */ }
+
+function isFeedEntry(x: unknown): x is FeedEntry {
+  if (!x || typeof x !== 'object') return false;
+  const e = x as Record<string, unknown>;
+  return typeof e.id === 'string'
+    && typeof e.underlying === 'string'
+    && typeof e.entryAt === 'number'
+    && typeof e.entry === 'number'
+    && (e.direction === 'long' || e.direction === 'short');
+}
+
 function loadFeed(): FeedEntry[] {
   try {
     const raw = sessionStorage.getItem(FEED_KEY);
     if (!raw) return [];
-    const all: FeedEntry[] = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
     const cut = Date.now() - EXPIRE_MS;
-    return all.filter(e => e.entryAt > cut).slice(0, MAX_FEED);
+    return parsed
+      .filter(isFeedEntry)                   // reject bad-shape entries
+      .filter((e: FeedEntry) => e.entryAt > cut)
+      .slice(0, MAX_FEED);
   } catch { return []; }
 }
 
 function saveFeed(feed: FeedEntry[]) {
   try { sessionStorage.setItem(FEED_KEY, JSON.stringify(feed.slice(0, MAX_FEED))); }
-  catch { /* quota exceeded */ }
+  catch { try { sessionStorage.removeItem(FEED_KEY); } catch { /* ignore */ } }
 }
 
 function loadStates(): Record<string, string> {
-  try { return JSON.parse(sessionStorage.getItem(STATES_KEY) || '{}'); }
-  catch { return {}; }
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(STATES_KEY) || '{}');
+    if (typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as Record<string, string>;
+  } catch { return {}; }
 }
 
 function saveStates(m: Record<string, string>) {
@@ -153,6 +175,7 @@ export function useSignalFeed() {
 
   useEffect(() => {
     if (!data?.signals) return;
+    try {
 
     const now        = Date.now();
     const states     = { ...statesRef.current! }; // copy — don't mutate during loop
@@ -204,6 +227,10 @@ export function useSignalFeed() {
       if (newEntries.length === 0) return updated;
       return [...newEntries, ...updated].slice(0, MAX_FEED);
     });
+
+    } catch (err) {
+      console.warn('[useSignalFeed] effect error (ignored):', err);
+    }
   }, [data]);
 
   const dismiss = (id: string) =>
