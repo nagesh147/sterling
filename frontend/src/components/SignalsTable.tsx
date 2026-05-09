@@ -86,8 +86,13 @@ function TipRow({ row, hasOpen }: { row: TradeRow; hasOpen: boolean }) {
   const takeProfit = signal.target_price ?? null;
   const leverage  = signal.rec_leverage ?? 5;
 
-  // Estimated premium for options (very rough: ~0.5% of spot × leverage factor)
-  const optPremiumEst = entry > 0 ? Math.round(entry * 0.006) : null;
+  // ATM option premium estimate: ~1% of spot for weekly crypto options (7 DTE, ~80% IV)
+  // BTC $80k → ~$800, ETH $2,300 → ~$23, SOL $93 → ~$1 (hide if < $2)
+  const optPremiumRaw = entry > 0 ? entry * 0.01 : 0;
+  const optPremiumEst = optPremiumRaw >= 2 ? Math.round(optPremiumRaw) : null;
+
+  // Always derive opt type from direction — backend may not return it on cached paths
+  const resolvedOptType = signal.opt_type ?? (signal.direction === 'long' ? 'CE' : 'PE');
 
   const handleBuy = () => {
     if (hasOpen || placing) return;
@@ -148,7 +153,7 @@ function TipRow({ row, hasOpen }: { row: TradeRow; hasOpen: boolean }) {
         ) : (
           <>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {signal.opt_type === 'CE' ? 'CALL' : 'PUT'} {fp(signal.opt_strike, 0)}
+              {resolvedOptType === 'CE' ? 'CALL' : 'PUT'} {fp(signal.opt_strike, 0)}
             </div>
             <div style={{ fontSize: 10, color: '#f0c040', fontWeight: 700, marginTop: 2 }}>
               {signal.opt_expiry} · {signal.opt_dte} DTE
@@ -312,20 +317,26 @@ export function SignalsTable() {
 
   for (const s of signals) {
     rows.push({ id: `${s.underlying}_futures`, signal: s, type: 'futures' });
-    // Options: show when instrument has options AND we can compute a symbol
-    // If backend didn't send opt_symbol, derive it locally
-    const optSym = s.opt_symbol ?? (() => {
-      if (!s.has_options || !s.spot_price) return null;
-      const step = s.spot_price > 10000 ? 500 : 100;
-      const strike = Math.round(s.spot_price / step) * step;
-      const optType = s.direction === 'long' ? 'C' : 'P';
-      return `${optType}-${s.underlying}-${strike}-${NEXT_EXPIRY}`;
-    })();
 
-    if (s.has_options && optSym) {
-      const enriched = { ...s, opt_symbol: optSym };
-      rows.push({ id: `${s.underlying}_options`, signal: enriched, type: 'options' });
-    }
+    // Options row: only for instruments with liquid options and meaningful premium (>$2)
+    const estPremium = (s.spot_price ?? 0) * 0.01;
+    if (!s.has_options || !s.spot_price || estPremium < 2) continue;
+
+    // Derive opt_symbol if backend didn't return it (cached path)
+    const derivedOptType = s.direction === 'long' ? 'C' : 'P';
+    const step = s.spot_price > 10000 ? 500 : 100;
+    const derivedStrike = Math.round(s.spot_price / step) * step;
+    const optSym = s.opt_symbol ?? `${derivedOptType}-${s.underlying}-${derivedStrike}-${NEXT_EXPIRY}`;
+
+    // Enrich with derived values so TipRow always has opt_type, opt_strike, opt_expiry
+    const enriched = {
+      ...s,
+      opt_symbol: optSym,
+      opt_type: s.opt_type ?? (s.direction === 'long' ? 'CE' : 'PE'),
+      opt_strike: s.opt_strike ?? derivedStrike,
+      opt_expiry: s.opt_expiry ?? NEXT_EXPIRY,
+    };
+    rows.push({ id: `${s.underlying}_options`, signal: enriched, type: 'options' });
   }
 
   const ts = data?.timestamp_ms

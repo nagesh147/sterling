@@ -704,7 +704,11 @@ async def all_signals(request: Request) -> dict:
         latest = history[-1] if history else None
 
         if snap is not None:
-            # Fresh cache — serve enriched data written by _compute_signal_item
+            # Fresh cache — serve enriched data written by _compute_signal_item.
+            # Compute option params + leverage here too (pure, no I/O needed).
+            adx_v = snap.adx or 0.0
+            rec_lev = 5 if adx_v < 20 else (10 if adx_v < 30 else 20)
+            opt = _option_params(sym, snap.spot_price, snap.direction)
             cached_results.append({
                 'underlying': sym,
                 'has_options': inst.has_options,
@@ -725,6 +729,9 @@ async def all_signals(request: Request) -> dict:
                 'adx': snap.adx,
                 'rsi': snap.rsi,
                 'squeezed': snap.squeezed,
+                'rec_leverage': rec_lev,
+                'futures_symbol': inst.delta_perp_symbol or f"{sym}USDT",
+                **opt,
                 'fresh': True,
                 'timestamp_ms': snap.computed_at_ms,
             })
