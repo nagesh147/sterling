@@ -139,26 +139,28 @@ export function Dashboard() {
       </PanelBoundary>
 
       <div style={header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div>
-            <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: 'var(--text-primary)' }}>STERLING</span>
-            <span style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 12, letterSpacing: 1 }}>
-              v{sysInfo?.version ?? '0.4'} · {sysInfo?.paper_trading !== false ? 'PAPER' : 'LIVE'} · {(sysInfo?.active_data_source ?? 'deribit').toUpperCase()}
-            </span>
-          </div>
-          <PanelBoundary><StreamBadge underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary><ExchangeBadge /></PanelBoundary>
-          <PanelBoundary><AlertBadge /></PanelBoundary>
-          <PanelBoundary><TradingModeSelector /></PanelBoundary>
-          {/* Paper/Live badge */}
-          <span style={{
-            fontSize: 10, padding: '2px 8px', borderRadius: 3, letterSpacing: 1,
-            background: sysInfo?.paper_trading !== false ? '#1a1a2a' : '#1a2a1a',
-            color: sysInfo?.paper_trading !== false ? '#88aaff' : '#44cc88',
-            border: `1px solid ${sysInfo?.paper_trading !== false ? '#88aaff44' : '#44cc8844'}`,
-          }}>
-            {sysInfo?.paper_trading !== false ? 'PAPER' : 'LIVE'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {/* App name */}
+          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: 'var(--text-primary)' }}>
+            STERLING
           </span>
+
+          {/* Simple mode: just mode selector */}
+          {appMode === 'basic' && <TradingModeSelector />}
+
+          {/* Pro mode: full badge set */}
+          {appMode === 'pro' && <>
+            <PanelBoundary><StreamBadge underlying={selectedUnderlying} /></PanelBoundary>
+            <PanelBoundary><ExchangeBadge /></PanelBoundary>
+            <PanelBoundary><AlertBadge /></PanelBoundary>
+            <PanelBoundary><TradingModeSelector /></PanelBoundary>
+          </>}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Pro mode: instrument selector */}
+          {appMode === 'pro' && <InstrumentSelector />}
+
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
@@ -171,12 +173,13 @@ export function Dashboard() {
           >
             {theme === 'dark' ? '☀' : '◑'}
           </button>
-          {/* Mode toggle */}
+
+          {/* Simple / Advanced toggle */}
           <button
             onClick={() => setAppMode(appMode === 'basic' ? 'pro' : 'basic')}
             style={{
-              background: appMode === 'pro' ? '#1a2a1a' : 'var(--bg)',
-              border: `1px solid ${appMode === 'pro' ? '#44cc8888' : 'var(--border)'}`,
+              background: appMode === 'pro' ? '#0f2a1a' : 'var(--bg)',
+              border: `1px solid ${appMode === 'pro' ? 'var(--accent)' : 'var(--border)'}`,
               borderRadius: 3,
               color: appMode === 'pro' ? 'var(--accent)' : 'var(--text-dim)',
               cursor: 'pointer', padding: '3px 10px',
@@ -186,7 +189,6 @@ export function Dashboard() {
             {appMode === 'pro' ? '⚙ ADVANCED' : '◎ SIMPLE'}
           </button>
         </div>
-        <InstrumentSelector />
       </div>
 
       {appMode === 'basic' ? (

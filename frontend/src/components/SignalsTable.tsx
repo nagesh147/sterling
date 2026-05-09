@@ -155,6 +155,14 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, onDismiss }: {
           )}
           <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--text-faint)' }}>
             {entry.regime.replace(/_/g, ' ')} · Score {entry.score}
+            {entry.mode && (
+              <span style={{ marginLeft: 6, fontSize: 8, fontWeight: 700,
+                color: ({ scalping:'#ff7f6e', intraday:'#f0c040', swing:'var(--accent)', positional:'#aa88ff' } as Record<string,string>)[entry.mode] ?? 'var(--text-dim)',
+                background: 'rgba(0,0,0,0.3)', borderRadius: 2, padding: '1px 4px',
+              }}>
+                {entry.mode.toUpperCase()}
+              </span>
+            )}
           </span>
         </div>
 

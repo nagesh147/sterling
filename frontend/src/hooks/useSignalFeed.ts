@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSignals } from './useSignals';
 import type { SignalItem } from './useSignals';
+import { useTradingMode } from './useTradingMode';
 
 // Module-level registry so ArrowAlert can inject entries without prop drilling
 type ArrowParams = [string, 'long'|'short', number, number|null, number|null, number, string, string|null, number|null, 'CE'|'PE'|null, string|null, string, number];
@@ -52,6 +53,7 @@ export interface FeedEntry {
   score: number;
   adx: number;
   rsi: number;
+  mode: string;         // trading mode that generated this signal (scalping/swing/etc.)
   entryAt: number;
   currentPrice: number | null;
   currentState: string;
@@ -146,7 +148,7 @@ function nextFridayExpiry(): string {
 const NEXT_EXPIRY = nextFridayExpiry();
 
 // ── build a FeedEntry from a SignalItem ───────────────────────────────────────
-function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number): FeedEntry {
+function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, mode = 'swing'): FeedEntry {
   const dir  = sig.direction as 'long' | 'short';
   const spot = sig.spot_price ?? 0;
   const atr  = sig.atr ?? spot * 0.02;
@@ -183,6 +185,7 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number): 
     score,
     adx: sig.adx ?? 0,
     rsi: sig.rsi ?? 50,
+    mode,
     entryAt: now,
     currentPrice: spot,
     currentState: sig.state,
@@ -193,6 +196,8 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number): 
 // ── main hook ─────────────────────────────────────────────────────────────────
 export function useSignalFeed() {
   const { data } = useSignals();
+  const { data: modeData } = useTradingMode();
+  const currentMode = modeData?.name ?? 'swing';
 
   // Lazy initializer — runs exactly once on mount, not on every render
   const [feed, setFeed] = useState<FeedEntry[]>(() => loadFeed());
@@ -238,7 +243,7 @@ export function useSignalFeed() {
         const arrow           = sig.green_arrow || sig.red_arrow;
 
         if (stateTransition || dirFlip || arrow) {
-          newEntries.push(buildEntry(sig, type, now));
+          newEntries.push(buildEntry(sig, type, now, currentMode));
         }
       }
     }
@@ -295,7 +300,7 @@ export function useSignalFeed() {
       entry: spot, stopLoss, takeProfit,
       leverage, futuresSymbol,
       optSymbol: null, optStrike: null, optType: null, optExpiry: null, optDte: null,
-      state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50,
+      state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50, mode: currentMode,
       entryAt: now, currentPrice: spot, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
     });
 
@@ -307,7 +312,7 @@ export function useSignalFeed() {
         entry: spot, stopLoss, takeProfit,
         leverage: 1, futuresSymbol,
         optSymbol, optStrike, optType, optExpiry, optDte: null,
-        state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50,
+        state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50, mode: currentMode,
         entryAt: now, currentPrice: null, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
       });
     }
