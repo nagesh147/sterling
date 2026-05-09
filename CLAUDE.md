@@ -36,3 +36,20 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+## New modules (v3)
+
+`analytics/`: walk-forward, sensitivity, correlation, performance — no exchange calls
+`risk/`: slippage, greeks_budget, circuit_breaker — stateful singletons on SterlingEngine
+`services/calibration.py`: persisted adaptive state — always access via dependency injection
+
+### Key invariants
+- CorrelationTracker is fed 1H close prices on EVERY evaluate() call
+- CircuitBreaker (DrawdownCircuitBreaker).update() is called BEFORE any trade logic in evaluate()
+- CalibrationService.record_trade() is called on EVERY position close in paper_store
+- Walk-forward results are cached in DB; re-run only when >7 days stale or user forces
+- Parameter sensitivity sweep runs on first startup and weekly via background task
+- `app.state.dd_circuit_breaker` — DrawdownCircuitBreaker (v3, portfolio drawdown)
+- `app.state.circuit_breaker` — existing execution-level CircuitBreaker (DO NOT confuse them)
+- `app.state.correlation_tracker` — CorrelationTracker singleton
+- `app.state.calibration_service` — CalibrationService singleton

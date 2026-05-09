@@ -125,6 +125,59 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             conn.execute(stmt)
         except Exception:
             pass
+    # v3 tables
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS wf_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying TEXT NOT NULL,
+            run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            config_json TEXT NOT NULL,
+            result_json TEXT NOT NULL,
+            recommended_threshold REAL,
+            oos_sharpe REAL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parameter_sensitivity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying TEXT NOT NULL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            results_json TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS calibration_state (
+            underlying TEXT PRIMARY KEY,
+            ivr_history_json TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS calibration_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pnl_pct REAL NOT NULL,
+            regime TEXT,
+            closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS equity_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            portfolio_value REAL NOT NULL,
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            drawdown REAL,
+            circuit_breaker_state TEXT
+        )
+    """)
+    for stmt in [
+        "ALTER TABLE positions ADD COLUMN greeks_json TEXT",
+        "ALTER TABLE positions ADD COLUMN notional REAL",
+        "ALTER TABLE positions ADD COLUMN slippage_bps REAL",
+    ]:
+        try:
+            conn.execute(stmt)
+        except Exception:
+            pass
     conn.commit()
 
 
@@ -314,4 +367,106 @@ def load_all() -> List[dict]:
         return [json.loads(r["data"]) for r in rows]
     except Exception as exc:
         log.warning("DB load failed: %s", exc)
+        return []
+
+
+def record_equity_snapshot(portfolio_value: float, drawdown: float | None = None, cb_state: str | None = None) -> None:
+    if not _available:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO equity_snapshots (portfolio_value, drawdown, circuit_breaker_state) VALUES (?, ?, ?)",
+                (portfolio_value, drawdown, cb_state),
+            )
+    except Exception as exc:
+        log.warning("record_equity_snapshot failed: %s", exc)
+
+
+def save_wf_result(underlying: str, config_json: str, result_json: str, rec_threshold: float, oos_sharpe: float) -> None:
+    if not _available:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO wf_results (underlying, config_json, result_json, recommended_threshold, oos_sharpe)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (underlying, config_json, result_json, rec_threshold, oos_sharpe),
+            )
+    except Exception as exc:
+        log.warning("save_wf_result failed: %s", exc)
+
+
+def get_latest_wf_result(underlying: str) -> dict | None:
+    if not _available:
+        return None
+    try:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT * FROM wf_results WHERE underlying=? ORDER BY run_at DESC LIMIT 1",
+                (underlying,),
+            ).fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def save_sensitivity(underlying: str, results_json: str) -> None:
+    if not _available:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                "INSERT INTO parameter_sensitivity (underlying, results_json) VALUES (?, ?)",
+                (underlying, results_json),
+            )
+    except Exception as exc:
+        log.warning("save_sensitivity failed: %s", exc)
+
+
+def get_latest_sensitivity(underlying: str) -> dict | None:
+    if not _available:
+        return None
+    try:
+        with _conn() as c:
+            row = c.execute(
+                "SELECT * FROM parameter_sensitivity WHERE underlying=? ORDER BY computed_at DESC LIMIT 1",
+                (underlying,),
+            ).fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def get_closed_positions_for(underlying: str | None = None) -> list:
+    if not _available:
+        return []
+    try:
+        with _conn() as c:
+            if underlying:
+                rows = c.execute(
+                    "SELECT data FROM positions WHERE status='closed' AND underlying=? ORDER BY updated_ts DESC",
+                    (underlying,),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT data FROM positions WHERE status='closed' ORDER BY updated_ts DESC"
+                ).fetchall()
+        return [json.loads(r["data"]) for r in rows]
+    except Exception:
+        return []
+
+
+def get_equity_snapshots(limit: int = 500) -> list:
+    if not _available:
+        return []
+    try:
+        with _conn() as c:
+            rows = c.execute(
+                "SELECT portfolio_value, drawdown, circuit_breaker_state, recorded_at"
+                " FROM equity_snapshots ORDER BY recorded_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
         return []
