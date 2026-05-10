@@ -3,6 +3,7 @@ import { useSignals } from '../hooks/useSignals';
 import type { SignalItem } from '../hooks/useSignals';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useStore';
 import { usePositions } from '../hooks/usePositions';
+import { useExchanges } from '../hooks/useExchanges';
 
 const STATE_META: Record<string, { color: string; label: string }> = {
   ENTRY_ARMED_PULLBACK:     { color: '#44aaff', label: 'ARMED·PB' },
@@ -122,7 +123,10 @@ function SignalCard({
 
 export function SignalsBar() {
   const { data, isLoading } = useSignals();
-  const { data: posData } = usePositions();
+  const { data: exData }    = useExchanges();
+  const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
+  const isLive  = !!(delta?.has_credentials && !delta.is_paper);
+  const { data: posData }   = usePositions(isLive ? 'live' : 'paper');
   const selected = useSelectedUnderlying();
   const setUnderlying = useSetSelectedUnderlying();
 
@@ -148,8 +152,17 @@ export function SignalsBar() {
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: 'var(--text-faint)', fontSize: 10, letterSpacing: 2 }}>SIGNALS</span>
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 1,
+            color: isLive ? 'var(--accent)' : '#88aaff',
+            background: isLive ? 'var(--accent)18' : '#88aaff18',
+            border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
+            borderRadius: 3, padding: '1px 6px',
+          }}>
+            {isLive ? '● LIVE' : 'PAPER'}
+          </span>
           {actionable.length > 0 && (
             <span style={{ fontSize: 10, color: '#f0c040', background: '#f0c04014', border: '1px solid #f0c04044', borderRadius: 3, padding: '1px 7px' }}>
               {actionable.length} actionable

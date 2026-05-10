@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { usePositions, useEnterPosition, useClosePosition, useDeletePosition, useCloseAll } from '../hooks/usePositions';
+import { useExchanges } from '../hooks/useExchanges';
 import { useMonitorPosition, useMonitorAll } from '../hooks/useMonitorPosition';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { useTrailStop } from '../hooks/useTrailStop';
@@ -291,7 +292,10 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
 interface Props { underlying: string }
 
 export function PositionsPanel({ underlying }: Props) {
-  const { data, isLoading } = usePositions();
+  const { data: exData }  = useExchanges();
+  const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
+  const isLive  = !!(delta?.has_credentials && !delta.is_paper);
+  const { data, isLoading } = usePositions(isLive ? 'live' : 'paper');
   const enter = useEnterPosition();
   const monitorAll = useMonitorAll();
   const closeAll = useCloseAll();
@@ -315,7 +319,18 @@ export function PositionsPanel({ underlying }: Props) {
     <div style={styles.card}>
       <div style={styles.header}>
         <div>
-          <div style={styles.title}>PAPER POSITIONS</div>
+          <div style={{ ...styles.title, display: 'flex', alignItems: 'center', gap: 8 }}>
+            POSITIONS
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: 1,
+              color: isLive ? 'var(--accent)' : '#88aaff',
+              background: isLive ? 'var(--accent)18' : '#88aaff18',
+              border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
+              borderRadius: 3, padding: '1px 6px',
+            }}>
+              {isLive ? '● LIVE' : 'PAPER'}
+            </span>
+          </div>
           {data && (
             <div style={styles.counts}>
               <span style={{ ...styles.countBadge, color: '#44cc88' }}>

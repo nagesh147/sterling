@@ -4,6 +4,7 @@ import { useSignals } from '../hooks/useSignals';
 import type { SignalItem } from '../hooks/useSignals';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useStore';
 import { usePositions } from '../hooks/usePositions';
+import { useExchanges } from '../hooks/useExchanges';
 import { api } from '../utils/api';
 
 function useDirectEntry() {
@@ -262,7 +263,10 @@ function SignalRow({
 
 export function SignalsList() {
   const { data, isLoading } = useSignals();
-  const { data: posData } = usePositions();
+  const { data: exData }    = useExchanges();
+  const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
+  const isLive  = !!(delta?.has_credentials && !delta.is_paper);
+  const { data: posData }   = usePositions(isLive ? 'live' : 'paper');
   const selected    = useSelectedUnderlying();
   const setSelected = useSetSelectedUnderlying();
 
@@ -290,11 +294,20 @@ export function SignalsList() {
         padding: '10px 16px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{
             fontSize: 12, fontWeight: 900, color: 'var(--accent)', letterSpacing: 2,
           }}>
             ● LIVE SIGNALS
+          </span>
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 1,
+            color: isLive ? 'var(--accent)' : '#88aaff',
+            background: isLive ? 'var(--accent)18' : '#88aaff18',
+            border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
+            borderRadius: 3, padding: '1px 6px',
+          }}>
+            {isLive ? '● LIVE' : 'PAPER'}
           </span>
           <span style={{ fontSize: 10, color: '#2a4a2a', letterSpacing: 1 }}>
             {signals.length} instruments
