@@ -87,8 +87,9 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
     def _sign(self, method, path, query="", body=""):
         ts = int(time.time())
-        # Delta Exchange signature format: timestamp + METHOD + /path + ?query + body
-        msg = str(ts) + method + path
+        # Delta Exchange signature: METHOD + timestamp + /path + ?query + body
+        # Reference: github.com/delta-exchange/python-rest-client
+        msg = method + str(ts) + path
         if query: msg += "?" + query
         if body:  msg += body
         sig = hmac.new(
@@ -116,6 +117,21 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         data = resp.json()
         return self._validate_response(data, path)
 
+    def _raise_api_error(self, resp, path: str) -> None:
+        """Raise a clear error with Delta's own error message when possible."""
+        try:
+            data = resp.json()
+            if isinstance(data, dict):
+                # Delta returns {"success":false,"error":{"code":"...","context":"..."}}
+                err = data.get("error") or {}
+                code = err.get("code") if isinstance(err, dict) else str(err)
+                ctx  = err.get("context", "") if isinstance(err, dict) else ""
+                if code:
+                    raise RuntimeError(f"Delta API {resp.status_code} on {path}: {code}{' — ' + str(ctx) if ctx else ''}")
+        except (ValueError, KeyError):
+            pass
+        resp.raise_for_status()
+
     async def _auth_get(self, path, params=None):
         if self._is_paper or not self._api_key or not self._api_secret:
             raise RuntimeError("Account access requires valid credentials (is_paper=False)")
@@ -124,7 +140,8 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         client = await self._get_client()
         resp = await client.get(path, params=params or {},
             headers={"api-key": self._api_key, "timestamp": str(ts), "signature": sig})
-        resp.raise_for_status()
+        if not resp.is_success:
+            self._raise_api_error(resp, path)
         data = resp.json()
         return self._validate_response(data, path)
 
@@ -140,7 +157,8 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                 "api-key": self._api_key, "timestamp": str(ts), "signature": sig,
                 "Content-Type": "application/json",
             })
-        resp.raise_for_status()
+        if not resp.is_success:
+            self._raise_api_error(resp, path)
         data = resp.json()
         return self._validate_response(data, path)
 

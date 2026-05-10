@@ -223,6 +223,32 @@ def _send_order_telegram(body: LiveOrderRequest, sym: str, side: str, entry: flo
         pass
 
 
+@router.get("/test-credentials")
+async def test_credentials(request: Request) -> dict:
+    """
+    Verify live credentials are valid and have trading permission.
+    Calls GET /v2/profile (read-only) — safe, no order placed.
+    """
+    from app.services import exchange_account_store
+    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+    active = exchange_account_store.get_active()
+    if not active or not active.api_key or active.is_paper:
+        return {"ok": False, "reason": "No live credentials configured — switch to Live mode first"}
+    adapter = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret, is_paper=False)
+    try:
+        data = await adapter._auth_get("/v2/profile")
+        name = (data.get("result") or {}).get("email", "")
+        return {"ok": True, "account": name, "message": "Credentials valid — ready to trade"}
+    except Exception as exc:
+        msg = str(exc)
+        hint = ""
+        if "401" in msg or "Unauthorized" in msg:
+            hint = "API key invalid or wrong secret. Check Delta Exchange → Settings → API Keys."
+        elif "403" in msg or "Forbidden" in msg:
+            hint = "API key lacks Order Management permission. Enable it in Delta Exchange API settings."
+        return {"ok": False, "reason": msg, "hint": hint}
+
+
 @router.get("/order-status/{order_id}")
 async def get_order_status(order_id: str, request: Request) -> dict:
     """Check status of a live order."""

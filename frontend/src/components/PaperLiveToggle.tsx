@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
+import { api } from '../utils/api';
 
 type ModalView = 'none' | 'go-live-confirm' | 'add-keys';
 
@@ -9,11 +10,31 @@ export function PaperLiveToggle() {
   const { data: exData } = useExchanges();
   const update = useUpdateExchange();
 
-  const [modal, setModal]     = useState<ModalView>('none');
-  const [apiKey, setApiKey]   = useState('');
+  const [modal, setModal]       = useState<ModalView>('none');
+  const [apiKey, setApiKey]     = useState('');
   const [apiSecret, setApiSecret] = useState('');
-  const [saving, setSaving]   = useState(false);
-  const [err, setErr]         = useState('');
+  const [saving, setSaving]     = useState(false);
+  const [err, setErr]           = useState('');
+  const [testStatus, setTestStatus] = useState<{ ok: boolean; msg: string; hint?: string } | null>(null);
+  const [testing, setTesting]   = useState(false);
+
+  const testConnection = async () => {
+    setTesting(true); setTestStatus(null);
+    try {
+      const res = await api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string }>(
+        '/api/v1/trading/test-credentials'
+      );
+      setTestStatus({
+        ok: res.ok,
+        msg: res.ok ? (res.message ?? 'Connected') + (res.account ? ` · ${res.account}` : '') : (res.reason ?? 'Unknown error'),
+        hint: res.hint,
+      });
+    } catch (e: unknown) {
+      setTestStatus({ ok: false, msg: (e as Error).message });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive  = !!(delta?.has_credentials && !delta.is_paper);
@@ -131,14 +152,41 @@ export function PaperLiveToggle() {
             ))}
           </div>
 
-          {keyHint && (
-            <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>CONNECTED ACCOUNT</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                Delta Exchange India · ••••{keyHint}
+          {/* account + test connection */}
+          <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--bg)', borderRadius: 5, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: testStatus ? 8 : 0 }}>
+              <div>
+                <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>CONNECTED ACCOUNT</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                  Delta Exchange India{keyHint ? ` · ••••${keyHint}` : ''}
+                </div>
               </div>
+              <button
+                onClick={testConnection}
+                disabled={testing}
+                style={{
+                  padding: '4px 10px', background: 'var(--bg-input)',
+                  color: 'var(--text-dim)', border: '1px solid var(--border)',
+                  borderRadius: 4, cursor: testing ? 'wait' : 'pointer',
+                  fontFamily: 'inherit', fontSize: 10, flexShrink: 0,
+                }}
+              >
+                {testing ? 'Testing…' : 'Test Connection'}
+              </button>
             </div>
-          )}
+            {testStatus && (
+              <div style={{
+                padding: '7px 10px', borderRadius: 4, marginTop: 6,
+                background: testStatus.ok ? '#071a14' : '#1a0707',
+                border: `1px solid ${testStatus.ok ? 'var(--accent)33' : 'var(--danger)33'}`,
+                fontSize: 10,
+                color: testStatus.ok ? 'var(--accent)' : 'var(--danger)',
+              }}>
+                {testStatus.ok ? '✅ ' : '❌ '}{testStatus.msg}
+                {testStatus.hint && <div style={{ marginTop: 4, color: 'var(--text-faint)', fontSize: 9 }}>{testStatus.hint}</div>}
+              </div>
+            )}
+          </div>
 
           {err && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 12 }}>❌ {err}</div>}
 
