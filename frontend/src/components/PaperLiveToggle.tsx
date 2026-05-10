@@ -176,14 +176,25 @@ export function PaperLiveToggle() {
             </div>
             {testStatus && (
               <div style={{
-                padding: '7px 10px', borderRadius: 4, marginTop: 6,
+                padding: '8px 10px', borderRadius: 4, marginTop: 6,
                 background: testStatus.ok ? '#071a14' : '#1a0707',
                 border: `1px solid ${testStatus.ok ? 'var(--accent)33' : 'var(--danger)33'}`,
-                fontSize: 10,
-                color: testStatus.ok ? 'var(--accent)' : 'var(--danger)',
               }}>
-                {testStatus.ok ? '✅ ' : '❌ '}{testStatus.msg}
-                {testStatus.hint && <div style={{ marginTop: 4, color: 'var(--text-faint)', fontSize: 9 }}>{testStatus.hint}</div>}
+                <div style={{ fontSize: 10, color: testStatus.ok ? 'var(--accent)' : 'var(--danger)', marginBottom: testStatus.hint ? 4 : 0 }}>
+                  {testStatus.ok ? '✅ ' : '❌ '}{testStatus.msg}
+                </div>
+                {testStatus.hint && (
+                  <>
+                    <div style={{ fontSize: 9, color: '#f0c040', lineHeight: 1.5, marginBottom: 6 }}>{testStatus.hint}</div>
+                    <a
+                      href="https://www.delta.exchange/app/settings/api"
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 9, color: 'var(--accent)', textDecoration: 'none', background: '#0f2a1a', border: '1px solid var(--accent)33', borderRadius: 3, padding: '3px 8px' }}
+                    >
+                      Open delta.exchange API Keys ↗
+                    </a>
+                  </>
+                )}
               </div>
             )}
           </div>

@@ -74,20 +74,21 @@ function ExchangeSection() {
   const hint    = delta?.api_key_hint ?? '';
   const hasKeys = !!delta?.has_credentials;
 
+  const [testResult, setTestResult] = useState<{
+    ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string;
+  } | null>(null);
+
   const testConnection = async () => {
-    setTesting(true); setMsg('');
+    setTesting(true); setTestResult(null); setMsg('');
     try {
-      const res = await api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string }>(
+      const res = await api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string }>(
         '/api/v1/trading/test-credentials'
       );
-      setConnOk(res.ok); setMsgOk(res.ok);
-      setMsg(res.ok
-        ? `Connected${res.account ? ' · ' + res.account : ''}`
-        : `${res.reason ?? 'Failed'}${res.hint ? '\n' + res.hint : ''}`
-      );
+      setConnOk(res.ok);
+      setTestResult(res);
     } catch (e: unknown) {
-      setConnOk(false); setMsgOk(false);
-      setMsg((e as Error).message);
+      setConnOk(false);
+      setTestResult({ ok: false, reason: (e as Error).message });
     } finally {
       setTesting(false);
     }
@@ -122,29 +123,83 @@ function ExchangeSection() {
         </div>
       }
     >
-      {hasKeys && (
-        <div style={{ marginBottom: 12, padding: '6px 10px', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', fontSize: 10, color: 'var(--text-faint)' }}>
-          Current key: <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>••••{hint}</span>
+      {/* Test result — rich block */}
+      {testResult && (
+        <div style={{
+          marginBottom: 14, padding: '10px 12px', borderRadius: 5,
+          background: testResult.ok ? '#071a14' : '#110a0a',
+          border: `1px solid ${testResult.ok ? 'var(--accent)33' : 'var(--danger)33'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: testResult.ok ? 2 : 6 }}>
+            <span style={{ fontSize: 14 }}>{testResult.ok ? '✅' : '❌'}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: testResult.ok ? 'var(--accent)' : 'var(--danger)' }}>
+              {testResult.ok ? testResult.message : 'Connection failed'}
+            </span>
+          </div>
+          {testResult.ok && testResult.balance && (
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>
+              Margin available: <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{testResult.balance}</span>
+            </div>
+          )}
+          {!testResult.ok && testResult.reason && (
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 6, lineHeight: 1.5 }}>
+              {testResult.reason}
+            </div>
+          )}
+          {!testResult.ok && testResult.hint && (
+            <div style={{ fontSize: 10, color: '#f0c040', lineHeight: 1.6, marginBottom: 8 }}>
+              {testResult.hint}
+            </div>
+          )}
+          {!testResult.ok && (
+            <a
+              href="https://www.delta.exchange/app/settings/api"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block', marginTop: 2,
+                fontSize: 10, fontWeight: 700,
+                color: 'var(--accent)', textDecoration: 'none',
+                background: '#0f2a1a', border: '1px solid var(--accent)44',
+                borderRadius: 4, padding: '5px 12px',
+              }}
+            >
+              Open delta.exchange API Keys ↗
+            </a>
+          )}
         </div>
       )}
 
-      <Field label="API KEY" hint={hasKeys ? 'Leave blank to keep current key' : 'Get from delta.exchange → Settings → API Keys'}>
+      {hasKeys && !testResult && (
+        <div style={{ marginBottom: 12, padding: '6px 10px', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', fontSize: 10, color: 'var(--text-faint)' }}>
+          Current key: <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>••••{hint}</span>
+          <span style={{ marginLeft: 8, color: 'var(--text-faint)' }}>— click Test to verify</span>
+        </div>
+      )}
+
+      <Field label="API KEY" hint="From delta.exchange (global platform) → Settings → API Keys">
         <input
-          type="password" placeholder={hasKeys ? '(unchanged)' : 'Paste API key'}
+          type="password" placeholder={hasKeys ? '(unchanged — enter new key to update)' : 'Paste API key from delta.exchange'}
           value={apiKey} onChange={e => setApiKey(e.target.value)}
-          style={inputStyle}
+          style={{
+            ...inputStyle,
+            border: testResult && !testResult.ok ? '1px solid var(--danger)66' : inputStyle.border,
+          }}
         />
       </Field>
       <Field label="API SECRET">
         <input
-          type="password" placeholder={hasKeys ? '(unchanged)' : 'Paste API secret'}
+          type="password" placeholder={hasKeys ? '(unchanged — enter new secret to update)' : 'Paste API secret'}
           value={apiSecret} onChange={e => setApiSecret(e.target.value)}
-          style={inputStyle}
+          style={{
+            ...inputStyle,
+            border: testResult && !testResult.ok ? '1px solid var(--danger)66' : inputStyle.border,
+          }}
         />
       </Field>
 
       {msg && (
-        <div style={{ fontSize: 10, color: msgOk ? 'var(--accent)' : 'var(--danger)', marginBottom: 8, lineHeight: 1.5, whiteSpace: 'pre-line' }}>
+        <div style={{ fontSize: 10, color: msgOk ? 'var(--accent)' : 'var(--danger)', marginBottom: 8, lineHeight: 1.5 }}>
           {msg}
         </div>
       )}
