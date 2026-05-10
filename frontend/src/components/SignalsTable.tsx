@@ -89,11 +89,12 @@ function tradeLabel(placing: boolean, hasOpen: boolean, isLive: boolean, side: s
 // memo: skip re-render when entry object reference, hasOpen, and onDismiss are unchanged.
 // Combined with the setFeed same-ref optimisation, this eliminates re-renders of
 // unchanged rows on every 15s poll — the main GC pressure source.
-const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, onDismiss }: {
+const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, showModeTag, onDismiss }: {
   entry: FeedEntry;
   hasOpen: boolean;
   isLive: boolean;
-  availFunds: number | null;   // lifted from parent — one subscription for the whole list
+  availFunds: number | null;
+  showModeTag: boolean;       // true only in ALL mode — redundant otherwise
   onDismiss: () => void;
 }) {
   const [leverage, setLeverage]     = useState(entry.leverage);
@@ -216,7 +217,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, onDi
           )}
           <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--text-faint)' }}>
             {entry.regime.replace(/_/g, ' ')} · Score {entry.score}
-            {entry.mode && (() => {
+            {showModeTag && entry.mode && (() => {
               const tag = resolveMode(entry);
               const tagColor = MODE_COLOR[tag] ?? 'var(--text-dim)';
               return (
@@ -675,6 +676,7 @@ export function SignalsTable() {
               hasOpen={(openByUnderlying[entry.underlying] ?? 0) > 0}
               isLive={isLive}
               availFunds={availFunds}
+              showModeTag={currentMode === 'all'}
               onDismiss={() => dismiss(entry.id)}
             />
           ))}
