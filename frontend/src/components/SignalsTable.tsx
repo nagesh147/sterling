@@ -101,6 +101,9 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   const [currency, setCurrency]     = useState<'USD'|'INR'>('USD');
   const [qtyValue, setQtyValue]     = useState('1');
   const [qtyUnit, setQtyUnit]       = useState<'lot'|'usd'|string>('lot');
+  const [orderType, setOrderType]   = useState<'market'|'limit'>('market');
+  const [limitPrice, setLimitPrice] = useState('');
+  const [showBracket, setShowBracket] = useState(false);
   const [feedback, setFeedback]     = useState('');   // row-level (post-dismiss)
   const [placing, setPlacing]       = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -172,7 +175,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       instrument_type: entry.type,
       size,
       leverage,
-      order_type: 'market',
+      order_type: orderType,
+      limit_price: orderType === 'limit' && limitPrice ? parseFloat(limitPrice) : undefined,
       stop_loss: entry.stopLoss,
       take_profit: entry.takeProfit,
       option_symbol: !isFutures ? entry.optSymbol : null,
@@ -331,261 +335,294 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            background: 'var(--bg-card)',
-            border: `1px solid ${dirColor}55`,
-            borderTop: `3px solid ${dirColor}`,
-            borderRadius: 8, padding: '20px 24px', width: 340,
-            boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+            background: '#151b1e',
+            border: '1px solid #2a3038',
+            borderRadius: 10, width: 340,
+            boxShadow: '0 12px 48px rgba(0,0,0,0.7)',
+            overflow: 'hidden',
           }}
         >
-          {/* header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div>
-              <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-primary)', marginRight: 8 }}>
-                {arrow} {side} {entry.underlying}
+          {/* ── contract + close ── */}
+          <div style={{ padding: '10px 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)' }}>
+                {isFutures ? entry.futuresSymbol : `${entry.optType === 'CE' ? 'CALL' : 'PUT'} ${fp(entry.optStrike)}`}
               </span>
               <span style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: 1,
+                fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
                 color: isLive ? 'var(--accent)' : '#88aaff',
-                background: isLive ? 'var(--accent)18' : '#88aaff18',
-                border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
-                borderRadius: 3, padding: '2px 6px',
+                background: isLive ? 'var(--accent)15' : '#88aaff15',
+                border: `1px solid ${isLive ? 'var(--accent)33' : '#88aaff33'}`,
+                borderRadius: 3, padding: '1px 5px',
               }}>
-                {isLive ? '● LIVE ORDER' : 'PAPER ORDER'}
+                {isLive ? '● LIVE' : 'PAPER'}
               </span>
             </div>
-            <button onClick={modalStatus.type === 'pending' ? undefined : closeModal} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: modalStatus.type === 'pending' ? 'wait' : 'pointer', fontSize: 16, padding: 0 }}>✕</button>
+            <button
+              onClick={modalStatus.type === 'pending' ? undefined : closeModal}
+              style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px' }}
+            >✕</button>
           </div>
 
-          {/* instrument */}
-          <div style={{ marginBottom: 12, padding: '8px 10px', background: 'var(--bg)', borderRadius: 5, border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: isFutures ? '#88aaff' : 'var(--warning)', marginBottom: 3 }}>
-              {isFutures ? `${entry.futuresSymbol}` : `${entry.optType === 'CE' ? 'CALL' : 'PUT'} ${fp(entry.optStrike)} · ${entry.optExpiry} · ${entry.optDte} DTE`}
-            </div>
-            <div style={{ fontSize: 10, color: 'var(--text-faint)' }}>Market order · {size} contract{size !== 1 ? 's' : ''}</div>
+          {/* ── Buy | Long / Sell | Short tabs ── */}
+          <div style={{ display: 'flex', margin: '12px 16px 0', borderRadius: 6, overflow: 'hidden', border: '1px solid #2a3038' }}>
+            {(['long','short'] as const).map(d => {
+              const active = d === entry.direction;
+              const col    = d === 'long' ? '#1ed760' : '#ff4757';
+              const bg     = active ? (d === 'long' ? '#0d2e1a' : '#2e0d12') : 'transparent';
+              return (
+                <div key={d} style={{
+                  flex: 1, textAlign: 'center', padding: '10px 0',
+                  background: bg,
+                  color: active ? col : '#555',
+                  fontWeight: 800, fontSize: 13, letterSpacing: 0.3,
+                  cursor: 'default',
+                  borderRight: d === 'long' ? '1px solid #2a3038' : 'none',
+                }}>
+                  {d === 'long' ? 'Buy | Long' : 'Sell | Short'}
+                </div>
+              );
+            })}
           </div>
 
-          {/* price grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 12 }}>
-            {[
-              { label: 'ENTRY', val: isFutures ? fp(entry.entry) : `~$${optPrem}`, color: 'var(--text-primary)' },
-              { label: 'STOP LOSS', val: isFutures ? fp(entry.stopLoss) : `~$${optSL}`, color: 'var(--danger)' },
-              { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optTP}`, color: 'var(--accent)' },
-            ].map(({ label, val, color }) => (
-              <div key={label} style={{ textAlign: 'center', padding: '7px 4px', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 3 }}>{label}</div>
-                <div style={{ fontSize: 12, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
+          <div style={{ padding: '0 16px 16px' }}>
+
+          {/* ── Leverage row ── */}
+          {isFutures && (
+            <div style={{ marginTop: 12, padding: '10px 12px', background: '#1c2228', borderRadius: 6, border: '1px solid #2a3038' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: '#aaa' }}>Leverage</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button onClick={() => setLeverage(l => Math.max(1, l - 1))} style={{ ...sBtn, background: '#252d35' }}>&minus;</button>
+                  <span style={{
+                    fontSize: 15, fontWeight: 800, minWidth: 44, textAlign: 'center',
+                    color: leverage !== entry.leverage ? '#f0c040' : '#1ed760',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>{leverage}×</span>
+                  <button onClick={() => setLeverage(l => Math.min(100, l + 1))} style={{ ...sBtn, background: '#252d35' }}>+</button>
+                </div>
               </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[5,10,20,50,100].map(l => (
+                  <button key={l} onClick={() => setLeverage(l)} style={{
+                    flex: 1, padding: '4px 0', borderRadius: 4, fontFamily: 'inherit',
+                    fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    background: leverage === l ? '#253020' : '#252d35',
+                    color: leverage === l ? '#1ed760' : '#666',
+                    border: `1px solid ${leverage === l ? '#1ed76044' : '#2a3038'}`,
+                  }}>{l}×</button>
+                ))}
+              </div>
+              {leverage !== entry.leverage && (
+                <div style={{ marginTop: 6, fontSize: 9, color: '#f0c040' }}>
+                  Signal suggests {entry.leverage}× (ADX {entry.adx?.toFixed(0)}) — higher leverage increases liquidation risk
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Order type tabs ── */}
+          <div style={{ display: 'flex', gap: 0, marginTop: 12, borderBottom: '1px solid #2a3038' }}>
+            {(['market','limit'] as const).map(t => (
+              <button key={t} onClick={() => setOrderType(t)} style={{
+                background: 'none', border: 'none', padding: '7px 14px',
+                fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                color: orderType === t ? '#1ed760' : '#555',
+                borderBottom: orderType === t ? '2px solid #1ed760' : '2px solid transparent',
+                marginBottom: -1,
+              }}>
+                {t === 'market' ? 'Market' : 'Limit'}
+              </button>
             ))}
           </div>
 
-          {/* ── Quantity ── */}
-          <div style={{ marginBottom: 12, background: 'var(--bg)', borderRadius: 5, border: '1px solid var(--border)', padding: '10px 12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-              <span style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1 }}>QUANTITY</span>
-              <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>
-                1 Lot = {lotInfo.lotSize} {lotInfo.unit}
-              </span>
+          {/* ── Price row ── */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{orderType === 'limit' ? 'Limit Price' : 'Market Price'}</span>
+              {orderType === 'market' && (
+                <span style={{ fontSize: 11, color: '#555' }}>
+                  ~{fp(entry.currentPrice ?? entry.entry)}
+                </span>
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            {orderType === 'limit' ? (
+              <div style={{ display: 'flex', alignItems: 'center', background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, padding: '0 12px' }}>
+                <input
+                  type="number" value={limitPrice}
+                  onChange={e => setLimitPrice(e.target.value)}
+                  placeholder={String(Math.round(entry.currentPrice ?? entry.entry))}
+                  style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }}
+                />
+                <span style={{ fontSize: 11, color: '#555', flexShrink: 0 }}>USD</span>
+              </div>
+            ) : (
+              <div style={{ padding: '9px 12px', background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, color: '#f0c040', fontSize: 13, fontWeight: 700 }}>
+                Best {entry.direction === 'long' ? 'Ask' : 'Bid'} &nbsp;<span style={{ color: '#666', fontWeight: 400, fontSize: 11 }}>USD</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Quantity ── */}
+          <div style={{ marginTop: 12 }}>
+            <span style={{ fontSize: 12, color: '#aaa' }}>Quantity</span>
+            <div style={{ display: 'flex', alignItems: 'center', background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, padding: '0 12px', marginTop: 6 }}>
               <input
-                type="number" min="0" step={qtyUnit === 'lot' ? 1 : undefined}
+                type="number" min="1" step={qtyUnit === 'lot' ? 1 : undefined}
                 value={qtyValue}
                 onChange={e => setQtyValue(e.target.value)}
-                style={{
-                  flex: 1, background: 'var(--bg-input)', color: 'var(--text-primary)',
-                  border: '1px solid var(--border-light)', borderRadius: 4,
-                  padding: '6px 8px', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
-                  fontVariantNumeric: 'tabular-nums', outline: 'none',
-                }}
+                style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }}
               />
-              <select
-                value={qtyUnit}
-                onChange={e => { setQtyUnit(e.target.value); setQtyValue('1'); }}
-                style={{
-                  background: 'var(--bg-input)', color: 'var(--text-primary)',
-                  border: '1px solid var(--border-light)', borderRadius: 4,
-                  padding: '4px 6px', fontFamily: 'inherit', fontSize: 11,
-                  cursor: 'pointer', outline: 'none',
-                }}
-              >
-                <option value="lot">Lot</option>
-                <option value="usd">USD</option>
-                <option value={lotInfo.unit}>{lotInfo.unit}</option>
+              <select value={qtyUnit} onChange={e => { setQtyUnit(e.target.value); setQtyValue('1'); }}
+                style={{ background: 'none', border: 'none', color: '#f0c040', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', outline: 'none', padding: '0 0 0 4px' }}>
+                <option value="lot" style={{ background: '#1c2228' }}>Lot ▾</option>
+                <option value="usd" style={{ background: '#1c2228' }}>USD ▾</option>
+                <option value={lotInfo.unit} style={{ background: '#1c2228' }}>{lotInfo.unit} ▾</option>
               </select>
             </div>
-            {/* conversion hint */}
-            <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 5, display: 'flex', gap: 10 }}>
-              <span>{qtyLots} lot{qtyLots !== 1 ? 's' : ''}</span>
-              <span>= {qtyInUnderlying} {lotInfo.unit}</span>
-              <span>≈ ${qtyInUsd}</span>
+            <div style={{ fontSize: 9, color: '#555', marginTop: 4 }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</div>
+            {/* % quick buttons */}
+            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+              {[10,25,50,75,100].map(pct => {
+                const lotsAtPct = availFunds && isFutures
+                  ? Math.max(1, Math.floor((availFunds * pct / 100) / ((spotPrice * lotInfo.lotSize) / leverage)))
+                  : null;
+                return (
+                  <button key={pct} onClick={() => {
+                    setQtyUnit('lot');
+                    setQtyValue(lotsAtPct ? String(lotsAtPct) : String(Math.max(1, Math.round(pct / 100 * 10))));
+                  }} style={{
+                    flex: 1, padding: '5px 0', borderRadius: 4,
+                    background: '#252d35', color: '#777',
+                    border: '1px solid #2a3038', fontSize: 10,
+                    fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600,
+                  }}>{pct}%</button>
+                );
+              })}
             </div>
           </div>
 
-          {/* ── Leverage (futures only) ── */}
-          {isFutures && (
-            <div style={{ marginBottom: leverage !== entry.leverage ? 6 : 12, background: 'var(--bg)', borderRadius: 5, border: '1px solid var(--border)', padding: '10px 12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1 }}>LEVERAGE</span>
-                <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>suggested: {entry.leverage}×</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button onClick={() => setLeverage(l => Math.max(1, l - 1))} style={sBtn}>&minus;</button>
-                <span style={{
-                  fontSize: 18, fontWeight: 800, minWidth: 40, textAlign: 'center',
-                  color: leverage !== entry.leverage ? '#f0c040' : 'var(--text-primary)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {leverage}×
-                </span>
-                <button onClick={() => setLeverage(l => Math.min(100, l + 1))} style={sBtn}>+</button>
-                {/* quick picks */}
-                {[5,10,20,50].map(l => (
-                  <button key={l} onClick={() => setLeverage(l)} style={{
-                    ...sBtn, width: 'auto', padding: '0 7px', fontSize: 10,
-                    background: leverage === l ? '#1a1000' : 'var(--bg)',
-                    color: leverage === l ? '#f0c040' : 'var(--text-faint)',
-                    border: `1px solid ${leverage === l ? '#f0c04066' : 'var(--border)'}`,
-                  }}>
-                    {l}×
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* leverage warning */}
-          {isFutures && leverage !== entry.leverage && (
-            <div style={{ marginBottom: 12, padding: '6px 10px', background: '#1a1200', border: '1px solid #f0c04033', borderRadius: 4, fontSize: 9, color: '#f0c040' }}>
-              Suggested leverage is {entry.leverage}× based on ADX {entry.adx?.toFixed(0)}. Higher leverage increases liquidation risk.
-            </div>
-          )}
-
-          {/* ── Funds ── */}
-          <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--bg)', borderRadius: 5, border: `1px solid ${insufficientFunds ? 'var(--danger)44' : 'var(--border)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 4 }}>
-                <div>
-                  <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>{isFutures ? 'MARGIN REQUIRED' : 'PREMIUM COST'}</div>
-                  <div style={{ fontSize: 17, fontWeight: 800, color: insufficientFunds ? 'var(--danger)' : 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmtCost(marginUsd)}</div>
+          {/* ── Bracket Order / TP·SL ── */}
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#aaa', borderBottom: '1px dashed #444' }}>Bracket Order</span>
+            <button
+              onClick={() => setShowBracket(b => !b)}
+              style={{ background: 'none', border: '1px solid #f0c04055', borderRadius: 5, padding: '4px 10px', color: '#f0c040', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              {showBracket ? '− Remove TP/SL' : '+ Add TP/SL'}
+            </button>
+          </div>
+          {showBracket && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              {[
+                { label: 'Take Profit', val: fp(entry.takeProfit), color: 'var(--accent)' },
+                { label: 'Stop Loss',   val: fp(entry.stopLoss),   color: 'var(--danger)' },
+              ].map(({ label, val, color }) => (
+                <div key={label} style={{ background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 9, color: '#555', marginBottom: 3 }}>{label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
                 </div>
-                {availFunds !== null && (
-                  <div>
-                    <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>AVAILABLE</div>
-                    <div style={{ fontSize: 17, fontWeight: 800, color: insufficientFunds ? 'var(--danger)' : 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{fmtCost(availFunds)}</div>
-                  </div>
-                )}
-              </div>
-              {isFutures && <div style={{ fontSize: 9, color: 'var(--text-faint)' }}>Notional {fmtCost(notionalUsd)} ÷ {leverage}×</div>}
-              {insufficientFunds && <div style={{ fontSize: 9, color: 'var(--danger)', marginTop: 3 }}>Insufficient funds for this order size</div>}
-            </div>
-            {/* USD / INR toggle */}
-            <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
-              {(['USD','INR'] as const).map(c => (
-                <button key={c} onClick={() => setCurrency(c)} style={{
-                  padding: '5px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  fontSize: 10, fontWeight: 700,
-                  background: currency === c ? (c === 'INR' ? '#1a1000' : '#0d1230') : 'transparent',
-                  color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : 'var(--text-faint)',
-                }}>
-                  {c === 'INR' ? '₹' : '$'}
-                </button>
               ))}
             </div>
+          )}
+
+          {/* ── Funds req / Available margin ── */}
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 12, color: '#aaa', borderBottom: '1px dashed #444' }}>Funds req.</span>
+                <span style={{ fontSize: 12, cursor: 'pointer', color: '#888' }} title="Reload">↻</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: insufficientFunds ? 'var(--danger)' : 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtCost(marginUsd)}
+                </span>
+                {/* USD/INR pill */}
+                <div style={{ display: 'flex', background: '#1c2228', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a3038' }}>
+                  {(['USD','INR'] as const).map(c => (
+                    <button key={c} onClick={() => setCurrency(c)} style={{
+                      padding: '2px 7px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 9, fontWeight: 700,
+                      background: currency === c ? (c === 'INR' ? '#251800' : '#0d1a26') : 'transparent',
+                      color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : '#555',
+                    }}>{c}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: '#aaa' }}>Available Margin</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: insufficientFunds ? 'var(--danger)' : '#ccc', fontVariantNumeric: 'tabular-nums' }}>
+                {availFunds !== null ? fmtCost(availFunds) : '—'}
+              </span>
+            </div>
+            {insufficientFunds && (
+              <div style={{ fontSize: 9, color: 'var(--danger)', textAlign: 'right' }}>
+                Need {fmtCost(marginUsd - (availFunds ?? 0))} more —{' '}
+                <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Deposit ↗</a>
+              </div>
+            )}
           </div>
 
 
-          {/* status banner — shown after submit */}
+          {/* status banner */}
           {modalStatus.type !== 'idle' && (
             <div style={{
-              marginBottom: 12, padding: '10px 12px', borderRadius: 5,
-              border: `1px solid ${modalStatus.type === 'success' ? 'var(--accent)44' : modalStatus.type === 'error' ? 'var(--danger)44' : 'var(--border)'}`,
-              background: modalStatus.type === 'success' ? '#071a14' : modalStatus.type === 'error' ? '#1a0707' : 'var(--bg)',
+              marginTop: 12, padding: '10px 12px', borderRadius: 6,
+              border: `1px solid ${modalStatus.type === 'success' ? '#1ed76033' : modalStatus.type === 'error' ? '#ff475733' : '#2a3038'}`,
+              background: modalStatus.type === 'success' ? '#0a1f12' : modalStatus.type === 'error' ? '#1f0a0a' : '#1c2228',
               display: 'flex', alignItems: 'flex-start', gap: 8,
             }}>
-              <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }}>
+              <span style={{ fontSize: 14, flexShrink: 0 }}>
                 {modalStatus.type === 'pending' ? '⏳' : modalStatus.type === 'success' ? '✅' : '❌'}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 700,
-                  color: modalStatus.type === 'success' ? 'var(--accent)' : modalStatus.type === 'error' ? 'var(--danger)' : 'var(--text-faint)',
-                  marginBottom: 3,
-                }}>
-                  {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed' : 'Order failed'}
+                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2,
+                  color: modalStatus.type === 'success' ? '#1ed760' : modalStatus.type === 'error' ? '#ff4757' : '#888' }}>
+                  {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed ✓' : 'Order failed'}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.6, wordBreak: 'break-word' }}>
-                  {modalStatus.msg}
-                </div>
-                {/* Insufficient margin — add funds CTA */}
+                <div style={{ fontSize: 10, color: '#777', lineHeight: 1.6, wordBreak: 'break-word' }}>{modalStatus.msg}</div>
                 {modalStatus.type === 'error' && modalStatus.msg.toLowerCase().includes('insufficient margin') && (
-                  <a
-                    href="https://www.delta.exchange/app/account/deposit"
-                    target="_blank" rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-block', marginTop: 8,
-                      fontSize: 10, fontWeight: 700,
-                      color: 'var(--accent)', textDecoration: 'none',
-                      background: '#0f2a1a', border: '1px solid var(--accent)44',
-                      borderRadius: 4, padding: '5px 12px',
-                    }}
-                  >
-                    Add Funds to Delta Exchange ↗
+                  <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, color: '#1ed760', textDecoration: 'none', background: '#0a2010', border: '1px solid #1ed76033', borderRadius: 4, padding: '4px 10px' }}>
+                    Deposit Funds ↗
                   </a>
                 )}
               </div>
             </div>
           )}
 
-          {/* action buttons */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {modalStatus.type === 'success' ? (
-              <button
-                onClick={closeModal}
-                style={{
-                  flex: 1, padding: '11px 0', background: '#071a14',
-                  color: 'var(--accent)', border: '1px solid var(--accent)44',
-                  borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
-                }}
-              >
-                Done
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={closeModal}
-                  disabled={modalStatus.type === 'pending'}
-                  style={{
-                    flex: 1, padding: '10px 0', background: 'var(--bg)',
-                    color: 'var(--text-dim)', border: '1px solid var(--border)',
-                    borderRadius: 5, cursor: modalStatus.type === 'pending' ? 'wait' : 'pointer',
-                    fontFamily: 'inherit', fontSize: 11,
-                    opacity: modalStatus.type === 'pending' ? 0.5 : 1,
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={submitOrder}
-                  disabled={insufficientFunds || modalStatus.type === 'pending'}
-                  style={{
-                    flex: 2, padding: '10px 0',
-                    background: insufficientFunds || modalStatus.type === 'pending' ? 'var(--bg)' : bgDark,
-                    color: insufficientFunds || modalStatus.type === 'pending' ? 'var(--text-faint)' : dirColor,
-                    border: `1px solid ${insufficientFunds || modalStatus.type === 'pending' ? 'var(--border)' : dirColor}`,
-                    borderRadius: 5,
-                    cursor: insufficientFunds || modalStatus.type === 'pending' ? 'not-allowed' : 'pointer',
-                    fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
-                  }}
-                >
-                  {modalStatus.type === 'error'
-                    ? `Retry ${side}`
-                    : modalStatus.type === 'pending'
-                      ? 'Placing…'
-                      : isLive ? `Confirm ${side} — LIVE` : `Confirm ${side}`}
-                </button>
-              </>
-            )}
-          </div>
+          </div>{/* end padded inner */}
+
+          {/* ── Big action button (full width, no padding) ── */}
+          {modalStatus.type === 'success' ? (
+            <button onClick={closeModal} style={{
+              width: '100%', padding: '14px 0', background: '#1c2228',
+              color: '#1ed760', border: 'none', borderTop: '1px solid #2a3038',
+              fontFamily: 'inherit', fontSize: 14, fontWeight: 800, cursor: 'pointer', letterSpacing: 0.5,
+            }}>Done</button>
+          ) : (
+            <button
+              onClick={modalStatus.type === 'pending' ? undefined : submitOrder}
+              disabled={insufficientFunds || modalStatus.type === 'pending'}
+              style={{
+                width: '100%', padding: '15px 0', border: 'none',
+                background: insufficientFunds ? '#1c2228'
+                  : modalStatus.type === 'pending' ? '#1c2228'
+                  : entry.direction === 'long' ? '#1ed760' : '#ff4757',
+                color: insufficientFunds || modalStatus.type === 'pending'
+                  ? '#555' : '#000',
+                fontFamily: 'inherit', fontSize: 15, fontWeight: 900,
+                cursor: insufficientFunds || modalStatus.type === 'pending' ? 'not-allowed' : 'pointer',
+                letterSpacing: 0.5, transition: 'opacity 0.15s',
+                opacity: modalStatus.type === 'pending' ? 0.7 : 1,
+              }}
+            >
+              {modalStatus.type === 'pending' ? 'Placing…'
+                : modalStatus.type === 'error' ? `Retry ${side}`
+                : `${side}${isLive ? '' : ' (Paper)'}`}
+            </button>
+          )}
         </div>
       </div>
     )}
