@@ -214,6 +214,7 @@ async def get_telegram_config() -> TelegramConfigResponse:
         bot_token_hint=f"…{token[-6:]}" if len(token) >= 6 else ("set" if token else ""),
         chat_id=chat,
         enabled=bool(token and chat),
+        reachable=_tg.TELEGRAM_REACHABLE,   # persists in memory across requests
     )
 
 

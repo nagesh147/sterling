@@ -4,8 +4,9 @@ import logging
 
 log = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_REACHABLE: bool = False   # updated by test/send success; read by GET endpoint
 
 
 async def send(text: str, parse_mode: str = "HTML",
@@ -29,7 +30,11 @@ async def send(text: str, parse_mode: str = "HTML",
             )
         if r.status_code != 200:
             log.warning("Telegram sendMessage failed %s: %s", r.status_code, r.text[:200])
-        return r.status_code == 200
+        ok = r.status_code == 200
+        global TELEGRAM_REACHABLE
+        if ok:
+            TELEGRAM_REACHABLE = True
+        return ok
     except Exception as exc:
         log.warning("Telegram send error: %s", exc)
         return False

@@ -267,8 +267,9 @@ function TelegramSection() {
   const sendTest = async () => {
     setSending(true); setMsg('');
     try {
-      await api.post<TelegramConfig>('/api/v1/config/telegram/test', {});
-      qc.invalidateQueries({ queryKey: ['telegram-config'] });
+      const result = await api.post<TelegramConfig>('/api/v1/config/telegram/test', {});
+      // Update cache directly from test response — avoids the GET overwriting reachable=false
+      qc.setQueryData(['telegram-config'], result);
       setMsgOk(true); setMsg('✅ Test message sent — check your Telegram');
     } catch (e: unknown) {
       const err = (e as Error).message ?? 'Unknown error';
