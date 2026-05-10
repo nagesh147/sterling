@@ -428,6 +428,30 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             </div>
           )}
 
+          {/* ── Override warning ── */}
+          {direction !== entry.direction && (
+            <div style={{
+              marginTop: 10, padding: '8px 12px',
+              background: '#2a1800', border: '1px solid #f0c04044',
+              borderLeft: '3px solid #f0c040',
+              borderRadius: 5, display: 'flex', gap: 8, alignItems: 'flex-start',
+            }}>
+              <span style={{ fontSize: 13, flexShrink: 0 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#f0c040', marginBottom: 2 }}>
+                  Going against the signal
+                </div>
+                <div style={{ fontSize: 10, color: '#c8941a', lineHeight: 1.5 }}>
+                  The signal recommends <strong style={{ color: '#f0c040' }}>
+                    {entry.direction === 'long' ? 'BUY (Long)' : 'SELL (Short)'}
+                  </strong>. You've switched to <strong style={{ color: 'var(--danger)' }}>
+                    {direction === 'long' ? 'BUY (Long)' : 'SELL (Short)'}
+                  </strong>. Proceed only if you have a specific reason to counter-trade.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Order type tabs ── */}
           <div style={{ display: 'flex', marginTop: 12, borderBottom: '1px solid var(--border)' }}>
             {(['market','limit'] as const).map(t => (
