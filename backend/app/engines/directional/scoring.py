@@ -80,6 +80,7 @@ def _score_rr_v2(structure: TradeStructure) -> float:
 def _check_hard_vetoes(
     structure: TradeStructure,
     funding_rate: Optional[float] = None,
+    bar_hour_utc: Optional[int] = None,
 ) -> Optional[str]:
     if not structure.legs:
         return "no legs"
@@ -92,7 +93,8 @@ def _check_hard_vetoes(
     if oi < 50:
         return f"OI {oi:.0f} < 50"
 
-    hour_utc = _dt.datetime.now(_dt.timezone.utc).hour
+    # Use caller-supplied bar hour (backtest context) or current wall-clock hour (live).
+    hour_utc = bar_hour_utc if bar_hour_utc is not None else _dt.datetime.now(_dt.timezone.utc).hour
     if hour_utc in {2, 3, 4, 5}:
         return f"hour {hour_utc}:00 UTC in dead zone"
 
@@ -128,10 +130,11 @@ def score_structure(
     policy: PolicyResult,
     weights: Optional[ScoringWeights] = None,
     funding_rate: Optional[float] = None,
+    bar_hour_utc: Optional[int] = None,
 ) -> TradeStructure:
     direction = structure.direction.value
 
-    veto = _check_hard_vetoes(structure, funding_rate)
+    veto = _check_hard_vetoes(structure, funding_rate, bar_hour_utc)
     if veto:
         breakdown = {
             "macro_trend": 0.0, "signal": 0.0, "entry": 0.0,
@@ -184,9 +187,10 @@ def rank_structures(
     policy: PolicyResult,
     weights: Optional[ScoringWeights] = None,
     funding_rate: Optional[float] = None,
+    bar_hour_utc: Optional[int] = None,
 ) -> List[TradeStructure]:
     scored = [
-        score_structure(s, regime, signal, exec_timing, policy, weights, funding_rate)
+        score_structure(s, regime, signal, exec_timing, policy, weights, funding_rate, bar_hour_utc)
         for s in structures
     ]
     return sorted(scored, key=lambda s: s.score, reverse=True)

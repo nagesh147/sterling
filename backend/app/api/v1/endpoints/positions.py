@@ -533,15 +533,36 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
-    # Circuit breaker check
+    # Circuit breaker check — compute real daily PnL and margin before calling.
     cb = getattr(request.app.state, "circuit_breaker", None)
     if cb is not None:
         mode = getattr(request.app.state, "trading_mode", None)
         max_conc = mode.max_concurrent if mode else 5
         from app.services.execution.circuit_breaker import CircuitState
+        from app.api.v1.endpoints.config import get_runtime_risk as _get_risk
+
+        # Daily PnL: sum realized P&L for positions closed today.
+        _capital = _get_risk().capital or 10_000.0
+        _today_start_ms = int((time.time() // 86_400) * 86_400 * 1_000)
+        _today_closed = [
+            p for p in paper_store.list_positions()
+            if p.status.value == "closed"
+            and p.realized_pnl_usd is not None
+            and (p.exit_timestamp_ms or 0) >= _today_start_ms
+        ]
+        _daily_pnl_usd = sum(p.realized_pnl_usd for p in _today_closed)
+        _daily_pnl_pct = _daily_pnl_usd / _capital if _capital > 0 else 0.0
+
+        # Free margin: capital not tied up in open position risk.
+        _open_risk = sum(
+            p.sized_trade.max_risk_usd for p in paper_store.list_positions()
+            if p.status.value in ("open", "partially_closed")
+        )
+        _free_margin_pct = max(0.0, 1.0 - _open_risk / _capital) if _capital > 0 else 1.0
+
         check = await cb.check(
-            daily_pnl_pct=0.0,
-            free_margin_pct=1.0,
+            daily_pnl_pct=_daily_pnl_pct,
+            free_margin_pct=_free_margin_pct,
             open_count=paper_store.open_count(),
             mode_max_concurrent=max_conc,
         )
@@ -733,12 +754,13 @@ async def close_position(pos_id: str, body: ClosePositionRequest, request: Reque
         raise HTTPException(
             status_code=404, detail=f"Position {pos_id} not found or already closed"
         )
-    # Record calibration trade on close
+    # Record calibration trade on close — use max_risk_usd as denominator so pnl_pct
+    # is a return-on-risk ratio (correct input for fractional Kelly win_rate estimation).
     if pos and updated.realized_pnl_usd is not None:
         svc = getattr(request.app.state, 'calibration_service', None)
         if svc:
-            entry_spot = pos.entry_spot_price or 1.0
-            pnl_pct = updated.realized_pnl_usd / max(entry_spot * 10, 1.0)
+            max_risk = pos.sized_trade.max_risk_usd if pos.sized_trade else 0.0
+            pnl_pct = updated.realized_pnl_usd / max(max_risk, 1.0)
             regime = getattr(pos, 'regime', 'unknown') or 'unknown'
             svc.record_trade(float(pnl_pct), str(regime))
         # Record equity snapshot

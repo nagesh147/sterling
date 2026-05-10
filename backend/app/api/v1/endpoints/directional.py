@@ -148,11 +148,13 @@ def _build_indicator_lines(candles):
     """
     Compute supertrend and EMA50 line arrays for chart overlays.
     Returns (st1_line, st2_line, st3_line, ema50_line) — each a list of {time, value}.
+    ST configs must exactly match signal_engine.py to keep the chart consistent with strategy logic.
     """
     import numpy as np
     from app.engines.indicators.supertrend import compute_supertrend
     from app.engines.indicators.heikin_ashi import compute_heikin_ashi
     from app.engines.indicators.ema import compute_ema
+    from app.engines.directional.signal_engine import _to_vwap_candles
 
     if not candles:
         return [], [], [], []
@@ -166,7 +168,14 @@ def _build_indicator_lines(candles):
     ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
     st1, _ = compute_supertrend(ha_h, ha_l, ha_c, 7, 3.0)
     st2, _ = compute_supertrend(h, l, c, 14, 2.0)
-    st3, _ = compute_supertrend(h, l, c, 21, 1.0)
+
+    # ST3 uses VWAP-adjusted candles (period=21, mult=2.0) — matches signal_engine.py exactly.
+    vwap_candles = list(_to_vwap_candles(candles))
+    vwap_h = np.array([v.high for v in vwap_candles], dtype=np.float64)
+    vwap_l = np.array([v.low  for v in vwap_candles], dtype=np.float64)
+    vwap_c = np.array([v.close for v in vwap_candles], dtype=np.float64)
+    st3, _ = compute_supertrend(vwap_h, vwap_l, vwap_c, 21, 2.0)
+
     ema50 = compute_ema(c, 50)
 
     def _to_line(values):

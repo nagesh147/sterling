@@ -280,8 +280,8 @@ const btnSecondary: React.CSSProperties = {
 
 function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--accent)33',
         borderTop: '3px solid var(--accent)', borderRadius: 8, padding: '22px 24px', width: 360,
         boxShadow: '0 8px 40px rgba(0,0,0,0.6)',

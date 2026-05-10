@@ -590,7 +590,6 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     {/* ── Order confirmation modal ─────────────────────────────────── */}
     {showConfirm && (
       <div
-        onClick={modalStatus.type === 'pending' ? undefined : closeModal}
         style={{
           position: 'fixed', inset: 0, zIndex: 4000,
           background: 'rgba(0,0,0,0.75)',
@@ -598,7 +597,6 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         }}
       >
         <div
-          onClick={e => e.stopPropagation()}
           style={{
             background: 'var(--bg-card)',
             border: '1px solid var(--border)',
