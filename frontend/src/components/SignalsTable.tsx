@@ -519,7 +519,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                 {/* Insufficient margin — add funds CTA */}
                 {modalStatus.type === 'error' && modalStatus.msg.toLowerCase().includes('insufficient margin') && (
                   <a
-                    href="https://www.delta.exchange/app/account/fund-transfer"
+                    href="https://www.delta.exchange/app/account/deposit"
                     target="_blank" rel="noopener noreferrer"
                     style={{
                       display: 'inline-block', marginTop: 8,
