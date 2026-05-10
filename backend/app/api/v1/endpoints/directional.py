@@ -62,7 +62,7 @@ def _option_params(sym: str, spot: float, direction: str) -> dict:
         opt_type = 'CE' if direction == 'long' else 'PE'
         today = datetime.date.today()
         days_to_fri = (4 - today.weekday()) % 7 or 7
-        expiry = (today + datetime.timedelta(days=days_to_fri)).strftime('%d%b%y').upper()
+        expiry = (today + datetime.timedelta(days=days_to_fri)).strftime('%d%m%y')
         dte = days_to_fri
         return {
             'opt_strike': strike,
@@ -95,7 +95,7 @@ async def _fire_signal_alert(
             opt_type   = 'CE' if dir_str == 'long' else 'PE'
             today = datetime.date.today()
             days_to_friday = (4 - today.weekday()) % 7 or 7
-            opt_expiry = (today + datetime.timedelta(days=days_to_friday)).strftime('%d%b%y').upper()
+            opt_expiry = (today + datetime.timedelta(days=days_to_friday)).strftime('%d%m%y')
             opt_symbol = f"{opt_type[0]}-{sym}-{opt_strike}-{opt_expiry}"
         except Exception:
             pass
@@ -625,6 +625,7 @@ async def _compute_signal_item(
             target_price=target_price,
             atr=round(atr_val, 2),
             adx=round(regime.adx, 1),
+            atr_percentile=round(regime.atr_percentile, 1),
             rsi=round(getattr(signal, 'rsi', 50.0), 1),
             squeezed=getattr(signal, 'squeezed', False),
             exec_confidence=round(exec_timing.confidence, 2),
@@ -727,6 +728,7 @@ async def all_signals(request: Request) -> dict:
                 'target_price': snap.target_price,
                 'atr': snap.atr,
                 'adx': snap.adx,
+                'atr_percentile': snap.atr_percentile,
                 'rsi': snap.rsi,
                 'squeezed': snap.squeezed,
                 'rec_leverage': rec_lev,

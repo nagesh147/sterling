@@ -28,6 +28,7 @@ class PaperPosition(BaseModel):
     trail_stop_json: Optional[str] = None
     trail_mode: Optional[str] = None
     entry_price_real: Optional[float] = None
+    is_paper: bool = True          # False when position was entered in live mode
 
 
 class EnterPositionRequest(BaseModel):

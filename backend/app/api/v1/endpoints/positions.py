@@ -69,8 +69,20 @@ from app.schemas.positions import (
 )
 from app.schemas.risk import ExitSignal
 from app.services import paper_store, pnl_history
+from app.services.exchange_account_store import list_exchanges as _list_exchange_configs
 from app.services.exchanges import instrument_registry as registry
 from app.engines.directional.orchestrator import run_once as engine_run_once
+
+
+def _is_paper_mode() -> bool:
+    """True when no active exchange is in live mode. Defaults to True (paper) on error or no configs."""
+    try:
+        active = [cfg for cfg in _list_exchange_configs() if cfg.is_active]
+        if not active:
+            return True  # no active exchanges → safe default to paper
+        return all(cfg.is_paper for cfg in active)
+    except Exception:
+        return True
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.monitor_engine import check_exits
 from app.schemas.directional import TradeState
@@ -84,12 +96,17 @@ router = APIRouter(prefix="/positions", tags=["positions"])
 async def list_positions(
     underlying: str = Query(default=""),
     status: str = Query(default=""),
+    mode: str = Query(default=""),   # "paper" | "live" — filter by trading mode
 ) -> PositionListResponse:
     positions = paper_store.list_positions()
     if underlying.strip():
         positions = [p for p in positions if p.underlying == underlying.upper()]
     if status.strip():
         positions = [p for p in positions if p.status.value == status.lower()]
+    if mode.strip() == "paper":
+        positions = [p for p in positions if p.is_paper]
+    elif mode.strip() == "live":
+        positions = [p for p in positions if not p.is_paper]
     return PositionListResponse(
         positions=positions,
         open_count=sum(1 for p in positions if p.status.value in ("open", "partially_closed")),
@@ -503,6 +520,7 @@ async def enter_direct_position(body: DirectEntryRequest, request: Request) -> P
         sized_trade=sized,
         entry_spot_price=spot_price,
         notes=body.notes or f"Direct {body.direction.upper()} entry",
+        is_paper=_is_paper_mode(),
         trail_mode_name=mode.name if mode else None,
         trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
     )
@@ -561,6 +579,7 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
         sized_trade=best_sized,
         entry_spot_price=spot_price,
         notes=body.notes,
+        is_paper=_is_paper_mode(),
         trail_mode_name=mode.name if mode else None,
         trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
     )

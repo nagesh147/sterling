@@ -1,26 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSignalStream } from '../hooks/useSignalStream';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import type { SignalsResponse } from '../hooks/useSignals';
 import { injectArrowEntry } from '../hooks/useSignalFeed';
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-function fp(v: number | null | undefined): string {
-  if (v == null || !isFinite(v)) return '—';
-  if (v >= 10_000) return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
-  if (v >= 100)   return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  return '$' + v.toFixed(2);
-}
-
-function pctStr(entry: number, level: number | null | undefined): string {
-  if (!level) return '';
-  const p = ((level - entry) / entry) * 100;
-  return (p >= 0 ? '+' : '') + p.toFixed(1) + '%';
-}
-
-// ── order mutation ────────────────────────────────────────────────────────────
+import { useTradingMode } from '../hooks/useTradingMode';
+import { fpPrice, MODE_COLOR } from '../utils/fmt';
 
 function usePlaceNow() {
   const qc = useQueryClient();
@@ -33,8 +18,6 @@ function usePlaceNow() {
   });
 }
 
-// ── notification card ─────────────────────────────────────────────────────────
-
 interface TradeNotif {
   underlying: string;
   direction: string;
@@ -44,6 +27,7 @@ interface TradeNotif {
   leverage: number;
   regime: string;
   score: number;
+  mode: string;
   optSymbol: string | null;
   optStrike: number | null;
   optType: string | null;
@@ -51,166 +35,166 @@ interface TradeNotif {
   ts: number;
 }
 
-function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => void }) {
-  const [orderType, setOrderType] = useState<'futures' | 'options'>('futures');
-  const [feedback, setFeedback] = useState('');
-  const { mutate: place, isPending } = usePlaceNow();
+const AUTO_DISMISS_MS = 30_000;
 
-  const isLong   = notif.direction === 'long';
-  const color    = isLong ? 'var(--accent)' : 'var(--danger)';
-  const bgDark   = isLong ? '#003d2e' : '#3d0014';
-  const side     = isLong ? 'BUY' : 'SELL';
-  const arrow    = isLong ? '▲' : '▼';
-  const riskPct  = notif.stopLoss && notif.spot
-    ? Math.abs((notif.spot - notif.stopLoss) / notif.spot * 100).toFixed(1)
-    : null;
+function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => void }) {
+  const [feedback, setFeedback]   = useState('');
+  const [progress, setProgress]   = useState(100);
+  const { mutate: place, isPending } = usePlaceNow();
+  // Stable ref for onDismiss so the interval never captures a stale closure
+  const onDismissRef = useRef(onDismiss);
+  useEffect(() => { onDismissRef.current = onDismiss; });
+
+  const isLong    = notif.direction === 'long';
+  const color     = isLong ? 'var(--accent)' : 'var(--danger)';
+  const bgDark    = isLong ? '#071f18' : '#1f0708';
+  const side      = isLong ? 'BUY' : 'SELL';
+  const arrow     = isLong ? '▲' : '▼';
+  const modeColor = MODE_COLOR[notif.mode] ?? 'var(--text-dim)';
+
+  // Countdown progress bar — uses ref so interval never captures a stale dismiss callback
+  useEffect(() => {
+    const start = Date.now();
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const pct = Math.max(0, 100 - (elapsed / AUTO_DISMISS_MS) * 100);
+      setProgress(pct);
+      if (pct === 0) { clearInterval(tick); onDismissRef.current(); }
+    }, 200);
+    return () => clearInterval(tick);
+  }, []); // no dependency — ref stays current
 
   const handleTrade = () => {
     place({
       underlying: notif.underlying,
       direction: notif.direction,
-      instrument_type: orderType,
+      instrument_type: 'futures',
       size: 1,
       leverage: notif.leverage,
       order_type: 'market',
       stop_loss: notif.stopLoss,
       take_profit: notif.takeProfit,
-      option_symbol: orderType === 'options' ? notif.optSymbol : null,
       notes: `Arrow signal — ${notif.regime}`,
     }, {
-      onSuccess: () => { setFeedback('✅ Order placed!'); setTimeout(onDismiss, 2000); },
-      onError:   (e: unknown) => setFeedback(`❌ ${(e as Error).message}`),
+      onSuccess: () => { setFeedback('✅ Placed'); setTimeout(onDismiss, 2000); },
+      onError:   (e: unknown) => { setFeedback(`❌ ${(e as Error).message}`); setTimeout(() => setFeedback(''), 6000); },
     });
   };
 
   return (
     <div style={{
-      position: 'fixed', top: 76, right: 16, zIndex: 9999,
-      width: 340,
+      position: 'fixed', bottom: 28, right: 20, zIndex: 3000,
+      width: 300,
       background: 'var(--bg-card)',
-      border: `1px solid ${color}`,
-      borderLeft: `4px solid ${color}`,
-      borderRadius: 8,
-      boxShadow: `0 8px 32px ${isLong ? '#00d4aa' : '#ff4757'}33`,
+      border: `1px solid ${color}44`,
+      borderLeft: `3px solid ${color}`,
+      borderRadius: 7,
+      boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
       overflow: 'hidden',
+      animation: 'slideUp 0.2s ease',
     }}>
+      {/* progress bar — depletes left-to-right over 30s */}
+      <div style={{ height: 2, background: 'var(--border)' }}>
+        <div style={{
+          height: '100%', width: `${progress}%`,
+          background: color, transition: 'width 0.2s linear',
+        }} />
+      </div>
+
       {/* header */}
       <div style={{
-        background: bgDark,
-        padding: '10px 14px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '8px 12px 6px',
+        background: bgDark,
       }}>
-        <div>
-          <span style={{ fontSize: 13, fontWeight: 900, color, letterSpacing: 1 }}>
-            {arrow} {side} SIGNAL — {notif.underlying}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 900, color, letterSpacing: 0.5 }}>
+            {arrow} {side} — {notif.underlying}
           </span>
-          <span style={{ fontSize: 10, color: `${color}99`, marginLeft: 10 }}>
-            {notif.regime.replace(/_/g, ' ')} · Score {notif.score}
+          {/* mode badge */}
+          <span style={{
+            fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
+            color: modeColor, background: modeColor + '20',
+            border: `1px solid ${modeColor}44`,
+            borderRadius: 3, padding: '1px 5px',
+          }}>
+            {notif.mode.toUpperCase()}
+          </span>
+          <span style={{
+            fontSize: 8, fontWeight: 700, color: `${color}99`,
+            background: `${color}15`, border: `1px solid ${color}30`,
+            borderRadius: 3, padding: '1px 5px', letterSpacing: 0.5,
+          }}>
+            SIGNAL
           </span>
         </div>
         <button onClick={onDismiss} style={{
-          background: 'none', border: 'none', color: 'var(--text-dim)',
-          cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px',
+          background: 'none', border: 'none', color: 'var(--text-faint)',
+          cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0,
         }}>×</button>
       </div>
 
-      {/* prices */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 1,
-        background: 'var(--border)', margin: '0',
-      }}>
-        {[
-          ['ENTRY', fp(notif.spot), 'var(--text-primary)', ''],
-          ['STOP LOSS', fp(notif.stopLoss), 'var(--danger)', riskPct ? `-${riskPct}%` : ''],
-          ['TAKE PROFIT', fp(notif.takeProfit), 'var(--accent)', notif.takeProfit ? pctStr(notif.spot, notif.takeProfit) : ''],
-        ].map(([label, val, clr, sub]) => (
+      {/* prices — compact 3-column */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+        {([
+          ['ENTRY', fpPrice(notif.spot), 'var(--text-primary)'],
+          ['SL', fpPrice(notif.stopLoss), 'var(--danger)'],
+          ['TP', fpPrice(notif.takeProfit), 'var(--accent)'],
+        ] as [string, string, string][]).map(([label, val, clr]) => (
           <div key={label} style={{
-            background: 'var(--bg-card)', padding: '8px 10px', textAlign: 'center',
+            flex: 1, textAlign: 'center', padding: '7px 4px',
+            borderRight: label !== 'TP' ? '1px solid var(--border)' : 'none',
           }}>
             <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>{label}</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: clr, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
-            {sub && <div style={{ fontSize: 9, color: 'var(--text-dim)' }}>{sub}</div>}
+            <div style={{ fontSize: 12, fontWeight: 800, color: clr, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
           </div>
         ))}
       </div>
 
-      {/* instrument selector */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-        {/* futures */}
-        <div
-          onClick={() => setOrderType('futures')}
-          style={{
-            padding: '7px 10px', borderRadius: 4, cursor: 'pointer', marginBottom: 6,
-            background: orderType === 'futures' ? bgDark : 'var(--bg)',
-            border: `1px solid ${orderType === 'futures' ? color : 'var(--border)'}`,
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          }}
-        >
-          <div>
-            <span style={{ fontSize: 11, fontWeight: 700, color: orderType === 'futures' ? color : 'var(--text-muted)' }}>
-              FUTURES
-            </span>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 8 }}>
-              {notif.underlying}USDT · {notif.leverage}× leverage
-            </span>
+      {/* meta + action */}
+      <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {notif.regime.replace(/_/g, ' ')} · {notif.leverage}× · Score {notif.score}
           </div>
-          <span style={{ fontSize: 9, color: orderType === 'futures' ? color : 'var(--text-faint)', fontWeight: 700 }}>
-            {orderType === 'futures' ? '●' : '○'}
-          </span>
+          {notif.optSymbol && (
+            <div style={{ fontSize: 8, color: 'var(--text-faint)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {notif.optType === 'CE' ? 'CALL' : 'PUT'} {fpPrice(notif.optStrike)} · {notif.optExpiry}
+            </div>
+          )}
         </div>
 
-        {/* options */}
-        {notif.optSymbol && (
-          <div
-            onClick={() => setOrderType('options')}
-            style={{
-              padding: '7px 10px', borderRadius: 4, cursor: 'pointer',
-              background: orderType === 'options' ? bgDark : 'var(--bg)',
-              border: `1px solid ${orderType === 'options' ? color : 'var(--border)'}`,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}
-          >
-            <div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: orderType === 'options' ? color : 'var(--text-muted)' }}>
-                {notif.optType === 'CE' ? 'CALL' : 'PUT'} OPTION
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 8 }}>
-                Strike {fp(notif.optStrike)} · {notif.optExpiry}
-              </span>
-            </div>
-            <span style={{ fontSize: 9, color: orderType === 'options' ? color : 'var(--text-faint)', fontWeight: 700 }}>
-              {orderType === 'options' ? '●' : '○'}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* action */}
-      <div style={{ padding: '10px 12px' }}>
         {feedback ? (
-          <div style={{
-            textAlign: 'center', padding: '8px', fontSize: 12, fontWeight: 700,
+          <span style={{
+            fontSize: 11, fontWeight: 700,
             color: feedback.startsWith('✅') ? 'var(--accent)' : 'var(--danger)',
-          }}>{feedback}</div>
+          }}>
+            {feedback}
+          </span>
         ) : (
           <button
             onClick={handleTrade}
             disabled={isPending}
             style={{
-              width: '100%', padding: '11px 0',
+              flexShrink: 0,
+              padding: '7px 14px',
               background: bgDark, color, border: `1px solid ${color}`,
               borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: 13, fontWeight: 900, letterSpacing: 1,
-              opacity: isPending ? 0.7 : 1,
+              fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+              opacity: isPending ? 0.6 : 1,
             }}
           >
-            {isPending ? 'Placing…' : `${arrow} ${side} NOW — 1 ${orderType === 'futures' ? `contract ${notif.leverage}×` : 'lot'}`}
+            {isPending ? '…' : `${side} NOW`}
           </button>
         )}
-        <div style={{ textAlign: 'center', marginTop: 5, fontSize: 9, color: 'var(--text-faint)' }}>
-          Paper mode · SL/TP auto-attached · tap × to dismiss
-        </div>
       </div>
+
+      <style>{`
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -222,10 +206,10 @@ const ARMED_STATES = new Set([
 ]);
 
 export function ArrowAlert({ underlying }: { underlying: string }) {
-  const { data } = useSignalStream(underlying, 30);
-  const [notif, setNotif] = useState<TradeNotif | null>(null);
+  const { data }     = useSignalStream(underlying, 30);
+  const { data: modeData } = useTradingMode();
+  const [notif, setNotif]  = useState<TradeNotif | null>(null);
   const lastTs    = useRef<number>(0);
-  // Seed from sessionStorage so page refresh doesn't re-fire for pre-existing state
   const stateKey  = `sterling_alert_state_${underlying}`;
   const lastState = useRef<string>(
     (() => { try { return sessionStorage.getItem(stateKey) ?? ''; } catch { return ''; } })()
@@ -239,10 +223,6 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
 
     const curState = data.state ?? '';
     const prev     = lastState.current;
-
-    // Fire only on a genuine transition into an armed state, or on a fresh arrow.
-    // Seeding lastState from sessionStorage prevents re-firing on page refresh
-    // when the state was already ARMED before the reload.
     const shouldFire =
       data.green_arrow || data.red_arrow ||
       (ARMED_STATES.has(curState) && !ARMED_STATES.has(prev));
@@ -253,59 +233,43 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
     if (!shouldFire) return;
     if (data.direction === 'neutral') return;
 
-    // Pull cached signal data for this underlying to get SL/TP/leverage/options
     const cached = qc.getQueryData<SignalsResponse>(['signals-all']);
-    const sig = cached?.signals.find(s => s.underlying === underlying);
-
-    const spot    = data.spot_price ?? 0;
-    const isLong  = data.direction === 'long';
-    const atr     = sig?.atr ?? spot * 0.02;
-    const mult    = sig?.stop_atr_mult ?? 2.0;
-    const rr      = 2.0;
-    const stopLoss    = sig?.stop_price ?? (isLong ? spot - atr * mult : spot + atr * mult);
-    const takeProfit  = sig?.target_price ?? (isLong ? spot + atr * mult * rr : spot - atr * mult * rr);
-    const leverage    = sig?.rec_leverage ?? 5;
-    const score       = isLong ? (data.score_long ?? 0) : (data.score_short ?? 0);
-
-    // Always derive optType from LIVE direction (SSE), not from cache which may
-    // have been computed when direction was 'neutral' → stale 'PE' for a BUY signal.
-    const optType   = isLong ? 'CE' : 'PE';
-    const step      = spot > 10_000 ? 500 : 100;
-    const optStrike = sig?.opt_strike ?? (spot > 0 ? Math.round(spot / step) * step : null);
-    const optExpiry = sig?.opt_expiry ?? null;
-    const optSymbol = sig?.opt_symbol
+    const sig    = cached?.signals.find(s => s.underlying === underlying);
+    const spot   = data.spot_price ?? 0;
+    const isLong = data.direction === 'long';
+    const atr    = sig?.atr ?? spot * 0.02;
+    const mult   = sig?.stop_atr_mult ?? 2.0;
+    const stopLoss   = sig?.stop_price   ?? (isLong ? spot - atr * mult     : spot + atr * mult);
+    const takeProfit = sig?.target_price ?? (isLong ? spot + atr * mult * 2 : spot - atr * mult * 2);
+    const leverage   = sig?.rec_leverage ?? 5;
+    const score      = isLong ? (data.score_long ?? 0) : (data.score_short ?? 0);
+    const optType    = isLong ? 'CE' : 'PE';
+    const step       = spot > 10_000 ? 500 : 100;
+    const optStrike  = sig?.opt_strike  ?? (spot > 0 ? Math.round(spot / step) * step : null);
+    const optExpiry  = sig?.opt_expiry  ?? null;
+    const optSymbol  = sig?.opt_symbol
       ?? (optStrike && optExpiry ? `${optType[0]}-${underlying}-${optStrike}-${optExpiry}` : null);
 
     const dir = data.direction as 'long' | 'short';
-    const regime = data.macro_regime ?? '';
-    const scoreVal = Math.round(score);
-
     setNotif({
-      underlying, direction: dir,
-      spot, stopLoss, takeProfit, leverage,
-      regime: regime, score: scoreVal,
-      optSymbol, optStrike, optType: optType ?? null, optExpiry,
-      ts: data.timestamp_ms,
+      underlying, direction: dir, spot, stopLoss, takeProfit, leverage,
+      regime: data.macro_regime ?? '', score: Math.round(score),
+      mode: modeData?.name ?? 'scalping',
+      optSymbol, optStrike, optType, optExpiry, ts: data.timestamp_ms,
     });
 
-    // Inject into the feed immediately — don't wait for the 15s poll.
-    // Arrows are ephemeral (true for one candle only); by next poll the arrow
-    // is gone and the feed would miss this signal.
     injectArrowEntry(
       underlying, dir, spot, stopLoss, takeProfit, leverage,
       sig?.futures_symbol ?? `${underlying}USDT`,
-      optSymbol, optStrike, optType ?? null, optExpiry,
-      regime, scoreVal,
+      optSymbol, optStrike, optType, optExpiry,
+      data.macro_regime ?? '', Math.round(score),
     );
 
-    // Don't invalidate signals-all here — injectArrowEntry already adds the
-    // entry to the feed immediately. Forcing a refetch would double the exchange
-    // API load on every arrow and race with the 15s background poll.
     qc.invalidateQueries({ queryKey: ['snapshot', underlying] });
     qc.invalidateQueries({ queryKey: ['arrows', underlying] });
 
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setNotif(null), 30_000);
+    timerRef.current = setTimeout(() => setNotif(null), AUTO_DISMISS_MS);
   }, [data?.timestamp_ms, data?.green_arrow, data?.red_arrow, data?.state, underlying, qc]);
 
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);

@@ -79,7 +79,15 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
     if has_live_creds:
         # ── LIVE ORDER ────────────────────────────────────────────────────
         try:
-            adapter = _adm.get_adapter() or request.app.state.adapter
+            # Use a dedicated Delta India adapter with live credentials.
+            # _adm.get_adapter() is the market-data adapter (Deribit/etc.) and
+            # does not have place_order — we always need DeltaIndiaAdapter here.
+            from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+            adapter = DeltaIndiaAdapter(
+                api_key=active.api_key,
+                api_secret=active.api_secret,
+                is_paper=False,
+            )
             if not hasattr(adapter, "place_order"):
                 raise RuntimeError("Active adapter does not support live order placement")
 
@@ -156,13 +164,14 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
 
 
 def _create_paper_tracking(body: LiveOrderRequest, sym: str, entry_price: float, order_id: str = "") -> str:
-    """Create a paper store tracking entry for P&L monitoring."""
+    """Create a tracking entry in paper_store for P&L monitoring."""
     try:
         from app.schemas.execution import Direction as ExecDir
         from app.schemas.execution import TradeStructure, SizedTrade, CandidateContract
         from app.engines.directional.sizing_engine import size_trade
         from app.schemas.risk import RiskParams
 
+        is_live_order = bool(order_id)
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
@@ -175,7 +184,7 @@ def _create_paper_tracking(body: LiveOrderRequest, sym: str, entry_price: float,
             direction=direction, legs=[leg],
             net_premium=entry_price, max_loss=entry_price * 0.03,
             max_gain=None, risk_reward=2.0,
-            setup_reason=body.notes or f"Live {body.direction.upper()} {body.instrument_type}",
+            setup_reason=body.notes or f"{'LIVE' if is_live_order else 'PAPER'} {body.direction.upper()} {body.instrument_type}",
             score=0.0, score_breakdown={},
         )
         risk = RiskParams()
@@ -183,7 +192,8 @@ def _create_paper_tracking(body: LiveOrderRequest, sym: str, entry_price: float,
         pos = paper_store.add_position(
             underlying=sym, sized_trade=sized,
             entry_spot_price=entry_price,
-            notes=f"{'[LIVE]' if order_id else '[PAPER]'} {body.notes} order_id={order_id}",
+            notes=f"{'[LIVE]' if is_live_order else '[PAPER]'} {body.notes} order_id={order_id}",
+            is_paper=not is_live_order,   # live orders are tracked as is_paper=False
         )
         return pos.id
     except Exception as exc:

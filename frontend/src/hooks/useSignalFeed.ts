@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSignals } from './useSignals';
 import type { SignalItem } from './useSignals';
 import { useTradingMode } from './useTradingMode';
+import { inferModeTag } from '../utils/fmt';
 
 // Module-level registry so ArrowAlert can inject entries without prop drilling
 type ArrowParams = [string, 'long'|'short', number, number|null, number|null, number, string, string|null, number|null, 'CE'|'PE'|null, string|null, string, number];
@@ -28,9 +29,16 @@ export function injectArrowEntry(...args: ArrowParams) {
 // fresh entries with the new mode's parameters (new SL/TP/leverage).
 // Without this, the state tracker says EARLY===EARLY → no new entry added.
 let _globalClearState: (() => void) | null = null;
+let _globalClearFeed:  (() => void) | null = null;
 
 export function clearSignalFeedState() {
   _globalClearState?.();
+}
+
+/** Wipe the entire feed + state tracker. Called on mode switch so stale
+ *  entries tagged with the old mode don't linger in the list. */
+export function clearSignalFeed() {
+  _globalClearFeed?.();
 }
 
 export interface FeedEntry {
@@ -52,6 +60,7 @@ export interface FeedEntry {
   regime: string;
   score: number;
   adx: number;
+  atr_percentile: number;
   rsi: number;
   mode: string;         // trading mode that generated this signal (scalping/swing/etc.)
   entryAt: number;
@@ -114,14 +123,15 @@ function loadFeed(): FeedEntry[] {
 
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
 function saveFeed(feed: FeedEntry[]) {
-  // Debounce: skip if a write is already scheduled within 5s.
-  // Prevents 4-6 synchronous 40-100KB JSON.stringify calls per minute.
-  if (_saveTimer) return;
+  // Debounce writes — cancel any pending save and reschedule with latest data.
+  // The old pattern (skip if timer exists) was saving stale data: entries that
+  // accumulated after the first call in the window were never persisted.
+  if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     _saveTimer = null;
     try { sessionStorage.setItem(FEED_KEY, JSON.stringify(feed.slice(0, MAX_FEED))); }
     catch { try { sessionStorage.removeItem(FEED_KEY); } catch { /* ignore */ } }
-  }, 5_000);
+  }, 3_000);
 }
 
 function loadStates(): Record<string, string> {
@@ -139,16 +149,22 @@ function saveStates(m: Record<string, string>) {
 
 // ── option expiry ─────────────────────────────────────────────────────────────
 function nextFridayExpiry(): string {
+  // Delta Exchange India symbol format: DDMMYY (e.g. 150526, not 15MAY26)
   const d = new Date();
   const daysToFri = ((5 - d.getDay()) + 7) % 7 || 7;
   const exp = new Date(d.getTime() + daysToFri * 86_400_000);
-  return exp.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
-    .replace(/ /g, '').toUpperCase();
+  const dd = String(exp.getDate()).padStart(2, '0');
+  const mm = String(exp.getMonth() + 1).padStart(2, '0');
+  const yy = String(exp.getFullYear()).slice(-2);
+  return `${dd}${mm}${yy}`;
 }
-const NEXT_EXPIRY = nextFridayExpiry();
-
 // ── build a FeedEntry from a SignalItem ───────────────────────────────────────
 function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, mode = 'swing'): FeedEntry {
+  const resolvedMode = mode === 'all'
+    ? inferModeTag(sig.adx ?? 0, sig.atr_percentile ?? 50, Math.max(sig.score_long, sig.score_short))
+    : mode;
+  // nextFridayExpiry() called per-entry so long-lived tabs don't carry a stale week
+  const NEXT_EXPIRY = nextFridayExpiry();
   const dir  = sig.direction as 'long' | 'short';
   const spot = sig.spot_price ?? 0;
   const atr  = sig.atr ?? spot * 0.02;
@@ -184,8 +200,9 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
     regime: sig.regime,
     score,
     adx: sig.adx ?? 0,
+    atr_percentile: sig.atr_percentile ?? 0,
     rsi: sig.rsi ?? 50,
-    mode,
+    mode: resolvedMode,
     entryAt: now,
     currentPrice: spot,
     currentState: sig.state,
@@ -300,7 +317,7 @@ export function useSignalFeed() {
       entry: spot, stopLoss, takeProfit,
       leverage, futuresSymbol,
       optSymbol: null, optStrike: null, optType: null, optExpiry: null, optDte: null,
-      state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50, mode: currentMode,
+      state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, atr_percentile: 0, rsi: 50, mode: currentMode,
       entryAt: now, currentPrice: spot, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
     });
 
@@ -312,7 +329,7 @@ export function useSignalFeed() {
         entry: spot, stopLoss, takeProfit,
         leverage: 1, futuresSymbol,
         optSymbol, optStrike, optType, optExpiry, optDte: null,
-        state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, rsi: 50, mode: currentMode,
+        state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, atr_percentile: 0, rsi: 50, mode: currentMode,
         entryAt: now, currentPrice: null, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
       });
     }
@@ -340,12 +357,18 @@ export function useSignalFeed() {
   useEffect(() => {
     _globalAddArrow   = (...args: ArrowParams) => addArrowRef.current?.(...args);
     _globalClearState = () => {
-      // Reset state tracker → next poll treats every signal as a fresh transition,
-      // generating new feed entries with the new mode's SL/TP/leverage parameters.
       statesRef.current = {};
       saveStates({});
     };
-    return () => { _globalAddArrow = null; _globalClearState = null; };
+    _globalClearFeed = () => {
+      setFeed([]);
+      try {
+        sessionStorage.removeItem(FEED_KEY);
+        sessionStorage.removeItem(STATES_KEY);
+      } catch { /* quota */ }
+      statesRef.current = {};
+    };
+    return () => { _globalAddArrow = null; _globalClearState = null; _globalClearFeed = null; };
   }, []);
 
   const dismiss = (id: string) =>

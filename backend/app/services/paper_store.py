@@ -41,6 +41,7 @@ def add_position(
     notes: str = "",
     trail_mode_name: str | None = None,
     trail_atr_mult: float = 2.0,
+    is_paper: bool = True,
 ) -> PaperPosition:
     from app.core.trading_mode import MODES, DEFAULT_MODE, TrailMode
     from app.engines.directional.trailing_stop import TrailState
@@ -67,6 +68,7 @@ def add_position(
         trail_stop_json=trail_state.to_json(),
         trail_mode=mode.trail_mode.value,
         entry_price_real=entry_spot_price,
+        is_paper=is_paper,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())

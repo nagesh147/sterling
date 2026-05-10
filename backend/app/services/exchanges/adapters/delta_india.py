@@ -158,18 +158,33 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         """Resolve a Delta product symbol to its integer product_id. Cached per-process."""
         if symbol in self._product_id_cache:
             return self._product_id_cache[symbol]
-        data = await self._public_get("/v2/products", params={"contract_type": "perpetual_futures", "page_size": 200})
-        for p in ((data or {}).get("result") or []):
-            if str(p.get("symbol") or "") == symbol:
-                pid = int(p["id"])
+
+        def _scan(result):
+            for p in (result or []):
+                if str(p.get("symbol") or "") == symbol:
+                    return int(p["id"])
+            return None
+
+        # 1. Perpetuals only — small list, always includes BTCUSDT/ETHUSDT/etc.
+        #    Note: Delta requires "contract_types" (plural) for this filter to work.
+        data = await self._public_get("/v2/products", params={"contract_types": "perpetual_futures", "page_size": 100})
+        pid = _scan((data or {}).get("result"))
+        if pid is not None:
+            self._product_id_cache[symbol] = pid
+            return pid
+
+        # 2. Options — fetch all expiry pages in parallel then scan
+        import asyncio as _asyncio
+        pages = await _asyncio.gather(*[
+            self._public_get("/v2/products", params={"page_size": 200, "after": offset})
+            for offset in (0, 200, 400, 600)
+        ])
+        for page in pages:
+            pid = _scan((page or {}).get("result"))
+            if pid is not None:
                 self._product_id_cache[symbol] = pid
                 return pid
-        data2 = await self._public_get("/v2/products", params={"page_size": 200})
-        for p in ((data2 or {}).get("result") or []):
-            if str(p.get("symbol") or "") == symbol:
-                pid = int(p["id"])
-                self._product_id_cache[symbol] = pid
-                return pid
+
         raise RuntimeError(f"Delta product not found for symbol: {symbol}")
 
     async def place_order(

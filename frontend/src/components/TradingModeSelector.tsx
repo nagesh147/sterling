@@ -1,53 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTradingMode, useSetTradingMode } from '../hooks/useTradingMode';
 import { clearSignalFeedState } from '../hooks/useSignalFeed';
 import { api } from '../utils/api';
-
-const MODE_COLOR: Record<string, string> = {
-  scalping:   '#ff7f6e',
-  intraday:   '#f0c040',
-  swing:      '#44cc88',
-  positional: '#aa88ff',
-};
+import { MODE_COLOR } from '../utils/fmt';
 
 const MODE_DESC: Record<string, string> = {
   scalping:   'Fast · 1m–15m · 1×ATR stop',
   intraday:   'Day · 5m–1H · 1.5×ATR stop',
   swing:      'Swing · 1H–4H · 2×ATR stop',
   positional: 'Position · 4H–D · 3×ATR stop',
+  all:        'All timeframes combined',
 };
 
-const MODES = ['scalping', 'intraday', 'swing', 'positional'];
+const MODES = ['scalping', 'intraday', 'swing', 'positional', 'all'];
+
+const MAX_LOCK_MS = 10_000;
 
 export function TradingModeSelector() {
   const { data: current, isLoading } = useTradingMode();
   const setMode = useSetTradingMode();
   const [toast, setToast] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
+  const [isChanging, setIsChanging] = useState(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qc = useQueryClient();
 
-  const currentName = current?.name ?? 'swing';
-  const color = MODE_COLOR[currentName] ?? 'var(--text-dim)';
+  const currentName = current?.name ?? '';
+  const color = MODE_COLOR[currentName] ?? MODE_COLOR['swing'];
+
+  const unlock = () => {
+    if (lockTimer.current) clearTimeout(lockTimer.current);
+    lockTimer.current = null;
+    setIsChanging(false);
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const name = e.target.value;
-    if (name === currentName || setMode.isPending) return;
+    // If already changing, skip (no external state dependency — just our own flag)
+    if (isChanging) return;
+    // Don't re-submit the same mode, but only once we have real data from server
+    if (currentName && name === currentName) return;
+
+    setIsChanging(true);
+    // Safety: always unlock after MAX_LOCK_MS regardless of what happens
+    lockTimer.current = setTimeout(unlock, MAX_LOCK_MS);
 
     setMode.mutate({ name }, {
       onSuccess: async (data) => {
         const display = data.config?.display ?? name;
         setToast(`⚡ Switched to ${display} — refreshing signals…`);
         qc.invalidateQueries({ queryKey: ['trading-mode'] });
-
-        // Reset the signal feed state tracker so the next poll generates
-        // fresh entries with the new mode's SL/TP/leverage parameters.
-        // Without this, statesRef keeps old states (e.g. EARLY===EARLY) and
-        // no new feed entries appear even though the signal params changed.
         clearSignalFeedState();
 
-        // Immediately recompute signals with new mode settings
-        setRefreshing(true);
         try {
           await api.post('/api/v1/directional/refresh-signals', {});
           qc.invalidateQueries({ queryKey: ['signals-all'] });
@@ -56,18 +60,20 @@ export function TradingModeSelector() {
         } catch {
           setToast(`✅ ${display} mode saved (signals refresh in 30s)`);
         } finally {
-          setRefreshing(false);
+          unlock();
           setTimeout(() => setToast(''), 3000);
         }
       },
       onError: (err) => {
         setToast(`Error: ${err.message}`);
+        unlock();
         setTimeout(() => setToast(''), 3000);
       },
     });
   };
 
-  const isPending = setMode.isPending || refreshing || isLoading;
+  const badgeLabel = isChanging ? '…' : isLoading ? '…' : (currentName || 'swing').toUpperCase();
+  const displayColor = MODE_COLOR[currentName || 'swing'] ?? 'var(--text-dim)';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -75,37 +81,35 @@ export function TradingModeSelector() {
       <span style={{
         display: 'inline-block', padding: '3px 9px', borderRadius: 4,
         fontSize: 10, fontWeight: 800, letterSpacing: 1,
-        background: color + '22', color, border: `1px solid ${color}55`,
+        background: displayColor + '22', color: displayColor,
+        border: `1px solid ${displayColor}55`,
         minWidth: 70, textAlign: 'center',
+        transition: 'background 0.2s, color 0.2s',
       }}>
-        {isPending ? '…' : currentName.toUpperCase()}
+        {badgeLabel}
       </span>
 
-      {/* dropdown */}
+      {/* dropdown — never fully disabled; cursor shows state visually */}
       <select
         style={{
           background: 'var(--bg)', color: 'var(--text-primary)',
-          border: `1px solid ${color}77`,
+          border: `1px solid ${displayColor}77`,
           borderRadius: 4, padding: '4px 8px', fontFamily: 'inherit',
-          fontSize: 11, cursor: isPending ? 'wait' : 'pointer',
-          outline: 'none', minWidth: 100,
+          fontSize: 11, cursor: isChanging ? 'wait' : 'pointer',
+          outline: 'none', minWidth: 110,
+          opacity: isChanging ? 0.6 : 1,
+          transition: 'opacity 0.15s',
         }}
-        value={currentName}
+        value={currentName || 'swing'}
         onChange={handleChange}
-        disabled={isPending}
         title={MODE_DESC[currentName] ?? ''}
       >
         {MODES.map((m) => (
           <option key={m} value={m}>
-            {m.charAt(0).toUpperCase() + m.slice(1)}
+            {m === 'all' ? 'All Modes' : m.charAt(0).toUpperCase() + m.slice(1)}
           </option>
         ))}
       </select>
-
-      {/* mode description */}
-      <span style={{ fontSize: 9, color: 'var(--text-faint)', display: 'none' }}>
-        {MODE_DESC[currentName]}
-      </span>
 
       {/* toast */}
       {toast && (
