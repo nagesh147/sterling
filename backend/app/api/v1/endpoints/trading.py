@@ -79,14 +79,15 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
     if has_live_creds:
         # ── LIVE ORDER ────────────────────────────────────────────────────
         try:
-            # Use a dedicated Delta India adapter with live credentials.
-            # _adm.get_adapter() is the market-data adapter (Deribit/etc.) and
-            # does not have place_order — we always need DeltaIndiaAdapter here.
             from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+            # Use the API base URL auto-detected during test-credentials (India vs Global).
+            # Falls back to global if not yet tested.
+            api_base = (active.extra or {}).get("api_base_url", "https://api.delta.exchange")
             adapter = DeltaIndiaAdapter(
                 api_key=active.api_key,
                 api_secret=active.api_secret,
                 is_paper=False,
+                base_url=api_base,
             )
             if not hasattr(adapter, "place_order"):
                 raise RuntimeError("Active adapter does not support live order placement")
@@ -247,12 +248,37 @@ async def test_credentials(request: Request) -> dict:
             data = await adapter._auth_get("/v2/wallet/balances")
             balances = (data.get("result") or [])
             usd = next((b for b in balances if b.get("asset_symbol") in ("USDT", "USD")), None)
-            avail = usd.get("available_balance", 0) if usd else 0
+            avail = float(usd.get("available_balance", 0) if usd else 0)
+
+            # Check if this platform has the products Sterling trades (BTCUSDT etc.)
+            try:
+                prod_data = await adapter._public_get("/v2/products",
+                    params={"contract_types": "perpetual_futures", "page_size": 100})
+                symbols = {p.get("symbol") for p in (prod_data.get("result") or [])}
+                has_btc = "BTCUSDT" in symbols
+            except Exception:
+                has_btc = True  # assume ok if check fails
+
+            # Persist the working URL
+            updated_extra = dict(active.extra or {})
+            updated_extra["api_base_url"] = base_url
+            exchange_account_store.update_exchange(active.id, extra=updated_extra)
+
+            if not has_btc:
+                return {
+                    "ok": False,
+                    "account": label,
+                    "base_url": base_url,
+                    "reason": f"Connected to {label} (${avail:,.2f} available) but BTCUSDT/ETHUSDT are not listed here.",
+                    "hint": "Sterling trades BTCUSDT perpetuals which are on the Global platform (delta.exchange). "
+                            "Go to delta.exchange → Settings → API Keys, generate new keys there, and re-enter them in Settings.",
+                }
+
             return {
                 "ok": True,
-                "account": f"{label}",
-                "balance": f"${float(avail):,.2f} available",
-                "message": f"Connected via {label} — ${float(avail):,.2f} margin available",
+                "account": label,
+                "balance": f"${avail:,.2f} available",
+                "message": f"Connected · ${avail:,.2f} margin available",
                 "base_url": base_url,
             }
         except Exception as exc:
@@ -262,11 +288,11 @@ async def test_credentials(request: Request) -> dict:
     global_err = errors.get("Global (delta.exchange)", "")
     hint = ""
     if "invalid_api_key" in global_err or "invalid_api_key" in errors.get("India (india.delta.exchange)", ""):
-        hint = "API key not recognised on either platform. Regenerate from delta.exchange → Settings → API Keys and re-enter in Sterling."
+        hint = "API key not recognised. Regenerate from delta.exchange → Settings → API Keys and re-enter in Settings."
     elif "403" in global_err or "Forbidden" in global_err:
-        hint = "API key exists but lacks Order Management permission. Enable it in Delta Exchange API settings."
+        hint = "Key exists but lacks Order Management permission. Enable it in Delta Exchange API settings."
     else:
-        hint = "Check that the key was generated on delta.exchange (not testnet) and has Read + Order Management permissions."
+        hint = "Ensure the key is from delta.exchange (not testnet) and has Read + Order Management permissions."
     return {"ok": False, "reason": f"Global: {global_err}", "hint": hint}
 
 
