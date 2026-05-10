@@ -25,10 +25,17 @@ class LiveOrderRequest(BaseModel):
     leverage: float = 5.0    # for futures
     order_type: str = "market"  # "market" or "limit"
     limit_price: Optional[float] = None
+    # Bracket fields (per pseudocode)
     stop_loss: Optional[float] = None
+    stop_loss_order_type: str = "market_order"   # "market_order"|"limit_order"
+    stop_loss_limit_price: Optional[float] = None
+    trail_amount: Optional[float] = None         # for trailing SL
     take_profit: Optional[float] = None
+    take_profit_order_type: str = "market_order"
+    take_profit_limit_price: Optional[float] = None
+    bracket_trigger_method: str = "mark_price"   # "mark_price"|"last_traded_price"|"spot_price"
     # For options
-    option_symbol: Optional[str] = None  # e.g. "C-BTC-80000-050626"
+    option_symbol: Optional[str] = None
     option_premium: Optional[float] = None
     notes: str = ""
 
@@ -92,6 +99,16 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             if not hasattr(adapter, "place_order"):
                 raise RuntimeError("Active adapter does not support live order placement")
 
+            bracket = dict(
+                stop_loss=body.stop_loss,
+                stop_loss_order_type=body.stop_loss_order_type,
+                stop_loss_limit_price=body.stop_loss_limit_price,
+                trail_amount=body.trail_amount,
+                take_profit=body.take_profit,
+                take_profit_order_type=body.take_profit_order_type,
+                take_profit_limit_price=body.take_profit_limit_price,
+                bracket_trigger_method=body.bracket_trigger_method,
+            )
             if body.instrument_type == "options" and body.option_symbol:
                 order = await adapter.place_order_option(
                     option_symbol=body.option_symbol,
@@ -99,8 +116,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                     size=body.size,
                     order_type="market_order" if body.order_type == "market" else "limit_order",
                     limit_price=body.limit_price,
-                    stop_loss=body.stop_loss,
-                    take_profit=body.take_profit,
+                    **bracket,
                 )
                 delta_symbol = body.option_symbol
             else:
@@ -112,8 +128,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                     order_type="market_order" if body.order_type == "market" else "limit_order",
                     limit_price=body.limit_price,
                     leverage=body.leverage,
-                    stop_loss=body.stop_loss,
-                    take_profit=body.take_profit,
+                    **bracket,
                 )
 
             order_id = str(order.get("id") or order.get("order_id") or "")

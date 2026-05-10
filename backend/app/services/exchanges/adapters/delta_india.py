@@ -232,24 +232,27 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
     async def place_order(
         self,
         symbol: str,
-        side: str,           # "buy" or "sell"
+        side: str,
         size: float,
-        order_type: str = "market_order",  # "market_order" or "limit_order"
+        order_type: str = "market_order",
         limit_price: float | None = None,
         leverage: float | None = None,
         stop_loss: float | None = None,
+        stop_loss_order_type: str = "market_order",
+        stop_loss_limit_price: float | None = None,
+        trail_amount: float | None = None,
         take_profit: float | None = None,
+        take_profit_order_type: str = "market_order",
+        take_profit_limit_price: float | None = None,
+        bracket_trigger_method: str = "mark_price",
         reduce_only: bool = False,
     ) -> dict:
-        """
-        Place an order on Delta Exchange India.
-        Returns the order dict from the API.
-        """
+        """Place an order with optional bracket (TP/SL) per Delta Exchange India API."""
         product_id = await self.get_product_id(symbol)
         body: dict = {
             "product_id": product_id,
-            "size": int(size),           # Delta uses integer contract size
-            "side": side,                # "buy" / "sell"
+            "size": int(size),
+            "side": side,
             "order_type": order_type,
             "reduce_only": reduce_only,
         }
@@ -257,12 +260,28 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             body["limit_price"] = str(round(limit_price, 2))
         if leverage is not None:
             body["leverage"] = str(int(leverage))
-        if stop_loss is not None:
-            body["bracket_stop_loss_price"] = str(round(stop_loss, 2))
-            body["bracket_stop_loss_limit_price"] = str(round(stop_loss * 0.999, 2))  # 0.1% slip
+
+        # Bracket trigger method
+        has_bracket = take_profit is not None or stop_loss is not None or trail_amount is not None
+        if has_bracket:
+            body["bracket_stop_trigger_method"] = bracket_trigger_method
+
+        # Take Profit
         if take_profit is not None:
             body["bracket_take_profit_price"] = str(round(take_profit, 2))
-            body["bracket_take_profit_limit_price"] = str(round(take_profit * 0.999, 2))
+            if take_profit_order_type == "limit_order":
+                lp = take_profit_limit_price if take_profit_limit_price else take_profit
+                body["bracket_take_profit_limit_price"] = str(round(lp, 2))
+
+        # Stop Loss (trail takes precedence over fixed price)
+        if trail_amount is not None and trail_amount > 0:
+            body["bracket_trail_amount"] = str(round(trail_amount, 2))
+        elif stop_loss is not None:
+            body["bracket_stop_loss_price"] = str(round(stop_loss, 2))
+            if stop_loss_order_type == "limit_order":
+                lp = stop_loss_limit_price if stop_loss_limit_price else stop_loss
+                body["bracket_stop_loss_limit_price"] = str(round(lp, 2))
+
         data = await self._auth_post("/v2/orders", body)
         return (data or {}).get("result") or {}
 

@@ -4,7 +4,7 @@
  * New signals appear at the top; existing rows never reorder.
  * Scroll down to see older signals. Works like an Instagram feed.
  */
-import React, { useEffect, useMemo, useState, memo } from 'react';
+import React, { useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSignalFeed } from '../hooks/useSignalFeed';
 import type { FeedEntry } from '../hooks/useSignalFeed';
@@ -87,83 +87,152 @@ function tradeLabel(placing: boolean, hasOpen: boolean, isLive: boolean, side: s
 }
 
 // ── Bracket Order Panel ───────────────────────────────────────────────────────
+
+// Pseudocode §3: percent_to_price
+function pctToPrice(entryPrice: number, pct: number, side: 'long'|'short', leg: 'tp'|'sl'): number {
+  if (side === 'long')  return leg === 'tp' ? entryPrice * (1 + pct/100) : entryPrice * (1 - pct/100);
+  return leg === 'tp' ? entryPrice * (1 - pct/100) : entryPrice * (1 + pct/100);
+}
+
+// Pseudocode §3: price_to_percent (for display)
+function priceToDisplayPct(entryPrice: number, triggerPrice: number, side: 'long'|'short', leg: 'tp'|'sl'): number {
+  if (side === 'long')  return leg === 'tp' ? (triggerPrice - entryPrice)/entryPrice*100 : (entryPrice - triggerPrice)/entryPrice*100;
+  return leg === 'tp' ? (entryPrice - triggerPrice)/entryPrice*100 : (triggerPrice - entryPrice)/entryPrice*100;
+}
+
+// Pseudocode §4: calculate_pnl (contract_value = lotSize for futures)
+function calcPnl(entry: number, exit: number, size: number, contractValue: number, side: 'long'|'short'): number {
+  return (side === 'long' ? exit - entry : entry - exit) * size * contractValue;
+}
+
+// Pseudocode §2: validate bracket prices
+function validateBracket(entry: number, tp: number|null, sl: number|null, side: 'long'|'short'): string|null {
+  if (tp !== null && tp > 0) {
+    if (side === 'long'  && tp <= entry) return 'Take Profit must be above entry for Long';
+    if (side === 'short' && tp >= entry) return 'Take Profit must be below entry for Short';
+  }
+  if (sl !== null && sl > 0) {
+    if (side === 'long'  && sl >= entry) return 'Stop Loss must be below entry for Long';
+    if (side === 'short' && sl <= entry) return 'Stop Loss must be above entry for Short';
+  }
+  return null;
+}
+
+export interface BracketState {
+  tpValue: string; setTpValue: (v: string) => void;
+  slValue: string; setSlValue: (v: string) => void;
+  slType: 'market'|'limit'|'trail';
+  trailAmount: string;
+  triggerMethod: string;
+}
+
 function BracketPanel({
-  spotPrice, direction, tpValue, setTpValue, slValue, setSlValue, defaultTp, defaultSl,
+  spotPrice, direction, lotSize, size,
+  tpValue, setTpValue, slValue, setSlValue,
+  defaultTp, defaultSl,
+  onStateChange,
 }: {
   spotPrice: number; direction: 'long'|'short';
+  lotSize: number; size: number;
   tpValue: string; setTpValue: (v: string) => void;
   slValue: string; setSlValue: (v: string) => void;
   defaultTp: number; defaultSl: number;
+  onStateChange?: (s: { slType: string; trailAmount: string; triggerMethod: string }) => void;
 }) {
-  const [slType, setSlType] = useState<'market'|'limit'|'trail'>('market');
-  const [dismissed, setDismissed] = useState(false);
+  const [slType, setSlType]           = useState<'market'|'limit'|'trail'>('market');
+  const [slLimitPrice, setSlLimitPrice] = useState('');
+  const [tpLimitPrice, setTpLimitPrice] = useState('');
+  const [trailAmount, setTrailAmount]  = useState('');
+  const [triggerMethod, setTriggerMethod] = useState<'mark_price'|'last_traded_price'|'spot_price'>('mark_price');
+  const [dismissed, setDismissed]     = useState(false);
 
-  const pctFromEntry = (pct: number, isUp: boolean) =>
-    String(Math.round(spotPrice * (1 + (isUp ? 1 : -1) * pct / 100)));
+  // Notify parent of state changes for submitOrder
+  useEffect(() => { onStateChange?.({ slType, trailAmount, triggerMethod }); }, [slType, trailAmount, triggerMethod]);
 
-  const tpNum = parseFloat(tpValue) || defaultTp;
-  const slNum = parseFloat(slValue) || defaultSl;
-  const tpPct = spotPrice > 0 ? ((tpNum - spotPrice) / spotPrice * 100).toFixed(2) : '—';
-  const slPct = spotPrice > 0 ? ((slNum - spotPrice) / spotPrice * 100).toFixed(2) : '—';
+  const tpNum = parseFloat(tpValue) || 0;
+  const slNum = parseFloat(slValue) || 0;
+  const tpPct = tpNum > 0 ? priceToDisplayPct(spotPrice, tpNum, direction, 'tp').toFixed(2) : null;
+  const slPct = slNum > 0 ? priceToDisplayPct(spotPrice, slNum, direction, 'sl').toFixed(2) : null;
+  const validErr = validateBracket(spotPrice, tpNum || null, slNum || null, direction);
+
+  // PnL: pseudocode §4 — contract_value = lotSize
+  const exitPnl = tpNum > 0 ? calcPnl(spotPrice, tpNum, size, lotSize, direction) : null;
+  const stopPnl = slNum > 0 ? calcPnl(spotPrice, slNum, size, lotSize, direction) : null;
 
   const inpStyle: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box', background: 'var(--bg-input)',
-    border: '1px solid var(--border)', borderRadius: 5,
-    padding: '7px 40px 7px 10px', color: 'var(--text-primary)',
-    fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-    fontVariantNumeric: 'tabular-nums', outline: 'none',
+    flex: 1, background: 'none', border: 'none', outline: 'none',
+    color: 'var(--text-primary)', fontFamily: 'inherit',
+    fontSize: 13, fontWeight: 700, padding: '8px 0', fontVariantNumeric: 'tabular-nums',
   };
+  const rowStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', background: 'var(--bg-input)',
+    border: '1px solid var(--border)', borderRadius: 5, padding: '0 10px', marginBottom: 6,
+  };
+  const pctBtn = (label: string, onClick: () => void): React.ReactNode => (
+    <button key={label} onClick={onClick} style={{
+      flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9, fontWeight: 600,
+      background: 'var(--bg-input)', color: 'var(--text-faint)',
+      border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+    }}>{label}</button>
+  );
 
   return (
     <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-      {/* Entry Price row */}
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Entry Price</span>
-        <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Mark ({spotPrice.toLocaleString('en-US', { maximumFractionDigits: 1 })})</span>
+
+      {/* Entry / Trigger method */}
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Entry Price</span>
+        <select value={triggerMethod} onChange={e => setTriggerMethod(e.target.value as typeof triggerMethod)}
+          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 10, padding: '2px 6px', cursor: 'pointer', outline: 'none' }}>
+          <option value="mark_price">Trigger: Mark ({spotPrice.toLocaleString('en-US', { maximumFractionDigits: 1 })})</option>
+          <option value="last_traded_price">Trigger: Last Traded</option>
+          <option value="spot_price">Trigger: Spot</option>
+        </select>
       </div>
 
       {/* Info banner */}
       {!dismissed && (
-        <div style={{ padding: '8px 12px', background: '#f0730018', borderBottom: '1px solid #f0730033', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ padding: '7px 12px', background: '#f0730018', borderBottom: '1px solid #f0730033', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ fontSize: 10, color: '#f07300', lineHeight: 1.5, fontWeight: 600 }}>
-            TP/SL are triggered by the underlying index price
+            Now use underlying index price to trigger TP/SL orders
           </span>
-          <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#f07300', cursor: 'pointer', fontSize: 13, padding: 0, flexShrink: 0 }}>✕</button>
+          <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#f07300', cursor: 'pointer', fontSize: 14, padding: 0, flexShrink: 0 }}>✕</button>
         </div>
       )}
 
-      {/* Take Profit */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Take Profit</span>
-          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>
-            {direction === 'long' ? '+' : ''}{tpPct}% from entry
-          </span>
+      {/* Validation error */}
+      {validErr && (
+        <div style={{ padding: '6px 12px', background: 'var(--danger)15', borderBottom: '1px solid var(--danger)33', fontSize: 10, color: 'var(--danger)', fontWeight: 600 }}>
+          ⚠ {validErr}
         </div>
-        <div style={{ position: 'relative' }}>
+      )}
+
+      {/* ── Take Profit ── */}
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>Take Profit</span>
+          {tpPct !== null && <span style={{ fontSize: 10, color: tpNum > 0 ? 'var(--accent)' : 'var(--text-faint)' }}>+{tpPct}%</span>}
+        </div>
+        <div style={rowStyle}>
+          <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Trigger</span>
           <input type="number" value={tpValue} onChange={e => setTpValue(e.target.value)}
             placeholder={String(defaultTp)} style={inpStyle} />
-          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-faint)', pointerEvents: 'none' }}>USD</span>
+          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
         </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-          {['0.25','0.5','1','2'].map(p => (
-            <button key={p} onClick={() => setTpValue(pctFromEntry(parseFloat(p), direction === 'long'))} style={{
-              flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9, fontWeight: 600,
-              background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
-            }}>{p}%</button>
-          ))}
-          <button onClick={() => setTpValue('')} style={{ padding: '4px 8px', borderRadius: 4, fontSize: 9, background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>0%</button>
+        <div style={{ display: 'flex', gap: 4, marginBottom: tpLimitPrice !== '' ? 6 : 0 }}>
+          {['0.25','0.5','1','2'].map(p => pctBtn(`${p}%`, () => setTpValue(String(Math.round(pctToPrice(spotPrice, parseFloat(p), direction, 'tp'))))))}
+          {pctBtn('0%', () => setTpValue(''))}
         </div>
       </div>
 
-      {/* Stop Loss */}
+      {/* ── Stop Loss ── */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700, textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Stop Loss</span>
+          <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>Stop Loss</span>
           <div style={{ display: 'flex', gap: 2 }}>
             {(['market','limit','trail'] as const).map(t => (
               <button key={t} onClick={() => setSlType(t)} style={{
-                padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                 background: slType === t ? '#f0730020' : 'transparent',
                 color: slType === t ? '#f07300' : 'var(--text-faint)',
                 border: `1px solid ${slType === t ? '#f0730055' : 'var(--border)'}`,
@@ -171,52 +240,54 @@ function BracketPanel({
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>
-            {direction === 'long' ? '' : '+'}{slPct}% from entry
-          </span>
-        </div>
-        <div style={{ position: 'relative' }}>
-          <input type="number" value={slValue} onChange={e => setSlValue(e.target.value)}
-            placeholder={String(defaultSl)} style={inpStyle} />
-          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-faint)', pointerEvents: 'none' }}>USD</span>
-        </div>
-        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-          {['0.25','0.5','1','2'].map(p => (
-            <button key={p} onClick={() => setSlValue(pctFromEntry(parseFloat(p), direction !== 'long'))} style={{
-              flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9, fontWeight: 600,
-              background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
-            }}>{p}%</button>
-          ))}
-          <button onClick={() => setSlValue('')} style={{ padding: '4px 8px', borderRadius: 4, fontSize: 9, background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>0%</button>
-        </div>
+        {slPct !== null && <div style={{ fontSize: 10, color: slNum > 0 ? 'var(--danger)' : 'var(--text-faint)', marginBottom: 4, textAlign: 'right' }}>−{slPct}%</div>}
+
+        {slType === 'trail' ? (
+          <div style={rowStyle}>
+            <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Trail Amount</span>
+            <input type="number" value={trailAmount} onChange={e => setTrailAmount(e.target.value)}
+              placeholder="e.g. 500" style={inpStyle} />
+            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+          </div>
+        ) : (
+          <>
+            <div style={rowStyle}>
+              <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Trigger</span>
+              <input type="number" value={slValue} onChange={e => setSlValue(e.target.value)}
+                placeholder={String(defaultSl)} style={inpStyle} />
+              <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+            </div>
+            {slType === 'limit' && (
+              <div style={{ ...rowStyle, marginTop: 4 }}>
+                <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Limit</span>
+                <input type="number" value={slLimitPrice} onChange={e => setSlLimitPrice(e.target.value)}
+                  placeholder="Limit price" style={inpStyle} />
+                <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+              {['0.25','0.5','1','2'].map(p => pctBtn(`${p}%`, () => setSlValue(String(Math.round(pctToPrice(spotPrice, parseFloat(p), direction, 'sl'))))))}
+              {pctBtn('0%', () => setSlValue(''))}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* PnL preview */}
-      {(() => {
-        const tp = parseFloat(tpValue) || defaultTp;
-        const sl = parseFloat(slValue) || defaultSl;
-        const lots = 1;
-        const lotSz = 0.001; // approximate
-        const exitPnl  = ((tp - spotPrice) * (direction === 'long' ? 1 : -1) * lots * lotSz).toFixed(2);
-        const stopPnl  = ((sl - spotPrice) * (direction === 'long' ? 1 : -1) * lots * lotSz).toFixed(2);
-        return (
-          <div style={{ padding: '8px 12px', display: 'flex', gap: 16 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 2 }}>Exit PnL</div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: parseFloat(exitPnl) >= 0 ? 'var(--accent)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
-                {parseFloat(exitPnl) >= 0 ? '+' : ''}${exitPnl}
-              </div>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 2 }}>Stop PnL</div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: parseFloat(stopPnl) >= 0 ? 'var(--accent)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
-                {parseFloat(stopPnl) >= 0 ? '+' : ''}${stopPnl}
-              </div>
+      {/* ── PnL preview (§4) ── */}
+      <div style={{ padding: '8px 12px', display: 'flex', gap: 0 }}>
+        {([
+          { label: 'Exit PnL', val: exitPnl, good: true },
+          { label: 'Stop PnL', val: stopPnl, good: false },
+        ]).map(({ label, val, good }) => (
+          <div key={label} style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', borderBottom: '1px dashed var(--border)', paddingBottom: 2, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              color: val === null ? 'var(--text-faint)' : (val >= 0 ? 'var(--accent)' : 'var(--danger)') }}>
+              {val === null ? '—' : `${val >= 0 ? '+' : ''}$${Math.abs(val).toFixed(2)}`}
             </div>
           </div>
-        );
-      })()}
+        ))}
+      </div>
     </div>
   );
 }
@@ -272,6 +343,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   useEffect(() => { setSlValue(String(defaultSl)); setTpValue(String(defaultTp)); }, [defaultSl, defaultTp]);
 
   const { mutate: trade } = useDirectEntry();
+  const bracketRef = useRef({ slType: 'market', trailAmount: '', triggerMethod: 'mark_price' });
 
   const USD_INR = 84.5;
 
@@ -343,8 +415,12 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       leverage,
       order_type: orderType,
       limit_price: orderType === 'limit' && limitPrice ? parseFloat(limitPrice) : undefined,
-      stop_loss: entry.stopLoss,
-      take_profit: entry.takeProfit,
+      // Bracket fields from BracketPanel state
+      take_profit: parseFloat(tpValue) > 0 ? parseFloat(tpValue) : undefined,
+      stop_loss: bracketRef.current.slType !== 'trail' && parseFloat(slValue) > 0 ? parseFloat(slValue) : undefined,
+      stop_loss_order_type: bracketRef.current.slType === 'limit' ? 'limit_order' : 'market_order',
+      trail_amount: bracketRef.current.slType === 'trail' && bracketRef.current.trailAmount ? parseFloat(bracketRef.current.trailAmount) : undefined,
+      bracket_trigger_method: bracketRef.current.triggerMethod,
       option_symbol: !isFutures ? entry.optSymbol : null,
       notes: `Feed entry — ${stLabel}`,
     }, {
@@ -687,9 +763,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           </div>
           {showBracket && <BracketPanel
             spotPrice={spotPrice} direction={direction}
+            lotSize={lotInfo.lotSize} size={size}
             tpValue={tpValue} setTpValue={setTpValue}
             slValue={slValue} setSlValue={setSlValue}
             defaultTp={defaultTp} defaultSl={defaultSl}
+            onStateChange={s => { bracketRef.current = s as typeof bracketRef.current; }}
           />}
 
           {/* ── Economics breakdown ── */}
