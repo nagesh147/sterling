@@ -101,9 +101,10 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   const [currency, setCurrency]     = useState<'USD'|'INR'>('USD');
   const [qtyValue, setQtyValue]     = useState('1');
   const [qtyUnit, setQtyUnit]       = useState<'lot'|'usd'|string>('lot');
-  const [feedback, setFeedback]     = useState('');
+  const [feedback, setFeedback]     = useState('');   // row-level (post-dismiss)
   const [placing, setPlacing]       = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [modalStatus, setModalStatus] = useState<{ type: 'idle'|'pending'|'success'|'error'; msg: string }>({ type: 'idle', msg: '' });
   const { mutate: trade }           = useDirectEntry();
 
   const USD_INR   = 84.5; // approximate; shown as estimate only
@@ -156,8 +157,14 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   );
   const qtyInUsd = (qtyLots * lotInfo.lotSize * spotPrice).toLocaleString('en-US', { maximumFractionDigits: 0 });
 
-  const submitOrder = () => {
+  const closeModal = () => {
     setShowConfirm(false);
+    setModalStatus({ type: 'idle', msg: '' });
+  };
+
+  const submitOrder = () => {
+    // Keep modal open — user sees status inside it
+    setModalStatus({ type: 'pending', msg: 'Placing order…' });
     setPlacing(true);
     trade({
       underlying: entry.underlying,
@@ -171,13 +178,24 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       option_symbol: !isFutures ? entry.optSymbol : null,
       notes: `Feed entry — ${stLabel}`,
     }, {
-      onSuccess: () => { setFeedback('✅ Placed'); setPlacing(false); setTimeout(() => setFeedback(''), 5000); },
-      onError: (e: unknown) => { setFeedback(`❌ ${(e as Error).message}`); setPlacing(false); setTimeout(() => setFeedback(''), 8000); },
+      onSuccess: (data: any) => {
+        const orderId = data?.order_id ?? data?.paper_position_id ?? '';
+        const mode    = data?.mode === 'live' ? 'Live' : 'Paper';
+        setModalStatus({ type: 'success', msg: `${mode} order placed${orderId ? ` · ID ${orderId}` : ''}` });
+        setPlacing(false);
+        setFeedback('✅ Placed');
+      },
+      onError: (e: unknown) => {
+        const msg = (e as Error).message ?? 'Unknown error';
+        setModalStatus({ type: 'error', msg });
+        setPlacing(false);
+      },
     });
   };
 
   const handleTrade = () => {
     if (hasOpen || placing) return;
+    setModalStatus({ type: 'idle', msg: '' });
     setShowConfirm(true);
   };
 
@@ -303,7 +321,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     {/* ── Order confirmation modal ─────────────────────────────────── */}
     {showConfirm && (
       <div
-        onClick={() => setShowConfirm(false)}
+        onClick={modalStatus.type === 'pending' ? undefined : closeModal}
         style={{
           position: 'fixed', inset: 0, zIndex: 4000,
           background: 'rgba(0,0,0,0.75)',
@@ -336,7 +354,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                 {isLive ? '● LIVE ORDER' : 'PAPER ORDER'}
               </span>
             </div>
-            <button onClick={() => setShowConfirm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 16, padding: 0 }}>✕</button>
+            <button onClick={modalStatus.type === 'pending' ? undefined : closeModal} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: modalStatus.type === 'pending' ? 'wait' : 'pointer', fontSize: 16, padding: 0 }}>✕</button>
           </div>
 
           {/* instrument */}
@@ -475,37 +493,87 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             </div>
           </div>
 
-          {isLive && (
+          {/* live warning — only before submission */}
+          {isLive && modalStatus.type === 'idle' && (
             <div style={{ marginBottom: 12, padding: '7px 10px', background: '#2a1200', border: '1px solid #f0c04044', borderRadius: 4, fontSize: 10, color: '#f0c040' }}>
               ⚠ This places a real order on Delta Exchange India. Funds will be deducted.
             </div>
           )}
 
+          {/* status banner — shown after submit */}
+          {modalStatus.type !== 'idle' && (
+            <div style={{
+              marginBottom: 12, padding: '10px 12px', borderRadius: 5,
+              border: `1px solid ${modalStatus.type === 'success' ? 'var(--accent)44' : modalStatus.type === 'error' ? 'var(--danger)44' : 'var(--border)'}`,
+              background: modalStatus.type === 'success' ? '#071a14' : modalStatus.type === 'error' ? '#1a0707' : 'var(--bg)',
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+            }}>
+              <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }}>
+                {modalStatus.type === 'pending' ? '⏳' : modalStatus.type === 'success' ? '✅' : '❌'}
+              </span>
+              <div>
+                <div style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: modalStatus.type === 'success' ? 'var(--accent)' : modalStatus.type === 'error' ? 'var(--danger)' : 'var(--text-faint)',
+                }}>
+                  {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed' : 'Order failed'}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2, wordBreak: 'break-word' }}>
+                  {modalStatus.msg}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* action buttons */}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => setShowConfirm(false)}
-              style={{
-                flex: 1, padding: '10px 0', background: 'var(--bg)',
-                color: 'var(--text-dim)', border: '1px solid var(--border)',
-                borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={submitOrder}
-              disabled={insufficientFunds}
-              style={{
-                flex: 2, padding: '10px 0', background: insufficientFunds ? 'var(--bg)' : bgDark,
-                color: insufficientFunds ? 'var(--text-faint)' : dirColor,
-                border: `1px solid ${insufficientFunds ? 'var(--border)' : dirColor}`,
-                borderRadius: 5, cursor: insufficientFunds ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
-              }}
-            >
-              {isLive ? `Confirm ${side} — LIVE` : `Confirm ${side}`}
-            </button>
+            {modalStatus.type === 'success' ? (
+              <button
+                onClick={closeModal}
+                style={{
+                  flex: 1, padding: '11px 0', background: '#071a14',
+                  color: 'var(--accent)', border: '1px solid var(--accent)44',
+                  borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
+                }}
+              >
+                Done
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={closeModal}
+                  disabled={modalStatus.type === 'pending'}
+                  style={{
+                    flex: 1, padding: '10px 0', background: 'var(--bg)',
+                    color: 'var(--text-dim)', border: '1px solid var(--border)',
+                    borderRadius: 5, cursor: modalStatus.type === 'pending' ? 'wait' : 'pointer',
+                    fontFamily: 'inherit', fontSize: 11,
+                    opacity: modalStatus.type === 'pending' ? 0.5 : 1,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitOrder}
+                  disabled={insufficientFunds || modalStatus.type === 'pending'}
+                  style={{
+                    flex: 2, padding: '10px 0',
+                    background: insufficientFunds || modalStatus.type === 'pending' ? 'var(--bg)' : bgDark,
+                    color: insufficientFunds || modalStatus.type === 'pending' ? 'var(--text-faint)' : dirColor,
+                    border: `1px solid ${insufficientFunds || modalStatus.type === 'pending' ? 'var(--border)' : dirColor}`,
+                    borderRadius: 5,
+                    cursor: insufficientFunds || modalStatus.type === 'pending' ? 'not-allowed' : 'pointer',
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
+                  }}
+                >
+                  {modalStatus.type === 'error'
+                    ? `Retry ${side}`
+                    : modalStatus.type === 'pending'
+                      ? 'Placing…'
+                      : isLive ? `Confirm ${side} — LIVE` : `Confirm ${side}`}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
