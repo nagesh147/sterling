@@ -4,7 +4,7 @@
  * New signals appear at the top; existing rows never reorder.
  * Scroll down to see older signals. Works like an Instagram feed.
  */
-import React, { useMemo, useState, memo } from 'react';
+import React, { useEffect, useMemo, useState, memo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSignalFeed } from '../hooks/useSignalFeed';
 import type { FeedEntry } from '../hooks/useSignalFeed';
@@ -86,6 +86,141 @@ function tradeLabel(placing: boolean, hasOpen: boolean, isLive: boolean, side: s
   return isLive ? `${side} — LIVE` : `${side} NOW`;
 }
 
+// ── Bracket Order Panel ───────────────────────────────────────────────────────
+function BracketPanel({
+  spotPrice, direction, tpValue, setTpValue, slValue, setSlValue, defaultTp, defaultSl,
+}: {
+  spotPrice: number; direction: 'long'|'short';
+  tpValue: string; setTpValue: (v: string) => void;
+  slValue: string; setSlValue: (v: string) => void;
+  defaultTp: number; defaultSl: number;
+}) {
+  const [slType, setSlType] = useState<'market'|'limit'|'trail'>('market');
+  const [dismissed, setDismissed] = useState(false);
+
+  const pctFromEntry = (pct: number, isUp: boolean) =>
+    String(Math.round(spotPrice * (1 + (isUp ? 1 : -1) * pct / 100)));
+
+  const tpNum = parseFloat(tpValue) || defaultTp;
+  const slNum = parseFloat(slValue) || defaultSl;
+  const tpPct = spotPrice > 0 ? ((tpNum - spotPrice) / spotPrice * 100).toFixed(2) : '—';
+  const slPct = spotPrice > 0 ? ((slNum - spotPrice) / spotPrice * 100).toFixed(2) : '—';
+
+  const inpStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', background: 'var(--bg-input)',
+    border: '1px solid var(--border)', borderRadius: 5,
+    padding: '7px 40px 7px 10px', color: 'var(--text-primary)',
+    fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+    fontVariantNumeric: 'tabular-nums', outline: 'none',
+  };
+
+  return (
+    <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+      {/* Entry Price row */}
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Entry Price</span>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Mark ({spotPrice.toLocaleString('en-US', { maximumFractionDigits: 1 })})</span>
+      </div>
+
+      {/* Info banner */}
+      {!dismissed && (
+        <div style={{ padding: '8px 12px', background: '#f0730018', borderBottom: '1px solid #f0730033', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <span style={{ fontSize: 10, color: '#f07300', lineHeight: 1.5, fontWeight: 600 }}>
+            TP/SL are triggered by the underlying index price
+          </span>
+          <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#f07300', cursor: 'pointer', fontSize: 13, padding: 0, flexShrink: 0 }}>✕</button>
+        </div>
+      )}
+
+      {/* Take Profit */}
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700, textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Take Profit</span>
+          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>
+            {direction === 'long' ? '+' : ''}{tpPct}% from entry
+          </span>
+        </div>
+        <div style={{ position: 'relative' }}>
+          <input type="number" value={tpValue} onChange={e => setTpValue(e.target.value)}
+            placeholder={String(defaultTp)} style={inpStyle} />
+          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-faint)', pointerEvents: 'none' }}>USD</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+          {['0.25','0.5','1','2'].map(p => (
+            <button key={p} onClick={() => setTpValue(pctFromEntry(parseFloat(p), direction === 'long'))} style={{
+              flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9, fontWeight: 600,
+              background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+            }}>{p}%</button>
+          ))}
+          <button onClick={() => setTpValue('')} style={{ padding: '4px 8px', borderRadius: 4, fontSize: 9, background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>0%</button>
+        </div>
+      </div>
+
+      {/* Stop Loss */}
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700, textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Stop Loss</span>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {(['market','limit','trail'] as const).map(t => (
+              <button key={t} onClick={() => setSlType(t)} style={{
+                padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                background: slType === t ? '#f0730020' : 'transparent',
+                color: slType === t ? '#f07300' : 'var(--text-faint)',
+                border: `1px solid ${slType === t ? '#f0730055' : 'var(--border)'}`,
+              }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>
+            {direction === 'long' ? '' : '+'}{slPct}% from entry
+          </span>
+        </div>
+        <div style={{ position: 'relative' }}>
+          <input type="number" value={slValue} onChange={e => setSlValue(e.target.value)}
+            placeholder={String(defaultSl)} style={inpStyle} />
+          <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 10, color: 'var(--text-faint)', pointerEvents: 'none' }}>USD</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+          {['0.25','0.5','1','2'].map(p => (
+            <button key={p} onClick={() => setSlValue(pctFromEntry(parseFloat(p), direction !== 'long'))} style={{
+              flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9, fontWeight: 600,
+              background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+            }}>{p}%</button>
+          ))}
+          <button onClick={() => setSlValue('')} style={{ padding: '4px 8px', borderRadius: 4, fontSize: 9, background: 'var(--bg-input)', color: 'var(--text-faint)', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>0%</button>
+        </div>
+      </div>
+
+      {/* PnL preview */}
+      {(() => {
+        const tp = parseFloat(tpValue) || defaultTp;
+        const sl = parseFloat(slValue) || defaultSl;
+        const lots = 1;
+        const lotSz = 0.001; // approximate
+        const exitPnl  = ((tp - spotPrice) * (direction === 'long' ? 1 : -1) * lots * lotSz).toFixed(2);
+        const stopPnl  = ((sl - spotPrice) * (direction === 'long' ? 1 : -1) * lots * lotSz).toFixed(2);
+        return (
+          <div style={{ padding: '8px 12px', display: 'flex', gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 2 }}>Exit PnL</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: parseFloat(exitPnl) >= 0 ? 'var(--accent)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                {parseFloat(exitPnl) >= 0 ? '+' : ''}${exitPnl}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 2 }}>Stop PnL</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: parseFloat(stopPnl) >= 0 ? 'var(--accent)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+                {parseFloat(stopPnl) >= 0 ? '+' : ''}${stopPnl}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
 // memo: skip re-render when entry object reference, hasOpen, and onDismiss are unchanged.
 // Combined with the setFeed same-ref optimisation, this eliminates re-renders of
 // unchanged rows on every 15s poll — the main GC pressure source.
@@ -97,23 +232,48 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   showModeTag: boolean;       // true only in ALL mode — redundant otherwise
   onDismiss: () => void;
 }) {
-  const [leverage, setLeverage]     = useState(entry.leverage);
+  const LOT_LEVERAGES = [5, 10, 20, 50, 100];
+
+  const isFutures = entry.type === 'futures';
+  const lotInfo   = LOT_SIZES[entry.underlying] ?? { lotSize: 1, unit: entry.underlying };
+  const spotPrice = entry.currentPrice ?? entry.entry;
+
+  // Snap initial leverage to nearest valid tier
+  const snapLev = (l: number) => LOT_LEVERAGES.reduce((a, b) => Math.abs(b - l) < Math.abs(a - l) ? b : a);
+
+  const [leverage, setLeverage]     = useState(() => snapLev(entry.leverage));
   const [direction, setDirection]   = useState<'long'|'short'>(entry.direction as 'long'|'short');
-  const [currency, setCurrency]     = useState<'USD'|'INR'>('USD');
-  const [qtyValue, setQtyValue]     = useState('1');
-  const [qtyUnit, setQtyUnit]       = useState<'lot'|'usd'|string>('lot');
-  const [orderType, setOrderType]   = useState<'market'|'limit'>('market');
-  const [limitPrice, setLimitPrice] = useState('');
-  const [showBracket, setShowBracket] = useState(true); // open by default
-  const [feedback, setFeedback]     = useState('');   // row-level (post-dismiss)
+  const [currency, setCurrency]     = useState<'USD'|'INR'>('INR');  // default INR
+  const [qtyValue, setQtyValue]     = useState(() => String(Math.round(spotPrice * lotInfo.lotSize)));
+  const [qtyUnit, setQtyUnit]       = useState<'lot'|'usd'|string>('usd'); // default USD
+  const [orderType, setOrderType]   = useState<'market'|'limit'>('limit'); // default Limit
+  const [limitPrice, setLimitPrice] = useState(() => String(Math.round(spotPrice))); // start at current price
+  const [showBracket, setShowBracket] = useState(true);
+  const [feedback, setFeedback]     = useState('');
   const [placing, setPlacing]       = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [modalStatus, setModalStatus] = useState<{ type: 'idle'|'pending'|'success'|'error'; msg: string }>({ type: 'idle', msg: '' });
-  const { mutate: trade }           = useDirectEntry();
 
-  const USD_INR   = 84.5; // approximate; shown as estimate only
-  const lotInfo   = LOT_SIZES[entry.underlying] ?? { lotSize: 1, unit: entry.underlying };
-  const spotPrice = entry.currentPrice ?? entry.entry;
+  // Editable SL/TP — recompute defaults when direction changes
+  const atr = spotPrice * (entry.adx > 0 ? 0.015 : 0.02);
+  const defaultSl = useMemo(() => {
+    if (!isFutures) return entry.stopLoss ?? 0;
+    const dist = Math.abs(spotPrice - (entry.stopLoss ?? spotPrice - atr));
+    return Math.round(direction === 'long' ? spotPrice - dist : spotPrice + dist);
+  }, [direction, spotPrice, entry.stopLoss, isFutures, atr]);
+  const defaultTp = useMemo(() => {
+    if (!isFutures) return entry.takeProfit ?? 0;
+    const dist = Math.abs((entry.takeProfit ?? spotPrice + atr * 2) - spotPrice);
+    return Math.round(direction === 'long' ? spotPrice + dist : spotPrice - dist);
+  }, [direction, spotPrice, entry.takeProfit, isFutures, atr]);
+  const [slValue, setSlValue] = useState(() => String(Math.round(entry.stopLoss ?? defaultSl)));
+  const [tpValue, setTpValue] = useState(() => String(Math.round(entry.takeProfit ?? defaultTp)));
+  // Sync defaults when direction flips
+  useEffect(() => { setSlValue(String(defaultSl)); setTpValue(String(defaultTp)); }, [defaultSl, defaultTp]);
+
+  const { mutate: trade } = useDirectEntry();
+
+  const USD_INR = 84.5;
 
   const size = useMemo(() => {
     const n = parseFloat(qtyValue) || 0;
@@ -122,51 +282,44 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     return Math.max(1, Math.round(n / lotInfo.lotSize));
   }, [qtyValue, qtyUnit, spotPrice, lotInfo.lotSize]);
 
-  const isFutures = entry.type === 'futures';
-  // Use local direction state (user can switch long↔short in the modal)
   const dirColor  = direction === 'long' ? 'var(--accent)' : 'var(--danger)';
   const side      = direction === 'long' ? 'BUY' : 'SELL';
   const arrow     = direction === 'long' ? '▲' : '▼';
   const stColor   = STATE_COLOR[entry.currentState] ?? 'var(--text-dim)';
   const stLabel   = STATE_SHORT[entry.currentState] ?? '—';
 
-  // Live P&L vs entry (uses entry.direction for display in the row, not modal direction)
   const livePnl = entry.currentPrice && entry.entry
     ? (entry.direction === 'long'
         ? (entry.currentPrice - entry.entry) / entry.entry * 100
         : (entry.entry - entry.currentPrice) / entry.entry * 100)
     : null;
 
-  // Options premium estimate
   const optPrem = isFutures ? null : Math.round(entry.entry * 0.01);
-  const optSL   = optPrem ? Math.round(optPrem * 0.5) : null;
-  const optTP   = optPrem ? Math.round(optPrem * 2) : null;
 
-  // Dynamic SL/TP based on current direction + ATR
-  const atr = entry.adx > 0 ? spotPrice * 0.015 : spotPrice * 0.02; // rough ATR proxy
-  const slPrice = useMemo(() => {
-    if (!isFutures) return entry.stopLoss;
-    const dist = Math.abs(spotPrice - (entry.stopLoss ?? spotPrice - atr));
-    return direction === 'long' ? spotPrice - dist : spotPrice + dist;
-  }, [direction, spotPrice, entry.stopLoss, isFutures, atr]);
-  const tpPrice = useMemo(() => {
-    if (!isFutures) return entry.takeProfit;
-    const dist = Math.abs((entry.takeProfit ?? spotPrice + atr * 2) - spotPrice);
-    return direction === 'long' ? spotPrice + dist : spotPrice - dist;
-  }, [direction, spotPrice, entry.takeProfit, isFutures, atr]);
-
-  // Order cost: margin = (notional / leverage) for futures; premium for options
-  const notionalUsd  = isFutures ? spotPrice * size * lotInfo.lotSize : (optPrem ?? 0) * size;
-  const marginUsd    = isFutures ? notionalUsd / leverage : notionalUsd;
-  const insufficientFunds = availFunds !== null && marginUsd > availFunds;
+  // Order economics
+  const notionalUsd   = isFutures ? spotPrice * size * lotInfo.lotSize : (optPrem ?? 0) * size;
+  const marginUsd     = isFutures ? notionalUsd / leverage : notionalUsd;
+  // Delta Exchange India fees: maker 0.02%, taker 0.05% + 18% GST
+  const feeRate       = orderType === 'limit' ? 0.0002 : 0.0005;
+  const feeUsd        = notionalUsd * feeRate;
+  const gstUsd        = feeUsd * 0.18;
+  const totalCostUsd  = marginUsd + feeUsd + gstUsd;
+  const insufficientFunds = availFunds !== null && totalCostUsd > availFunds;
 
   const fmtCost = (usd: number) => {
     const v = currency === 'INR' ? usd * USD_INR : usd;
     const sym = currency === 'INR' ? '₹' : '$';
-    return `${sym}${v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+    return `${sym}${v.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
   };
 
-  // Qty hint: what the current qty equals in other units
+  // Leverage cycle helpers (only valid tiers)
+  const levUp   = () => { const i = LOT_LEVERAGES.indexOf(leverage); if (i < LOT_LEVERAGES.length - 1) setLeverage(LOT_LEVERAGES[i + 1]); };
+  const levDown = () => { const i = LOT_LEVERAGES.indexOf(leverage); if (i > 0) setLeverage(LOT_LEVERAGES[i - 1]); };
+
+  // Limit price step (tick size based on instrument)
+  const priceStep = spotPrice > 10000 ? 0.5 : spotPrice > 100 ? 0.05 : 0.001;
+
+  // Qty hint
   const qtyLots = size;
   const qtyInUnderlying = (qtyLots * lotInfo.lotSize).toFixed(
     lotInfo.lotSize < 0.01 ? 4 : lotInfo.lotSize < 1 ? 3 : 1
@@ -270,8 +423,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         <div style={{ display: 'flex', gap: 8 }}>
           {[
             { label: 'ENTRY', val: isFutures ? fp(entry.entry) : `~$${optPrem}`, color: 'var(--text-primary)', sub: '' },
-            { label: 'STOP LOSS', val: isFutures ? fp(entry.stopLoss) : `~$${optSL}`, color: 'var(--danger)', sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%' },
-            { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optTP}`, color: 'var(--accent)', sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%' },
+            { label: 'STOP LOSS', val: isFutures ? fp(entry.stopLoss) : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: 'var(--danger)', sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%' },
+            { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`, color: 'var(--accent)', sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%' },
           ].map(({ label, val, color, sub }) => (
             <div key={label} style={{
               background: 'var(--bg)', border: '1px solid var(--border)',
@@ -401,16 +554,16 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Leverage</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => setLeverage(l => Math.max(1, l - 1))} style={sBtn}>&minus;</button>
+                  <button onClick={levDown} disabled={LOT_LEVERAGES.indexOf(leverage) === 0} style={{ ...sBtn, opacity: LOT_LEVERAGES.indexOf(leverage) === 0 ? 0.3 : 1 }}>&minus;</button>
                   <span style={{ fontSize: 15, fontWeight: 800, minWidth: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
-                    color: leverage !== entry.leverage ? '#f0c040' : dirColor }}>
+                    color: leverage !== snapLev(entry.leverage) ? '#f0c040' : dirColor }}>
                     {leverage}×
                   </span>
-                  <button onClick={() => setLeverage(l => Math.min(100, l + 1))} style={sBtn}>+</button>
+                  <button onClick={levUp} disabled={LOT_LEVERAGES.indexOf(leverage) === LOT_LEVERAGES.length - 1} style={{ ...sBtn, opacity: LOT_LEVERAGES.indexOf(leverage) === LOT_LEVERAGES.length - 1 ? 0.3 : 1 }}>+</button>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
-                {[5,10,20,50,100].map(l => (
+                {LOT_LEVERAGES.map(l => (
                   <button key={l} onClick={() => setLeverage(l)} style={{
                     flex: 1, padding: '4px 0', borderRadius: 4, fontFamily: 'inherit',
                     fontSize: 10, fontWeight: 700, cursor: 'pointer',
@@ -472,16 +625,21 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               {orderType === 'market' && <span style={{ fontSize: 11, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>~{fp(spotPrice)}</span>}
             </div>
             {orderType === 'limit' ? (
-              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '0 12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '0 8px 0 12px' }}>
                 <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
-                  placeholder={String(Math.round(spotPrice))}
                   style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 4 }}>
+                  <button onClick={() => setLimitPrice(p => String(Math.round((parseFloat(p) || spotPrice) + priceStep)))}
+                    style={{ ...sBtn, height: 14, fontSize: 9, lineHeight: 1 }}>▲</button>
+                  <button onClick={() => setLimitPrice(p => String(Math.max(0, Math.round((parseFloat(p) || spotPrice) - priceStep))))}
+                    style={{ ...sBtn, height: 14, fontSize: 9, lineHeight: 1 }}>▼</button>
+                </div>
                 <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>USD</span>
               </div>
             ) : (
               <div style={{ padding: '9px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#f0c040', fontSize: 13, fontWeight: 700 }}>Best {direction === 'long' ? 'Ask' : 'Bid'}</span>
-                <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>USD</span>
+                <span style={{ color: '#f0c040', fontSize: 13, fontWeight: 700 }}>{fp(spotPrice)}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Best {direction === 'long' ? 'Ask' : 'Bid'} · Market</span>
               </div>
             )}
           </div>
@@ -503,13 +661,14 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 4 }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</div>
             <div style={{ display: 'flex', gap: 4, marginTop: 7 }}>
               {[10,25,50,75,100].map(pct => {
-                const lotsAtPct = availFunds && isFutures
-                  ? Math.max(1, Math.floor((availFunds * pct / 100) / ((spotPrice * lotInfo.lotSize) / leverage)))
-                  : null;
+                // Calculate USD amount = pct% of available funds (or 10× notional as fallback)
+                const usdAtPct = availFunds
+                  ? availFunds * leverage * (pct / 100)   // pct of purchasing power
+                  : notionalUsd * (pct / 100);
                 return (
                   <button key={pct} onClick={() => {
-                    setQtyUnit('lot');
-                    setQtyValue(lotsAtPct ? String(lotsAtPct) : String(Math.max(1, pct)));
+                    setQtyUnit('usd');
+                    setQtyValue(String(Math.round(usdAtPct)));
                   }} style={{ flex: 1, padding: '5px 0', borderRadius: 4, background: 'var(--bg-input)', color: 'var(--text-dim)', border: '1px solid var(--border)', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600 }}>
                     {pct}%
                   </button>
@@ -518,65 +677,60 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             </div>
           </div>
 
-          {/* ── Bracket Order / TP·SL ── */}
+          {/* ── Bracket Order ── */}
           <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Bracket Order</span>
             <button onClick={() => setShowBracket(b => !b)}
               style={{ background: 'none', border: '1px solid #f0c04055', borderRadius: 5, padding: '4px 10px', color: '#f0c040', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {showBracket ? '− Remove TP/SL' : '+ Add TP/SL'}
+              {showBracket ? '− Remove' : '+ Add TP/SL'}
             </button>
           </div>
-          {showBracket && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              {([
-                { label: 'Take Profit', val: fp(tpPrice), color: 'var(--accent)' },
-                { label: 'Stop Loss',   val: fp(slPrice), color: 'var(--danger)' },
-              ] as {label:string;val:string;color:string}[]).map(({ label, val, color }) => (
-                <div key={label} style={{ background: 'var(--bg)', border: `1px solid ${color}33`, borderRadius: 6, padding: '8px 10px' }}>
-                  <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {showBracket && <BracketPanel
+            spotPrice={spotPrice} direction={direction}
+            tpValue={tpValue} setTpValue={setTpValue}
+            slValue={slValue} setSlValue={setSlValue}
+            defaultTp={defaultTp} defaultSl={defaultSl}
+          />}
 
-          {/* ── Funds req / Available margin ── */}
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Funds req.</span>
+          {/* ── Economics breakdown ── */}
+          <div style={{ marginTop: 14, background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
+            {([
+              { label: 'Notional', val: fmtCost(notionalUsd) },
+              { label: `Fee (${orderType === 'limit' ? 'Maker 0.02%' : 'Taker 0.05%'})`, val: fmtCost(feeUsd) },
+              { label: 'GST (18% on fee)', val: fmtCost(gstUsd) },
+              { label: 'Funds req.', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
+            ]).map(({ label, val, bold, warn }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{label}</span>
+                <span style={{ fontSize: 11, fontWeight: bold ? 700 : 400, color: warn ? 'var(--danger)' : bold ? 'var(--text-primary)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
               </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Available Margin</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: insufficientFunds ? 'var(--danger)' : 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtCost(marginUsd)}
+                <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                  color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--accent)' }}>
+                  {availFunds !== null ? fmtCost(availFunds) : isLive ? '—' : 'Paper'}
                 </span>
                 <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
                   {(['USD','INR'] as const).map(c => (
                     <button key={c} onClick={() => setCurrency(c)} style={{
-                      padding: '2px 7px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      padding: '2px 6px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                       fontSize: 9, fontWeight: 700,
-                      background: currency === c ? (c === 'INR' ? 'var(--bg-card)' : 'var(--bg-card)') : 'transparent',
+                      background: currency === c ? 'var(--bg-card)' : 'transparent',
                       color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : 'var(--text-faint)',
                     }}>{c}</button>
                   ))}
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Available Margin</span>
-              <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--text-primary)' }}>
-                {availFunds !== null ? fmtCost(availFunds) : isLive ? 'Loading…' : 'Paper mode'}
-              </span>
-            </div>
-            {insufficientFunds && (
-              <div style={{ fontSize: 9, color: 'var(--danger)', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
-                Need {fmtCost(marginUsd - (availFunds ?? 0))} more
-                <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
-                  style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
-              </div>
-            )}
           </div>
+          {insufficientFunds && (
+            <div style={{ fontSize: 9, color: 'var(--danger)', textAlign: 'right', marginTop: 4 }}>
+              Need {fmtCost(totalCostUsd - (availFunds ?? 0))} more —{' '}
+              <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
+            </div>
+          )}
 
 
           {/* status banner */}
