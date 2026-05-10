@@ -32,6 +32,7 @@ class SnapshotEntry:
     target_price: Optional[float] = None
     atr: Optional[float] = None
     adx: float = 0.0
+    atr_percentile: float = 50.0
     rsi: float = 50.0
     squeezed: bool = False
     exec_confidence: float = 0.0
@@ -57,6 +58,7 @@ def put(
     target_price: Optional[float] = None,
     atr: Optional[float] = None,
     adx: float = 0.0,
+    atr_percentile: float = 50.0,
     rsi: float = 50.0,
     squeezed: bool = False,
     exec_confidence: float = 0.0,
@@ -78,6 +80,7 @@ def put(
         target_price=target_price,
         atr=atr,
         adx=adx,
+        atr_percentile=atr_percentile,
         rsi=rsi,
         squeezed=squeezed,
         exec_confidence=exec_confidence,

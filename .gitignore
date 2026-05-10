@@ -38,3 +38,4 @@ backups/*.tmp
 !skills/
 !superpowers/
 !ui-ux-pro-max-skill/
+.gstack/

@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import type { PositionListResponse, PaperPosition } from '../types';
 
-export function usePositions() {
+export function usePositions(mode?: 'paper' | 'live') {
   return useQuery<PositionListResponse>({
-    queryKey: ['positions'],
-    queryFn: () => api.get<PositionListResponse>('/api/v1/positions'),
+    queryKey: ['positions', mode ?? 'all'],
+    queryFn: () => api.get<PositionListResponse>(mode ? `/api/v1/positions?mode=${mode}` : '/api/v1/positions'),
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   });

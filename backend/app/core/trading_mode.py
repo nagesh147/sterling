@@ -86,4 +86,17 @@ MODES: dict[str, TradingModeConfig] = {
     ),
 }
 
+MODES["all"] = TradingModeConfig(
+    name="all", display="All Modes",
+    macro_tf="1H", signal_tf="5m", execution_tf="1m",
+    st_threshold=1, macro_filter="off",
+    dte_min=0, dte_preferred=(0, 30), dte_max=90,
+    ivr_pct_naked_max=85,
+    stop_atr_mult=2.0, trail_mode=TrailMode.ATR,
+    trail_atr_mult=2.0, trail_pct=2.5,
+    rr_target=2.0, partial_25_pct=0.10, partial_50_pct=0.20,
+    force_close_time=None, max_hold_bars=90,
+    position_pct=0.04, max_concurrent=6, poll_interval_s=30,
+)
+
 DEFAULT_MODE = "swing"

@@ -1,3 +1,34 @@
+/** Price formatter: $80,767 / $2,328.44 / $1.23 */
+export function fpPrice(v: number | null | undefined): string {
+  if (v == null || !isFinite(v)) return '—';
+  if (v >= 10_000) return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (v >= 100)   return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return '$' + v.toFixed(2);
+}
+
+/** Mode badge colours — single source of truth for scalping/intraday/swing/positional/all */
+export const MODE_COLOR: Record<string, string> = {
+  scalping:   '#ff7f6e',
+  intraday:   '#f0c040',
+  swing:      'var(--accent)',
+  positional: '#aa88ff',
+  all:        '#88ccff',
+};
+
+/**
+ * When ALL mode is active, infer the most specific mode a signal qualifies for.
+ * Thresholds mirror the backend regime engine: ADX_WEAK=15, ADX_TREND=20, ADX_STRONG=25.
+ * atrPct < 35 → cooldown active in ADX-filtered modes → only scalping passes.
+ * score = green_count/3 * 100: ≥95 means 3/3 STs agree; ≥60 means 2+/3.
+ */
+export function inferModeTag(adx: number, atrPct: number, score: number): string {
+  if (atrPct < 35) return 'scalping';
+  if (score >= 95 && adx >= 25) return 'positional';
+  if (score >= 95 && adx >= 20) return 'swing';
+  if (score >= 60 && adx >= 15) return 'intraday';
+  return 'scalping';
+}
+
 /** Safe number format — returns '—' for null/undefined/NaN/Infinity */
 export function fmtN(val: number | null | undefined, decimals = 2): string {
   if (val == null || !isFinite(val)) return '—';
