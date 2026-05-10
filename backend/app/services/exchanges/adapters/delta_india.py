@@ -184,9 +184,9 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                     return int(p["id"])
             return None
 
-        # 1. Perpetuals only — small list, always includes BTCUSDT/ETHUSDT/etc.
-        #    Note: Delta requires "contract_types" (plural) for this filter to work.
-        data = await self._public_get("/v2/products", params={"contract_types": "perpetual_futures", "page_size": 100})
+        # 1. Perpetuals — Delta India has ~189 perpetuals (BTCUSD at position 189).
+        #    Fetch with page_size=500 to get all in one call.
+        data = await self._public_get("/v2/products", params={"contract_types": "perpetual_futures", "page_size": 500})
         pid = _scan((data or {}).get("result"))
         if pid is not None:
             self._product_id_cache[symbol] = pid

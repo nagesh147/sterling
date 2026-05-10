@@ -104,7 +104,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                 )
                 delta_symbol = body.option_symbol
             else:
-                delta_symbol = inst.delta_perp_symbol or f"{sym}USDT"
+                delta_symbol = inst.delta_perp_symbol or f"{sym}USD"
                 order = await adapter.place_order(
                     symbol=delta_symbol,
                     side=side,
@@ -153,7 +153,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
 
         return LiveOrderResponse(
             mode="paper", paper_position_id=pos_id,
-            symbol=inst.delta_perp_symbol or f"{sym}USDT",
+            symbol=inst.delta_perp_symbol or f"{sym}USD",
             side=side, size=body.size,
             entry_price=entry_price,
             stop_loss=body.stop_loss, take_profit=body.take_profit,
@@ -250,12 +250,13 @@ async def test_credentials(request: Request) -> dict:
             usd = next((b for b in balances if b.get("asset_symbol") in ("USDT", "USD")), None)
             avail = float(usd.get("available_balance", 0) if usd else 0)
 
-            # Check if this platform has the products Sterling trades (BTCUSDT etc.)
+            # Check if this platform has the products Sterling trades (BTCUSD etc.)
+            # page_size=500 needed — Delta India has 189 perps, BTCUSD is at position 189
             try:
                 prod_data = await adapter._public_get("/v2/products",
-                    params={"contract_types": "perpetual_futures", "page_size": 100})
+                    params={"contract_types": "perpetual_futures", "page_size": 500})
                 symbols = {p.get("symbol") for p in (prod_data.get("result") or [])}
-                has_btc = "BTCUSDT" in symbols
+                has_btc = "BTCUSD" in symbols
             except Exception:
                 has_btc = True  # assume ok if check fails
 
@@ -269,8 +270,8 @@ async def test_credentials(request: Request) -> dict:
                     "ok": False,
                     "account": label,
                     "base_url": base_url,
-                    "reason": f"Connected to {label} (${avail:,.2f} available) but BTCUSDT/ETHUSDT are not listed here.",
-                    "hint": "Sterling trades BTCUSDT perpetuals which are on the Global platform (delta.exchange). "
+                    "reason": f"Connected to {label} (${avail:,.2f} available) but BTCUSD/ETHUSD are not listed here.",
+                    "hint": "Sterling trades BTCUSD perpetuals which are on the Global platform (delta.exchange). "
                             "Go to delta.exchange → Settings → API Keys, generate new keys there, and re-enter them in Settings.",
                 }
 

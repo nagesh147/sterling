@@ -190,7 +190,7 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
     stopLoss: sl,
     takeProfit: tp,
     leverage: type === 'futures' ? lev : 1,
-    futuresSymbol: sig.futures_symbol ?? `${sig.underlying}USDT`,
+    futuresSymbol: sig.futures_symbol ?? `${sig.underlying}USD`,
     optSymbol:  type === 'options' ? optSym   : null,
     optStrike:  type === 'options' ? strike   : null,
     optType:    type === 'options' ? optType  : null,
