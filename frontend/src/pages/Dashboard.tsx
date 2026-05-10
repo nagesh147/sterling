@@ -54,6 +54,7 @@ import { AlertsPanel } from '../components/AlertsPanel';
 import { GoLivePanel } from '../components/GoLivePanel';
 import { SignalsTable } from '../components/SignalsTable';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
+import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSettings';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -117,6 +118,7 @@ export function Dashboard() {
   const toggleTheme = useToggleTheme();
   const appMode = useAppMode();
   const setAppMode = useSetAppMode();
+  const [showSettings, setShowSettings] = useState(false);
 
   const defaultTf = modeData?.config?.execution_tf ?? '15m';
 
@@ -165,6 +167,24 @@ export function Dashboard() {
           {/* Paper / Live toggle — always visible */}
           <PaperLiveToggle />
 
+          {/* Simple mode: status dots + settings gear */}
+          {appMode === 'basic' && (
+            <>
+              <SimpleStatusDots />
+              <button
+                onClick={() => setShowSettings(true)}
+                title="Settings"
+                style={{
+                  background: 'none', border: '1px solid var(--border)', borderRadius: 3,
+                  color: 'var(--text-dim)', cursor: 'pointer', padding: '3px 8px',
+                  fontFamily: 'inherit', fontSize: 13, lineHeight: 1,
+                }}
+              >
+                ⚙
+              </button>
+            </>
+          )}
+
           {/* Theme toggle */}
           <button
             onClick={toggleTheme}
@@ -198,6 +218,7 @@ export function Dashboard() {
       {appMode === 'basic' ? (
         // ── SIMPLE MODE ─────────────────────────────────────────────────────
         <>
+          <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
           <PanelBoundary title="LIVE SIGNALS"><SignalsTable /></PanelBoundary>
           <PanelBoundary title="POSITIONS"><PositionsStrip /></PanelBoundary>
         </>
