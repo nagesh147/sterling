@@ -98,12 +98,13 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   onDismiss: () => void;
 }) {
   const [leverage, setLeverage]     = useState(entry.leverage);
+  const [direction, setDirection]   = useState<'long'|'short'>(entry.direction as 'long'|'short');
   const [currency, setCurrency]     = useState<'USD'|'INR'>('USD');
   const [qtyValue, setQtyValue]     = useState('1');
   const [qtyUnit, setQtyUnit]       = useState<'lot'|'usd'|string>('lot');
   const [orderType, setOrderType]   = useState<'market'|'limit'>('market');
   const [limitPrice, setLimitPrice] = useState('');
-  const [showBracket, setShowBracket] = useState(false);
+  const [showBracket, setShowBracket] = useState(true); // open by default
   const [feedback, setFeedback]     = useState('');   // row-level (post-dismiss)
   const [placing, setPlacing]       = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -122,14 +123,14 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   }, [qtyValue, qtyUnit, spotPrice, lotInfo.lotSize]);
 
   const isFutures = entry.type === 'futures';
-  const dirColor  = entry.direction === 'long' ? 'var(--accent)' : 'var(--danger)';
-  const bgDark    = entry.direction === 'long' ? '#003d2e' : '#3d0014';
-  const side      = entry.direction === 'long' ? 'BUY' : 'SELL';
-  const arrow     = entry.direction === 'long' ? '▲' : '▼';
+  // Use local direction state (user can switch long↔short in the modal)
+  const dirColor  = direction === 'long' ? 'var(--accent)' : 'var(--danger)';
+  const side      = direction === 'long' ? 'BUY' : 'SELL';
+  const arrow     = direction === 'long' ? '▲' : '▼';
   const stColor   = STATE_COLOR[entry.currentState] ?? 'var(--text-dim)';
   const stLabel   = STATE_SHORT[entry.currentState] ?? '—';
 
-  // Live P&L vs entry
+  // Live P&L vs entry (uses entry.direction for display in the row, not modal direction)
   const livePnl = entry.currentPrice && entry.entry
     ? (entry.direction === 'long'
         ? (entry.currentPrice - entry.entry) / entry.entry * 100
@@ -141,10 +142,22 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   const optSL   = optPrem ? Math.round(optPrem * 0.5) : null;
   const optTP   = optPrem ? Math.round(optPrem * 2) : null;
 
+  // Dynamic SL/TP based on current direction + ATR
+  const atr = entry.adx > 0 ? spotPrice * 0.015 : spotPrice * 0.02; // rough ATR proxy
+  const slPrice = useMemo(() => {
+    if (!isFutures) return entry.stopLoss;
+    const dist = Math.abs(spotPrice - (entry.stopLoss ?? spotPrice - atr));
+    return direction === 'long' ? spotPrice - dist : spotPrice + dist;
+  }, [direction, spotPrice, entry.stopLoss, isFutures, atr]);
+  const tpPrice = useMemo(() => {
+    if (!isFutures) return entry.takeProfit;
+    const dist = Math.abs((entry.takeProfit ?? spotPrice + atr * 2) - spotPrice);
+    return direction === 'long' ? spotPrice + dist : spotPrice - dist;
+  }, [direction, spotPrice, entry.takeProfit, isFutures, atr]);
+
   // Order cost: margin = (notional / leverage) for futures; premium for options
   const notionalUsd  = isFutures ? spotPrice * size * lotInfo.lotSize : (optPrem ?? 0) * size;
   const marginUsd    = isFutures ? notionalUsd / leverage : notionalUsd;
-  // availFunds is passed as a prop — lifted to parent to avoid one hook per row
   const insufficientFunds = availFunds !== null && marginUsd > availFunds;
 
   const fmtCost = (usd: number) => {
@@ -171,7 +184,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     setPlacing(true);
     trade({
       underlying: entry.underlying,
-      direction: entry.direction,
+      direction,
       instrument_type: entry.type,
       size,
       leverage,
@@ -309,7 +322,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             disabled={hasOpen || placing}
             style={{
               padding: '9px 0', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
-              background: hasOpen ? 'var(--bg)' : bgDark,
+              background: hasOpen ? 'var(--bg)' : entry.direction === 'long' ? '#003d2e' : '#3d0014',
               color: hasOpen ? 'var(--text-faint)' : dirColor,
               border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + 'cc'}`,
               fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
@@ -335,52 +348,47 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            background: '#151b1e',
-            border: '1px solid #2a3038',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border)',
             borderRadius: 10, width: 340,
-            boxShadow: '0 12px 48px rgba(0,0,0,0.7)',
+            boxShadow: '0 12px 48px rgba(0,0,0,0.6)',
             overflow: 'hidden',
           }}
         >
           {/* ── contract + close ── */}
-          <div style={{ padding: '10px 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)' }}>
+          <div style={{ padding: '12px 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                 {isFutures ? entry.futuresSymbol : `${entry.optType === 'CE' ? 'CALL' : 'PUT'} ${fp(entry.optStrike)}`}
               </span>
               <span style={{
-                fontSize: 8, fontWeight: 700, letterSpacing: 0.5,
+                fontSize: 8, fontWeight: 700, letterSpacing: 0.5, flexShrink: 0,
                 color: isLive ? 'var(--accent)' : '#88aaff',
                 background: isLive ? 'var(--accent)15' : '#88aaff15',
                 border: `1px solid ${isLive ? 'var(--accent)33' : '#88aaff33'}`,
                 borderRadius: 3, padding: '1px 5px',
-              }}>
-                {isLive ? '● LIVE' : 'PAPER'}
-              </span>
+              }}>{isLive ? '● LIVE' : 'PAPER'}</span>
             </div>
-            <button
-              onClick={modalStatus.type === 'pending' ? undefined : closeModal}
-              style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px' }}
-            >✕</button>
+            <button onClick={modalStatus.type === 'pending' ? undefined : closeModal}
+              style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px', flexShrink: 0 }}>✕</button>
           </div>
 
           {/* ── Buy | Long / Sell | Short tabs ── */}
-          <div style={{ display: 'flex', margin: '12px 16px 0', borderRadius: 6, overflow: 'hidden', border: '1px solid #2a3038' }}>
+          <div style={{ display: 'flex', margin: '12px 16px 0', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
             {(['long','short'] as const).map(d => {
-              const active = d === entry.direction;
-              const col    = d === 'long' ? '#1ed760' : '#ff4757';
-              const bg     = active ? (d === 'long' ? '#0d2e1a' : '#2e0d12') : 'transparent';
+              const active = d === direction;
+              const col    = d === 'long' ? 'var(--accent)' : 'var(--danger)';
+              const bg     = active ? (d === 'long' ? 'var(--accent)18' : 'var(--danger)18') : 'transparent';
               return (
-                <div key={d} style={{
+                <button key={d} onClick={() => setDirection(d)} style={{
                   flex: 1, textAlign: 'center', padding: '10px 0',
-                  background: bg,
-                  color: active ? col : '#555',
+                  background: bg, color: active ? col : 'var(--text-faint)',
                   fontWeight: 800, fontSize: 13, letterSpacing: 0.3,
-                  cursor: 'default',
-                  borderRight: d === 'long' ? '1px solid #2a3038' : 'none',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  borderRight: d === 'long' ? '1px solid var(--border)' : 'none',
                 }}>
                   {d === 'long' ? 'Buy | Long' : 'Sell | Short'}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -389,17 +397,16 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
           {/* ── Leverage row ── */}
           {isFutures && (
-            <div style={{ marginTop: 12, padding: '10px 12px', background: '#1c2228', borderRadius: 6, border: '1px solid #2a3038' }}>
+            <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: '#aaa' }}>Leverage</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Leverage</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => setLeverage(l => Math.max(1, l - 1))} style={{ ...sBtn, background: '#252d35' }}>&minus;</button>
-                  <span style={{
-                    fontSize: 15, fontWeight: 800, minWidth: 44, textAlign: 'center',
-                    color: leverage !== entry.leverage ? '#f0c040' : '#1ed760',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>{leverage}×</span>
-                  <button onClick={() => setLeverage(l => Math.min(100, l + 1))} style={{ ...sBtn, background: '#252d35' }}>+</button>
+                  <button onClick={() => setLeverage(l => Math.max(1, l - 1))} style={sBtn}>&minus;</button>
+                  <span style={{ fontSize: 15, fontWeight: 800, minWidth: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
+                    color: leverage !== entry.leverage ? '#f0c040' : dirColor }}>
+                    {leverage}×
+                  </span>
+                  <button onClick={() => setLeverage(l => Math.min(100, l + 1))} style={sBtn}>+</button>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
@@ -407,82 +414,70 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   <button key={l} onClick={() => setLeverage(l)} style={{
                     flex: 1, padding: '4px 0', borderRadius: 4, fontFamily: 'inherit',
                     fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    background: leverage === l ? '#253020' : '#252d35',
-                    color: leverage === l ? '#1ed760' : '#666',
-                    border: `1px solid ${leverage === l ? '#1ed76044' : '#2a3038'}`,
+                    background: leverage === l ? 'var(--accent)15' : 'var(--bg-input)',
+                    color: leverage === l ? 'var(--accent)' : 'var(--text-faint)',
+                    border: `1px solid ${leverage === l ? 'var(--accent)44' : 'var(--border)'}`,
                   }}>{l}×</button>
                 ))}
               </div>
               {leverage !== entry.leverage && (
                 <div style={{ marginTop: 6, fontSize: 9, color: '#f0c040' }}>
-                  Signal suggests {entry.leverage}× (ADX {entry.adx?.toFixed(0)}) — higher leverage increases liquidation risk
+                  Signal suggests {entry.leverage}× (ADX {entry.adx?.toFixed(0)}) — higher leverage increases risk
                 </div>
               )}
             </div>
           )}
 
           {/* ── Order type tabs ── */}
-          <div style={{ display: 'flex', gap: 0, marginTop: 12, borderBottom: '1px solid #2a3038' }}>
+          <div style={{ display: 'flex', marginTop: 12, borderBottom: '1px solid var(--border)' }}>
             {(['market','limit'] as const).map(t => (
               <button key={t} onClick={() => setOrderType(t)} style={{
                 background: 'none', border: 'none', padding: '7px 14px',
                 fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                color: orderType === t ? '#1ed760' : '#555',
-                borderBottom: orderType === t ? '2px solid #1ed760' : '2px solid transparent',
+                color: orderType === t ? dirColor : 'var(--text-faint)',
+                borderBottom: orderType === t ? `2px solid ${dirColor}` : '2px solid transparent',
                 marginBottom: -1,
-              }}>
-                {t === 'market' ? 'Market' : 'Limit'}
-              </button>
+              }}>{t === 'market' ? 'Market' : 'Limit'}</button>
             ))}
           </div>
 
-          {/* ── Price row ── */}
+          {/* ── Price ── */}
           <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 12, color: '#aaa' }}>{orderType === 'limit' ? 'Limit Price' : 'Market Price'}</span>
-              {orderType === 'market' && (
-                <span style={{ fontSize: 11, color: '#555' }}>
-                  ~{fp(entry.currentPrice ?? entry.entry)}
-                </span>
-              )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{orderType === 'limit' ? 'Limit Price' : 'Market Price'}</span>
+              {orderType === 'market' && <span style={{ fontSize: 11, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>~{fp(spotPrice)}</span>}
             </div>
             {orderType === 'limit' ? (
-              <div style={{ display: 'flex', alignItems: 'center', background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, padding: '0 12px' }}>
-                <input
-                  type="number" value={limitPrice}
-                  onChange={e => setLimitPrice(e.target.value)}
-                  placeholder={String(Math.round(entry.currentPrice ?? entry.entry))}
-                  style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }}
-                />
-                <span style={{ fontSize: 11, color: '#555', flexShrink: 0 }}>USD</span>
+              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '0 12px' }}>
+                <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
+                  placeholder={String(Math.round(spotPrice))}
+                  style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>USD</span>
               </div>
             ) : (
-              <div style={{ padding: '9px 12px', background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, color: '#f0c040', fontSize: 13, fontWeight: 700 }}>
-                Best {entry.direction === 'long' ? 'Ask' : 'Bid'} &nbsp;<span style={{ color: '#666', fontWeight: 400, fontSize: 11 }}>USD</span>
+              <div style={{ padding: '9px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#f0c040', fontSize: 13, fontWeight: 700 }}>Best {direction === 'long' ? 'Ask' : 'Bid'}</span>
+                <span style={{ color: 'var(--text-faint)', fontSize: 11 }}>USD</span>
               </div>
             )}
           </div>
 
           {/* ── Quantity ── */}
           <div style={{ marginTop: 12 }}>
-            <span style={{ fontSize: 12, color: '#aaa' }}>Quantity</span>
-            <div style={{ display: 'flex', alignItems: 'center', background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, padding: '0 12px', marginTop: 6 }}>
-              <input
-                type="number" min="1" step={qtyUnit === 'lot' ? 1 : undefined}
-                value={qtyValue}
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Quantity</span>
+            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '0 12px', marginTop: 5 }}>
+              <input type="number" min="1" step={qtyUnit === 'lot' ? 1 : undefined} value={qtyValue}
                 onChange={e => setQtyValue(e.target.value)}
-                style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }}
-              />
+                style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
               <select value={qtyUnit} onChange={e => { setQtyUnit(e.target.value); setQtyValue('1'); }}
                 style={{ background: 'none', border: 'none', color: '#f0c040', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', outline: 'none', padding: '0 0 0 4px' }}>
-                <option value="lot" style={{ background: '#1c2228' }}>Lot ▾</option>
-                <option value="usd" style={{ background: '#1c2228' }}>USD ▾</option>
-                <option value={lotInfo.unit} style={{ background: '#1c2228' }}>{lotInfo.unit} ▾</option>
+                <option value="lot">Lot</option>
+                <option value="usd">USD</option>
+                <option value={lotInfo.unit}>{lotInfo.unit}</option>
               </select>
             </div>
-            <div style={{ fontSize: 9, color: '#555', marginTop: 4 }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</div>
-            {/* % quick buttons */}
-            <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 4 }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</div>
+            <div style={{ display: 'flex', gap: 4, marginTop: 7 }}>
               {[10,25,50,75,100].map(pct => {
                 const lotsAtPct = availFunds && isFutures
                   ? Math.max(1, Math.floor((availFunds * pct / 100) / ((spotPrice * lotInfo.lotSize) / leverage)))
@@ -490,36 +485,31 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                 return (
                   <button key={pct} onClick={() => {
                     setQtyUnit('lot');
-                    setQtyValue(lotsAtPct ? String(lotsAtPct) : String(Math.max(1, Math.round(pct / 100 * 10))));
-                  }} style={{
-                    flex: 1, padding: '5px 0', borderRadius: 4,
-                    background: '#252d35', color: '#777',
-                    border: '1px solid #2a3038', fontSize: 10,
-                    fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600,
-                  }}>{pct}%</button>
+                    setQtyValue(lotsAtPct ? String(lotsAtPct) : String(Math.max(1, pct)));
+                  }} style={{ flex: 1, padding: '5px 0', borderRadius: 4, background: 'var(--bg-input)', color: 'var(--text-dim)', border: '1px solid var(--border)', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600 }}>
+                    {pct}%
+                  </button>
                 );
               })}
             </div>
           </div>
 
           {/* ── Bracket Order / TP·SL ── */}
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: '#aaa', borderBottom: '1px dashed #444' }}>Bracket Order</span>
-            <button
-              onClick={() => setShowBracket(b => !b)}
-              style={{ background: 'none', border: '1px solid #f0c04055', borderRadius: 5, padding: '4px 10px', color: '#f0c040', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
+          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Bracket Order</span>
+            <button onClick={() => setShowBracket(b => !b)}
+              style={{ background: 'none', border: '1px solid #f0c04055', borderRadius: 5, padding: '4px 10px', color: '#f0c040', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               {showBracket ? '− Remove TP/SL' : '+ Add TP/SL'}
             </button>
           </div>
           {showBracket && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              {[
-                { label: 'Take Profit', val: fp(entry.takeProfit), color: 'var(--accent)' },
-                { label: 'Stop Loss',   val: fp(entry.stopLoss),   color: 'var(--danger)' },
-              ].map(({ label, val, color }) => (
-                <div key={label} style={{ background: '#1c2228', border: '1px solid #2a3038', borderRadius: 6, padding: '8px 10px' }}>
-                  <div style={{ fontSize: 9, color: '#555', marginBottom: 3 }}>{label}</div>
+              {([
+                { label: 'Take Profit', val: fp(tpPrice), color: 'var(--accent)' },
+                { label: 'Stop Loss',   val: fp(slPrice), color: 'var(--danger)' },
+              ] as {label:string;val:string;color:string}[]).map(({ label, val, color }) => (
+                <div key={label} style={{ background: 'var(--bg)', border: `1px solid ${color}33`, borderRadius: 6, padding: '8px 10px' }}>
+                  <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 3 }}>{label}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
                 </div>
               ))}
@@ -527,39 +517,39 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           )}
 
           {/* ── Funds req / Available margin ── */}
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 12, color: '#aaa', borderBottom: '1px dashed #444' }}>Funds req.</span>
-                <span style={{ fontSize: 12, cursor: 'pointer', color: '#888' }} title="Reload">↻</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Funds req.</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: insufficientFunds ? 'var(--danger)' : 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                   {fmtCost(marginUsd)}
                 </span>
-                {/* USD/INR pill */}
-                <div style={{ display: 'flex', background: '#1c2228', borderRadius: 4, overflow: 'hidden', border: '1px solid #2a3038' }}>
+                <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
                   {(['USD','INR'] as const).map(c => (
                     <button key={c} onClick={() => setCurrency(c)} style={{
                       padding: '2px 7px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                       fontSize: 9, fontWeight: 700,
-                      background: currency === c ? (c === 'INR' ? '#251800' : '#0d1a26') : 'transparent',
-                      color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : '#555',
+                      background: currency === c ? (c === 'INR' ? 'var(--bg-card)' : 'var(--bg-card)') : 'transparent',
+                      color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : 'var(--text-faint)',
                     }}>{c}</button>
                   ))}
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: '#aaa' }}>Available Margin</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: insufficientFunds ? 'var(--danger)' : '#ccc', fontVariantNumeric: 'tabular-nums' }}>
-                {availFunds !== null ? fmtCost(availFunds) : '—'}
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Available Margin</span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--text-primary)' }}>
+                {availFunds !== null ? fmtCost(availFunds) : isLive ? 'Loading…' : 'Paper mode'}
               </span>
             </div>
             {insufficientFunds && (
-              <div style={{ fontSize: 9, color: 'var(--danger)', textAlign: 'right' }}>
-                Need {fmtCost(marginUsd - (availFunds ?? 0))} more —{' '}
-                <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Deposit ↗</a>
+              <div style={{ fontSize: 9, color: 'var(--danger)', display: 'flex', justifyContent: 'flex-end', gap: 6, alignItems: 'center' }}>
+                Need {fmtCost(marginUsd - (availFunds ?? 0))} more
+                <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
               </div>
             )}
           </div>
@@ -607,14 +597,14 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               disabled={insufficientFunds || modalStatus.type === 'pending'}
               style={{
                 width: '100%', padding: '15px 0', border: 'none',
-                background: insufficientFunds ? '#1c2228'
-                  : modalStatus.type === 'pending' ? '#1c2228'
-                  : entry.direction === 'long' ? '#1ed760' : '#ff4757',
+                background: insufficientFunds || modalStatus.type === 'pending'
+                  ? 'var(--bg-input)'
+                  : direction === 'long' ? 'var(--accent)' : 'var(--danger)',
                 color: insufficientFunds || modalStatus.type === 'pending'
-                  ? '#555' : '#000',
+                  ? 'var(--text-faint)' : '#fff',
                 fontFamily: 'inherit', fontSize: 15, fontWeight: 900,
                 cursor: insufficientFunds || modalStatus.type === 'pending' ? 'not-allowed' : 'pointer',
-                letterSpacing: 0.5, transition: 'opacity 0.15s',
+                letterSpacing: 0.5, transition: 'background 0.15s',
                 opacity: modalStatus.type === 'pending' ? 0.7 : 1,
               }}
             >
