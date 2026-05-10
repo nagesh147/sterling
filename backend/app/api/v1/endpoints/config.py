@@ -220,19 +220,24 @@ async def get_telegram_config() -> TelegramConfigResponse:
 @router.put("/telegram", response_model=TelegramConfigResponse)
 async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
-    import os
+    from app.services import db as _db
 
-    # Apply at runtime
-    _tg.TELEGRAM_TOKEN   = body.bot_token.strip()
-    _tg.TELEGRAM_CHAT_ID = body.chat_id.strip()
+    new_token = body.bot_token.strip()
+    new_chat  = body.chat_id.strip()
 
-    # Persist to environment for current process
-    os.environ["TELEGRAM_BOT_TOKEN"] = _tg.TELEGRAM_TOKEN
-    os.environ["TELEGRAM_CHAT_ID"]   = _tg.TELEGRAM_CHAT_ID
+    # Empty token = keep existing (don't wipe a saved token when only updating chat_id)
+    if new_token:
+        _tg.TELEGRAM_TOKEN = new_token
+    if new_chat or not _tg.TELEGRAM_CHAT_ID:
+        _tg.TELEGRAM_CHAT_ID = new_chat
+
+    # Persist to SQLite so config survives server restarts
+    _db.set_config("telegram_bot_token", _tg.TELEGRAM_TOKEN)
+    _db.set_config("telegram_chat_id",   _tg.TELEGRAM_CHAT_ID)
 
     # Test reachability
     reachable = False
-    if body.bot_token and body.chat_id:
+    if _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID:
         try:
             reachable = await _tg.send("✓ Sterling Telegram connected", parse_mode="HTML")
         except Exception:

@@ -226,27 +226,48 @@ def _send_order_telegram(body: LiveOrderRequest, sym: str, side: str, entry: flo
 @router.get("/test-credentials")
 async def test_credentials(request: Request) -> dict:
     """
-    Verify live credentials are valid and have trading permission.
-    Calls GET /v2/profile (read-only) — safe, no order placed.
+    Verify live credentials against both Delta Exchange endpoints (global + India).
+    Calls GET /v2/wallet/balances (read-only, no order placed).
     """
     from app.services import exchange_account_store
     from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+
     active = exchange_account_store.get_active()
-    if not active or not active.api_key or active.is_paper:
-        return {"ok": False, "reason": "No live credentials configured — switch to Live mode first"}
-    adapter = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret, is_paper=False)
-    try:
-        data = await adapter._auth_get("/v2/profile")
-        name = (data.get("result") or {}).get("email", "")
-        return {"ok": True, "account": name, "message": "Credentials valid — ready to trade"}
-    except Exception as exc:
-        msg = str(exc)
-        hint = ""
-        if "401" in msg or "Unauthorized" in msg:
-            hint = "API key invalid or wrong secret. Check Delta Exchange → Settings → API Keys."
-        elif "403" in msg or "Forbidden" in msg:
-            hint = "API key lacks Order Management permission. Enable it in Delta Exchange API settings."
-        return {"ok": False, "reason": msg, "hint": hint}
+    if not active or not active.api_key or not active.api_secret:
+        return {"ok": False, "reason": "No credentials configured", "hint": "Enter API key and secret in Settings."}
+    if active.api_key.startswith("DUMMY") or active.api_secret.startswith("DUMMY"):
+        return {"ok": False, "reason": "Placeholder credentials detected", "hint": "Replace the default DUMMY key/secret with real Delta Exchange credentials."}
+
+    errors = {}
+    for label, base_url in [("Global (delta.exchange)", "https://api.delta.exchange"),
+                             ("India (india.delta.exchange)", "https://api.india.delta.exchange")]:
+        adapter = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
+                                    is_paper=False, base_url=base_url)
+        try:
+            data = await adapter._auth_get("/v2/wallet/balances")
+            balances = (data.get("result") or [])
+            usd = next((b for b in balances if b.get("asset_symbol") in ("USDT", "USD")), None)
+            avail = usd.get("available_balance", 0) if usd else 0
+            return {
+                "ok": True,
+                "account": f"{label}",
+                "balance": f"${float(avail):,.2f} available",
+                "message": f"Connected via {label} — ${float(avail):,.2f} margin available",
+                "base_url": base_url,
+            }
+        except Exception as exc:
+            errors[label] = str(exc)
+
+    # Both failed — give a consolidated error
+    global_err = errors.get("Global (delta.exchange)", "")
+    hint = ""
+    if "invalid_api_key" in global_err or "invalid_api_key" in errors.get("India (india.delta.exchange)", ""):
+        hint = "API key not recognised on either platform. Regenerate from delta.exchange → Settings → API Keys and re-enter in Sterling."
+    elif "403" in global_err or "Forbidden" in global_err:
+        hint = "API key exists but lacks Order Management permission. Enable it in Delta Exchange API settings."
+    else:
+        hint = "Check that the key was generated on delta.exchange (not testnet) and has Read + Order Management permissions."
+    return {"ok": False, "reason": f"Global: {global_err}", "hint": hint}
 
 
 @router.get("/order-status/{order_id}")

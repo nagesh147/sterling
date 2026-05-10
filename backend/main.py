@@ -167,14 +167,22 @@ async def lifespan(app: FastAPI):
     _arrow_store_svc.bootstrap()
 
     from app.core.trading_mode import MODES, DEFAULT_MODE
-    from app.services.db import get_trading_mode
+    from app.services.db import get_trading_mode, get_config
     mode_name = get_trading_mode() or DEFAULT_MODE
     if mode_name not in MODES:
         mode_name = DEFAULT_MODE
     app.state.trading_mode = MODES[mode_name]
 
-    from app.services.execution.circuit_breaker import CircuitBreaker
+    # Restore persisted Telegram config (survives server restarts)
     from app.services.notifications import telegram as _telegram_svc
+    saved_tg_token = get_config("telegram_bot_token")
+    saved_tg_chat  = get_config("telegram_chat_id")
+    if saved_tg_token:
+        _telegram_svc.TELEGRAM_TOKEN   = saved_tg_token
+    if saved_tg_chat:
+        _telegram_svc.TELEGRAM_CHAT_ID = saved_tg_chat
+
+    from app.services.execution.circuit_breaker import CircuitBreaker
     app.state.circuit_breaker = CircuitBreaker(telegram=_telegram_svc)
 
     # v3 singletons

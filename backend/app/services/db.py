@@ -254,6 +254,27 @@ def get_trading_mode() -> str:
         return "swing"
 
 
+def get_config(key: str, default: str = "") -> str:
+    if not _available:
+        return default
+    try:
+        with _conn() as c:
+            row = c.execute("SELECT value FROM system_config WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+    except Exception:
+        return default
+
+
+def set_config(key: str, value: str) -> None:
+    if not _available:
+        return
+    try:
+        with _conn() as c:
+            c.execute("INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)", (key, value))
+    except Exception as exc:
+        log.warning("DB set_config failed for %s: %s", key, exc)
+
+
 def set_trading_mode(name: str) -> None:
     if not _available:
         return

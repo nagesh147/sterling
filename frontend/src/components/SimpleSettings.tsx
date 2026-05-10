@@ -184,18 +184,21 @@ function TelegramSection() {
   useEffect(() => { if (data) setChatId(data.chat_id || ''); }, [data]);
 
   const connOk: boolean | null = isLoading ? null : (data?.reachable ?? false);
+  const canTest = !!(data?.enabled && data?.reachable);
 
   const save = useMutation<TelegramConfig, Error, void>({
     mutationFn: () => api.put<TelegramConfig>('/api/v1/config/telegram', {
-      bot_token: botToken || undefined,
+      bot_token: botToken.trim() || undefined,  // empty = keep existing
       chat_id: chatId,
     }),
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ['telegram-config'] });
       setBotToken('');
-      setMsgOk(d.reachable);
-      setMsg(d.reachable ? '✅ Saved — test message sent' : d.enabled ? '⚠ Saved but unreachable — check token/chat ID' : '✅ Saved (notifications disabled)');
-      setTimeout(() => setMsg(''), 6000);
+      setMsgOk(d.reachable || d.enabled);
+      if (d.reachable)     setMsg('✅ Saved and connected — test message sent');
+      else if (d.enabled)  setMsg('✅ Saved — enter your chat_id and click Send Test to verify');
+      else                 setMsg('⚠ Bot token required to enable alerts');
+      setTimeout(() => setMsg(''), 7000);
     },
     onError: (e) => { setMsgOk(false); setMsg(`❌ ${e.message}`); },
   });
@@ -203,8 +206,9 @@ function TelegramSection() {
   const sendTest = async () => {
     setSending(true); setMsg('');
     try {
-      await api.post('/api/v1/config/telegram/test', {});
-      setMsgOk(true); setMsg('✅ Test message sent to Telegram');
+      const d = await api.post<TelegramConfig>('/api/v1/config/telegram/test', {});
+      qc.invalidateQueries({ queryKey: ['telegram-config'] });
+      setMsgOk(true); setMsg('✅ Test message sent successfully');
     } catch (e: unknown) {
       setMsgOk(false); setMsg(`❌ ${(e as Error).message}`);
     } finally {
@@ -213,25 +217,32 @@ function TelegramSection() {
     }
   };
 
+  const needsToken = !data?.bot_token_set && !botToken.trim();
+
   return (
     <Section
       title="TELEGRAM ALERTS"
       status={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <StatusLight
-            ok={data?.enabled ? connOk : null}
-            label={!data?.enabled ? 'DISABLED' : connOk ? 'CONNECTED' : 'NOT REACHABLE'}
+            ok={data?.bot_token_set ? connOk : null}
+            label={!data?.bot_token_set ? 'NO TOKEN' : !data?.enabled ? 'DISABLED' : connOk ? 'CONNECTED' : 'NOT REACHABLE'}
           />
           <button
-            onClick={sendTest} disabled={sending || !data?.enabled || !data?.reachable}
-            style={{ fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', opacity: !data?.enabled || !data?.reachable ? 0.4 : 1 }}
+            onClick={sendTest} disabled={sending || !canTest}
+            style={{ fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, cursor: canTest ? 'pointer' : 'default', fontFamily: 'inherit', opacity: !canTest ? 0.4 : 1 }}
           >
             {sending ? 'Sending…' : 'Send Test'}
           </button>
         </div>
       }
     >
-      <Field label="BOT TOKEN" hint={data?.bot_token_set ? `Current: ••••${data.bot_token_hint} — leave blank to keep` : '@BotFather → /newbot → copy HTTP API token'}>
+      {needsToken && (
+        <div style={{ marginBottom: 10, padding: '6px 10px', background: '#1a1200', border: '1px solid #f0c04033', borderRadius: 4, fontSize: 10, color: '#f0c040' }}>
+          Enter bot token to enable Telegram alerts
+        </div>
+      )}
+      <Field label="BOT TOKEN" hint={data?.bot_token_set ? `Current: ${data.bot_token_hint} — leave blank to keep` : '@BotFather → /newbot → copy the HTTP API token'}>
         <input
           type="password"
           placeholder={data?.bot_token_set ? '(unchanged)' : 'Paste bot token'}
