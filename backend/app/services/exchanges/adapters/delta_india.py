@@ -117,18 +117,41 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         data = resp.json()
         return self._validate_response(data, path)
 
+    # Human-readable messages for known Delta API error codes
+    _FRIENDLY: dict[str, str] = {
+        "insufficient_margin":    "Insufficient margin",
+        "invalid_api_key":        "Invalid API key — check your credentials",
+        "order_size_too_small":   "Order size too small for this contract",
+        "order_size_too_large":   "Order size exceeds the maximum allowed",
+        "market_closed":          "Market is currently closed",
+        "post_only_reject":       "Order rejected — market would take immediately (post-only mode)",
+        "self_trade_prevention":  "Order cancelled — would match your own open order",
+        "risk_limit_exceeded":    "Position exceeds account risk limit",
+    }
+
     def _raise_api_error(self, resp, path: str) -> None:
-        """Raise a clear error with Delta's own error message when possible."""
+        """Raise a RuntimeError with a human-readable message for known Delta error codes."""
         try:
             data = resp.json()
             if isinstance(data, dict):
-                # Delta returns {"success":false,"error":{"code":"...","context":"..."}}
-                err = data.get("error") or {}
-                code = err.get("code") if isinstance(err, dict) else str(err)
-                ctx  = err.get("context", "") if isinstance(err, dict) else ""
+                err  = data.get("error") or {}
+                code = (err.get("code") if isinstance(err, dict) else str(err)) or ""
+                ctx  = err.get("context") if isinstance(err, dict) else None
+
+                if code == "insufficient_margin" and isinstance(ctx, dict):
+                    avail = float(ctx.get("available_balance", 0))
+                    need  = float(ctx.get("required_additional_balance", 0))
+                    asset = ctx.get("asset_symbol", "USD")
+                    raise RuntimeError(
+                        f"Insufficient margin — you have ${avail:.2f} {asset} available "
+                        f"but need ${need:.2f} more. Add funds to your Delta Exchange account."
+                    )
+
                 if code:
-                    raise RuntimeError(f"Delta API {resp.status_code} on {path}: {code}{' — ' + str(ctx) if ctx else ''}")
-        except (ValueError, KeyError):
+                    friendly = self._FRIENDLY.get(code, code.replace("_", " ").capitalize())
+                    ctx_str  = f" — {ctx}" if ctx and not isinstance(ctx, dict) else ""
+                    raise RuntimeError(f"{friendly}{ctx_str}")
+        except (ValueError, KeyError, TypeError):
             pass
         resp.raise_for_status()
 

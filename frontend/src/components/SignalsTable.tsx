@@ -505,16 +505,33 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               <span style={{ fontSize: 14, lineHeight: 1.2, flexShrink: 0 }}>
                 {modalStatus.type === 'pending' ? '⏳' : modalStatus.type === 'success' ? '✅' : '❌'}
               </span>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   fontSize: 11, fontWeight: 700,
                   color: modalStatus.type === 'success' ? 'var(--accent)' : modalStatus.type === 'error' ? 'var(--danger)' : 'var(--text-faint)',
+                  marginBottom: 3,
                 }}>
                   {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed' : 'Order failed'}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2, wordBreak: 'break-word' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.6, wordBreak: 'break-word' }}>
                   {modalStatus.msg}
                 </div>
+                {/* Insufficient margin — add funds CTA */}
+                {modalStatus.type === 'error' && modalStatus.msg.toLowerCase().includes('insufficient margin') && (
+                  <a
+                    href="https://www.delta.exchange/app/account/fund-transfer"
+                    target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-block', marginTop: 8,
+                      fontSize: 10, fontWeight: 700,
+                      color: 'var(--accent)', textDecoration: 'none',
+                      background: '#0f2a1a', border: '1px solid var(--accent)44',
+                      borderRadius: 4, padding: '5px 12px',
+                    }}
+                  >
+                    Add Funds to Delta Exchange ↗
+                  </a>
+                )}
               </div>
             </div>
           )}
