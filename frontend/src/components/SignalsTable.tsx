@@ -317,7 +317,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   const [currency, setCurrency]     = useState<'USD'|'INR'>('INR');  // default INR
   const [qtyValue, setQtyValue]     = useState(() => String(Math.round(spotPrice * lotInfo.lotSize)));
   const [qtyUnit, setQtyUnit]       = useState<'lot'|'usd'|string>('usd'); // default USD
-  const [orderType, setOrderType]   = useState<'market'|'limit'>('limit'); // default Limit
+  const [orderType, setOrderType]   = useState<'market'|'limit'|'maker'>('limit'); // default Limit
+  const [timeInForce, setTimeInForce] = useState<'gtc'|'ioc'>('gtc');
+  const [reduceOnly, setReduceOnly]   = useState(false);
+  const [scalperMode, setScalperMode] = useState(false);
+  const [scalperSecs, setScalerSecs]  = useState(30); // auto-cancel after N seconds
   const [limitPrice, setLimitPrice] = useState(() => String(Math.round(spotPrice))); // start at current price
   const [showBracket, setShowBracket] = useState(true);
   const [feedback, setFeedback]     = useState('');
@@ -372,7 +376,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   const notionalUsd   = isFutures ? spotPrice * size * lotInfo.lotSize : (optPrem ?? 0) * size;
   const marginUsd     = isFutures ? notionalUsd / leverage : notionalUsd;
   // Delta Exchange India fees: maker 0.02%, taker 0.05% + 18% GST
-  const feeRate       = orderType === 'limit' ? 0.0002 : 0.0005;
+  const feeRate = orderType === 'market' ? 0.0005 : orderType === 'maker' ? 0.0 : 0.0002; // market=taker, limit=maker, maker-only=0 (rebate possible)
   const feeUsd        = notionalUsd * feeRate;
   const gstUsd        = feeUsd * 0.18;
   const totalCostUsd  = marginUsd + feeUsd + gstUsd;
@@ -413,8 +417,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       instrument_type: entry.type,
       size,
       leverage,
-      order_type: orderType,
-      limit_price: orderType === 'limit' && limitPrice ? parseFloat(limitPrice) : undefined,
+      order_type: orderType,   // "market" | "limit" | "maker" (backend resolves "maker" → limit+post_only)
+      limit_price: orderType !== 'market' && limitPrice ? parseFloat(limitPrice) : undefined,
+      time_in_force: timeInForce,
+      post_only: orderType === 'maker',
+      reduce_only: reduceOnly,
       // Bracket fields from BracketPanel state
       take_profit: parseFloat(tpValue) > 0 ? parseFloat(tpValue) : undefined,
       stop_loss: bracketRef.current.slType !== 'trail' && parseFloat(slValue) > 0 ? parseFloat(slValue) : undefined,
@@ -430,6 +437,17 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         setModalStatus({ type: 'success', msg: `${mode} order placed${orderId ? ` · ID ${orderId}` : ''}` });
         setPlacing(false);
         setFeedback('✅ Placed');
+        // Scalper auto-cancel: if order still unfilled after scalperSecs, cancel it
+        if (scalperMode && orderId && data?.mode === 'live') {
+          const underlying = entry.underlying;
+          setTimeout(async () => {
+            try {
+              // The product_id lookup is server-side; we just call cancel-all as fallback
+              await fetch(`/api/v1/trading/cancel-order/${orderId}?product_id=0`, { method: 'DELETE' });
+            } catch { /* ignore if already filled */ }
+          }, scalperSecs * 1000);
+          setFeedback(`⚡ Scalper: auto-cancels in ${scalperSecs}s if unfilled`);
+        }
       },
       onError: (e: unknown) => {
         const msg = (e as Error).message ?? 'Unknown error';
@@ -441,6 +459,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
   const handleTrade = () => {
     if (hasOpen || placing) return;
+    if (scalperMode) {
+      // Scalper: skip confirmation, fire immediately
+      submitOrder();
+      return;
+    }
     setModalStatus({ type: 'idle', msg: '' });
     setShowConfirm(true);
   };
@@ -683,14 +706,18 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
           {/* ── Order type tabs ── */}
           <div style={{ display: 'flex', marginTop: 12, borderBottom: '1px solid var(--border)' }}>
-            {(['market','limit'] as const).map(t => (
-              <button key={t} onClick={() => setOrderType(t)} style={{
+            {([
+              { id: 'market', label: 'Market' },
+              { id: 'limit',  label: 'Limit'  },
+              { id: 'maker',  label: 'Maker Only', hint: 'Post-only — rejected if it would take liquidity. Fee rebate eligible.' },
+            ] as { id: string; label: string; hint?: string }[]).map(t => (
+              <button key={t.id} onClick={() => setOrderType(t.id as typeof orderType)} title={t.hint} style={{
                 background: 'none', border: 'none', padding: '7px 14px',
                 fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                color: orderType === t ? dirColor : 'var(--text-faint)',
-                borderBottom: orderType === t ? `2px solid ${dirColor}` : '2px solid transparent',
+                color: orderType === t.id ? dirColor : 'var(--text-faint)',
+                borderBottom: orderType === t.id ? `2px solid ${dirColor}` : '2px solid transparent',
                 marginBottom: -1,
-              }}>{t === 'market' ? 'Market' : 'Limit'}</button>
+              }}>{t.label}</button>
             ))}
           </div>
 
@@ -716,6 +743,53 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               <div style={{ padding: '9px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: '#f0c040', fontSize: 13, fontWeight: 700 }}>{fp(spotPrice)}</span>
                 <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Best {direction === 'long' ? 'Ask' : 'Bid'} · Market</span>
+              </div>
+            )}
+          </div>
+
+          {/* ── Order options row: GTC/IOC + Reduce Only + Scalper ── */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' as const, alignItems: 'center' }}>
+            {/* GTC / IOC — only for non-market orders */}
+            {orderType !== 'market' && (
+              <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                {(['gtc','ioc'] as const).map(t => (
+                  <button key={t} onClick={() => setTimeInForce(t)} style={{
+                    padding: '3px 9px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                    background: timeInForce === t ? 'var(--bg-card)' : 'transparent',
+                    color: timeInForce === t ? 'var(--text-primary)' : 'var(--text-faint)',
+                  }} title={t === 'gtc' ? 'Good Till Cancel' : 'Immediate Or Cancel'}>
+                    {t.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Reduce Only toggle */}
+            <button onClick={() => setReduceOnly(r => !r)} style={{
+              padding: '3px 10px', borderRadius: 4, fontFamily: 'inherit',
+              fontSize: 9, fontWeight: 700, cursor: 'pointer',
+              background: reduceOnly ? 'var(--accent)15' : 'transparent',
+              color: reduceOnly ? 'var(--accent)' : 'var(--text-faint)',
+              border: `1px solid ${reduceOnly ? 'var(--accent)44' : 'var(--border)'}`,
+            }} title="Close-only — never opens a new position">
+              {reduceOnly ? '✓ ' : ''}Reduce Only
+            </button>
+            {/* Scalper mode */}
+            <button onClick={() => setScalperMode(s => !s)} style={{
+              padding: '3px 10px', borderRadius: 4, fontFamily: 'inherit',
+              fontSize: 9, fontWeight: 700, cursor: 'pointer',
+              background: scalperMode ? '#f0c04015' : 'transparent',
+              color: scalperMode ? '#f0c040' : 'var(--text-faint)',
+              border: `1px solid ${scalperMode ? '#f0c04044' : 'var(--border)'}`,
+            }} title={`One-click order without re-confirming. Auto-cancels unfilled after ${scalperSecs}s.`}>
+              {scalperMode ? `⚡ ${scalperSecs}s` : '⚡ Scalper'}
+            </button>
+            {scalperMode && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input type="range" min={5} max={300} step={5} value={scalperSecs}
+                  onChange={e => setScalerSecs(parseInt(e.target.value))}
+                  style={{ width: 60, accentColor: '#f0c040' }} />
+                <span style={{ fontSize: 9, color: '#f0c040' }}>{scalperSecs}s</span>
               </div>
             )}
           </div>
@@ -774,7 +848,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           <div style={{ marginTop: 14, background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
             {([
               { label: 'Notional', val: fmtCost(notionalUsd) },
-              { label: `Fee (${orderType === 'limit' ? 'Maker 0.02%' : 'Taker 0.05%'})`, val: fmtCost(feeUsd) },
+              { label: `Fee (${orderType === 'market' ? 'Taker 0.05%' : orderType === 'maker' ? 'Maker-Only 0%' : 'Maker 0.02%'})`, val: fmtCost(feeUsd) },
               { label: 'GST (18% on fee)', val: fmtCost(gstUsd) },
               { label: 'Funds req.', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
             ]).map(({ label, val, bold, warn }) => (

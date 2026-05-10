@@ -19,21 +19,24 @@ router = APIRouter(prefix="/trading", tags=["trading"])
 
 class LiveOrderRequest(BaseModel):
     underlying: str
-    direction: str           # "long" or "short"
-    instrument_type: str     # "futures" or "options"
-    size: float = 1.0        # number of contracts
-    leverage: float = 5.0    # for futures
-    order_type: str = "market"  # "market" or "limit"
+    direction: str              # "long" or "short"
+    instrument_type: str        # "futures" or "options"
+    size: float = 1.0           # number of contracts (integer lots)
+    leverage: float = 5.0       # set via separate leverage API before order
+    order_type: str = "market"  # "market" | "limit" | "maker" (limit+post_only)
     limit_price: Optional[float] = None
-    # Bracket fields (per pseudocode)
+    time_in_force: str = "gtc"  # "gtc" (good-till-cancel) | "ioc" (immediate-or-cancel)
+    post_only: bool = False      # maker-only order (limit orders only)
+    reduce_only: bool = False    # close-only, never open new position
+    # Bracket fields
     stop_loss: Optional[float] = None
-    stop_loss_order_type: str = "market_order"   # "market_order"|"limit_order"
+    stop_loss_order_type: str = "market_order"
     stop_loss_limit_price: Optional[float] = None
-    trail_amount: Optional[float] = None         # for trailing SL
+    trail_amount: Optional[float] = None
     take_profit: Optional[float] = None
     take_profit_order_type: str = "market_order"
     take_profit_limit_price: Optional[float] = None
-    bracket_trigger_method: str = "mark_price"   # "mark_price"|"last_traded_price"|"spot_price"
+    bracket_trigger_method: str = "mark_price"
     # For options
     option_symbol: Optional[str] = None
     option_premium: Optional[float] = None
@@ -109,25 +112,41 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                 take_profit_limit_price=body.take_profit_limit_price,
                 bracket_trigger_method=body.bracket_trigger_method,
             )
+
+            # "maker" order_type = limit + post_only
+            is_maker = body.order_type == "maker"
+            api_order_type = "limit_order" if body.order_type in ("limit", "maker") else "market_order"
+
             if body.instrument_type == "options" and body.option_symbol:
                 order = await adapter.place_order_option(
                     option_symbol=body.option_symbol,
                     side=side,
                     size=body.size,
-                    order_type="market_order" if body.order_type == "market" else "limit_order",
+                    order_type=api_order_type,
                     limit_price=body.limit_price,
                     **bracket,
                 )
                 delta_symbol = body.option_symbol
             else:
                 delta_symbol = inst.delta_perp_symbol or f"{sym}USD"
+                product_id   = await adapter.get_product_id(delta_symbol)
+
+                # Step 1: Set leverage BEFORE placing order (API contract requirement)
+                try:
+                    await adapter.set_leverage(product_id, body.leverage)
+                except Exception as lev_exc:
+                    log.warning("Leverage pre-set failed for %s: %s (continuing)", delta_symbol, lev_exc)
+
+                # Step 2: Place order
                 order = await adapter.place_order(
                     symbol=delta_symbol,
                     side=side,
                     size=body.size,
-                    order_type="market_order" if body.order_type == "market" else "limit_order",
+                    order_type=api_order_type,
                     limit_price=body.limit_price,
-                    leverage=body.leverage,
+                    time_in_force=body.time_in_force,
+                    post_only=is_maker,
+                    reduce_only=body.reduce_only,
                     **bracket,
                 )
 
@@ -329,11 +348,41 @@ async def get_order_status(order_id: str, request: Request) -> dict:
 
 @router.delete("/cancel-order/{order_id}")
 async def cancel_order(order_id: str, product_id: int, request: Request) -> dict:
-    """Cancel a live open order."""
-    from app.services import adapter_manager as _adm
-    adapter = _adm.get_adapter() or request.app.state.adapter
+    """Cancel a single live open order. DELETE /v2/orders with {id, product_id}."""
+    from app.services import exchange_account_store
+    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+    active = exchange_account_store.get_active()
+    if not active or active.is_paper:
+        raise HTTPException(status_code=400, detail="Live credentials required")
+    api_base = (active.extra or {}).get("api_base_url", "https://api.delta.exchange")
+    adapter  = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
+                                  is_paper=False, base_url=api_base)
     try:
         result = await adapter.cancel_order(order_id, product_id)
         return {"cancelled": True, "order_id": order_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.delete("/cancel-all")
+async def cancel_all_orders(product_symbol: str, request: Request) -> dict:
+    """Cancel all open orders for a product. DELETE /v2/orders/all"""
+    from app.services import exchange_account_store
+    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+    from app.services.exchanges import instrument_registry as registry
+    active = exchange_account_store.get_active()
+    if not active or active.is_paper:
+        raise HTTPException(status_code=400, detail="Live credentials required")
+    inst = registry.get_instrument(product_symbol.upper())
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown symbol: {product_symbol}")
+    api_base = (active.extra or {}).get("api_base_url", "https://api.delta.exchange")
+    adapter  = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
+                                  is_paper=False, base_url=api_base)
+    try:
+        delta_symbol = inst.delta_perp_symbol or f"{product_symbol.upper()}USD"
+        product_id   = await adapter.get_product_id(delta_symbol)
+        result       = await adapter.cancel_all_orders(product_id)
+        return {"cancelled_all": True, "product": delta_symbol, "result": result}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))

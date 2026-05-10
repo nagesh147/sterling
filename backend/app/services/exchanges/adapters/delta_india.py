@@ -229,6 +229,42 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
         raise RuntimeError(f"Delta product not found for symbol: {symbol}")
 
+    async def set_leverage(self, product_id: int, leverage: float) -> dict:
+        """
+        Set leverage for a product BEFORE placing orders.
+        Must be called separately — Delta does not accept leverage inline in order body.
+        POST /v2/products/{product_id}/orders/leverage
+        """
+        data = await self._auth_post(f"/v2/products/{product_id}/orders/leverage",
+                                     {"leverage": str(int(leverage))})
+        return (data or {}).get("result") or {}
+
+    async def get_leverage(self, product_id: int) -> dict:
+        """GET /v2/products/{product_id}/orders/leverage"""
+        data = await self._auth_get(f"/v2/products/{product_id}/orders/leverage")
+        return (data or {}).get("result") or {}
+
+    async def cancel_all_orders(self, product_id: int) -> dict:
+        """Cancel all open orders for a product. DELETE /v2/orders/all"""
+        data = await self._auth_delete_with_body("/v2/orders/all", {"product_id": product_id})
+        return (data or {})
+
+    async def _auth_delete_with_body(self, path: str, body: dict) -> dict:
+        """DELETE with body — needed for /v2/orders/all."""
+        if self._is_paper or not self._api_key or not self._api_secret:
+            raise RuntimeError("Live trading requires valid Delta Exchange API credentials")
+        import json as _json
+        body_str = _json.dumps(body, separators=(',', ':'))
+        sig, ts = self._sign("DELETE", path, body=body_str)
+        client = await self._get_client()
+        resp = await client.request("DELETE", path, content=body_str,
+            headers={"api-key": self._api_key, "timestamp": str(ts), "signature": sig,
+                     "Content-Type": "application/json"})
+        if not resp.is_success:
+            self._raise_api_error(resp, path)
+        data = resp.json()
+        return self._validate_response(data, path)
+
     async def place_order(
         self,
         symbol: str,
@@ -237,6 +273,9 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         order_type: str = "market_order",
         limit_price: float | None = None,
         leverage: float | None = None,
+        time_in_force: str = "gtc",        # "gtc" or "ioc"
+        post_only: bool = False,            # maker-only — strings "true"/"false" per API
+        reduce_only: bool = False,          # strings "true"/"false" per API
         stop_loss: float | None = None,
         stop_loss_order_type: str = "market_order",
         stop_loss_limit_price: float | None = None,
@@ -245,21 +284,27 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         take_profit_order_type: str = "market_order",
         take_profit_limit_price: float | None = None,
         bracket_trigger_method: str = "mark_price",
-        reduce_only: bool = False,
     ) -> dict:
-        """Place an order with optional bracket (TP/SL) per Delta Exchange India API."""
+        """
+        Place an order on Delta Exchange India.
+        Leverage is set via set_leverage() BEFORE this call (see flow in trading.py).
+        """
         product_id = await self.get_product_id(symbol)
         body: dict = {
             "product_id": product_id,
             "size": int(size),
             "side": side,
             "order_type": order_type,
-            "reduce_only": reduce_only,
+            # API requires string "true"/"false" for boolean flags
+            "reduce_only": "true" if reduce_only else "false",
         }
-        if order_type == "limit_order" and limit_price is not None:
-            body["limit_price"] = str(round(limit_price, 2))
-        if leverage is not None:
-            body["leverage"] = str(int(leverage))
+        if order_type == "limit_order":
+            if limit_price is not None:
+                body["limit_price"] = str(round(limit_price, 2))
+            body["time_in_force"] = time_in_force
+            if post_only:
+                body["post_only"] = "true"
+        # Leverage no longer set here — must be set via set_leverage() first
 
         # Bracket trigger method
         has_bracket = take_profit is not None or stop_loss is not None or trail_amount is not None
@@ -286,8 +331,8 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         return (data or {}).get("result") or {}
 
     async def cancel_order(self, order_id: str, product_id: int) -> dict:
-        """Cancel an open order by ID."""
-        data = await self._auth_delete(f"/v2/orders/{order_id}")
+        """Cancel an open order. DELETE /v2/orders with body {id, product_id}."""
+        data = await self._auth_delete_with_body("/v2/orders", {"id": int(order_id), "product_id": product_id})
         return (data or {}).get("result") or {}
 
     async def place_order_option(
