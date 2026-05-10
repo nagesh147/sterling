@@ -272,7 +272,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, onDi
 
       {/* RIGHT — action */}
       <div style={{
-        width: 110, flexShrink: 0, padding: '12px 10px',
+        width: 100, flexShrink: 0, padding: '12px 10px',
         borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center',
       }}>
@@ -281,41 +281,20 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, onDi
             {feedback}
           </div>
         ) : (
-          <>
-            {/* size (quick ± in lot units) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
-              <button onClick={() => setQtyValue(v => String(Math.max(1, (parseInt(v)||1) - 1)))} style={sBtn}>&minus;</button>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 16, textAlign: 'center' }}>{size}</span>
-              <button onClick={() => setQtyValue(v => String((parseInt(v)||1) + 1))} style={sBtn}>+</button>
-            </div>
-            {/* trade */}
-            <button
-              onClick={handleTrade}
-              disabled={hasOpen || placing}
-              style={{
-                padding: '7px 0', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
-                background: hasOpen ? 'var(--bg)' : bgDark,
-                color: hasOpen ? 'var(--text-faint)' : dirColor,
-                border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + 'cc'}`,
-                fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
-                opacity: placing ? 0.6 : 1,
-              }}
-            >
-              {tradeLabel(placing, hasOpen, isLive, side)}
-            </button>
-            {/* dismiss */}
-            <button
-              onClick={onDismiss}
-              style={{
-                padding: '3px 0', background: 'none',
-                border: '1px solid var(--border)', borderRadius: 3,
-                color: 'var(--text-faint)', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: 9,
-              }}
-            >
-              dismiss
-            </button>
-          </>
+          <button
+            onClick={handleTrade}
+            disabled={hasOpen || placing}
+            style={{
+              padding: '9px 0', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
+              background: hasOpen ? 'var(--bg)' : bgDark,
+              color: hasOpen ? 'var(--text-faint)' : dirColor,
+              border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + 'cc'}`,
+              fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+              opacity: placing ? 0.6 : 1,
+            }}
+          >
+            {tradeLabel(placing, hasOpen, isLive, side)}
+          </button>
         )}
       </div>
     </div>
@@ -544,7 +523,7 @@ const sBtn: React.CSSProperties = {
 // ── main component ────────────────────────────────────────────────────────────
 
 export function SignalsTable() {
-  const { feed, dismiss, clearAll }   = useSignalFeed();
+  const { feed, dismiss }   = useSignalFeed();
   const { data: signals }             = useSignals();
   const { data: modeData }            = useTradingMode();
   const { data: exData }              = useExchanges();
@@ -612,21 +591,6 @@ export function SignalsTable() {
             <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>
               {visible.length} in feed
             </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>newest ↑ · scroll for history</span>
-          {feed.length > 0 && (
-            <button
-              onClick={clearAll}
-              style={{
-                background: 'none', border: '1px solid var(--border)',
-                color: 'var(--text-faint)', borderRadius: 3, padding: '2px 8px',
-                cursor: 'pointer', fontFamily: 'inherit', fontSize: 9,
-              }}
-            >
-              clear
-            </button>
           )}
         </div>
       </div>

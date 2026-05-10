@@ -87,7 +87,8 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
     def _sign(self, method, path, query="", body=""):
         ts = int(time.time())
-        msg = method + str(ts) + path
+        # Delta Exchange signature format: timestamp + METHOD + /path + ?query + body
+        msg = str(ts) + method + path
         if query: msg += "?" + query
         if body:  msg += body
         sig = hmac.new(
