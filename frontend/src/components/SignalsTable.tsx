@@ -493,12 +493,6 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             </div>
           </div>
 
-          {/* live warning — only before submission */}
-          {isLive && modalStatus.type === 'idle' && (
-            <div style={{ marginBottom: 12, padding: '7px 10px', background: '#2a1200', border: '1px solid #f0c04044', borderRadius: 4, fontSize: 10, color: '#f0c040' }}>
-              ⚠ This places a real order on Delta Exchange India. Funds will be deducted.
-            </div>
-          )}
 
           {/* status banner — shown after submit */}
           {modalStatus.type !== 'idle' && (
