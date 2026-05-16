@@ -210,9 +210,16 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
   const { data: modeData } = useTradingMode();
   const [notif, setNotif]  = useState<TradeNotif | null>(null);
   const lastTs    = useRef<number>(0);
-  const stateKey  = `sterling_alert_state_${underlying}`;
+  // Deliberately NOT prefixed with 'sterling_' — useSignalFeed purges all
+  // sterling_* keys on load (legacy cleanup), which would reset this state.
+  const stateKey  = `sa_state_${underlying}`;
+  const arrowKey  = `sa_arrow_ts_${underlying}`;
   const lastState = useRef<string>(
     (() => { try { return sessionStorage.getItem(stateKey) ?? ''; } catch { return ''; } })()
+  );
+  // Persist last arrow-popup timestamp so page reloads don't re-fire within 2h
+  const lastArrowTs = useRef<number>(
+    (() => { try { return parseInt(sessionStorage.getItem(arrowKey) ?? '0') || 0; } catch { return 0; } })()
   );
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const qc        = useQueryClient();
@@ -223,8 +230,19 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
 
     const curState = data.state ?? '';
     const prev     = lastState.current;
+
+    // Arrow popup: additionally gated by 2h cooldown (survives page reloads)
+    const arrowFiring = data.green_arrow || data.red_arrow;
+    const ARROW_POPUP_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+    if (arrowFiring && Date.now() - lastArrowTs.current < ARROW_POPUP_COOLDOWN_MS) {
+      // Trend already signalled within cooldown — update state tracker but skip popup
+      lastState.current = curState;
+      try { sessionStorage.setItem(stateKey, curState); } catch { /* ignore */ }
+      return;
+    }
+
     const shouldFire =
-      data.green_arrow || data.red_arrow ||
+      arrowFiring ||
       (ARMED_STATES.has(curState) && !ARMED_STATES.has(prev));
 
     lastState.current = curState;
@@ -232,6 +250,11 @@ export function ArrowAlert({ underlying }: { underlying: string }) {
 
     if (!shouldFire) return;
     if (data.direction === 'neutral') return;
+
+    if (arrowFiring) {
+      lastArrowTs.current = Date.now();
+      try { sessionStorage.setItem(arrowKey, String(lastArrowTs.current)); } catch { /* ignore */ }
+    }
 
     const cached = qc.getQueryData<SignalsResponse>(['signals-all']);
     const sig    = cached?.signals.find(s => s.underlying === underlying);

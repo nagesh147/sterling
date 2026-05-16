@@ -47,6 +47,10 @@ _prev_states: dict[str, str] = {}
 # Without this, green_arrow stays True for the entire first 1H candle (~240 polls @ 15s).
 _prev_all_green: dict[str, bool] = {}
 _prev_all_red:   dict[str, bool] = {}
+# Per-instrument SSE alert state — persists across reconnections so page reloads
+# don't re-fire the arrow popup for a trend that's already been signalled.
+_prev_alert_green_stream: dict[str, bool] = {}
+_prev_alert_red_stream:   dict[str, bool] = {}
 _signal_alerts: deque = deque(maxlen=50)  # O(1) appendleft, bounded automatically
 _ALERT_STATES = frozenset({'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE'})
 
@@ -57,22 +61,66 @@ _STATE_LABELS = {
 }
 
 
-def _option_params(sym: str, spot: float, direction: str) -> dict:
-    """Compute ATM option parameters for a given instrument and spot price."""
+def _strategy_expiry(dte_min: int, dte_preferred: tuple, dte_max: int) -> tuple[str, int]:
+    """
+    Find the Friday expiry closest to dte_preferred midpoint, constrained to [dte_min, dte_max].
+    Delta Exchange India crypto options expire every Friday.
+
+    Returns (expiry_DDMMYY, actual_dte).
+    """
     import datetime
+    today = datetime.date.today()
+    pref_mid = (dte_preferred[0] + dte_preferred[1]) / 2.0
+
+    # Collect all Fridays (weekday=4) within [dte_min, dte_max]
+    candidates: list[tuple[int, datetime.date]] = []
+    for days in range(max(0, dte_min), dte_max + 8):
+        d = today + datetime.timedelta(days=days)
+        if d.weekday() == 4:            # Friday
+            dte = (d - today).days
+            if dte_min <= dte <= dte_max:
+                candidates.append((dte, d))
+
+    if candidates:
+        best_dte, best_date = min(candidates, key=lambda x: abs(x[0] - pref_mid))
+        return best_date.strftime('%d%m%y'), best_dte
+
+    # Fallback: nearest Friday on or after dte_min, even if outside dte_max
+    start = today + datetime.timedelta(days=max(0, dte_min))
+    extra = (4 - start.weekday()) % 7
+    fallback = start + datetime.timedelta(days=extra)
+    dte = (fallback - today).days
+    return fallback.strftime('%d%m%y'), dte
+
+
+def _option_params(sym: str, spot: float, direction: str, mode: 'TradingModeConfig | None' = None) -> dict:  # type: ignore[name-defined]
+    """
+    Compute ATM option parameters for a given instrument, spot price, and trading mode.
+    Expiry is selected to match the mode's target DTE range:
+      SCALPING  → 0–3 DTE   (same-week Friday)
+      INTRADAY  → 0–7 DTE   (current-week Friday)
+      SWING     → 7–30 DTE  (Friday ~2 weeks out)
+      POSITIONAL→ 21–90 DTE (Friday ~45 days out)
+    """
     try:
-        step = 500 if spot > 10000 else (100 if spot > 1000 else 10)
-        strike = round(spot / step) * step
+        from app.core.trading_mode import MODES as _MODES
+        import datetime
+
+        step = 500 if spot > 10_000 else (100 if spot > 1_000 else 10)
+        strike   = round(spot / step) * step
         opt_type = 'CE' if direction == 'long' else 'PE'
-        today = datetime.date.today()
-        days_to_fri = (4 - today.weekday()) % 7 or 7
-        expiry = (today + datetime.timedelta(days=days_to_fri)).strftime('%d%m%y')
-        dte = days_to_fri
+
+        if mode is None:
+            # Try to resolve from MODES if a string was passed; fall back to swing
+            mode = _MODES.get('swing')   # type: ignore[assignment]
+
+        expiry, dte = _strategy_expiry(mode.dte_min, mode.dte_preferred, mode.dte_max)  # type: ignore[union-attr]
+
         return {
             'opt_strike': strike,
-            'opt_type': opt_type,
+            'opt_type':   opt_type,
             'opt_expiry': expiry,
-            'opt_dte': dte,
+            'opt_dte':    dte,
             'opt_symbol': f"{opt_type[0]}-{sym}-{strike}-{expiry}",
         }
     except Exception:
@@ -82,6 +130,7 @@ def _option_params(sym: str, spot: float, direction: str) -> dict:
 async def _fire_signal_alert(
     sym: str, inst, setup, regime, signal,
     spot_f: float, stop_price, target_price, atr_val: float, now_ms: int,
+    _alert_mode=None,
 ) -> None:
     """Build and store a professional signal alert; fire Telegram. Runs as a background task."""
     import datetime
@@ -91,18 +140,12 @@ async def _fire_signal_alert(
         dir_str = setup.direction.value
         state   = setup.state.value
 
-        # ATM options recommendation
-        opt_strike = opt_type = opt_expiry = opt_symbol = None
-        try:
-            step = 500 if spot_f > 10000 else (100 if spot_f > 1000 else 10)
-            opt_strike = round(spot_f / step) * step
-            opt_type   = 'CE' if dir_str == 'long' else 'PE'
-            today = datetime.date.today()
-            days_to_friday = (4 - today.weekday()) % 7 or 7
-            opt_expiry = (today + datetime.timedelta(days=days_to_friday)).strftime('%d%m%y')
-            opt_symbol = f"{opt_type[0]}-{sym}-{opt_strike}-{opt_expiry}"
-        except Exception:
-            pass
+        # ATM options recommendation — use strategy-aware expiry
+        opt_params = _option_params(sym, spot_f, dir_str, _alert_mode)
+        opt_strike = opt_params['opt_strike']
+        opt_type   = opt_params['opt_type']
+        opt_expiry = opt_params['opt_expiry']
+        opt_symbol = opt_params['opt_symbol']
 
         adx_val    = regime.adx
         rec_lev    = 5 if adx_val < 20 else (10 if adx_val < 30 else 20)
@@ -618,7 +661,7 @@ async def _compute_signal_item(
 
         if cur_state in _ALERT_STATES and prev_state != cur_state:
             asyncio.create_task(
-                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms)
+                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode)
             )
 
         # Poll-level arrow edge: True only on first poll after the trend flips.
@@ -683,7 +726,7 @@ async def _compute_signal_item(
             # Actionable trade parameters
             'rec_leverage': 5 if regime.adx < 20 else (10 if regime.adx < 30 else 20),
             'futures_symbol': inst.delta_perp_symbol or f"{sym}USD",
-            **_option_params(sym, spot_f, setup.direction.value),
+            **_option_params(sym, spot_f, setup.direction.value, mode),
             'fresh': True,
             'timestamp_ms': now_ms,
         }
@@ -735,7 +778,7 @@ async def all_signals(request: Request) -> dict:
             # Compute option params + leverage here too (pure, no I/O needed).
             adx_v = snap.adx or 0.0
             rec_lev = 5 if adx_v < 20 else (10 if adx_v < 30 else 20)
-            opt = _option_params(sym, snap.spot_price, snap.direction)
+            opt = _option_params(sym, snap.spot_price, snap.direction, mode)
             # Apply poll-level edge on the cached path too: snap stores raw all_green/all_red.
             prev_ag = _prev_all_green.get(sym, False)
             prev_ar = _prev_all_red.get(sym, False)
@@ -925,11 +968,10 @@ async def _sse_generator(
         yield f"data: {json.dumps({'error': f'Unknown underlying: {sym}'})}\n\n"
         return
 
-    # Track previous alert state across iterations for rising-edge detection.
-    # Without this, a sustained all_green condition fires alerts every 30s
-    # but never records an arrow because signal.green_arrow (transition) is False.
-    _prev_alert_green = False
-    _prev_alert_red = False
+    # Use module-level dicts so state persists across client reconnections.
+    # Local False would re-fire the arrow popup on every page reload.
+    _prev_alert_green = _prev_alert_green_stream.get(sym, False)
+    _prev_alert_red   = _prev_alert_red_stream.get(sym, False)
 
     while True:
         if await request.is_disconnected():
@@ -992,6 +1034,8 @@ async def _sse_generator(
                                    setup.state.value, now_ms, "stream")
             _prev_alert_green = _alert_green
             _prev_alert_red   = _alert_red
+            _prev_alert_green_stream[sym] = _alert_green
+            _prev_alert_red_stream[sym]   = _alert_red
 
             # Also expose the expanded condition in the payload so ArrowAlert popup
             # and the frontend know a live signal is active.
@@ -1091,6 +1135,122 @@ async def refresh_signals_now(request: Request) -> dict:
         'stop_atr_mult': stop_mult,
         'timestamp_ms': int(time.time() * 1000),
     }
+
+
+# ─── /stream-all (Bloomberg-style multi-instrument SSE) ───────────────────────
+
+async def _sse_all_generator(
+    request: Request,
+    price_interval: float = 2.0,
+) -> AsyncGenerator[str, None]:
+    """
+    Single SSE connection that emits two named event types:
+      - "prices"  every `price_interval` seconds: spot prices for all instruments
+      - "signals" every 30 seconds: full signal data from snapshot cache
+    """
+    instruments = registry.list_instruments()
+    last_signals_t = 0.0  # monotonic timestamp of last signals emission
+
+    while True:
+        if await request.is_disconnected():
+            break
+
+        now_mono = time.monotonic()
+        adapter = _adapter(request)
+        current_source = _adm.get_data_source()
+
+        # ── fast path: spot prices ────────────────────────────────────────────
+        serveable = [i for i in instruments if _adapter_can_serve(i, current_source)]
+
+        async def _fetch_price(inst) -> tuple[str, float | None]:
+            try:
+                p = await adapter.get_index_price(inst)
+                return inst.underlying, float(p)
+            except Exception:
+                return inst.underlying, None
+
+        price_results = await asyncio.gather(
+            *[_fetch_price(inst) for inst in serveable],
+            return_exceptions=False,
+        )
+        prices: dict[str, float] = {
+            sym: price for sym, price in price_results if price is not None
+        }
+        if prices:
+            yield f"event: prices\ndata: {json.dumps(prices)}\n\n"
+
+        # ── slow path: full signal data (every 30s from snap cache) ──────────
+        if now_mono - last_signals_t >= 30.0:
+            last_signals_t = now_mono
+            mode = getattr(request.app.state, "trading_mode", None)
+
+            signals_list: list[dict] = []
+            for inst in instruments:
+                sym = inst.underlying
+                snap = _snap_cache.get(sym)
+                if snap is None:
+                    continue  # stale — skip, background refresher will update cache
+
+                adx_v   = snap.adx or 0.0
+                rec_lev = 5 if adx_v < 20 else (10 if adx_v < 30 else 20)
+                opt = _option_params(sym, snap.spot_price, snap.direction, mode)
+
+                # Apply poll-level edge detection (same logic as all_signals)
+                prev_ag = _prev_all_green.get(sym, False)
+                prev_ar = _prev_all_red.get(sym, False)
+                _prev_all_green[sym] = snap.all_green
+                _prev_all_red[sym]   = snap.all_red
+                cache_green_arrow = snap.all_green and not prev_ag
+                cache_red_arrow   = snap.all_red   and not prev_ar
+
+                signals_list.append({
+                    'underlying': sym,
+                    'has_options': inst.has_options,
+                    'spot_price': snap.spot_price,
+                    'ivr': snap.ivr,
+                    'green_arrow': cache_green_arrow,
+                    'red_arrow': cache_red_arrow,
+                    'state': snap.current_state,
+                    'direction': snap.direction,
+                    'regime': snap.regime,
+                    'score_long': snap.score_long,
+                    'score_short': snap.score_short,
+                    'exec_mode': snap.exec_mode,
+                    'exec_confidence': snap.exec_confidence,
+                    'stop_price': snap.stop_price,
+                    'target_price': snap.target_price,
+                    'atr': snap.atr,
+                    'adx': snap.adx,
+                    'atr_percentile': snap.atr_percentile,
+                    'rsi': snap.rsi,
+                    'squeezed': snap.squeezed,
+                    'rec_leverage': rec_lev,
+                    'futures_symbol': inst.delta_perp_symbol or f"{sym}USD",
+                    **opt,
+                    'fresh': True,
+                    'timestamp_ms': snap.computed_at_ms,
+                })
+
+            now_ms = int(time.time() * 1000)
+            payload = json.dumps({'signals': signals_list, 'timestamp_ms': now_ms})
+            yield f"event: signals\ndata: {payload}\n\n"
+
+        await asyncio.sleep(price_interval)
+
+
+@router.get("/stream-all")
+async def stream_all_signals(
+    request: Request,
+    price_interval: float = Query(2.0, ge=1.0, le=10.0),
+):
+    return StreamingResponse(
+        _sse_all_generator(request, price_interval),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/stream/{underlying}")

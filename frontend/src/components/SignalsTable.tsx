@@ -4,10 +4,11 @@
  * New signals appear at the top; existing rows never reorder.
  * Scroll down to see older signals. Works like an Instagram feed.
  */
-import React, { useEffect, useMemo, useRef, useState, memo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSignalFeed } from '../hooks/useSignalFeed';
 import type { FeedEntry } from '../hooks/useSignalFeed';
+import type { StreamStatus } from '../hooks/useAllSignalsStream';
 import { usePositions } from '../hooks/usePositions';
 import { useSignals } from '../hooks/useSignals';
 import { useTradingMode } from '../hooks/useTradingMode';
@@ -66,6 +67,33 @@ const STATE_SHORT: Record<string, string> = {
   FILTERED: 'FILTERED',
   IDLE: 'IDLE',
 };
+
+// ── Stream connection indicator ───────────────────────────────────────────────
+
+function StreamBadge({ status }: { status: StreamStatus }) {
+  const dotColor =
+    status === 'connected'    ? '#1ed760' :
+    status === 'connecting'   ? '#f0c040' :
+    /* disconnected */          '#ff4757';
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{
+        display: 'inline-block',
+        width: 6, height: 6,
+        borderRadius: '50%',
+        background: dotColor,
+        flexShrink: 0,
+        boxShadow: status === 'connected' ? `0 0 4px ${dotColor}` : 'none',
+      }} />
+      {status === 'disconnected' && (
+        <span style={{ fontSize: 8, color: '#ff4757', fontWeight: 700, letterSpacing: 0.3 }}>
+          reconnecting…
+        </span>
+      )}
+    </span>
+  );
+}
 
 function useDirectEntry() {
   const qc = useQueryClient();
@@ -292,17 +320,19 @@ function BracketPanel({
   );
 }
 
-// memo: skip re-render when entry object reference, hasOpen, and onDismiss are unchanged.
+// memo: skip re-render when entry object reference, hasOpen, and dismiss are unchanged.
 // Combined with the setFeed same-ref optimisation, this eliminates re-renders of
 // unchanged rows on every 15s poll — the main GC pressure source.
-const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, showModeTag, onDismiss }: {
+const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, showModeTag, dismiss }: {
   entry: FeedEntry;
   hasOpen: boolean;
   isLive: boolean;
   availFunds: number | null;
-  showModeTag: boolean;       // true only in ALL mode — redundant otherwise
-  onDismiss: () => void;
+  showModeTag: boolean;
+  dismiss: (id: string) => void;  // stable ref — memo works correctly
 }) {
+  // Stable dismiss callback for this entry — won't change between renders
+  const onDismiss = useCallback(() => dismiss(entry.id), [dismiss, entry.id]);
   const LOT_LEVERAGES = [5, 10, 20, 50, 100];
 
   const isFutures = entry.type === 'futures';
@@ -580,25 +610,45 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
         {/* price grid */}
         <div style={{ display: 'flex', gap: 8 }}>
-          {([
-            { label: 'ENTRY',       val: isFutures ? fp(entry.entry)      : `~$${optPrem}`,                               color: 'var(--text-primary)', sub: '',                                                                     glow: false },
-            { label: 'STOP LOSS',   val: isFutures ? fp(entry.stopLoss)   : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: 'var(--danger)',        sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%', glow: !!entry.slImproved },
-            { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`,  color: 'var(--accent)',         sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%', glow: false },
-          ] as { label: string; val: string; color: string; sub: string; glow: boolean }[]).map(({ label, val, color, sub, glow }) => (
-            <div key={label} style={{
-              background: glow ? 'rgba(29,215,96,0.06)' : 'var(--bg)',
-              border: `1px solid ${glow ? 'var(--accent)55' : 'var(--border)'}`,
-              borderRadius: 4, padding: '5px 8px', textAlign: 'center', minWidth: 70,
-              position: 'relative',
-            }}>
-              <div style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>
-                {label}
-                {glow && <span style={{ marginLeft: 3, color: 'var(--accent)', fontWeight: 900 }}>↑</span>}
+          {(() => {
+            // Points tightened: always positive when SL improved
+            const slDiff = entry.slImproved && entry.initialStopLoss != null && entry.stopLoss != null && isFutures
+              ? Math.abs(entry.initialStopLoss - entry.stopLoss)
+              : null;
+            const fmtPts = (d: number) =>
+              d >= 100 ? `${Math.round(d)} pts` :
+              d >= 10  ? `${d.toFixed(1)} pts`  :
+                         `${d.toFixed(2)} pts`;
+
+            return ([
+              { label: 'ENTRY',       val: isFutures ? fp(entry.entry)      : `~$${optPrem}`,                                   color: 'var(--text-primary)', sub: '',                                                                             glow: false, initSl: null,                                                                                                                                  diff: null },
+              { label: 'STOP LOSS',   val: isFutures ? fp(entry.stopLoss)   : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: 'var(--danger)',        sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%',      glow: !!entry.slImproved, initSl: entry.slImproved && entry.initialStopLoss != null && isFutures ? fp(entry.initialStopLoss) : null, diff: slDiff != null ? fmtPts(slDiff) : null },
+              { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`,   color: 'var(--accent)',        sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%', glow: false, initSl: null,                                                                                                                                  diff: null },
+            ] as { label: string; val: string; color: string; sub: string; glow: boolean; initSl: string | null; diff: string | null }[])
+            .map(({ label, val, color, sub, glow, initSl, diff }) => (
+              <div key={label} style={{
+                background: glow ? 'rgba(29,215,96,0.06)' : 'var(--bg)',
+                border: `1px solid ${glow ? 'var(--accent)55' : 'var(--border)'}`,
+                borderRadius: 4, padding: '5px 8px', textAlign: 'center', minWidth: 70,
+              }}>
+                <div style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>
+                  {label}{glow && <span style={{ marginLeft: 3, color: 'var(--accent)', fontWeight: 900 }}>↑</span>}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
+                {initSl && (
+                  <div style={{ fontSize: 7, color: 'var(--text-faint)', marginTop: 1, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums' }}>
+                    {initSl}
+                  </div>
+                )}
+                {diff && (
+                  <div style={{ fontSize: 7, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+                    +{diff}
+                  </div>
+                )}
+                {!initSl && !diff && sub && <div style={{ fontSize: 8, color: 'var(--text-dim)' }}>{sub}</div>}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
-              {sub && <div style={{ fontSize: 8, color: 'var(--text-dim)' }}>{sub}</div>}
-            </div>
-          ))}
+            ));
+          })()}
 
           {/* Live price — only meaningful for futures (options premium ≠ spot price) */}
           {isFutures && entry.currentPrice && (
@@ -1031,11 +1081,11 @@ const sBtn: React.CSSProperties = {
 // ── shared state hook (React Query deduplicates across both panels) ────────────
 
 function useSignalsPanelState() {
-  const { feed, dismiss }  = useSignalFeed();
-  const { data: signals }  = useSignals();
-  const { data: modeData } = useTradingMode();
-  const { data: exData }   = useExchanges();
-  const { data: acctData } = useAccountSummary();
+  const { feed, dismiss, streamStatus } = useSignalFeed();
+  const { data: signals }               = useSignals();
+  const { data: modeData }            = useTradingMode();
+  const { data: exData }              = useExchanges();
+  const { data: acctData }            = useAccountSummary();
   const currentMode = modeData?.name ?? '';
 
   const delta      = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
@@ -1045,29 +1095,41 @@ function useSignalsPanelState() {
 
   const { data: posData } = usePositions(posMode);
 
-  const openByUnderlying: Record<string, number> = {};
-  (posData?.positions ?? []).forEach(p => {
-    if (p.status === 'open' || p.status === 'partially_closed')
-      openByUnderlying[p.underlying] = (openByUnderlying[p.underlying] ?? 0) + 1;
-  });
+  const positions = posData?.positions;
+  const openByUnderlying = useMemo(() => {
+    const map: Record<string, number> = {};
+    (positions ?? []).forEach(p => {
+      if (p.status === 'open' || p.status === 'partially_closed')
+        map[p.underlying] = (map[p.underlying] ?? 0) + 1;
+    });
+    return map;
+  }, [positions]);
 
-  return { feed, dismiss, signals, currentMode, isLive, availFunds, openByUnderlying };
+  return { feed, dismiss, signals, streamStatus, currentMode, isLive, availFunds, openByUnderlying };
 }
 
-// ── shared panel renderer ─────────────────────────────────────────────────────
+type PanelState = ReturnType<typeof useSignalsPanelState>;
 
 // ── feed body: empty-state + rows + footer (no outer wrapper, no header) ──────
 
-function SignalsFeedBody({ type }: { type: 'futures' | 'options' }) {
-  const { feed, dismiss, signals, currentMode, isLive, availFunds, openByUnderlying } =
-    useSignalsPanelState();
+function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: PanelState }) {
+  const { feed, dismiss, signals, currentMode, isLive, availFunds, openByUnderlying } = state;
 
   const isFut = type === 'futures';
 
-  const visible = feed.filter(e =>
-    !e.dismissed && e.type === type &&
-    (currentMode === 'all' || !currentMode || resolveMode(e) === currentMode)
-  );
+  // Dedup at render time: if feed transiently contains duplicates (race between
+  // stream events), never show more than one card per (underlying, direction).
+  const visible = (() => {
+    const seen = new Set<string>();
+    return feed.filter(e => {
+      if (e.dismissed || e.type !== type) return false;
+      if (currentMode !== 'all' && currentMode && resolveMode(e) !== currentMode) return false;
+      const key = `${e.underlying}_${e.direction}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
 
   return (
     <>
@@ -1154,7 +1216,7 @@ function SignalsFeedBody({ type }: { type: 'futures' | 'options' }) {
               isLive={isLive}
               availFunds={availFunds}
               showModeTag={currentMode === 'all'}
-              onDismiss={() => dismiss(entry.id)}
+              dismiss={dismiss}
             />
           ))}
         </div>
@@ -1176,9 +1238,10 @@ function SignalsFeedBody({ type }: { type: 'futures' | 'options' }) {
 
 // Standalone wrapper (for direct use outside the tabbed component)
 function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
+  const state = useSignalsPanelState();
   return (
     <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
-      <SignalsFeedBody type={type} />
+      <SignalsFeedBody type={type} state={state} />
     </div>
   );
 }
@@ -1189,7 +1252,11 @@ function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
 
 export function SignalsTable() {
   const [tab, setTab] = React.useState<'futures' | 'options'>('futures');
-  const { feed, signals, currentMode } = useSignalsPanelState();
+  // Single hook instance — both tab-bar counts and SignalsFeedBody share this state.
+  // Calling useSignalsPanelState() a second time (inside SignalsFeedBody) would create
+  // a separate useState, causing counts and displayed cards to diverge.
+  const state = useSignalsPanelState();
+  const { feed, signals, currentMode, streamStatus } = state;
 
   // Count actionable entries per type so tabs can show a badge
   const count = (type: 'futures' | 'options') =>
@@ -1259,8 +1326,9 @@ export function SignalsTable() {
           );
         })}
 
-        {/* right-side: live badge pushed to end */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4 }}>
+        {/* right-side: stream status dot + instrument count */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 4 }}>
+          <StreamBadge status={streamStatus} />
           {signals && (
             <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>
               {(signals.signals ?? []).filter((s: any) => s.fresh).length} instruments
@@ -1269,8 +1337,8 @@ export function SignalsTable() {
         </div>
       </div>
 
-      {/* ── active tab body (no extra wrapper, sits flush under tab bar) ── */}
-      <SignalsFeedBody type={tab} />
+      {/* ── active tab body — same state instance as the tab-bar counts above ── */}
+      <SignalsFeedBody type={tab} state={state} />
     </div>
   );
 }

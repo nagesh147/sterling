@@ -10,8 +10,8 @@
  * Both the feed and the state-tracker are persisted to sessionStorage so page
  * refresh does NOT re-fire signals that are already in an armed state.
  */
-import { useEffect, useRef, useState } from 'react';
-import { useSignals } from './useSignals';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAllSignalsStream } from './useAllSignalsStream';
 import type { SignalItem } from './useSignals';
 import { useTradingMode } from './useTradingMode';
 import { inferModeTag } from '../utils/fmt';
@@ -68,8 +68,9 @@ export interface FeedEntry {
   currentState: string;
   dismissed: boolean;
   // Live-refresh fields — updated on every poll when signal is still active
-  refreshedAt?: number;    // timestamp of last SL/TP update
-  slImproved?: boolean;    // true when SL tightened since card was created
+  initialStopLoss?: number | null;  // SL at signal creation — never updated
+  refreshedAt?: number;             // timestamp of last SL/TP update
+  slImproved?: boolean;             // true when SL tightened since card was created
 }
 
 // ── persistence keys ──────────────────────────────────────────────────────────
@@ -173,24 +174,55 @@ function saveStates(m: Record<string, string>) {
   catch { /* quota */ }
 }
 
-// ── option expiry ─────────────────────────────────────────────────────────────
-function nextFridayExpiry(): string {
-  // Delta Exchange India symbol format: DDMMYY (e.g. 150526, not 15MAY26)
-  const d = new Date();
-  const daysToFri = ((5 - d.getDay()) + 7) % 7 || 7;
-  const exp = new Date(d.getTime() + daysToFri * 86_400_000);
-  const dd = String(exp.getDate()).padStart(2, '0');
-  const mm = String(exp.getMonth() + 1).padStart(2, '0');
-  const yy = String(exp.getFullYear()).slice(-2);
-  return `${dd}${mm}${yy}`;
+// ── option expiry — strategy-aware ───────────────────────────────────────────
+
+// Target DTE ranges mirror backend TradingModeConfig.dte_preferred
+const MODE_DTE: Record<string, { min: number; pref: [number, number]; max: number }> = {
+  scalping:   { min: 0,  pref: [0, 1],   max: 3  },
+  intraday:   { min: 0,  pref: [0, 3],   max: 7  },
+  swing:      { min: 7,  pref: [10, 21], max: 30 },
+  positional: { min: 21, pref: [30, 60], max: 90 },
+  all:        { min: 0,  pref: [0, 30],  max: 90 },
+};
+
+function strategyExpiry(mode: string): { expiry: string; dte: number } {
+  const cfg = MODE_DTE[mode] ?? MODE_DTE['swing'];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const prefMid = (cfg.pref[0] + cfg.pref[1]) / 2;
+
+  // Collect all Fridays within [dte_min, dte_max] from today
+  const candidates: { dte: number; date: Date }[] = [];
+  for (let days = Math.max(0, cfg.min); days <= cfg.max + 7; days++) {
+    const d = new Date(today.getTime() + days * 86_400_000);
+    if (d.getDay() === 5) { // Friday
+      const dte = Math.round((d.getTime() - today.getTime()) / 86_400_000);
+      if (dte >= cfg.min && dte <= cfg.max) candidates.push({ dte, date: d });
+    }
+  }
+
+  const best = candidates.length
+    ? candidates.reduce((a, b) => Math.abs(a.dte - prefMid) <= Math.abs(b.dte - prefMid) ? a : b)
+    : (() => {
+        // Fallback: nearest Friday on or after dte_min
+        const start = new Date(today.getTime() + Math.max(0, cfg.min) * 86_400_000);
+        const daysToFri = (5 - start.getDay() + 7) % 7 || 7;
+        const d = new Date(start.getTime() + daysToFri * 86_400_000);
+        return { dte: Math.round((d.getTime() - today.getTime()) / 86_400_000), date: d };
+      })();
+
+  const dd = String(best.date.getDate()).padStart(2, '0');
+  const mm = String(best.date.getMonth() + 1).padStart(2, '0');
+  const yy = String(best.date.getFullYear()).slice(-2);
+  return { expiry: `${dd}${mm}${yy}`, dte: best.dte };
 }
+
 // ── build a FeedEntry from a SignalItem ───────────────────────────────────────
 function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, mode = 'swing'): FeedEntry {
   const resolvedMode = mode === 'all'
     ? inferModeTag(sig.adx ?? 0, sig.atr_percentile ?? 50, Math.max(sig.score_long, sig.score_short))
     : mode;
-  // nextFridayExpiry() called per-entry so long-lived tabs don't carry a stale week
-  const NEXT_EXPIRY = nextFridayExpiry();
+
   const dir  = sig.direction as 'long' | 'short';
   const spot = sig.spot_price ?? 0;
   const atr  = sig.atr ?? spot * 0.02;
@@ -203,8 +235,11 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
   const step    = spot > 10_000 ? 500 : 100;
   const strike  = sig.opt_strike  ?? Math.round(spot / step) * step;
   const optType = (sig.opt_type   ?? (dir === 'long' ? 'CE' : 'PE')) as 'CE' | 'PE';
-  const expiry  = sig.opt_expiry  ?? NEXT_EXPIRY;
-  const dte     = sig.opt_dte     ?? (((5 - new Date().getDay()) + 7) % 7 || 7);
+
+  // Prefer backend-computed expiry; fall back to strategy-aware client calculation
+  const fallback = strategyExpiry(resolvedMode);
+  const expiry  = sig.opt_expiry  ?? fallback.expiry;
+  const dte     = sig.opt_dte     ?? fallback.dte;
   const optSym  = sig.opt_symbol  ?? `${optType[0]}-${sig.underlying}-${strike}-${expiry}`;
 
   return {
@@ -233,12 +268,13 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
     currentPrice: spot,
     currentState: sig.state,
     dismissed: false,
+    initialStopLoss: sl,   // preserved forever — never overwritten by live updates
   };
 }
 
 // ── main hook ─────────────────────────────────────────────────────────────────
 export function useSignalFeed() {
-  const { data } = useSignals();
+  const { data, status: streamStatus } = useAllSignalsStream();
   const { data: modeData } = useTradingMode();
   const currentMode = modeData?.name ?? 'swing';
 
@@ -402,19 +438,23 @@ export function useSignalFeed() {
       });
     }
 
-    // Update state tracker so this doesn't get re-added on the next poll
+    // Update state tracker — set both state/dir AND the arrow cooldown timestamp
+    // so the main stream loop doesn't add another card for the same direction.
     if (statesRef.current) {
-      statesRef.current[`${underlying}_futures`] = 'ENTRY_ARMED_PULLBACK';
-      statesRef.current[`${underlying}_options`] = 'ENTRY_ARMED_PULLBACK';
-      statesRef.current[`${underlying}_futures_dir`] = direction;
-      statesRef.current[`${underlying}_options_dir`] = direction;
+      statesRef.current[`${underlying}_futures`]                      = 'ENTRY_ARMED_PULLBACK';
+      statesRef.current[`${underlying}_options`]                      = 'ENTRY_ARMED_PULLBACK';
+      statesRef.current[`${underlying}_futures_dir`]                  = direction;
+      statesRef.current[`${underlying}_options_dir`]                  = direction;
+      statesRef.current[`${underlying}_futures_${direction}_fired_ms`] = String(now);
+      statesRef.current[`${underlying}_options_${direction}_fired_ms`] = String(now);
       saveStates(statesRef.current);
     }
 
-    setFeed(prev => {
-      const next = [...newEntries, ...prev].slice(0, MAX_FEED);
-      return next;
-    });
+    setFeed(prev =>
+      // deduplicateFeed ensures the new arrow card (with fresh SL/TP) replaces
+      // any stale card for the same (underlying, type, direction) in one pass.
+      deduplicateFeed([...newEntries, ...prev].slice(0, MAX_FEED))
+    );
   };
 
   // Keep ref in sync (runs every render, no effect needed — just assignment)
@@ -439,15 +479,16 @@ export function useSignalFeed() {
     return () => { _globalAddArrow = null; _globalClearState = null; _globalClearFeed = null; };
   }, []);
 
-  const dismiss = (id: string) =>
-    setFeed(prev => prev.map(e => e.id === id ? { ...e, dismissed: true } : e));
+  const dismiss = useCallback((id: string) =>
+    setFeed(prev => prev.map(e => e.id === id ? { ...e, dismissed: true } : e)),
+  []);
 
-  const clearAll = () => {
+  const clearAll = useCallback(() => {
     setFeed([]);
     sessionStorage.removeItem(FEED_KEY);
     sessionStorage.removeItem(STATES_KEY);
     statesRef.current = {};
-  };
+  }, []);
 
-  return { feed, dismiss, clearAll, addArrowEntry };
+  return { feed, dismiss, clearAll, addArrowEntry, streamStatus };
 }
