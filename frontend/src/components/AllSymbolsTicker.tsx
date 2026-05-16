@@ -44,42 +44,38 @@ export function AllSymbolsTicker() {
     const trendColor = trend > 0 ? '#00c87a' : trend < 0 ? '#f03050' : '#4a5a6a';
     const trendArrow = trend > 0 ? '▲' : trend < 0 ? '▼' : '◆';
 
+    const scoreClass = score >= 80 ? 'high' : score >= 60 ? 'mid' : 'low';
     return (
       <span
         key={sym + keySuffix}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '0 14px', borderRight: '1px solid var(--t-border)',
-          flexShrink: 0, height: '100%',
-        }}
+        className="sym-ticker-item"
       >
+        {/* Direction arrow */}
+        <span style={{ color: trendColor, fontSize: 10, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', width: 10, flexShrink: 0 }}>{trendArrow}</span>
         {/* Symbol */}
-        <span style={{ color: 'var(--t-bright)', fontWeight: 700, fontSize: 11, letterSpacing: 0.5, fontFamily: 'JetBrains Mono, monospace' }}>
+        <span style={{ color: 'var(--t-bright)', fontWeight: 800, fontSize: 12, letterSpacing: 0.8, fontFamily: 'JetBrains Mono, monospace' }}>
           {sym}
         </span>
         {/* Live price */}
         {price != null && (
-          <span style={{ color: trendColor, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
+          <span style={{ color: price != null ? trendColor : 'var(--t-dim)', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
             ${fmtP(price)}
           </span>
         )}
-        {/* Direction arrow */}
-        <span style={{ color: trendColor, fontSize: 9 }}>{trendArrow}</span>
         {/* Regime badge */}
-        {regime && (
+        {regime && regime !== 'IDLE' && (
           <span style={{
-            fontSize: 9, fontWeight: 700, padding: '0px 5px', borderRadius: 2,
-            background: regimeColor + '22', color: regimeColor,
-            fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.04em',
+            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
+            background: regimeColor + '18', color: regimeColor,
+            fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.05em',
+            border: `1px solid ${regimeColor}33`,
           }}>
             {regime.replace(/_/g, ' ')}
           </span>
         )}
-        {/* Score */}
-        {score > 0 && (
-          <span style={{ fontSize: 9, color: scoreColor, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>
-            {score}
-          </span>
+        {/* Score badge */}
+        {score >= 60 && (
+          <span className={`score-badge ${scoreClass}`}>{score}</span>
         )}
       </span>
     );

@@ -155,6 +155,16 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
               {livePnl >= 0 ? '+' : ''}{fmtN(livePnl, 2)}
             </span>
           )}
+          {pos.notes?.startsWith('[ALGO-FAILED]') && (
+            <span style={{
+              ...styles.statusBadge,
+              background: '#cc444422',
+              color: '#cc4444',
+              marginRight: 4,
+            }}>
+              ✕ ALGO FAILED
+            </span>
+          )}
           <span style={{
             ...styles.statusBadge,
             background: STATUS_COLOR[pos.status] + '22',
@@ -195,6 +205,16 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
         )}
       </div>
 
+      {pos.notes?.startsWith('[ALGO-FAILED]') && (
+        <div style={{
+          marginTop: 8, padding: '6px 10px',
+          background: '#cc444411', border: '1px solid #cc444433',
+          borderRadius: 4, fontSize: 11, color: '#cc6644',
+        }}>
+          <span style={{ fontWeight: 700 }}>Order failed: </span>
+          {pos.notes.replace('[ALGO-FAILED] ', '')}
+        </div>
+      )}
       {(pos.status === 'open' || pos.status === 'partially_closed') && (
         <TrailStopRow
           posId={pos.id}

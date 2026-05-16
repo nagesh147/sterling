@@ -47,6 +47,9 @@ _prev_states: dict[str, str] = {}
 # Without this, green_arrow stays True for the entire first 1H candle (~240 polls @ 15s).
 _prev_all_green: dict[str, bool] = {}
 _prev_all_red:   dict[str, bool] = {}
+# Last-known good prices for SSE stream — used as fallback when exchange fetch fails
+# so the ticker never shows stale watchlist data due to transient network errors.
+_stream_last_prices: dict[str, float] = {}
 # Per-instrument SSE alert state — persists across reconnections so page reloads
 # don't re-fire the arrow popup for a trend that's already been signalled.
 _prev_alert_green_stream: dict[str, bool] = {}
@@ -1222,6 +1225,15 @@ async def _sse_all_generator(
         prices: dict[str, float] = {
             sym: price for sym, price in price_results if price is not None
         }
+        # Fill missing symbols from last-known prices so the ticker never goes
+        # blank due to transient exchange errors or WS reconnect gaps.
+        for inst in serveable:
+            sym = inst.underlying
+            if sym not in prices and sym in _stream_last_prices:
+                prices[sym] = _stream_last_prices[sym]
+        # Persist latest successful prices for future fallback
+        _stream_last_prices.update(prices)
+
         if prices:
             yield f"event: prices\ndata: {json.dumps(prices)}\n\n"
         else:
@@ -1256,7 +1268,7 @@ async def _sse_all_generator(
                 signals_list.append({
                     'underlying': sym,
                     'has_options': inst.has_options,
-                    'spot_price': snap.spot_price,
+                    'spot_price': _stream_last_prices.get(sym, snap.spot_price),
                     'ivr': snap.ivr,
                     'green_arrow': cache_green_arrow,
                     'red_arrow': cache_red_arrow,

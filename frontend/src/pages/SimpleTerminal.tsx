@@ -4,7 +4,6 @@ import { StatusBar } from '../components/StatusBar';
 import { SignalsTable } from '../components/SignalsTable';
 import { PositionsStrip } from '../components/PositionsStrip';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
-import { InstrumentSelector } from '../components/InstrumentSelector';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { TradingModeSelector } from '../components/TradingModeSelector';
 import { CalibrationPanel } from '../components/CalibrationPanel';
@@ -60,12 +59,10 @@ export function SimpleTerminal() {
         }}>
           STERLING
         </span>
-        {/* Compact selectors — no "UNDERLYING" label */}
-        <InstrumentSelector compact />
         <TradingModeSelector />
-        <PaperLiveToggle />
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <PaperLiveToggle />
           <DataSourceSelector />
           <CbChip />
           <button

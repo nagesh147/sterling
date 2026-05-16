@@ -344,17 +344,29 @@ export function useSignalFeed() {
 
     setFeed(prev => {
       // On every poll: update live price, state, AND SL/TP/score from the signal.
-      // SL/TP come from ATR recalculated on fresh candles — they tighten as the
-      // trend continues, giving a better R:R on the existing card without a new trade.
+      // Price updates use ANY signal for the underlying (regardless of fresh/direction)
+      // so the NOW column always shows the latest spot price even when signals are stale.
+      // State/SL/TP updates still require fresh + matching direction.
       let anyChanged = false;
       const now = Date.now();
       const updated = prev.map(e => {
-        const match = data.signals.find(
-          s => s.underlying === e.underlying && s.fresh && s.direction === e.direction
-        );
-        if (!match) return e;
+        // Price: any signal for this underlying gives us the latest spot price
+        const priceSig = data.signals.find(s => s.underlying === e.underlying);
+        // Full update (state, SL, TP, score): requires fresh + matching direction
+        const match = priceSig?.fresh && priceSig?.direction === e.direction ? priceSig
+          : data.signals.find(s => s.underlying === e.underlying && s.fresh && s.direction === e.direction);
 
-        const cp  = match.spot_price   ?? e.currentPrice;
+        if (!priceSig && !match) return e;
+
+        const cp  = priceSig?.spot_price ?? e.currentPrice;
+
+        if (!match) {
+          // Only update price
+          if (cp === e.currentPrice) return e;
+          anyChanged = true;
+          return { ...e, currentPrice: cp };
+        }
+
         const cs  = match.state;
         const sl  = (match.stop_price   != null ? match.stop_price   : e.stopLoss);
         const tp  = (match.target_price != null ? match.target_price : e.takeProfit);

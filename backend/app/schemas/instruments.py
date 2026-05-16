@@ -13,7 +13,7 @@ class InstrumentMeta(BaseModel):
     preferred_dte_max: int = 15
     force_exit_dte: int = 3
     has_options: bool = True
-    exchange: str = "deribit"
+    exchange: str = "delta_india"
     exchange_currency: str
     perp_symbol: str
     index_name: str
@@ -38,11 +38,12 @@ class InstrumentMeta(BaseModel):
         """Data sources that can provide market data for this instrument."""
         if self.exchange == "zerodha":
             return ["zerodha"]
-        sources = ["deribit", "binance"]  # most crypto available on deribit + binance
+        sources: List[str] = []
         if self.delta_perp_symbol:
-            sources.append("delta_india")
+            sources.append("delta_india")  # Delta Exchange first — primary source
         if self.okx_perp_symbol:
             sources.append("okx")
+        sources += ["deribit", "binance"]  # legacy/fallback sources
         return sources
 
 

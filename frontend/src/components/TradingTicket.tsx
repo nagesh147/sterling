@@ -4,7 +4,7 @@ import { useSignals } from '../hooks/useSignals';
 import { usePositions, useClosePosition } from '../hooks/usePositions';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { useTradingMode } from '../hooks/useTradingMode';
-import { usePlaceOrder } from '../hooks/useSignalAlerts';
+import { usePlaceOrder, useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
 import { fmtN, fmtUSD, ivrColor } from '../utils/fmt';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -257,6 +257,9 @@ export function TradingTicket({ underlying }: Props) {
   const { data: modeData } = useTradingMode();
   const placeOrder = usePlaceOrder();
   const closePosition = useClosePosition();
+  const { data: algoData } = useAlgoMode();
+  const setAlgoMode = useSetAlgoMode();
+  const algoEnabled = algoData?.enabled ?? false;
 
   // ── Signal for this underlying ──────────────────────────────────────────────
   const signal = useMemo(
@@ -466,7 +469,23 @@ export function TradingTicket({ underlying }: Props) {
             </span>
           </>
         )}
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={() => setAlgoMode.mutate(!algoEnabled)}
+            disabled={setAlgoMode.isPending}
+            title={algoEnabled ? 'Algo ON — orders go live to Delta Exchange' : 'Algo OFF — orders are paper only'}
+            style={{
+              background: algoEnabled ? '#ff4757' : 'var(--bg)',
+              color: algoEnabled ? '#fff' : 'var(--text-dim)',
+              border: `1px solid ${algoEnabled ? '#ff4757' : 'var(--border)'}`,
+              borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
+              letterSpacing: 1.5, transition: 'all 0.15s',
+              opacity: setAlgoMode.isPending ? 0.6 : 1,
+            }}
+          >
+            {algoEnabled ? '⚡ ALGO ON' : 'ALGO OFF'}
+          </button>
           <LiveClock />
         </div>
       </div>

@@ -66,3 +66,24 @@ export function usePlaceOrder() {
     },
   });
 }
+
+export interface AlgoModeResponse {
+  enabled: boolean;
+}
+
+export function useAlgoMode() {
+  return useQuery<AlgoModeResponse>({
+    queryKey: ['algo-mode'],
+    queryFn: () => api.get<AlgoModeResponse>('/api/v1/trading/algo-mode'),
+    staleTime: 0,
+  });
+}
+
+export function useSetAlgoMode() {
+  const qc = useQueryClient();
+  return useMutation<AlgoModeResponse, Error, boolean>({
+    mutationFn: (enabled) =>
+      api.post<AlgoModeResponse>('/api/v1/trading/algo-mode', { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['algo-mode'] }),
+  });
+}

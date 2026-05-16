@@ -193,7 +193,7 @@ function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; cu
 }
 
 function AddExchangeForm({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState('deribit');
+  const [name, setName] = useState('delta_india');
   const [displayName, setDisplayName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');

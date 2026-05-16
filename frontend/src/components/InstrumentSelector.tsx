@@ -27,7 +27,7 @@ export function InstrumentSelector({ compact }: { compact?: boolean }) {
   const selectedUnderlying = useSelectedUnderlying();
   const setSelectedUnderlying = useSetSelectedUnderlying();
 
-  const activeSource = dsData?.exchange ?? 'deribit';
+  const activeSource = dsData?.exchange ?? 'delta_india';
   const instruments = data?.instruments ?? [];
 
   // Partition into compatible and incompatible for current source

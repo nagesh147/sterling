@@ -561,29 +561,29 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       borderBottom: '1px solid var(--border)',
       background: entry.dismissed ? 'var(--bg)' : 'var(--bg-card)',
       opacity: entry.dismissed ? 0.4 : 1,
-      transition: 'opacity 0.3s',
+      transition: 'opacity 0.3s, background 0.1s',
     }}>
       {/* LEFT — time + symbol */}
-      <div style={{ width: 130, flexShrink: 0, padding: '12px 10px 12px 12px', borderRight: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
-        <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 0.5 }}>{entry.underlying}</div>
-        <div style={{ fontSize: 10, fontWeight: 700, color: dirColor, marginTop: 2 }}>
+      <div style={{ width: 150, flexShrink: 0, padding: '14px 12px 14px 14px', borderRight: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
+        <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>{entry.underlying}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: dirColor, marginTop: 2 }}>
           {arrow} {side}
         </div>
-        <div style={{ fontSize: 8, color: stColor, marginTop: 3, letterSpacing: 0.5, fontWeight: 700 }}>{stLabel}</div>
-        <div style={{ fontSize: 8, color: 'var(--text-faint)', marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
+        <div style={{ fontSize: 9, color: stColor, marginTop: 4, letterSpacing: 0.5, fontWeight: 700 }}>{stLabel}</div>
+        <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
       </div>
 
       {/* CENTRE — instrument + prices */}
-      <div style={{ flex: 1, padding: '12px 10px', minWidth: 0 }}>
+      <div style={{ flex: 1, padding: '14px 12px', minWidth: 0 }}>
         {/* instrument */}
         <div style={{ marginBottom: 8 }}>
           {isFutures ? (
-            <span style={{ fontSize: 11, color: '#88aaff', fontWeight: 700 }}>
+            <span style={{ fontSize: 12, color: '#88aaff', fontWeight: 700 }}>
               {entry.futuresSymbol} · {entry.leverage}× lev
             </span>
           ) : (
-            <span style={{ fontSize: 11, color: 'var(--warning)', fontWeight: 700 }}>
+            <span style={{ fontSize: 12, color: 'var(--warning)', fontWeight: 700 }}>
               {entry.optType === 'CE' ? 'CALL' : 'PUT'} {fp(entry.optStrike)} · {entry.optExpiry} · {entry.optDte} DTE
             </span>
           )}
@@ -629,12 +629,12 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               <div key={label} style={{
                 background: glow ? 'rgba(29,215,96,0.06)' : 'var(--bg)',
                 border: `1px solid ${glow ? 'var(--accent)55' : 'var(--border)'}`,
-                borderRadius: 4, padding: '5px 8px', textAlign: 'center', minWidth: 70,
+                borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
               }}>
-                <div style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>
+                <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1.2, marginBottom: 2 }}>
                   {label}{glow && <span style={{ marginLeft: 3, color: 'var(--accent)', fontWeight: 900 }}>↑</span>}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
                 {initSl && (
                   <div style={{ fontSize: 7, color: 'var(--text-faint)', marginTop: 1, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums' }}>
                     {initSl}
@@ -652,12 +652,12 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
           {/* Live price — only meaningful for futures (options premium ≠ spot price) */}
           {isFutures && entry.currentPrice && (
-            <div style={{
+            <div className="live-price-cell" style={{
               background: 'var(--bg)', border: `1px solid ${livePnl != null && livePnl >= 0 ? '#00d4aa44' : '#ff475744'}`,
-              borderRadius: 4, padding: '5px 8px', textAlign: 'center', minWidth: 70,
+              borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
             }}>
-              <div style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>NOW</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1.2, marginBottom: 2 }}>NOW</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                 {fp(entry.currentPrice)}
               </div>
               {livePnl != null && (
@@ -675,7 +675,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
       {/* RIGHT — action */}
       <div style={{
-        width: 100, flexShrink: 0, padding: '12px 10px',
+        width: 130, flexShrink: 0, padding: '14px 10px',
         borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center',
       }}>
@@ -688,11 +688,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             onClick={handleTrade}
             disabled={hasOpen || placing}
             style={{
-              padding: '9px 0', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
+              padding: '11px 0', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
               background: hasOpen ? 'var(--bg)' : entry.direction === 'long' ? '#003d2e' : '#3d0014',
               color: hasOpen ? 'var(--text-faint)' : dirColor,
               border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + 'cc'}`,
-              fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+              fontFamily: 'inherit', fontSize: 11, fontWeight: 900, letterSpacing: 0.5,
               opacity: placing ? 0.6 : 1,
             }}
           >
@@ -715,7 +715,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           style={{
             background: 'var(--bg-card)',
             border: '1px solid var(--border)',
-            borderRadius: 10, width: 340,
+            borderRadius: 10, width: 380,
             boxShadow: '0 12px 48px rgba(0,0,0,0.6)',
             overflow: 'hidden',
           }}
@@ -1207,7 +1207,7 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
 
       {/* scrollable feed */}
       {visible.length > 0 && (
-        <div style={{ maxHeight: 520, overflowY: 'auto', scrollbarWidth: 'thin' }}>
+        <div className="signal-feed-scroll" style={{ maxHeight: 540, overflowY: 'auto' }}>
           {visible.map(entry => (
             <FeedRow
               key={entry.id}
@@ -1278,6 +1278,8 @@ export function SignalsTable() {
   // Notify when options panel gets a new actionable signal while futures is active
   const hasOptAlert = tab === 'futures' && optCount > 0;
 
+  const freshCount = (signals?.signals ?? []).filter((s: any) => s.fresh).length;
+
   return (
     <div style={{ marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
 
@@ -1285,7 +1287,7 @@ export function SignalsTable() {
       <div style={{
         background: 'var(--bg-card)',
         borderBottom: '1px solid var(--border)',
-        padding: '0 14px',
+        padding: '0 12px',
         display: 'flex', alignItems: 'stretch', gap: 0,
       }}>
         {TAB.map(t => {
@@ -1295,43 +1297,48 @@ export function SignalsTable() {
               key={t.id}
               onClick={() => setTab(t.id)}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                padding: '10px 16px', fontFamily: 'inherit',
+                background: active ? t.accent + '0a' : 'none',
+                border: 'none', cursor: 'pointer',
+                padding: '11px 18px', fontFamily: 'inherit',
                 borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
                 marginBottom: -1,
-                display: 'flex', alignItems: 'center', gap: 6,
+                display: 'flex', alignItems: 'center', gap: 7,
                 color: active ? t.accent : 'var(--text-faint)',
-                transition: 'color 0.15s, border-color 0.15s',
+                transition: 'color 0.15s, border-color 0.15s, background 0.15s',
               }}
             >
-              <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.5 }}>
+              <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.5 }}>
                 {t.icon} {t.label}
               </span>
               {t.cnt > 0 && (
                 <span style={{
-                  fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                  fontSize: 10, fontWeight: 800, letterSpacing: 0.3,
                   color: active ? t.accent : 'var(--warning)',
-                  background: active ? t.accent + '18' : 'rgba(255,165,2,0.12)',
-                  border: `1px solid ${active ? t.accent + '44' : 'rgba(255,165,2,0.3)'}`,
-                  borderRadius: 10, padding: '1px 6px', minWidth: 16, textAlign: 'center',
+                  background: active ? t.accent + '20' : 'rgba(255,165,2,0.12)',
+                  border: `1px solid ${active ? t.accent + '55' : 'rgba(255,165,2,0.3)'}`,
+                  borderRadius: 12, padding: '1px 7px', minWidth: 18, textAlign: 'center',
                 }}>
                   {t.cnt}
                 </span>
               )}
-              {/* dot alert on options tab when viewing futures */}
               {t.id === 'options' && hasOptAlert && !active && (
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', flexShrink: 0 }} />
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#a78bfa', flexShrink: 0, boxShadow: '0 0 4px #a78bfa' }} />
               )}
             </button>
           );
         })}
 
-        {/* right-side: stream status dot + instrument count */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 4 }}>
+        {/* right-side: stream status + instrument count */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 6 }}>
           <StreamBadge status={streamStatus} />
-          {signals && (
-            <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>
-              {(signals.signals ?? []).filter((s: any) => s.fresh).length} instruments
+          {freshCount > 0 && (
+            <span style={{
+              fontSize: 9, color: 'var(--text-faint)',
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              borderRadius: 3, padding: '1px 6px', fontFamily: 'inherit',
+              letterSpacing: 0.5,
+            }}>
+              {freshCount} live
             </span>
           )}
         </div>

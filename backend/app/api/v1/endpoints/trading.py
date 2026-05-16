@@ -59,6 +59,27 @@ class LiveOrderResponse(BaseModel):
     timestamp_ms: int
 
 
+class AlgoModeRequest(BaseModel):
+    enabled: bool
+
+
+class AlgoModeResponse(BaseModel):
+    enabled: bool
+
+
+@router.get("/algo-mode", response_model=AlgoModeResponse)
+async def get_algo_mode(request: Request) -> AlgoModeResponse:
+    return AlgoModeResponse(enabled=getattr(request.app.state, "algo_mode", False))
+
+
+@router.post("/algo-mode", response_model=AlgoModeResponse)
+async def set_algo_mode(body: AlgoModeRequest, request: Request) -> AlgoModeResponse:
+    from app.services.db import set_config
+    request.app.state.algo_mode = body.enabled
+    set_config("algo_mode", "true" if body.enabled else "false")
+    return AlgoModeResponse(enabled=body.enabled)
+
+
 @router.post("/place-order", response_model=LiveOrderResponse)
 async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrderResponse:
     """
@@ -81,13 +102,15 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
     now_ms = int(time.time() * 1000)
 
     # Check if Delta Exchange India is active with credentials
+    algo_mode = getattr(request.app.state, "algo_mode", False)
     active = exchange_account_store.get_active()
     has_live_creds = (
         active is not None
         and active.name in ("delta_india", "delta")
         and bool(active.api_key)
         and bool(active.api_secret)
-        and not active.is_paper
+        and not active.api_key.startswith("DUMMY")
+        and (not active.is_paper or algo_mode)
     )
 
     if has_live_creds:
@@ -176,6 +199,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
 
         except Exception as exc:
             log.error("Live order failed: %s", exc)
+            _create_failed_algo_tracking(body, sym, str(exc))
             raise HTTPException(status_code=502, detail=f"Order failed: {exc}")
 
     else:
@@ -260,6 +284,44 @@ def _send_order_telegram(body: LiveOrderRequest, sym: str, side: str, entry: flo
         _aio.create_task(_tg.send(msg))
     except Exception:
         pass
+
+
+def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -> None:
+    """Track a failed algo order in paper_store so it appears in positions with FAILED badge."""
+    try:
+        from app.schemas.execution import Direction as ExecDir
+        from app.schemas.execution import TradeStructure, SizedTrade, CandidateContract
+        from app.engines.directional.sizing_engine import size_trade
+        from app.schemas.risk import RiskParams
+        from app.services import paper_store
+
+        direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
+        leg = CandidateContract(
+            instrument_name=body.option_symbol or f"{sym}-PERP",
+            strike=0.0, expiry_date="", option_type=body.instrument_type,
+            mark_price=0.0, mark_iv=None,
+            delta=1.0 if body.direction == "long" else -1.0, dte=0,
+        )
+        structure = TradeStructure(
+            structure_type=body.instrument_type,
+            direction=direction, legs=[leg],
+            net_premium=0.0, max_loss=0.0,
+            max_gain=None, risk_reward=2.0,
+            setup_reason=f"[ALGO-FAILED] {body.direction.upper()} {body.instrument_type}",
+            score=0.0, score_breakdown={},
+        )
+        risk = RiskParams()
+        sized = size_trade(structure, risk, leverage=int(body.leverage))
+        pos = paper_store.add_position(
+            underlying=sym, sized_trade=sized,
+            entry_spot_price=0.0,
+            notes=f"[ALGO-FAILED] {error}",
+            is_paper=False,
+        )
+        # Immediately close at 0 so it shows in closed positions
+        paper_store.close_position(pos.id, exit_spot_price=0.0, notes=f"[ALGO-FAILED] {error}")
+    except Exception as e:
+        log.warning("Failed algo tracking creation error: %s", e)
 
 
 @router.get("/test-credentials")

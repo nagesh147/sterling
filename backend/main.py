@@ -302,6 +302,7 @@ async def lifespan(app: FastAPI):
     if mode_name not in MODES:
         mode_name = DEFAULT_MODE
     app.state.trading_mode = MODES[mode_name]
+    app.state.algo_mode = get_config("algo_mode", "false").lower() == "true"
 
     # Restore persisted Telegram config (survives server restarts)
     from app.services.notifications import telegram as _telegram_svc

@@ -115,3 +115,123 @@
 .term-signals-wrap [class*="border"] {
   border-radius: 0 !important;
 }
+
+/* Live price cell — subtle pulse to indicate live data */
+.live-price-cell {
+  animation: live-pulse 3s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { border-color: rgba(0, 212, 170, 0.2); }
+  50%       { border-color: rgba(0, 212, 170, 0.55); }
+}
+
+/* Feed row hover highlight */
+.feed-row {
+  transition: background 0.12s;
+}
+.feed-row:hover {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+/* Signal tab bar */
+.signals-tab-bar {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: stretch;
+}
+.signals-tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  padding: 11px 18px;
+  margin-bottom: -1px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+/* AllSymbolsTicker improvements */
+.sym-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  border-right: 1px solid var(--t-border);
+  flex-shrink: 0;
+  height: 100%;
+  cursor: default;
+  transition: background 0.15s;
+}
+.sym-ticker-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* Signal score badge */
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.5px;
+}
+.score-badge.high  { background: rgba(0,200,122,0.15); color: #00c87a; border: 1px solid rgba(0,200,122,0.3); }
+.score-badge.mid   { background: rgba(240,160,32,0.12); color: #f0a020; border: 1px solid rgba(240,160,32,0.25); }
+.score-badge.low   { background: rgba(74,90,106,0.15); color: #4a5a6a; border: 1px solid rgba(74,90,106,0.25); }
+
+/* State chips */
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Improve scrollbar in feed */
+.signal-feed-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.signal-feed-scroll::-webkit-scrollbar { width: 4px; }
+.signal-feed-scroll::-webkit-scrollbar-track { background: transparent; }
+.signal-feed-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Improve SignalPane header */
+.signal-pane-header {
+  background: var(--t-bg2);
+  border-bottom: 1px solid var(--t-border);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-height: 36px;
+}
+
+/* Instrument badge in header */
+.inst-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  font-family: 'JetBrains Mono', monospace;
+  background: rgba(32, 144, 240, 0.12);
+  color: var(--t-blue);
+  border: 1px solid rgba(32, 144, 240, 0.25);
+}
