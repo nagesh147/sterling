@@ -986,7 +986,37 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
             )
             # Persist updated trail state and live SL/TP
             _new_sl = round(trail_update.new_stop, 4)
-            _new_tp = pos.current_tp   # TP stays fixed unless overridden
+
+            # B3: trailing TP — re-evaluate using the same 1H candles + ATR.
+            # Skips silently if guards (entry/spot side, threshold) prevent update.
+            _new_tp = pos.current_tp
+            try:
+                if _new_tp is not None and pos.current_sl is not None:
+                    from app.engines.directional.dynamic_tp import recompute_tp as _recompute_tp
+                    import numpy as _np_local
+                    _highs = _np_local.array([_c.high for _c in c1h], dtype=_np_local.float64)
+                    _lows  = _np_local.array([_c.low  for _c in c1h], dtype=_np_local.float64)
+                    _closes_local = _np_local.array([_c.close for _c in c1h], dtype=_np_local.float64)
+                    from app.engines.indicators.atr import compute_atr as _compute_atr_local
+                    _atr_arr = _compute_atr_local(_highs, _lows, _closes_local, 14)
+                    _atr_now = float(_atr_arr[-1]) if len(_atr_arr) > 0 else 0.0
+                    _entry_p = pos.entry_price_real or pos.entry_spot_price
+                    _sl_dist = abs(_entry_p - pos.current_sl)
+                    _rr_target = mode_obj.rr_target if mode_obj else 2.0
+                    _candidate_tp, _changed, _src = _recompute_tp(
+                        direction="long" if direction_sign == 1 else "short",
+                        entry=_entry_p,
+                        current_tp=_new_tp,
+                        current_spot=float(current_spot),
+                        stop_dist=_sl_dist,
+                        rr=_rr_target,
+                        highs=_highs, lows=_lows, atr=_atr_now,
+                    )
+                    if _changed:
+                        _new_tp = _candidate_tp
+            except Exception:
+                pass
+
             paper_store.update_position(
                 pos.id,
                 trail_stop_json=trail_state.to_json(),

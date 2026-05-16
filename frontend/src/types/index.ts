@@ -164,6 +164,13 @@ export interface PaperPosition {
   run_once_state: TradeState;
   order_id?: string | null;
   order_status?: string | null;
+  // Live SL/TP (set by trail engine + recompute_tp on each monitor tick)
+  initial_sl?: number | null;
+  current_sl?: number | null;
+  initial_tp?: number | null;
+  current_tp?: number | null;
+  trail_mode?: string | null;
+  mode?: string | null;
 }
 
 export interface PositionListResponse {

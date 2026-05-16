@@ -1,0 +1,67 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Sterling Design Tokens — Bloomberg-grade trading terminal
+ * Pure CSS custom properties; no Tailwind, no shadcn dependency.
+ * ───────────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="dark"] {
+  --bg:           #070d1a;
+  --bg-card:      #0d1526;
+  --bg-input:     #111e33;
+  --border:       #1a2d4a;
+  --border-light: #243d60;
+  --text-primary: #d4e4f7;
+  --text-muted:   #7a9ec2;
+  --text-dim:     #3d5a7a;
+  --text-faint:   #1e3350;
+  --accent:       #00d4aa;
+  --danger:       #ff4757;
+  --warning:      #ffa502;
+  --blue:         #3d9ef0;
+  --purple:       #a855f7;
+}
+
+[data-theme="light"] {
+  --bg:           #f0f4fa;
+  --bg-card:      #ffffff;
+  --bg-input:     #e8eef8;
+  --border:       #c8d8ec;
+  --border-light: #dce8f4;
+  --text-primary: #0d1a2e;
+  --text-muted:   #3d6080;
+  --text-dim:     #7a9ab8;
+  --text-faint:   #b0c4d8;
+  --accent:       #00a87a;
+  --danger:       #e02020;
+  --warning:      #c07000;
+  --blue:         #1a6ec0;
+  --purple:       #7c3aed;
+}
+
+/* ─── Base resets ─── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular numbers for any currency / pnl figures */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Scroll bar — matches dark palette */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* Selection */
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-primary);
+}

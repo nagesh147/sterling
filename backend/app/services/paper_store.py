@@ -90,6 +90,7 @@ def add_position(
         current_tp=round(initial_tp, 4) if initial_tp is not None else None,
         order_id=order_id,
         order_status=order_status,
+        mode=mode_name,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())
@@ -141,6 +142,22 @@ def close_position(
     if max_gain is not None:
         bounded = min(max_gain * pos.sized_trade.contracts, bounded)
     estimated_pnl = round(bounded, 2)
+
+    # Record exit in cooldown engine — keyed on (underlying, mode, direction).
+    # Same-(underlying, mode, direction) re-entries are blocked for the
+    # mode-defined window after this call. Defaults to "swing" for legacy
+    # positions persisted before the mode field existed.
+    try:
+        from app.engines.risk import cooldown
+        cooldown.record_exit(
+            underlying=pos.underlying,
+            mode=getattr(pos, "mode", None) or "swing",
+            direction=structure.direction.value,
+            exit_ts_ms=int(time.time() * 1000),
+        )
+    except Exception:
+        # Cooldown is advisory — never let a failure here block a close
+        pass
 
     return update_position(
         pos_id,

@@ -41,6 +41,10 @@ class LiveOrderRequest(BaseModel):
     option_symbol: Optional[str] = None
     option_premium: Optional[float] = None
     notes: str = ""
+    # Idempotency: caller supplies a stable key per logical order. Duplicate
+    # submissions within the live_safety TTL window are rejected and the
+    # prior order_id is returned. Optional — auto-generated when omitted.
+    client_order_id: Optional[str] = None
 
 
 class LiveOrderResponse(BaseModel):
@@ -85,14 +89,50 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
     """
     Place a live order on Delta Exchange India (or paper if not configured).
     Automatically sets bracket SL/TP when provided.
+
+    Pre-flight safety checks (in order, fail-closed):
+      1. kill_switch_state.enabled       → 423 Locked
+      2. daily_loss_state.level == halt  → 423 Locked
+      3. idempotency cache hit           → returns prior order_id (200)
     """
     from app.services import adapter_manager as _adm
     from app.services import exchange_account_store
+    from app.services import live_safety, paper_store
 
     sym = body.underlying.upper()
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+
+    # ── Safety gate (composite): kill switch + daily-loss + idempotency ──
+    idem_key = body.client_order_id or live_safety.make_idempotency_key(
+        sym, body.direction, body.instrument_type, body.size,
+        # Bucket to the current minute so back-to-back identical clicks dedupe
+        int(time.time() // 60),
+    )
+    decision = live_safety.assert_safe_to_trade(
+        positions=paper_store.list_positions(),
+        idempotency_key=idem_key,
+    )
+    if not decision.allowed:
+        if decision.code == "duplicate_order":
+            # Surface the existing order_id with HTTP 200 — the client retried
+            # but should treat the prior order as authoritative.
+            return LiveOrderResponse(
+                mode="live",
+                order_id=live_safety.check_idempotency(idem_key),
+                symbol=inst.delta_perp_symbol or f"{sym}USD",
+                side="buy" if body.direction == "long" else "sell",
+                size=body.size,
+                status="duplicate",
+                message=decision.reason,
+                timestamp_ms=int(time.time() * 1000),
+            )
+        # Kill switch / daily-loss → 423 Locked (semantic: resource locked)
+        raise HTTPException(status_code=423, detail={
+            "error": decision.reason,
+            "code": decision.code,
+        })
 
     # Options: always BUY — direction is encoded in CE/PE symbol, not in the order side.
     if body.instrument_type == "options":
@@ -180,6 +220,10 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             order_id = str(order.get("id") or order.get("order_id") or "")
             entry_price = float(order.get("average_fill_price") or order.get("limit_price") or 0.0)
 
+            # Record success in idempotency cache so duplicate submits within
+            # the TTL window short-circuit and reuse this order_id.
+            live_safety.record_idempotency(idem_key, order_id)
+
             # Also create a paper tracking entry for P&L monitoring
             _create_paper_tracking(body, sym, entry_price, order_id)
 
@@ -200,6 +244,23 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
         except Exception as exc:
             log.error("Live order failed: %s", exc)
             failed_pos_id = _create_failed_algo_tracking(body, sym, str(exc))
+            # Enqueue for operator-driven retry. The retry endpoint at the
+            # bottom of this file picks items off this queue.
+            try:
+                live_safety.enqueue_retry(
+                    payload={
+                        "underlying": sym,
+                        "direction": body.direction,
+                        "instrument_type": body.instrument_type,
+                        "size": body.size,
+                        "leverage": body.leverage,
+                        "client_order_id": idem_key,
+                        "failed_position_id": failed_pos_id,
+                    },
+                    error=str(exc),
+                )
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=502,
                 detail=json.dumps({
@@ -593,3 +654,62 @@ async def cancel_all_orders(product_symbol: str, request: Request) -> dict:
         return {"cancelled_all": True, "product": delta_symbol, "result": result}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+
+# ─── Live execution safety endpoints ────────────────────────────────────────
+
+
+class KillSwitchRequest(BaseModel):
+    enabled: bool
+    reason: str = ""
+
+
+@router.get("/kill-switch")
+async def get_kill_switch() -> dict:
+    """Current kill-switch state. When enabled, all live orders are rejected."""
+    from app.services import live_safety
+    return live_safety.kill_switch_state()
+
+
+@router.post("/kill-switch")
+async def set_kill_switch_state(body: KillSwitchRequest) -> dict:
+    """Toggle the live-order kill switch. Operator emergency halt."""
+    from app.services import live_safety
+    return live_safety.set_kill_switch(body.enabled, reason=body.reason)
+
+
+@router.get("/daily-loss")
+async def get_daily_loss() -> dict:
+    """Realised PnL for the current UTC day plus circuit-breaker level."""
+    from app.services import live_safety, paper_store
+    return live_safety.daily_loss_state(paper_store.list_positions())
+
+
+@router.get("/retry-queue")
+async def get_retry_queue(include_poison: bool = True) -> dict:
+    """List failed-order retry queue items. Items reaching max_attempts
+    are flagged poison=True and require operator intervention."""
+    from app.services import live_safety
+    items = live_safety.list_retries(include_poison=include_poison)
+    return {
+        "items": [
+            {
+                "id": i.id, "payload": i.payload, "attempt": i.attempt,
+                "max_attempts": i.max_attempts, "last_error": i.last_error,
+                "enqueued_ms": i.enqueued_ms,
+                "last_attempt_ms": i.last_attempt_ms, "poison": i.poison,
+            }
+            for i in items
+        ],
+        "count": len(items),
+    }
+
+
+@router.delete("/retry-queue/{rid}")
+async def remove_retry_item(rid: str) -> dict:
+    """Remove a retry item. Use after manual reconciliation or to drop poison."""
+    from app.services import live_safety
+    removed = live_safety.remove_retry(rid)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Retry item {rid} not found")
+    return {"ok": True, "id": rid}

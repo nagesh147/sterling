@@ -37,6 +37,10 @@ class PaperPosition(BaseModel):
     # Live order tracking fields (populated when algo_mode is on)
     order_id: Optional[str] = None        # Delta Exchange order ID
     order_status: Optional[str] = None   # "pending" | "filled" | "failed" | "cancelled" | "retry"
+    # Trading-mode tag (scalping / intraday / swing / positional). Used to key
+    # the re-entry cooldown so a scalp exit cannot block a swing entry, and
+    # vice-versa. Optional for back-compat with positions persisted before this field.
+    mode: Optional[str] = None
 
 
 class EnterPositionRequest(BaseModel):

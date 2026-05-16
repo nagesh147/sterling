@@ -29,7 +29,8 @@ class TestInstrumentRegistry:
 
     def test_btc_metadata(self):
         inst = get_instrument("BTC")
-        assert inst.exchange == "deribit"
+        # Default exchange switched to Delta India for v4 (live trading target).
+        assert inst.exchange == "delta_india"
         assert inst.perp_symbol == "BTC-PERPETUAL"
         assert inst.index_name == "btc_usd"
         assert inst.dvol_symbol == "BTC-DVOL"

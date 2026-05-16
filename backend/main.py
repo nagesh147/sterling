@@ -415,8 +415,9 @@ async def lifespan(app: FastAPI):
     _arrow_store_svc.bootstrap()
 
     # Restore signal tracker state — prevents re-firing Telegram on server restart
-    from app.api.v1.endpoints.directional import _load_signal_tracker_state
+    from app.api.v1.endpoints.directional import _load_signal_tracker_state, _migrate_signal_ids_to_v2
     _load_signal_tracker_state()
+    _migrate_signal_ids_to_v2()
 
     from app.core.trading_mode import MODES, DEFAULT_MODE
     from app.services.db import get_trading_mode, get_config

@@ -76,9 +76,20 @@ async def run_once(
     adapter: BaseExchangeAdapter,
     risk_params: Optional[RiskParams] = None,
     macro_filter: str = "adx_4h",
+    mode: str = "swing",
 ) -> RunOnceResponse:
     now_ms = int(time.time() * 1000)
     risk = risk_params or RiskParams()
+
+    # ── Mode-aware candle resolution routing ────────────────────────────────
+    # Default mode "swing" preserves prior behaviour exactly (4H / 1H / 15m).
+    # Other modes route to their own timeframe stack — fixes the "scalp leak"
+    # where a scalping selection still computed signals from 4H/1H candles.
+    from app.core.trading_mode import MODES, DEFAULT_MODE
+    mode_cfg = MODES.get(mode, MODES.get(DEFAULT_MODE))
+    macro_tf  = mode_cfg.macro_tf      if mode_cfg else "4H"
+    signal_tf = mode_cfg.signal_tf     if mode_cfg else "1H"
+    exec_tf   = mode_cfg.execution_tf  if mode_cfg else "15m"
 
     if not instrument.has_options:
         return RunOnceResponse(
@@ -90,9 +101,9 @@ async def run_once(
         )
 
     try:
-        candles_4h = await adapter.get_candles(instrument, "4H", limit=100)
-        candles_1h = await adapter.get_candles(instrument, "1H", limit=200)
-        candles_15m = await adapter.get_candles(instrument, "15m", limit=50)
+        candles_4h  = await adapter.get_candles(instrument, macro_tf,  limit=100)
+        candles_1h  = await adapter.get_candles(instrument, signal_tf, limit=200)
+        candles_15m = await adapter.get_candles(instrument, exec_tf,   limit=50)
     except Exception as exc:
         log.error("Candle fetch failed for %s: %s", instrument.underlying, exc)
         return RunOnceResponse(
@@ -116,6 +127,34 @@ async def run_once(
             timestamp_ms=now_ms,
         )
 
+    # ── Re-entry cooldown gate ─────────────────────────────────────────────
+    # If a recent same-(underlying, mode, direction) exit falls inside the
+    # mode-defined cooldown window, suppress this evaluation. Prevents
+    # whipsaw re-entries after a stop-out.
+    try:
+        from app.engines.risk import cooldown
+        if cooldown.is_blocked(
+            underlying=instrument.underlying,
+            mode=mode,
+            direction=setup.direction.value,
+            now_ms=now_ms,
+        ):
+            remaining = cooldown.remaining_ms(
+                instrument.underlying, mode, setup.direction.value, now_ms,
+            )
+            return RunOnceResponse(
+                underlying=instrument.underlying, paper_mode=True,
+                state=TradeState.FILTERED, direction=setup.direction,
+                regime=regime.model_dump(), signal=signal.model_dump(),
+                recommendation="no_trade",
+                reason=f"Cooldown active for {mode} {setup.direction.value} — "
+                       f"{remaining // 60000} min remaining",
+                timestamp_ms=now_ms,
+            )
+    except Exception:
+        # Cooldown is advisory — never block evaluation if the engine errors
+        pass
+
     exec_timing = assess_timing(candles_15m, signal, atr_pct=regime.atr_percentile)
     ivr = await compute_ivr(adapter, instrument, candles_1h)
     policy = apply_policy(setup.direction, instrument, ivr)
@@ -136,7 +175,8 @@ async def run_once(
         )
 
     calls, puts = translate_options(
-        instrument, setup.direction, policy, option_chain, spot_price
+        instrument, setup.direction, policy, option_chain, spot_price,
+        candles_1h=candles_1h,
     )
     structures = build_structures(
         calls, puts, setup.direction, policy,
@@ -181,6 +221,9 @@ async def run_once(
 
     top_breakdown = ranked[0].score_breakdown if ranked else None
 
+    from app.engines.directional.mtf import compute_mtf_breakdown
+    mtf = compute_mtf_breakdown(regime, signal, exec_timing)
+
     return RunOnceResponse(
         underlying=instrument.underlying, paper_mode=True,
         state=state_final, direction=setup.direction,
@@ -192,6 +235,7 @@ async def run_once(
         recommendation=recommendation, reason=reason,
         timestamp_ms=now_ms,
         score_breakdown=top_breakdown,
+        mtf_breakdown=mtf,
     )
 
 
@@ -248,7 +292,8 @@ async def preview(
         )
 
     calls, puts = translate_options(
-        instrument, setup.direction, policy, option_chain, spot_price
+        instrument, setup.direction, policy, option_chain, spot_price,
+        candles_1h=candles_1h,
     )
     all_candidates = calls + puts
     structures = build_structures(

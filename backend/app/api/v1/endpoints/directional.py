@@ -22,6 +22,7 @@ from app.engines.directional.execution_engine import assess_timing
 from app.schemas.execution import RunOnceResponse, PreviewResponse
 from app.schemas.market import MarketSnapshotResponse
 from app.services.exchanges import instrument_registry as registry
+from app.services.exchanges.instrument_registry import get_instrument
 from app.services import eval_history as hist_store
 from app.services import arrow_store
 from app.services import alert_store as _alert_store
@@ -69,7 +70,7 @@ _STATE_LABELS = {
 }
 
 # ── Signal ID tracking ────────────────────────────────────────────────────────
-# key: "{sym}_{direction}" → short signal ID (e.g. "BTC-A3K7P")
+# key: "{sym}_{mode}_{direction}" → short signal ID (e.g. "BTC_swing_short" → "BTCFUT-SW-A3K7P")
 _active_signal_ids:  dict[str, str]   = {}
 # key: "{sym}_{direction}" → last-alerted SL (for detecting improvements)
 _active_signal_sls:  dict[str, float] = {}
@@ -108,6 +109,77 @@ def _save_signal_tracker_state() -> None:
         log.debug("Signal tracker state save failed (non-fatal): %s", exc)
 
 
+def _migrate_signal_ids_to_v2() -> None:
+    """
+    Migrate signal IDs from v1 format (BTC-F-SW-XXX) to v2 format (BTCFUT-SW-XXX).
+    Also migrate oldest format (BTC-XXX) to BTCFUT-XXX.
+    Also migrate old-style KEYS from {sym}_{dir} to {sym}_{mode}_{dir}.
+    """
+    from app.services.db import get_config as _gc, set_config as _sc
+    
+    raw = _gc("signal_tracker_state")
+    if not raw:
+        return
+    
+    data = json.loads(raw)
+    old_ids = data.get("signal_ids", {})
+    if not old_ids:
+        return
+    
+    migrated = {}
+    for key, old_id in old_ids.items():
+        # Migrate KEY format: {sym}_{dir} -> {sym}_swing_{dir} (default to swing for old keys)
+        new_key = key
+        if '_' in key:
+            parts = key.split('_')
+            if len(parts) == 2 and parts[1] in ('long', 'short'):
+                # Old key format: BTC_short -> BTC_swing_short
+                new_key = f"{parts[0]}_swing_{parts[1]}"
+                if new_key != key:
+                    log.info("Migrated key %s -> %s", key, new_key)
+        
+        if not old_id:
+            migrated[new_key] = old_id
+            continue
+        
+        # Skip if already v2 format: BTCFUT-SW-XXX or ETHOPT-IN-XXX
+        if len(old_id) >= 6 and old_id[3:6] in ("FUT", "OPT"):
+            migrated[new_key] = old_id
+            continue
+        
+        # Parse old formats:
+        # - BTC-F-SW-XXX (v1 with type code)
+        # - BTC-O-SW-XXX (v1 with type code)
+        # - BTC-XXX (oldest, no type code)
+        parts = old_id.split("-")
+        
+        if len(parts) == 4 and parts[1] in ("F", "O"):
+            # v1 format: BTC-F-SW-XXX or BTC-O-SW-XXX
+            asset = parts[0]
+            instr = "FUT" if parts[1] == "F" else "OPT"
+            new_id = f"{asset}{instr}-{parts[2]}-{parts[3]}"
+            log.info("Migrated signal ID %s -> %s", old_id, new_id)
+            migrated[new_key] = new_id
+        elif len(parts) == 2:
+            # Oldest format: BTC-XXX (assume FUT)
+            asset = parts[0]
+            new_id = f"{asset}FUT-{parts[1]}"
+            log.info("Migrated signal ID %s -> %s", old_id, new_id)
+            migrated[new_key] = new_id
+        else:
+            # Unknown format, keep as-is but use new key
+            migrated[new_key] = old_id
+    
+    # Update in-memory dict
+    _active_signal_ids.clear()
+    _active_signal_ids.update(migrated)
+    
+    # Persist migrated state
+    data["signal_ids"] = migrated
+    _sc("signal_tracker_state", json.dumps(data))
+    log.info("Signal ID migration complete: %d IDs migrated", len(migrated))
+
+
 _MODE_CODES = {
     "scalping":   "SC",
     "intraday":   "IN",
@@ -116,18 +188,22 @@ _MODE_CODES = {
     "all":        "AL",
 }
 
-def _make_signal_id(sym: str, now_ms: int, mode=None) -> str:
+def _make_signal_id(sym: str, now_ms: int, mode=None, is_options: bool = False) -> str:
     """
-    Human-readable signal ID — format: SYM-F-MODE-SEQ
-    e.g. BTC-F-SW-A3K (BTC Futures Swing), ETH-F-IN-X9P (ETH Futures Intraday)
+    Human-readable signal ID — format: SYMINSTR-MODE-SEQ
+    e.g. BTCFUT-SW-A3K (BTC Futures Swing), ETHOPT-IN-X9P (ETH Options Intraday)
 
-    TYPE is always F here (signal is per underlying, not per instrument type).
-    The frontend appends O for options cards: BTC-O-SW-A3K.
+    SYMINSTR = asset + instrument type (FUT or OPT)
+    MODE = SC/IN/SW/PO/AL (scalping/intraday/swing/positional/all)
     SEQ = 3-char base36 mixed from sym + mode + timestamp — unique per (sym, mode, ts).
     """
     _chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     mode_name = (mode.name if mode else None) or "swing"
     mode_code = _MODE_CODES.get(mode_name, "SW")
+
+    # Asset prefix + instrument type
+    asset = sym[:3].upper()
+    instr_type = "OPT" if is_options else "FUT"
 
     # Mix sym + mode_code into the timestamp for uniqueness across symbols/modes
     mix = 0
@@ -141,7 +217,7 @@ def _make_signal_id(sym: str, now_ms: int, mode=None) -> str:
         seq = _chars[n % 36] + seq
         n //= 36
 
-    return f"{sym[:3].upper()}-F-{mode_code}-{seq}"
+    return f"{asset}{instr_type}-{mode_code}-{seq}"
 
 
 def _strategy_expiry(
@@ -244,7 +320,7 @@ def _option_params(sym: str, spot: float, direction: str, mode: 'TradingModeConf
 async def _fire_signal_alert(
     sym: str, inst, setup, regime, signal,
     spot_f: float, stop_price, target_price, atr_val: float, now_ms: int,
-    _alert_mode=None,
+    _alert_mode=None, is_options: bool = False,
 ) -> None:
     """Build and store a professional signal alert; fire Telegram. Runs as a background task."""
     import datetime
@@ -258,13 +334,15 @@ async def _fire_signal_alert(
         dir_str = setup.direction.value
         state   = setup.state.value
 
-        # Generate / reuse signal ID: one ID per (sym, direction) until direction flips
-        _key = f"{sym}_{dir_str}"
-        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, _alert_mode)
+        # Generate / reuse signal ID: one ID per (sym, mode, direction) until direction flips
+        mode_name = _alert_mode.name if _alert_mode else "swing"
+        _key = f"{sym}_{mode_name}_{dir_str}"
+        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, _alert_mode, is_options)
         _active_signal_ids[_key] = signal_id
         # Record the SL at alert time for future improvement detection
         if stop_price is not None:
             _active_signal_sls[_key] = stop_price
+            log.debug("Recorded SL for %s: %s", _key, stop_price)
 
         # ATM options recommendation — use strategy-aware expiry
         opt_params = _option_params(sym, spot_f, dir_str, _alert_mode)
@@ -838,14 +916,25 @@ async def _compute_signal_item(
 
         stop_price   = None
         target_price = None
+        tp_source    = None
         stop_dist = stop_mult * atr_val
+
+        from app.engines.directional.dynamic_tp import dynamic_tp as _dynamic_tp
 
         if setup.direction.value == 'long':
             stop_price   = round(spot_f - stop_dist, 2)
-            target_price = round(spot_f + stop_dist * rr, 2)
+            tp, src      = _dynamic_tp(
+                "long", spot_f, stop_dist, rr, highs_4h, lows_4h, atr_val,
+            )
+            target_price = tp
+            tp_source    = src
         elif setup.direction.value == 'short':
             stop_price   = round(spot_f + stop_dist, 2)
-            target_price = round(spot_f - stop_dist * rr, 2)
+            tp, src      = _dynamic_tp(
+                "short", spot_f, stop_dist, rr, highs_4h, lows_4h, atr_val,
+            )
+            target_price = tp
+            tp_source    = src
 
         # Telegram alert on new actionable state transitions
         prev_state = _prev_states.get(sym, 'IDLE')
@@ -854,11 +943,12 @@ async def _compute_signal_item(
 
         if cur_state in _ALERT_STATES and prev_state != cur_state:
             asyncio.create_task(
-                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode)
+                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode, is_options=False)
             )
 
         # SL improvement check: fire Telegram when SL tightens on an active signal
-        _sl_key = f"{sym}_{setup.direction.value}"
+        mode_name = mode.name if mode else "swing"
+        _sl_key = f"{sym}_{mode_name}_{setup.direction.value}"
         if (
             stop_price is not None
             and cur_state in _ALERT_STATES
@@ -915,6 +1005,13 @@ async def _compute_signal_item(
             all_red=signal.all_red,
         )
 
+        # C1/C2: MTF breakdown + filter reason for the frontend.
+        from app.engines.directional.mtf import compute_mtf_breakdown
+        _mtf = compute_mtf_breakdown(regime, signal, exec_timing)
+        _veto = None
+        if setup.state.value == 'FILTERED':
+            _veto = setup.reason
+
         return {
             'underlying': sym,
             'has_options': inst.has_options,
@@ -927,10 +1024,17 @@ async def _compute_signal_item(
             'regime': regime.macro_regime.value,
             'score_long': round(signal.score_long, 1),
             'score_short': round(signal.score_short, 1),
+            'signal_score': round(getattr(signal, 'signal_score', 0.0), 2),
+            'signal_strength': getattr(signal, 'signal_strength', 'NONE'),
             'exec_mode': exec_timing.mode.value,
             'exec_confidence': round(exec_timing.confidence, 2),
+            'exec_score': round(exec_timing.exec_score, 2),
+            'regime_score': round(regime.score, 2),
+            'mtf_breakdown': _mtf,
+            'veto_reason': _veto,
             'stop_price': stop_price,
             'target_price': target_price,
+            'tp_source': tp_source,
             'atr': round(atr_val, 2),
             'stop_atr_mult': stop_mult,
             'st_values': [round(v, 2) for v in st_vals[:3]],
@@ -1612,8 +1716,16 @@ async def _sse_all_generator(
                     **opt,
                     'fresh': True,
                     'timestamp_ms': snap.computed_at_ms,
-                    'signal_id': _active_signal_ids.get(f"{sym}_{snap.direction}"),
                 })
+                
+                # Fix signal_id in the last added entry
+                mode_name = mode.name if mode else "swing"
+                signal_key = f"{sym}_{mode_name}_{snap.direction}"
+                signal_id = _active_signal_ids.get(signal_key)
+                if not signal_id:
+                    signal_id = _make_signal_id(sym, int(time.time() * 1000), mode, is_options=False)
+                    _active_signal_ids[signal_key] = signal_id
+                signals_list[-1]['signal_id'] = signal_id
 
             now_ms = int(time.time() * 1000)
             payload = json.dumps({'signals': signals_list, 'timestamp_ms': now_ms})

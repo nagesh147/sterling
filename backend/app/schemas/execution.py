@@ -64,6 +64,12 @@ class RunOnceResponse(BaseModel):
     timestamp_ms: int = 0
     score_breakdown: Optional[dict] = None
     funding_rate: Optional[float] = None
+    # B5: MTF (multi-timeframe) score decomposition exposed for UI consumption.
+    # macro_4h: regime score (0-20)
+    # signal_1h: 1H confluence score (0-20)
+    # execution_15m: pullback/continuation score (0-15)
+    # alignment: human-readable alignment label
+    mtf_breakdown: Optional[dict] = None
 
 
 class PreviewResponse(BaseModel):

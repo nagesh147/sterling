@@ -124,11 +124,26 @@ function isFeedEntry(x: unknown): x is FeedEntry {
  * Feed is newest-first, so first occurrence wins; later ones are older duplicates.
  * Dismissed entries are preserved in-place (user chose to keep them visible as history).
  */
+// Inline mode resolver (same logic as SignalsTable.resolveMode)
+function resolveEntryMode(e: FeedEntry): string {
+  if (e.mode !== 'all') return e.mode;
+  // Infer from adx/atr_percentile/score if mode is 'all'
+  const adx = e.adx ?? 0;
+  const atr = e.atr_percentile ?? 50;
+  const sc = e.score ?? 0;
+  if (atr < 30 || adx < 15) return 'scalping';
+  if (adx >= 20 && atr >= 40 && sc >= 75) return 'positional';
+  if (adx >= 15 && atr >= 30) return 'swing';
+  return 'intraday';
+}
+
 function deduplicateFeed(entries: FeedEntry[]): FeedEntry[] {
   const seen = new Set<string>();
   return entries.filter(e => {
     if (e.dismissed) return true;            // keep dismissed — user action
-    const key = `${e.underlying}_${e.type}_${e.direction}`;
+    // Include mode in key to separate signals across different modes
+    const modeKey = resolveEntryMode(e);
+    const key = `${e.underlying}_${modeKey}_${e.type}_${e.direction}`;
     if (seen.has(key)) return false;         // older duplicate — remove
     seen.add(key);
     return true;
@@ -148,7 +163,8 @@ function loadFeed(): FeedEntry[] {
       .slice(0, MAX_FEED)
       // Regenerate signalId if missing OR in the old format (no TYPE-MODE segments)
       .map((e: FeedEntry) => {
-        const valid = /^[A-Z]{2,4}-[FO]-[A-Z]{2}-[0-9A-Z]{3}$/.test(e.signalId ?? '');
+        // New format: BTCFUT-SW-XXX or ETHOPT-IN-XXX (2-4 char asset + FUT/OPT + MODE + SEQ)
+        const valid = /^[A-Z]{2,4}(FUT|OPT)-[A-Z]{2}-[0-9A-Z]{3}$/.test(e.signalId ?? '');
         return valid ? e : { ...e, signalId: makeSignalId(e.underlying, e.entryAt, e.type, e.mode) };
       });
     return deduplicateFeed(entries);
@@ -224,11 +240,11 @@ function strategyExpiry(mode: string): { expiry: string; dte: number } {
   return { expiry: `${dd}${mm}${yy}`, dte: best.dte };
 }
 
-// ── Signal ID format: SYM-TYPE-MODE-SEQ ──────────────────────────────────────
-// e.g. BTC-F-SW-A3K  (BTC Futures Swing)
-//      ETH-O-IN-X9P  (ETH Options Intraday)
-//      SOL-F-SC-M4L  (SOL Futures Scalping)
-//      BTC-O-PO-K2Q  (BTC Options Positional)
+// ── Signal ID format: SYMINSTR-MODE-SEQ ──────────────────────────────────────
+// e.g. BTCFUT-SW-A3K  (BTC Futures Swing)
+//      ETHOPT-IN-X9P  (ETH Options Intraday)
+//      SOLFUT-SC-M4L  (SOL Futures Scalping)
+//      ETHOPT-PO-K2Q  (ETH Options Positional)
 const MODE_CODES: Record<string, string> = {
   scalping: 'SC', intraday: 'IN', swing: 'SW', positional: 'PO', all: 'AL',
 };
@@ -240,7 +256,7 @@ function makeSignalId(
   mode = 'swing',
 ): string {
   const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const typeCode = type === 'options' ? 'O' : 'F';
+  const instrType = type === 'options' ? 'OPT' : 'FUT';
   const modeCode = MODE_CODES[mode] ?? 'SW';
 
   // Mix sym + type + mode into the timestamp → unique per every (sym, type, mode, ts)
@@ -255,7 +271,7 @@ function makeSignalId(
     seq = chars[n % 36] + seq;
     n = Math.floor(n / 36);
   }
-  return `${underlying.slice(0, 3).toUpperCase()}-${typeCode}-${modeCode}-${seq}`;
+  return `${underlying.slice(0, 3).toUpperCase()}${instrType}-${modeCode}-${seq}`;
 }
 
 // ── build a FeedEntry from a SignalItem ───────────────────────────────────────
@@ -369,7 +385,7 @@ export function useSignalFeed() {
       for (const type of ['futures', 'options'] as const) {
         if (type === 'options' && (!sig.has_options || (sig.spot_price ?? 0) * 0.01 < 2)) continue;
 
-        const key      = `${sig.underlying}_${type}`;
+        const key      = `${sig.underlying}_${currentMode}_${type}`;
         const dirKey   = `${key}_dir`;
         const prevState = states[key]    ?? 'IDLE';
         const prevDir   = states[dirKey] ?? '';
@@ -517,12 +533,12 @@ export function useSignalFeed() {
     // Update state tracker — set both state/dir AND the arrow cooldown timestamp
     // so the main stream loop doesn't add another card for the same direction.
     if (statesRef.current) {
-      statesRef.current[`${underlying}_futures`]                      = 'ENTRY_ARMED_PULLBACK';
-      statesRef.current[`${underlying}_options`]                      = 'ENTRY_ARMED_PULLBACK';
-      statesRef.current[`${underlying}_futures_dir`]                  = direction;
-      statesRef.current[`${underlying}_options_dir`]                  = direction;
-      statesRef.current[`${underlying}_futures_${direction}_fired_ms`] = String(now);
-      statesRef.current[`${underlying}_options_${direction}_fired_ms`] = String(now);
+      statesRef.current[`${underlying}_${currentMode}_futures`]                      = 'ENTRY_ARMED_PULLBACK';
+      statesRef.current[`${underlying}_${currentMode}_options`]                      = 'ENTRY_ARMED_PULLBACK';
+      statesRef.current[`${underlying}_${currentMode}_futures_dir`]                  = direction;
+      statesRef.current[`${underlying}_${currentMode}_options_dir`]                  = direction;
+      statesRef.current[`${underlying}_${currentMode}_futures_${direction}_fired_ms`] = String(now);
+      statesRef.current[`${underlying}_${currentMode}_options_${direction}_fired_ms`] = String(now);
       saveStates(statesRef.current);
     }
 

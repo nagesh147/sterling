@@ -182,7 +182,7 @@ class TestConftestIsolation:
 class TestHealthFinal:
     def test_health_exchange_adapter_field(self, client):
         data = client.get("/health").json()
-        assert data["exchange_adapter"] in ("deribit", "okx")
+        assert data["exchange_adapter"] in ("deribit", "okx", "delta_india")
 
     def test_health_cache_keys_field(self, client):
         data = client.get("/health").json()

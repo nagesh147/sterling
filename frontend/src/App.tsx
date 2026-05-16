@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Dashboard } from './pages/Dashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -20,6 +20,8 @@ function ThemedApp() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Single root view. Dashboard internally toggles between basic/pro layouts
+  // via the `appMode` Zustand selector (see useStore.useAppMode).
   return <Dashboard />;
 }
 

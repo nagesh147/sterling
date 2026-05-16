@@ -1199,7 +1199,7 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
     return feed.filter(e => {
       if (e.dismissed || e.type !== type) return false;
       if (currentMode !== 'all' && currentMode && resolveMode(e) !== currentMode) return false;
-      const key = `${e.underlying}_${e.direction}`;
+      const key = `${e.underlying}_${resolveMode(e)}_${e.direction}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;

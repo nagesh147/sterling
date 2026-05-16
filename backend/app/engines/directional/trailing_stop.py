@@ -7,6 +7,28 @@ from app.engines.indicators.atr import compute_atr
 import numpy as np
 
 
+def _atr_percentile(atr_arr: np.ndarray, lookback: int = 100) -> float:
+    """Percentile rank of latest ATR within trailing window. Returns 50.0 on empty."""
+    if atr_arr is None or len(atr_arr) == 0:
+        return 50.0
+    valid = atr_arr[~np.isnan(atr_arr)]
+    if len(valid) < 5:
+        return 50.0
+    recent = valid[-lookback:] if len(valid) > lookback else valid
+    cur = float(valid[-1])
+    return float(np.sum(cur > recent) / len(recent) * 100.0)
+
+
+def _adaptive_base_mult(atr_pct: float) -> float:
+    """
+    Map ATR percentile (0-100) to base trail multiplier (1.5-3.5).
+    Low vol → tighter trail (don't give back gains in chop).
+    High vol → wider trail (avoid premature stop-outs in expansion).
+    """
+    pct = max(0.0, min(100.0, atr_pct))
+    return round(1.5 + pct * 0.020, 2)  # 0% → 1.5, 100% → 3.5
+
+
 @dataclass
 class TrailState:
     mode: TrailMode
@@ -20,6 +42,10 @@ class TrailState:
     # Mode-specific partial thresholds (fraction, e.g. 0.10 = 10%)
     partial_25_pct: float = 0.10
     partial_50_pct: float = 0.20
+    # A2: cumulative manual tightening applied on top of the adaptive base.
+    # Each milestone (50% partial, lock-in) adds 0.5; effective_mult is
+    # max(1.0, adaptive_base - tightening_offset).
+    tightening_offset: float = 0.0
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -33,6 +59,7 @@ class TrailState:
         # Back-compat: older snapshots may lack the new fields
         d.setdefault("partial_25_pct", 0.10)
         d.setdefault("partial_50_pct", 0.20)
+        d.setdefault("tightening_offset", 0.0)
         return cls(**d)
 
 
@@ -81,6 +108,16 @@ class TrailingStopEngine:
         atr_arr = compute_atr(h, l, c_arr, 14)
         atr = float(atr_arr[-1]) if len(atr_arr) > 0 and atr_arr[-1] > 0 else abs(current * 0.01)
 
+        # A2: adaptive base trail multiplier scaled by ATR percentile.
+        # The effective mult applied this tick =
+        #   max(1.0, adaptive_base - state.tightening_offset)
+        # state.trail_mult is updated to reflect the effective value so
+        # observers (UI, JSON snapshots) see what is actually being used.
+        atr_pct = _atr_percentile(atr_arr)
+        base_mult = _adaptive_base_mult(atr_pct)
+        effective_mult = max(1.0, round(base_mult - state.tightening_offset, 2))
+        state.trail_mult = effective_mult
+
         # Update high/low watermark
         if direction == "bullish":
             state.highest_seen = max(state.highest_seen, current)
@@ -90,10 +127,10 @@ class TrailingStopEngine:
         # Advance the stop
         if state.mode == TrailMode.ATR:
             if direction == "bullish":
-                candidate = state.highest_seen - atr * state.trail_mult
+                candidate = state.highest_seen - atr * effective_mult
                 state.current_stop = max(state.current_stop, candidate)
             else:
-                candidate = state.lowest_seen + atr * state.trail_mult
+                candidate = state.lowest_seen + atr * effective_mult
                 state.current_stop = min(state.current_stop, candidate)
 
         elif state.mode == TrailMode.SUPERTREND:
@@ -154,14 +191,15 @@ class TrailingStopEngine:
                 partial_ratio=0.25,
             )
 
-        # Second partial: tighten trail multiplier
+        # Second partial: tighten trail multiplier (apply to adaptive base)
         if gain >= state.partial_50_pct and not state.partial_50_done:
             state.partial_50_done = True
-            state.trail_mult = max(state.trail_mult - 0.5, 1.0)
+            state.tightening_offset = round(state.tightening_offset + 0.5, 2)
             return PartialExitSignal(
                 close_pct=25,
                 new_trail_mult=state.trail_mult,
-                reason=f"{state.partial_50_pct*100:.0f}% gain — 25% more closed, trail tightened to {state.trail_mult:.1f}×",
+                reason=f"{state.partial_50_pct*100:.0f}% gain — 25% more closed, "
+                       f"trail tightening +0.5 (effective {state.trail_mult:.2f}×)",
                 partial_ratio=0.25,
             )
 
