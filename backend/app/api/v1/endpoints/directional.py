@@ -108,15 +108,40 @@ def _save_signal_tracker_state() -> None:
         log.debug("Signal tracker state save failed (non-fatal): %s", exc)
 
 
-def _make_signal_id(sym: str, now_ms: int) -> str:
-    """Short human-readable signal ID: e.g. BTC-A3K7P (5-char base36 suffix)."""
+_MODE_CODES = {
+    "scalping":   "SC",
+    "intraday":   "IN",
+    "swing":      "SW",
+    "positional": "PO",
+    "all":        "AL",
+}
+
+def _make_signal_id(sym: str, now_ms: int, mode=None) -> str:
+    """
+    Human-readable signal ID — format: SYM-F-MODE-SEQ
+    e.g. BTC-F-SW-A3K (BTC Futures Swing), ETH-F-IN-X9P (ETH Futures Intraday)
+
+    TYPE is always F here (signal is per underlying, not per instrument type).
+    The frontend appends O for options cards: BTC-O-SW-A3K.
+    SEQ = 3-char base36 mixed from sym + mode + timestamp — unique per (sym, mode, ts).
+    """
     _chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    n = now_ms % (36 ** 5)
-    result = ""
-    for _ in range(5):
-        result = _chars[n % 36] + result
+    mode_name = (mode.name if mode else None) or "swing"
+    mode_code = _MODE_CODES.get(mode_name, "SW")
+
+    # Mix sym + mode_code into the timestamp for uniqueness across symbols/modes
+    mix = 0
+    for c in sym:
+        mix = (mix * 31 + ord(c)) & 0xFFFFFFFF
+    mix = (mix + ord(mode_code[0]) * 97 + ord(mode_code[1])) & 0xFFFFFFFF
+
+    n = (now_ms + mix) % (36 ** 3)
+    seq = ""
+    for _ in range(3):
+        seq = _chars[n % 36] + seq
         n //= 36
-    return f"{sym[:3]}-{result}"
+
+    return f"{sym[:3].upper()}-F-{mode_code}-{seq}"
 
 
 def _strategy_expiry(
@@ -235,7 +260,7 @@ async def _fire_signal_alert(
 
         # Generate / reuse signal ID: one ID per (sym, direction) until direction flips
         _key = f"{sym}_{dir_str}"
-        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms)
+        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, _alert_mode)
         _active_signal_ids[_key] = signal_id
         # Record the SL at alert time for future improvement detection
         if stop_price is not None:

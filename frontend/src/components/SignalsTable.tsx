@@ -572,22 +572,24 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         </div>
         <div style={{ fontSize: 9, color: stColor, marginTop: 4, letterSpacing: 0.5, fontWeight: 700 }}>{stLabel}</div>
         <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
-        {entry.signalId && (
-          <div
-            title="Click to copy signal ID"
-            onClick={() => navigator.clipboard?.writeText(entry.signalId!)}
-            style={{
-              marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
-              background: 'var(--bg)', border: '1px solid var(--border)',
-              borderRadius: 3, padding: '2px 6px', cursor: 'pointer',
-            }}
-          >
-            <span style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 0.5 }}>ID</span>
-            <span style={{ fontSize: 9, fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.5 }}>
-              {entry.signalId}
-            </span>
-          </div>
-        )}
+        <div
+          title={`Signal ID: ${entry.signalId} — click to copy`}
+          onClick={() => entry.signalId && navigator.clipboard?.writeText(entry.signalId)}
+          style={{
+            marginTop: 6, display: 'flex', alignItems: 'center', gap: 4,
+            background: 'var(--bg)', border: '1px solid var(--border)',
+            borderRadius: 3, padding: '3px 6px', cursor: 'pointer',
+            width: 'fit-content',
+          }}
+        >
+          <span style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>ID</span>
+          <span style={{
+            fontSize: 10, fontFamily: 'monospace', fontWeight: 800,
+            color: 'var(--text-primary)', letterSpacing: 1,
+          }}>
+            {entry.signalId ?? '—'}
+          </span>
+        </div>
       </div>
 
       {/* CENTRE — instrument + prices */}

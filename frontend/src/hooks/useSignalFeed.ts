@@ -145,8 +145,13 @@ function loadFeed(): FeedEntry[] {
     const entries = parsed
       .filter(isFeedEntry)
       .filter((e: FeedEntry) => e.entryAt > cut)
-      .slice(0, MAX_FEED);
-    return deduplicateFeed(entries);         // strip duplicates on restore
+      .slice(0, MAX_FEED)
+      // Regenerate signalId if missing OR in the old format (no TYPE-MODE segments)
+      .map((e: FeedEntry) => {
+        const valid = /^[A-Z]{2,4}-[FO]-[A-Z]{2}-[0-9A-Z]{3}$/.test(e.signalId ?? '');
+        return valid ? e : { ...e, signalId: makeSignalId(e.underlying, e.entryAt, e.type, e.mode) };
+      });
+    return deduplicateFeed(entries);
   } catch { return []; }
 }
 
@@ -219,6 +224,40 @@ function strategyExpiry(mode: string): { expiry: string; dte: number } {
   return { expiry: `${dd}${mm}${yy}`, dte: best.dte };
 }
 
+// ── Signal ID format: SYM-TYPE-MODE-SEQ ──────────────────────────────────────
+// e.g. BTC-F-SW-A3K  (BTC Futures Swing)
+//      ETH-O-IN-X9P  (ETH Options Intraday)
+//      SOL-F-SC-M4L  (SOL Futures Scalping)
+//      BTC-O-PO-K2Q  (BTC Options Positional)
+const MODE_CODES: Record<string, string> = {
+  scalping: 'SC', intraday: 'IN', swing: 'SW', positional: 'PO', all: 'AL',
+};
+
+function makeSignalId(
+  underlying: string,
+  ts: number,
+  type: 'futures' | 'options' = 'futures',
+  mode = 'swing',
+): string {
+  const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const typeCode = type === 'options' ? 'O' : 'F';
+  const modeCode = MODE_CODES[mode] ?? 'SW';
+
+  // Mix sym + type + mode into the timestamp → unique per every (sym, type, mode, ts)
+  let mix = 0;
+  for (let i = 0; i < underlying.length; i++) mix = (Math.imul(mix, 31) + underlying.charCodeAt(i)) >>> 0;
+  if (type === 'options') mix = Math.imul(mix, 7919) >>> 0;
+  mix = (mix + modeCode.charCodeAt(0) * 97 + modeCode.charCodeAt(1)) >>> 0;
+
+  let n = ((ts >>> 0) + mix) % (36 ** 3);   // 3-char suffix = 46 656 combinations
+  let seq = '';
+  for (let i = 0; i < 3; i++) {
+    seq = chars[n % 36] + seq;
+    n = Math.floor(n / 36);
+  }
+  return `${underlying.slice(0, 3).toUpperCase()}-${typeCode}-${modeCode}-${seq}`;
+}
+
 // ── build a FeedEntry from a SignalItem ───────────────────────────────────────
 function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, mode = 'swing'): FeedEntry {
   const resolvedMode = mode === 'all'
@@ -266,7 +305,9 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
     atr_percentile: sig.atr_percentile ?? 0,
     rsi: sig.rsi ?? 50,
     mode: resolvedMode,
-    signalId: sig.signal_id ?? null,
+    signalId: sig.signal_id
+      ? (type === 'options' ? sig.signal_id.replace('-F-', '-O-') : sig.signal_id)
+      : makeSignalId(sig.underlying, now, type, resolvedMode),
     entryAt: now,
     currentPrice: spot,
     currentState: sig.state,
@@ -455,7 +496,7 @@ export function useSignalFeed() {
       leverage, futuresSymbol,
       optSymbol: null, optStrike: null, optType: null, optExpiry: null, optDte: null,
       state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, atr_percentile: 0, rsi: 50, mode: currentMode,
-      signalId: null,
+      signalId: makeSignalId(underlying, now, 'futures', currentMode),
       entryAt: now, currentPrice: spot, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
     });
 
@@ -468,7 +509,7 @@ export function useSignalFeed() {
         leverage: 1, futuresSymbol,
         optSymbol, optStrike, optType, optExpiry, optDte: null,
         state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, atr_percentile: 0, rsi: 50, mode: currentMode,
-        signalId: null,
+        signalId: makeSignalId(underlying, now, 'options', currentMode),
         entryAt: now, currentPrice: null, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
       });
     }
