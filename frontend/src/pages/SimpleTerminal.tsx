@@ -8,7 +8,6 @@ import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { TradingModeSelector } from '../components/TradingModeSelector';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SimpleSettingsDrawer } from '../components/SimpleSettings';
-import { AllSymbolsTicker } from '../components/AllSymbolsTicker';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
@@ -101,8 +100,6 @@ export function SimpleTerminal() {
         </div>
       </div>
 
-      {/* All-symbols scrolling context ticker */}
-      <AllSymbolsTicker />
 
       {/* Section tabs */}
       <div style={{

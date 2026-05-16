@@ -143,6 +143,7 @@ class WatchlistItem(BaseModel):
     score_long: Optional[float] = None
     score_short: Optional[float] = None
     spot_price: Optional[float] = None
+    daily_change_pct: Optional[float] = None  # 24h % change
     error: Optional[str] = None
     timestamp_ms: int
 

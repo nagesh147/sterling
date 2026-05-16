@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAllSignalsStream } from './useAllSignalsStream';
+import { useLivePrices } from './useLivePrices';
 import type { SignalItem } from './useSignals';
 import { useTradingMode } from './useTradingMode';
 import { inferModeTag } from '../utils/fmt';
@@ -275,6 +276,7 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
 // ── main hook ─────────────────────────────────────────────────────────────────
 export function useSignalFeed() {
   const { data, status: streamStatus } = useAllSignalsStream();
+  const liveP = useLivePrices();  // direct SSE price map — updates every 2s
   const { data: modeData } = useTradingMode();
   const currentMode = modeData?.name ?? 'swing';
 
@@ -288,6 +290,23 @@ export function useSignalFeed() {
 
   // Persist feed whenever it changes (pure side effect, outside updater)
   useEffect(() => { saveFeed(feed); }, [feed]);
+
+  // Update currentPrice directly from SSE live prices every tick.
+  // This runs independently of the signals effect so it fires even when
+  // the signals data reference doesn't change (same prices in useAllSignalsStream).
+  useEffect(() => {
+    if (Object.keys(liveP).length === 0) return;
+    setFeed(prev => {
+      let changed = false;
+      const updated = prev.map(e => {
+        const p = liveP[e.underlying];
+        if (p == null || p === e.currentPrice) return e;
+        changed = true;
+        return { ...e, currentPrice: p };
+      });
+      return changed ? updated : prev;
+    });
+  }, [liveP]);
 
   // Stable ref for the global registration (declared after addArrowEntry below)
   const addArrowRef = useRef<typeof addArrowEntry | null>(null);

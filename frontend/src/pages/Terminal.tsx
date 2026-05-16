@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { TickerStrip } from '../components/TickerStrip';
-import { AllSymbolsTicker } from '../components/AllSymbolsTicker';
 import { SignalPane } from '../components/SignalPane';
 import { ChartPane } from '../components/ChartPane';
 import { RiskPane } from '../components/RiskPane';
@@ -137,8 +136,6 @@ export function Terminal() {
         </div>
       </div>
 
-      {/* All-symbols context ticker (regime, score, live prices) */}
-      <AllSymbolsTicker />
 
       {/* Main workspace */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

@@ -2,7 +2,15 @@
 Delta Exchange India adapter.
 Public: market data, tickers, option chain. Private: balances, positions, orders, fills.
 API base:  https://api.india.delta.exchange   Docs: https://docs.india.delta.exchange
-WebSocket: wss://socket.india.delta.exchange  (mark_price + spot_price_v2 channels)
+WebSocket: wss://socket.india.delta.exchange  (public channels: v2/ticker, all_trades)
+
+Public WS channels (no auth):
+  v2/ticker   — 24h rolling OHLCV + mark/spot price, emitted every 5s
+  all_trades  — real-time trade fills (last traded price on every fill)
+
+Heartbeat: send {"type":"enable_heartbeat"} after subscribe;
+           server sends {"type":"heartbeat"} every ~10s;
+           reconnect if no message received within 35s.
 """
 import asyncio
 import hashlib
@@ -89,13 +97,21 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
     # ─── WebSocket live price feed ────────────────────────────────────────────
 
     async def start_ws(self, symbols: list[str]) -> None:
-        """Start background WebSocket feed for live mark/spot prices.
-        Eliminates REST ticker calls while connected (~100× fewer API calls)."""
+        """Start (or restart) background WebSocket feed for live prices.
+        Eliminates REST ticker calls while connected (~100× fewer API calls).
+        Safe to call multiple times — stops old task first if still running."""
         if self._ws_task and not self._ws_task.done():
+            # Already running — no-op (symbols are baked into the task)
             return
         self._ws_active = True
+        self._ws_prices.clear()
         self._ws_task = asyncio.create_task(self._ws_loop(list(symbols)))
-        log.info("Delta India WS: starting live feed for %s", symbols)
+        ws_url = (
+            "wss://socket.india.delta.exchange"
+            if "india" in self._base
+            else "wss://socket.delta.exchange"
+        )
+        log.info("Delta WS: starting feed → %s | symbols: %s", ws_url, symbols)
 
     async def stop_ws(self) -> None:
         """Gracefully stop the WebSocket feed."""
@@ -110,58 +126,101 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         self._ws_prices.clear()
 
     async def _ws_loop(self, symbols: list[str]) -> None:
-        """Persistent WebSocket loop with exponential-backoff reconnect."""
+        """Persistent WebSocket loop with correct public channels and heartbeat."""
         import websockets  # local import — only needed when WS is active
         delay = 3.0
+
+        # Derive WS URL from the REST base that was auto-detected during credential test.
+        # India platform → wss://socket.india.delta.exchange
+        # Global platform → wss://socket.delta.exchange
+        ws_url = (
+            "wss://socket.india.delta.exchange"
+            if "india" in self._base
+            else "wss://socket.delta.exchange"
+        )
+
+        # Delta WS heartbeat: reconnect if no message received within 35s.
+        HEARTBEAT_TIMEOUT = 35.0
 
         while self._ws_active:
             try:
                 async with websockets.connect(
-                    _WS_URL,
+                    ws_url,
                     ping_interval=20,
                     ping_timeout=10,
                     close_timeout=5,
                     open_timeout=10,
                 ) as ws:
-                    # Subscribe to mark_price and spot_price_v2 for all symbols
-                    for channel in ("mark_price", "spot_price_v2"):
-                        await ws.send(json.dumps({
-                            "type": "subscribe",
-                            "payload": {"channels": [{"name": channel, "symbols": symbols}]},
-                        }))
-                    delay = 3.0  # reset backoff on successful connect
-                    log.info("Delta India WS: connected, subscribed to %d symbols", len(symbols))
+                    # Subscribe to public market data channels (no auth required):
+                    #   v2/ticker   — 24h OHLCV + mark/spot price, every 5s
+                    #   all_trades  — real-time last-traded price on every fill
+                    await ws.send(json.dumps({
+                        "type": "subscribe",
+                        "payload": {"channels": [
+                            {"name": "v2/ticker",  "symbols": symbols},
+                            {"name": "all_trades", "symbols": symbols},
+                        ]},
+                    }))
+                    # Enable server-side heartbeat (server sends every ~10s)
+                    await ws.send(json.dumps({"type": "enable_heartbeat"}))
 
-                    async for raw in ws:
-                        if not self._ws_active:
-                            break
+                    delay = 3.0  # reset backoff on successful connect
+                    log.info(
+                        "Delta WS connected: %s | %d symbols | channels: v2/ticker, all_trades",
+                        ws_url, len(symbols),
+                    )
+
+                    while self._ws_active:
                         try:
-                            msg = json.loads(raw)
+                            # Wait up to 35s for any message (heartbeat keeps this alive)
+                            raw = await asyncio.wait_for(ws.recv(), timeout=HEARTBEAT_TIMEOUT)
+                        except asyncio.TimeoutError:
+                            log.warning(
+                                "Delta WS: no message in %.0fs (heartbeat timeout) — reconnecting",
+                                HEARTBEAT_TIMEOUT,
+                            )
+                            break  # reconnect
+
+                        try:
+                            msg   = json.loads(raw)
                             mtype = msg.get("type", "")
-                            if mtype in ("mark_price", "spot_price_v2", "v2/ticker"):
-                                sym = msg.get("symbol") or msg.get("product_symbol")
-                                # price field varies by channel
+
+                            if mtype == "heartbeat":
+                                continue  # keep-alive, no price data
+
+                            sym = msg.get("symbol") or msg.get("product_symbol")
+                            if not sym:
+                                continue
+
+                            if mtype == "v2/ticker":
+                                # 5s snapshot: mark_price is the primary; fall back to spot/close
                                 raw_price = (
-                                    msg.get("price") or       # mark_price / spot_price_v2
-                                    msg.get("mark_price") or  # v2/ticker
-                                    msg.get("spot_price") or  # v2/ticker
-                                    msg.get("close")          # v2/ticker fallback
+                                    msg.get("mark_price") or
+                                    msg.get("spot_price") or
+                                    msg.get("close")
                                 )
-                                if sym and raw_price:
-                                    v = float(raw_price)
-                                    if v > 0:
-                                        self._ws_prices[sym] = v
+                            elif mtype == "all_trades":
+                                # Real-time fill: last traded price
+                                raw_price = msg.get("price")
+                            else:
+                                continue  # ignore unknown channel types
+
+                            if raw_price:
+                                v = float(raw_price)
+                                if v > 0:
+                                    self._ws_prices[sym] = v
+
                         except Exception:
-                            continue  # ignore parse errors on individual messages
+                            continue  # ignore individual parse errors
 
             except asyncio.CancelledError:
                 break
             except Exception as exc:
                 if not self._ws_active:
                     break
-                log.debug("Delta India WS disconnected (%s). Reconnecting in %.0fs.", exc, delay)
+                log.debug("Delta WS disconnected (%s). Reconnecting in %.0fs.", exc, delay)
                 await asyncio.sleep(delay)
-                delay = min(delay * 2, 60.0)  # cap at 60s
+                delay = min(delay * 2, 60.0)
 
     async def _get_client(self):
         if self._client is None or self._client.is_closed:

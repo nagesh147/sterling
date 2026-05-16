@@ -13,6 +13,7 @@ export interface WatchlistItem {
   score_long?: number;
   score_short?: number;
   spot_price?: number;
+  daily_change_pct?: number | null;
   error?: string;
   timestamp_ms: number;
 }

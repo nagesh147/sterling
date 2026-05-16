@@ -368,6 +368,15 @@ async def _watchlist_item(
         ivr = await compute_ivr(adapter, inst, c1h)
         from app.engines.directional.policy_engine import apply_policy
         policy = apply_policy(setup.direction, inst, ivr)
+        # 24h % change: find 1H candle closest to 24 hours ago
+        daily_change_pct: float | None = None
+        if c1h and spot and spot > 0:
+            target_ts = now_ms - 24 * 3600 * 1000
+            candle_24h = min(c1h, key=lambda c: abs(c.timestamp_ms - target_ts))
+            ref = candle_24h.close or candle_24h.open
+            if ref and ref > 0:
+                daily_change_pct = round((spot - ref) / ref * 100, 2)
+
         return WatchlistItem(
             underlying=inst.underlying,
             has_options=inst.has_options,
@@ -380,6 +389,7 @@ async def _watchlist_item(
             score_long=signal.score_long,
             score_short=signal.score_short,
             spot_price=spot,
+            daily_change_pct=daily_change_pct,
             timestamp_ms=now_ms,
         )
     except Exception as exc:

@@ -36,15 +36,18 @@ export function AllSymbolsTicker() {
     const price = liveP[sym] ?? item.spot_price ?? null;
     const regime = (item as any).macro_regime as string | undefined;
     const regimeColor = REGIME_COLOR[regime ?? ''] ?? '#4a5a6a';
-    const scoreL = item.score_long ?? 0;
-    const scoreS = item.score_short ?? 0;
-    const score = Math.max(scoreL, scoreS);
-    const scoreColor = score >= 85 ? '#00c87a' : score >= 75 ? '#f0a020' : '#4a5a6a';
+    const dailyChg = (item as any).daily_change_pct as number | null | undefined;
     const trend = item.signal_trend ?? 0;
     const trendColor = trend > 0 ? '#00c87a' : trend < 0 ? '#f03050' : '#4a5a6a';
     const trendArrow = trend > 0 ? '▲' : trend < 0 ? '▼' : '◆';
 
-    const scoreClass = score >= 80 ? 'high' : score >= 60 ? 'mid' : 'low';
+    const chgColor = dailyChg == null ? 'var(--t-dim)'
+      : dailyChg > 0 ? '#00c87a'
+      : dailyChg < 0 ? '#f03050'
+      : 'var(--t-dim)';
+    const chgStr = dailyChg == null ? null
+      : `${dailyChg >= 0 ? '+' : ''}${dailyChg.toFixed(2)}%`;
+
     return (
       <span
         key={sym + keySuffix}
@@ -58,11 +61,17 @@ export function AllSymbolsTicker() {
         </span>
         {/* Live price */}
         {price != null && (
-          <span style={{ color: price != null ? trendColor : 'var(--t-dim)', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ color: 'var(--t-bright)', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
             ${fmtP(price)}
           </span>
         )}
-        {/* Regime badge */}
+        {/* 24h % change */}
+        {chgStr != null && (
+          <span style={{ color: chgColor, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+            {chgStr}
+          </span>
+        )}
+        {/* Regime badge — only when non-idle */}
         {regime && regime !== 'IDLE' && (
           <span style={{
             fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
@@ -72,10 +81,6 @@ export function AllSymbolsTicker() {
           }}>
             {regime.replace(/_/g, ' ')}
           </span>
-        )}
-        {/* Score badge */}
-        {score >= 60 && (
-          <span className={`score-badge ${scoreClass}`}>{score}</span>
         )}
       </span>
     );

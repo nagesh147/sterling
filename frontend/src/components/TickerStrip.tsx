@@ -19,11 +19,13 @@ export function TickerStrip() {
 
   const renderItem = (item: typeof items[0], key: string) => {
     const trend = item.signal_trend ?? 0;
-    const score = Math.max(item.score_long ?? 0, item.score_short ?? 0);
     const cls   = trend > 0 ? 'up' : trend < 0 ? 'dn' : 'neu';
     const arrow = trend > 0 ? '▲' : trend < 0 ? '▼' : '◆';
+    const dailyChg = (item as any).daily_change_pct as number | null | undefined;
+    const chgColor = dailyChg == null ? 'var(--t-dim)' : dailyChg > 0 ? 'var(--t-green)' : dailyChg < 0 ? 'var(--t-red)' : 'var(--t-dim)';
+    const chgStr = dailyChg != null ? `${dailyChg >= 0 ? '+' : ''}${dailyChg.toFixed(2)}%` : null;
 
-    /* Prefer SSE live price; fall back to watchlist price */
+    // SSE live price when fresh (changed within 20s), otherwise watchlist poll
     const price = liveP[item.underlying] ?? item.spot_price ?? null;
     if (price == null) return null;
 
@@ -34,9 +36,9 @@ export function TickerStrip() {
         </span>
         <span className={'num ' + cls} style={{ fontSize: 11 }}>${fmtPrice(price)}</span>
         <span className={cls} style={{ fontSize: 9 }}>{arrow}</span>
-        {score >= 75 && (
-          <span className="tag" style={{ background: 'var(--t-border)', color: 'var(--t-text)' }}>
-            {score}
+        {chgStr != null && (
+          <span className="num" style={{ fontSize: 10, color: chgColor, fontWeight: 700 }}>
+            {chgStr}
           </span>
         )}
         <span style={{ color: 'var(--t-br2)', marginLeft: 8 }}>│</span>

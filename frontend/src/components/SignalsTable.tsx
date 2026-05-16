@@ -702,364 +702,421 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       </div>
     </div>
 
-    {/* ── Order confirmation modal ─────────────────────────────────── */}
+    {/* ── Order confirmation modal — side-by-side layout ─────────── */}
     {showConfirm && (
       <div
+        onClick={e => { if (e.target === e.currentTarget && modalStatus.type !== 'pending') closeModal(); }}
         style={{
           position: 'fixed', inset: 0, zIndex: 4000,
-          background: 'rgba(0,0,0,0.75)',
+          background: 'rgba(0,0,0,0.82)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16,
         }}
       >
-        <div
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 10, width: 380,
-            boxShadow: '0 12px 48px rgba(0,0,0,0.6)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* ── contract + close ── */}
-          <div style={{ padding: '12px 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                {isFutures ? entry.futuresSymbol : `${entry.optType === 'CE' ? 'CALL' : 'PUT'} ${fp(entry.optStrike)}`}
-              </span>
-              <span style={{
-                fontSize: 8, fontWeight: 700, letterSpacing: 0.5, flexShrink: 0,
-                color: isLive ? 'var(--accent)' : '#88aaff',
-                background: isLive ? 'var(--accent)15' : '#88aaff15',
-                border: `1px solid ${isLive ? 'var(--accent)33' : '#88aaff33'}`,
-                borderRadius: 3, padding: '1px 5px',
-              }}>{isLive ? '● LIVE' : 'PAPER'}</span>
+        <div style={{
+          background: 'var(--bg-card)',
+          border: `1px solid ${dirColor}44`,
+          borderRadius: 12,
+          width: 760, maxWidth: '98vw',
+          boxShadow: `0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px ${dirColor}22`,
+          overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+          maxHeight: '94vh',
+        }}>
+
+          {/* ══ HEADER ══════════════════════════════════════════════════ */}
+          <div style={{
+            background: direction === 'long'
+              ? 'linear-gradient(135deg, #002a1e 0%, #001a12 100%)'
+              : 'linear-gradient(135deg, #2a0010 0%, #1a0008 100%)',
+            borderBottom: `1px solid ${dirColor}33`,
+            padding: '14px 20px',
+            display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+          }}>
+            {/* Direction indicator */}
+            <div style={{
+              width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+              background: dirColor + '20',
+              border: `1px solid ${dirColor}55`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 16, color: dirColor, fontWeight: 900,
+            }}>
+              {direction === 'long' ? '▲' : '▼'}
             </div>
-            <button onClick={modalStatus.type === 'pending' ? undefined : closeModal}
-              style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '4px', flexShrink: 0 }}>✕</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
+                  {isFutures ? entry.futuresSymbol : `${entry.optType === 'CE' ? 'CALL' : 'PUT'} ${fp(entry.optStrike)}`}
+                </span>
+                <span style={{
+                  fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
+                  color: isLive ? 'var(--accent)' : '#88aaff',
+                  background: isLive ? 'var(--accent)15' : '#88aaff15',
+                  border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
+                  borderRadius: 4, padding: '2px 7px',
+                }}>{isLive ? '● LIVE' : '◎ PAPER'}</span>
+                {entry.regime && (
+                  <span style={{ fontSize: 9, color: 'var(--text-faint)', background: 'rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 6px' }}>
+                    {entry.regime.replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                {direction === 'long' ? 'BUY LONG' : 'SELL SHORT'} · Score {entry.score} · ADX {entry.adx?.toFixed(0) ?? '—'}
+              </div>
+            </div>
+            {/* Current price */}
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+                {fp(spotPrice)}
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--text-faint)' }}>SPOT PRICE</div>
+            </div>
+            <button onClick={modalStatus.type === 'pending' ? undefined : closeModal} style={{
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+              color: 'var(--text-muted)', cursor: 'pointer', borderRadius: 6,
+              width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, flexShrink: 0,
+            }}>✕</button>
           </div>
 
-          {/* ── Buy | Long / Sell | Short tabs ── */}
-          <div style={{ display: 'flex', margin: '12px 16px 0', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+          {/* ══ DIRECTION TABS (full width) ═════════════════════════════ */}
+          <div style={{ display: 'flex', background: 'var(--bg)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
             {(['long','short'] as const).map(d => {
               const active = d === direction;
               const col    = d === 'long' ? 'var(--accent)' : 'var(--danger)';
-              const bg     = active ? (d === 'long' ? 'var(--accent)18' : 'var(--danger)18') : 'transparent';
               return (
                 <button key={d} onClick={() => setDirection(d)} style={{
-                  flex: 1, textAlign: 'center', padding: '10px 0',
-                  background: bg, color: active ? col : 'var(--text-faint)',
-                  fontWeight: 800, fontSize: 13, letterSpacing: 0.3,
+                  flex: 1, padding: '11px 0', textAlign: 'center',
+                  background: active ? (d === 'long' ? 'rgba(0,212,170,0.1)' : 'rgba(255,71,87,0.1)') : 'transparent',
+                  color: active ? col : 'var(--text-dim)',
+                  fontWeight: 900, fontSize: 13, letterSpacing: 0.5,
                   border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  borderBottom: active ? `2px solid ${col}` : '2px solid transparent',
                   borderRight: d === 'long' ? '1px solid var(--border)' : 'none',
+                  transition: 'all 0.12s',
                 }}>
-                  {d === 'long' ? 'Buy | Long' : 'Sell | Short'}
+                  {d === 'long' ? '▲ BUY / LONG' : '▼ SELL / SHORT'}
                 </button>
               );
             })}
           </div>
 
-          <div style={{ padding: '0 16px 16px' }}>
+          {/* ══ SIDE-BY-SIDE BODY ════════════════════════════════════════ */}
+          <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-          {/* ── Leverage row ── */}
-          {isFutures && (
-            <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Leverage</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={levDown} disabled={LOT_LEVERAGES.indexOf(leverage) === 0} style={{ ...sBtn, opacity: LOT_LEVERAGES.indexOf(leverage) === 0 ? 0.3 : 1 }}>&minus;</button>
-                  <span style={{ fontSize: 15, fontWeight: 800, minWidth: 44, textAlign: 'center', fontVariantNumeric: 'tabular-nums',
-                    color: leverage !== snapLev(entry.leverage) ? '#f0c040' : dirColor }}>
-                    {leverage}×
-                  </span>
-                  <button onClick={levUp} disabled={LOT_LEVERAGES.indexOf(leverage) === LOT_LEVERAGES.length - 1} style={{ ...sBtn, opacity: LOT_LEVERAGES.indexOf(leverage) === LOT_LEVERAGES.length - 1 ? 0.3 : 1 }}>+</button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {LOT_LEVERAGES.map(l => (
-                  <button key={l} onClick={() => setLeverage(l)} style={{
-                    flex: 1, padding: '4px 0', borderRadius: 4, fontFamily: 'inherit',
-                    fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    background: leverage === l ? 'var(--accent)15' : 'var(--bg-input)',
-                    color: leverage === l ? 'var(--accent)' : 'var(--text-faint)',
-                    border: `1px solid ${leverage === l ? 'var(--accent)44' : 'var(--border)'}`,
-                  }}>{l}×</button>
-                ))}
-              </div>
-              {leverage !== entry.leverage && (
-                <div style={{ marginTop: 6, fontSize: 9, color: '#f0c040' }}>
-                  Signal suggests {entry.leverage}× (ADX {entry.adx?.toFixed(0)}) — higher leverage increases risk
+            {/* ── LEFT PANEL: Order parameters ── */}
+            <div style={{
+              width: '50%', borderRight: '1px solid var(--border)',
+              overflowY: 'auto', padding: '16px',
+              display: 'flex', flexDirection: 'column', gap: 14,
+            }}>
+
+              {/* Override warning */}
+              {direction !== entry.direction && (
+                <div style={{
+                  padding: '8px 12px', borderLeft: '3px solid #f0c040',
+                  background: '#f0c04010', border: '1px solid #f0c04033',
+                  borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-start',
+                }}>
+                  <span style={{ fontSize: 12, flexShrink: 0 }}>⚠</span>
+                  <div style={{ fontSize: 10, color: '#c8941a', lineHeight: 1.5 }}>
+                    Signal recommends <strong style={{ color: '#f0c040' }}>
+                      {entry.direction === 'long' ? 'BUY' : 'SELL'}
+                    </strong> — you're counter-trading.
+                  </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* ── Override warning ── */}
-          {direction !== entry.direction && (
-            <div style={{
-              marginTop: 10, padding: '8px 12px',
-              background: '#2a1800', border: '1px solid #f0c04044',
-              borderLeft: '3px solid #f0c040',
-              borderRadius: 5, display: 'flex', gap: 8, alignItems: 'flex-start',
-            }}>
-              <span style={{ fontSize: 13, flexShrink: 0 }}>⚠️</span>
+              {/* Leverage */}
+              {isFutures && (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>LEVERAGE</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <button onClick={levDown} disabled={LOT_LEVERAGES.indexOf(leverage) === 0}
+                      style={{ ...sBtn, width: 28, height: 28, opacity: LOT_LEVERAGES.indexOf(leverage) === 0 ? 0.3 : 1 }}>&minus;</button>
+                    <span style={{
+                      flex: 1, textAlign: 'center', fontSize: 22, fontWeight: 900,
+                      fontVariantNumeric: 'tabular-nums',
+                      color: leverage !== snapLev(entry.leverage) ? '#f0c040' : dirColor,
+                    }}>{leverage}×</span>
+                    <button onClick={levUp} disabled={LOT_LEVERAGES.indexOf(leverage) === LOT_LEVERAGES.length - 1}
+                      style={{ ...sBtn, width: 28, height: 28, opacity: LOT_LEVERAGES.indexOf(leverage) === LOT_LEVERAGES.length - 1 ? 0.3 : 1 }}>+</button>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {LOT_LEVERAGES.map(l => (
+                      <button key={l} onClick={() => setLeverage(l)} style={{
+                        flex: 1, padding: '6px 0', borderRadius: 5, fontFamily: 'inherit',
+                        fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                        background: leverage === l ? dirColor + '20' : 'var(--bg)',
+                        color: leverage === l ? dirColor : 'var(--text-faint)',
+                        border: `1px solid ${leverage === l ? dirColor + '66' : 'var(--border)'}`,
+                        transition: 'all 0.1s',
+                      }}>{l}×</button>
+                    ))}
+                  </div>
+                  {leverage !== entry.leverage && (
+                    <div style={{ marginTop: 5, fontSize: 9, color: '#f0c040' }}>
+                      Signal suggests {entry.leverage}× — higher leverage increases risk
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Order type */}
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#f0c040', marginBottom: 2 }}>
-                  Going against the signal
-                </div>
-                <div style={{ fontSize: 10, color: '#c8941a', lineHeight: 1.5 }}>
-                  The signal recommends <strong style={{ color: '#f0c040' }}>
-                    {entry.direction === 'long' ? 'BUY (Long)' : 'SELL (Short)'}
-                  </strong>. You've switched to <strong style={{ color: 'var(--danger)' }}>
-                    {direction === 'long' ? 'BUY (Long)' : 'SELL (Short)'}
-                  </strong>. Proceed only if you have a specific reason to counter-trade.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Order type tabs ── */}
-          <div style={{ display: 'flex', marginTop: 12, borderBottom: '1px solid var(--border)' }}>
-            {([
-              { id: 'market', label: 'Market' },
-              { id: 'limit',  label: 'Limit'  },
-              { id: 'maker',  label: 'Maker Only', hint: 'Post-only — rejected if it would take liquidity. Fee rebate eligible.' },
-            ] as { id: string; label: string; hint?: string }[]).map(t => (
-              <button key={t.id} onClick={() => setOrderType(t.id as typeof orderType)} title={t.hint} style={{
-                background: 'none', border: 'none', padding: '7px 14px',
-                fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                color: orderType === t.id ? dirColor : 'var(--text-faint)',
-                borderBottom: orderType === t.id ? `2px solid ${dirColor}` : '2px solid transparent',
-                marginBottom: -1,
-              }}>{t.label}</button>
-            ))}
-          </div>
-
-          {/* ── Price ── */}
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{orderType === 'limit' ? 'Limit Price' : 'Market Price'}</span>
-              {orderType === 'market' && <span style={{ fontSize: 11, color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>~{fp(spotPrice)}</span>}
-            </div>
-            {orderType === 'limit' ? (
-              <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '0 8px 0 12px' }}>
-                <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
-                  style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginRight: 4 }}>
-                  <button onClick={() => setLimitPrice(p => String(Math.round((parseFloat(p) || spotPrice) + priceStep)))}
-                    style={{ ...sBtn, height: 14, fontSize: 9, lineHeight: 1 }}>▲</button>
-                  <button onClick={() => setLimitPrice(p => String(Math.max(0, Math.round((parseFloat(p) || spotPrice) - priceStep))))}
-                    style={{ ...sBtn, height: 14, fontSize: 9, lineHeight: 1 }}>▼</button>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--text-faint)', flexShrink: 0 }}>USD</span>
-              </div>
-            ) : (
-              <div style={{ padding: '9px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#f0c040', fontSize: 13, fontWeight: 700 }}>{fp(spotPrice)}</span>
-                <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Best {direction === 'long' ? 'Ask' : 'Bid'} · Market</span>
-              </div>
-            )}
-          </div>
-
-          {/* ── Order options row: GTC/IOC + Reduce Only + Scalper ── */}
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' as const, alignItems: 'center' }}>
-            {/* GTC / IOC — only for non-market orders */}
-            {orderType !== 'market' && (
-              <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                {(['gtc','ioc'] as const).map(t => (
-                  <button key={t} onClick={() => setTimeInForce(t)} style={{
-                    padding: '3px 9px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
-                    background: timeInForce === t ? 'var(--bg-card)' : 'transparent',
-                    color: timeInForce === t ? 'var(--text-primary)' : 'var(--text-faint)',
-                  }} title={t === 'gtc' ? 'Good Till Cancel' : 'Immediate Or Cancel'}>
-                    {t.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            )}
-            {/* Reduce Only toggle */}
-            <button onClick={() => setReduceOnly(r => !r)} style={{
-              padding: '3px 10px', borderRadius: 4, fontFamily: 'inherit',
-              fontSize: 9, fontWeight: 700, cursor: 'pointer',
-              background: reduceOnly ? 'var(--accent)15' : 'transparent',
-              color: reduceOnly ? 'var(--accent)' : 'var(--text-faint)',
-              border: `1px solid ${reduceOnly ? 'var(--accent)44' : 'var(--border)'}`,
-            }} title="Close-only — never opens a new position">
-              {reduceOnly ? '✓ ' : ''}Reduce Only
-            </button>
-            {/* Scalper mode */}
-            <button onClick={() => setScalperMode(s => !s)} style={{
-              padding: '3px 10px', borderRadius: 4, fontFamily: 'inherit',
-              fontSize: 9, fontWeight: 700, cursor: 'pointer',
-              background: scalperMode ? '#f0c04015' : 'transparent',
-              color: scalperMode ? '#f0c040' : 'var(--text-faint)',
-              border: `1px solid ${scalperMode ? '#f0c04044' : 'var(--border)'}`,
-            }} title={`One-click order without re-confirming. Auto-cancels unfilled after ${scalperSecs}s.`}>
-              {scalperMode ? `⚡ ${scalperSecs}s` : '⚡ Scalper'}
-            </button>
-            {scalperMode && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input type="range" min={5} max={300} step={5} value={scalperSecs}
-                  onChange={e => setScalerSecs(parseInt(e.target.value))}
-                  style={{ width: 60, accentColor: '#f0c040' }} />
-                <span style={{ fontSize: 9, color: '#f0c040' }}>{scalperSecs}s</span>
-              </div>
-            )}
-          </div>
-
-          {/* ── Quantity ── */}
-          <div style={{ marginTop: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Quantity</span>
-            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-input)', border: '1px solid var(--border-light)', borderRadius: 6, padding: '0 12px', marginTop: 5 }}>
-              <input type="number" min="1" step={qtyUnit === 'lot' ? 1 : undefined} value={qtyValue}
-                onChange={e => setQtyValue(e.target.value)}
-                style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, padding: '9px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
-              <select value={qtyUnit} onChange={e => { setQtyUnit(e.target.value); setQtyValue('1'); }}
-                style={{ background: 'none', border: 'none', color: '#f0c040', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', outline: 'none', padding: '0 0 0 4px' }}>
-                <option value="lot">Lot</option>
-                <option value="usd">USD</option>
-                <option value={lotInfo.unit}>{lotInfo.unit}</option>
-              </select>
-            </div>
-            <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 4 }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</div>
-            <div style={{ display: 'flex', gap: 4, marginTop: 7 }}>
-              {[10,25,50,75,100].map(pct => {
-                // Calculate USD amount = pct% of available funds (or 10× notional as fallback)
-                const usdAtPct = availFunds
-                  ? availFunds * leverage * (pct / 100)   // pct of purchasing power
-                  : notionalUsd * (pct / 100);
-                return (
-                  <button key={pct} onClick={() => {
-                    setQtyUnit('usd');
-                    setQtyValue(String(Math.round(usdAtPct)));
-                  }} style={{ flex: 1, padding: '5px 0', borderRadius: 4, background: 'var(--bg-input)', color: 'var(--text-dim)', border: '1px solid var(--border)', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 600 }}>
-                    {pct}%
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ── Bracket Order ── */}
-          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline dotted', textDecorationColor: 'var(--border)' }}>Bracket Order</span>
-            <button onClick={() => setShowBracket(b => !b)}
-              style={{ background: 'none', border: '1px solid #f0c04055', borderRadius: 5, padding: '4px 10px', color: '#f0c040', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {showBracket ? '− Remove' : '+ Add TP/SL'}
-            </button>
-          </div>
-          {showBracket && <BracketPanel
-            spotPrice={spotPrice} direction={direction}
-            lotSize={lotInfo.lotSize} size={size}
-            tpValue={tpValue} setTpValue={setTpValue}
-            slValue={slValue} setSlValue={setSlValue}
-            defaultTp={defaultTp} defaultSl={defaultSl}
-            onStateChange={s => { bracketRef.current = s as typeof bracketRef.current; }}
-          />}
-
-          {/* ── Economics breakdown ── */}
-          <div style={{ marginTop: 14, background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
-            {([
-              { label: 'Notional',  val: fmtCost(notionalUsd) },
-              { label: `Exchange fee · ${
-                  feeRole === 'taker'        ? 'Taker 0.05%'      :
-                  feeRole === 'maker-rebate' ? 'Maker-Only 0%'    :
-                                               'Maker 0.02%'
-                }`, val: feeUsd > 0 ? fmtCost(feeUsd) : feeRole === 'maker-rebate' ? 'Rebate eligible' : fmtCost(feeUsd) },
-              { label: 'GST 18% (on fee, est.)', val: fmtCost(gstUsd), hint: true },
-              { label: 'Margin required', val: fmtCost(marginUsd) },
-              { label: 'Funds req. (margin + fee + GST)', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
-            ].filter(Boolean) as {label:string;val:string;bold?:boolean;warn?:boolean;hint?:boolean}[])
-            .map(({ label, val, bold, warn, hint }) => (
-              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 11, color: hint ? 'var(--text-faint)' : 'var(--text-faint)' }}>{label}</span>
-                <span style={{ fontSize: 11, fontWeight: bold ? 700 : 400, color: warn ? 'var(--danger)' : bold ? 'var(--text-primary)' : hint ? '#888' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
-              </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Available Funds</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                  color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--accent)' }}>
-                  {availFunds !== null ? fmtCost(availFunds) : isLive ? '—' : 'Paper'}
-                </span>
-                <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                  {(['USD','INR'] as const).map(c => (
-                    <button key={c} onClick={() => setCurrency(c)} style={{
-                      padding: '2px 6px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: 9, fontWeight: 700,
-                      background: currency === c ? 'var(--bg-card)' : 'transparent',
-                      color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : 'var(--text-faint)',
-                    }}>{c}</button>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>ORDER TYPE</div>
+                <div style={{ display: 'flex', background: 'var(--bg)', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                  {([
+                    { id: 'market', label: 'Market' },
+                    { id: 'limit',  label: 'Limit'  },
+                    { id: 'maker',  label: 'Maker', hint: 'Post-only — 0% fee, rebate eligible' },
+                  ] as { id: string; label: string; hint?: string }[]).map((t, i) => (
+                    <button key={t.id} onClick={() => setOrderType(t.id as typeof orderType)} title={t.hint} style={{
+                      flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+                      background: orderType === t.id ? dirColor + '18' : 'transparent',
+                      color: orderType === t.id ? dirColor : 'var(--text-faint)',
+                      borderRight: i < 2 ? '1px solid var(--border)' : 'none',
+                      transition: 'all 0.1s',
+                    }}>{t.label}</button>
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-          {insufficientFunds && (
-            <div style={{ fontSize: 9, color: 'var(--danger)', textAlign: 'right', marginTop: 4 }}>
-              Need {fmtCost(totalCostUsd - (availFunds ?? 0))} more —{' '}
-              <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
-            </div>
-          )}
 
-
-          {/* status banner */}
-          {modalStatus.type !== 'idle' && (
-            <div style={{
-              marginTop: 12, padding: '10px 12px', borderRadius: 6,
-              border: `1px solid ${modalStatus.type === 'success' ? '#1ed76033' : modalStatus.type === 'error' ? '#ff475733' : '#2a3038'}`,
-              background: modalStatus.type === 'success' ? '#0a1f12' : modalStatus.type === 'error' ? '#1f0a0a' : '#1c2228',
-              display: 'flex', alignItems: 'flex-start', gap: 8,
-            }}>
-              <span style={{ fontSize: 14, flexShrink: 0 }}>
-                {modalStatus.type === 'pending' ? '⏳' : modalStatus.type === 'success' ? '✅' : '❌'}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2,
-                  color: modalStatus.type === 'success' ? '#1ed760' : modalStatus.type === 'error' ? '#ff4757' : '#888' }}>
-                  {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed ✓' : 'Order failed'}
+              {/* Price */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>
+                  {orderType === 'market' ? 'MARKET PRICE' : 'LIMIT PRICE'}
                 </div>
-                <div style={{ fontSize: 10, color: '#777', lineHeight: 1.6, wordBreak: 'break-word' }}>{modalStatus.msg}</div>
-                {modalStatus.type === 'error' && modalStatus.msg.toLowerCase().includes('insufficient margin') && (
-                  <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, color: '#1ed760', textDecoration: 'none', background: '#0a2010', border: '1px solid #1ed76033', borderRadius: 4, padding: '4px 10px' }}>
-                    Deposit Funds ↗
-                  </a>
+                {orderType === 'limit' || orderType === 'maker' ? (
+                  <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: `1px solid ${dirColor}55`, borderRadius: 7, padding: '0 10px 0 14px' }}>
+                    <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
+                      style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 16, fontWeight: 800, padding: '10px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 6 }}>
+                      <button onClick={() => setLimitPrice(p => String(Math.round((parseFloat(p) || spotPrice) + priceStep)))}
+                        style={{ ...sBtn, height: 14, fontSize: 9 }}>▲</button>
+                      <button onClick={() => setLimitPrice(p => String(Math.max(0, Math.round((parseFloat(p) || spotPrice) - priceStep))))}
+                        style={{ ...sBtn, height: 14, fontSize: 9 }}>▼</button>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>USD</span>
+                  </div>
+                ) : (
+                  <div style={{ padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: dirColor, fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fp(spotPrice)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Best {direction === 'long' ? 'Ask' : 'Bid'}</span>
+                  </div>
                 )}
               </div>
+
+              {/* Quantity */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1 }}>QUANTITY</span>
+                  <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '0 12px' }}>
+                  <input type="number" min="1" step={qtyUnit === 'lot' ? 1 : undefined} value={qtyValue}
+                    onChange={e => setQtyValue(e.target.value)}
+                    style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 16, fontWeight: 800, padding: '10px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                  <select value={qtyUnit} onChange={e => { setQtyUnit(e.target.value); setQtyValue('1'); }}
+                    style={{ background: 'none', border: 'none', color: '#f0c040', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>
+                    <option value="lot">Lot</option>
+                    <option value="usd">USD</option>
+                    <option value={lotInfo.unit}>{lotInfo.unit}</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                  {[10,25,50,75,100].map(pct => {
+                    const usdAtPct = availFunds
+                      ? availFunds * leverage * (pct / 100)
+                      : notionalUsd * (pct / 100);
+                    return (
+                      <button key={pct} onClick={() => { setQtyUnit('usd'); setQtyValue(String(Math.round(usdAtPct))); }}
+                        style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
+                        {pct}%
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Order options */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>ORDER OPTIONS</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, alignItems: 'center' }}>
+                  {orderType !== 'market' && (
+                    <div style={{ display: 'flex', background: 'var(--bg)', borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                      {(['gtc','ioc'] as const).map(t => (
+                        <button key={t} onClick={() => setTimeInForce(t)} style={{
+                          padding: '5px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                          fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
+                          background: timeInForce === t ? 'var(--bg-card)' : 'transparent',
+                          color: timeInForce === t ? 'var(--text-primary)' : 'var(--text-faint)',
+                        }} title={t === 'gtc' ? 'Good Till Cancel' : 'Immediate Or Cancel'}>
+                          {t.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={() => setReduceOnly(r => !r)} style={{
+                    padding: '5px 10px', borderRadius: 5, fontFamily: 'inherit', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    background: reduceOnly ? 'var(--accent)15' : 'var(--bg)',
+                    color: reduceOnly ? 'var(--accent)' : 'var(--text-faint)',
+                    border: `1px solid ${reduceOnly ? 'var(--accent)44' : 'var(--border)'}`,
+                  }} title="Close-only">
+                    {reduceOnly ? '✓ Reduce Only' : 'Reduce Only'}
+                  </button>
+                  <button onClick={() => setScalperMode(s => !s)} style={{
+                    padding: '5px 10px', borderRadius: 5, fontFamily: 'inherit', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    background: scalperMode ? '#f0c04015' : 'var(--bg)',
+                    color: scalperMode ? '#f0c040' : 'var(--text-faint)',
+                    border: `1px solid ${scalperMode ? '#f0c04044' : 'var(--border)'}`,
+                  }}>
+                    {scalperMode ? `⚡ ${scalperSecs}s` : '⚡ Scalper'}
+                  </button>
+                  {scalperMode && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <input type="range" min={5} max={300} step={5} value={scalperSecs}
+                        onChange={e => setScalerSecs(parseInt(e.target.value))}
+                        style={{ width: 60, accentColor: '#f0c040' }} />
+                      <span style={{ fontSize: 9, color: '#f0c040' }}>{scalperSecs}s</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
 
-          </div>{/* end padded inner */}
+            {/* ── RIGHT PANEL: Bracket + Economics ── */}
+            <div style={{
+              width: '50%',
+              overflowY: 'auto', padding: '16px',
+              display: 'flex', flexDirection: 'column', gap: 14,
+              background: 'rgba(0,0,0,0.15)',
+            }}>
 
-          {/* ── Big action button (full width, no padding) ── */}
+              {/* Bracket Order — always visible */}
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>BRACKET ORDER (TP / SL)</div>
+                <BracketPanel
+                  spotPrice={spotPrice} direction={direction}
+                  lotSize={lotInfo.lotSize} size={size}
+                  tpValue={tpValue} setTpValue={setTpValue}
+                  slValue={slValue} setSlValue={setSlValue}
+                  defaultTp={defaultTp} defaultSl={defaultSl}
+                  onStateChange={s => { bracketRef.current = s as typeof bracketRef.current; }}
+                />
+              </div>
+
+              {/* Economics */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1 }}>ORDER ECONOMICS</span>
+                  <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    {(['USD','INR'] as const).map(c => (
+                      <button key={c} onClick={() => setCurrency(c)} style={{
+                        padding: '2px 8px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                        fontSize: 9, fontWeight: 700,
+                        background: currency === c ? 'var(--bg-card)' : 'transparent',
+                        color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : 'var(--text-faint)',
+                      }}>{c}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  {([
+                    { label: 'Notional value', val: fmtCost(notionalUsd), dim: true },
+                    { label: `Fee · ${feeRole === 'taker' ? 'Taker 0.05%' : feeRole === 'maker-rebate' ? 'Maker 0% (rebate)' : 'Maker 0.02%'}`,
+                      val: feeUsd > 0 ? fmtCost(feeUsd) : 'Rebate eligible', dim: true },
+                    { label: 'GST 18% (est.)', val: fmtCost(gstUsd), dim: true },
+                    { label: 'Margin required', val: fmtCost(marginUsd) },
+                    { label: 'Total required', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
+                  ] as {label:string;val:string;bold?:boolean;warn?:boolean;dim?:boolean}[])
+                  .map(({ label, val, bold, warn, dim }) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: 11, color: dim ? 'var(--text-dim)' : 'var(--text-faint)' }}>{label}</span>
+                      <span style={{ fontSize: 11, fontWeight: bold ? 800 : 500, fontVariantNumeric: 'tabular-nums',
+                        color: warn ? 'var(--danger)' : bold ? 'var(--text-primary)' : 'var(--text-muted)' }}>{val}</span>
+                    </div>
+                  ))}
+                  {/* Available funds row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px' }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Available</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
+                      color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--accent)' }}>
+                      {availFunds !== null ? fmtCost(availFunds) : isLive ? '—' : 'Paper'}
+                    </span>
+                  </div>
+                </div>
+                {insufficientFunds && (
+                  <div style={{ marginTop: 6, fontSize: 10, color: 'var(--danger)', textAlign: 'right' }}>
+                    Need {fmtCost(totalCostUsd - (availFunds ?? 0))} more —{' '}
+                    <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
+                      style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
+                  </div>
+                )}
+              </div>
+
+              {/* Status banner */}
+              {modalStatus.type !== 'idle' && (
+                <div style={{
+                  padding: '10px 14px', borderRadius: 8,
+                  border: `1px solid ${modalStatus.type === 'success' ? '#1ed76044' : modalStatus.type === 'error' ? '#ff475744' : 'var(--border)'}`,
+                  background: modalStatus.type === 'success' ? '#0a1f12' : modalStatus.type === 'error' ? '#1f0a0a' : 'var(--bg)',
+                  display: 'flex', alignItems: 'flex-start', gap: 10,
+                }}>
+                  <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1.3 }}>
+                    {modalStatus.type === 'pending' ? '⏳' : modalStatus.type === 'success' ? '✅' : '❌'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3,
+                      color: modalStatus.type === 'success' ? '#1ed760' : modalStatus.type === 'error' ? '#ff4757' : 'var(--text-muted)' }}>
+                      {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed ✓' : 'Order failed'}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, wordBreak: 'break-word' }}>{modalStatus.msg}</div>
+                    {modalStatus.type === 'error' && modalStatus.msg.toLowerCase().includes('insufficient margin') && (
+                      <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, color: '#1ed760', textDecoration: 'none', background: '#0a2010', border: '1px solid #1ed76033', borderRadius: 4, padding: '4px 10px' }}>
+                        Deposit Funds ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ══ ACTION BUTTON (full width) ══════════════════════════════ */}
           {modalStatus.type === 'success' ? (
             <button onClick={closeModal} style={{
-              width: '100%', padding: '14px 0', background: '#1c2228',
-              color: '#1ed760', border: 'none', borderTop: '1px solid #2a3038',
-              fontFamily: 'inherit', fontSize: 14, fontWeight: 800, cursor: 'pointer', letterSpacing: 0.5,
-            }}>Done</button>
+              width: '100%', padding: '16px 0', background: '#0a1f12',
+              color: '#1ed760', border: 'none', borderTop: '1px solid #1ed76033',
+              fontFamily: 'inherit', fontSize: 14, fontWeight: 900, cursor: 'pointer', letterSpacing: 1,
+              flexShrink: 0,
+            }}>✓ Done</button>
           ) : (
             <button
               onClick={modalStatus.type === 'pending' ? undefined : submitOrder}
               disabled={insufficientFunds || modalStatus.type === 'pending'}
               style={{
-                width: '100%', padding: '15px 0', border: 'none',
+                width: '100%', padding: '17px 0', border: 'none', flexShrink: 0,
                 background: insufficientFunds || modalStatus.type === 'pending'
                   ? 'var(--bg-input)'
-                  : direction === 'long' ? 'var(--accent)' : 'var(--danger)',
-                color: insufficientFunds || modalStatus.type === 'pending'
-                  ? 'var(--text-faint)' : '#fff',
-                fontFamily: 'inherit', fontSize: 15, fontWeight: 900,
+                  : direction === 'long'
+                    ? 'linear-gradient(90deg, #00c87a, #00d4aa)'
+                    : 'linear-gradient(90deg, #e02030, #ff4757)',
+                color: insufficientFunds || modalStatus.type === 'pending' ? 'var(--text-faint)' : '#fff',
+                fontFamily: 'inherit', fontSize: 15, fontWeight: 900, letterSpacing: 1,
                 cursor: insufficientFunds || modalStatus.type === 'pending' ? 'not-allowed' : 'pointer',
-                letterSpacing: 0.5, transition: 'background 0.15s',
+                borderTop: '1px solid var(--border)',
+                transition: 'opacity 0.15s',
                 opacity: modalStatus.type === 'pending' ? 0.7 : 1,
+                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
               }}
             >
-              {modalStatus.type === 'pending' ? 'Placing…'
-                : modalStatus.type === 'error' ? `Retry`
-                : `${tradeActionLabel}${isLive ? '' : ' (Paper)'}`}
+              {modalStatus.type === 'pending' ? 'Placing order…'
+                : modalStatus.type === 'error' ? 'Retry Order'
+                : `${tradeActionLabel}${isLive ? '' : '  (Paper)'}`}
             </button>
           )}
         </div>
