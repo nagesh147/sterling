@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Terminal } from './Terminal';
+import { SimpleTerminal } from './SimpleTerminal';
 import { useSelectedUnderlying } from '../store/useStore';
 import { useConfigInfo } from '../hooks/useConfigInfo';
 import { InstrumentSelector } from '../components/InstrumentSelector';
@@ -119,16 +120,9 @@ export function Dashboard() {
   const toggleTheme = useToggleTheme();
   const appMode = useAppMode();
   const setAppMode = useSetAppMode();
-
-  /* In pro mode, render the Bloomberg Terminal.
-     Use a widened string type to prevent TypeScript from narrowing `appMode`
-     in the rest of this component (which retains the original basic-mode paths). */
-  const _modeStr: string = appMode;
-  if (_modeStr === 'pro') return <Terminal />;
+  /* These must be declared before any early returns to satisfy React hooks rules. */
   const [showSettings, setShowSettings] = useState(false);
-
   const defaultTf = modeData?.config?.execution_tf ?? '15m';
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -140,6 +134,12 @@ export function Dashboard() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  /* Route to dedicated Terminal views — use widened string to avoid TS narrowing
+     appMode for the (now unreachable) legacy render paths below. */
+  const _modeStr: string = appMode;
+  if (_modeStr === 'basic') return <SimpleTerminal />;
+  if (_modeStr === 'pro')   return <Terminal />;
 
   return (
     <div style={page}>
