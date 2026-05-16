@@ -1,7 +1,7 @@
 """
-Delta Exchange India adapter — fixed all data issues.
+Delta Exchange India adapter.
 Public: market data, tickers, option chain. Private: balances, positions, orders, fills.
-API base: https://api.delta.exchange  Docs: https://docs.delta.exchange
+API base: https://api.india.delta.exchange  Docs: https://docs.india.delta.exchange
 """
 import hashlib
 import hmac
@@ -21,7 +21,7 @@ from app.core.logging import get_logger
 
 log = get_logger(__name__)
 
-_BASE = "https://api.delta.exchange"
+_BASE = "https://api.india.delta.exchange"
 
 _RESOLUTION_MAP = {
     "15m": "15m",
@@ -87,11 +87,11 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
     def _sign(self, method, path, query="", body=""):
         ts = int(time.time())
-        # Delta Exchange signature: METHOD + timestamp + /path + ?query + body
+        # Delta Exchange India signature format (from official Python REST client):
+        #   message = method + timestamp + requestPath + queryString + requestBody
+        # queryString is the raw query string WITHOUT the leading '?'.
         # Reference: github.com/delta-exchange/python-rest-client
-        msg = method + str(ts) + path
-        if query: msg += "?" + query
-        if body:  msg += body
+        msg = method + str(ts) + path + query + body
         sig = hmac.new(
             self._api_secret.encode(), msg.encode(), digestmod=hashlib.sha256
         ).hexdigest()

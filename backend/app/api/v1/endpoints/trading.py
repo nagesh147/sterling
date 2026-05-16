@@ -96,7 +96,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
             # Use the API base URL auto-detected during test-credentials (India vs Global).
             # Falls back to global if not yet tested.
-            api_base = (active.extra or {}).get("api_base_url", "https://api.delta.exchange")
+            api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
             adapter = DeltaIndiaAdapter(
                 api_key=active.api_key,
                 api_secret=active.api_secret,
@@ -278,8 +278,8 @@ async def test_credentials(request: Request) -> dict:
         return {"ok": False, "reason": "Placeholder credentials detected", "hint": "Replace the default DUMMY key/secret with real Delta Exchange credentials."}
 
     errors = {}
-    for label, base_url in [("Global (delta.exchange)", "https://api.delta.exchange"),
-                             ("India (india.delta.exchange)", "https://api.india.delta.exchange")]:
+    for label, base_url in [("India (india.delta.exchange)", "https://api.india.delta.exchange"),
+                             ("Global (delta.exchange)", "https://api.delta.exchange")]:
         adapter = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
                                     is_paper=False, base_url=base_url)
         try:
@@ -324,15 +324,21 @@ async def test_credentials(request: Request) -> dict:
             errors[label] = str(exc)
 
     # Both failed — give a consolidated error
+    india_err = errors.get("India (india.delta.exchange)", "")
     global_err = errors.get("Global (delta.exchange)", "")
+    primary_err = india_err or global_err
     hint = ""
-    if "invalid_api_key" in global_err or "invalid_api_key" in errors.get("India (india.delta.exchange)", ""):
-        hint = "API key not recognised. Regenerate from delta.exchange → Settings → API Keys and re-enter in Settings."
-    elif "403" in global_err or "Forbidden" in global_err:
-        hint = "Key exists but lacks Order Management permission. Enable it in Delta Exchange API settings."
+    if "invalid_api_key" in primary_err or "Invalid API key" in primary_err:
+        hint = ("Key not recognised on either endpoint. Ensure it was generated at "
+                "delta.exchange/app/account/manageapikeys (not testnet) and has Read + Trading permissions.")
+    elif "403" in primary_err or "Forbidden" in primary_err:
+        hint = "Key exists but lacks required permissions. Enable Read + Order Management at delta.exchange/app/account/manageapikeys."
+    elif "signature" in primary_err.lower():
+        hint = "Signature mismatch — ensure the API Secret is copied exactly (no extra spaces or line breaks)."
     else:
-        hint = "Ensure the key is from delta.exchange (not testnet) and has Read + Order Management permissions."
-    return {"ok": False, "reason": f"Global: {global_err}", "hint": hint}
+        hint = "Ensure the key is from delta.exchange (not testnet) with Read + Order Management permissions."
+    label = "India" if india_err else "Global"
+    return {"ok": False, "reason": f"{label}: {primary_err}", "hint": hint}
 
 
 @router.get("/order-status/{order_id}")
@@ -358,7 +364,7 @@ async def cancel_order(order_id: str, product_id: int, request: Request) -> dict
     active = exchange_account_store.get_active()
     if not active or active.is_paper:
         raise HTTPException(status_code=400, detail="Live credentials required")
-    api_base = (active.extra or {}).get("api_base_url", "https://api.delta.exchange")
+    api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
     adapter  = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
                                   is_paper=False, base_url=api_base)
     try:
@@ -380,7 +386,7 @@ async def cancel_all_orders(product_symbol: str, request: Request) -> dict:
     inst = registry.get_instrument(product_symbol.upper())
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown symbol: {product_symbol}")
-    api_base = (active.extra or {}).get("api_base_url", "https://api.delta.exchange")
+    api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
     adapter  = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
                                   is_paper=False, base_url=api_base)
     try:
