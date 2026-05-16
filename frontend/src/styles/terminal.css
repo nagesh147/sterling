@@ -1,0 +1,89 @@
+/* Sterling Bloomberg Terminal Design System */
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+.term-root {
+  --t-bg:     #07090d;
+  --t-bg2:    #0d1117;
+  --t-bg3:    #141c24;
+  --t-border: #1e2d3d;
+  --t-br2:    #243447;
+  --t-text:   #a8b8c8;
+  --t-bright: #dce8f0;
+  --t-dim:    #4a5a6a;
+  --t-green:  #00c87a;
+  --t-red:    #f03050;
+  --t-amber:  #f0a020;
+  --t-blue:   #2090f0;
+  --t-cyan:   #00d4ff;
+  --t-purple: #9060f0;
+
+  position: fixed;
+  inset: 0;
+  background: var(--t-bg);
+  color: var(--t-text);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 10000;
+}
+
+.term-root .num {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.term-root .up  { color: var(--t-green); }
+.term-root .dn  { color: var(--t-red); }
+.term-root .neu { color: var(--t-dim); }
+
+.term-root .tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.06em;
+}
+
+/* Scrollbars */
+.term-root ::-webkit-scrollbar { width: 4px; height: 4px; }
+.term-root ::-webkit-scrollbar-track { background: var(--t-bg); }
+.term-root ::-webkit-scrollbar-thumb { background: var(--t-border); border-radius: 2px; }
+
+/* Ticker scroll animation */
+@keyframes ticker-move {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Blink animation */
+@keyframes t-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+/* Resize handle */
+.t-resize-handle {
+  width: 3px;
+  background: var(--t-border);
+  cursor: col-resize;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.t-resize-handle:hover,
+.t-resize-handle[data-resize-handle-active] {
+  background: var(--t-blue);
+}
+
+.t-resize-handle-h {
+  height: 3px;
+  background: var(--t-border);
+  cursor: row-resize;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.t-resize-handle-h:hover { background: var(--t-blue); }

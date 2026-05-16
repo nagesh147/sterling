@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { Terminal } from './Terminal';
 import { useSelectedUnderlying } from '../store/useStore';
 import { useConfigInfo } from '../hooks/useConfigInfo';
 import { InstrumentSelector } from '../components/InstrumentSelector';
@@ -118,6 +119,12 @@ export function Dashboard() {
   const toggleTheme = useToggleTheme();
   const appMode = useAppMode();
   const setAppMode = useSetAppMode();
+
+  /* In pro mode, render the Bloomberg Terminal.
+     Use a widened string type to prevent TypeScript from narrowing `appMode`
+     in the rest of this component (which retains the original basic-mode paths). */
+  const _modeStr: string = appMode;
+  if (_modeStr === 'pro') return <Terminal />;
   const [showSettings, setShowSettings] = useState(false);
 
   const defaultTf = modeData?.config?.execution_tf ?? '15m';

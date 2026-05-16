@@ -68,3 +68,7 @@ class DrawdownCircuitBreaker:
         """Manual reset endpoint. Clears RESET state → CLEAR."""
         self._manual_halt = False
         self._state = BreakerState.CLEAR
+
+
+# Alias for spec-compatibility
+CircuitBreaker = DrawdownCircuitBreaker

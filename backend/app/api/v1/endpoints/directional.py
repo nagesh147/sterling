@@ -638,6 +638,7 @@ async def _compute_signal_item(
     inst, adapter,
     macro_filter: str, st_threshold: int,
     stop_mult: float = 2.0, rr: float = 2.0,
+    mode=None,
 ) -> dict:
     """
     Compute a full signal row for one instrument.
@@ -862,7 +863,7 @@ async def all_signals(request: Request) -> dict:
     live_results: list[dict] = []
     if stale_insts:
         live_results = list(await asyncio.gather(
-            *[_compute_signal_item(inst, adapter, macro_filter, st_threshold, stop_mult, rr_target)
+            *[_compute_signal_item(inst, adapter, macro_filter, st_threshold, stop_mult, rr_target, mode=mode)
               for inst in stale_insts],
         ))
 

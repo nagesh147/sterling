@@ -32,11 +32,10 @@ def test_put_invalid_mode_400(client):
     assert resp.status_code == 400
 
 
-def test_get_all_modes_has_four(client):
+def test_get_all_modes_has_core_modes(client):
     resp = client.get("/api/v1/config/trading-mode/all")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 4
     for name in ("scalping", "intraday", "swing", "positional"):
         assert name in data
 

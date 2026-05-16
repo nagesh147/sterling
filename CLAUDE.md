@@ -53,3 +53,17 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 - `app.state.circuit_breaker` — existing execution-level CircuitBreaker (DO NOT confuse them)
 - `app.state.correlation_tracker` — CorrelationTracker singleton
 - `app.state.calibration_service` — CalibrationService singleton
+
+## v3 modules (do not Grep these — use graph)
+
+`engines/analytics/`: walk-forward, sensitivity, correlation, performance — pure functions, no I/O
+`engines/risk/`: slippage, greeks_budget, circuit_breaker — stateful singletons via DI
+`services/calibration.py`: adaptive state — always inject via Depends, never import directly
+
+### Wire invariants
+- CorrelationTracker.update() called on EVERY evaluate() with 1H close
+- CircuitBreaker.update() called FIRST in evaluate() before any strategy logic
+- CalibrationService.record_trade() called on EVERY paper_store position close
+- Sensitivity sweep runs as startup background task; cached 7 days
+- Walk-forward: NEVER use test window data to select threshold (lookahead veto)
+- `CircuitBreaker` is an alias for `DrawdownCircuitBreaker` — both names valid
