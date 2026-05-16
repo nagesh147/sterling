@@ -383,35 +383,53 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
             except Exception:
                 return False
 
+    @staticmethod
+    def _pick_price(t: dict, *keys: str) -> float:
+        """
+        Extract the first positive price from a Delta ticker result dict.
+        Handles strings ('103456.78'), ints, and floats. Skips None and zero.
+        Raises RuntimeError if none of the keys yield a usable value.
+        """
+        for key in keys:
+            raw = t.get(key)
+            if raw is None:
+                continue
+            try:
+                v = float(raw)
+                if v > 0:
+                    return v
+            except (TypeError, ValueError):
+                continue
+        raise RuntimeError(
+            f"No usable price in ticker result. "
+            f"Tried keys {keys}. Available keys: {list(t.keys())}"
+        )
+
+    async def _fetch_ticker(self, sym: str) -> dict:
+        """GET /v2/tickers/{sym} → result dict. Shared by price methods."""
+        data = await self._public_get(f"/v2/tickers/{sym}")
+        t = (data or {}).get("result")
+        # result is a dict for single-symbol requests; defensive check
+        if not isinstance(t, dict):
+            raise RuntimeError(
+                f"Delta ticker for {sym}: expected result dict, got {type(t).__name__}"
+            )
+        return t
+
     async def get_index_price(self, instrument: InstrumentMeta) -> float:
         sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
-        data = await self._public_get(f"/v2/tickers/{sym}")
-        t = (data or {}).get("result") or {}
-        price = (
-            t.get("spot_price") or
-            t.get("index_price") or
-            t.get("mark_price") or
-            t.get("close") or
-            t.get("last_price")
-        )
-        if not price:
-            raise RuntimeError(f"No price field in Delta ticker response for {sym}: {list(t.keys())}")
-        v = float(price)
-        if v <= 0:
-            raise RuntimeError(f"Delta ticker returned non-positive price {v} for {sym}")
-        return v
+        t = await self._fetch_ticker(sym)
+        # spot_price = index price; mark_price = fair value; close = last trade
+        return self._pick_price(t, "spot_price", "mark_price", "close")
 
     async def get_spot_price(self, instrument: InstrumentMeta) -> float:
         return await self.get_index_price(instrument)
 
     async def get_perp_price(self, instrument: InstrumentMeta) -> float:
         sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
-        data = await self._public_get(f"/v2/tickers/{sym}")
-        t = (data or {}).get("result") or {}
-        price = t.get("mark_price") or t.get("close") or t.get("last_price") or t.get("spot_price")
-        if not price:
-            raise RuntimeError(f"No price in Delta perp ticker for {sym}")
-        return float(price)
+        t = await self._fetch_ticker(sym)
+        # mark_price is the canonical perp price; fall back to spot_price, then close
+        return self._pick_price(t, "mark_price", "spot_price", "close")
 
     async def get_candles(self, instrument: InstrumentMeta,
                           resolution: str, limit: int = 200) -> List[Candle]:
