@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     deribit_base_url: str = "https://www.deribit.com/api/v2"
     log_level: str = "INFO"
     cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
-    exchange_adapter: str = "deribit"  # "deribit" | "okx"
+    exchange_adapter: str = "delta_india"  # "delta_india" | "deribit" | "okx" | "binance"
 
     max_contracts: int = 10
     max_position_pct: float = 0.05

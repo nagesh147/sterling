@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { TickerStrip } from '../components/TickerStrip';
+import { AllSymbolsTicker } from '../components/AllSymbolsTicker';
 import { SignalPane } from '../components/SignalPane';
 import { ChartPane } from '../components/ChartPane';
 import { RiskPane } from '../components/RiskPane';
@@ -8,8 +9,9 @@ import { BottomPanel } from '../components/BottomPanel';
 import { StatusBar } from '../components/StatusBar';
 import { InstrumentSelector } from '../components/InstrumentSelector';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
+import { DataSourceSelector } from '../components/DataSourceSelector';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
-import { useSelectedUnderlying, useAppMode, useSetAppMode } from '../store/useStore';
+import { useSelectedUnderlying, useAppMode, useSetAppMode, useTheme, useToggleTheme } from '../store/useStore';
 
 import '../styles/terminal.css';
 
@@ -36,6 +38,8 @@ export function Terminal() {
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
   const appMode = useAppMode();
   const setAppMode = useSetAppMode();
+  const theme = useTheme();
+  const toggleTheme = useToggleTheme();
 
   /* Keep panel sizes in localStorage */
   const handlePanelResize = (sizes: number[]) => {
@@ -105,21 +109,36 @@ export function Terminal() {
 
         {/* Right side */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12 }}>
-          <InstrumentSelector />
+          <DataSourceSelector />
+          <InstrumentSelector compact />
           <PaperLiveToggle />
           <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{
+              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
+              color: 'var(--t-dim)', cursor: 'pointer', padding: '2px 7px',
+              fontFamily: 'inherit', fontSize: 12, lineHeight: 1,
+            }}
+          >
+            {theme === 'dark' ? '☀' : '◑'}
+          </button>
+          <button
             onClick={() => setAppMode(appMode === 'pro' ? 'basic' : 'pro')}
-            title="Switch to classic mode"
+            title="Switch to simple mode"
             style={{
               background: 'none', border: '1px solid var(--t-border)',
               color: 'var(--t-dim)', cursor: 'pointer', padding: '2px 8px',
               fontFamily: 'inherit', fontSize: 10, borderRadius: 3,
             }}
           >
-            CLASSIC
+            SIMPLE
           </button>
         </div>
       </div>
+
+      {/* All-symbols context ticker (regime, score, live prices) */}
+      <AllSymbolsTicker />
 
       {/* Main workspace */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>

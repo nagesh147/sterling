@@ -10,7 +10,8 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 _adapter: Optional[BaseExchangeAdapter] = None
-_data_source: str = "deribit"
+_data_source: str = "delta_india"
+_raw_adapter: Optional[BaseExchangeAdapter] = None   # unwrapped, for WS access
 
 SUPPORTED_DATA_SOURCES = {
     "deribit":     "Deribit (BTC/ETH/SOL options + perps)",
@@ -44,14 +45,22 @@ def _build_raw(exchange: str, api_key: str = "", api_secret: str = "") -> BaseEx
     return DeribitAdapter(base_url=settings.deribit_base_url)
 
 
-async def init(exchange: str = "deribit", api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
+async def init(exchange: str = "delta_india", api_key: str = "", api_secret: str = "") -> BaseExchangeAdapter:
     """Build adapter stack and set as active. Called at startup."""
-    global _adapter, _data_source
+    global _adapter, _data_source, _raw_adapter
     from app.services.cache import CachingAdapter
     from app.services.retry import RetryingAdapter
     raw = _build_raw(exchange, api_key, api_secret)
     _adapter = CachingAdapter(RetryingAdapter(raw))
     _data_source = exchange.lower()
+    _raw_adapter = raw
+
+    # Start WebSocket live price feed for delta_india (eliminates REST ticker polling)
+    if _data_source == "delta_india" and hasattr(raw, "start_ws"):
+        from app.services.exchanges.instrument_registry import list_instruments
+        symbols = [i.delta_perp_symbol for i in list_instruments() if i.delta_perp_symbol]
+        await raw.start_ws(symbols)
+
     log.info("Market data adapter initialized: %s", _data_source)
     return _adapter
 

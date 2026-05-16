@@ -1,10 +1,13 @@
 """
 Delta Exchange India adapter.
 Public: market data, tickers, option chain. Private: balances, positions, orders, fills.
-API base: https://api.india.delta.exchange  Docs: https://docs.india.delta.exchange
+API base:  https://api.india.delta.exchange   Docs: https://docs.india.delta.exchange
+WebSocket: wss://socket.india.delta.exchange  (mark_price + spot_price_v2 channels)
 """
+import asyncio
 import hashlib
 import hmac
+import json
 import time
 from datetime import datetime, timezone
 from typing import List, Optional, Union
@@ -21,7 +24,8 @@ from app.core.logging import get_logger
 
 log = get_logger(__name__)
 
-_BASE = "https://api.india.delta.exchange"
+_BASE   = "https://api.india.delta.exchange"
+_WS_URL = "wss://socket.india.delta.exchange"
 
 _RESOLUTION_MAP = {
     "15m": "15m",
@@ -75,7 +79,89 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         self._base = base_url
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
-        self._product_id_cache: dict[str, int] = {}  # symbol → product_id, lives for process lifetime
+        self._product_id_cache: dict[str, int] = {}
+
+        # WebSocket live price cache — populated by _ws_loop, read by get_index_price
+        self._ws_prices: dict[str, float] = {}
+        self._ws_active  = False
+        self._ws_task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
+
+    # ─── WebSocket live price feed ────────────────────────────────────────────
+
+    async def start_ws(self, symbols: list[str]) -> None:
+        """Start background WebSocket feed for live mark/spot prices.
+        Eliminates REST ticker calls while connected (~100× fewer API calls)."""
+        if self._ws_task and not self._ws_task.done():
+            return
+        self._ws_active = True
+        self._ws_task = asyncio.create_task(self._ws_loop(list(symbols)))
+        log.info("Delta India WS: starting live feed for %s", symbols)
+
+    async def stop_ws(self) -> None:
+        """Gracefully stop the WebSocket feed."""
+        self._ws_active = False
+        if self._ws_task:
+            self._ws_task.cancel()
+            try:
+                await self._ws_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._ws_task = None
+        self._ws_prices.clear()
+
+    async def _ws_loop(self, symbols: list[str]) -> None:
+        """Persistent WebSocket loop with exponential-backoff reconnect."""
+        import websockets  # local import — only needed when WS is active
+        delay = 3.0
+
+        while self._ws_active:
+            try:
+                async with websockets.connect(
+                    _WS_URL,
+                    ping_interval=20,
+                    ping_timeout=10,
+                    close_timeout=5,
+                    open_timeout=10,
+                ) as ws:
+                    # Subscribe to mark_price and spot_price_v2 for all symbols
+                    for channel in ("mark_price", "spot_price_v2"):
+                        await ws.send(json.dumps({
+                            "type": "subscribe",
+                            "payload": {"channels": [{"name": channel, "symbols": symbols}]},
+                        }))
+                    delay = 3.0  # reset backoff on successful connect
+                    log.info("Delta India WS: connected, subscribed to %d symbols", len(symbols))
+
+                    async for raw in ws:
+                        if not self._ws_active:
+                            break
+                        try:
+                            msg = json.loads(raw)
+                            mtype = msg.get("type", "")
+                            if mtype in ("mark_price", "spot_price_v2", "v2/ticker"):
+                                sym = msg.get("symbol") or msg.get("product_symbol")
+                                # price field varies by channel
+                                raw_price = (
+                                    msg.get("price") or       # mark_price / spot_price_v2
+                                    msg.get("mark_price") or  # v2/ticker
+                                    msg.get("spot_price") or  # v2/ticker
+                                    msg.get("close")          # v2/ticker fallback
+                                )
+                                if sym and raw_price:
+                                    v = float(raw_price)
+                                    if v > 0:
+                                        self._ws_prices[sym] = v
+                        except Exception:
+                            continue  # ignore parse errors on individual messages
+
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                if not self._ws_active:
+                    break
+                log.debug("Delta India WS disconnected (%s). Reconnecting in %.0fs.", exc, delay)
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 60.0)  # cap at 60s
 
     async def _get_client(self):
         if self._client is None or self._client.is_closed:
@@ -418,8 +504,10 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
     async def get_index_price(self, instrument: InstrumentMeta) -> float:
         sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
+        # Prefer live WS price (zero REST calls when connected)
+        if sym in self._ws_prices:
+            return self._ws_prices[sym]
         t = await self._fetch_ticker(sym)
-        # spot_price = index price; mark_price = fair value; close = last trade
         return self._pick_price(t, "spot_price", "mark_price", "close")
 
     async def get_spot_price(self, instrument: InstrumentMeta) -> float:
@@ -427,8 +515,10 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
     async def get_perp_price(self, instrument: InstrumentMeta) -> float:
         sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
+        # Prefer live WS mark price
+        if sym in self._ws_prices:
+            return self._ws_prices[sym]
         t = await self._fetch_ticker(sym)
-        # mark_price is the canonical perp price; fall back to spot_price, then close
         return self._pick_price(t, "mark_price", "spot_price", "close")
 
     async def get_candles(self, instrument: InstrumentMeta,
@@ -735,6 +825,7 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         )
 
     async def close(self) -> None:
+        await self.stop_ws()
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
