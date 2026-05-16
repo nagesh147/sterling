@@ -12,7 +12,7 @@ const SHORT: Record<string, string> = {
   deribit:     'Deribit',
   binance:     'Binance',
   okx:         'OKX',
-  delta_india: 'Delta IN',
+  delta_india: 'DELTA EXCHANGE',
 };
 
 export function DataSourceSelector() {

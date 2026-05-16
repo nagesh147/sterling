@@ -14,10 +14,10 @@ _data_source: str = "delta_india"
 _raw_adapter: Optional[BaseExchangeAdapter] = None   # unwrapped, for WS access
 
 SUPPORTED_DATA_SOURCES = {
+    "delta_india": "Delta Exchange India (candles/prices)",
     "deribit":     "Deribit (BTC/ETH/SOL options + perps)",
     "binance":     "Binance USDT-M Futures (candles/prices)",
     "okx":         "OKX (candles/prices/options)",
-    "delta_india": "Delta Exchange India (candles/prices)",
 }
 
 

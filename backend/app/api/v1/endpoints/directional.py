@@ -52,9 +52,13 @@ _prev_all_red:   dict[str, bool] = {}
 _prev_alert_green_stream: dict[str, bool] = {}
 _prev_alert_red_stream:   dict[str, bool] = {}
 _signal_alerts: deque = deque(maxlen=50)  # O(1) appendleft, bounded automatically
-_ALERT_STATES = frozenset({'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE'})
+_ALERT_STATES = frozenset({
+    'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
+    'CONFIRMED_SETUP_ACTIVE', 'EARLY_SETUP_ACTIVE',
+})
 
 _STATE_LABELS = {
+    'EARLY_SETUP_ACTIVE':       '👁 FORMING — Early Setup',
     'ENTRY_ARMED_PULLBACK':     '⚡ ARMED — Pullback Entry',
     'ENTRY_ARMED_CONTINUATION': '⚡ ARMED — Continuation',
     'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED Setup',
@@ -167,6 +171,10 @@ async def _fire_signal_alert(
     import datetime
     from app.services.notifications import telegram as _tg
 
+    if not _tg.TELEGRAM_TOKEN or not _tg.TELEGRAM_CHAT_ID:
+        log.debug("Telegram not configured — skipping alert for %s", sym)
+        return
+
     try:
         dir_str = setup.direction.value
         state   = setup.state.value
@@ -217,9 +225,13 @@ async def _fire_signal_alert(
         )
         if opt_symbol:
             msg += f"📈 Options: {opt_type} {opt_strike} {opt_expiry}\n"
-        await _tg.send(msg)
+        sent = await _tg.send(msg)
+        if sent:
+            log.info("Telegram alert sent: %s %s", sym, cur_state)
+        else:
+            log.warning("Telegram alert NOT delivered for %s %s — check token/chat_id", sym, cur_state)
     except Exception as exc:
-        log.debug("Alert generation error for %s: %s", sym, exc)
+        log.warning("Alert generation error for %s: %s", sym, exc)
 
 
 def _build_indicator_lines(candles):
@@ -1500,4 +1512,44 @@ async def volatility_scan(
         "healthy_candidates": len(healthy),
         "note": "Use straddle/strangle when expecting large move but uncertain direction.",
         "timestamp_ms": now_ms,
+    }
+
+
+@router.post("/test-alert")
+async def test_signal_alert() -> dict:
+    """
+    Send a test Telegram message to verify alerts are wired up correctly.
+    Returns the delivery result and diagnostic info.
+    """
+    from app.services.notifications import telegram as _tg
+
+    token_set   = bool(_tg.TELEGRAM_TOKEN)
+    chat_set    = bool(_tg.TELEGRAM_CHAT_ID)
+
+    if not token_set or not chat_set:
+        return {
+            "sent": False,
+            "reason": "Telegram not configured — set bot_token and chat_id in Settings → Telegram",
+            "token_set": token_set,
+            "chat_set": chat_set,
+        }
+
+    msg = (
+        "🔔 <b>Sterling — Test Alert</b>\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "✅ Telegram alerts are working.\n"
+        "You will receive notifications when:\n"
+        "  • 👁 FORMING — Early Setup detected\n"
+        "  • ⚡ ARMED — Entry conditions met\n"
+        "  • ✅ CONFIRMED — Setup confirmed\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Sent from Sterling Signal Engine</i>"
+    )
+    sent = await _tg.send(msg)
+    return {
+        "sent": sent,
+        "reason": "OK" if sent else "Telegram API call failed — check bot token and chat_id",
+        "token_set": token_set,
+        "chat_set": chat_set,
+        "reachable": _tg.TELEGRAM_REACHABLE,
     }

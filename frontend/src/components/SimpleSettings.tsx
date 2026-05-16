@@ -278,7 +278,6 @@ function TelegramSection() {
     setSending(true); setMsg('');
     try {
       const result = await api.post<TelegramConfig>('/api/v1/config/telegram/test', {});
-      // Update cache directly from test response — avoids the GET overwriting reachable=false
       qc.setQueryData(['telegram-config'], result);
       setMsgOk(true); setMsg('✅ Test message sent — check your Telegram');
     } catch (e: unknown) {
@@ -288,6 +287,23 @@ function TelegramSection() {
     } finally {
       setSending(false);
       setTimeout(() => setMsg(''), 6000);
+    }
+  };
+
+  const sendSignalTest = async () => {
+    setSending(true); setMsg('');
+    try {
+      const result = await api.post<{ sent: boolean; reason: string }>('/api/v1/directional/test-alert', {});
+      if (result.sent) {
+        setMsgOk(true); setMsg('✅ Signal alert test sent — you should see a formatted signal card in Telegram');
+      } else {
+        setMsgOk(false); setMsg(`❌ Not sent: ${result.reason}`);
+      }
+    } catch (e: unknown) {
+      setMsgOk(false); setMsg(`❌ ${(e as Error).message}`);
+    } finally {
+      setSending(false);
+      setTimeout(() => setMsg(''), 8000);
     }
   };
 
@@ -321,6 +337,21 @@ function TelegramSection() {
             }}
           >
             {sending ? 'Sending…' : 'Send Test'}
+          </button>
+          <button
+            onClick={sendSignalTest}
+            disabled={!canTest}
+            title="Send a sample signal alert in the exact format you'll receive for real signals"
+            style={{
+              fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)',
+              color: canTest ? '#a78bfa' : 'var(--text-dim)',
+              border: `1px solid ${canTest ? '#a78bfa44' : 'var(--border)'}`,
+              borderRadius: 3, cursor: canTest ? 'pointer' : 'default',
+              fontFamily: 'inherit', opacity: !canTest ? 0.5 : 1,
+              fontWeight: canTest ? 700 : 400,
+            }}
+          >
+            Test Signal
           </button>
         </div>
       }
