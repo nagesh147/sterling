@@ -161,7 +161,7 @@ function ExchangeSection() {
           )}
           {!testResult.ok && (
             <a
-              href="https://www.delta.exchange/app/settings/api"
+              href="https://www.delta.exchange/app/account/manageapikeys"
               target="_blank"
               rel="noopener noreferrer"
               style={{

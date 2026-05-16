@@ -1195,8 +1195,10 @@ async def _sse_all_generator(
         serveable = [i for i in instruments if _adapter_can_serve(i, current_source)]
 
         async def _fetch_price(inst) -> tuple[str, float | None]:
+            # Hard 2s deadline per instrument so a slow/failing exchange can never
+            # block the entire SSE stream (RetryingAdapter alone can take 25s).
             try:
-                p = await adapter.get_index_price(inst)
+                p = await asyncio.wait_for(adapter.get_index_price(inst), timeout=2.0)
                 return inst.underlying, float(p)
             except Exception:
                 return inst.underlying, None

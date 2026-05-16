@@ -14,8 +14,8 @@ _SENTINEL = object()
 
 class CachingAdapter(BaseExchangeAdapter):
     _TTL: Dict[str, float] = {
-        "price":       5.0,
-        "perp":        5.0,
+        "price":       1.8,   # just under the 2s SSE cadence → fresh price each tick
+        "perp":        1.8,
         "candles_15m": 15.0,
         "candles_1H":  60.0,
         "candles_4H":  120.0,
