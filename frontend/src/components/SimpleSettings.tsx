@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
+import { useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
 import { api } from '../utils/api';
 
 interface TelegramConfig {
@@ -75,7 +76,7 @@ function ExchangeSection() {
   const hasKeys = !!delta?.has_credentials;
 
   const [testResult, setTestResult] = useState<{
-    ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string;
+    ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string; server_ip?: string;
   } | null>(null);
 
   // Auto-test saved credentials on mount so user always sees current status
@@ -89,7 +90,7 @@ function ExchangeSection() {
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setMsg('');
     try {
-      const res = await api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string }>(
+      const res = await api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string; server_ip?: string }>(
         '/api/v1/trading/test-credentials'
       );
       setConnOk(res.ok);
@@ -157,6 +158,35 @@ function ExchangeSection() {
           {!testResult.ok && testResult.hint && (
             <div style={{ fontSize: 10, color: '#f0c040', lineHeight: 1.6, marginBottom: 8 }}>
               {testResult.hint}
+            </div>
+          )}
+          {!testResult.ok && testResult.server_ip && (
+            <div style={{
+              marginBottom: 8, padding: '6px 10px',
+              background: '#1a1400', border: '1px solid #f0c04033', borderRadius: 4,
+            }}>
+              <div style={{ fontSize: 9, color: '#888', marginBottom: 3 }}>WHITELIST THIS SERVER IP IN DELTA EXCHANGE:</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#f0c040',
+                  letterSpacing: 1,
+                }}>
+                  {testResult.server_ip}
+                </span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(testResult.server_ip!)}
+                  style={{
+                    background: '#2a2000', color: '#f0c040', border: '1px solid #f0c04044',
+                    padding: '2px 8px', borderRadius: 3, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: 9,
+                  }}
+                >
+                  COPY
+                </button>
+              </div>
+              <div style={{ fontSize: 9, color: '#666', marginTop: 4, lineHeight: 1.5 }}>
+                Go to india.delta.exchange → Profile → API Keys → Edit Key → Allowed IPs → Add this IP
+              </div>
             </div>
           )}
           {!testResult.ok && (
@@ -432,6 +462,226 @@ export function SimpleStatusDots() {
   );
 }
 
+// ── Algo mode section (settings drawer) ──────────────────────────────────────
+function AlgoSection() {
+  const { data: algoData, isLoading } = useAlgoMode();
+  const setAlgoMode = useSetAlgoMode();
+  const [confirming, setConfirming] = useState(false);
+  const enabled = algoData?.enabled ?? false;
+  const pending = setAlgoMode.isPending;
+
+  const handleToggle = () => {
+    if (enabled) {
+      setAlgoMode.mutate(false);
+    } else {
+      setConfirming(true);
+    }
+  };
+
+  const confirmEnable = () => {
+    setConfirming(false);
+    setAlgoMode.mutate(true);
+  };
+
+  return (
+    <Section
+      title="ALGO MODE"
+      status={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            width: 7, height: 7, borderRadius: '50%',
+            background: enabled ? '#ff4757' : '#333',
+            boxShadow: enabled ? '0 0 8px #ff4757' : 'none',
+            display: 'inline-block',
+            animation: enabled ? 'none' : undefined,
+          }} />
+          <span style={{ fontSize: 9, fontWeight: 700, color: enabled ? '#ff4757' : 'var(--text-faint)', letterSpacing: 1 }}>
+            {isLoading ? '…' : enabled ? 'ON' : 'OFF'}
+          </span>
+        </div>
+      }
+    >
+      <div style={{
+        padding: '12px 14px', borderRadius: 6, marginBottom: 14,
+        background: enabled ? '#1a0505' : 'var(--bg)',
+        border: `1px solid ${enabled ? '#ff475733' : 'var(--border)'}`,
+      }}>
+        <div style={{ fontSize: 11, color: enabled ? '#ff8a80' : 'var(--text-faint)', lineHeight: 1.6, marginBottom: 12 }}>
+          {enabled
+            ? '⚡ Algo is ACTIVE — Sterling automatically places live orders on Delta Exchange when signals reach actionable states.'
+            : 'When enabled, Sterling automatically places live market orders on Delta Exchange India for every actionable signal (ARMED / CONFIRMED), with a 2-hour cooldown per instrument.'}
+        </div>
+
+        {enabled && (
+          <div style={{ fontSize: 10, color: '#666', lineHeight: 1.6, marginBottom: 12 }}>
+            Failed orders appear in the Positions tab with a <strong style={{ color: '#cc4444' }}>✕ FAILED</strong> badge and a <strong style={{ color: '#4499cc' }}>RETRY</strong> button.
+          </div>
+        )}
+
+        <button
+          onClick={handleToggle}
+          disabled={pending || isLoading}
+          style={{
+            width: '100%', padding: '9px 0', borderRadius: 5,
+            fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 1,
+            cursor: pending ? 'wait' : 'pointer',
+            opacity: pending ? 0.6 : 1,
+            background: enabled ? '#2a0808' : '#0f2a1a',
+            color: enabled ? '#ff4757' : 'var(--accent)',
+            border: `1px solid ${enabled ? '#ff475766' : 'var(--accent)'}`,
+            transition: 'all 0.15s',
+          }}
+        >
+          {pending ? '…' : enabled ? '■ DISABLE ALGO' : '▶ ENABLE ALGO'}
+        </button>
+
+        {setAlgoMode.isError && (
+          <div style={{ marginTop: 8, fontSize: 10, color: 'var(--danger)' }}>
+            {(setAlgoMode.error as Error).message}
+          </div>
+        )}
+      </div>
+
+      {!enabled && (
+        <div style={{ fontSize: 9, color: 'var(--text-faint)', lineHeight: 1.6 }}>
+          Requires live Delta Exchange credentials. Failed orders are kept open for retry.
+        </div>
+      )}
+
+      {/* Confirm enable modal */}
+      {confirming && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid #ff475733',
+            borderTop: '3px solid #ff4757', borderRadius: 8,
+            padding: '22px 24px', width: 340,
+            boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>
+              ⚡ Enable Algo Trading?
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 18 }}>
+              Sterling will automatically place <strong style={{ color: 'var(--text-muted)' }}>real live orders</strong> on Delta Exchange India whenever a signal becomes actionable.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
+              {[
+                ['💸', 'Real funds will be used — orders go to your Delta Exchange account'],
+                ['⏱', '2-hour cooldown per instrument prevents over-trading'],
+                ['🔁', 'Failed orders stay open in Positions tab for manual retry'],
+                ['🛑', 'Turn off at any time — open positions are not auto-closed'],
+              ].map(([icon, text]) => (
+                <div key={text as string} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--text-faint)', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 12, flexShrink: 0 }}>{icon as string}</span>
+                  <span style={{ lineHeight: 1.5 }}>{text as string}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setConfirming(false)}
+                style={{ flex: 1, padding: '9px 0', background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmEnable}
+                style={{ flex: 2, padding: '9px 0', background: '#2a0808', color: '#ff4757', border: '1px solid #ff475766', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800 }}
+              >
+                ▶ Enable Algo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ── Compact algo toggle for header bar ────────────────────────────────────────
+export function AlgoToggle() {
+  const { data: algoData, isLoading } = useAlgoMode();
+  const setAlgoMode = useSetAlgoMode();
+  const [confirming, setConfirming] = useState(false);
+  const enabled = algoData?.enabled ?? false;
+  const pending = setAlgoMode.isPending;
+
+  const handleClick = () => {
+    if (enabled) {
+      setAlgoMode.mutate(false);
+    } else {
+      setConfirming(true);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        disabled={pending || isLoading}
+        title={enabled ? 'Algo ON — click to disable auto-trading' : 'Algo OFF — click to enable auto-trading on Delta Exchange'}
+        style={{
+          padding: '3px 10px',
+          background: enabled ? '#2a0808' : 'var(--t-bg2, var(--bg))',
+          color: enabled ? '#ff4757' : 'var(--t-dim, var(--text-faint))',
+          border: `1px solid ${enabled ? '#ff475766' : 'var(--t-border, var(--border))'}`,
+          borderRadius: 4, cursor: pending ? 'wait' : 'pointer',
+          fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+          opacity: pending ? 0.6 : 1,
+          boxShadow: enabled ? '0 0 8px #ff475733' : 'none',
+          transition: 'all 0.15s',
+        }}
+      >
+        {pending ? '…' : enabled ? '⚡ ALGO ON' : 'ALGO OFF'}
+      </button>
+
+      {confirming && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid #ff475733',
+            borderTop: '3px solid #ff4757', borderRadius: 8,
+            padding: '22px 24px', width: 340,
+            boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>⚡ Enable Algo Trading?</div>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 16 }}>
+              Sterling will automatically place <strong style={{ color: 'var(--text-muted)' }}>real live orders</strong> on Delta Exchange India for every actionable signal.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
+              {[
+                ['💸', 'Real funds — orders go to your Delta Exchange account'],
+                ['⏱', '2-hour cooldown per instrument'],
+                ['🔁', 'Failed orders stay in Positions tab for retry'],
+                ['🛑', 'Disable anytime — open positions not auto-closed'],
+              ].map(([icon, text]) => (
+                <div key={text as string} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--text-faint)', alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 12, flexShrink: 0 }}>{icon as string}</span>
+                  <span style={{ lineHeight: 1.5 }}>{text as string}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setConfirming(false)}
+                style={{ flex: 1, padding: '9px 0', background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}>
+                Cancel
+              </button>
+              <button onClick={() => { setConfirming(false); setAlgoMode.mutate(true); }}
+                style={{ flex: 2, padding: '9px 0', background: '#2a0808', color: '#ff4757', border: '1px solid #ff475766', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800 }}>
+                ▶ Enable Algo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Main drawer ───────────────────────────────────────────────────────────────
 export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
@@ -451,6 +701,7 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
           <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>SETTINGS</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1 }}>✕</button>
         </div>
+        <AlgoSection />
         <ExchangeSection />
         <TelegramSection />
       </div>

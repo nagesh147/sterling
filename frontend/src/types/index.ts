@@ -154,6 +154,7 @@ export interface PaperPosition {
   underlying: string;
   sized_trade: SizedTrade;
   status: PositionStatus;
+  is_paper: boolean;
   entry_timestamp_ms: number;
   entry_spot_price: number;
   exit_timestamp_ms?: number;
@@ -161,6 +162,8 @@ export interface PaperPosition {
   realized_pnl_usd?: number;
   notes: string;
   run_once_state: TradeState;
+  order_id?: string | null;
+  order_status?: string | null;
 }
 
 export interface PositionListResponse {

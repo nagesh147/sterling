@@ -1,14 +1,42 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { api } from '../utils/api';
+import { useAppStream } from './useAppStream';
 import type { PositionListResponse, PaperPosition } from '../types';
 
+/**
+ * usePositions — SSE-driven position list.
+ *
+ * Replaces 10s REST polling with the 'positions' SSE event (5s backend push).
+ * Mutations (enter/close/delete) still use REST; on success, the next SSE
+ * tick (≤5s) delivers the updated list automatically.
+ *
+ * The `mode` filter is applied client-side since the SSE stream delivers all positions.
+ */
 export function usePositions(mode?: 'paper' | 'live') {
-  return useQuery<PositionListResponse>({
-    queryKey: ['positions', mode ?? 'all'],
-    queryFn: () => api.get<PositionListResponse>(mode ? `/api/v1/positions?mode=${mode}` : '/api/v1/positions'),
-    refetchInterval: 10_000,
-    refetchOnWindowFocus: true,
-  });
+  const { data: streamData, status } = useAppStream<PositionListResponse>('positions');
+
+  const data = useMemo<PositionListResponse | undefined>(() => {
+    if (!streamData) return undefined;
+    if (!mode) return streamData;
+    const filtered = streamData.positions.filter(p =>
+      mode === 'paper' ? p.is_paper : !p.is_paper
+    );
+    return {
+      ...streamData,
+      positions: filtered,
+      open_count: filtered.filter(p => p.status === 'open' || p.status === 'partially_closed').length,
+      partially_closed_count: filtered.filter(p => p.status === 'partially_closed').length,
+      closed_count: filtered.filter(p => p.status === 'closed').length,
+    };
+  }, [streamData, mode]);
+
+  return {
+    data,
+    isLoading: status === 'connecting' && data == null,
+    isError: false,
+    status,
+  };
 }
 
 export function useEnterPosition() {

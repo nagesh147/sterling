@@ -44,6 +44,8 @@ def add_position(
     is_paper: bool = True,
     initial_sl: float | None = None,
     initial_tp: float | None = None,
+    order_id: str | None = None,
+    order_status: str | None = None,
 ) -> PaperPosition:
     from app.core.trading_mode import MODES, DEFAULT_MODE, TrailMode
     from app.engines.directional.trailing_stop import TrailState
@@ -86,6 +88,8 @@ def add_position(
         current_sl=round(sl_price, 4),
         initial_tp=round(initial_tp, 4) if initial_tp is not None else None,
         current_tp=round(initial_tp, 4) if initial_tp is not None else None,
+        order_id=order_id,
+        order_status=order_status,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())

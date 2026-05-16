@@ -199,8 +199,14 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
 
         except Exception as exc:
             log.error("Live order failed: %s", exc)
-            _create_failed_algo_tracking(body, sym, str(exc))
-            raise HTTPException(status_code=502, detail=f"Order failed: {exc}")
+            failed_pos_id = _create_failed_algo_tracking(body, sym, str(exc))
+            raise HTTPException(
+                status_code=502,
+                detail=json.dumps({
+                    "error": f"Order failed: {exc}",
+                    "failed_position_id": failed_pos_id,
+                }),
+            )
 
     else:
         # ── PAPER ORDER ───────────────────────────────────────────────────
@@ -226,7 +232,10 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
         )
 
 
-def _create_paper_tracking(body: LiveOrderRequest, sym: str, entry_price: float, order_id: str = "") -> str:
+def _create_paper_tracking(
+    body: LiveOrderRequest, sym: str, entry_price: float,
+    order_id: str = "", order_status: str = "filled",
+) -> str:
     """Create a tracking entry in paper_store for P&L monitoring."""
     try:
         from app.schemas.execution import Direction as ExecDir
@@ -256,7 +265,9 @@ def _create_paper_tracking(body: LiveOrderRequest, sym: str, entry_price: float,
             underlying=sym, sized_trade=sized,
             entry_spot_price=entry_price,
             notes=f"{'[LIVE]' if is_live_order else '[PAPER]'} {body.notes} order_id={order_id}",
-            is_paper=not is_live_order,   # live orders are tracked as is_paper=False
+            is_paper=not is_live_order,
+            order_id=order_id or None,
+            order_status=order_status,
         )
         return pos.id
     except Exception as exc:
@@ -286,14 +297,16 @@ def _send_order_telegram(body: LiveOrderRequest, sym: str, side: str, entry: flo
         pass
 
 
-def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -> None:
-    """Track a failed algo order in paper_store so it appears in positions with FAILED badge."""
+def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -> str:
+    """
+    Track a failed algo order in paper_store so it appears in positions with FAILED badge.
+    Position stays OPEN so the user can retry from the positions tab.
+    """
     try:
         from app.schemas.execution import Direction as ExecDir
-        from app.schemas.execution import TradeStructure, SizedTrade, CandidateContract
+        from app.schemas.execution import TradeStructure, CandidateContract
         from app.engines.directional.sizing_engine import size_trade
         from app.schemas.risk import RiskParams
-        from app.services import paper_store
 
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         leg = CandidateContract(
@@ -317,11 +330,121 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
             entry_spot_price=0.0,
             notes=f"[ALGO-FAILED] {error}",
             is_paper=False,
+            order_status="failed",
         )
-        # Immediately close at 0 so it shows in closed positions
-        paper_store.close_position(pos.id, exit_spot_price=0.0, notes=f"[ALGO-FAILED] {error}")
+        return pos.id
     except Exception as e:
         log.warning("Failed algo tracking creation error: %s", e)
+        return ""
+
+
+@router.post("/retry-order/{position_id}")
+async def retry_failed_order(position_id: str, request: Request) -> dict:
+    """
+    Retry a failed algo order. Looks up the failed position by ID, re-attempts
+    order placement with the original parameters reconstructed from the position,
+    and updates order_status accordingly.
+    """
+    from app.services import adapter_manager as _adm
+    from app.services import exchange_account_store
+
+    pos = paper_store.get_position(position_id)
+    if not pos:
+        raise HTTPException(status_code=404, detail=f"Position {position_id} not found")
+    if pos.order_status not in ("failed", "retry"):
+        raise HTTPException(status_code=400, detail=f"Position order_status is '{pos.order_status}', not retryable")
+
+    # Mark as retrying
+    paper_store.update_position(position_id, order_status="retry", notes=f"[ALGO-RETRY] {pos.notes}")
+
+    sym = pos.underlying
+    inst = registry.get_instrument(sym)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+
+    active = exchange_account_store.get_active()
+    if not active or not active.api_key or active.api_key.startswith("DUMMY"):
+        paper_store.update_position(position_id, order_status="failed",
+                                     notes=f"[ALGO-FAILED] No live credentials")
+        raise HTTPException(status_code=400, detail="Live credentials required for retry")
+
+    s = pos.sized_trade.structure
+    direction = "long" if s.direction.value == "long" else "short"
+    side = "buy" if direction == "long" else "sell"
+    instrument_type = s.structure_type
+    now_ms = int(time.time() * 1000)
+
+    try:
+        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+        api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+        adapter = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
+                                     is_paper=False, base_url=api_base)
+
+        delta_symbol = inst.delta_perp_symbol or f"{sym}USD"
+        product_id   = await adapter.get_product_id(delta_symbol)
+        leverage     = pos.sized_trade.leverage if hasattr(pos.sized_trade, 'leverage') else 5
+        try:
+            await adapter.set_leverage(product_id, leverage)
+        except Exception:
+            pass
+
+        order = await adapter.place_order(
+            symbol=delta_symbol, side=side,
+            size=pos.sized_trade.contracts,
+            order_type="market_order",
+        )
+        order_id  = str(order.get("id") or order.get("order_id") or "")
+        fill_price = float(order.get("average_fill_price") or order.get("limit_price") or 0.0)
+
+        paper_store.update_position(
+            position_id,
+            order_id=order_id,
+            order_status="filled",
+            entry_spot_price=fill_price or pos.entry_spot_price,
+            notes=f"[LIVE-RETRY] {pos.underlying} {direction.upper()} order_id={order_id}",
+        )
+        log.info("Retry succeeded for %s: order_id=%s", position_id, order_id)
+        return {"ok": True, "order_id": order_id, "fill_price": fill_price, "timestamp_ms": now_ms}
+
+    except Exception as exc:
+        paper_store.update_position(position_id, order_status="failed",
+                                     notes=f"[ALGO-FAILED] Retry error: {exc}")
+        log.error("Retry failed for %s: %s", position_id, exc)
+        raise HTTPException(status_code=502, detail=f"Retry failed: {exc}")
+
+
+@router.post("/update-order-status/{position_id}")
+async def update_order_status(position_id: str, order_id: str, request: Request) -> dict:
+    """
+    Poll Delta Exchange for a specific order's status and update the position.
+    Called by the frontend after placing an order to confirm fill.
+    """
+    from app.services import exchange_account_store
+    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+
+    pos = paper_store.get_position(position_id)
+    if not pos:
+        raise HTTPException(status_code=404, detail=f"Position {position_id} not found")
+
+    active = exchange_account_store.get_active()
+    if not active or active.is_paper:
+        raise HTTPException(status_code=400, detail="Live credentials required")
+
+    api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+    adapter  = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
+                                  is_paper=False, base_url=api_base)
+    try:
+        result = await adapter._auth_get(f"/v2/orders/{order_id}")
+        order  = result.get("result", {})
+        status = order.get("state", "unknown")    # open, filled, cancelled, rejected
+        fill_price = float(order.get("average_fill_price") or 0.0)
+        order_status = "filled" if status == "filled" else ("cancelled" if status == "cancelled" else "pending")
+        paper_store.update_position(position_id, order_status=order_status,
+                                     entry_spot_price=fill_price or pos.entry_spot_price)
+        return {"position_id": position_id, "order_id": order_id, "order_status": order_status,
+                "fill_price": fill_price, "raw_status": status}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Status check failed: {exc}")
 
 
 @router.get("/test-credentials")
@@ -390,7 +513,19 @@ async def test_credentials(request: Request) -> dict:
     global_err = errors.get("Global (delta.exchange)", "")
     primary_err = india_err or global_err
     hint = ""
-    if "invalid_api_key" in primary_err or "Invalid API key" in primary_err:
+
+    if "ip_not_whitelisted" in primary_err.lower() or "whitelist" in primary_err.lower():
+        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DIA
+        server_ip = await _DIA._get_public_ip()
+        hint = (
+            f"Your API key has IP whitelisting enabled. "
+            f"Add this server's IP ({server_ip}) to the whitelist at "
+            f"india.delta.exchange → Profile → API Keys → Edit Key → Allowed IPs. "
+            f"Alternatively, remove all IPs from the whitelist to allow access from any IP."
+        )
+        label = "India" if india_err else "Global"
+        return {"ok": False, "reason": f"IP not whitelisted for this API key", "hint": hint, "server_ip": server_ip}
+    elif "invalid_api_key" in primary_err or "Invalid API key" in primary_err:
         hint = ("Key not recognised on either endpoint. Ensure it was generated at "
                 "delta.exchange/app/account/manageapikeys (not testnet) and has Read + Trading permissions.")
     elif "403" in primary_err or "Forbidden" in primary_err:

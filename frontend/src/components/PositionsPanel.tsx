@@ -129,6 +129,49 @@ function MonitorResultInline({ result }: { result: MonitorResult }) {
   );
 }
 
+const ORDER_STATUS_COLORS: Record<string, string> = {
+  filled: '#44cc88',
+  pending: '#f0c040',
+  failed: '#cc4444',
+  cancelled: '#888',
+  retry: '#4499cc',
+};
+
+function RetryOrderButton({ posId, onDone }: { posId: string; onDone?: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const retry = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await api.post(`/api/v1/trading/retry-order/${posId}`);
+      onDone?.();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Retry failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        style={{
+          background: '#1a2233', color: '#4499cc', border: '1px solid #4499cc66',
+          padding: '4px 12px', borderRadius: 3, cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: 11, opacity: loading ? 0.6 : 1,
+        }}
+        onClick={retry}
+        disabled={loading}
+      >
+        {loading ? '⟳ RETRYING…' : '⟳ RETRY ORDER'}
+      </button>
+      {error && <span style={{ color: '#cc4444', fontSize: 10, marginLeft: 8 }}>{error}</span>}
+    </div>
+  );
+}
+
 function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number | null }) {
   const [closePrice, setClosePrice] = useState('');
   const [showClose, setShowClose] = useState(false);
@@ -139,12 +182,25 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
   const monitor = useMonitorPosition();
   const s = pos.sized_trade.structure;
   const leg = s.legs[0];
+  const isFailed = pos.order_status === 'failed';
+  const isPending = pos.order_status === 'pending' || pos.order_status === 'retry';
+  const isLiveOrder = !pos.is_paper;
 
   return (
-    <div style={styles.posCard}>
+    <div style={{
+      ...styles.posCard,
+      borderColor: isFailed ? '#cc444433' : isPending ? '#f0c04033' : styles.posCard.borderColor,
+    }}>
       <div style={styles.posHeader}>
         <span style={styles.posType}>
           {pos.underlying} · {s.structure_type}
+          {isLiveOrder && (
+            <span style={{
+              marginLeft: 8, fontSize: 10, padding: '1px 6px',
+              background: '#4499cc22', color: '#4499cc',
+              border: '1px solid #4499cc44', borderRadius: 3,
+            }}>LIVE</span>
+          )}
         </span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {livePnl != null && (
@@ -155,14 +211,18 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
               {livePnl >= 0 ? '+' : ''}{fmtN(livePnl, 2)}
             </span>
           )}
-          {pos.notes?.startsWith('[ALGO-FAILED]') && (
+          {pos.order_status && (
             <span style={{
               ...styles.statusBadge,
-              background: '#cc444422',
-              color: '#cc4444',
+              background: (ORDER_STATUS_COLORS[pos.order_status] ?? '#888') + '22',
+              color: ORDER_STATUS_COLORS[pos.order_status] ?? '#888',
               marginRight: 4,
             }}>
-              ✕ ALGO FAILED
+              {pos.order_status === 'failed' ? '✕ FAILED' :
+               pos.order_status === 'filled' ? '✓ FILLED' :
+               pos.order_status === 'pending' ? '⟳ PENDING' :
+               pos.order_status === 'retry' ? '↻ RETRYING' :
+               pos.order_status.toUpperCase()}
             </span>
           )}
           <span style={{
@@ -205,14 +265,24 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
         )}
       </div>
 
-      {pos.notes?.startsWith('[ALGO-FAILED]') && (
+      {pos.order_id && (
+        <div style={{ marginTop: 6, fontSize: 10, color: '#444' }}>
+          ORDER ID: <span style={{ color: '#666', fontFamily: 'monospace' }}>{pos.order_id}</span>
+        </div>
+      )}
+      {isFailed && (
         <div style={{
           marginTop: 8, padding: '6px 10px',
           background: '#cc444411', border: '1px solid #cc444433',
-          borderRadius: 4, fontSize: 11, color: '#cc6644',
+          borderRadius: 4, fontSize: 11,
         }}>
-          <span style={{ fontWeight: 700 }}>Order failed: </span>
-          {pos.notes.replace('[ALGO-FAILED] ', '')}
+          <div style={{ color: '#cc4444', fontWeight: 700, marginBottom: 6 }}>
+            ✕ Order failed — position held for retry
+          </div>
+          <div style={{ color: '#cc6644', marginBottom: 8 }}>
+            {pos.notes?.replace('[ALGO-FAILED] ', '').replace('[ALGO-RETRY] [ALGO-FAILED] ', '')}
+          </div>
+          <RetryOrderButton posId={pos.id} />
         </div>
       )}
       {(pos.status === 'open' || pos.status === 'partially_closed') && (

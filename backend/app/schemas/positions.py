@@ -34,6 +34,9 @@ class PaperPosition(BaseModel):
     initial_tp: Optional[float] = None    # R:R-derived target at entry
     current_sl: Optional[float] = None    # latest trailing stop price
     current_tp: Optional[float] = None    # current take-profit price
+    # Live order tracking fields (populated when algo_mode is on)
+    order_id: Optional[str] = None        # Delta Exchange order ID
+    order_status: Optional[str] = None   # "pending" | "filled" | "failed" | "cancelled" | "retry"
 
 
 class EnterPositionRequest(BaseModel):

@@ -34,6 +34,7 @@ export interface SignalItem {
   opt_symbol?: string | null;
   fresh: boolean;
   timestamp_ms: number;
+  signal_id?: string | null;
 }
 
 export interface SignalsResponse {

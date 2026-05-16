@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../utils/api';
+import { useAppStream } from './useAppStream';
 
 export interface LivePnlEntry {
   position_id: string;
@@ -19,12 +18,11 @@ export interface LivePnlResponse {
   timestamp_ms: number;
 }
 
-export function useLivePnl(enabled = true) {
-  return useQuery<LivePnlResponse>({
-    queryKey: ['live-pnl'],
-    queryFn: () => api.get<LivePnlResponse>('/api/v1/positions/pnl-live'),
-    refetchInterval: 10_000,
-    refetchOnWindowFocus: true,
-    enabled,
-  });
+export function useLivePnl(_enabled = true) {
+  const { data, status } = useAppStream<LivePnlResponse>('pnl');
+  return {
+    data: data ?? undefined,
+    isLoading: status === 'connecting' && data == null,
+    isError: false,
+  };
 }

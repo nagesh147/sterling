@@ -1,4 +1,5 @@
 import os
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -248,11 +249,113 @@ async def _background_position_monitor(app: FastAPI) -> None:
             log.warning("Background position monitor error: %s", exc)
 
 
+_algo_last_ordered: dict[str, int] = {}   # key: "{sym}_{direction}" → timestamp_ms
+
+def _algo_cooldown_ms(mode) -> int:
+    """
+    Cooldown = one typical trade hold duration for the active mode.
+    Formula: max_hold_bars × poll_interval_s, floored at 15 min, capped at 24h.
+      scalping:   15 bars ×  5s =   75s  → floor → 15 min
+      intraday:   48 bars × 30s = 1440s  → 24 min
+      swing:      42 bars ×300s = 12600s → 3.5h
+      positional: 90 bars ×900s = 81000s → 22.5h
+    """
+    if not mode:
+        return 60 * 60 * 1000  # 1h default
+    raw_ms = mode.max_hold_bars * mode.poll_interval_s * 1000
+    return max(15 * 60 * 1000, min(24 * 60 * 60 * 1000, raw_ms))
+
+_ALGO_ACTIONABLE = frozenset({
+    'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
+    'CONFIRMED_SETUP_ACTIVE',
+})
+
+
+async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
+    """Place a live order automatically when algo_mode is on and signal is actionable."""
+    from app.services import exchange_account_store
+    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+    from app.services.exchanges import instrument_registry as registry
+    from app.api.v1.endpoints.trading import LiveOrderRequest, _create_paper_tracking, _create_failed_algo_tracking, _send_order_telegram
+
+    key = f"{sym}_{snap.direction}"
+    now_ms = int(time.time() * 1000)
+
+    if now_ms - _algo_last_ordered.get(key, 0) < _algo_cooldown_ms(mode):
+        return  # still cooling down
+
+    active = exchange_account_store.get_active()
+    if not active or not active.api_key or active.api_key.startswith("DUMMY"):
+        return
+
+    inst = registry.get_instrument(sym)
+    if not inst:
+        return
+
+    _algo_last_ordered[key] = now_ms
+    direction = snap.direction
+    side = "buy" if direction == "long" else "sell"
+    spot = snap.spot_price or 0.0
+    atr  = snap.atr or spot * 0.02
+    stop_mult = mode.stop_atr_mult if mode else 2.0
+    rr   = mode.rr_target if mode else 2.0
+    stop_price   = round(spot - atr * stop_mult, 2) if direction == "long" else round(spot + atr * stop_mult, 2)
+    target_price = round(spot + atr * stop_mult * rr, 2) if direction == "long" else round(spot - atr * stop_mult * rr, 2)
+    adx_v = snap.adx or 0.0
+    leverage = 5 if adx_v < 20 else (10 if adx_v < 30 else 20)
+
+    body = LiveOrderRequest(
+        underlying=sym,
+        direction=direction,
+        instrument_type="futures",
+        size=1.0,
+        leverage=float(leverage),
+        order_type="market",
+        stop_loss=stop_price,
+        take_profit=target_price,
+        notes=f"[AUTO] {snap.current_state}",
+    )
+
+    try:
+        api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+        adapter  = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
+                                      is_paper=False, base_url=api_base)
+        delta_symbol = inst.delta_perp_symbol or f"{sym}USD"
+        product_id   = await adapter.get_product_id(delta_symbol)
+        try:
+            await adapter.set_leverage(product_id, leverage)
+        except Exception:
+            pass
+
+        order = await adapter.place_order(
+            symbol=delta_symbol, side=side, size=1.0,
+            order_type="market_order",
+            stop_loss=stop_price, stop_loss_order_type="market_order",
+            take_profit=target_price, take_profit_order_type="market_order",
+            bracket_trigger_method="mark_price",
+        )
+        order_id   = str(order.get("id") or order.get("order_id") or "")
+        fill_price = float(order.get("average_fill_price") or spot)
+
+        _create_paper_tracking(body, sym, fill_price, order_id, order_status="filled")
+        _send_order_telegram(body, sym, side, fill_price, order_id, "LIVE")
+        log.info("ALGO AUTO-ORDER: %s %s @ %.2f order_id=%s", sym, direction.upper(), fill_price, order_id)
+
+    except Exception as exc:
+        log.error("ALGO AUTO-ORDER FAILED for %s: %s", sym, exc)
+        _create_failed_algo_tracking(body, sym, str(exc))
+        _algo_last_ordered.pop(key, None)   # reset cooldown on failure so retry is possible
+
+
 async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None:
     """Refresh signals for all instruments every `interval` seconds. Runs immediately at startup."""
     import asyncio
-    from app.api.v1.endpoints.directional import _compute_signal_item, _adapter_can_serve
+    from app.api.v1.endpoints.directional import (
+        _compute_signal_item, _adapter_can_serve,
+        _save_signal_tracker_state,
+    )
     from app.services.exchanges import instrument_registry as registry
+    from app.services import snapshot_cache as _snap_cache
 
     while True:
         try:
@@ -278,6 +381,21 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                 )
                 ok = sum(1 for r in results if isinstance(r, dict) and r.get('fresh'))
                 log.info("Signal refresh: %d/%d instruments updated", ok, len(instruments))
+
+            # Persist tracker state so server restarts don't re-fire existing signals
+            _save_signal_tracker_state()
+
+            # Auto-order trigger: when algo_mode is on, auto-place orders for actionable signals
+            if getattr(app.state, "algo_mode", False):
+                for inst in instruments:
+                    snap = _snap_cache.get(inst.underlying)
+                    if not snap:
+                        continue
+                    if snap.current_state in _ALGO_ACTIONABLE and snap.direction != "neutral":
+                        asyncio.create_task(
+                            _auto_place_algo_order(app, inst.underlying, snap, mode)
+                        )
+
         except Exception as exc:
             log.debug("Signal refresher error: %s", exc)
         await asyncio.sleep(interval)  # sleep at end so first run is immediate
@@ -295,6 +413,10 @@ async def lifespan(app: FastAPI):
     _eval_history_svc.bootstrap()
     from app.services import arrow_store as _arrow_store_svc
     _arrow_store_svc.bootstrap()
+
+    # Restore signal tracker state — prevents re-firing Telegram on server restart
+    from app.api.v1.endpoints.directional import _load_signal_tracker_state
+    _load_signal_tracker_state()
 
     from app.core.trading_mode import MODES, DEFAULT_MODE
     from app.services.db import get_trading_mode, get_config

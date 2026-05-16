@@ -64,6 +64,7 @@ export interface FeedEntry {
   atr_percentile: number;
   rsi: number;
   mode: string;         // trading mode that generated this signal (scalping/swing/etc.)
+  signalId: string | null;  // backend-assigned short ID, e.g. "BTC-A3K7P"
   entryAt: number;
   currentPrice: number | null;
   currentState: string;
@@ -265,6 +266,7 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
     atr_percentile: sig.atr_percentile ?? 0,
     rsi: sig.rsi ?? 50,
     mode: resolvedMode,
+    signalId: sig.signal_id ?? null,
     entryAt: now,
     currentPrice: spot,
     currentState: sig.state,
@@ -453,6 +455,7 @@ export function useSignalFeed() {
       leverage, futuresSymbol,
       optSymbol: null, optStrike: null, optType: null, optExpiry: null, optDte: null,
       state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, atr_percentile: 0, rsi: 50, mode: currentMode,
+      signalId: null,
       entryAt: now, currentPrice: spot, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
     });
 
@@ -465,6 +468,7 @@ export function useSignalFeed() {
         leverage: 1, futuresSymbol,
         optSymbol, optStrike, optType, optExpiry, optDte: null,
         state: 'ENTRY_ARMED_PULLBACK', regime, score, adx: 0, atr_percentile: 0, rsi: 50, mode: currentMode,
+        signalId: null,
         entryAt: now, currentPrice: null, currentState: 'ENTRY_ARMED_PULLBACK', dismissed: false,
       });
     }

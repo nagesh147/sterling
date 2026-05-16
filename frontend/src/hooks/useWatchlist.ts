@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../utils/api';
+import { useAppStream } from './useAppStream';
 
 export interface WatchlistItem {
   underlying: string;
@@ -25,9 +24,13 @@ export interface WatchlistResponse {
 }
 
 export function useWatchlist() {
-  return useQuery<WatchlistResponse>({
-    queryKey: ['watchlist'],
-    queryFn: () => api.get<WatchlistResponse>('/api/v1/directional/watchlist'),
-    refetchInterval: 10_000,
-  });
+  const { data, status } = useAppStream<WatchlistResponse>('watchlist');
+  return {
+    data: data ?? undefined,
+    isLoading: status === 'connecting' && data == null,
+    isError: false,
+    status,
+    // React Query compat: surface the backend timestamp as dataUpdatedAt
+    dataUpdatedAt: data?.timestamp_ms ?? 0,
+  };
 }

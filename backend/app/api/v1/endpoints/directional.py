@@ -38,6 +38,7 @@ from app.engines.directional.setup_engine import evaluate_setup
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.services import adapter_manager as _adm
+from app.services import paper_store as _paper_store
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
@@ -66,6 +67,56 @@ _STATE_LABELS = {
     'ENTRY_ARMED_CONTINUATION': '⚡ ARMED — Continuation',
     'CONFIRMED_SETUP_ACTIVE':   '✅ CONFIRMED Setup',
 }
+
+# ── Signal ID tracking ────────────────────────────────────────────────────────
+# key: "{sym}_{direction}" → short signal ID (e.g. "BTC-A3K7P")
+_active_signal_ids:  dict[str, str]   = {}
+# key: "{sym}_{direction}" → last-alerted SL (for detecting improvements)
+_active_signal_sls:  dict[str, float] = {}
+
+
+def _load_signal_tracker_state() -> None:
+    """Load persisted tracker state from DB so restarts don't re-fire existing signals."""
+    from app.services.db import get_config as _gc
+    try:
+        raw = _gc("signal_tracker_state")
+        if not raw:
+            return
+        data = json.loads(raw)
+        _prev_states.update(data.get("prev_states", {}))
+        _active_signal_ids.update(data.get("signal_ids", {}))
+        _active_signal_sls.update({k: float(v) for k, v in data.get("signal_sls", {}).items()})
+        _prev_all_green.update({k: bool(v) for k, v in data.get("prev_all_green", {}).items()})
+        _prev_all_red.update({k: bool(v) for k, v in data.get("prev_all_red", {}).items()})
+        log.info("Signal tracker state restored (%d symbols)", len(_prev_states))
+    except Exception as exc:
+        log.debug("Signal tracker state load failed (non-fatal): %s", exc)
+
+
+def _save_signal_tracker_state() -> None:
+    """Persist tracker state to DB after each refresh cycle."""
+    from app.services.db import set_config as _sc
+    try:
+        _sc("signal_tracker_state", json.dumps({
+            "prev_states":   dict(_prev_states),
+            "signal_ids":    dict(_active_signal_ids),
+            "signal_sls":    dict(_active_signal_sls),
+            "prev_all_green": dict(_prev_all_green),
+            "prev_all_red":   dict(_prev_all_red),
+        }))
+    except Exception as exc:
+        log.debug("Signal tracker state save failed (non-fatal): %s", exc)
+
+
+def _make_signal_id(sym: str, now_ms: int) -> str:
+    """Short human-readable signal ID: e.g. BTC-A3K7P (5-char base36 suffix)."""
+    _chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    n = now_ms % (36 ** 5)
+    result = ""
+    for _ in range(5):
+        result = _chars[n % 36] + result
+        n //= 36
+    return f"{sym[:3]}-{result}"
 
 
 def _strategy_expiry(
@@ -182,6 +233,14 @@ async def _fire_signal_alert(
         dir_str = setup.direction.value
         state   = setup.state.value
 
+        # Generate / reuse signal ID: one ID per (sym, direction) until direction flips
+        _key = f"{sym}_{dir_str}"
+        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms)
+        _active_signal_ids[_key] = signal_id
+        # Record the SL at alert time for future improvement detection
+        if stop_price is not None:
+            _active_signal_sls[_key] = stop_price
+
         # ATM options recommendation — use strategy-aware expiry
         opt_params = _option_params(sym, spot_f, dir_str, _alert_mode)
         opt_strike = opt_params['opt_strike']
@@ -196,7 +255,7 @@ async def _fire_signal_alert(
         state_label = _STATE_LABELS.get(state, state)
 
         alert = {
-            'id': f"{sym}_{state}_{now_ms}",
+            'id': signal_id,
             'underlying': sym, 'state': state, 'state_label': state_label,
             'direction': dir_str, 'regime': regime.macro_regime.value,
             'entry': round(spot_f, 2), 'stop_loss': stop_price, 'take_profit': target_price,
@@ -211,30 +270,82 @@ async def _fire_signal_alert(
         }
         _signal_alerts.appendleft(alert)
 
-        side_tag = '🟢 BUY' if dir_str == 'long' else '🔴 SELL'
-        sl_str   = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
-        tp_str   = f"${target_price:,.2f}" if target_price else 'N/A'
-        msg = (
-            f"<b>{state_label}</b>\n"
-            f"<b>{sym}</b>  {side_tag}\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"📍 Entry:  <b>${spot_f:,.2f}</b>\n"
-            f"🛑 Stop:   <b>{sl_str}</b>  ({risk_pct:.1f}% risk)\n"
-            f"🎯 Target: <b>{tp_str}</b>  (2:1 R:R)\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"⚙️ Regime: {regime.macro_regime.value}  |  ADX {adx_val:.0f}\n"
-            f"📊 Score:  {round(score)}/100  |  RSI {round(getattr(signal, 'rsi', 50))}\n"
-            f"🔧 Futures: {inst.delta_perp_symbol or sym+'USDT'}  {rec_lev}× leverage\n"
+        side_tag  = '🟢 BUY' if dir_str == 'long' else '🔴 SELL'
+        sl_str    = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
+        tp_str    = f"${target_price:,.2f}" if target_price else 'N/A'
+        rr_label  = f"{_alert_mode.rr_target:.1f}:1" if _alert_mode else "2:1"
+        fut_sym   = inst.delta_perp_symbol or f"{sym}USD"
+        rsi_val   = round(getattr(signal, 'rsi', 50))
+
+        # ── FUTURES message ───────────────────────────────────────────────────
+        fut_msg = (
+            f"📦 <b>FUTURES  ·  {state_label}</b>\n"
+            f"<b>{sym}</b>  {side_tag}  ·  {fut_sym}  {rec_lev}×\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📍 Entry:   <b>${spot_f:,.2f}</b>\n"
+            f"🛑 Stop:    <b>{sl_str}</b>  ({risk_pct:.1f}% risk)\n"
+            f"🎯 Target:  <b>{tp_str}</b>  ({rr_label} R:R)\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⚙️ Regime: {regime.macro_regime.value}  |  ADX {adx_val:.0f}  |  RSI {rsi_val}\n"
+            f"📊 Score: <b>{round(score)}/100</b>\n"
+            f"🔖 ID: <code>{signal_id}</code>\n"
         )
-        if opt_symbol:
-            msg += f"📈 Options: {opt_type} {opt_strike} {opt_expiry}\n"
-        sent = await _tg.send(msg)
+        sent = await _tg.send(fut_msg)
         if sent:
-            log.info("Telegram alert sent: %s %s", sym, cur_state)
+            log.info("Telegram FUTURES alert sent: %s %s [%s]", sym, state, signal_id)
         else:
-            log.warning("Telegram alert NOT delivered for %s %s — check token/chat_id", sym, cur_state)
+            log.warning("Telegram FUTURES alert NOT delivered for %s — check token/chat_id", sym)
+
+        # ── OPTIONS message (separate, only when instrument has options) ───────
+        if opt_symbol and inst.has_options:
+            opt_msg = (
+                f"📊 <b>OPTIONS  ·  {state_label}</b>\n"
+                f"<b>{sym}</b>  {side_tag}  ·  {opt_type} {opt_strike:,}  {opt_expiry}\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📍 Entry:   <b>${spot_f:,.2f}</b>  (spot ref)\n"
+                f"🛑 Stop:    <b>{sl_str}</b>  ({risk_pct:.1f}% risk)\n"
+                f"🎯 Target:  <b>{tp_str}</b>  ({rr_label} R:R)\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚙️ Regime: {regime.macro_regime.value}  |  ADX {adx_val:.0f}  |  RSI {rsi_val}\n"
+                f"📊 Score: <b>{round(score)}/100</b>\n"
+                f"📌 Symbol: <code>{opt_symbol}</code>\n"
+                f"🔖 ID: <code>{signal_id}</code>\n"
+            )
+            sent_opt = await _tg.send(opt_msg)
+            if sent_opt:
+                log.info("Telegram OPTIONS alert sent: %s %s [%s]", sym, state, signal_id)
+            else:
+                log.warning("Telegram OPTIONS alert NOT delivered for %s — check token/chat_id", sym)
     except Exception as exc:
         log.warning("Alert generation error for %s: %s", sym, exc)
+
+
+async def _fire_sl_update_alert(
+    sym: str, signal_id: str, direction: str,
+    old_sl: float, new_sl: float, spot_f: float,
+) -> None:
+    """Send a Telegram message when SL improves (tightens toward profit)."""
+    from app.services.notifications import telegram as _tg
+    if not _tg.TELEGRAM_TOKEN or not _tg.TELEGRAM_CHAT_ID:
+        return
+    try:
+        side_tag   = '🟢 LONG' if direction == 'long' else '🔴 SHORT'
+        moved_pts  = abs(new_sl - old_sl)
+        moved_pct  = moved_pts / spot_f * 100
+        direction_word = "raised" if direction == 'long' else "lowered"
+        msg = (
+            f"🔄 <b>SL Updated  ·  {sym}  {side_tag}</b>\n"
+            f"🔖 ID: <code>{signal_id}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛑 New Stop:  <b>${new_sl:,.2f}</b>\n"
+            f"   Old Stop:  <s>${old_sl:,.2f}</s>\n"
+            f"   Moved {direction_word}: <b>{moved_pts:,.2f} pts ({moved_pct:.2f}%)</b>\n"
+            f"📍 Spot now:  ${spot_f:,.2f}\n"
+        )
+        await _tg.send(msg)
+        log.info("Telegram SL update sent: %s [%s] %.2f→%.2f", sym, signal_id, old_sl, new_sl)
+    except Exception as exc:
+        log.warning("SL update alert error for %s: %s", sym, exc)
 
 
 def _build_indicator_lines(candles):
@@ -721,6 +832,28 @@ async def _compute_signal_item(
                 _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode)
             )
 
+        # SL improvement check: fire Telegram when SL tightens on an active signal
+        _sl_key = f"{sym}_{setup.direction.value}"
+        if (
+            stop_price is not None
+            and cur_state in _ALERT_STATES
+            and _sl_key in _active_signal_sls
+            and _sl_key in _active_signal_ids
+        ):
+            old_sl = _active_signal_sls[_sl_key]
+            sl_improved = (
+                (setup.direction.value == 'long'  and stop_price > old_sl) or
+                (setup.direction.value == 'short' and stop_price < old_sl)
+            )
+            if sl_improved:
+                _active_signal_sls[_sl_key] = stop_price  # update tracker before async task
+                asyncio.create_task(
+                    _fire_sl_update_alert(
+                        sym, _active_signal_ids[_sl_key],
+                        setup.direction.value, old_sl, stop_price, spot_f,
+                    )
+                )
+
         # Poll-level arrow edge: True only on first poll after the trend flips.
         # signal.green_arrow stays True for the entire 1H candle (~240 polls); we
         # instead track the raw all_green/all_red booleans and fire the arrow only
@@ -1196,17 +1329,154 @@ async def refresh_signals_now(request: Request) -> dict:
 
 # ─── /stream-all (Bloomberg-style multi-instrument SSE) ───────────────────────
 
+def _build_watchlist_event(instruments, now_ms: int) -> str | None:
+    """Build watchlist SSE payload from snap_cache — zero exchange calls."""
+    items = []
+    for inst in instruments:
+        sym = inst.underlying
+        snap = _snap_cache.get(sym)
+        if snap is None:
+            continue
+        ivr = snap.ivr or 0.0
+        if ivr < 40:
+            ivr_band = "low"
+        elif ivr < 60:
+            ivr_band = "normal"
+        elif ivr < 80:
+            ivr_band = "elevated"
+        else:
+            ivr_band = "high"
+        items.append({
+            "underlying": sym,
+            "has_options": inst.has_options,
+            "state": snap.current_state,
+            "direction": snap.direction,
+            "macro_regime": snap.regime or "neutral",
+            "signal_trend": 1 if snap.direction == "long" else (-1 if snap.direction == "short" else 0),
+            "ivr": snap.ivr,
+            "ivr_band": ivr_band,
+            "score_long": snap.score_long,
+            "score_short": snap.score_short,
+            "spot_price": _stream_last_prices.get(sym, snap.spot_price),
+            "daily_change_pct": None,
+            "timestamp_ms": snap.computed_at_ms,
+        })
+    if not items:
+        return None
+    return json.dumps({"items": items, "count": len(items), "timestamp_ms": now_ms})
+
+
+def _build_positions_event(now_ms: int) -> str:
+    """Build positions SSE payload from paper_store — zero exchange calls."""
+    positions = _paper_store.list_positions()
+    serialized = []
+    for p in positions:
+        try:
+            serialized.append(json.loads(p.model_dump_json()))
+        except Exception:
+            pass
+    open_count = sum(1 for p in positions if p.status.value in ("open", "partially_closed"))
+    partially_closed = sum(1 for p in positions if p.status.value == "partially_closed")
+    closed_count = sum(1 for p in positions if p.status.value == "closed")
+    return json.dumps({
+        "positions": serialized,
+        "open_count": open_count,
+        "partially_closed_count": partially_closed,
+        "closed_count": closed_count,
+        "timestamp_ms": now_ms,
+    })
+
+
+def _build_pnl_event(now_ms: int) -> str:
+    """Build live PnL from paper_store + stream_last_prices — zero exchange calls."""
+    from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
+    active = [p for p in _paper_store.list_positions() if p.status.value in ("open", "partially_closed")]
+    results = []
+    total_pnl = 0.0
+    for pos in active:
+        spot = _stream_last_prices.get(pos.underlying)
+        leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+        dte_from_exp = _dte_from_expiry(leg.expiry_date) if leg else -1
+        if dte_from_exp >= 0:
+            current_dte = dte_from_exp
+        else:
+            days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
+            current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
+        pnl = None
+        if spot is not None:
+            spot_move = spot - pos.entry_spot_price
+            direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
+            pnl = _estimate_pnl(pos.sized_trade, spot_move, direction_sign,
+                                  pos.sized_trade.max_risk_usd, pos.sized_trade.structure.max_gain)
+            total_pnl += pnl
+        results.append({
+            "position_id": pos.id,
+            "underlying": pos.underlying,
+            "status": pos.status.value,
+            "current_spot": spot,
+            "entry_spot": pos.entry_spot_price,
+            "estimated_pnl_usd": pnl,
+            "current_dte": current_dte,
+            "max_risk_usd": pos.sized_trade.max_risk_usd,
+            "capital_at_risk_pct": pos.sized_trade.capital_at_risk_pct,
+        })
+    return json.dumps({"positions": results, "total_estimated_pnl_usd": round(total_pnl, 2), "timestamp_ms": now_ms})
+
+
+def _build_portfolio_event(now_ms: int) -> str:
+    """Build portfolio summary from paper_store — zero exchange calls."""
+    positions = _paper_store.list_positions()
+    open_pos = [p for p in positions if p.status.value in ("open", "partially_closed")]
+    closed_pos = [p for p in positions if p.status.value == "closed"]
+    total_open_risk = sum(p.sized_trade.max_risk_usd for p in open_pos)
+    largest_open_risk = max((p.sized_trade.max_risk_usd for p in open_pos), default=0.0)
+    total_realized = sum(getattr(p, "realized_pnl_usd", 0.0) or 0.0 for p in closed_pos)
+    avg_cap_risk = (
+        sum(p.sized_trade.capital_at_risk_pct for p in open_pos) / len(open_pos)
+        if open_pos else 0.0
+    )
+    return json.dumps({
+        "open_count": len(open_pos),
+        "partially_closed_count": sum(1 for p in positions if p.status.value == "partially_closed"),
+        "closed_count": len(closed_pos),
+        "total_positions": len(positions),
+        "total_open_risk_usd": round(total_open_risk, 2),
+        "total_realized_pnl_usd": round(total_realized, 2),
+        "largest_open_risk_usd": round(largest_open_risk, 2),
+        "underlyings_open": list({p.underlying for p in open_pos}),
+        "avg_capital_at_risk_pct": round(avg_cap_risk, 4),
+        "timestamp_ms": now_ms,
+    })
+
+
+def _build_alerts_event(now_ms: int) -> str:
+    """Build signal alerts payload from in-memory deque — zero I/O."""
+    alerts_list = list(_signal_alerts)
+    return json.dumps({"alerts": alerts_list, "count": len(alerts_list), "timestamp_ms": now_ms})
+
+
 async def _sse_all_generator(
     request: Request,
-    price_interval: float = 2.0,
+    price_interval: float = 1.0,
 ) -> AsyncGenerator[str, None]:
     """
-    Single SSE connection that emits two named event types:
-      - "prices"  every `price_interval` seconds: spot prices for all instruments
-      - "signals" every 30 seconds: full signal data from snapshot cache
+    Single SSE connection that emits named event types:
+      - "prices"    every `price_interval` s: spot prices for all instruments
+      - "signals"   every 30s: full signal data from snapshot cache
+      - "watchlist" every 10s: watchlist rows built from snapshot cache
+      - "positions" every 5s:  paper positions from DB (no exchange call)
+      - "pnl"       every 5s:  live PnL using cached spot prices (no exchange call)
+      - "portfolio" every 10s: portfolio summary from DB
+      - "alerts"    every 15s: signal alerts from in-memory deque
+    Prices read directly from WS cache (no CachingAdapter overhead).
     """
     instruments = registry.list_instruments()
-    last_signals_t = 0.0  # monotonic timestamp of last signals emission
+    last_signals_t   = 0.0
+    last_watchlist_t = 0.0
+    last_positions_t = 0.0
+    last_pnl_t       = 0.0
+    last_portfolio_t = 0.0
+    last_alerts_t    = 0.0
 
     while True:
         if await request.is_disconnected():
@@ -1219,28 +1489,44 @@ async def _sse_all_generator(
         # ── fast path: spot prices ────────────────────────────────────────────
         serveable = [i for i in instruments if _adapter_can_serve(i, current_source)]
 
-        async def _fetch_price(inst) -> tuple[str, float | None]:
-            # Hard 2s deadline per instrument so a slow/failing exchange can never
-            # block the entire SSE stream (RetryingAdapter alone can take 25s).
-            try:
-                p = await asyncio.wait_for(adapter.get_index_price(inst), timeout=2.0)
-                return inst.underlying, float(p)
-            except Exception:
-                return inst.underlying, None
+        # Try direct WS price cache first — zero latency, bypasses CachingAdapter.
+        # _ws_prices is keyed by exchange symbol (e.g. "BTCUSD"), so map back to underlying.
+        raw = _adm.get_raw_adapter()
+        ws_cache: dict[str, float] = getattr(raw, "_ws_prices", {})
 
-        price_results = await asyncio.gather(
-            *[_fetch_price(inst) for inst in serveable],
-            return_exceptions=False,
-        )
-        prices: dict[str, float] = {
-            sym: price for sym, price in price_results if price is not None
-        }
-        # Fill missing symbols from last-known prices so the ticker never goes
-        # blank due to transient exchange errors or WS reconnect gaps.
+        prices: dict[str, float] = {}
+        rest_needed: list = []
+
+        for inst in serveable:
+            delta_sym = inst.delta_perp_symbol or f"{inst.underlying}USD"
+            if delta_sym in ws_cache:
+                prices[inst.underlying] = ws_cache[delta_sym]
+            else:
+                rest_needed.append(inst)
+
+        # REST fallback for instruments not in WS cache (other adapters, startup gap)
+        if rest_needed:
+            async def _fetch_price(inst) -> tuple[str, float | None]:
+                try:
+                    p = await asyncio.wait_for(adapter.get_index_price(inst), timeout=2.0)
+                    return inst.underlying, float(p)
+                except Exception:
+                    return inst.underlying, None
+
+            rest_results = await asyncio.gather(
+                *[_fetch_price(inst) for inst in rest_needed],
+                return_exceptions=False,
+            )
+            for sym, price in rest_results:
+                if price is not None:
+                    prices[sym] = price
+
+        # Fill any remaining gaps from last-known prices
         for inst in serveable:
             sym = inst.underlying
             if sym not in prices and sym in _stream_last_prices:
                 prices[sym] = _stream_last_prices[sym]
+
         # Persist latest successful prices for future fallback
         _stream_last_prices.update(prices)
 
@@ -1301,11 +1587,59 @@ async def _sse_all_generator(
                     **opt,
                     'fresh': True,
                     'timestamp_ms': snap.computed_at_ms,
+                    'signal_id': _active_signal_ids.get(f"{sym}_{snap.direction}"),
                 })
 
             now_ms = int(time.time() * 1000)
             payload = json.dumps({'signals': signals_list, 'timestamp_ms': now_ms})
             yield f"event: signals\ndata: {payload}\n\n"
+
+        # ── watchlist (every 10s from snap cache — no exchange call) ─────────
+        if now_mono - last_watchlist_t >= 10.0:
+            last_watchlist_t = now_mono
+            now_ms = int(time.time() * 1000)
+            try:
+                wl_payload = _build_watchlist_event(instruments, now_ms)
+                if wl_payload:
+                    yield f"event: watchlist\ndata: {wl_payload}\n\n"
+            except Exception as _e:
+                log.debug("SSE watchlist build error: %s", _e)
+
+        # ── positions (every 5s from SQLite — no exchange call) ──────────────
+        if now_mono - last_positions_t >= 5.0:
+            last_positions_t = now_mono
+            now_ms = int(time.time() * 1000)
+            try:
+                yield f"event: positions\ndata: {_build_positions_event(now_ms)}\n\n"
+            except Exception as _e:
+                log.debug("SSE positions build error: %s", _e)
+
+        # ── live PnL (every 5s using cached prices — no exchange call) ───────
+        if now_mono - last_pnl_t >= 5.0:
+            last_pnl_t = now_mono
+            now_ms = int(time.time() * 1000)
+            try:
+                yield f"event: pnl\ndata: {_build_pnl_event(now_ms)}\n\n"
+            except Exception as _e:
+                log.debug("SSE pnl build error: %s", _e)
+
+        # ── portfolio summary (every 10s from SQLite — no exchange call) ─────
+        if now_mono - last_portfolio_t >= 10.0:
+            last_portfolio_t = now_mono
+            now_ms = int(time.time() * 1000)
+            try:
+                yield f"event: portfolio\ndata: {_build_portfolio_event(now_ms)}\n\n"
+            except Exception as _e:
+                log.debug("SSE portfolio build error: %s", _e)
+
+        # ── signal alerts (every 15s from in-memory deque) ───────────────────
+        if now_mono - last_alerts_t >= 15.0:
+            last_alerts_t = now_mono
+            now_ms = int(time.time() * 1000)
+            try:
+                yield f"event: alerts\ndata: {_build_alerts_event(now_ms)}\n\n"
+            except Exception as _e:
+                log.debug("SSE alerts build error: %s", _e)
 
         await asyncio.sleep(price_interval)
 
@@ -1313,7 +1647,7 @@ async def _sse_all_generator(
 @router.get("/stream-all")
 async def stream_all_signals(
     request: Request,
-    price_interval: float = Query(2.0, ge=1.0, le=10.0),
+    price_interval: float = Query(1.0, ge=0.5, le=10.0),
 ):
     return StreamingResponse(
         _sse_all_generator(request, price_interval),

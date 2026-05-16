@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../utils/api';
+import { useAppStream } from './useAppStream';
 
 export interface PortfolioSummary {
   open_count: number;
@@ -15,10 +14,10 @@ export interface PortfolioSummary {
 }
 
 export function usePortfolioSummary() {
-  return useQuery<PortfolioSummary>({
-    queryKey: ['portfolio-summary'],
-    queryFn: () => api.get<PortfolioSummary>('/api/v1/positions/summary'),
-    refetchInterval: 10_000,
-    refetchOnWindowFocus: true,
-  });
+  const { data, status } = useAppStream<PortfolioSummary>('portfolio');
+  return {
+    data: data ?? undefined,
+    isLoading: status === 'connecting' && data == null,
+    isError: false,
+  };
 }

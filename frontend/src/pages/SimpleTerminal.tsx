@@ -7,7 +7,7 @@ import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { TradingModeSelector } from '../components/TradingModeSelector';
 import { CalibrationPanel } from '../components/CalibrationPanel';
-import { SimpleSettingsDrawer } from '../components/SimpleSettings';
+import { SimpleSettingsDrawer, AlgoToggle } from '../components/SimpleSettings';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
@@ -62,6 +62,7 @@ export function SimpleTerminal() {
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <PaperLiveToggle />
+          <AlgoToggle />
           <DataSourceSelector />
           <CbChip />
           <button

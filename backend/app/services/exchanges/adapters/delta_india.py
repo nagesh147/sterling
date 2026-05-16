@@ -272,7 +272,24 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         "post_only_reject":       "Order rejected — market would take immediately (post-only mode)",
         "self_trade_prevention":  "Order cancelled — would match your own open order",
         "risk_limit_exceeded":    "Position exceeds account risk limit",
+        "ip_not_whitelisted":     "IP not whitelisted for this API key",
+        "IpNotWhitelisted":       "IP not whitelisted for this API key",
     }
+
+    @staticmethod
+    async def _get_public_ip() -> str:
+        """Fetch the server's outbound IP so users know what to whitelist."""
+        import httpx as _httpx
+        for url in ("https://api.ipify.org", "https://checkip.amazonaws.com"):
+            try:
+                async with _httpx.AsyncClient(timeout=3.0) as c:
+                    r = await c.get(url)
+                    ip = r.text.strip()
+                    if ip:
+                        return ip
+            except Exception:
+                pass
+        return "unknown (check ifconfig.me)"
 
     def _raise_api_error(self, resp, path: str) -> None:
         """Raise a RuntimeError with a human-readable message for known Delta error codes."""
@@ -292,10 +309,15 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                         f"but need ${need:.2f} more. Add funds to your Delta Exchange account."
                     )
 
+                if code in ("ip_not_whitelisted", "IpNotWhitelisted") or "whitelist" in code.lower():
+                    raise RuntimeError("ip_not_whitelisted")
+
                 if code:
                     friendly = self._FRIENDLY.get(code, code.replace("_", " ").capitalize())
                     ctx_str  = f" — {ctx}" if ctx and not isinstance(ctx, dict) else ""
                     raise RuntimeError(f"{friendly}{ctx_str}")
+        except RuntimeError:
+            raise
         except (ValueError, KeyError, TypeError):
             pass
         resp.raise_for_status()

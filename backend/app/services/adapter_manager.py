@@ -25,6 +25,11 @@ def get_adapter() -> Optional[BaseExchangeAdapter]:
     return _adapter
 
 
+def get_raw_adapter() -> Optional[BaseExchangeAdapter]:
+    """Return the unwrapped adapter (no cache/retry). Used for direct WS price access."""
+    return _raw_adapter
+
+
 def get_data_source() -> str:
     return _data_source
 

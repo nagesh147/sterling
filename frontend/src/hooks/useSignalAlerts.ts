@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAppStream } from './useAppStream';
 import { api } from '../utils/api';
 
 export interface SignalAlert {
@@ -33,11 +34,12 @@ export interface SignalAlertsResponse {
 }
 
 export function useSignalAlerts() {
-  return useQuery<SignalAlertsResponse>({
-    queryKey: ['signal-alerts'],
-    queryFn: () => api.get<SignalAlertsResponse>('/api/v1/directional/signal-alerts'),
-    refetchInterval: 10_000,
-  });
+  const { data, status } = useAppStream<SignalAlertsResponse>('alerts');
+  return {
+    data: data ?? undefined,
+    isLoading: status === 'connecting' && data == null,
+    isError: false,
+  };
 }
 
 export interface LiveOrderRequest {
