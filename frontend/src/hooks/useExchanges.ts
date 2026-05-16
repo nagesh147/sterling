@@ -63,10 +63,12 @@ function _invalidateMarketData(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['config-info'] });
   qc.invalidateQueries({ queryKey: ['snapshot'] });
   qc.invalidateQueries({ queryKey: ['watchlist'] });
+  qc.invalidateQueries({ queryKey: ['signals-all'] });
   qc.invalidateQueries({ queryKey: ['market-snapshot'] });
   qc.invalidateQueries({ queryKey: ['preview'] });
   qc.invalidateQueries({ queryKey: ['eval-history'] });
   qc.invalidateQueries({ queryKey: ['regime-trend'] });
+  qc.invalidateQueries({ queryKey: ['candles'] });
 }
 
 export function useSetDataSource() {

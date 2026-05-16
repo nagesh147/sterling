@@ -1210,6 +1210,10 @@ async def _sse_all_generator(
         }
         if prices:
             yield f"event: prices\ndata: {json.dumps(prices)}\n\n"
+        else:
+            # SSE comment keepalive — keeps TCP/proxy alive when no instruments
+            # are serveable on the current data source (empty prices dict).
+            yield ": ka\n\n"
 
         # ── slow path: full signal data (every 30s from snap cache) ──────────
         if now_mono - last_signals_t >= 30.0:

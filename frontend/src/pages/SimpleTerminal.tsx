@@ -10,6 +10,7 @@ import { TradingModeSelector } from '../components/TradingModeSelector';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SimpleSettingsDrawer } from '../components/SimpleSettings';
 import { AllSymbolsTicker } from '../components/AllSymbolsTicker';
+import { DataSourceSelector } from '../components/DataSourceSelector';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import '../styles/terminal.css';
@@ -64,7 +65,8 @@ export function SimpleTerminal() {
         <TradingModeSelector />
         <PaperLiveToggle />
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <DataSourceSelector />
           <CbChip />
           <button
             onClick={toggleTheme}

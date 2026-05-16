@@ -4,6 +4,7 @@ import { useCalibration } from '../hooks/useCalibration';
 import { useSelectedUnderlying } from '../store/useStore';
 import { useSnapshot } from '../hooks/useSnapshot';
 import { useLivePrices } from '../hooks/useLivePrices';
+import { useDataSource } from '../hooks/useExchanges';
 
 export function StatusBar() {
   const underlying = useSelectedUnderlying();
@@ -11,6 +12,7 @@ export function StatusBar() {
   const { data: cal } = useCalibration(underlying);
   const { data: snap } = useSnapshot(underlying);
   const liveP = useLivePrices();
+  const { data: ds } = useDataSource();
 
   /* SSE live price takes precedence over snapshot's polled price */
   const spotPrice = liveP[underlying] ?? snap?.spot_price ?? null;
@@ -36,10 +38,14 @@ export function StatusBar() {
       fontSize: 10,
       color: 'var(--t-dim)',
     }}>
-      {/* Exchange status */}
+      {/* Data source + reachability */}
       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--t-green)', display: 'inline-block' }} />
-        DERIBIT
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
+          background: ds?.reachable ? 'var(--t-green)' : ds?.reachable === false ? 'var(--t-red)' : 'var(--t-dim)',
+          boxShadow: ds?.reachable ? '0 0 4px var(--t-green)' : 'none',
+        }} />
+        {ds ? ds.exchange.toUpperCase().replace('_', ' ') : 'DERIBIT'}
       </span>
 
       {/* Current price — live from SSE (~2s) */}
