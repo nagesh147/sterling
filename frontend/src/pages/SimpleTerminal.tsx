@@ -18,6 +18,7 @@ import { useSetAppMode } from '../store/useStore';
 import { useSelectedUnderlying } from '../store/useStore';
 import { useSnapshot } from '../hooks/useSnapshot';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
+import { useLivePrices } from '../hooks/useLivePrices';
 import '../styles/terminal.css';
 
 const REGIME_COLOR: Record<string, string> = {
@@ -30,33 +31,45 @@ const REGIME_COLOR: Record<string, string> = {
 
 function RegimeChip({ underlying }: { underlying: string }) {
   const { data: snap } = useSnapshot(underlying);
-  if (!snap) return null;
+  const liveP = useLivePrices();
+  if (!snap && Object.keys(liveP).length === 0) return null;
 
-  const regime = snap.macro_regime ?? 'RANGING';
+  const regime = snap?.macro_regime ?? 'RANGING';
   const color = REGIME_COLOR[regime] ?? '#4a5a6a';
-  const totalScore = Math.max(snap.score_long, snap.score_short);
+  const totalScore = snap ? Math.max(snap.score_long, snap.score_short) : 0;
   const scoreColor = totalScore >= 85 ? '#00c87a' : totalScore >= 75 ? '#f0a020' : '#4a5a6a';
-  const adx = snap.adx ?? 0;
-  const atrPct = snap.atr_percentile ?? 50;
+  const adx = snap?.adx ?? 0;
+  const atrPct = snap?.atr_percentile ?? 50;
+  const livePrice = liveP[underlying];
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderLeft: '1px solid var(--t-border)' }}>
-      <span style={{
-        fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 3,
-        background: color + '22', color, border: `1px solid ${color}44`,
-        fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em',
-      }}>
-        {regime.replace('_', ' ')}
-      </span>
-      <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>
-        ADX <span style={{ color: adx >= 25 ? '#00c87a' : 'var(--t-text)', fontFamily: 'JetBrains Mono,monospace' }}>{Math.round(adx)}</span>
-      </span>
-      <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>
-        ATR <span style={{ color: atrPct > 65 ? '#f0a020' : 'var(--t-text)', fontFamily: 'JetBrains Mono,monospace' }}>{Math.round(atrPct)}%</span>
-      </span>
-      <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>
-        Score <span style={{ color: scoreColor, fontFamily: 'JetBrains Mono,monospace', fontWeight: 700 }}>{totalScore}</span>
-      </span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderLeft: '1px solid var(--t-border)', overflow: 'hidden' }}>
+      {/* Live spot price — updates every ~2s */}
+      {livePrice != null && (
+        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: 'var(--t-bright)' }}>
+          ${livePrice >= 1000
+              ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 0 })
+              : livePrice.toLocaleString('en-US', { maximumFractionDigits: 3 })}
+        </span>
+      )}
+      {snap && <>
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 3,
+          background: color + '22', color, border: `1px solid ${color}44`,
+          fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em', flexShrink: 0,
+        }}>
+          {regime.replace(/_/g, ' ')}
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--t-dim)', flexShrink: 0 }}>
+          ADX <span style={{ color: adx >= 25 ? '#00c87a' : 'var(--t-text)', fontFamily: 'JetBrains Mono,monospace' }}>{Math.round(adx)}</span>
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--t-dim)', flexShrink: 0 }}>
+          ATR <span style={{ color: atrPct > 65 ? '#f0a020' : 'var(--t-text)', fontFamily: 'JetBrains Mono,monospace' }}>{Math.round(atrPct)}%</span>
+        </span>
+        <span style={{ fontSize: 10, color: 'var(--t-dim)', flexShrink: 0 }}>
+          Score <span style={{ color: scoreColor, fontFamily: 'JetBrains Mono,monospace', fontWeight: 700 }}>{totalScore}</span>
+        </span>
+      </>}
     </div>
   );
 }

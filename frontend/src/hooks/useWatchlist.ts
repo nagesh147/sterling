@@ -27,6 +27,6 @@ export function useWatchlist() {
   return useQuery<WatchlistResponse>({
     queryKey: ['watchlist'],
     queryFn: () => api.get<WatchlistResponse>('/api/v1/directional/watchlist'),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 }

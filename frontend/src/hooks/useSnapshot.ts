@@ -42,7 +42,7 @@ export function useSnapshot(underlying: string) {
       api.get<DirectionalSnapshot>(
         `/api/v1/directional/snapshot?underlying=${underlying}`
       ),
-    refetchInterval: 20_000,
+    refetchInterval: 5_000,
     enabled: !!underlying,
   });
 }

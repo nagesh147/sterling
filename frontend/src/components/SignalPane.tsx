@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSnapshot } from '../hooks/useSnapshot';
+import { useLivePrices } from '../hooks/useLivePrices';
 
 interface Props {
   underlying: string;
@@ -24,6 +25,8 @@ const REGIME_COLORS: Record<string, string> = {
 
 export function SignalPane({ underlying }: Props) {
   const { data: snap } = useSnapshot(underlying);
+  const liveP = useLivePrices();
+  const liveSpot = liveP[underlying] ?? snap?.spot_price ?? null;
 
   if (!snap) {
     return (
@@ -68,6 +71,13 @@ export function SignalPane({ underlying }: Props) {
         <span style={{ color: 'var(--t-bright)', fontWeight: 700, letterSpacing: 1, fontSize: 13 }}>
           [{underlying}]
         </span>
+        {liveSpot != null && (
+          <span className="num" style={{ color: 'var(--t-bright)', fontSize: 12, fontWeight: 700 }}>
+            ${liveSpot >= 1000
+                ? liveSpot.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                : liveSpot.toLocaleString('en-US', { maximumFractionDigits: 3 })}
+          </span>
+        )}
         <span
           className="tag"
           style={{ background: regimeColor + '22', color: regimeColor, border: `1px solid ${regimeColor}44` }}
