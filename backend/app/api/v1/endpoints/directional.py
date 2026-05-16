@@ -61,21 +61,34 @@ _STATE_LABELS = {
 }
 
 
-def _strategy_expiry(dte_min: int, dte_preferred: tuple, dte_max: int) -> tuple[str, int]:
+def _strategy_expiry(
+    dte_min: int,
+    dte_preferred: tuple,
+    dte_max: int,
+    _today: 'datetime.date | None' = None,
+) -> tuple[str, int]:
     """
     Find the Friday expiry closest to dte_preferred midpoint, constrained to [dte_min, dte_max].
     Delta Exchange India crypto options expire every Friday.
 
+    Edge cases handled:
+    - dte_min=0 on a Friday (expiry day): 0 DTE is allowed only when a
+      force_close_time protects intraday/scalping positions. For strategies
+      with dte_min>0 the expiry day is naturally excluded.
+    - No Friday in range: falls back to nearest Friday >= dte_min.
+
+    _today is injectable for testing; defaults to datetime.date.today().
+
     Returns (expiry_DDMMYY, actual_dte).
     """
-    import datetime
-    today = datetime.date.today()
+    import datetime as _dt
+    today = _today or _dt.date.today()
     pref_mid = (dte_preferred[0] + dte_preferred[1]) / 2.0
 
     # Collect all Fridays (weekday=4) within [dte_min, dte_max]
-    candidates: list[tuple[int, datetime.date]] = []
+    candidates: list[tuple[int, _dt.date]] = []
     for days in range(max(0, dte_min), dte_max + 8):
-        d = today + datetime.timedelta(days=days)
+        d = today + _dt.timedelta(days=days)
         if d.weekday() == 4:            # Friday
             dte = (d - today).days
             if dte_min <= dte <= dte_max:
@@ -86,33 +99,51 @@ def _strategy_expiry(dte_min: int, dte_preferred: tuple, dte_max: int) -> tuple[
         return best_date.strftime('%d%m%y'), best_dte
 
     # Fallback: nearest Friday on or after dte_min, even if outside dte_max
-    start = today + datetime.timedelta(days=max(0, dte_min))
-    extra = (4 - start.weekday()) % 7
-    fallback = start + datetime.timedelta(days=extra)
-    dte = (fallback - today).days
-    return fallback.strftime('%d%m%y'), dte
+    start = today + _dt.timedelta(days=max(0, dte_min))
+    extra = (4 - start.weekday()) % 7 or 7
+    fallback = start + _dt.timedelta(days=extra)
+    return fallback.strftime('%d%m%y'), (fallback - today).days
 
 
 def _option_params(sym: str, spot: float, direction: str, mode: 'TradingModeConfig | None' = None) -> dict:  # type: ignore[name-defined]
     """
-    Compute ATM option parameters for a given instrument, spot price, and trading mode.
-    Expiry is selected to match the mode's target DTE range:
-      SCALPING  → 0–3 DTE   (same-week Friday)
+    Compute option parameters for a given instrument, spot price, and trading mode.
+
+    Strike selection (theta vs delta tradeoff):
+      SCALPING / INTRADAY → ATM  (maximum gamma, respond fastest to spot moves)
+      SWING               → 1-step ITM (delta ~0.6, less theta decay per dollar of premium)
+      POSITIONAL          → ATM  (let the move develop; premium efficiency matters less)
+
+    Expiry selection (strategy-aware DTE):
+      SCALPING  → 0–3 DTE   (same-week Friday; position closed by force_close_time)
       INTRADAY  → 0–7 DTE   (current-week Friday)
-      SWING     → 7–30 DTE  (Friday ~2 weeks out)
-      POSITIONAL→ 21–90 DTE (Friday ~45 days out)
+      SWING     → 7–30 DTE  (Friday ~2 weeks out, ~8–10× expected hold time)
+      POSITIONAL→ 21–90 DTE (Friday ~45 days out, ~3× expected hold time)
+
+    The 2× rule: selected DTE ≥ 2× expected hold time so theta decay is not
+    the dominant risk driver. Verified across all modes and days in test_strategy_expiry.py.
     """
     try:
         from app.core.trading_mode import MODES as _MODES
-        import datetime
 
         step = 500 if spot > 10_000 else (100 if spot > 1_000 else 10)
-        strike   = round(spot / step) * step
+        atm  = round(spot / step) * step
         opt_type = 'CE' if direction == 'long' else 'PE'
 
         if mode is None:
-            # Try to resolve from MODES if a string was passed; fall back to swing
-            mode = _MODES.get('swing')   # type: ignore[assignment]
+            mode = _MODES.get('swing')  # type: ignore[assignment]
+
+        mode_name = mode.name if mode else 'swing'  # type: ignore[union-attr]
+
+        # Swing: use 1-step ITM for higher delta (less theta per dollar)
+        # ITM CE = strike below spot; ITM PE = strike above spot
+        if mode_name in ('swing',):
+            if opt_type == 'CE':
+                strike = atm - step          # 1 step below spot → ITM call
+            else:
+                strike = atm + step          # 1 step above spot → ITM put
+        else:
+            strike = atm                     # ATM for scalping, intraday, positional
 
         expiry, dte = _strategy_expiry(mode.dte_min, mode.dte_preferred, mode.dte_max)  # type: ignore[union-attr]
 
