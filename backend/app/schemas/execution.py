@@ -25,7 +25,8 @@ class CandidateContract(BaseModel):
 
 
 class TradeStructure(BaseModel):
-    structure_type: str  # "naked_call","naked_put","bull_call_spread","bear_put_spread","bull_put_spread","bear_call_spread"
+    structure_type: str  # "naked_call","naked_put","bull_call_spread","bear_put_spread",
+                         # "bull_put_spread","bear_call_spread","futures"
     direction: Direction
     legs: List[CandidateContract]
     max_loss: Optional[float]
@@ -34,6 +35,8 @@ class TradeStructure(BaseModel):
     risk_reward: Optional[float]
     score: float
     score_breakdown: dict
+    leverage: int = 1               # futures leverage; 1 for options
+    entry_price: Optional[float] = None  # spot price snapshot for futures
 
 
 class SizedTrade(BaseModel):

@@ -138,7 +138,11 @@ async def run_once(
     calls, puts = translate_options(
         instrument, setup.direction, policy, option_chain, spot_price
     )
-    structures = build_structures(calls, puts, setup.direction, policy)
+    structures = build_structures(
+        calls, puts, setup.direction, policy,
+        spot_price=spot_price, ivr=ivr,
+        signal_strength=getattr(signal, "signal_strength", "SIGNAL"),
+    )
 
     if not structures:
         return RunOnceResponse(
@@ -247,7 +251,11 @@ async def preview(
         instrument, setup.direction, policy, option_chain, spot_price
     )
     all_candidates = calls + puts
-    structures = build_structures(calls, puts, setup.direction, policy)
+    structures = build_structures(
+        calls, puts, setup.direction, policy,
+        spot_price=spot_price, ivr=ivr,
+        signal_strength=getattr(signal, "signal_strength", "SIGNAL"),
+    )
 
     candles_15m = []
     try:

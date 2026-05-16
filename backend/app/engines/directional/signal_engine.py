@@ -135,22 +135,44 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
     # ST flip
     st_flip = (green_arrow if trend_val == 1 else red_arrow) if trend_val != 0 else False
 
-    # RSI gate: 40-78 LONG (avoid overbought > 78), 22-60 SHORT (avoid oversold < 22)
-    # Upper bounds tightened from 82/55 to prevent late exhaustion-trend entries.
+    # ── HA/Real divergence filter (v3) ────────────────────────────────────────
+    # When |Real close − HA close| / Real close > 0.3%, HA is smoothing reality
+    # too aggressively → degrade signal quality (not a hard veto, a weight hit).
+    real_close = float(c[-1])
+    ha_close_cur = float(ha_c[-1]) if len(ha_c) > 0 else real_close
+    ha_real_div_pct = abs(real_close - ha_close_cur) / real_close * 100.0 if real_close > 0 else 0.0
+    ha_real_aligned = ha_real_div_pct < 0.3   # True = HA faithfully tracks real price
+
+    # RSI adaptive scoring: Bull >60 / Bear <40 earns max weight (momentum confirmation).
+    # Bull 40-60 / Bear 40-60 earns half weight (neutral zone, valid but weaker).
+    # Outside overbought/oversold bounds vetoed elsewhere.
     if trend_val == 1:
-        rsi_ok = 40.0 < cur_rsi < 78.0
+        rsi_ok = 40.0 < cur_rsi < 78.0        # hard gate (unchanged)
+        rsi_momentum = cur_rsi > 60.0          # bonus: RSI confirms momentum
     elif trend_val == -1:
         rsi_ok = 22.0 < cur_rsi < 60.0
+        rsi_momentum = cur_rsi < 40.0
     else:
         rsi_ok = False
+        rsi_momentum = False
 
-    weights = {"st_flip": 3, "rsi": 3, "squeeze": 5, "volume": 4, "ha_aligned": 5}
+    weights = {
+        "st_flip":     3,
+        "rsi":         2,   # base RSI gate
+        "rsi_momentum":1,   # bonus for strong RSI positioning
+        "squeeze":     4,
+        "volume":      4,
+        "ha_aligned":  4,   # was 5; split 1 pt to ha_real_aligned
+        "ha_real_aligned": 2,
+    }
     flags = {
-        "st_flip": st_flip,
-        "rsi": rsi_ok,
-        "squeeze": squeeze_ok,
-        "volume": vol_spike,
-        "ha_aligned": ha_aligned,
+        "st_flip":         st_flip,
+        "rsi":             rsi_ok,
+        "rsi_momentum":    rsi_momentum,
+        "squeeze":         squeeze_ok,
+        "volume":          vol_spike,
+        "ha_aligned":      ha_aligned,
+        "ha_real_aligned": ha_real_aligned,
     }
     total_weight = sum(weights.values())  # 20
     earned = sum(w for k, w in weights.items() if flags[k])
@@ -181,4 +203,6 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
         signal_score=signal_score,
         rsi=round(cur_rsi, 2),
         squeezed=squeezed,
+        ha_real_divergence_pct=round(ha_real_div_pct, 4),
+        vol_confirm=vol_spike,
     )

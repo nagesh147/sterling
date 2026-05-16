@@ -17,6 +17,20 @@ def _atr_pct_at(atr_arr: np.ndarray, pos: int, lookback: int = 100) -> float:
     return float(np.sum(atr_arr[pos] > valid) / len(valid) * 100)
 
 
+def _atr_slope(atr_arr: np.ndarray, closes: np.ndarray, pos: int) -> float:
+    """
+    Normalized ATR slope: Δ(ATR/Close) between current and previous bar.
+    Negative = ATR contracting relative to price (volatility drying up).
+    """
+    if pos < 1 or np.isnan(atr_arr[pos]) or np.isnan(atr_arr[pos - 1]):
+        return 0.0
+    if closes[pos] <= 0 or closes[pos - 1] <= 0:
+        return 0.0
+    cur = atr_arr[pos] / closes[pos]
+    prev = atr_arr[pos - 1] / closes[pos - 1]
+    return round(cur - prev, 6)
+
+
 def compute_regime(
     candles_4h: List[Candle],
     ema_period: int = 50,
@@ -42,23 +56,29 @@ def compute_regime(
     cur_ema55 = float(ema55_arr[-1])
     cur_adx = float(adx_arr[-1])
     cur_atr_pct = _atr_pct_at(atr_arr, n - 1, 100)
+    cur_atr_slope = _atr_slope(atr_arr, closes, n - 1)
 
-    # Cooldown: IDLE only when current AND previous bar both have ATR pct < 30.
-    # A single quiet bar used to pause the strategy for 4 bars — too aggressive.
-    cooldown_active = (
-        n >= 2
-        and _atr_pct_at(atr_arr, n - 1, 100) < 30
-        and _atr_pct_at(atr_arr, n - 2, 100) < 30
+    # IDLE when ATR percentile < 30 on 2 consecutive bars (original cooldown)
+    # OR when ATR/Close slope is negative AND percentile < 35 (spec: ATR falling → IDLE + 2-bar cooldown).
+    # Slope-only veto is intentionally NOT used to avoid false IDLE on mean-reversion dips.
+    pct_low_now  = _atr_pct_at(atr_arr, n - 1, 100) < 30
+    pct_low_prev = n >= 2 and _atr_pct_at(atr_arr, n - 2, 100) < 30
+    slope_contraction = cur_atr_slope < 0 and cur_atr_pct < 35
+    cooldown_active = (pct_low_now and pct_low_prev) or slope_contraction
+
+    _common = dict(
+        atr_percentile=round(cur_atr_pct, 2),
+        adx=round(cur_adx, 4),
+        ema21=round(cur_ema21, 4),
+        ema55=round(cur_ema55, 4),
+        atr_slope=round(cur_atr_slope, 6),
     )
 
     if cur_ema21 == 0.0 or cur_ema55 == 0.0:
         return RegimeResult(
             macro_regime=MacroRegime.NEUTRAL,
             ema50=cur_ema21, close_4h=cur_close, score=0.0,
-            atr_percentile=round(cur_atr_pct, 2),
-            adx=round(cur_adx, 4),
-            ema21=round(cur_ema21, 4),
-            ema55=round(cur_ema55, 4),
+            **_common,
         )
 
     # Scalping mode: simple direction without ADX/cooldown gates
@@ -70,10 +90,7 @@ def compute_regime(
         return RegimeResult(
             macro_regime=regime,
             ema50=cur_ema21, close_4h=cur_close, score=score,
-            atr_percentile=round(cur_atr_pct, 2),
-            adx=round(cur_adx, 4),
-            ema21=round(cur_ema21, 4),
-            ema55=round(cur_ema55, 4),
+            **_common,
         )
 
     # ADX thresholds: crypto markets trend at lower ADX than FX/equities.
@@ -110,8 +127,5 @@ def compute_regime(
         ema50=cur_ema21,          # kept for backward compat
         close_4h=cur_close,
         score=score,
-        atr_percentile=round(cur_atr_pct, 2),
-        adx=round(cur_adx, 4),
-        ema21=round(cur_ema21, 4),
-        ema55=round(cur_ema55, 4),
+        **_common,
     )

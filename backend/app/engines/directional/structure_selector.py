@@ -70,11 +70,46 @@ def _width(leg_a: CandidateContract, leg_b: CandidateContract) -> float:
     return abs(leg_a.strike - leg_b.strike)
 
 
+def build_futures_structure(
+    direction: Direction,
+    spot_price: float,
+    ivr: Optional[float],
+    score: float = 0.0,
+    signal_strength: str = "SIGNAL",
+) -> TradeStructure:
+    """
+    Build a futures TradeStructure for instruments without options or when
+    IVR routing indicates futures. Leverage is selected by score/signal_strength.
+    Max-loss is computed as 1 ATR-stop equivalent (1.5% of notional) for sizing.
+    """
+    lev = select_leverage(score, signal_strength)
+    notional = spot_price * lev
+    atr_stop_pct = 0.015          # 1.5% default; sizing engine applies true ATR
+    max_loss_est = notional * atr_stop_pct
+    rr = 2.0                       # baseline R/R for trend futures
+    return TradeStructure(
+        structure_type="futures",
+        direction=direction,
+        legs=[],
+        max_loss=round(max_loss_est, 4),
+        max_gain=round(max_loss_est * rr, 4),
+        net_premium=0.0,           # no premium for futures
+        risk_reward=rr,
+        score=score,
+        score_breakdown={},
+        leverage=lev,
+        entry_price=spot_price,
+    )
+
+
 def build_structures(
     calls: List[CandidateContract],
     puts: List[CandidateContract],
     direction: Direction,
     policy: PolicyResult,
+    spot_price: Optional[float] = None,
+    ivr: Optional[float] = None,
+    signal_strength: str = "SIGNAL",
 ) -> List[TradeStructure]:
     structures: List[TradeStructure] = []
     allowed = set(policy.allowed_structures)
@@ -193,5 +228,19 @@ def build_structures(
                     risk_reward=round(credit / max_loss, 2),
                     score=0.0, score_breakdown={},
                 ))
+
+    # ── Futures fallback / supplement ────────────────────────────────────────
+    # Add a futures structure when:
+    #   (a) IVR routing explicitly recommends futures, or
+    #   (b) no options structures were built (e.g. no healthy chain) and spot_price is known
+    futures_routed = (ivr is not None and route_by_ivr(ivr, 0.0, signal_strength, 0.0, 0.0) in ("futures", "naked_short"))
+    if spot_price and spot_price > 0 and (futures_routed or not structures):
+        structures.append(build_futures_structure(
+            direction=direction,
+            spot_price=spot_price,
+            ivr=ivr,
+            score=0.0,
+            signal_strength=signal_strength,
+        ))
 
     return structures

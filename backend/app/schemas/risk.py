@@ -25,9 +25,9 @@ class ScoringWeights(BaseModel):
     regime: float = 0.20
     signal: float = 0.20
     execution: float = 0.15
-    dte: float = 0.15
+    dte: float = 0.10        # 10 pts max — matches scoring code (20+20+15+20+10+15=100)
     health: float = 0.20
-    risk_reward: float = 0.10
+    risk_reward: float = 0.15  # 15 pts max — matches scoring code
 
     @field_validator("regime", "signal", "execution", "dte", "health", "risk_reward", mode="before")
     @classmethod

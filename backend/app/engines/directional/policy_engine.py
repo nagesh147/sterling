@@ -18,13 +18,14 @@ def _ivr_band(ivr: Optional[float], underlying: Optional[str] = None) -> IVRBand
     else:
         rank = ivr
 
-    if rank < 30:
-        return IVRBand.LOW
-    if rank < 55:
-        return IVRBand.NORMAL
-    if rank < 75:
-        return IVRBand.ELEVATED
-    return IVRBand.HIGH
+    # v3 thresholds: naked long allowed up to IVR 40 (was 30); naked short requires IVR >70
+    if rank < 40:
+        return IVRBand.LOW      # naked long allowed
+    if rank < 60:
+        return IVRBand.NORMAL   # all structures allowed
+    if rank < 70:
+        return IVRBand.ELEVATED # debit preferred
+    return IVRBand.HIGH         # naked short zone (IVR > 70)
 
 
 def _allowed_structures(

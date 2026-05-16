@@ -65,6 +65,8 @@ class RegimeResult(BaseModel):
     adx: float = 0.0
     ema21: float = 0.0
     ema55: float = 0.0
+    # v3 unified engine fields
+    atr_slope: float = 0.0       # normalized: Δ(ATR/Close) over last 2 bars; negative = contracting
 
 
 class SignalResult(BaseModel):
@@ -83,6 +85,9 @@ class SignalResult(BaseModel):
     signal_score: float = 0.0       # 0-20
     rsi: float = 50.0
     squeezed: bool = False
+    # v3 unified engine fields
+    ha_real_divergence_pct: float = 0.0  # |Real close − HA close| / Real close * 100
+    vol_confirm: bool = False             # volume > 1.5× median
 
 
 class SetupResult(BaseModel):

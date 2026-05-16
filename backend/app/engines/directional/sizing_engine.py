@@ -45,6 +45,10 @@ def size_trade(
     lev_factor = _LEV_SCALE.get(lev_key, 1.0)
     max_per = base_cap * lev_factor
 
+    # Scalp leverage (≥ 50×): hard 0.5% risk ceiling regardless of Kelly or base_cap
+    if leverage >= 50:
+        max_per = min(max_per, 0.005)
+
     target_risk_pct = min(
         frac_kelly,
         max_per,

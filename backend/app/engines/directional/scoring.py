@@ -93,6 +93,14 @@ def _check_hard_vetoes(
     if oi < 50:
         return f"OI {oi:.0f} < 50"
 
+    # Naked shorts require tighter guardrails: OI > 100 AND spread < 5%
+    is_naked_short = structure.structure_type in ("naked_short", "naked_short_call", "naked_short_put")
+    if is_naked_short:
+        if oi <= 100:
+            return f"naked short: OI {oi:.0f} ≤ 100 (requires > 100)"
+        if spread_pct >= 0.05:
+            return f"naked short: spread {spread_pct:.1%} ≥ 5% (requires < 5%)"
+
     # Use caller-supplied bar hour (backtest context) or current wall-clock hour (live).
     hour_utc = bar_hour_utc if bar_hour_utc is not None else _dt.datetime.now(_dt.timezone.utc).hour
     if hour_utc in {2, 3, 4, 5}:
@@ -102,6 +110,34 @@ def _check_hard_vetoes(
         return f"funding_rate {funding_rate:.4f} exceeds 0.025 threshold"
 
     return None
+
+
+# ── Hard score threshold gates ────────────────────────────────────────────────
+
+_SCORE_THRESHOLD_NORMAL = 75.0
+_SCORE_THRESHOLD_HIGH   = 85.0  # high leverage (≥10×) or naked shorts
+
+
+def _needs_high_threshold(structure: TradeStructure, leverage: int = 1) -> bool:
+    """True if this structure requires the ≥85 score threshold."""
+    is_naked_short = structure.structure_type in ("naked_short", "naked_short_call", "naked_short_put")
+    is_high_leverage = leverage >= 10
+    return is_naked_short or is_high_leverage
+
+
+def passes_score_threshold(
+    structure: TradeStructure,
+    leverage: int = 1,
+) -> tuple[bool, str]:
+    """
+    Returns (passes, reason). Enforces hard gates:
+      - ≥85 for naked shorts and leverage ≥ 10×
+      - ≥75 for everything else
+    """
+    threshold = _SCORE_THRESHOLD_HIGH if _needs_high_threshold(structure, leverage) else _SCORE_THRESHOLD_NORMAL
+    if structure.score < threshold:
+        return False, f"score {structure.score:.1f} < threshold {threshold:.0f}"
+    return True, ""
 
 
 # ── Backward-compat aliases used by existing tests / endpoints ─────────────
@@ -188,9 +224,18 @@ def rank_structures(
     weights: Optional[ScoringWeights] = None,
     funding_rate: Optional[float] = None,
     bar_hour_utc: Optional[int] = None,
+    leverage: int = 1,
 ) -> List[TradeStructure]:
     scored = [
         score_structure(s, regime, signal, exec_timing, policy, weights, funding_rate, bar_hour_utc)
         for s in structures
     ]
-    return sorted(scored, key=lambda s: s.score, reverse=True)
+    # Apply hard score threshold: filter structures that don't meet the ≥75/≥85 gate.
+    # Futures structures inherit the leverage from the caller.
+    passing = []
+    for s in scored:
+        s_lev = s.leverage if s.structure_type == "futures" else leverage
+        ok, _ = passes_score_threshold(s, s_lev)
+        if ok:
+            passing.append(s)
+    return sorted(passing, key=lambda s: s.score, reverse=True)

@@ -1,8 +1,10 @@
-# Sterling — Universal Crypto Options Platform
+# Sterling — Unified Crypto Options & Futures Platform (v3)
 
-Paper-trading-first, engine-driven crypto options evaluator.  
+Paper-trading-first, unified engine for **crypto options (long/short) and futures (leveraged/unleveraged)**.  
 Exchange adapters: **Deribit** (default) · **OKX** · **Delta Exchange** · **Binance** · **Zerodha Kite**.  
 No live order routing. All execution is read-only evaluation + paper simulation.
+
+> **v3 Unified Engine**: a single evaluation pipeline routes every signal to the optimal instrument — naked options, spread strategies, or leveraged futures — based on IVR, score, and market structure. Hard score gates (≥75/≥85), ATR slope volatility veto, HA/Real divergence filter, and adaptive Kelly sizing enforce portfolio-level discipline.
 
 ---
 
@@ -240,20 +242,91 @@ SessionExport · SystemInfoPanel · PanelBoundary · ErrorBoundary
 
 ---
 
-## Strategy Logic
+## Strategy Logic (v3 Unified Engine)
 
-### Multi-Timeframe Signal
+The engine routes every signal to the optimal instrument — **options or futures** — based on IVR, score, and market structure. A single evaluation pipeline handles both.
 
-| TF | Data | Purpose |
-|----|------|---------|
-| 4H | Real candles | Macro regime (EMA50 filter) — look-ahead-free in backtest |
-| 1H | Heikin-Ashi | Directional state (ST × 3) |
-| 15m | Real candles | Execution timing (pullback / continuation) |
+### Layer 1 — Macro Filter (4H)
 
-**Directional state**: ST(7,3) + ST(14,2) + ST(21,1) on HA candles  
-- All green → bullish · All red → bearish · Mixed → neutral  
-- `green_arrow = all_green_now AND NOT all_green_prev` — setup activation  
-- Macro filter: bullish only if 4H close > EMA50; bearish only if 4H close < EMA50
+| Field | Logic |
+|-------|-------|
+| Trend bias | EMA21 > EMA55 AND close > EMA21 → Bull; inverse → Bear |
+| Volatility | ATR(14)/Close slope ≥ 0 (expanding or flat) = healthy |
+| **IDLE veto** | ATR percentile < 30 on 2 consecutive bars **OR** ATR/Close slope < 0 with pct < 35 |
+| Cooldown | 2-bar cooldown after contraction (slope-triggered) |
+| ADX gating | ADX < 15 → RANGING; 15–20 → partial signals; ≥ 20 → full trend |
+
+`atr_slope` is exposed on `RegimeResult` for dashboard display.
+
+### Layer 2 — Signal Trigger (1H)
+
+| Indicator | Weight |
+|-----------|--------|
+| SuperTrend flip (ST7,3) | 3 |
+| RSI gate (40–78 long / 22–60 short) | 2 |
+| RSI momentum bonus (RSI >60 bull / <40 bear) | 1 |
+| BB/KC squeeze breakout | 4 |
+| Volume spike (>1.5× median) | 4 |
+| HA body aligned with trend | 4 |
+| HA/Real divergence < 0.3% | 2 |
+
+**Total weight = 20 pts → mapped to 0–20 signal_score.**  
+`signal_score ≥ 15` (75%) = STRONG; ≥ 7 (35%) = SIGNAL; below = NONE.
+
+`ha_real_divergence_pct` and `vol_confirm` are exposed on `SignalResult`.
+
+### Layer 3 — Micro Entry (15m)
+
+| Mode | Condition | exec_score |
+|------|-----------|-----------|
+| **A — Pullback** | Price within 1.5 ATR of ST(7,3) support/resistance + EMA20 aligned + rejection wick bonus | 14 |
+| **B — Continuation** | Close beyond 5-bar range + 2× volume | 10 |
+| Wait | Neither | 0 |
+
+### Instrument Routing (IVR-driven)
+
+| IVR | Allowed structures |
+|-----|-------------------|
+| `None` | Fail-closed — ELEVATED band; debit spreads only |
+| < 40 | **Long naked calls/puts** + debit spreads |
+| 40–60 | All structures (debit preferred) |
+| 60–70 | Debit spreads preferred over naked |
+| > 70 | **Naked shorts** (IVR >70, OI >100, spread <5%) + credit spreads; hedge with futures |
+
+**Options Long**: 1.5% risk/trade cap · portfolio max 4.5%  
+**Options Short**: 1.0% risk/trade cap · portfolio max 3.0%  
+**Futures**: 2.0% risk/trade cap; added when IVR routing recommends futures or no healthy chain exists
+
+### Futures Leverage Scale
+
+| Score | Signal | Leverage |
+|-------|--------|----------|
+| ≥ 95 | STRONG | 50× |
+| ≥ 90 | STRONG | 25× |
+| ≥ 85 | STRONG | 10× |
+| ≥ 80 | any | 5× |
+| ≥ 75 | any | 3× |
+| < 75 | any | 1× (or no-trade) |
+
+**Scalp leverage (≥ 50×)**: hard 0.5% capital-at-risk ceiling, applied before Kelly sizing.
+
+### Score Thresholds (Hard Gates — not soft comparisons)
+
+| Condition | Required score |
+|-----------|---------------|
+| Normal trade (options/futures ≤ 5×) | **≥ 75** |
+| High leverage (≥ 10×) or naked short | **≥ 85** |
+
+Structures scoring below the applicable threshold are **excluded** from ranked output, not just ranked lower.
+
+### Hard Vetoes (any instrument)
+
+| Veto | Condition |
+|------|-----------|
+| Spread | > 10% of mid (> 5% for naked shorts) |
+| OI | < 50 contracts (> 100 required for naked shorts) |
+| Dead zone | 02:00–06:00 UTC |
+| Funding rate | \|rate\| > 2.5% |
 
 ### State Machine
 
@@ -269,32 +342,19 @@ SessionExport · SystemInfoPanel · PanelBoundary · ErrorBoundary
 | `EXITED` | Closed |
 | `FILTERED` | Filtered |
 
-### Options Policy (IV Rank-driven)
+### Scoring (0–100, deterministic)
 
-| IV Rank | Behavior |
-|---------|----------|
-| `None` (unknown) | **Fail-closed** — treated as ELEVATED; naked long premium excluded |
-| < 40 | Low IV — long calls/puts and credit spreads all allowed |
-| 40–60 | Normal — all structures allowed |
-| 60–80 | Elevated — debit spreads preferred over naked |
-| > 80 | High IV — credit spreads only (avoid paying expensive premium) |
+| Component | Points | What it measures |
+|-----------|--------|-----------------|
+| Macro regime | 0–20 | EMA21/55 trend + ADX + ATR percentile on 4H |
+| 1H signal | 0–20 | SuperTrend confluence, RSI, BB squeeze, volume, HA |
+| Execution timing | 0–15 | Pullback (14 pts) vs continuation (10 pts) vs wait (0) |
+| Contract health | 0–20 | Spread, OI, volume, quote freshness |
+| Days to expiry | 0–10 | Proximity to preferred 10–15 DTE (futures always 10) |
+| Risk / reward | 0–15 | max_gain / max_loss ratio |
+| **Total** | **100** | |
 
-**DTE**: reject < 5 days, prefer 10–15 days, force exit at ≤ 3 days  
-**Structures**: Long Call / Long Put (naked), Bull Call Spread, Bear Put Spread, Bull Put Spread (credit), Bear Call Spread (credit)
-
-### Scoring (deterministic, 0–100 — weights auto-normalised)
-
-| Component | Default weight | What it measures |
-|-----------|---------------|-----------------|
-| Macro regime | 20% | Price vs EMA50 on 4H chart |
-| 1H signal | 20% | SuperTrend agreement across 3 periods |
-| Execution timing | 15% | Pullback (best) vs continuation vs wait |
-| Contract health | 20% | Bid-ask spread, OI, volume, quote freshness |
-| Days to expiry | 15% | Proximity to preferred 10–15 DTE window |
-| Risk / reward | 10% | Max gain ÷ max loss ratio |
-
-Weights are configurable live via `PUT /api/v1/config/scoring-weights` and the Config tab UI.  
-`score_no_trade` compared against best structure — no-trade wins on tie or if unknown IV.
+Weights configurable live: `PUT /api/v1/config/scoring-weights`.
 
 ### Contract Health
 
@@ -342,10 +402,10 @@ npm run dev   # http://localhost:5173
 ```bash
 cd backend
 pytest -v
-# 544 tests — indicators, engines, adapters (Deribit + OKX + Delta India),
+# 718+ tests — indicators, engines, adapters (Deribit + OKX + Delta India),
 # registry, API, structures, positions, backtest (BS pricing), cache, retry,
 # persistence, snapshot, alerts (integration), webhooks, account, options,
-# stats, session, scoring weights, adapter fixtures
+# stats, session, scoring weights, adapter fixtures, v3 unified engine
 ```
 
 ### Docker
