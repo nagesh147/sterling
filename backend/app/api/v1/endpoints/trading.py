@@ -73,7 +73,11 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
-    side = "buy" if body.direction == "long" else "sell"
+    # Options: always BUY — direction is encoded in CE/PE symbol, not in the order side.
+    if body.instrument_type == "options":
+        side = "buy"
+    else:
+        side = "buy" if body.direction == "long" else "sell"
     now_ms = int(time.time() * 1000)
 
     # Check if Delta Exchange India is active with credentials

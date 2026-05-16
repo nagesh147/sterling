@@ -77,3 +77,65 @@ def run_all_sweeps(candles: list, base_config: dict, n_test_bars: int = 60) -> l
         results.append(r)
     results.sort(key=lambda x: x.sensitivity, reverse=True)
     return results
+
+
+def sweep_real(
+    candles_1h: list,
+    candles_4h: list,
+    param_name: str,
+    values: list,
+    fee_rt_pct: float = 0.001,
+    n_test_bars: int = 60,
+) -> SensitivityResult:
+    """
+    Real engine sweep for score_min (signal_score 0-20 range).
+    Pre-computes all potential trades once at score_min=0, then filters by threshold.
+    Other parameter names use the same pre-computed trades (score_min proxy).
+    Only score_min sweeps are dimensionally valid without engine re-runs.
+    """
+    from app.engines.analytics.walk_forward import _engine_replay_trades, _equity_from_trades
+    from app.engines.analytics.performance import sharpe as _sharpe
+
+    c1h = candles_1h[-n_test_bars:] if len(candles_1h) > n_test_bars else candles_1h
+
+    sharpes = []
+    for val in values:
+        if param_name == "score_min":
+            threshold = float(val)
+            filtered  = _engine_replay_trades(c1h, candles_4h, score_min=threshold, fee_rt_pct=fee_rt_pct)
+        else:
+            # Non-score params require engine re-runs with modified config;
+            # use score_min=0 for all values to at least measure baseline real performance.
+            filtered = _engine_replay_trades(c1h, candles_4h, score_min=0.0, fee_rt_pct=fee_rt_pct)
+
+        if filtered:
+            ec = _equity_from_trades(filtered)
+            s  = _sharpe(ec)
+        else:
+            s = 0.0
+        sharpes.append(s)
+
+    arr      = np.array(sharpes)
+    best_idx = int(np.argmax(arr))
+    return SensitivityResult(
+        parameter=param_name,
+        values_tested=values,
+        sharpes=sharpes,
+        best_value=values[best_idx],
+        sensitivity=float(arr.std()),
+    )
+
+
+def run_all_sweeps_real(
+    candles_1h: list,
+    candles_4h: list,
+    fee_rt_pct: float = 0.001,
+    n_test_bars: int = 60,
+) -> list:
+    """Real sweep for all SWEEP_PARAMS. Returns list[SensitivityResult] sorted by sensitivity desc."""
+    results = [
+        sweep_real(candles_1h, candles_4h, param, values, fee_rt_pct, n_test_bars)
+        for param, values in SWEEP_PARAMS.items()
+    ]
+    results.sort(key=lambda x: x.sensitivity, reverse=True)
+    return results

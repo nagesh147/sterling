@@ -607,21 +607,91 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                 continue
         return orders
 
+    async def get_trading_preferences(self) -> dict:
+        """
+        GET /v2/users/trading_preferences
+        Returns VIP level, discount factor, DETO setting, 30-day volume.
+        """
+        if self._is_paper or not self._api_key:
+            return {}
+        try:
+            data = await self._auth_get("/v2/users/trading_preferences")
+            return (data or {}).get("result") or {}
+        except Exception:
+            return {}
+
+    async def _get_product_fee_info(self, symbol: str) -> dict:
+        """
+        Fetch taker/maker rates and contract_value for a product.
+        Cached per symbol for the process lifetime.
+        """
+        cache_key = f"_fee_{symbol}"
+        if hasattr(self, "_fee_cache") and cache_key in self._fee_cache:
+            return self._fee_cache[cache_key]
+        try:
+            data = await self._public_get(f"/v2/products/{symbol}")
+            r    = (data or {}).get("result") or {}
+            info = {
+                "contract_value":   float(r.get("contract_value") or 0.001),
+                "notional_type":    str(r.get("notional_type") or "vanilla"),
+                "taker_rate":       float(r.get("taker_commission_rate") or 0.0005),
+                "maker_rate":       float(r.get("maker_commission_rate") or 0.0002),
+                "settling_asset":   str((r.get("settling_asset") or {}).get("symbol") or "USD"),
+            }
+        except Exception:
+            info = {
+                "contract_value": 0.001, "notional_type": "vanilla",
+                "taker_rate": 0.0005,    "maker_rate": 0.0002,
+                "settling_asset": "USD",
+            }
+        if not hasattr(self, "_fee_cache"):
+            self._fee_cache: dict = {}
+        self._fee_cache[cache_key] = info
+        return info
+
     async def get_fills(self, limit: int = 50) -> List[AccountFill]:
         if self._is_paper:
             return []
+        from app.services.fees import decode_fill_fee
         data = await self._auth_get("/v2/fills", params={"page_size": min(limit, 100)})
         fills = []
         for f in ((data or {}).get("result") or []):
             try:
+                symbol   = str(f.get("product_symbol") or "")
+                fee_info = await self._get_product_fee_info(symbol)
+                settling = str(f.get("settling_asset_symbol") or fee_info["settling_asset"])
+
+                breakdown = decode_fill_fee(
+                    f,
+                    contract_value=fee_info["contract_value"],
+                    notional_type=fee_info["notional_type"],
+                )
+
                 fills.append(AccountFill(
-                    fill_id=str(f.get("id") or ""), order_id=str(f.get("order_id") or ""),
-                    symbol=str(f.get("product_symbol") or ""), side=str(f.get("side") or ""),
-                    size=float(f.get("size") or 0.0), price=float(f.get("price") or 0.0),
-                    fee=float(f.get("commission") or 0.0),
-                    fee_asset=str((f.get("fee_asset") or {}).get("symbol") or "USD"),
-                    pnl=float(f.get("pnl") or 0.0),
-                    created_at_ms=_ts_ms(f.get("created_at") or int(time.time())),
+                    fill_id   = str(f.get("id") or ""),
+                    order_id  = str(f.get("order_id") or ""),
+                    symbol    = symbol,
+                    side      = str(f.get("side") or ""),
+                    size      = float(f.get("size") or 0.0),
+                    price     = float(f.get("price") or 0.0),
+                    fee       = breakdown.net_commission,
+                    fee_asset = settling,
+                    pnl       = float(f.get("pnl") or 0.0),
+                    created_at_ms = _ts_ms(f.get("created_at") or int(time.time())),
+                    # Detailed fee breakdown
+                    fill_type        = breakdown.fill_type,
+                    role             = breakdown.role,
+                    notional_usd     = round(breakdown.notional_usd, 4),
+                    gross_commission = round(breakdown.gross_commission, 6),
+                    liquidation_fee  = round(breakdown.liquidation_fee, 6),
+                    effective_rate   = round(breakdown.effective_rate, 8),
+                    deto_discount    = round(breakdown.deto_discount, 6),
+                    tfc_used         = round(breakdown.tfc_used, 6),
+                    vip_discount     = round(breakdown.vip_discount, 6),
+                    gst_amount       = round(breakdown.gst_amount, 6),
+                    total_cost       = round(breakdown.total_cost, 6),
+                    total_with_gst   = round(breakdown.total_with_gst, 6),
+                    settling_asset   = breakdown.settling_asset,
                 ))
             except (ValueError, TypeError):
                 continue

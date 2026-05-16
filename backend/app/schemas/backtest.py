@@ -85,3 +85,12 @@ class BacktestResult(BaseModel):
     # Echoed back so UI can label the results
     atm_iv_used: Optional[float] = None
     option_dte_used: Optional[int] = None
+    # Position-level simulation (fees applied, non-overlapping trades)
+    sim_equity_curve:   Optional[List[float]] = None
+    sim_trade_count:    Optional[int]         = None
+    sim_win_rate:       Optional[float]       = None
+    sim_expectancy_pct: Optional[float]       = None
+    sim_profit_factor:  Optional[float]       = None
+    sim_max_drawdown:   Optional[float]       = None
+    sim_sharpe:         Optional[float]       = None
+    sim_fee_rt_pct:     Optional[float]       = None

@@ -15,6 +15,7 @@ from app.engines.backtest.bs_pricing import bs_price, atm_option_pnl_pct
 
 _MIN_4H_WINDOW = 55  # need at least 55 4H bars for EMA50
 _MIN_1H_WINDOW = 30  # minimum 1H bars for SuperTrend
+FEE_RT_PCT     = 0.001  # 0.10% round-trip (taker both legs)
 
 
 def _fwd_return(candles: List[Candle], from_idx: int, n_bars: int) -> Optional[float]:
@@ -97,6 +98,8 @@ def run_backtest(
         )
 
     stats = _compute_stats(bars, atm_iv is not None)
+    sim   = simulate_capital_curve(bars, capital=10_000.0, fee_rt_pct=FEE_RT_PCT)
+
     return BacktestResult(
         underlying=underlying,
         lookback_days=lookback_days,
@@ -108,6 +111,14 @@ def run_backtest(
         timestamp_ms=now_ms,
         atm_iv_used=atm_iv,
         option_dte_used=option_dte if atm_iv is not None else None,
+        sim_equity_curve=sim["equity_curve"],
+        sim_trade_count=len(sim["trades"]),
+        sim_win_rate=sim["win_rate"],
+        sim_expectancy_pct=sim["expectancy_pct"],
+        sim_profit_factor=sim["profit_factor"],
+        sim_max_drawdown=sim["max_drawdown"],
+        sim_sharpe=sim["sharpe"],
+        sim_fee_rt_pct=sim["fee_rt_pct"],
     )
 
 
@@ -238,6 +249,84 @@ def _compute_stats(bars: List[BacktestBarResult], has_bs: bool = False) -> Backt
         # BS stats — only populated when atm_iv was supplied
         **(_bs_stats(bars) if has_bs else {}),
     )
+
+
+def simulate_capital_curve(
+    bars: List[BacktestBarResult],
+    capital: float = 10_000.0,
+    fee_rt_pct: float = FEE_RT_PCT,
+    risk_pct: float = 0.02,
+    hold_bars: int = 3,
+) -> dict:
+    """
+    Non-overlapping position simulation over sampled backtest bars.
+    Uses fwd_return_12h from the entry bar as the hold-horizon return.
+    Compounds equity; applies fee_rt_pct per trade.
+    Returns equity_curve (normalised), win_rate, expectancy_pct, profit_factor,
+    max_drawdown, sharpe, fee_rt_pct.
+    """
+    import numpy as np
+    from app.engines.analytics.performance import max_drawdown as _mdd, sharpe as _sharpe
+
+    equity   = [capital]
+    trades: List[dict] = []
+    in_trade  = False
+    entry_idx = 0
+    entry_dir = 0
+
+    conf = TradeState.CONFIRMED_SETUP_ACTIVE.value
+
+    for i, bar in enumerate(bars):
+        if in_trade and (i - entry_idx >= hold_bars or i == len(bars) - 1):
+            entry_bar  = bars[entry_idx]
+            raw_ret    = entry_bar.fwd_return_12h
+            raw_ret    = (raw_ret / 100.0) if raw_ret is not None else 0.0
+            if entry_dir == -1:
+                raw_ret = -raw_ret
+            net_ret   = raw_ret - fee_rt_pct
+            trade_pnl = equity[-1] * risk_pct * net_ret
+            equity.append(max(0.01, equity[-1] + trade_pnl))
+            trades.append({
+                "pnl_pct":   net_ret,
+                "regime":    entry_bar.macro_regime,
+                "direction": "long" if entry_dir == 1 else "short",
+            })
+            in_trade = False
+
+        if not in_trade and bar.state == conf:
+            d = 1 if bar.direction == "long" else (-1 if bar.direction == "short" else 0)
+            if d != 0:
+                in_trade  = True
+                entry_idx = i
+                entry_dir = d
+
+    if not trades:
+        return {
+            "equity_curve":   [1.0, 1.0],
+            "trades":         [],
+            "win_rate":       None,
+            "expectancy_pct": None,
+            "profit_factor":  None,
+            "max_drawdown":   None,
+            "sharpe":         None,
+            "fee_rt_pct":     fee_rt_pct,
+        }
+
+    pnls    = [t["pnl_pct"] for t in trades]
+    winners = [p for p in pnls if p > 0]
+    losers  = [p for p in pnls if p < 0]
+    ec_norm = np.array(equity) / equity[0]
+
+    return {
+        "equity_curve":   [round(v, 6) for v in ec_norm.tolist()],
+        "trades":         trades,
+        "win_rate":       round(len(winners) / len(pnls), 4),
+        "expectancy_pct": round(float(np.mean(pnls)) * 100, 4),
+        "profit_factor":  round(sum(winners) / abs(sum(losers)), 3) if losers else None,
+        "max_drawdown":   round(float(_mdd(ec_norm)), 4),
+        "sharpe":         round(float(_sharpe(ec_norm)), 3),
+        "fee_rt_pct":     fee_rt_pct,
+    }
 
 
 def _bs_stats(bars: List[BacktestBarResult]) -> dict:

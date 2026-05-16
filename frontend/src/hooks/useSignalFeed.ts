@@ -67,6 +67,9 @@ export interface FeedEntry {
   currentPrice: number | null;
   currentState: string;
   dismissed: boolean;
+  // Live-refresh fields — updated on every poll when signal is still active
+  refreshedAt?: number;    // timestamp of last SL/TP update
+  slImproved?: boolean;    // true when SL tightened since card was created
 }
 
 // ── persistence keys ──────────────────────────────────────────────────────────
@@ -75,6 +78,12 @@ const STATES_KEY = 'sterling_signal_states_v2';   // last-known state per key
 
 const MAX_FEED  = 100;
 const EXPIRE_MS = 8 * 60 * 60 * 1000;   // 8 hours
+
+// How long before the same (underlying, type, direction) can generate a new card.
+// Arrow-triggered entries: 2 hours (one trade per trend leg).
+// State-transition entries: 30 min (allows EARLY→CONFIRMED upgrade card).
+const ARROW_COOLDOWN_MS      = 2 * 60 * 60 * 1000;   // 2h
+const TRANSITION_COOLDOWN_MS = 30 * 60 * 1000;        // 30m
 
 const ACTIONABLE = new Set([
   'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
@@ -107,6 +116,22 @@ function isFeedEntry(x: unknown): x is FeedEntry {
     && (e.type === 'futures' || e.type === 'options');
 }
 
+/**
+ * Keep only the newest entry per (underlying, type, direction).
+ * Feed is newest-first, so first occurrence wins; later ones are older duplicates.
+ * Dismissed entries are preserved in-place (user chose to keep them visible as history).
+ */
+function deduplicateFeed(entries: FeedEntry[]): FeedEntry[] {
+  const seen = new Set<string>();
+  return entries.filter(e => {
+    if (e.dismissed) return true;            // keep dismissed — user action
+    const key = `${e.underlying}_${e.type}_${e.direction}`;
+    if (seen.has(key)) return false;         // older duplicate — remove
+    seen.add(key);
+    return true;
+  });
+}
+
 function loadFeed(): FeedEntry[] {
   try {
     const raw = sessionStorage.getItem(FEED_KEY);
@@ -114,10 +139,11 @@ function loadFeed(): FeedEntry[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const cut = Date.now() - EXPIRE_MS;
-    return parsed
-      .filter(isFeedEntry)                   // reject bad-shape entries
+    const entries = parsed
+      .filter(isFeedEntry)
       .filter((e: FeedEntry) => e.entryAt > cut)
       .slice(0, MAX_FEED);
+    return deduplicateFeed(entries);         // strip duplicates on restore
   } catch { return []; }
 }
 
@@ -260,6 +286,15 @@ export function useSignalFeed() {
         const arrow           = sig.green_arrow || sig.red_arrow;
 
         if (stateTransition || dirFlip || arrow) {
+          // ── Cooldown gate: one card per (underlying, type, direction) per window ──
+          const dirStr   = sig.direction;
+          const firedKey = `${key}_${dirStr}_fired_ms`;
+          const lastFired = Number(states[firedKey] ?? 0);
+          const cooldown  = arrow ? ARROW_COOLDOWN_MS : TRANSITION_COOLDOWN_MS;
+          if (now - lastFired < cooldown) continue;   // still cooling down — skip
+
+          states[firedKey] = String(now);
+          statesChanged = true;
           newEntries.push(buildEntry(sig, type, now, currentMode));
         }
       }
@@ -272,24 +307,57 @@ export function useSignalFeed() {
     }
 
     setFeed(prev => {
-      // Update live price/state per entry — return SAME object reference if unchanged
-      // so React bails out of re-rendering that row.
+      // On every poll: update live price, state, AND SL/TP/score from the signal.
+      // SL/TP come from ATR recalculated on fresh candles — they tighten as the
+      // trend continues, giving a better R:R on the existing card without a new trade.
       let anyChanged = false;
+      const now = Date.now();
       const updated = prev.map(e => {
-        const match = data.signals.find(s => s.underlying === e.underlying && s.fresh);
+        const match = data.signals.find(
+          s => s.underlying === e.underlying && s.fresh && s.direction === e.direction
+        );
         if (!match) return e;
-        const cp = match.spot_price ?? e.currentPrice;
-        const cs = match.state;
-        if (cp === e.currentPrice && cs === e.currentState) return e;
+
+        const cp  = match.spot_price   ?? e.currentPrice;
+        const cs  = match.state;
+        const sl  = (match.stop_price   != null ? match.stop_price   : e.stopLoss);
+        const tp  = (match.target_price != null ? match.target_price : e.takeProfit);
+        const sc  = match.score_short != null || match.score_long != null
+          ? Math.round(e.direction === 'short' ? (match.score_short ?? e.score) : (match.score_long ?? e.score))
+          : e.score;
+
+        // SL "improved" = tighter risk (lower for shorts, higher for longs)
+        const slBetter = e.stopLoss != null && sl != null
+          ? (e.direction === 'short' ? sl < e.stopLoss : sl > e.stopLoss)
+          : false;
+
+        const unchanged = cp === e.currentPrice && cs === e.currentState
+          && sl === e.stopLoss && tp === e.takeProfit && sc === e.score;
+        if (unchanged) return e;
+
         anyChanged = true;
-        return { ...e, currentPrice: cp, currentState: cs };
+        return {
+          ...e,
+          currentPrice: cp,
+          currentState: cs,
+          stopLoss:  sl,
+          takeProfit: tp,
+          score: sc,
+          refreshedAt: now,
+          slImproved: slBetter || e.slImproved,
+        };
       });
 
       // No new entries and no price changes → return SAME array reference.
       // React uses Object.is() comparison; same ref = skip re-render entirely.
       if (newEntries.length === 0 && !anyChanged) return prev;
-      if (newEntries.length === 0) return updated;
-      return [...newEntries, ...updated].slice(0, MAX_FEED);
+      if (newEntries.length === 0) return deduplicateFeed(updated);
+
+      // Prepend new entries then deduplicateFeed in one pass.
+      // deduplicateFeed keeps the first (newest) occurrence per
+      // (underlying, type, direction) — so new entries naturally
+      // win over older duplicates already in the feed.
+      return deduplicateFeed([...newEntries, ...updated].slice(0, MAX_FEED));
     });
 
     } catch (err) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
 import { api } from '../utils/api';
@@ -41,6 +41,14 @@ export function PaperLiveToggle() {
       setTestStatus({ ok: false, msg: (e as Error).message });
     } finally { setTesting(false); }
   };
+
+  // Auto-verify saved credentials on load so the toggle always reflects real connection state
+  useEffect(() => {
+    if (hasKeys && testStatus === null && !testing) {
+      testConnection();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasKeys]);
 
   const handleLiveClick = () => {
     if (isLive) return;

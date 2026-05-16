@@ -36,6 +36,9 @@ class SnapshotEntry:
     rsi: float = 50.0
     squeezed: bool = False
     exec_confidence: float = 0.0
+    # Raw trend booleans — used for poll-level edge detection in /signals
+    all_green: bool = False
+    all_red: bool = False
 
 
 _cache: Dict[str, SnapshotEntry] = {}
@@ -62,6 +65,8 @@ def put(
     rsi: float = 50.0,
     squeezed: bool = False,
     exec_confidence: float = 0.0,
+    all_green: bool = False,
+    all_red: bool = False,
 ) -> None:
     _cache[sym] = SnapshotEntry(
         sym=sym,
@@ -84,6 +89,8 @@ def put(
         rsi=rsi,
         squeezed=squeezed,
         exec_confidence=exec_confidence,
+        all_green=all_green,
+        all_red=all_red,
     )
 
 

@@ -159,6 +159,101 @@ def _ts_iso(ms: int) -> str:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
 
 
+@router.get("/fills/summary")
+async def get_fills_summary(limit: int = Query(default=200, ge=1, le=500)):
+    """
+    Aggregate fee summary across recent fills.
+    Returns total commissions paid, GST, liquidation fees, VIP/DETO discounts,
+    fill-type breakdown, and average effective rate.
+    """
+    from app.services.fees import decode_fill_fee, summarise_fills
+    cfg, adapter = _get_active_adapter()
+    try:
+        fills = await adapter.get_fills(limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    finally:
+        await adapter.close()
+
+    from app.services.fees import FeeBreakdown
+    breakdowns = []
+    for f in fills:
+        breakdowns.append(FeeBreakdown(
+            notional_usd     = f.notional_usd,
+            gross_commission = f.gross_commission,
+            vip_discount     = f.vip_discount,
+            deto_discount    = f.deto_discount,
+            tfc_used         = f.tfc_used,
+            net_commission   = f.fee,
+            liquidation_fee  = f.liquidation_fee,
+            gst_amount       = f.gst_amount,
+            total_with_gst   = f.total_with_gst,
+            total_cost       = f.total_cost,
+            effective_rate   = f.effective_rate,
+            fill_type        = f.fill_type,
+            role             = f.role,
+            settling_asset   = f.settling_asset,
+        ))
+
+    s = summarise_fills(breakdowns)
+    return {
+        "exchange":              cfg.display_name,
+        "is_paper":              cfg.is_paper,
+        "fills_analysed":        s.total_fills,
+        "fill_type_breakdown":   {
+            "normal":            s.normal_fills,
+            "liquidation":       s.liquidation_fills,
+            "adl":               s.adl_fills,
+            "settlement":        s.settlement_fills,
+            "otc":               s.otc_fills,
+        },
+        "role_breakdown":        {"taker": s.taker_fills, "maker": s.maker_fills},
+        "total_notional":        s.total_notional,
+        "total_gross_commission":s.total_gross_commission,
+        "total_vip_discount":    s.total_vip_discount,
+        "total_deto_discount":   s.total_deto_discount,
+        "total_tfc_used":        s.total_tfc_used,
+        "total_net_commission":  s.total_net_commission,
+        "total_liquidation_fee": s.total_liquidation_fee,
+        "total_gst":             s.total_gst,
+        "total_cost_with_gst":   s.total_cost_with_gst,
+        "total_rebates_earned":  s.total_rebates,
+        "avg_effective_rate":    s.avg_effective_rate,
+        "gst_note":              "GST (18%) is not in the Delta API. Applied as post-processing.",
+        "timestamp_ms":          int(time.time() * 1000),
+    }
+
+
+@router.get("/trading-preferences")
+async def get_trading_preferences():
+    """
+    GET /v2/users/trading_preferences — VIP level, discount factor, DETO setting.
+    Used to apply correct fee discounts to pre-trade estimates.
+    """
+    cfg, adapter = _get_active_adapter()
+    try:
+        if hasattr(adapter, "get_trading_preferences"):
+            prefs = await adapter.get_trading_preferences()
+        else:
+            prefs = {}
+        return {
+            "exchange":          cfg.display_name,
+            "is_paper":          cfg.is_paper,
+            "vip_level":         prefs.get("vip_level", 0),
+            "vip_discount_factor": float(prefs.get("vip_discount_factor") or 0.0),
+            "deto_for_commission": bool(prefs.get("deto_for_commission", False)),
+            "volume_30d":        float(prefs.get("volume_30d") or 0.0),
+            "taker_rate":        0.0005,
+            "maker_rate":        0.0002,
+            "gst_rate":          0.18,
+            "timestamp_ms":      int(time.time() * 1000),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    finally:
+        await adapter.close()
+
+
 @router.get("/fills/export")
 async def export_fills_csv(limit: int = Query(default=200, ge=1, le=500)):
     cfg, adapter = _get_active_adapter()
@@ -171,11 +266,23 @@ async def export_fills_csv(limit: int = Query(default=200, ge=1, le=500)):
 
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["fill_id", "order_id", "symbol", "side", "size",
-                "price", "fee", "fee_asset", "pnl", "created_at"])
+    w.writerow([
+        "fill_id", "order_id", "symbol", "side", "size", "price",
+        "fill_type", "role",
+        "notional_usd", "gross_commission", "net_commission",
+        "vip_discount", "deto_discount", "tfc_used",
+        "liquidation_fee", "gst_amount", "total_with_gst", "total_cost",
+        "effective_rate", "settling_asset", "pnl", "created_at",
+    ])
     for f in fills:
-        w.writerow([f.fill_id, f.order_id, f.symbol, f.side, f.size,
-                    f.price, f.fee, f.fee_asset, f.pnl, _ts_iso(f.created_at_ms)])
+        w.writerow([
+            f.fill_id, f.order_id, f.symbol, f.side, f.size, f.price,
+            f.fill_type, f.role,
+            f.notional_usd, f.gross_commission, f.fee,
+            f.vip_discount, f.deto_discount, f.tfc_used,
+            f.liquidation_fee, f.gst_amount, f.total_with_gst, f.total_cost,
+            f.effective_rate, f.settling_asset, f.pnl, _ts_iso(f.created_at_ms),
+        ])
 
     return StreamingResponse(
         iter([buf.getvalue()]),

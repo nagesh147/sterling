@@ -8,8 +8,10 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from app.engines.analytics.walk_forward import WalkForwardConfig, run as wf_run, WalkForwardResult
-from app.engines.analytics.sensitivity import run_all_sweeps, SWEEP_PARAMS
+from app.engines.analytics.walk_forward import (
+    WalkForwardConfig, run as wf_run, run_real as wf_run_real, WalkForwardResult,
+)
+from app.engines.analytics.sensitivity import run_all_sweeps_real, SWEEP_PARAMS
 from app.engines.analytics.performance import full_report
 from app.services import db as _db
 
@@ -90,21 +92,23 @@ async def run_walk_forward(
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
 
     adapter = _adm.get_adapter() or request.app.state.adapter
+    _1h_limit = (body.train_bars + body.test_bars) * 4 + 50
     try:
         candles_4h = await adapter.get_candles(inst, "4H", limit=body.train_bars + body.test_bars + 50)
+        candles_1h = await adapter.get_candles(inst, "1H", limit=_1h_limit)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
 
-    candle_dicts = _candles_to_dicts(candles_4h)
     config = WalkForwardConfig(
         train_bars=body.train_bars,
         test_bars=body.test_bars,
         step_bars=body.step_bars,
         underlying=sym,
+        score_thresholds_to_test=[0, 3, 5, 8, 10, 12, 15],
     )
 
     try:
-        result = wf_run(candle_dicts, config)
+        result = wf_run_real(candles_1h, candles_4h, config)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Walk-forward failed: {exc}")
 
@@ -154,19 +158,17 @@ async def run_sensitivity(
     adapter = _adm.get_adapter() or request.app.state.adapter
     try:
         candles_4h = await adapter.get_candles(inst, "4H", limit=300)
+        candles_1h = await adapter.get_candles(inst, "1H", limit=400)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
 
-    candle_dicts = _candles_to_dicts(candles_4h)
-    base_config = {'score_min': 72}
-
     try:
         if body.params:
-            from app.engines.analytics.sensitivity import sweep
+            from app.engines.analytics.sensitivity import sweep_real
             results = []
             for p in body.params:
                 if p in SWEEP_PARAMS:
-                    r = sweep(candle_dicts, p, SWEEP_PARAMS[p], base_config)
+                    r = sweep_real(candles_1h, candles_4h, p, SWEEP_PARAMS[p])
                     results.append({
                         'parameter': r.parameter,
                         'values_tested': r.values_tested,
@@ -175,7 +177,7 @@ async def run_sensitivity(
                         'sensitivity': r.sensitivity,
                     })
         else:
-            results_raw = run_all_sweeps(candle_dicts, base_config)
+            results_raw = run_all_sweeps_real(candles_1h, candles_4h)
             results = [
                 {
                     'parameter': r.parameter,

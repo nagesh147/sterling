@@ -42,18 +42,31 @@ def add_position(
     trail_mode_name: str | None = None,
     trail_atr_mult: float = 2.0,
     is_paper: bool = True,
+    initial_sl: float | None = None,
+    initial_tp: float | None = None,
 ) -> PaperPosition:
     from app.core.trading_mode import MODES, DEFAULT_MODE, TrailMode
     from app.engines.directional.trailing_stop import TrailState
 
     mode_name = trail_mode_name or DEFAULT_MODE
-    mode = MODES.get(mode_name, MODES[DEFAULT_MODE])
+    mode      = MODES.get(mode_name, MODES[DEFAULT_MODE])
+
+    # Use ATR-based SL when provided; direction-aware fallback (long: below entry, short: above)
+    if initial_sl is not None:
+        sl_price = initial_sl
+    else:
+        _dir = sized_trade.structure.direction.value if sized_trade else "long"
+        sl_price = (entry_spot_price * 0.95 if _dir == "long"
+                    else entry_spot_price * 1.05)
+
     trail_state = TrailState(
         mode=mode.trail_mode,
-        current_stop=entry_spot_price * 0.95,  # initial: 5% below entry
+        current_stop=sl_price,
         highest_seen=entry_spot_price,
         lowest_seen=entry_spot_price,
         trail_mult=mode.trail_atr_mult,
+        partial_25_pct=mode.partial_25_pct,
+        partial_50_pct=mode.partial_50_pct,
     )
 
     pos = PaperPosition(
@@ -69,6 +82,10 @@ def add_position(
         trail_mode=mode.trail_mode.value,
         entry_price_real=entry_spot_price,
         is_paper=is_paper,
+        initial_sl=round(sl_price, 4),
+        current_sl=round(sl_price, 4),
+        initial_tp=round(initial_tp, 4) if initial_tp is not None else None,
+        current_tp=round(initial_tp, 4) if initial_tp is not None else None,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())
@@ -132,15 +149,56 @@ def close_position(
     )
 
 
-def partial_close_position(pos_id: str) -> Optional[PaperPosition]:
-    """Transition OPEN → PARTIALLY_CLOSED when a partial-profit signal fires."""
+def partial_close_position(
+    pos_id: str,
+    exit_spot_price: float = 0.0,
+    partial_ratio: float = 0.50,
+) -> Optional[PaperPosition]:
+    """
+    Close `partial_ratio` of the position.
+    Reduces contracts proportionally, books partial realized P&L,
+    transitions to PARTIALLY_CLOSED.
+    """
     pos = _positions.get(pos_id)
     if not pos or pos.status != PositionStatus.OPEN:
         return None
+
+    structure      = pos.sized_trade.structure
+    direction_sign = 1 if structure.direction.value == "long" else -1
+    legs           = structure.legs
+    if not legs:
+        net_delta = 0.0
+    elif len(legs) == 1:
+        net_delta = abs(legs[0].delta)
+    else:
+        net_delta = max(0.0, abs(legs[0].delta) - abs(legs[1].delta))
+
+    closed_contracts    = max(1, round(pos.sized_trade.contracts * partial_ratio))
+    remaining_contracts = max(0, pos.sized_trade.contracts - closed_contracts)
+
+    spot_move   = (exit_spot_price - pos.entry_spot_price) if exit_spot_price > 0 else 0.0
+    raw_pnl     = spot_move * direction_sign * closed_contracts * net_delta
+    risk_closed = pos.sized_trade.max_risk_usd * partial_ratio
+    partial_pnl = max(-risk_closed, raw_pnl)
+    if structure.max_gain is not None:
+        partial_pnl = min(structure.max_gain * closed_contracts, partial_pnl)
+    partial_pnl = round(partial_pnl, 2)
+
+    scale     = 1.0 - partial_ratio
+    new_sized = pos.sized_trade.model_copy(update={
+        "contracts":           remaining_contracts,
+        "max_risk_usd":        round(pos.sized_trade.max_risk_usd        * scale, 2),
+        "position_value":      round(pos.sized_trade.position_value      * scale, 2),
+        "capital_at_risk_pct": round(pos.sized_trade.capital_at_risk_pct * scale, 3),
+    })
+
+    prev_realized = pos.realized_pnl_usd or 0.0
     return update_position(
         pos_id,
         status=PositionStatus.PARTIALLY_CLOSED,
         run_once_state=TradeState.PARTIALLY_REDUCED,
+        sized_trade=new_sized,
+        realized_pnl_usd=round(prev_realized + partial_pnl, 2),
     )
 
 

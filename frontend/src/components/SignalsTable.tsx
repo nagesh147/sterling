@@ -80,10 +80,10 @@ function useDirectEntry() {
 
 // ── single feed row ───────────────────────────────────────────────────────────
 
-function tradeLabel(placing: boolean, hasOpen: boolean, isLive: boolean, side: string): string {
+function tradeLabel(placing: boolean, hasOpen: boolean, actionLabel: string): string {
   if (placing) return '…';
   if (hasOpen) return 'OPEN';
-  return isLive ? `${side} — LIVE` : `${side} NOW`;
+  return actionLabel;
 }
 
 // ── Bracket Order Panel ───────────────────────────────────────────────────────
@@ -329,21 +329,47 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   const [showConfirm, setShowConfirm] = useState(false);
   const [modalStatus, setModalStatus] = useState<{ type: 'idle'|'pending'|'success'|'error'; msg: string }>({ type: 'idle', msg: '' });
 
-  // Editable SL/TP — recompute defaults when direction changes
-  const atr = spotPrice * (entry.adx > 0 ? 0.015 : 0.02);
+  // SL/TP — scale with leverage to maintain constant dollar risk at stop.
+  // Base distances are anchored to entry.entry at entry.leverage (the signal's recommendation).
+  // When leverage changes: new_dist = base_dist * recLev / newLeverage (inversely proportional).
+  const recLev  = entry.leverage || 5;
+  const entryRef = entry.entry;  // signal price, not current price (avoids drift)
+
+  const baseSlDist = useMemo(() => {
+    if (!isFutures) return 0;
+    if (entry.stopLoss && entry.stopLoss > 0)
+      return Math.abs(entryRef - entry.stopLoss);
+    // Fallback: 2% of spot
+    return spotPrice * 0.02;
+  }, [isFutures, entryRef, entry.stopLoss, spotPrice]);
+
+  const baseTpDist = useMemo(() => {
+    if (!isFutures) return 0;
+    if (entry.takeProfit && entry.takeProfit > 0)
+      return Math.abs(entry.takeProfit - entryRef);
+    // Fallback: 2× SL distance (2:1 R:R)
+    return baseSlDist * 2;
+  }, [isFutures, entryRef, entry.takeProfit, baseSlDist]);
+
   const defaultSl = useMemo(() => {
     if (!isFutures) return entry.stopLoss ?? 0;
-    const dist = Math.abs(spotPrice - (entry.stopLoss ?? spotPrice - atr));
+    const dist = recLev > 0 && leverage > 0
+      ? baseSlDist * recLev / leverage
+      : baseSlDist;
     return Math.round(direction === 'long' ? spotPrice - dist : spotPrice + dist);
-  }, [direction, spotPrice, entry.stopLoss, isFutures, atr]);
+  }, [isFutures, direction, spotPrice, baseSlDist, recLev, leverage, entry.stopLoss]);
+
   const defaultTp = useMemo(() => {
     if (!isFutures) return entry.takeProfit ?? 0;
-    const dist = Math.abs((entry.takeProfit ?? spotPrice + atr * 2) - spotPrice);
+    const dist = recLev > 0 && leverage > 0
+      ? baseTpDist * recLev / leverage
+      : baseTpDist;
     return Math.round(direction === 'long' ? spotPrice + dist : spotPrice - dist);
-  }, [direction, spotPrice, entry.takeProfit, isFutures, atr]);
+  }, [isFutures, direction, spotPrice, baseTpDist, recLev, leverage, entry.takeProfit]);
+
   const [slValue, setSlValue] = useState(() => String(Math.round(entry.stopLoss ?? defaultSl)));
   const [tpValue, setTpValue] = useState(() => String(Math.round(entry.takeProfit ?? defaultTp)));
-  // Sync defaults when direction flips
+  // Sync inputs when direction OR leverage changes
   useEffect(() => { setSlValue(String(defaultSl)); setTpValue(String(defaultTp)); }, [defaultSl, defaultTp]);
 
   const { mutate: trade } = useDirectEntry();
@@ -359,8 +385,21 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   }, [qtyValue, qtyUnit, spotPrice, lotInfo.lotSize]);
 
   const dirColor  = direction === 'long' ? 'var(--accent)' : 'var(--danger)';
-  const side      = direction === 'long' ? 'BUY' : 'SELL';
+  // For options, direction is encoded in CE/PE symbol — always BUY the option.
+  // SELL would mean writing naked options, which is a completely different strategy.
+  const side      = isFutures ? (direction === 'long' ? 'BUY' : 'SELL') : 'BUY';
   const arrow     = direction === 'long' ? '▲' : '▼';
+
+  // Descriptive action label: "SELL FUTURES" or "BUY PUT $80,500 · 150526"
+  const tradeActionLabel = (() => {
+    if (!isFutures && entry.optType && entry.optStrike) {
+      const typeStr   = entry.optType === 'CE' ? 'CALL' : 'PUT';
+      const strikeStr = fp(entry.optStrike);
+      const expiry    = entry.optExpiry ?? '';
+      return `BUY ${typeStr} ${strikeStr} · ${expiry}`;
+    }
+    return `${side} FUTURES`;
+  })();
   const stColor   = STATE_COLOR[entry.currentState] ?? 'var(--text-dim)';
   const stLabel   = STATE_SHORT[entry.currentState] ?? '—';
 
@@ -375,10 +414,26 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
   // Order economics
   const notionalUsd   = isFutures ? spotPrice * size * lotInfo.lotSize : (optPrem ?? 0) * size;
   const marginUsd     = isFutures ? notionalUsd / leverage : notionalUsd;
-  // Delta Exchange India fees: maker 0.02%, taker 0.05% + 18% GST
-  const feeRate = orderType === 'market' ? 0.0005 : orderType === 'maker' ? 0.0 : 0.0002; // market=taker, limit=maker, maker-only=0 (rebate possible)
-  const feeUsd        = notionalUsd * feeRate;
-  const gstUsd        = feeUsd * 0.18;
+
+  // ── Delta Exchange India fee schedule (from /v2/products/{symbol}) ──────────
+  // Taker rate: 0.05% | Maker rate: 0.02% | Maker-Only (post-only): 0% (rebate eligible)
+  // VIP discount applied on gross commission before GST.
+  // GST (18%) is NOT in the API — applied externally per Indian statutory requirement.
+  // Source: official Delta Exchange API documentation.
+  const TAKER_RATE    = 0.0005;   // 0.05%
+  const MAKER_RATE    = 0.0002;   // 0.02%
+  const MAKER_REBATE  = 0.0;      // 0% for post-only (maker-only) — rebate eligible
+  const GST_RATE      = 0.18;     // 18% GST on exchange commission
+
+  const feeRole = orderType === 'market' ? 'taker' : orderType === 'maker' ? 'maker-rebate' : 'maker';
+  const grossRate = orderType === 'market' ? TAKER_RATE
+                  : orderType === 'maker'  ? MAKER_REBATE
+                  : MAKER_RATE;
+
+  const grossFeeUsd   = notionalUsd * grossRate;
+  const feeUsd        = grossFeeUsd;   // VIP discount would reduce this — shown separately if known
+  const gstUsd        = feeUsd * GST_RATE;
+  const feeRate       = grossRate;     // kept for backward-compat with downstream uses
   const totalCostUsd  = marginUsd + feeUsd + gstUsd;
   const insufficientFunds = availFunds !== null && totalCostUsd > availFunds;
 
@@ -504,6 +559,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           )}
           <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--text-faint)' }}>
             {entry.regime.replace(/_/g, ' ')} · Score {entry.score}
+            {entry.refreshedAt && (
+              <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--accent)', opacity: 0.7 }}>
+                · SL/TP live
+              </span>
+            )}
             {showModeTag && entry.mode && (() => {
               const tag = resolveMode(entry);
               const tagColor = MODE_COLOR[tag] ?? 'var(--text-dim)';
@@ -520,16 +580,21 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
         {/* price grid */}
         <div style={{ display: 'flex', gap: 8 }}>
-          {[
-            { label: 'ENTRY', val: isFutures ? fp(entry.entry) : `~$${optPrem}`, color: 'var(--text-primary)', sub: '' },
-            { label: 'STOP LOSS', val: isFutures ? fp(entry.stopLoss) : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: 'var(--danger)', sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%' },
-            { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`, color: 'var(--accent)', sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%' },
-          ].map(({ label, val, color, sub }) => (
+          {([
+            { label: 'ENTRY',       val: isFutures ? fp(entry.entry)      : `~$${optPrem}`,                               color: 'var(--text-primary)', sub: '',                                                                     glow: false },
+            { label: 'STOP LOSS',   val: isFutures ? fp(entry.stopLoss)   : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: 'var(--danger)',        sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%', glow: !!entry.slImproved },
+            { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`,  color: 'var(--accent)',         sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%', glow: false },
+          ] as { label: string; val: string; color: string; sub: string; glow: boolean }[]).map(({ label, val, color, sub, glow }) => (
             <div key={label} style={{
-              background: 'var(--bg)', border: '1px solid var(--border)',
+              background: glow ? 'rgba(29,215,96,0.06)' : 'var(--bg)',
+              border: `1px solid ${glow ? 'var(--accent)55' : 'var(--border)'}`,
               borderRadius: 4, padding: '5px 8px', textAlign: 'center', minWidth: 70,
+              position: 'relative',
             }}>
-              <div style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 2 }}>
+                {label}
+                {glow && <span style={{ marginLeft: 3, color: 'var(--accent)', fontWeight: 900 }}>↑</span>}
+              </div>
               <div style={{ fontSize: 12, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
               {sub && <div style={{ fontSize: 8, color: 'var(--text-dim)' }}>{sub}</div>}
             </div>
@@ -581,7 +646,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               opacity: placing ? 0.6 : 1,
             }}
           >
-            {tradeLabel(placing, hasOpen, isLive, side)}
+            {tradeLabel(placing, hasOpen, tradeActionLabel)}
           </button>
         )}
       </div>
@@ -845,18 +910,24 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           {/* ── Economics breakdown ── */}
           <div style={{ marginTop: 14, background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', overflow: 'hidden' }}>
             {([
-              { label: 'Notional', val: fmtCost(notionalUsd) },
-              { label: `Fee (${orderType === 'market' ? 'Taker 0.05%' : orderType === 'maker' ? 'Maker-Only 0%' : 'Maker 0.02%'})`, val: fmtCost(feeUsd) },
-              { label: 'GST (18% on fee)', val: fmtCost(gstUsd) },
-              { label: 'Funds req.', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
-            ]).map(({ label, val, bold, warn }) => (
+              { label: 'Notional',  val: fmtCost(notionalUsd) },
+              { label: `Exchange fee · ${
+                  feeRole === 'taker'        ? 'Taker 0.05%'      :
+                  feeRole === 'maker-rebate' ? 'Maker-Only 0%'    :
+                                               'Maker 0.02%'
+                }`, val: feeUsd > 0 ? fmtCost(feeUsd) : feeRole === 'maker-rebate' ? 'Rebate eligible' : fmtCost(feeUsd) },
+              { label: 'GST 18% (on fee, est.)', val: fmtCost(gstUsd), hint: true },
+              { label: 'Margin required', val: fmtCost(marginUsd) },
+              { label: 'Funds req. (margin + fee + GST)', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
+            ].filter(Boolean) as {label:string;val:string;bold?:boolean;warn?:boolean;hint?:boolean}[])
+            .map(({ label, val, bold, warn, hint }) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{label}</span>
-                <span style={{ fontSize: 11, fontWeight: bold ? 700 : 400, color: warn ? 'var(--danger)' : bold ? 'var(--text-primary)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
+                <span style={{ fontSize: 11, color: hint ? 'var(--text-faint)' : 'var(--text-faint)' }}>{label}</span>
+                <span style={{ fontSize: 11, fontWeight: bold ? 700 : 400, color: warn ? 'var(--danger)' : bold ? 'var(--text-primary)' : hint ? '#888' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{val}</span>
               </div>
             ))}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Available Margin</span>
+              <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Available Funds</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
                   color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--accent)' }}>
@@ -937,8 +1008,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               }}
             >
               {modalStatus.type === 'pending' ? 'Placing…'
-                : modalStatus.type === 'error' ? `Retry ${side}`
-                : `${side}${isLive ? '' : ' (Paper)'}`}
+                : modalStatus.type === 'error' ? `Retry`
+                : `${tradeActionLabel}${isLive ? '' : ' (Paper)'}`}
             </button>
           )}
         </div>
@@ -957,20 +1028,21 @@ const sBtn: React.CSSProperties = {
 
 // ── main component ────────────────────────────────────────────────────────────
 
-export function SignalsTable() {
-  const { feed, dismiss }   = useSignalFeed();
-  const { data: signals }             = useSignals();
-  const { data: modeData }            = useTradingMode();
-  const { data: exData }              = useExchanges();
-  const { data: acctData }            = useAccountSummary(); // single subscription here, passed as prop
+// ── shared state hook (React Query deduplicates across both panels) ────────────
+
+function useSignalsPanelState() {
+  const { feed, dismiss }  = useSignalFeed();
+  const { data: signals }  = useSignals();
+  const { data: modeData } = useTradingMode();
+  const { data: exData }   = useExchanges();
+  const { data: acctData } = useAccountSummary();
   const currentMode = modeData?.name ?? '';
 
-  const delta       = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
-  const isLive      = !!(delta?.has_credentials && !delta.is_paper);
-  const posMode     = isLive ? 'live' : 'paper';
-  const availFunds  = acctData?.portfolio?.margin_available ?? null;
+  const delta      = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
+  const isLive     = !!(delta?.has_credentials && !delta.is_paper);
+  const posMode    = isLive ? 'live' : 'paper';
+  const availFunds = acctData?.portfolio?.margin_available ?? null;
 
-  // Only count positions matching current paper/live mode to correctly gate BUY NOW
   const { data: posData } = usePositions(posMode);
 
   const openByUnderlying: Record<string, number> = {};
@@ -979,87 +1051,59 @@ export function SignalsTable() {
       openByUnderlying[p.underlying] = (openByUnderlying[p.underlying] ?? 0) + 1;
   });
 
-  // Show only entries for the active mode; 'all' shows every entry regardless of mode.
+  return { feed, dismiss, signals, currentMode, isLive, availFunds, openByUnderlying };
+}
+
+// ── shared panel renderer ─────────────────────────────────────────────────────
+
+// ── feed body: empty-state + rows + footer (no outer wrapper, no header) ──────
+
+function SignalsFeedBody({ type }: { type: 'futures' | 'options' }) {
+  const { feed, dismiss, signals, currentMode, isLive, availFunds, openByUnderlying } =
+    useSignalsPanelState();
+
+  const isFut = type === 'futures';
+
   const visible = feed.filter(e =>
-    !e.dismissed &&
+    !e.dismissed && e.type === type &&
     (currentMode === 'all' || !currentMode || resolveMode(e) === currentMode)
   );
-  const active  = visible.filter(e =>
-    ['ENTRY_ARMED_PULLBACK','ENTRY_ARMED_CONTINUATION','CONFIRMED_SETUP_ACTIVE','EARLY_SETUP_ACTIVE']
-      .includes(e.currentState)
-  ).length;
 
   return (
-    <div style={{ marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
-
-      {/* header */}
-      <div style={{
-        background: isLive ? 'linear-gradient(90deg, #071a14, #071a14)' : 'linear-gradient(90deg, #0d1230, #071a14)',
-        borderBottom: `1px solid ${isLive ? 'var(--accent)22' : '#4466bb22'}`,
-        padding: '10px 14px',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 900, letterSpacing: 2 }}>
-            ● LIVE SIGNALS
-          </span>
-          {/* paper/live badge */}
-          <span style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: 1,
-            color: isLive ? 'var(--accent)' : '#88aaff',
-            background: isLive ? 'var(--accent)18' : '#88aaff18',
-            border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
-            borderRadius: 3, padding: '1px 6px',
-          }}>
-            {isLive ? '● LIVE' : 'PAPER'}
-          </span>
-          {active > 0 && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, color: 'var(--warning)',
-              background: 'rgba(255,165,2,0.12)', border: '1px solid rgba(255,165,2,0.3)',
-              borderRadius: 3, padding: '1px 7px',
-            }}>
-              {active} actionable
-            </span>
-          )}
-          {visible.length > 0 && (
-            <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>
-              {visible.length} in feed
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* empty state — show current snapshot so user knows why feed is quiet */}
+    <>
+      {/* empty state */}
       {visible.length === 0 && (
         <div style={{ background: 'var(--bg-card)', padding: '20px 16px' }}>
           {(() => {
-            const fresh = (signals?.signals ?? []).filter(s => s.fresh);
-            const modeLabel = currentMode ? currentMode.charAt(0).toUpperCase() + currentMode.slice(1) : '';
-
-            // Determine why there are no signals
-            const allIdle     = fresh.length > 0 && fresh.every(s => s.regime === 'IDLE');
-            const allFiltered = fresh.length > 0 && fresh.every(s => s.state === 'FILTERED' || s.state === 'IDLE');
-            const avgAtr      = fresh.length > 0
-              ? fresh.reduce((a, s) => a + (s.atr_percentile ?? 50), 0) / fresh.length
+            const fresh = (signals?.signals ?? []).filter((s: any) => s.fresh &&
+              (type === 'options' ? s.has_options : true));
+            const modeLabel = currentMode
+              ? currentMode.charAt(0).toUpperCase() + currentMode.slice(1)
+              : '';
+            const allIdle        = fresh.length > 0 && fresh.every((s: any) => s.regime === 'IDLE');
+            const allFiltered    = fresh.length > 0 && fresh.every((s: any) => s.state === 'FILTERED' || s.state === 'IDLE');
+            const avgAtr         = fresh.length > 0
+              ? fresh.reduce((a: number, s: any) => a + (s.atr_percentile ?? 50), 0) / fresh.length
               : 50;
             const cooldownActive = allIdle || avgAtr < 30;
 
-            let headline = `No ${modeLabel} signals right now`;
-            let reason   = 'Waiting for market conditions to meet entry criteria.';
-            let badge    = { text: 'MARKET CONDITION', color: 'var(--text-faint)' };
+            let headline = `No ${modeLabel} ${type} signals right now`;
+            let reason   = isFut
+              ? 'Watching for supertrend + regime alignment on futures.'
+              : 'Watching for CE/PE setups on option-enabled instruments.';
+            let badge    = { text: 'WAITING', color: 'var(--text-faint)' };
 
             if (fresh.length === 0) {
               headline = 'Fetching live data…';
               reason   = 'Signals compute every 30s.';
               badge    = { text: 'LOADING', color: 'var(--text-faint)' };
             } else if (cooldownActive) {
-              headline = `Low volatility — ${modeLabel} signals paused`;
-              reason   = `Market ATR is in the bottom 30th percentile. ${modeLabel} mode requires stronger price movement before entries are valid.`;
+              headline = 'Low volatility — signals paused';
+              reason   = 'ATR below 30th percentile. Stronger move needed.';
               badge    = { text: 'COOLDOWN', color: '#f0c040' };
             } else if (allFiltered) {
-              headline = `No ${modeLabel} trend detected`;
-              reason   = `ADX and regime filters for ${modeLabel} mode aren't met. Signals fire when the trend strengthens.`;
+              headline = `No ${type} trend detected`;
+              reason   = 'Regime/ADX filters not met. Fires when trend strengthens.';
               badge    = { text: 'FILTERED', color: 'var(--text-faint)' };
             }
 
@@ -1069,14 +1113,13 @@ export function SignalsTable() {
                   <span style={{
                     fontSize: 9, fontWeight: 700, letterSpacing: 1,
                     color: badge.color, background: badge.color + '18',
-                    border: `1px solid ${badge.color}44`,
-                    borderRadius: 3, padding: '2px 6px',
+                    border: `1px solid ${badge.color}44`, borderRadius: 3, padding: '2px 6px',
                   }}>{badge.text}</span>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>{headline}</span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 12 }}>{reason}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {fresh.map(s => {
+                  {fresh.map((s: any) => {
                     const stateColor: Record<string, string> = {
                       ENTRY_ARMED_PULLBACK: '#44cc88', ENTRY_ARMED_CONTINUATION: '#66ccff',
                       CONFIRMED_SETUP_ACTIVE: '#f0c040', EARLY_SETUP_ACTIVE: '#f0a500',
@@ -1121,14 +1164,113 @@ export function SignalsTable() {
       <div style={{
         padding: '6px 14px', background: 'var(--bg)',
         borderTop: '1px solid var(--border)',
-        fontSize: 9, color: 'var(--text-faint)', display: 'flex', gap: 12,
+        fontSize: 9, color: 'var(--text-faint)',
       }}>
-        <span>Prices frozen at signal time · NOW column = live price</span>
-        <span>·</span>
-        <span>Options premium estimated · verify on exchange</span>
-        <span>·</span>
-        <span>Paper unless Delta India credentials set</span>
+        {isFut
+          ? 'Prices frozen at signal time · NOW = live · Leverage pre-set on Delta'
+          : 'Premium estimated · verify on exchange · Strike = nearest round'}
       </div>
+    </>
+  );
+}
+
+// Standalone wrapper (for direct use outside the tabbed component)
+function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
+  return (
+    <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      <SignalsFeedBody type={type} />
+    </div>
+  );
+}
+
+// ── public exports ────────────────────────────────────────────────────────────
+
+// ── tabbed public component ───────────────────────────────────────────────────
+
+export function SignalsTable() {
+  const [tab, setTab] = React.useState<'futures' | 'options'>('futures');
+  const { feed, signals, currentMode } = useSignalsPanelState();
+
+  // Count actionable entries per type so tabs can show a badge
+  const count = (type: 'futures' | 'options') =>
+    feed.filter(e =>
+      !e.dismissed && e.type === type &&
+      (currentMode === 'all' || !currentMode || resolveMode(e) === currentMode) &&
+      ['ENTRY_ARMED_PULLBACK','ENTRY_ARMED_CONTINUATION','CONFIRMED_SETUP_ACTIVE','EARLY_SETUP_ACTIVE']
+        .includes(e.currentState)
+    ).length;
+
+  const futCount = count('futures');
+  const optCount = count('options');
+
+  const TAB: Array<{ id: 'futures' | 'options'; label: string; icon: string; accent: string; bg: string; cnt: number }> = [
+    { id: 'futures', label: 'FUTURES', icon: '▣', accent: 'var(--accent)', bg: '#003d2e', cnt: futCount },
+    { id: 'options', label: 'OPTIONS', icon: '◈', accent: '#a78bfa',      bg: '#1a0d2e', cnt: optCount },
+  ];
+
+  // Notify when options panel gets a new actionable signal while futures is active
+  const hasOptAlert = tab === 'futures' && optCount > 0;
+
+  return (
+    <div style={{ marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+
+      {/* ── tab bar ─────────────────────────────────────────────────────── */}
+      <div style={{
+        background: 'var(--bg-card)',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 14px',
+        display: 'flex', alignItems: 'stretch', gap: 0,
+      }}>
+        {TAB.map(t => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '10px 16px', fontFamily: 'inherit',
+                borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
+                marginBottom: -1,
+                display: 'flex', alignItems: 'center', gap: 6,
+                color: active ? t.accent : 'var(--text-faint)',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1.5 }}>
+                {t.icon} {t.label}
+              </span>
+              {t.cnt > 0 && (
+                <span style={{
+                  fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                  color: active ? t.accent : 'var(--warning)',
+                  background: active ? t.accent + '18' : 'rgba(255,165,2,0.12)',
+                  border: `1px solid ${active ? t.accent + '44' : 'rgba(255,165,2,0.3)'}`,
+                  borderRadius: 10, padding: '1px 6px', minWidth: 16, textAlign: 'center',
+                }}>
+                  {t.cnt}
+                </span>
+              )}
+              {/* dot alert on options tab when viewing futures */}
+              {t.id === 'options' && hasOptAlert && !active && (
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', flexShrink: 0 }} />
+              )}
+            </button>
+          );
+        })}
+
+        {/* right-side: live badge pushed to end */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 4 }}>
+          {signals && (
+            <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>
+              {(signals.signals ?? []).filter((s: any) => s.fresh).length} instruments
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── active tab body (no extra wrapper, sits flush under tab bar) ── */}
+      <SignalsFeedBody type={tab} />
     </div>
   );
 }

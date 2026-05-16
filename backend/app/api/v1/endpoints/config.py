@@ -207,14 +207,20 @@ class TelegramConfigResponse(BaseModel):
 @router.get("/telegram", response_model=TelegramConfigResponse)
 async def get_telegram_config() -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
+    from app.services import db as _db
     token = _tg.TELEGRAM_TOKEN
     chat  = _tg.TELEGRAM_CHAT_ID
+    # Restore in-memory flag from DB when not already set — handles page reloads
+    # and any scenario where the module-level bool was reset without a server restart.
+    if not _tg.TELEGRAM_REACHABLE and token and chat:
+        if _db.get_config("telegram_verified") == "1":
+            _tg.TELEGRAM_REACHABLE = True
     return TelegramConfigResponse(
         bot_token_set=bool(token),
         bot_token_hint=f"…{token[-6:]}" if len(token) >= 6 else ("set" if token else ""),
         chat_id=chat,
         enabled=bool(token and chat),
-        reachable=_tg.TELEGRAM_REACHABLE,   # persists in memory across requests
+        reachable=_tg.TELEGRAM_REACHABLE,
     )
 
 
@@ -232,17 +238,20 @@ async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResp
     if new_chat or not _tg.TELEGRAM_CHAT_ID:
         _tg.TELEGRAM_CHAT_ID = new_chat
 
-    # Persist to SQLite so config survives server restarts
+    # Persist credentials to SQLite
     _db.set_config("telegram_bot_token", _tg.TELEGRAM_TOKEN)
     _db.set_config("telegram_chat_id",   _tg.TELEGRAM_CHAT_ID)
 
-    # Test reachability
+    # Attempt to send a verification message — write DB flag based on actual result
     reachable = False
     if _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID:
         try:
             reachable = await _tg.send("✓ Sterling Telegram connected", parse_mode="HTML")
         except Exception:
             pass
+
+    _db.set_config("telegram_verified", "1" if reachable else "0")
+    _tg.TELEGRAM_REACHABLE = reachable
 
     token = _tg.TELEGRAM_TOKEN
     return TelegramConfigResponse(
@@ -257,12 +266,16 @@ async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResp
 @router.post("/telegram/test", response_model=TelegramConfigResponse)
 async def test_telegram() -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
+    from app.services import db as _db
     reachable = False
     if _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID:
         reachable = await _tg.send(
             "<b>Sterling test message</b>\nTelegram notifications are working.",
             parse_mode="HTML",
         )
+    # Persist verified status so it survives server restarts
+    if reachable:
+        _db.set_config("telegram_verified", "1")
     token = _tg.TELEGRAM_TOKEN
     return TelegramConfigResponse(
         bot_token_set=bool(token),

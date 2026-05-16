@@ -24,11 +24,16 @@ class PaperPosition(BaseModel):
     realized_pnl_usd: Optional[float] = None
     notes: str = ""
     run_once_state: TradeState = TradeState.ENTERED
-    # Trailing stop state
+    # Trailing stop / TP state
     trail_stop_json: Optional[str] = None
     trail_mode: Optional[str] = None
     entry_price_real: Optional[float] = None
-    is_paper: bool = True          # False when position was entered in live mode
+    is_paper: bool = True
+    # ATR-based SL/TP — persisted and auto-updated on every monitor call
+    initial_sl: Optional[float] = None    # ATR-derived stop at entry (never moves)
+    initial_tp: Optional[float] = None    # R:R-derived target at entry
+    current_sl: Optional[float] = None    # latest trailing stop price
+    current_tp: Optional[float] = None    # current take-profit price
 
 
 class EnterPositionRequest(BaseModel):

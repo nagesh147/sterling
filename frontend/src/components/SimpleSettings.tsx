@@ -78,6 +78,14 @@ function ExchangeSection() {
     ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string;
   } | null>(null);
 
+  // Auto-test saved credentials on mount so user always sees current status
+  useEffect(() => {
+    if (hasKeys && connOk === null) {
+      testConnection();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasKeys]);
+
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setMsg('');
     try {
@@ -249,10 +257,12 @@ function TelegramSection() {
       chat_id: chatId,
     }),
     onSuccess: (d) => {
-      qc.invalidateQueries({ queryKey: ['telegram-config'] });
+      // Update cache directly from the PUT response — avoids a GET refetch
+      // that could race and briefly show NOT VERIFIED before completing.
+      qc.setQueryData(['telegram-config'], d);
       setBotToken('');
       if (d.reachable) {
-        setMsgOk(true);  setMsg('✅ Saved — test message sent to Telegram');
+        setMsgOk(true);  setMsg('✅ Saved & verified — Telegram is connected');
       } else if (d.enabled) {
         setMsgOk(true);
         setMsg('✅ Saved — click Send Test to verify (make sure you sent /start to your bot)');

@@ -118,6 +118,136 @@ async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
             log.warning("Background alert checker error: %s", exc)
 
 
+async def _background_position_monitor(app: FastAPI) -> None:
+    """
+    Auto-monitor all open positions on each mode's poll_interval_s.
+    Runs TrailingStopEngine + check_exits for every active position;
+    closes stopped-out positions and fires partial exits without user action.
+    """
+    import asyncio
+    from app.services import paper_store as _ps
+    from app.services.exchanges import instrument_registry as _reg
+    from app.schemas.positions import PositionStatus
+    from app.core.trading_mode import MODES, DEFAULT_MODE
+
+    DEFAULT_INTERVAL = 60   # fallback when no mode is set
+
+    while True:
+        try:
+            mode = getattr(app.state, "trading_mode", None)
+            interval = mode.poll_interval_s if mode else DEFAULT_INTERVAL
+        except Exception:
+            interval = DEFAULT_INTERVAL
+
+        await asyncio.sleep(interval)
+
+        try:
+            ad = adapter_manager.get_adapter()
+            if not ad:
+                continue
+            active = [
+                p for p in _ps.list_positions()
+                if p.status.value in ("open", "partially_closed")
+            ]
+            if not active:
+                continue
+
+            from app.engines.directional.signal_engine import compute_signal
+            from app.engines.directional.monitor_engine import check_exits
+            from app.engines.directional.trailing_stop  import TrailState, TrailingStopEngine
+            from app.schemas.risk import ExitSignal
+            from app.api.v1.endpoints.config import get_runtime_risk
+            from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
+            from app.services import pnl_history as _pnl_history
+            risk = get_runtime_risk()
+            now_ms = int(time.time() * 1000) if 'time' in dir() else __import__('time').time_ns() // 1_000_000
+
+            import asyncio as _aio
+            sem = _aio.Semaphore(3)
+
+            async def _auto_monitor_one(pos):
+                async with sem:
+                    try:
+                        inst = _reg.get_instrument(pos.underlying)
+                        if not inst:
+                            return
+                        c1h = await ad.get_candles(inst, "1H", limit=200)
+                        signal = compute_signal(c1h)
+                        current_spot = await ad.get_index_price(inst)
+                        leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+                        dte_exp = _dte_from_expiry(leg.expiry_date) if leg else -1
+                        if dte_exp >= 0:
+                            current_dte = dte_exp
+                        else:
+                            elapsed = int((__import__('time').time() * 1000 - pos.entry_timestamp_ms) / 86_400_000)
+                            current_dte = max(0, (leg.dte if leg else 0) - elapsed)
+
+                        direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
+                        estimated_pnl  = _estimate_pnl(
+                            pos.sized_trade,
+                            current_spot - pos.entry_spot_price,
+                            direction_sign,
+                            pos.sized_trade.max_risk_usd,
+                            pos.sized_trade.structure.max_gain,
+                        )
+
+                        # Trail update
+                        if pos.trail_stop_json and pos.status.value in ("open", "partially_closed"):
+                            try:
+                                _ts = TrailState.from_json(pos.trail_stop_json)
+                                _mo = getattr(app.state, "trading_mode", None) or MODES[DEFAULT_MODE]
+                                _dir = "bullish" if direction_sign == 1 else "bearish"
+                                _st  = signal.st_values[0] if signal.st_values else 0.0
+                                _tu  = TrailingStopEngine().update(
+                                    state=_ts, candles=c1h[-30:], st_value=_st,
+                                    direction=_dir,
+                                    entry_price=pos.entry_price_real or pos.entry_spot_price,
+                                    mode=_mo, initial_tp=pos.initial_tp,
+                                )
+                                _ps.update_position(
+                                    pos.id,
+                                    trail_stop_json=_ts.to_json(),
+                                    current_sl=round(_tu.new_stop, 4),
+                                    current_tp=pos.current_tp,
+                                )
+                                if _tu.stopped_out:
+                                    _ps.close_position(pos.id, float(current_spot))
+                                    log.info("Auto-monitor: trail stop hit for %s at %.2f", pos.id, current_spot)
+                                    return
+                                if _tu.partial and pos.status.value == "open":
+                                    _pr = getattr(_tu.partial, "partial_ratio", 0.25)
+                                    _ps.partial_close_position(pos.id, float(current_spot), _pr)
+                            except Exception as _te:
+                                log.debug("Auto-monitor trail error for %s: %s", pos.id, _te)
+
+                        exit_sig = check_exits(
+                            pos.sized_trade, signal, estimated_pnl, current_dte,
+                            current_spot=float(current_spot),
+                            current_tp=pos.current_tp,
+                            current_sl=pos.current_sl,
+                            force_exit_dte=inst.force_exit_dte,
+                            financial_stop_pct=risk.financial_stop_pct,
+                            partial_profit_r1=risk.partial_profit_r1,
+                            partial_profit_r2=risk.partial_profit_r2,
+                        )
+                        _pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte,
+                                            int(__import__('time').time() * 1000))
+                        if exit_sig.should_exit and not exit_sig.partial:
+                            _ps.close_position(pos.id, float(current_spot))
+                            log.info("Auto-monitor: %s closed (%s)", pos.id, exit_sig.exit_type)
+                        elif exit_sig.partial and pos.status.value == "open":
+                            _pr = getattr(exit_sig, "partial_ratio", 0.50)
+                            _ps.partial_close_position(pos.id, float(current_spot), _pr)
+                    except Exception as _e:
+                        log.debug("Auto-monitor error for position %s: %s", pos.id, _e)
+
+            await _aio.gather(*[_auto_monitor_one(p) for p in active], return_exceptions=True)
+            log.debug("Auto-monitor: checked %d position(s)", len(active))
+
+        except Exception as exc:
+            log.warning("Background position monitor error: %s", exc)
+
+
 async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None:
     """Refresh signals for all instruments every `interval` seconds. Runs immediately at startup."""
     import asyncio
@@ -181,6 +311,12 @@ async def lifespan(app: FastAPI):
         _telegram_svc.TELEGRAM_TOKEN   = saved_tg_token
     if saved_tg_chat:
         _telegram_svc.TELEGRAM_CHAT_ID = saved_tg_chat
+    # Restore verified status from DB — no network call needed at startup.
+    # telegram_verified is written to DB whenever a test message succeeds.
+    if saved_tg_token and saved_tg_chat:
+        if get_config("telegram_verified") == "1":
+            _telegram_svc.TELEGRAM_REACHABLE = True
+            log.info("Telegram: restored verified status from DB")
 
     from app.services.execution.circuit_breaker import CircuitBreaker
     app.state.circuit_breaker = CircuitBreaker(telegram=_telegram_svc)
@@ -235,6 +371,8 @@ async def lifespan(app: FastAPI):
     log.info("Background alert checker started (every 30s)")
     signal_refresh_task = asyncio.create_task(_background_signal_refresher(app, interval=30))
     log.info("Background signal refresher started (every 30s)")
+    position_monitor_task = asyncio.create_task(_background_position_monitor(app))
+    log.info("Background position monitor started (interval=mode.poll_interval_s)")
 
     yield
 
@@ -246,6 +384,11 @@ async def lifespan(app: FastAPI):
     signal_refresh_task.cancel()
     try:
         await signal_refresh_task
+    except (Exception, BaseException):
+        pass
+    position_monitor_task.cancel()
+    try:
+        await position_monitor_task
     except (Exception, BaseException):
         pass
     await adapter_manager.close_current()

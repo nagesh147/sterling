@@ -9,6 +9,7 @@ TELEGRAM_CHAT_ID  = os.getenv("TELEGRAM_CHAT_ID", "")
 TELEGRAM_REACHABLE: bool = False   # updated by test/send success; read by GET endpoint
 
 
+
 async def send(text: str, parse_mode: str = "HTML",
                reply_markup: dict | None = None) -> bool:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:

@@ -89,6 +89,9 @@ from app.schemas.directional import TradeState
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
+# Concurrency guard: serialises the open_count-check + add_position critical section.
+_enter_lock = asyncio.Lock()
+
 
 # ─── Collection endpoints (no path param) ────────────────────────────────────
 
@@ -579,7 +582,35 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
             detail=f"{sym} is not available on {src} data source",
         )
     adapter = _adm.get_adapter() or request.app.state.adapter
-    result = await engine_run_once(inst, adapter, get_runtime_risk())
+
+    # ── DrawdownCircuitBreaker: update portfolio value, get size multiplier ──
+    _dd_breaker   = getattr(request.app.state, "dd_circuit_breaker", None)
+    _dd_size_mult = 1.0
+    if _dd_breaker is not None:
+        _risk0   = get_runtime_risk()
+        _cap0    = _risk0.capital or 10_000.0
+        _all_p0  = paper_store.list_positions()
+        _pv0     = _cap0 + sum(
+            p.realized_pnl_usd for p in _all_p0
+            if p.status.value == "closed" and p.realized_pnl_usd
+        )
+        _dd_breaker.update(_pv0)
+        _dd_size_mult = _dd_breaker.size_multiplier()
+        if _dd_size_mult == 0.0:
+            raise HTTPException(
+                status_code=503,
+                detail=f"DrawdownCircuitBreaker {_dd_breaker.state.value} — no new positions",
+            )
+
+    # ── Calibration: inject adaptive win_rate into RiskParams for Kelly ──────
+    _risk = get_runtime_risk()
+    _cal  = getattr(request.app.state, "calibration_service", None)
+    if _cal is not None and _cal.trade_count() >= 10:
+        _adaptive_wr = _cal.win_rate()
+        if 0.10 <= _adaptive_wr <= 0.90:
+            _risk = _risk.model_copy(update={"win_rate": round(_adaptive_wr, 4)})
+
+    result = await engine_run_once(inst, adapter, _risk)
 
     if result.recommendation == "no_trade" or not result.ranked_structures:
         raise HTTPException(
@@ -587,23 +618,75 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
             detail=f"No trade recommended for {sym}: {result.reason}",
         )
 
-    rank = max(0, min(body.structure_rank, len(result.ranked_structures) - 1))
+    rank       = max(0, min(body.structure_rank, len(result.ranked_structures) - 1))
     best_sized = result.ranked_structures[rank]
     try:
         spot_price = await adapter.get_index_price(inst)
     except Exception:
         spot_price = best_sized.structure.legs[0].mark_price if best_sized.structure.legs else 0.0
 
+    # Apply DD size multiplier to the selected trade
+    if _dd_size_mult < 1.0:
+        _reduced = max(1, int(best_sized.contracts * _dd_size_mult))
+        _scale   = _reduced / max(best_sized.contracts, 1)
+        best_sized = best_sized.model_copy(update={
+            "contracts":           _reduced,
+            "max_risk_usd":        round(best_sized.max_risk_usd        * _scale, 2),
+            "position_value":      round(best_sized.position_value      * _scale, 2),
+            "capital_at_risk_pct": round(best_sized.capital_at_risk_pct * _scale, 3),
+        })
+
     mode = getattr(request.app.state, "trading_mode", None)
-    return paper_store.add_position(
-        underlying=sym,
-        sized_trade=best_sized,
-        entry_spot_price=spot_price,
-        notes=body.notes,
-        is_paper=_is_paper_mode(),
-        trail_mode_name=mode.name if mode else None,
-        trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
-    )
+
+    # ── ATR-based initial SL and TP ───────────────────────────────────────────
+    _initial_sl: Optional[float] = None
+    _initial_tp: Optional[float] = None
+    try:
+        import numpy as _np
+        from app.engines.indicators.atr import compute_atr as _atr_fn
+        _c4h_sl = await adapter.get_candles(inst, "4H", limit=25)
+        if len(_c4h_sl) >= 14:
+            _h4  = _np.array([c.high  for c in _c4h_sl], dtype=_np.float64)
+            _l4  = _np.array([c.low   for c in _c4h_sl], dtype=_np.float64)
+            _c4a = _np.array([c.close for c in _c4h_sl], dtype=_np.float64)
+            _av4 = _atr_fn(_h4, _l4, _c4a, 14)
+            _atr4 = float(_av4[-1]) if len(_av4) > 0 and not _np.isnan(_av4[-1]) else float(spot_price) * 0.02
+        else:
+            _atr4 = float(spot_price) * 0.02
+        _stop_mult  = mode.stop_atr_mult if mode else 2.0
+        _rr_mult    = mode.rr_target     if mode else 2.0
+        _stop_dist  = _stop_mult * _atr4
+        _dir_str    = result.direction.value  # "long" | "short" | "neutral"
+        if _dir_str == "long":
+            _initial_sl = round(float(spot_price) - _stop_dist, 4)
+            _initial_tp = round(float(spot_price) + _rr_mult * _stop_dist, 4)
+        elif _dir_str == "short":
+            _initial_sl = round(float(spot_price) + _stop_dist, 4)
+            _initial_tp = round(float(spot_price) - _rr_mult * _stop_dist, 4)
+    except Exception:
+        pass  # SL/TP remain None → paper_store falls back to 5%-below
+
+    # ── Concurrency-safe add: lock guards check + add atomically ─────────────
+    async with _enter_lock:
+        _mode_inner   = getattr(request.app.state, "trading_mode", None)
+        _max_conc_now = _mode_inner.max_concurrent if _mode_inner else 5
+        if paper_store.open_count() >= _max_conc_now:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Max concurrent positions ({_max_conc_now}) reached",
+            )
+        pos = paper_store.add_position(
+            underlying=sym,
+            sized_trade=best_sized,
+            entry_spot_price=spot_price,
+            notes=body.notes,
+            is_paper=_is_paper_mode(),
+            trail_mode_name=mode.name if mode else None,
+            trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
+            initial_sl=_initial_sl,
+            initial_tp=_initial_tp,
+        )
+    return pos
 
 
 @router.post("/monitor-all", response_model=MonitorAllResult)
@@ -640,28 +723,81 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                 else:
                     days_elapsed = int((now_ms - pos.entry_timestamp_ms) / 86_400_000)
                     current_dte = max(0, (leg.dte if leg else 0) - days_elapsed)
-                spot_move = current_spot - pos.entry_spot_price
+                spot_move      = current_spot - pos.entry_spot_price
                 direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
-                estimated_pnl = _estimate_pnl(
+                estimated_pnl  = _estimate_pnl(
                     pos.sized_trade, spot_move, direction_sign,
                     pos.sized_trade.max_risk_usd,
                     pos.sized_trade.structure.max_gain,
                 )
+
+                # Record P&L snapshot first — ensures capture regardless of which exit path fires
+                pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
+
+                # ── Trail update (mirrors monitor_position logic) ─────────────
+                if pos.trail_stop_json and pos.status.value in ("open", "partially_closed"):
+                    try:
+                        from app.engines.directional.trailing_stop import TrailState, TrailingStopEngine
+                        from app.core.trading_mode import MODES, DEFAULT_MODE
+                        _ts  = TrailState.from_json(pos.trail_stop_json)
+                        _mo  = getattr(request.app.state, "trading_mode", None) or MODES[DEFAULT_MODE]
+                        _dir = "bullish" if direction_sign == 1 else "bearish"
+                        _st  = signal.st_values[0] if signal.st_values else 0.0
+                        _tu  = TrailingStopEngine().update(
+                            state=_ts, candles=c1h[-30:], st_value=_st,
+                            direction=_dir,
+                            entry_price=pos.entry_price_real or pos.entry_spot_price,
+                            mode=_mo, initial_tp=pos.initial_tp,
+                        )
+                        _new_sl = round(_tu.new_stop, 4)
+                        paper_store.update_position(
+                            pos.id,
+                            trail_stop_json=_ts.to_json(),
+                            current_sl=_new_sl,
+                            current_tp=pos.current_tp,
+                        )
+                        if _tu.stopped_out:
+                            paper_store.close_position(pos.id, float(current_spot))
+                            return MonitorResult(
+                                position_id=pos.id, underlying=pos.underlying,
+                                exit_signal=ExitSignal(
+                                    should_exit=True,
+                                    reason=f"Trail stop hit at {_new_sl:.2f}",
+                                    exit_type="trail_stop",
+                                ),
+                                current_spot=current_spot, estimated_pnl_usd=estimated_pnl,
+                                current_dte=current_dte, current_signal_trend=signal.trend,
+                                timestamp_ms=now_ms,
+                            )
+                        if _tu.partial and pos.status == PositionStatus.OPEN:
+                            _pr = getattr(_tu.partial, "partial_ratio", 0.25)
+                            _pp = paper_store.partial_close_position(pos.id, float(current_spot), _pr)
+                            if _pp:
+                                _p_cal = getattr(request.app.state, "calibration_service", None)
+                                if _p_cal:
+                                    _slice = (_pp.realized_pnl_usd or 0.0) - (pos.realized_pnl_usd or 0.0)
+                                    _p_cal.record_trade(_slice / max(pos.sized_trade.max_risk_usd * _pr, 1.0), "unknown")
+                    except Exception:
+                        pass
+
                 exit_signal = check_exits(
                     pos.sized_trade, signal, estimated_pnl, current_dte,
+                    current_spot=float(current_spot),
+                    current_tp=pos.current_tp,
+                    current_sl=pos.current_sl,
                     force_exit_dte=inst.force_exit_dte,
                     financial_stop_pct=risk.financial_stop_pct,
                     partial_profit_r1=risk.partial_profit_r1,
                     partial_profit_r2=risk.partial_profit_r2,
                 )
-                pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte, now_ms)
 
                 # Auto-execute: full exit → close position
                 if exit_signal.should_exit and not exit_signal.partial:
                     paper_store.close_position(pos.id, float(current_spot))
-                # Auto-execute: partial → transition to PARTIALLY_CLOSED
+                # Auto-execute: partial → reduce contracts, book P&L
                 elif exit_signal.partial and pos.status == PositionStatus.OPEN:
-                    paper_store.partial_close_position(pos.id)
+                    _pr2 = getattr(exit_signal, "partial_ratio", 0.50)
+                    paper_store.partial_close_position(pos.id, float(current_spot), _pr2)
 
                 return MonitorResult(
                     position_id=pos.id, underlying=pos.underlying,
@@ -818,6 +954,9 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     risk = get_runtime_risk()
     exit_signal = check_exits(
         pos.sized_trade, signal, estimated_pnl, current_dte,
+        current_spot=float(current_spot),
+        current_tp=pos.current_tp,
+        current_sl=pos.current_sl,
         force_exit_dte=inst.force_exit_dte,
         financial_stop_pct=risk.financial_stop_pct,
         partial_profit_r1=risk.partial_profit_r1,
@@ -843,16 +982,21 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
                 direction=direction_str,
                 entry_price=pos.entry_price_real or pos.entry_spot_price,
                 mode=mode_obj,
+                initial_tp=pos.initial_tp,
             )
-            # Persist updated trail state
+            # Persist updated trail state and live SL/TP
+            _new_sl = round(trail_update.new_stop, 4)
+            _new_tp = pos.current_tp   # TP stays fixed unless overridden
             paper_store.update_position(
                 pos.id,
                 trail_stop_json=trail_state.to_json(),
+                current_sl=_new_sl,
+                current_tp=_new_tp,
             )
             # Telegram notifications
             from app.services.notifications import telegram as _tg
             from app.services.notifications.formatters import fmt_trail_update, fmt_partial_exit, fmt_position_closed
-            if trail_update.stop_moved and trail_update.new_stop:
+            if trail_update.stop_moved:
                 gain_pct = (float(current_spot) - (pos.entry_price_real or pos.entry_spot_price)) / max(pos.entry_price_real or pos.entry_spot_price, 1)
                 await _tg.send(fmt_trail_update(pos, trail_update.new_stop, gain_pct))
             if trail_update.partial:
@@ -866,9 +1010,21 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     # Auto-execute: full exit → close position
     if exit_signal.should_exit and not exit_signal.partial:
         paper_store.close_position(pos.id, float(current_spot))
-    # Auto-execute: partial → transition to PARTIALLY_CLOSED
+    # Auto-execute: partial → reduce contracts, book partial P&L, record calibration
     elif exit_signal.partial and pos.status == PositionStatus.OPEN:
-        paper_store.partial_close_position(pos.id)
+        _partial_ratio = getattr(exit_signal, "partial_ratio", 0.50) or 0.50
+        _partial_pos   = paper_store.partial_close_position(
+            pos.id, float(current_spot), _partial_ratio
+        )
+        if _partial_pos and _partial_pos.realized_pnl_usd is not None:
+            _p_cal = getattr(request.app.state, "calibration_service", None)
+            if _p_cal:
+                _prev_r    = pos.realized_pnl_usd or 0.0
+                _slice_pnl = _partial_pos.realized_pnl_usd - _prev_r
+                _risk_sl   = pos.sized_trade.max_risk_usd * _partial_ratio
+                _p_pct     = _slice_pnl / max(_risk_sl, 1.0)
+                _p_regime  = getattr(pos, "regime", "unknown") or "unknown"
+                _p_cal.record_trade(float(_p_pct), str(_p_regime))
 
     return MonitorResult(
         position_id=pos.id, underlying=pos.underlying,

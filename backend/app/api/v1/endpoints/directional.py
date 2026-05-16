@@ -43,6 +43,10 @@ log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
 
 _prev_states: dict[str, str] = {}
+# Poll-level edge detection: fire arrows once per trend transition, not once per 1H candle.
+# Without this, green_arrow stays True for the entire first 1H candle (~240 polls @ 15s).
+_prev_all_green: dict[str, bool] = {}
+_prev_all_red:   dict[str, bool] = {}
 _signal_alerts: deque = deque(maxlen=50)  # O(1) appendleft, bounded automatically
 _ALERT_STATES = frozenset({'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE'})
 
@@ -617,13 +621,24 @@ async def _compute_signal_item(
                 _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms)
             )
 
+        # Poll-level arrow edge: True only on first poll after the trend flips.
+        # signal.green_arrow stays True for the entire 1H candle (~240 polls); we
+        # instead track the raw all_green/all_red booleans and fire the arrow only
+        # when the transition is first observed at the poll level.
+        prev_ag = _prev_all_green.get(sym, False)
+        prev_ar = _prev_all_red.get(sym, False)
+        _prev_all_green[sym] = signal.all_green
+        _prev_all_red[sym]   = signal.all_red
+        poll_green_arrow = signal.all_green and not prev_ag
+        poll_red_arrow   = signal.all_red   and not prev_ar
+
         # Write enriched data to cache so subsequent fast-path calls have SL/TP
         _snap_cache.put(
             sym=sym,
             spot_price=spot_f,
             ivr=ivr,
-            green_arrow=signal.green_arrow,
-            red_arrow=signal.red_arrow,
+            green_arrow=poll_green_arrow,
+            red_arrow=poll_red_arrow,
             current_state=setup.state.value,
             direction=setup.direction.value,
             regime=regime.macro_regime.value,
@@ -638,6 +653,8 @@ async def _compute_signal_item(
             rsi=round(getattr(signal, 'rsi', 50.0), 1),
             squeezed=getattr(signal, 'squeezed', False),
             exec_confidence=round(exec_timing.confidence, 2),
+            all_green=signal.all_green,
+            all_red=signal.all_red,
         )
 
         return {
@@ -645,8 +662,8 @@ async def _compute_signal_item(
             'has_options': inst.has_options,
             'spot_price': spot_f,
             'ivr': ivr,
-            'green_arrow': signal.green_arrow,
-            'red_arrow': signal.red_arrow,
+            'green_arrow': poll_green_arrow,
+            'red_arrow': poll_red_arrow,
             'state': setup.state.value,
             'direction': setup.direction.value,
             'regime': regime.macro_regime.value,
@@ -719,13 +736,20 @@ async def all_signals(request: Request) -> dict:
             adx_v = snap.adx or 0.0
             rec_lev = 5 if adx_v < 20 else (10 if adx_v < 30 else 20)
             opt = _option_params(sym, snap.spot_price, snap.direction)
+            # Apply poll-level edge on the cached path too: snap stores raw all_green/all_red.
+            prev_ag = _prev_all_green.get(sym, False)
+            prev_ar = _prev_all_red.get(sym, False)
+            _prev_all_green[sym] = snap.all_green
+            _prev_all_red[sym]   = snap.all_red
+            cache_green_arrow = snap.all_green and not prev_ag
+            cache_red_arrow   = snap.all_red   and not prev_ar
             cached_results.append({
                 'underlying': sym,
                 'has_options': inst.has_options,
                 'spot_price': snap.spot_price,
                 'ivr': snap.ivr,
-                'green_arrow': snap.green_arrow,
-                'red_arrow': snap.red_arrow,
+                'green_arrow': cache_green_arrow,
+                'red_arrow': cache_red_arrow,
                 'state': snap.current_state,
                 'direction': snap.direction,
                 'regime': snap.regime,
