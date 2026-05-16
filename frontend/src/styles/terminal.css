@@ -87,3 +87,31 @@
   flex-shrink: 0;
 }
 .t-resize-handle-h:hover { background: var(--t-blue); }
+
+/* Light mode overrides for .term-root */
+[data-theme="light"] .term-root {
+  --t-bg:     #f4f6f9;
+  --t-bg2:    #eaecf1;
+  --t-bg3:    #dfe2e9;
+  --t-border: #c8cdd8;
+  --t-br2:    #b8bfcc;
+  --t-text:   #3a4557;
+  --t-bright: #0d1b2a;
+  --t-dim:    #7a8899;
+  --t-green:  #007a55;
+  --t-red:    #c0253a;
+  --t-amber:  #b07000;
+  --t-blue:   #1560bd;
+  --t-cyan:   #007a9e;
+  --t-purple: #5b2d8e;
+  background: var(--t-bg);
+  color: var(--t-text);
+}
+
+/* Bloomberg-dense overrides for SignalsTable inside terminal */
+.term-signals-wrap {
+  font-size: 11px;
+}
+.term-signals-wrap [class*="border"] {
+  border-radius: 0 !important;
+}

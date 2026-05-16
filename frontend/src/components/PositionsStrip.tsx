@@ -19,7 +19,19 @@ export function PositionsStrip() {
   const realizedPnl = closed.reduce((s, p) => s + (p.realized_pnl_usd ?? 0), 0);
   const livePnl     = pnlData?.total_estimated_pnl_usd ?? 0;
 
-  if (open.length === 0 && closed.length === 0) return null;
+  if (open.length === 0 && closed.length === 0) {
+    return (
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 8, padding: '32px 20px', textAlign: 'center',
+      }}>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>No positions yet</div>
+        <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+          Open a signal card to enter a trade. Paper positions appear here instantly.
+        </div>
+      </div>
+    );
+  }
 
   const modeColor  = isLive ? 'var(--accent)' : '#88aaff';
   const modeBg     = isLive ? '#0f2a1a' : '#0d1230';

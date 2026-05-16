@@ -1,8 +1,3 @@
-/**
- * Simple (Basic) Mode — Bloomberg-style chrome around the focused signal + positions view.
- * Keeps SignalsTable and PositionsStrip as the main content; adds TickerStrip,
- * StatusBar, a compact header bar, and applies the terminal dark design system.
- */
 import React, { useState } from 'react';
 import { TickerStrip } from '../components/TickerStrip';
 import { StatusBar } from '../components/StatusBar';
@@ -14,73 +9,16 @@ import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { TradingModeSelector } from '../components/TradingModeSelector';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SimpleSettingsDrawer } from '../components/SimpleSettings';
-import { useSetAppMode } from '../store/useStore';
-import { useSelectedUnderlying } from '../store/useStore';
-import { useSnapshot } from '../hooks/useSnapshot';
+import { AllSymbolsTicker } from '../components/AllSymbolsTicker';
+import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
-import { useLivePrices } from '../hooks/useLivePrices';
 import '../styles/terminal.css';
-
-const REGIME_COLOR: Record<string, string> = {
-  BULL_TREND: '#00c87a',
-  BEAR_TREND: '#f03050',
-  VOLATILE:   '#f0a020',
-  RANGING:    '#4a5a6a',
-  IDLE:       '#4a5a6a',
-};
-
-function RegimeChip({ underlying }: { underlying: string }) {
-  const { data: snap } = useSnapshot(underlying);
-  const liveP = useLivePrices();
-  if (!snap && Object.keys(liveP).length === 0) return null;
-
-  const regime = snap?.macro_regime ?? 'RANGING';
-  const color = REGIME_COLOR[regime] ?? '#4a5a6a';
-  const totalScore = snap ? Math.max(snap.score_long, snap.score_short) : 0;
-  const scoreColor = totalScore >= 85 ? '#00c87a' : totalScore >= 75 ? '#f0a020' : '#4a5a6a';
-  const adx = snap?.adx ?? 0;
-  const atrPct = snap?.atr_percentile ?? 50;
-  const livePrice = liveP[underlying];
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderLeft: '1px solid var(--t-border)', overflow: 'hidden' }}>
-      {/* Live spot price — updates every ~2s */}
-      {livePrice != null && (
-        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: 'var(--t-bright)' }}>
-          ${livePrice >= 1000
-              ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 0 })
-              : livePrice.toLocaleString('en-US', { maximumFractionDigits: 3 })}
-        </span>
-      )}
-      {snap && <>
-        <span style={{
-          fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 3,
-          background: color + '22', color, border: `1px solid ${color}44`,
-          fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.06em', flexShrink: 0,
-        }}>
-          {regime.replace(/_/g, ' ')}
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--t-dim)', flexShrink: 0 }}>
-          ADX <span style={{ color: adx >= 25 ? '#00c87a' : 'var(--t-text)', fontFamily: 'JetBrains Mono,monospace' }}>{Math.round(adx)}</span>
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--t-dim)', flexShrink: 0 }}>
-          ATR <span style={{ color: atrPct > 65 ? '#f0a020' : 'var(--t-text)', fontFamily: 'JetBrains Mono,monospace' }}>{Math.round(atrPct)}%</span>
-        </span>
-        <span style={{ fontSize: 10, color: 'var(--t-dim)', flexShrink: 0 }}>
-          Score <span style={{ color: scoreColor, fontFamily: 'JetBrains Mono,monospace', fontWeight: 700 }}>{totalScore}</span>
-        </span>
-      </>}
-    </div>
-  );
-}
 
 function CbChip() {
   const { data: cb } = useDrawdownBreaker();
   if (!cb || cb.state === 'clear') return null;
-
-  const color = cb.state === 'warning' ? '#f0a020' : '#f03050';
+  const color = cb.state === 'warning' ? 'var(--t-amber)' : 'var(--t-red)';
   const ddPct = (Math.abs(cb.current_drawdown) * 100).toFixed(1);
-
   return (
     <div style={{
       padding: '2px 10px', borderRadius: 3,
@@ -96,114 +34,97 @@ function CbChip() {
 
 export function SimpleTerminal() {
   const setAppMode = useSetAppMode();
-  const underlying = useSelectedUnderlying();
+  const theme = useTheme();
+  const toggleTheme = useToggleTheme();
   const [showSettings, setShowSettings] = useState(false);
   const [activeSection, setActiveSection] = useState<'signals' | 'positions' | 'calibration'>('signals');
 
   return (
-    <div className="term-root" style={{ fontFamily: 'inherit' }}>
+    <div className="term-root">
       <DrawdownBreakerBadge />
 
-      {/* Ticker strip */}
+      {/* Ticker strip — live prices all symbols */}
       <TickerStrip />
 
       {/* Header bar */}
       <div style={{
-        height: 40,
-        background: 'var(--t-bg2)',
+        height: 40, background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 0,
-        flexShrink: 0,
-        paddingLeft: 12,
-        paddingRight: 12,
+        display: 'flex', alignItems: 'center',
+        gap: 8, flexShrink: 0, paddingLeft: 12, paddingRight: 12,
       }}>
-        {/* Brand */}
         <span style={{
           color: 'var(--t-bright)', fontWeight: 700, fontSize: 13, letterSpacing: 2,
-          fontFamily: 'JetBrains Mono, monospace', marginRight: 12,
+          fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
         }}>
           STERLING
         </span>
+        {/* Compact selectors — no "UNDERLYING" label */}
+        <InstrumentSelector compact />
+        <TradingModeSelector />
+        <PaperLiveToggle />
 
-        {/* Instrument + mode + paper/live */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <InstrumentSelector />
-          <TradingModeSelector />
-          <PaperLiveToggle />
-        </div>
-
-        {/* Right side */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           <CbChip />
           <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={{
+              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
+              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 7px',
+              fontFamily: 'inherit', fontSize: 12, lineHeight: 1,
+            }}
+          >
+            {theme === 'dark' ? '☀' : '◑'}
+          </button>
+          <button
             onClick={() => setShowSettings(true)}
+            title="Settings"
             style={{
               background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
               color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 8px',
               fontFamily: 'inherit', fontSize: 11, lineHeight: 1,
             }}
-            title="Settings"
           >
             ⚙
           </button>
           <button
             onClick={() => setAppMode('pro')}
+            title="Switch to Bloomberg Terminal 3-pane layout"
             style={{
-              background: 'none',
-              border: '1px solid var(--t-border)',
-              borderRadius: 3, color: 'var(--t-dim)', cursor: 'pointer',
-              padding: '3px 10px', fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
+              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
+              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 10px',
+              fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
             }}
-            title="Switch to Bloomberg Terminal layout"
           >
             TERMINAL
           </button>
         </div>
       </div>
 
-      {/* Regime context bar */}
-      <div style={{
-        background: 'var(--t-bg3)',
-        borderBottom: '1px solid var(--t-border)',
-        display: 'flex', alignItems: 'center',
-        padding: '0 12px',
-        height: 32,
-        flexShrink: 0,
-        gap: 0,
-        overflowX: 'auto',
-      }}>
-        <RegimeChip underlying={underlying} />
-      </div>
+      {/* All-symbols scrolling context ticker */}
+      <AllSymbolsTicker />
 
       {/* Section tabs */}
       <div style={{
-        display: 'flex', gap: 0,
-        background: 'var(--t-bg2)',
+        display: 'flex', background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
-        flexShrink: 0,
-        paddingLeft: 12,
+        flexShrink: 0, paddingLeft: 12,
       }}>
         {([
           ['signals',     'SIGNALS'],
           ['positions',   'POSITIONS'],
           ['calibration', 'CALIBRATION'],
-        ] as [typeof activeSection, string][]).map(([id, label]) => (
+        ] as ['signals' | 'positions' | 'calibration', string][]).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setActiveSection(id)}
             style={{
-              background: 'none',
-              border: 'none',
+              background: 'none', border: 'none',
               borderBottom: `2px solid ${activeSection === id ? 'var(--t-blue)' : 'transparent'}`,
               color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
-              padding: '7px 16px',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              fontSize: 11,
-              letterSpacing: 1,
-              marginBottom: -1,
+              padding: '7px 16px', cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 11, letterSpacing: 1, marginBottom: -1,
             }}
           >
             {label}
@@ -211,16 +132,10 @@ export function SimpleTerminal() {
         ))}
       </div>
 
-      {/* Main content — scrollable */}
-      <div style={{
-        flex: 1,
-        overflow: 'auto',
-        padding: '12px 12px',
-        background: 'var(--t-bg)',
-      }}>
+      {/* Main content */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '12px', background: 'var(--t-bg)' }}>
         {activeSection === 'signals' && (
-          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-            {/* Override card background for signals table to use terminal vars */}
+          <div className="term-signals-wrap" style={{ maxWidth: 1200, margin: '0 auto' }}>
             <SignalsTable />
           </div>
         )}
@@ -237,8 +152,6 @@ export function SimpleTerminal() {
       </div>
 
       <StatusBar />
-
-      {/* Settings drawer */}
       <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   );

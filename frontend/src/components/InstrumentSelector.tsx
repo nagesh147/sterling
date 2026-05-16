@@ -21,7 +21,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-export function InstrumentSelector() {
+export function InstrumentSelector({ compact }: { compact?: boolean }) {
   const { data, isLoading } = useInstruments();
   const { data: dsData } = useDataSource();
   const selectedUnderlying = useSelectedUnderlying();
@@ -60,29 +60,41 @@ export function InstrumentSelector() {
 
   const selected = instruments.find(i => i.underlying === selectedUnderlying);
 
+  const selectEl = (
+    <select
+      style={compact ? {
+        background: 'none', color: 'var(--t-bright)', border: '1px solid var(--t-border)',
+        padding: '3px 8px', fontSize: 12, borderRadius: 3, cursor: 'pointer',
+        fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, outline: 'none',
+      } : styles.select}
+      value={selectedUnderlying}
+      onChange={e => setSelectedUnderlying(e.target.value)}
+    >
+      {displayList.map(inst => (
+        <option key={inst.underlying} value={inst.underlying}>
+          {inst.underlying}{inst.has_options === false ? ' (spot)' : ''}
+        </option>
+      ))}
+      {incompatible.length > 0 && (
+        <optgroup label="Other sources only">
+          {incompatible.map(inst => (
+            <option key={inst.underlying} value={inst.underlying} disabled>
+              {inst.underlying} — {inst.compatible_sources?.join('/')}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
+
+  if (compact) {
+    return selectEl;
+  }
+
   return (
     <div style={styles.container}>
       <span style={styles.label}>UNDERLYING</span>
-      <select
-        style={styles.select}
-        value={selectedUnderlying}
-        onChange={e => setSelectedUnderlying(e.target.value)}
-      >
-        {displayList.map(inst => (
-          <option key={inst.underlying} value={inst.underlying}>
-            {inst.underlying}{inst.has_options === false ? ' (spot)' : ''}
-          </option>
-        ))}
-        {incompatible.length > 0 && (
-          <optgroup label="Other sources only">
-            {incompatible.map(inst => (
-              <option key={inst.underlying} value={inst.underlying} disabled>
-                {inst.underlying} — {inst.compatible_sources?.join('/')}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
+      {selectEl}
       {selected && (
         <span style={styles.badge}>
           {selected.exchange?.toUpperCase()} · {selected.has_options ? 'OPTIONS' : 'SPOT'}
