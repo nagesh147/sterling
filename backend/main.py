@@ -810,8 +810,18 @@ async def lifespan(app: FastAPI):
     import asyncio
     bg_task = asyncio.create_task(_background_alert_checker(app, interval=30))
     log.info("Background alert checker started (every 30s)")
-    signal_refresh_task = asyncio.create_task(_background_signal_refresher(app, interval=30))
-    log.info("Background signal refresher started (every 30s)")
+    # Phase: faster signal cadence — default 5 s. Env-tunable via
+    # STERLING_SIGNAL_INTERVAL_S so deployments with tighter exchange rate
+    # limits can dial it back.
+    try:
+        signal_interval = int(os.environ.get("STERLING_SIGNAL_INTERVAL_S", "5"))
+    except (TypeError, ValueError):
+        signal_interval = 5
+    signal_interval = max(1, min(60, signal_interval))
+    signal_refresh_task = asyncio.create_task(
+        _background_signal_refresher(app, interval=signal_interval)
+    )
+    log.info("Background signal refresher started (every %ss)", signal_interval)
     position_monitor_task = asyncio.create_task(_background_position_monitor(app))
     log.info("Background position monitor started (interval=mode.poll_interval_s)")
     retry_worker_task = asyncio.create_task(_background_retry_worker(app, base_interval=60))

@@ -32,9 +32,12 @@ _BASE = "https://api.kite.trade"
 
 # Zerodha interval names
 _RESOLUTION_MAP = {
+    "1m":  "minute",
+    "5m":  "5minute",
     "15m": "15minute",
     "1H":  "60minute",
     "4H":  "60minute",   # aggregate 4 × 60min bars → 4H on client side
+    "D":   "day",
     "1D":  "day",
 }
 

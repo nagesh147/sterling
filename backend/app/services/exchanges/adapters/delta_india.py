@@ -36,9 +36,13 @@ _BASE   = "https://api.india.delta.exchange"
 _WS_URL = "wss://socket.india.delta.exchange"
 
 _RESOLUTION_MAP = {
+    "1m":  "1m",
+    "5m":  "5m",
     "15m": "15m",
     "1H":  "1h",
     "4H":  "4h",
+    "D":   "1d",
+    "1D":  "1d",
 }
 
 
@@ -607,10 +611,21 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         delta_res = _RESOLUTION_MAP.get(resolution)
         if not delta_res:
             raise ValueError(f"Unsupported resolution: {resolution}")
+        # Seconds-per-bar lookup must match every key in _RESOLUTION_MAP. Adding
+        # 1m / 5m / 1d here is the missing half of the Phase D extension — without
+        # it Delta candle fetches raise KeyError('1m') (or '5m') on the first
+        # request from scalping/intraday/positional modes.
+        _RES_SECONDS = {
+            "1m": 60, "5m": 300, "15m": 900,
+            "1h": 3600, "4h": 14400,
+            "1d": 86400,
+        }
         try:
             sym = instrument.delta_perp_symbol or f"{instrument.underlying}USD"
             now = int(time.time())
-            res_sec = {"15m": 900, "1h": 3600, "4h": 14400}[delta_res]
+            res_sec = _RES_SECONDS.get(delta_res)
+            if res_sec is None:
+                raise ValueError(f"Unsupported resolution mapping: {delta_res}")
             start = now - limit * res_sec
             data = await self._public_get(
                 "/v2/history/candles",

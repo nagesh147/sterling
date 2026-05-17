@@ -19,9 +19,13 @@ log = get_logger(__name__)
 _OKX_BASE = "https://www.okx.com"
 
 _RESOLUTION_MAP = {
+    "1m":  "1m",
+    "5m":  "5m",
     "15m": "15m",
-    "1H": "1H",
-    "4H": "4H",
+    "1H":  "1H",
+    "4H":  "4H",
+    "D":   "1D",
+    "1D":  "1D",
 }
 
 

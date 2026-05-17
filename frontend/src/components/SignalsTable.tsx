@@ -439,6 +439,37 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         : (entry.entry - entry.currentPrice) / entry.entry * 100)
     : null;
 
+  // ── 1-second wire: live SL/TP distance from CURRENT price + tick flash ──
+  // Recomputed every render (cheap) so the user sees these % counters move
+  // every time the SSE prices event lands a new spot for this underlying.
+  const liveSlDist = (isFutures && entry.currentPrice && entry.stopLoss)
+    ? (entry.direction === 'long'
+        ? (entry.currentPrice - entry.stopLoss) / entry.currentPrice * 100
+        : (entry.stopLoss - entry.currentPrice) / entry.currentPrice * 100)
+    : null;
+  const liveTpDist = (isFutures && entry.currentPrice && entry.takeProfit)
+    ? (entry.direction === 'long'
+        ? (entry.takeProfit - entry.currentPrice) / entry.currentPrice * 100
+        : (entry.currentPrice - entry.takeProfit) / entry.currentPrice * 100)
+    : null;
+
+  // Price-tick flash — animates the NOW cell green-up / red-down when
+  // currentPrice changes. Confirms the 1-s wire visually without polling.
+  const prevPriceRef = useRef<number | null>(null);
+  const [tickClass, setTickClass] = useState<'price-flash-up' | 'price-flash-down' | ''>('');
+  useEffect(() => {
+    const cp = entry.currentPrice;
+    if (cp == null || prevPriceRef.current == null) {
+      prevPriceRef.current = cp ?? null;
+      return;
+    }
+    if (cp === prevPriceRef.current) return;
+    setTickClass(cp > prevPriceRef.current ? 'price-flash-up' : 'price-flash-down');
+    prevPriceRef.current = cp;
+    const t = setTimeout(() => setTickClass(''), 420);
+    return () => clearTimeout(t);
+  }, [entry.currentPrice]);
+
   const optPrem = isFutures ? null : Math.round(entry.entry * 0.01);
 
   // Order economics
@@ -718,16 +749,44 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   </div>
                 )}
                 {!initSl && !diff && sub && <div style={{ fontSize: 8, color: 'var(--text-dim)' }}>{sub}</div>}
+                {/* 1-second wire: distance from CURRENT price (updates each price tick) */}
+                {label === 'STOP LOSS' && liveSlDist != null && (
+                  <div
+                    title="Live distance from current spot to stop. Negative = price already through stop."
+                    style={{
+                      fontSize: 7, color: liveSlDist > 0 ? 'var(--text-faint)' : 'var(--danger)',
+                      fontVariantNumeric: 'tabular-nums', marginTop: 1,
+                    }}
+                  >
+                    now {liveSlDist >= 0 ? '+' : ''}{liveSlDist.toFixed(2)}%
+                  </div>
+                )}
+                {label === 'TAKE PROFIT' && liveTpDist != null && (
+                  <div
+                    title="Live distance from current spot to target."
+                    style={{
+                      fontSize: 7, color: liveTpDist > 0 ? 'var(--text-faint)' : 'var(--accent)',
+                      fontVariantNumeric: 'tabular-nums', marginTop: 1,
+                    }}
+                  >
+                    now {liveTpDist >= 0 ? '+' : ''}{liveTpDist.toFixed(2)}%
+                  </div>
+                )}
               </div>
             ));
           })()}
 
           {/* Live price — only meaningful for futures (options premium ≠ spot price) */}
           {isFutures && entry.currentPrice && (
-            <div className="live-price-cell" style={{
-              background: 'var(--bg)', border: `1px solid ${livePnl != null && livePnl >= 0 ? '#00d4aa44' : '#ff475744'}`,
-              borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
-            }}>
+            <div
+              className={`live-price-cell ${tickClass}`}
+              style={{
+                background: 'var(--bg)',
+                border: `1px solid ${livePnl != null && livePnl >= 0 ? '#00d4aa44' : '#ff475744'}`,
+                borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
+              }}
+              title="NOW = live spot price · updates every 1 s from SSE prices event"
+            >
               <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1.2, marginBottom: 2 }}>NOW</div>
               <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
                 {fp(entry.currentPrice)}
@@ -737,7 +796,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   fontSize: 8, fontWeight: 700,
                   color: livePnl >= 0 ? 'var(--accent)' : 'var(--danger)',
                 }}>
-                  {livePnl >= 0 ? '+' : ''}{livePnl.toFixed(1)}%
+                  {livePnl >= 0 ? '+' : ''}{livePnl.toFixed(2)}%
                 </div>
               )}
             </div>

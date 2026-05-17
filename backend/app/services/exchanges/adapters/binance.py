@@ -26,7 +26,15 @@ log = get_logger(__name__)
 _FAPI = "https://fapi.binance.com"  # USDT-M Futures
 _SPOT  = "https://api.binance.com"
 
-_INTERVAL_MAP = {"15m": "15m", "1H": "1h", "4H": "4h"}
+_INTERVAL_MAP = {
+    "1m":  "1m",
+    "5m":  "5m",
+    "15m": "15m",
+    "1H":  "1h",
+    "4H":  "4h",
+    "D":   "1d",
+    "1D":  "1d",
+}
 
 
 def _ts_ms(ts) -> int:

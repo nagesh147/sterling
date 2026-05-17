@@ -66,6 +66,6 @@ export function useSignals() {
   return useQuery<SignalsResponse>({
     queryKey: ['signals-all'],
     queryFn: () => api.get<SignalsResponse>('/api/v1/directional/signals'),
-    refetchInterval: 15_000,
+    refetchInterval: 5_000,
   });
 }

@@ -899,12 +899,33 @@ async def _compute_signal_item(
     signal_tf = mode.signal_tf     if mode else "1H"
     exec_tf   = mode.execution_tf  if mode else "15m"
     try:
-        spot, c4h, c1h, c15m = await asyncio.gather(
-            adapter.get_index_price(inst),
-            adapter.get_candles(inst, macro_tf,  limit=100),
-            adapter.get_candles(inst, signal_tf, limit=200),
-            adapter.get_candles(inst, exec_tf,   limit=50),
-        )
+        try:
+            spot, c4h, c1h, c15m = await asyncio.gather(
+                adapter.get_index_price(inst),
+                adapter.get_candles(inst, macro_tf,  limit=100),
+                adapter.get_candles(inst, signal_tf, limit=200),
+                adapter.get_candles(inst, exec_tf,   limit=50),
+            )
+        except ValueError as exc:
+            # Adapter rejected a mode-specific timeframe (e.g. "1m" / "5m" /
+            # "D" not in its _RESOLUTION_MAP). Phase D falls back to the
+            # universally supported swing-mode timeframes so signals still
+            # flow. The mode's *parameters* (stop_mult, rr, macro_filter,
+            # st_threshold) are still applied — only candle resolution
+            # downgrades.
+            if "resolution" not in str(exc).lower():
+                raise
+            log.warning(
+                "_compute_signal_item: %s rejects %s/%s/%s — falling back to 4H/1H/15m",
+                sym, macro_tf, signal_tf, exec_tf,
+            )
+            macro_tf, signal_tf, exec_tf = "4H", "1H", "15m"
+            spot, c4h, c1h, c15m = await asyncio.gather(
+                adapter.get_index_price(inst),
+                adapter.get_candles(inst, "4H",  limit=100),
+                adapter.get_candles(inst, "1H",  limit=200),
+                adapter.get_candles(inst, "15m", limit=50),
+            )
         regime      = compute_regime(c4h, macro_filter=macro_filter)
         signal      = compute_signal(c1h, st_threshold=st_threshold)
         setup       = evaluate_setup(regime, signal)
@@ -1605,14 +1626,24 @@ async def _sse_all_generator(
     """
     Single SSE connection that emits named event types:
       - "prices"    every `price_interval` s: spot prices for all instruments
-      - "signals"   every 30s: full signal data from snapshot cache
+      - "signals"   every signal_interval s (default 5s): full signal data
       - "watchlist" every 10s: watchlist rows built from snapshot cache
       - "positions" every 5s:  paper positions from DB (no exchange call)
       - "pnl"       every 5s:  live PnL using cached spot prices (no exchange call)
       - "portfolio" every 10s: portfolio summary from DB
       - "alerts"    every 15s: signal alerts from in-memory deque
     Prices read directly from WS cache (no CachingAdapter overhead).
+
+    Signal-emit cadence is env-tunable via STERLING_SIGNAL_INTERVAL_S
+    (clamped 1–60 s).
     """
+    import os as _os
+    try:
+        signal_emit_interval = int(_os.environ.get("STERLING_SIGNAL_INTERVAL_S", "5"))
+    except (TypeError, ValueError):
+        signal_emit_interval = 5
+    signal_emit_interval = max(1, min(60, signal_emit_interval))
+
     instruments = registry.list_instruments()
     last_signals_t   = 0.0
     last_watchlist_t = 0.0
@@ -1651,7 +1682,10 @@ async def _sse_all_generator(
         if rest_needed:
             async def _fetch_price(inst) -> tuple[str, float | None]:
                 try:
-                    p = await asyncio.wait_for(adapter.get_index_price(inst), timeout=2.0)
+                    # 0.5 s cap keeps the 1-s SSE prices loop tight even when
+                    # an exchange REST endpoint is slow. Missing prices then
+                    # fall back to _stream_last_prices on the next line.
+                    p = await asyncio.wait_for(adapter.get_index_price(inst), timeout=0.5)
                     return inst.underlying, float(p)
                 except Exception:
                     return inst.underlying, None
@@ -1680,8 +1714,8 @@ async def _sse_all_generator(
             # are serveable on the current data source (empty prices dict).
             yield ": ka\n\n"
 
-        # ── slow path: full signal data (every 30s from snap cache) ──────────
-        if now_mono - last_signals_t >= 30.0:
+        # ── full signal data (every signal_emit_interval s from snap cache) ──
+        if now_mono - last_signals_t >= signal_emit_interval:
             last_signals_t = now_mono
             mode = getattr(request.app.state, "trading_mode", None)
 

@@ -14,7 +14,13 @@ log = get_logger(__name__)
 
 # Deribit valid resolutions: 1,3,5,10,15,30,60,120,180,360,720,1D
 # 240 NOT valid — 4H fetched as 1H bars and aggregated client-side
-_RESOLUTION_MAP = {"15m": 15, "1H": 60, "4H": 60}
+# 1D requested as the literal "1D" string in the API; we map "D" → 1440 (= 24h)
+# and the get_candles call detects that special case below.
+_RESOLUTION_MAP = {
+    "1m": 1, "5m": 5, "15m": 15,
+    "1H": 60, "4H": 60,
+    "D": 1440, "1D": 1440,
+}
 
 
 def _norm_cdf(x: float) -> float:
@@ -157,10 +163,16 @@ class DeribitAdapter(BaseExchangeAdapter):
 
         # 4H: fetch 4× 1H bars then aggregate — Deribit has no resolution=240
         want_4h = resolution == "4H"
+        # D: Deribit takes the literal "1D" string, not minutes. 1440 is the
+        # synthetic minutes-equivalent we use for time-window math; the API
+        # call below substitutes "1D" when it sees this.
+        is_daily = resolution in ("D", "1D")
         fetch_limit = limit * 4 if want_4h else limit
 
         now_ms = int(time.time() * 1000)
         start_ms = now_ms - fetch_limit * res_min * 60 * 1000
+
+        api_resolution = "1D" if is_daily else str(res_min)
 
         result = await self._get(
             "/public/get_tradingview_chart_data",
@@ -168,7 +180,7 @@ class DeribitAdapter(BaseExchangeAdapter):
                 "instrument_name": instrument.perp_symbol,
                 "start_timestamp": start_ms,
                 "end_timestamp": now_ms,
-                "resolution": str(res_min),
+                "resolution": api_resolution,
             },
         )
 

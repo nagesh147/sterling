@@ -3,14 +3,22 @@ In-memory snapshot cache for market signal data.
 
 SSE streams write here on every tick; the background alert poller reads
 from here first and only calls the exchange if the entry is stale.
-TTL slightly exceeds the default SSE interval (30s) so a connected stream
-always provides fresh data for the poller.
+TTL is set slightly above the SSE signal-emit interval so a connected
+stream always provides fresh data for the poller. Tunable via env:
+
+    STERLING_SNAPSHOT_TTL_MS  (default 10000 = 10 s)
 """
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-_TTL_MS = 45_000  # 45 s — fresh enough for 30 s SSE interval
+# Default 10 s. Bumped up to 45 s historically for the legacy 30-s SSE
+# interval; now matches a 5-s emit cadence with a 2× grace window.
+try:
+    _TTL_MS = int(os.environ.get("STERLING_SNAPSHOT_TTL_MS", "10000"))
+except (TypeError, ValueError):
+    _TTL_MS = 10_000
 
 
 @dataclass

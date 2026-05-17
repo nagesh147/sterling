@@ -65,3 +65,18 @@ body {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text-primary);
 }
+
+/* ─────────────────────────────────────────────────────────────────
+ * Price-tick flash — applied to NOW cells when currentPrice updates
+ * (every 1 s from SSE prices event). Confirms the live wire visually.
+ * ───────────────────────────────────────────────────────────────── */
+@keyframes price-flash-up {
+  0%   { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  100% { background: var(--bg); }
+}
+@keyframes price-flash-down {
+  0%   { background: color-mix(in srgb, var(--danger) 30%, transparent); }
+  100% { background: var(--bg); }
+}
+.price-flash-up   { animation: price-flash-up   0.4s ease-out; }
+.price-flash-down { animation: price-flash-down 0.4s ease-out; }
