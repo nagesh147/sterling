@@ -5,11 +5,13 @@ import { WalkForwardPanel } from './WalkForwardPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { RiskConfigPanel } from './RiskConfigPanel';
 import { CalibrationPanel } from './CalibrationPanel';
+import LiveControlPanel from './LiveControlPanel';
 import { useSelectedUnderlying } from '../store/useStore';
 
-type BottomTab = 'scanner' | 'chain' | 'watchlist' | 'analytics' | 'config';
+type BottomTab = 'live' | 'scanner' | 'chain' | 'watchlist' | 'analytics' | 'config';
 
 const TABS: [BottomTab, string][] = [
+  ['live',      'LIVE'],
   ['scanner',   'SCANNER'],
   ['chain',     'CHAIN'],
   ['watchlist', 'WATCHLIST'],
@@ -18,7 +20,7 @@ const TABS: [BottomTab, string][] = [
 ];
 
 export function BottomPanel() {
-  const [tab, setTab] = useState<BottomTab>('scanner');
+  const [tab, setTab] = useState<BottomTab>('live');
   const underlying = useSelectedUnderlying();
 
   return (
@@ -49,6 +51,11 @@ export function BottomPanel() {
 
       {/* Panel content */}
       <div style={{ flex: 1, overflow: 'auto', padding: '8px 10px' }}>
+        {tab === 'live' && (
+          <div style={{ maxWidth: 520 }}>
+            <LiveControlPanel />
+          </div>
+        )}
         {tab === 'scanner' && (
           <WatchlistPanel />
         )}

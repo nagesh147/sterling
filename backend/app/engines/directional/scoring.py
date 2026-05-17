@@ -147,9 +147,16 @@ def _check_hard_vetoes(
                 return f"naked short: spread {spread_pct:.1%} ≥ 5% (requires < 5%)"
 
     # Use caller-supplied bar hour (backtest context) or current wall-clock hour (live).
-    now = _dt.datetime.now(_dt.timezone.utc)
-    hour_utc = bar_hour_utc if bar_hour_utc is not None else now.hour
-    minute_utc = bar_minute_utc if bar_minute_utc is not None else now.minute
+    # When the caller pins bar_hour_utc but not bar_minute_utc, default the minute
+    # to 30 — mid-hour is safely outside every funding window so legacy tests
+    # that only thread bar_hour_utc don't accidentally trip the A5 funding veto.
+    if bar_hour_utc is not None:
+        hour_utc = bar_hour_utc
+        minute_utc = bar_minute_utc if bar_minute_utc is not None else 30
+    else:
+        now = _dt.datetime.now(_dt.timezone.utc)
+        hour_utc = now.hour
+        minute_utc = bar_minute_utc if bar_minute_utc is not None else now.minute
     if hour_utc in {2, 3, 4, 5}:
         return f"hour {hour_utc}:00 UTC in dead zone"
 

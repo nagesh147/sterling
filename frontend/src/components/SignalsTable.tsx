@@ -612,6 +612,19 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                 · SL/TP live
               </span>
             )}
+            {entry.signalStrength === 'STRONG' && (
+              <span
+                title="STRONG = ≥75% confluence on the 1H signal stack"
+                style={{
+                  marginLeft: 6, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
+                  color: '#f0c040', background: '#3a2a08',
+                  border: '1px solid #f0c04055', borderRadius: 2, padding: '1px 4px',
+                  cursor: 'help',
+                }}
+              >
+                STRONG
+              </span>
+            )}
             {showModeTag && entry.mode && (() => {
               const tag = resolveMode(entry);
               const tagColor = MODE_COLOR[tag] ?? 'var(--text-dim)';
@@ -625,6 +638,47 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             })()}
           </span>
         </div>
+
+        {/* G2: MTF chip strip — 4H / 1H / 15m breakdown */}
+        {entry.mtf && (
+          <div
+            style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}
+            title={entry.mtf.alignment_label}
+          >
+            {([
+              ['4H',  entry.mtf.macro_4h,      entry.mtf.macro_ok,  20],
+              ['1H',  entry.mtf.signal_1h,     entry.mtf.signal_ok, 20],
+              ['15m', entry.mtf.execution_15m, entry.mtf.exec_ok,   15],
+            ] as [string, number, boolean, number][]).map(([label, val, ok, max]) => (
+              <span
+                key={label}
+                style={{
+                  fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+                  padding: '1px 6px', borderRadius: 3,
+                  background: ok ? 'rgba(29,215,96,0.10)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${ok ? 'var(--accent)55' : 'var(--border)'}`,
+                  color: ok ? 'var(--accent)' : 'var(--text-faint)',
+                  fontFamily: 'monospace',
+                }}
+              >
+                {label} {val.toFixed(0)}/{max}
+              </span>
+            ))}
+            {entry.vetoReason && (
+              <span
+                title={entry.vetoReason}
+                style={{
+                  fontSize: 9, padding: '1px 6px', borderRadius: 3,
+                  background: 'rgba(255,71,87,0.10)',
+                  border: '1px solid var(--danger)55',
+                  color: 'var(--danger)', cursor: 'help',
+                }}
+              >
+                ✕ {entry.vetoReason.slice(0, 40)}{entry.vetoReason.length > 40 ? '…' : ''}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* price grid */}
         <div style={{ display: 'flex', gap: 8 }}>
@@ -1263,11 +1317,25 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
                       FILTERED: 'var(--text-faint)', IDLE: 'var(--border-light)',
                     };
                     const c = stateColor[s.state] ?? 'var(--text-faint)';
+                    // G1: explain *why* this row is filtered. Use the backend
+                    // veto_reason when present; otherwise fall back to a
+                    // regime/ADX/signal-score hint built from snap fields.
+                    const tip = (s.state === 'FILTERED' || s.state === 'IDLE')
+                      ? (s.veto_reason
+                        ?? (s.regime === 'IDLE'
+                          ? `IDLE regime — ATR ${s.atr_percentile?.toFixed?.(0) ?? '?'}% (cooldown)`
+                          : `No setup — ADX ${s.adx?.toFixed?.(0) ?? '?'} / signal score ${s.signal_score?.toFixed?.(0) ?? '?'}/20`))
+                      : `${s.state.replace(/_/g, ' ')} — score ${(s.score_long || s.score_short || 0).toFixed(0)}/100`;
                     return (
-                      <span key={s.underlying} style={{
-                        fontSize: 10, padding: '3px 8px', borderRadius: 4,
-                        background: c + '18', border: `1px solid ${c}44`, color: c, fontWeight: 700,
-                      }}>
+                      <span
+                        key={s.underlying}
+                        title={tip}
+                        style={{
+                          fontSize: 10, padding: '3px 8px', borderRadius: 4,
+                          background: c + '18', border: `1px solid ${c}44`, color: c, fontWeight: 700,
+                          cursor: 'help',
+                        }}
+                      >
                         {s.underlying} · {s.state.replace(/_/g, ' ')}
                         {s.atr_percentile != null ? ` · ATR${Math.round(s.atr_percentile)}%` : ''}
                       </span>

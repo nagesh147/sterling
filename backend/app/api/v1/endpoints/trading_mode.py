@@ -31,6 +31,36 @@ async def set_trading_mode(body: TradingModeRequest, request: Request) -> dict:
     _db_set(body.name)
     request.app.state.trading_mode = MODES[body.name]
     mode = MODES[body.name]
+
+    # ── Mode-change cache invalidation ────────────────────────────────────
+    # The snapshot cache stores SL/TP and signal payloads computed under the
+    # *previous* mode's stop_atr_mult / rr_target. The signal-id cache stores
+    # mode-coded IDs (e.g. BTCFUT-SC-XXX). Without eviction here the SSE
+    # serves stale data for up to 45 s + 30 s before the background refresher
+    # overwrites it — long enough for users to see e.g. INTRADAY signals
+    # rendered as scalping (BTCFUT-SC-...).
+    try:
+        from app.services import snapshot_cache as _snap_cache
+        _snap_cache.clear()
+    except Exception:
+        pass
+    try:
+        # Drop in-memory signal-id cache. Keeping it would cause the next
+        # SSE tick to serve old-mode IDs because the (sym, mode, dir) key
+        # for the new mode is empty, but the OLD-mode entry persists and
+        # could be matched if a downstream consumer looked it up under the
+        # legacy 2-part key during a partial migration.
+        from app.api.v1.endpoints.directional import (
+            _active_signal_ids, _save_signal_tracker_state,
+        )
+        _active_signal_ids.clear()
+        try:
+            _save_signal_tracker_state()
+        except Exception:
+            pass
+    except Exception:
+        pass
+
     return {"name": mode.name, "config": _mode_to_dict(mode)}
 
 

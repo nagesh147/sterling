@@ -39,6 +39,11 @@ class SnapshotEntry:
     # Raw trend booleans — used for poll-level edge detection in /signals
     all_green: bool = False
     all_red: bool = False
+    # Algo-gating inputs (populated from SignalResult)
+    # signal_score is the 0-20 confluence score (3-ST + RSI + squeeze + volume + HA)
+    # signal_strength is "STRONG" when signal_score >= 15 (75%), "SIGNAL" >= 7, else "NONE"
+    signal_score: float = 0.0
+    signal_strength: str = "NONE"
 
 
 _cache: Dict[str, SnapshotEntry] = {}
@@ -67,6 +72,8 @@ def put(
     exec_confidence: float = 0.0,
     all_green: bool = False,
     all_red: bool = False,
+    signal_score: float = 0.0,
+    signal_strength: str = "NONE",
 ) -> None:
     _cache[sym] = SnapshotEntry(
         sym=sym,
@@ -91,6 +98,8 @@ def put(
         exec_confidence=exec_confidence,
         all_green=all_green,
         all_red=all_red,
+        signal_score=signal_score,
+        signal_strength=signal_strength,
     )
 
 

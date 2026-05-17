@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTradingMode, useSetTradingMode } from '../hooks/useTradingMode';
-import { clearSignalFeedState } from '../hooks/useSignalFeed';
+import { clearSignalFeed, clearSignalFeedState } from '../hooks/useSignalFeed';
 import { api } from '../utils/api';
 import { MODE_COLOR } from '../utils/fmt';
 
@@ -48,6 +48,11 @@ export function TradingModeSelector() {
         const display = data.config?.display ?? name;
         setToast(`⚡ ${display} mode — refreshing…`);
         qc.invalidateQueries({ queryKey: ['trading-mode'] });
+        // Wipe the entire feed + state tracker. Old entries are tagged with
+        // the previous mode and carry SC/IN/SW signal IDs from the old
+        // backend cache — keeping them in view causes the "INTRADAY mode but
+        // BTCFUT-SC-XXX" mismatch we just fixed on the backend.
+        clearSignalFeed();
         clearSignalFeedState();
         try {
           await api.post('/api/v1/directional/refresh-signals', {});

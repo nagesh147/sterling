@@ -106,6 +106,8 @@ def test_normal_funding_rate_does_not_veto():
     result = score_structure(
         structure, _make_regime(), _make_signal(), _make_exec(), _make_policy(),
         funding_rate=0.01,
+        # Pin to 12:00 UTC — outside dead zone, outside any funding window
+        bar_hour_utc=12, bar_minute_utc=30,
     )
     assert result.score > 0.0
 
@@ -116,5 +118,6 @@ def test_no_funding_rate_does_not_veto():
     result = score_structure(
         structure, _make_regime(), _make_signal(), _make_exec(), _make_policy(),
         funding_rate=None,
+        bar_hour_utc=12, bar_minute_utc=30,
     )
     assert result.score > 0.0

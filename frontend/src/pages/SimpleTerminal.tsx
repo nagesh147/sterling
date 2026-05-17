@@ -9,6 +9,7 @@ import { TradingModeSelector } from '../components/TradingModeSelector';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SimpleSettingsDrawer, AlgoToggle } from '../components/SimpleSettings';
 import { DataSourceSelector } from '../components/DataSourceSelector';
+import LiveControlPanel from '../components/LiveControlPanel';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import '../styles/terminal.css';
@@ -36,6 +37,7 @@ export function SimpleTerminal() {
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
   const [showSettings, setShowSettings] = useState(false);
+  const [showLive, setShowLive] = useState(false);
   const [activeSection, setActiveSection] = useState<'signals' | 'positions' | 'calibration'>('signals');
 
   return (
@@ -75,6 +77,17 @@ export function SimpleTerminal() {
             }}
           >
             {theme === 'dark' ? '☀' : '◑'}
+          </button>
+          <button
+            onClick={() => setShowLive(true)}
+            title="Live Control — kill switch · daily loss · retry queue"
+            style={{
+              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
+              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 8px',
+              fontFamily: 'inherit', fontSize: 10, lineHeight: 1, letterSpacing: 1,
+            }}
+          >
+            LIVE
           </button>
           <button
             onClick={() => setShowSettings(true)}
@@ -150,6 +163,50 @@ export function SimpleTerminal() {
 
       <StatusBar />
       <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* Live control drawer — slide-out from the right */}
+      {showLive && (
+        <div
+          onClick={() => setShowLive(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+            zIndex: 3000, display: 'flex', justifyContent: 'flex-end',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 380, height: '100%', background: 'var(--bg, #07090d)',
+              borderLeft: '1px solid var(--t-border)',
+              display: 'flex', flexDirection: 'column', overflow: 'auto',
+            }}
+          >
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+              background: 'var(--t-bg2)',
+            }}>
+              <span style={{
+                fontSize: 11, letterSpacing: 2, fontWeight: 700, color: 'var(--t-bright)',
+              }}>
+                LIVE CONTROL
+              </span>
+              <button
+                onClick={() => setShowLive(false)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--t-dim)',
+                  cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ padding: 12 }}>
+              <LiveControlPanel />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

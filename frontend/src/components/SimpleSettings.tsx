@@ -470,18 +470,68 @@ function AlgoSection() {
   const enabled = algoData?.enabled ?? false;
   const pending = setAlgoMode.isPending;
 
+  // Preflight credential check — runs when modal opens, gates the Enable button.
+  type PreflightState =
+    | { state: 'pending' }
+    | { state: 'ok'; message: string; account: string }
+    | { state: 'fail'; reason: string; hint?: string; serverIp?: string }
+    | null;
+  const [preflight, setPreflight] = useState<PreflightState>(null);
+
+  const runPreflight = async () => {
+    setPreflight({ state: 'pending' });
+    try {
+      const resp = await api.get<{
+        ok: boolean;
+        account?: string;
+        message?: string;
+        balance?: string;
+        reason?: string;
+        hint?: string;
+        server_ip?: string;
+      }>('/api/v1/trading/test-credentials');
+      if (resp.ok) {
+        setPreflight({
+          state: 'ok',
+          message: resp.message ?? `Connected · ${resp.balance ?? 'OK'}`,
+          account: resp.account ?? 'Delta Exchange',
+        });
+      } else {
+        setPreflight({
+          state: 'fail',
+          reason: resp.reason ?? 'Credential check failed',
+          hint: resp.hint,
+          serverIp: resp.server_ip,
+        });
+      }
+    } catch (e) {
+      setPreflight({
+        state: 'fail',
+        reason: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
+
   const handleToggle = () => {
     if (enabled) {
       setAlgoMode.mutate(false);
     } else {
       setConfirming(true);
+      runPreflight();
     }
   };
 
-  const confirmEnable = () => {
+  const closeModal = () => {
     setConfirming(false);
+    setPreflight(null);
+  };
+
+  const confirmEnable = () => {
+    closeModal();
     setAlgoMode.mutate(true);
   };
+
+  const canEnable = preflight?.state === 'ok' && !pending;
 
   return (
     <Section
@@ -557,15 +607,73 @@ function AlgoSection() {
           <div style={{
             background: 'var(--bg-card)', border: '1px solid #ff475733',
             borderTop: '3px solid #ff4757', borderRadius: 8,
-            padding: '22px 24px', width: 340,
+            padding: '22px 24px', width: 400,
             boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>
               ⚡ Enable Algo Trading?
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 18 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 14 }}>
               Sterling will automatically place <strong style={{ color: 'var(--text-muted)' }}>real live orders</strong> on Delta Exchange India whenever a signal becomes actionable.
             </div>
+
+            {/* Preflight status block */}
+            <div style={{
+              border: `1px solid ${
+                preflight?.state === 'ok' ? '#44cc8866' :
+                preflight?.state === 'fail' ? '#ff475766' :
+                'var(--border)'
+              }`,
+              background: preflight?.state === 'ok' ? '#0a2a14' :
+                          preflight?.state === 'fail' ? '#2a0808' :
+                          'var(--bg)',
+              borderRadius: 5, padding: '8px 10px', marginBottom: 14, fontSize: 10,
+            }}>
+              {preflight === null && (
+                <span style={{ color: 'var(--text-faint)' }}>Preflight not run.</span>
+              )}
+              {preflight?.state === 'pending' && (
+                <span style={{ color: 'var(--text-faint)' }}>
+                  ⏳ Verifying Delta Exchange credentials…
+                </span>
+              )}
+              {preflight?.state === 'ok' && (
+                <div style={{ color: '#44cc88', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>✓</span>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{preflight.account}</div>
+                    <div style={{ color: '#88dda0', marginTop: 2 }}>{preflight.message}</div>
+                  </div>
+                </div>
+              )}
+              {preflight?.state === 'fail' && (
+                <div style={{ color: '#ff4757' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>✕ {preflight.reason}</div>
+                  {preflight.hint && (
+                    <div style={{ color: '#ffa0a8', fontSize: 9, lineHeight: 1.5, marginBottom: 4 }}>
+                      {preflight.hint}
+                    </div>
+                  )}
+                  {preflight.serverIp && (
+                    <div style={{ color: '#ffa0a8', fontSize: 9, fontFamily: 'monospace' }}>
+                      Server IP: {preflight.serverIp}
+                    </div>
+                  )}
+                  <button
+                    onClick={runPreflight}
+                    style={{
+                      marginTop: 6, background: 'transparent', color: '#ff4757',
+                      border: '1px solid #ff475766', borderRadius: 3,
+                      padding: '3px 10px', cursor: 'pointer', fontSize: 9,
+                      fontFamily: 'inherit', letterSpacing: 1,
+                    }}
+                  >
+                    RETRY
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
               {[
                 ['💸', 'Real funds will be used — orders go to your Delta Exchange account'],
@@ -581,14 +689,24 @@ function AlgoSection() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => setConfirming(false)}
+                onClick={closeModal}
                 style={{ flex: 1, padding: '9px 0', background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
               >
                 Cancel
               </button>
               <button
                 onClick={confirmEnable}
-                style={{ flex: 2, padding: '9px 0', background: '#2a0808', color: '#ff4757', border: '1px solid #ff475766', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800 }}
+                disabled={!canEnable}
+                title={canEnable ? 'Credentials verified — enable algo' : 'Preflight must succeed first'}
+                style={{
+                  flex: 2, padding: '9px 0',
+                  background: canEnable ? '#2a0808' : 'var(--bg)',
+                  color: canEnable ? '#ff4757' : 'var(--text-dim)',
+                  border: `1px solid ${canEnable ? '#ff475766' : 'var(--border)'}`,
+                  borderRadius: 5, cursor: canEnable ? 'pointer' : 'not-allowed',
+                  fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
+                  opacity: canEnable ? 1 : 0.6,
+                }}
               >
                 ▶ Enable Algo
               </button>
@@ -605,16 +723,66 @@ export function AlgoToggle() {
   const { data: algoData, isLoading } = useAlgoMode();
   const setAlgoMode = useSetAlgoMode();
   const [confirming, setConfirming] = useState(false);
+  // Preflight check state — runs when modal opens, gates the Enable button.
+  const [preflight, setPreflight] = useState<
+    | { state: 'pending' }
+    | { state: 'ok'; message: string; account: string }
+    | { state: 'fail'; reason: string; hint?: string; serverIp?: string }
+    | null
+  >(null);
   const enabled = algoData?.enabled ?? false;
   const pending = setAlgoMode.isPending;
+
+  const runPreflight = async () => {
+    setPreflight({ state: 'pending' });
+    try {
+      const resp = await api.get<{
+        ok: boolean;
+        account?: string;
+        message?: string;
+        balance?: string;
+        reason?: string;
+        hint?: string;
+        server_ip?: string;
+      }>('/api/v1/trading/test-credentials');
+      if (resp.ok) {
+        setPreflight({
+          state: 'ok',
+          message: resp.message ?? `Connected · ${resp.balance ?? 'OK'}`,
+          account: resp.account ?? 'Delta Exchange',
+        });
+      } else {
+        setPreflight({
+          state: 'fail',
+          reason: resp.reason ?? 'Credential check failed',
+          hint: resp.hint,
+          serverIp: resp.server_ip,
+        });
+      }
+    } catch (e) {
+      setPreflight({
+        state: 'fail',
+        reason: e instanceof Error ? e.message : String(e),
+      });
+    }
+  };
 
   const handleClick = () => {
     if (enabled) {
       setAlgoMode.mutate(false);
     } else {
       setConfirming(true);
+      // Fire preflight on open so the button reflects credential state immediately.
+      runPreflight();
     }
   };
+
+  const closeModal = () => {
+    setConfirming(false);
+    setPreflight(null);
+  };
+
+  const canEnable = preflight?.state === 'ok' && !pending;
 
   return (
     <>
@@ -645,13 +813,73 @@ export function AlgoToggle() {
           <div style={{
             background: 'var(--bg-card)', border: '1px solid #ff475733',
             borderTop: '3px solid #ff4757', borderRadius: 8,
-            padding: '22px 24px', width: 340,
+            padding: '22px 24px', width: 400,
             boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>⚡ Enable Algo Trading?</div>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 14 }}>
               Sterling will automatically place <strong style={{ color: 'var(--text-muted)' }}>real live orders</strong> on Delta Exchange India for every actionable signal.
             </div>
+
+            {/* Preflight status block */}
+            <div style={{
+              border: `1px solid ${
+                preflight?.state === 'ok' ? '#44cc8866' :
+                preflight?.state === 'fail' ? '#ff475766' :
+                'var(--border)'
+              }`,
+              background: preflight?.state === 'ok' ? '#0a2a14' :
+                          preflight?.state === 'fail' ? '#2a0808' :
+                          'var(--bg)',
+              borderRadius: 5, padding: '8px 10px', marginBottom: 14, fontSize: 10,
+            }}>
+              {preflight === null && (
+                <span style={{ color: 'var(--text-faint)' }}>Preflight not run.</span>
+              )}
+              {preflight?.state === 'pending' && (
+                <span style={{ color: 'var(--text-faint)' }}>
+                  ⏳ Verifying Delta Exchange credentials…
+                </span>
+              )}
+              {preflight?.state === 'ok' && (
+                <div style={{ color: '#44cc88', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>✓</span>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{preflight.account}</div>
+                    <div style={{ color: '#88dda0', marginTop: 2, fontSize: 10 }}>
+                      {preflight.message}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {preflight?.state === 'fail' && (
+                <div style={{ color: '#ff4757' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>✕ {preflight.reason}</div>
+                  {preflight.hint && (
+                    <div style={{ color: '#ffa0a8', fontSize: 9, lineHeight: 1.5, marginBottom: 4 }}>
+                      {preflight.hint}
+                    </div>
+                  )}
+                  {preflight.serverIp && (
+                    <div style={{ color: '#ffa0a8', fontSize: 9, fontFamily: 'monospace' }}>
+                      Server IP: {preflight.serverIp}
+                    </div>
+                  )}
+                  <button
+                    onClick={runPreflight}
+                    style={{
+                      marginTop: 6, background: 'transparent', color: '#ff4757',
+                      border: '1px solid #ff475766', borderRadius: 3,
+                      padding: '3px 10px', cursor: 'pointer', fontSize: 9,
+                      fontFamily: 'inherit', letterSpacing: 1,
+                    }}
+                  >
+                    RETRY
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
               {[
                 ['💸', 'Real funds — orders go to your Delta Exchange account'],
@@ -666,12 +894,24 @@ export function AlgoToggle() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setConfirming(false)}
+              <button onClick={closeModal}
                 style={{ flex: 1, padding: '9px 0', background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}>
                 Cancel
               </button>
-              <button onClick={() => { setConfirming(false); setAlgoMode.mutate(true); }}
-                style={{ flex: 2, padding: '9px 0', background: '#2a0808', color: '#ff4757', border: '1px solid #ff475766', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800 }}>
+              <button
+                onClick={() => { closeModal(); setAlgoMode.mutate(true); }}
+                disabled={!canEnable}
+                title={canEnable ? 'Credentials verified — enable algo' : 'Preflight must succeed first'}
+                style={{
+                  flex: 2, padding: '9px 0',
+                  background: canEnable ? '#2a0808' : 'var(--bg)',
+                  color: canEnable ? '#ff4757' : 'var(--text-dim)',
+                  border: `1px solid ${canEnable ? '#ff475766' : 'var(--border)'}`,
+                  borderRadius: 5, cursor: canEnable ? 'pointer' : 'not-allowed',
+                  fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
+                  opacity: canEnable ? 1 : 0.6,
+                }}
+              >
                 ▶ Enable Algo
               </button>
             </div>

@@ -60,6 +60,84 @@ function fmt(n?: number, d = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
+
+// ── G3: Next exit reason pill ─────────────────────────────────────────────
+//
+// Displays whichever exit boundary is closest to current price. Reason
+// priority mirrors backend monitor_engine.check_exits():
+//   DTE → SL → TP. Always wrapped in a `title` tooltip with full detail.
+
+interface ExitGuess {
+  label: string;
+  distance_pct: number;
+  color: string;
+  detail: string;
+}
+
+function nextExitGuess(pos: PaperPosition, currentSpot: number | null): ExitGuess | null {
+  const entry = pos.entry_spot_price;
+  const sl = pos.current_sl;
+  const tp = pos.current_tp;
+  const leg = pos.sized_trade?.structure?.legs?.[0];
+  const direction = pos.sized_trade?.structure?.direction;
+
+  if (leg?.dte != null) {
+    const ageDays = (Date.now() - pos.entry_timestamp_ms) / 86_400_000;
+    const remaining = Math.max(0, leg.dte - ageDays);
+    if (remaining <= 5) {
+      return {
+        label: 'DTE',
+        distance_pct: 0,
+        color: '#cc6644',
+        detail: `≈${remaining.toFixed(1)}d to expiry — time stop fires at 3d`,
+      };
+    }
+  }
+
+  const ref = currentSpot ?? entry;
+  const candidates: { label: string; price: number; color: string; reason: string }[] = [];
+  if (sl && sl > 0) candidates.push({ label: 'SL', price: sl, color: '#cc4444', reason: 'Trail stop hit' });
+  if (tp && tp > 0) candidates.push({ label: 'TP', price: tp, color: '#44cc88', reason: 'Take-profit hit' });
+  if (candidates.length === 0) return null;
+
+  const filtered = candidates.filter((c) => {
+    if (direction === 'long')  return (c.label === 'SL' && c.price < ref) || (c.label === 'TP' && c.price > ref);
+    if (direction === 'short') return (c.label === 'SL' && c.price > ref) || (c.label === 'TP' && c.price < ref);
+    return true;
+  });
+  const pool = filtered.length > 0 ? filtered : candidates;
+  pool.sort((a, b) => Math.abs(a.price - ref) - Math.abs(b.price - ref));
+  const top = pool[0];
+  const dist = Math.abs(top.price - ref) / Math.max(ref, 1) * 100;
+  return {
+    label: top.label,
+    distance_pct: dist,
+    color: top.color,
+    detail: `${top.reason} at $${fmt(top.price)} (${dist.toFixed(2)}% away)`,
+  };
+}
+
+function NextExitPill({ pos, currentSpot }: { pos: PaperPosition; currentSpot: number | null }) {
+  const guess = nextExitGuess(pos, currentSpot);
+  if (!guess) return null;
+  return (
+    <span
+      title={guess.detail}
+      style={{
+        fontSize: 10, padding: '2px 7px', borderRadius: 3,
+        background: guess.color + '18',
+        border: `1px solid ${guess.color}44`,
+        color: guess.color,
+        fontWeight: 700, letterSpacing: 0.5, cursor: 'help',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      NEXT: {guess.label}
+      {guess.distance_pct > 0 && ` ${guess.distance_pct.toFixed(2)}%`}
+    </span>
+  );
+}
+
 function TrailStopRow({ posId, entrySpot, currentSpot }: {
   posId: string; entrySpot: number; currentSpot?: number | null;
 }) {
@@ -203,6 +281,16 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           )}
         </span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {(pos.status === 'open' || pos.status === 'partially_closed') && (
+            <NextExitPill
+              pos={pos}
+              currentSpot={
+                livePnl != null
+                  ? pos.entry_spot_price + livePnl / Math.max(0.01, pos.sized_trade.contracts)
+                  : null
+              }
+            />
+          )}
           {livePnl != null && (
             <span style={{
               fontSize: 12, fontWeight: 700,

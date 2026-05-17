@@ -71,6 +71,14 @@ class AlgoModeResponse(BaseModel):
     enabled: bool
 
 
+class AlgoRouterModeRequest(BaseModel):
+    mode: str   # "paper" | "shadow" | "live"
+
+
+class AlgoRouterModeResponse(BaseModel):
+    mode: str
+
+
 @router.get("/algo-mode", response_model=AlgoModeResponse)
 async def get_algo_mode(request: Request) -> AlgoModeResponse:
     return AlgoModeResponse(enabled=getattr(request.app.state, "algo_mode", False))
@@ -82,6 +90,35 @@ async def set_algo_mode(body: AlgoModeRequest, request: Request) -> AlgoModeResp
     request.app.state.algo_mode = body.enabled
     set_config("algo_mode", "true" if body.enabled else "false")
     return AlgoModeResponse(enabled=body.enabled)
+
+
+@router.get("/algo-router-mode", response_model=AlgoRouterModeResponse)
+async def get_algo_router_mode(request: Request) -> AlgoRouterModeResponse:
+    """
+    Phase F: paper / shadow / live dispatch mode for the auto-trader.
+
+      paper  — never call the exchange; always create a paper position
+      shadow — call the exchange AND create a paper twin for audit/diff
+      live   — call the exchange; no paper record (default for back-compat)
+    """
+    return AlgoRouterModeResponse(
+        mode=getattr(request.app.state, "algo_router_mode", "live") or "live",
+    )
+
+
+@router.post("/algo-router-mode", response_model=AlgoRouterModeResponse)
+async def set_algo_router_mode(
+    body: AlgoRouterModeRequest, request: Request,
+) -> AlgoRouterModeResponse:
+    if body.mode not in ("paper", "shadow", "live"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid router mode {body.mode!r}. Must be paper|shadow|live.",
+        )
+    from app.services.db import set_config
+    request.app.state.algo_router_mode = body.mode
+    set_config("algo_router_mode", body.mode)
+    return AlgoRouterModeResponse(mode=body.mode)
 
 
 @router.post("/place-order", response_model=LiveOrderResponse)
@@ -308,16 +345,21 @@ def _create_paper_tracking(
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
-            strike=entry_price, expiry_date="", option_type=body.instrument_type,
-            mark_price=entry_price, mark_iv=None,
-            delta=1.0 if body.direction == "long" else -1.0, dte=0,
+            underlying=sym,
+            strike=entry_price, expiry_date="", dte=0,
+            option_type=body.instrument_type,
+            bid=0.0, ask=0.0,
+            mark_price=entry_price, mid_price=entry_price,
+            mark_iv=0.0,
+            delta=1.0 if body.direction == "long" else -1.0,
+            open_interest=0.0, volume_24h=0.0,
+            spread_pct=0.0, health_score=0.0, healthy=True,
         )
         structure = TradeStructure(
             structure_type=body.instrument_type,
             direction=direction, legs=[leg],
             net_premium=entry_price, max_loss=entry_price * 0.03,
             max_gain=None, risk_reward=2.0,
-            setup_reason=body.notes or f"{'LIVE' if is_live_order else 'PAPER'} {body.direction.upper()} {body.instrument_type}",
             score=0.0, score_breakdown={},
         )
         risk = RiskParams()
@@ -372,16 +414,20 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
-            strike=0.0, expiry_date="", option_type=body.instrument_type,
-            mark_price=0.0, mark_iv=None,
-            delta=1.0 if body.direction == "long" else -1.0, dte=0,
+            underlying=sym,
+            strike=0.0, expiry_date="", dte=0,
+            option_type=body.instrument_type,
+            bid=0.0, ask=0.0,
+            mark_price=0.0, mid_price=0.0, mark_iv=0.0,
+            delta=1.0 if body.direction == "long" else -1.0,
+            open_interest=0.0, volume_24h=0.0,
+            spread_pct=0.0, health_score=0.0, healthy=True,
         )
         structure = TradeStructure(
             structure_type=body.instrument_type,
             direction=direction, legs=[leg],
             net_premium=0.0, max_loss=0.0,
             max_gain=None, risk_reward=2.0,
-            setup_reason=f"[ALGO-FAILED] {body.direction.upper()} {body.instrument_type}",
             score=0.0, score_breakdown={},
         )
         risk = RiskParams()

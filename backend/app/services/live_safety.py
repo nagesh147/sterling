@@ -234,3 +234,49 @@ def reset_all_for_tests() -> None:
     _RETRY_QUEUE.clear()
     global _DAILY_LOSS_CFG
     _DAILY_LOSS_CFG = DailyLossConfig()
+
+
+# ─── 7. Per-symbol position cap (Phase F) ────────────────────────────────────
+
+
+@dataclass
+class PerSymbolCapConfig:
+    """Maximum simultaneously-open positions per underlying."""
+    max_per_symbol: int = 3
+
+
+_PER_SYMBOL_CFG = PerSymbolCapConfig()
+
+
+def configure_per_symbol_cap(cfg: PerSymbolCapConfig) -> None:
+    global _PER_SYMBOL_CFG
+    _PER_SYMBOL_CFG = cfg
+
+
+def open_count_for_symbol(positions: List[Any], sym: str) -> int:
+    """Count open / partially_closed positions for a single underlying."""
+    sym_u = sym.upper()
+    n = 0
+    for p in positions:
+        try:
+            status_value = getattr(p, "status", None)
+            status_str = getattr(status_value, "value", status_value)
+            if status_str not in ("open", "partially_closed"):
+                continue
+            if str(getattr(p, "underlying", "")).upper() == sym_u:
+                n += 1
+        except Exception:
+            continue
+    return n
+
+
+def per_symbol_cap_breach(sym: str, positions: List[Any]) -> Optional[str]:
+    """
+    Returns a human-readable reason when adding another position on `sym`
+    would exceed the per-symbol cap. None when the trade is allowed.
+    """
+    n = open_count_for_symbol(positions, sym)
+    cap = _PER_SYMBOL_CFG.max_per_symbol
+    if n >= cap:
+        return f"per-symbol cap reached: {n}/{cap} open on {sym.upper()}"
+    return None

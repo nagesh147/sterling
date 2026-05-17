@@ -29,6 +29,47 @@ function computeEma(closes: number[], period: number): (number | null)[] {
   return result;
 }
 
+
+// G4: Wilder's ATR(14) computed bar-by-bar so the chart can draw the same
+// adaptive trail band the engine uses live. Mirror of the backend
+// trailing_stop._adaptive_base_mult mapping.
+function computeAtr(
+  highs: number[], lows: number[], closes: number[], period = 14,
+): (number | null)[] {
+  const n = closes.length;
+  if (n < period + 1) return closes.map(() => null);
+  const tr: number[] = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const h = highs[i], l = lows[i], pc = closes[i - 1];
+    tr[i] = Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc));
+  }
+  const atr: (number | null)[] = new Array(n).fill(null);
+  let seed = 0;
+  for (let i = 1; i <= period; i++) seed += tr[i];
+  seed /= period;
+  atr[period] = seed;
+  for (let i = period + 1; i < n; i++) {
+    atr[i] = ((atr[i - 1] as number) * (period - 1) + tr[i]) / period;
+  }
+  return atr;
+}
+
+
+function adaptiveTrailMult(
+  atrSeries: (number | null)[], idx: number, lookback = 100,
+): number {
+  const window: number[] = [];
+  for (let i = Math.max(0, idx - lookback + 1); i <= idx; i++) {
+    const v = atrSeries[i];
+    if (v !== null && !Number.isNaN(v)) window.push(v);
+  }
+  if (window.length < 5) return 2.0;
+  const cur = window[window.length - 1];
+  const below = window.filter((v) => cur > v).length;
+  const pct = (below / window.length) * 100;
+  return 1.5 + pct * 0.020; // 0% → 1.5, 100% → 3.5
+}
+
 const REGIME_BG: Record<string, string> = {
   BULL_TREND: '#00c87a08',
   BEAR_TREND: '#f0305008',
@@ -48,6 +89,9 @@ export function ChartPane({ underlying }: Props) {
   const ema21Ref = useRef<any>(null);
   const ema55Ref = useRef<any>(null);
   const volRef = useRef<any>(null);
+  // G4: ATR-trail band — upper / lower envelope around close
+  const atrUpperRef = useRef<any>(null);
+  const atrLowerRef = useRef<any>(null);
 
   const regime = snap?.macro_regime ?? 'RANGING';
   const bgTint = REGIME_BG[regime] ?? 'transparent';
@@ -104,6 +148,22 @@ export function ChartPane({ underlying }: Props) {
       scaleMargins: { top: 0.85, bottom: 0 },
     });
 
+    /* G4: ATR-trail band */
+    atrUpperRef.current = chart.addSeries(LineSeries, {
+      color: '#cc664488',
+      lineWidth: 1,
+      lineStyle: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
+    atrLowerRef.current = chart.addSeries(LineSeries, {
+      color: '#cc664488',
+      lineWidth: 1,
+      lineStyle: 2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
+
     chartRef.current = chart;
 
     const ro = new ResizeObserver(() => {
@@ -154,6 +214,22 @@ export function ChartPane({ underlying }: Props) {
       }))
     );
 
+    /* G4: ATR-trail band — close ± atr × adaptive_mult */
+    const highs = candles.map((b) => b.high);
+    const lows  = candles.map((b) => b.low);
+    const atr   = computeAtr(highs, lows, closes, 14);
+    const upperPts: { time: any; value: number }[] = [];
+    const lowerPts: { time: any; value: number }[] = [];
+    for (let i = 0; i < candles.length; i++) {
+      const a = atr[i];
+      if (a === null || Number.isNaN(a)) continue;
+      const mult = adaptiveTrailMult(atr, i);
+      upperPts.push({ time: times[i] as any, value: closes[i] + a * mult });
+      lowerPts.push({ time: times[i] as any, value: closes[i] - a * mult });
+    }
+    atrUpperRef.current?.setData(upperPts);
+    atrLowerRef.current?.setData(lowerPts);
+
     chartRef.current?.timeScale().fitContent();
   }, [candles]);
 
@@ -202,6 +278,12 @@ export function ChartPane({ underlying }: Props) {
       <div style={{ display: 'flex', gap: 12, padding: '4px 10px', borderBottom: '1px solid var(--t-border)', flexShrink: 0 }}>
         <span style={{ fontSize: 9, color: 'var(--t-cyan)' }}>── EMA21</span>
         <span style={{ fontSize: 9, color: 'var(--t-amber)' }}>── EMA55</span>
+        <span
+          style={{ fontSize: 9, color: '#cc6644' }}
+          title="Adaptive ATR trail band: close ± ATR(14) × mult, where mult scales with the rolling ATR percentile (1.5–3.5). Mirrors the live trailing-stop engine."
+        >
+          ╌ ATR trail
+        </span>
         <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>Vol</span>
       </div>
 

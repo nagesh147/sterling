@@ -73,6 +73,20 @@ export interface FeedEntry {
   initialStopLoss?: number | null;  // SL at signal creation — never updated
   refreshedAt?: number;             // timestamp of last SL/TP update
   slImproved?: boolean;             // true when SL tightened since card was created
+  // Phase G UI extras — copied from /signals payload at buildEntry time.
+  mtf?: {
+    macro_4h: number;
+    signal_1h: number;
+    execution_15m: number;
+    macro_ok: boolean;
+    signal_ok: boolean;
+    exec_ok: boolean;
+    alignment: string;
+    alignment_label: string;
+    exec_mode: string;
+  } | null;
+  vetoReason?: string | null;
+  signalStrength?: 'STRONG' | 'SIGNAL' | 'NONE' | string;
 }
 
 // ── persistence keys ──────────────────────────────────────────────────────────
@@ -329,6 +343,9 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
     currentState: sig.state,
     dismissed: false,
     initialStopLoss: sl,   // preserved forever — never overwritten by live updates
+    mtf: sig.mtf_breakdown ?? null,
+    vetoReason: sig.veto_reason ?? null,
+    signalStrength: sig.signal_strength,
   };
 }
 

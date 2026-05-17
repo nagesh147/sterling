@@ -883,15 +883,27 @@ async def _compute_signal_item(
     Compute a full signal row for one instrument.
     Updates snapshot_cache so subsequent calls (and SSE) benefit from this data.
     stop_mult and rr come from the active TradingModeConfig (stop_atr_mult, rr_target).
+
+    Phase D: mode-aware candle resolution.
+    Each TradingModeConfig defines its own (macro_tf, signal_tf, execution_tf):
+      scalping   → 15m / 5m  / 1m
+      intraday   → 1H  / 15m / 5m
+      swing      → 4H  / 1H  / 15m  (legacy default)
+      positional → D   / 4H  / 1H
+    Variable names (c4h/c1h/c15m) are kept for diff stability — the values
+    they hold reflect the active mode's resolution, not literally 4H/1H/15m.
     """
     sym = inst.underlying
     now_ms = int(time.time() * 1000)
+    macro_tf  = mode.macro_tf      if mode else "4H"
+    signal_tf = mode.signal_tf     if mode else "1H"
+    exec_tf   = mode.execution_tf  if mode else "15m"
     try:
         spot, c4h, c1h, c15m = await asyncio.gather(
             adapter.get_index_price(inst),
-            adapter.get_candles(inst, "4H", limit=100),
-            adapter.get_candles(inst, "1H", limit=200),
-            adapter.get_candles(inst, "15m", limit=50),
+            adapter.get_candles(inst, macro_tf,  limit=100),
+            adapter.get_candles(inst, signal_tf, limit=200),
+            adapter.get_candles(inst, exec_tf,   limit=50),
         )
         regime      = compute_regime(c4h, macro_filter=macro_filter)
         signal      = compute_signal(c1h, st_threshold=st_threshold)
@@ -1003,6 +1015,8 @@ async def _compute_signal_item(
             exec_confidence=round(exec_timing.confidence, 2),
             all_green=signal.all_green,
             all_red=signal.all_red,
+            signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
+            signal_strength=getattr(signal, 'signal_strength', 'NONE'),
         )
 
         # C1/C2: MTF breakdown + filter reason for the frontend.
@@ -1441,7 +1455,7 @@ async def refresh_signals_now(request: Request) -> dict:
 
     adapter = _adapter(request)
     results = await asyncio.gather(
-        *[_compute_signal_item(inst, adapter, macro_filter, st_threshold, stop_mult, rr_target)
+        *[_compute_signal_item(inst, adapter, macro_filter, st_threshold, stop_mult, rr_target, mode=mode)
           for inst in serveable],
         return_exceptions=True,
     )
