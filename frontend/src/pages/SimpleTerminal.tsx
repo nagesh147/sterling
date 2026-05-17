@@ -12,6 +12,8 @@ import { DataSourceSelector } from '../components/DataSourceSelector';
 import LiveControlPanel from '../components/LiveControlPanel';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
+import { OHLCVChart } from '../components/OHLCVChart';
+import { BacktestPanel } from '../components/BacktestPanel';
 import '../styles/terminal.css';
 
 function CbChip() {
@@ -58,7 +60,7 @@ export function SimpleTerminal() {
   const toggleTheme = useToggleTheme();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
-  const [activeSection, setActiveSection] = useState<'signals' | 'positions' | 'calibration'>('signals');
+  const [activeSection, setActiveSection] = useState<'signals' | 'positions' | 'backtest' | 'calibration'>('signals');
 
   return (
     <div className="term-root">
@@ -167,8 +169,9 @@ export function SimpleTerminal() {
         {([
           ['signals',     'SIGNALS'],
           ['positions',   'POSITIONS'],
+          ['backtest',    'BACKTEST'],
           ['calibration', 'CALIBRATION'],
-        ] as ['signals' | 'positions' | 'calibration', string][]).map(([id, label]) => (
+        ] as ['signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setActiveSection(id)}
@@ -224,6 +227,54 @@ export function SimpleTerminal() {
         {activeSection === 'positions' && (
           <div style={{ maxWidth: 1200, margin: '0 auto' }}>
             <PositionsStrip />
+          </div>
+        )}
+        {activeSection === 'backtest' && (
+          <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+            {/* OHLCV candlestick chart — top section */}
+            <div style={{
+              background: 'var(--t-bg2)',
+              border: '1px solid var(--t-border)',
+              borderRadius: 10,
+              overflow: 'hidden',
+              marginBottom: 14,
+            }}>
+              <div style={{
+                padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
+                  HISTORICAL CANDLES
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
+                  Stored from Delta Exchange — 6 months · 5m 15m 30m 1h 2h 4h
+                </span>
+              </div>
+              <OHLCVChart />
+            </div>
+
+            {/* Sterling signal backtest — bottom section */}
+            <div style={{
+              background: 'var(--t-bg2)',
+              border: '1px solid var(--t-border)',
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
+                  SIGNAL BACKTEST
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
+                  Sterling regime + supertrend signal quality analysis
+                </span>
+              </div>
+              <div style={{ padding: 14 }}>
+                <BacktestPanel underlying="BTC" />
+              </div>
+            </div>
           </div>
         )}
         {activeSection === 'calibration' && (

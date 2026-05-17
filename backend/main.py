@@ -30,6 +30,7 @@ from app.api.v1.endpoints.candles import router as candles_router
 from app.api.v1.endpoints.analytics import router as analytics_router
 from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
 from app.api.v1.endpoints.trading import router as trading_router
+from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.services import alert_store as _alert_store_svc
 
 log = get_logger(__name__)
@@ -711,6 +712,17 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
         await asyncio.sleep(interval)  # sleep at end so first run is immediate
 
 
+async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
+    """Keeps OHLCV store fresh — runs immediately then every hour."""
+    from app.services.delta_candle_fetcher import run_full_fetch
+    while True:
+        try:
+            await run_full_fetch()
+        except Exception as exc:
+            log.warning("OHLCV background update error: %s", exc)
+        await asyncio.sleep(interval_hours * 3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -723,6 +735,10 @@ async def lifespan(app: FastAPI):
     _eval_history_svc.bootstrap()
     from app.services import arrow_store as _arrow_store_svc
     _arrow_store_svc.bootstrap()
+
+    # Init OHLCV table and kick off first fetch in background (non-blocking)
+    from app.services.ohlcv_store import init_ohlcv_table
+    init_ohlcv_table()
 
     # Restore signal tracker state — prevents re-firing Telegram on server restart
     from app.api.v1.endpoints.directional import _load_signal_tracker_state, _migrate_signal_ids_to_v2
@@ -826,9 +842,16 @@ async def lifespan(app: FastAPI):
     log.info("Background position monitor started (interval=mode.poll_interval_s)")
     retry_worker_task = asyncio.create_task(_background_retry_worker(app, base_interval=60))
     log.info("Background retry worker started (every 60s + exponential backoff)")
+    ohlcv_task = asyncio.create_task(_background_ohlcv_updater(interval_hours=1))
+    log.info("OHLCV background updater started (hourly)")
 
     yield
 
+    ohlcv_task.cancel()
+    try:
+        await ohlcv_task
+    except (Exception, BaseException):
+        pass
     bg_task.cancel()
     try:
         await bg_task
@@ -896,6 +919,7 @@ def create_app() -> FastAPI:
     app.include_router(session_router, prefix="/api/v1")
     app.include_router(trading_mode_router, prefix="/api/v1")
     app.include_router(candles_router, prefix="/api/v1")
+    app.include_router(ohlcv_router, prefix="/api/v1")
     app.include_router(analytics_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
     app.include_router(trading_router, prefix="/api/v1")
