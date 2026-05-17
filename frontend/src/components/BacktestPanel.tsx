@@ -357,7 +357,7 @@ function simulateTrades(
   const tpDec        = stopDec * rrRatio;
   const feeRate      = FEE[feeMode];
   const slipDec      = slippagePct / 100;
-  const roundTrip    = feeRate * 2 + slipDec * 2;  // fees + slippage both sides
+
 
   let capital        = initialCapital;
   let peakCap        = initialCapital;
@@ -1155,6 +1155,7 @@ const _MTF_PROFILE_ORDER = ['scalping_15m', 'intraday_1h', 'intraday_4h'];
 
 function MTFSection({ data }: { data: MTFBacktestResult }) {
   const { profiles, recommended } = data;
+  const _rows = _MTF_PROFILE_ORDER.filter(k => profiles[k]);
   const rateCol = (v: number | null) =>
     v == null ? '#444' : v >= 60 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444';
   const numCol = (v: number | null) =>
@@ -1187,7 +1188,13 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
             </tr>
           </thead>
           <tbody>
-            {_MTF_PROFILE_ORDER.filter(k => profiles[k]).map(key => {
+            {_rows.length === 0 ? (
+              <tr>
+                <td colSpan={11} style={{ padding: '12px 10px', color: '#444', fontSize: 11, textAlign: 'center' as const }}>
+                  No recognized profiles returned
+                </td>
+              </tr>
+            ) : _rows.map(key => {
               const r = profiles[key];
               const isRec = key === recommended;
               return (
@@ -1212,7 +1219,7 @@ function MTFSection({ data }: { data: MTFBacktestResult }) {
                     {r.max_drawdown != null ? `${r.max_drawdown.toFixed(1)}%` : '—'}
                   </td>
                   <td style={{ ...tdBase, color: rateCol(r.fwd1_long_win_rate), fontSize: 10 }}>
-                    {r.fwd1_long_win_rate != null ? `${r.fwd1_long_win_rate}%` : '—'}
+                    {r.fwd1_long_win_rate != null ? `${r.fwd1_long_win_rate.toFixed(1)}%` : '—'}
                     <span style={{ color: '#444', marginLeft: 3, fontSize: 9 }}>{r.fwd1_label}</span>
                   </td>
                   <td style={{ padding: '4px 10px', textAlign: 'center' as const }}>
@@ -1308,7 +1315,7 @@ export function BacktestPanel({ underlying }: Props) {
               onClick={() => runMtf({
                 underlying,
                 lookback_days: mtfLookback,
-                profiles: ['scalping_15m', 'intraday_1h'],
+                profiles: ['scalping_15m', 'intraday_1h', 'intraday_4h'],
               })}
               disabled={mtfPending}
             >
