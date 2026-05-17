@@ -26,6 +26,29 @@
   --purple:       #A855F7;
 }
 
+/* ── Grey — pure neutral zinc, no blue cast (shadcn reference) ── */
+[data-theme="grey"] {
+  /* Backgrounds — zinc-900/800 charcoal family */
+  --bg:           #18181B;   /* zinc-900 */
+  --bg-card:      #1F1F23;   /* zinc-850 */
+  --bg-surface:   #27272A;   /* zinc-800 */
+  --bg-input:     #2E2E32;   /* zinc-750 */
+  /* Borders — subtle zinc separators */
+  --border:       #3F3F46;   /* zinc-700 */
+  --border-light: #52525B;   /* zinc-600 */
+  /* Text — crisp white → muted zinc */
+  --text-primary: #FAFAFA;   /* zinc-50 */
+  --text-muted:   #A1A1AA;   /* zinc-400 */
+  --text-dim:     #71717A;   /* zinc-500 */
+  --text-faint:   #52525B;   /* zinc-600 */
+  /* Signal colors — same as dark, stays sharp */
+  --accent:       #10B981;
+  --danger:       #EF4444;
+  --warning:      #F59E0B;
+  --blue:         #3B82F6;
+  --purple:       #A855F7;
+}
+
 [data-theme="light"] {
   --bg:           #F8FAFC;
   --bg-card:      #FFFFFF;

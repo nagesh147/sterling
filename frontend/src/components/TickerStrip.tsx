@@ -129,12 +129,12 @@ function TickerCard({ item, price, prevPrice }: {
     <div style={{
       display: 'flex',
       alignItems: 'center',
-      gap: 10,
+      gap: 8,
       background: 'var(--t-bg3)',
       border: '1px solid var(--t-border)',
-      borderRadius: 10,
-      padding: '8px 12px',
-      minWidth: 220,
+      borderRadius: 8,
+      padding: '7px 10px',
+      width: 210,
       flexShrink: 0,
       position: 'relative',
       overflow: 'hidden',
@@ -248,12 +248,12 @@ export function TickerStrip() {
     <div style={{
       background: 'var(--t-bg2)',
       borderBottom: '1px solid var(--t-border)',
-      padding: '6px 14px',
+      padding: '6px 20px',
       display: 'flex',
       alignItems: 'center',
       gap: 8,
-      overflowX: 'auto',
       flexShrink: 0,
+      overflowX: 'auto',
       scrollbarWidth: 'none',
     } as React.CSSProperties}>
       {displayItems.map(item => {

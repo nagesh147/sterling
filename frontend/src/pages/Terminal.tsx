@@ -113,14 +113,14 @@ export function Terminal() {
           <PaperLiveToggle />
           <button
             onClick={toggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}
             style={{
               background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
               color: 'var(--t-dim)', cursor: 'pointer', padding: '2px 7px',
               fontFamily: 'inherit', fontSize: 12, lineHeight: 1,
             }}
           >
-            {theme === 'dark' ? '☀' : '◑'}
+            {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
           </button>
           <button
             onClick={() => setAppMode(appMode === 'pro' ? 'basic' : 'pro')}

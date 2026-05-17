@@ -239,10 +239,10 @@ export function Dashboard() {
             </>
           )}
 
-          {/* Theme toggle */}
+          {/* Theme toggle — cycles dark → grey → light → dark */}
           <button
             onClick={toggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}
             style={{
               background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
@@ -255,7 +255,7 @@ export function Dashboard() {
               lineHeight: 1,
             }}
           >
-            {theme === 'dark' ? '☀' : '◑'}
+            {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
           </button>
 
           {/* Simple / Advanced toggle */}

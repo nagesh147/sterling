@@ -66,23 +66,23 @@ export function SimpleTerminal() {
     <div className="term-root">
       <DrawdownBreakerBadge />
 
-      {/* ── Floating header pill ─────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────────── */}
       <div style={{
         flexShrink: 0,
-        padding: '10px 16px 0',
-        background: 'var(--t-bg)',
+        padding: '8px 14px',
+        background: 'var(--t-bg2)',
+        borderBottom: '1px solid var(--t-border)',
       }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: 46,
-          background: 'rgba(13, 17, 26, 0.92)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 14,
-          padding: '0 20px',
-          backdropFilter: 'blur(20px)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)',
+          height: 40,
+          background: 'rgba(10, 14, 22, 0.96)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 10,
+          padding: '0 18px',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
         }}>
           {/* Wordmark */}
           <span style={{
@@ -202,10 +202,10 @@ export function SimpleTerminal() {
           <CbChip />
           <button
             onClick={toggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}
             style={chip}
           >
-            {theme === 'dark' ? '☀' : '◑'}
+            {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
           </button>
           <button
             onClick={() => setAppMode('pro')}
@@ -218,19 +218,19 @@ export function SimpleTerminal() {
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px', background: 'var(--t-bg)' }}>
+      <div style={{ flex: 1, overflow: 'auto', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
         {activeSection === 'signals' && (
-          <div className="term-signals-wrap" style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div className="term-signals-wrap" style={{ flex: 1, minHeight: 0 }}>
             <SignalsTable />
           </div>
         )}
         {activeSection === 'positions' && (
-          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ flex: 1, padding: '10px 14px' }}>
             <PositionsStrip />
           </div>
         )}
         {activeSection === 'backtest' && (
-          <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+          <div style={{ flex: 1, padding: '10px 14px', overflow: 'auto' }}>
             {/* OHLCV candlestick chart — top section */}
             <div style={{
               background: 'var(--t-bg2)',
@@ -278,7 +278,7 @@ export function SimpleTerminal() {
           </div>
         )}
         {activeSection === 'calibration' && (
-          <div style={{ maxWidth: 600, margin: '0 auto' }}>
+          <div style={{ flex: 1, padding: '10px 14px', maxWidth: 700 }}>
             <CalibrationPanel />
           </div>
         )}

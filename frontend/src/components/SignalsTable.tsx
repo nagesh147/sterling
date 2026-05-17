@@ -1343,7 +1343,7 @@ function SignalsFeedBody({
   })();
 
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* empty state */}
       {visible.length === 0 && (
         <div style={{ background: 'var(--bg-card)', padding: '20px 16px' }}>
@@ -1432,7 +1432,7 @@ function SignalsFeedBody({
 
       {/* scrollable feed */}
       {visible.length > 0 && (
-        <div className="signal-feed-scroll" style={{ maxHeight: 540, overflowY: 'auto' }}>
+        <div className="signal-feed-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
           {visible.map(entry => (
             <FeedRow
               key={entry.id}
@@ -1449,10 +1449,11 @@ function SignalsFeedBody({
 
       {/* footer */}
       <div style={{
-        padding: '6px 14px', background: 'var(--bg)',
+        padding: '5px 14px', background: 'var(--bg)',
         borderTop: '1px solid var(--border)',
         fontSize: 9, color: 'var(--text-faint)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexShrink: 0,
       }}>
         <span>
           {isFut
@@ -1465,7 +1466,7 @@ function SignalsFeedBody({
           </span>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -1552,7 +1553,7 @@ export function SignalsTable() {
   });
 
   return (
-    <div style={{ marginBottom: 16, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 0, overflow: 'hidden', border: 'none', borderBottom: '1px solid var(--border)' }}>
 
       {/* ── Header bar ── */}
       <div style={{
@@ -1656,8 +1657,10 @@ export function SignalsTable() {
         </div>
       </div>
 
-      {/* ── Feed body ── */}
-      <SignalsFeedBody type={tab} state={state} filter={filter} localMode={localMode} />
+      {/* ── Feed body — flex: 1 so it fills remaining terminal height ── */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <SignalsFeedBody type={tab} state={state} filter={filter} localMode={localMode} />
+      </div>
     </div>
   );
 }

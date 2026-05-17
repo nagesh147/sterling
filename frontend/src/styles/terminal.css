@@ -88,6 +88,26 @@
 }
 .t-resize-handle-h:hover { background: var(--t-blue); }
 
+/* Grey mode overrides for .term-root — neutral zinc, no blue cast */
+[data-theme="grey"] .term-root {
+  --t-bg:     #18181B;
+  --t-bg2:    #1F1F23;
+  --t-bg3:    #27272A;
+  --t-border: #3F3F46;
+  --t-br2:    #52525B;
+  --t-text:   #A1A1AA;
+  --t-bright: #FAFAFA;
+  --t-dim:    #71717A;
+  --t-green:  #10B981;
+  --t-red:    #EF4444;
+  --t-amber:  #F59E0B;
+  --t-blue:   #3B82F6;
+  --t-cyan:   #06B6D4;
+  --t-purple: #A855F7;
+  background: var(--t-bg);
+  color: var(--t-text);
+}
+
 /* Light mode overrides for .term-root */
 [data-theme="light"] .term-root {
   --t-bg:     #f4f6f9;
