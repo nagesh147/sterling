@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Generator, List, Optional
+from typing import Generator, List, Optional, Tuple
 from app.schemas.market import Candle
 from app.schemas.directional import SignalResult
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi, ha_body_bull
@@ -7,8 +7,6 @@ from app.engines.indicators.supertrend import compute_supertrend
 from app.engines.indicators.rsi import rsi as compute_rsi
 from app.engines.indicators.bollinger import bollinger_bands
 from app.engines.indicators.keltner import keltner
-
-_ST_CONFIGS = [(7, 3.0), (14, 2.0), (21, 1.0)]
 
 
 def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
@@ -44,7 +42,7 @@ def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
 def compute_signal(
     candles_1h: List[Candle],
     st_threshold: int = 3,
-    st_configs: Optional[List[tuple]] = None,
+    st_configs: Optional[List[Tuple[int, float]]] = None,
 ) -> SignalResult:
     if len(candles_1h) < 30:
         return SignalResult(
@@ -64,6 +62,8 @@ def compute_signal(
     ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
 
     _st_cfgs = st_configs if st_configs is not None else [(7, 3.0), (14, 2.0), (21, 2.0)]
+    if len(_st_cfgs) != 3:
+        raise ValueError(f"st_configs must have exactly 3 (period, multiplier) tuples, got {len(_st_cfgs)}")
     p1, m1 = _st_cfgs[0]
     p2, m2 = _st_cfgs[1]
     p3, m3 = _st_cfgs[2]

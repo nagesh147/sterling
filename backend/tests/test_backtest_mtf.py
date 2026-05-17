@@ -11,12 +11,17 @@ def test_compute_signal_accepts_custom_st_configs():
     assert result.signal_score <= 20.0
 
 def test_compute_signal_accepts_custom_st_threshold():
-    """st_threshold=2 allows 2/3 STs to trigger all_green."""
-    candles = make_candles(60, base=30000.0, trend=10.0)
+    """st_threshold=2 requires fewer ST agreements than st_threshold=3."""
+    # Use enough candles for a stable supertrend
+    candles = make_candles(80, base=30000.0, trend=10.0)
+    # Both should run without error and return valid scores
     result_strict  = compute_signal(candles, st_threshold=3)
     result_relaxed = compute_signal(candles, st_threshold=2)
-    assert isinstance(result_relaxed.all_green, bool)
-    assert isinstance(result_strict.all_green, bool)
+    assert 0.0 <= result_strict.signal_score  <= 20.0
+    assert 0.0 <= result_relaxed.signal_score <= 20.0
+    # If strict is all_green, relaxed must also be (lower threshold = more inclusive)
+    if result_strict.all_green:
+        assert result_relaxed.all_green
 
 def test_compute_signal_default_unchanged():
     """Default call (no new params) returns same result as before."""
