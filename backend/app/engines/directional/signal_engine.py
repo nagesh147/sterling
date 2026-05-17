@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Generator, List
+from typing import Generator, List, Optional
 from app.schemas.market import Candle
 from app.schemas.directional import SignalResult
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi, ha_body_bull
@@ -41,7 +41,11 @@ def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
         )
 
 
-def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalResult:
+def compute_signal(
+    candles_1h: List[Candle],
+    st_threshold: int = 3,
+    st_configs: Optional[List[tuple]] = None,
+) -> SignalResult:
     if len(candles_1h) < 30:
         return SignalResult(
             trend=0, all_green=False, all_red=False,
@@ -59,18 +63,23 @@ def compute_signal(candles_1h: List[Candle], st_threshold: int = 3) -> SignalRes
 
     ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
 
+    _st_cfgs = st_configs if st_configs is not None else [(7, 3.0), (14, 2.0), (21, 2.0)]
+    p1, m1 = _st_cfgs[0]
+    p2, m2 = _st_cfgs[1]
+    p3, m3 = _st_cfgs[2]
+
     # ST1: Heikin-Ashi — smoothed, filters noise
-    st1_line, st1_trend = compute_supertrend(ha_h, ha_l, ha_c, 7, 3.0)
+    st1_line, st1_trend = compute_supertrend(ha_h, ha_l, ha_c, p1, m1)
 
     # ST2: Real candles — medium sensitivity
-    st2_line, st2_trend = compute_supertrend(h, l, c, 14, 2.0)
+    st2_line, st2_trend = compute_supertrend(h, l, c, p2, m2)
 
     # ST3: VWAP-adjusted candles — slower, trend-anchored perspective
     vwap_candles = list(_to_vwap_candles(candles_1h))
     vwap_h = np.array([v.high for v in vwap_candles], dtype=np.float64)
     vwap_l = np.array([v.low for v in vwap_candles], dtype=np.float64)
     vwap_c = np.array([v.close for v in vwap_candles], dtype=np.float64)
-    st3_line, st3_trend = compute_supertrend(vwap_h, vwap_l, vwap_c, 21, 2.0)
+    st3_line, st3_trend = compute_supertrend(vwap_h, vwap_l, vwap_c, p3, m3)
 
     st_trends = [int(st1_trend[-1]), int(st2_trend[-1]), int(st3_trend[-1])]
     st_values = [float(st1_line[-1]), float(st2_line[-1]), float(st3_line[-1])]
