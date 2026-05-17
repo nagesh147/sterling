@@ -29,7 +29,7 @@ _VOLATILE_REGIMES = {MacroRegime.VOLATILE}
 _VETO_REGIMES = {MacroRegime.CHOPPY, MacroRegime.IDLE}
 
 _PARTIAL_ST_MIN = 2
-_HIGH_SCORE_CONFIRM = 16.0  # min signal_score to confirm in RANGING/VOLATILE
+_HIGH_SCORE_CONFIRM = 16.0  # 80% of max-20; stricter than trending (15) — ranging has weaker directional edge
 
 
 def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
@@ -79,8 +79,9 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
         )
 
     # ── Ranging — allow when 2/3 STs strongly aligned ────────────────────────
+    # LONG: outer gate requires 2+ green STs; SHORT allows trend==-1 with 1 red (handled via inner FILTERED fallback)
     elif macro in _RANGING_REGIMES and green_count >= _PARTIAL_ST_MIN and trend == 1:
-        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        sig_score = float(signal.signal_score or 0.0)
         if signal.all_green and sig_score >= _HIGH_SCORE_CONFIRM:
             return SetupResult(
                 state=TradeState.CONFIRMED_SETUP_ACTIVE,
@@ -97,7 +98,7 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
             signal_trend=trend,
         )
     elif macro in _RANGING_REGIMES and trend == -1:
-        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        sig_score = float(signal.signal_score or 0.0)
         if signal.all_red and sig_score >= _HIGH_SCORE_CONFIRM:
             return SetupResult(
                 state=TradeState.CONFIRMED_SETUP_ACTIVE,
@@ -124,7 +125,7 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
 
     # ── Volatile — momentum direction when all STs agree ─────────────────────
     elif macro in _VOLATILE_REGIMES and trend == 1:
-        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        sig_score = float(signal.signal_score or 0.0)
         state = (TradeState.CONFIRMED_SETUP_ACTIVE
                  if signal.all_green and sig_score >= _HIGH_SCORE_CONFIRM
                  else TradeState.EARLY_SETUP_ACTIVE)
@@ -134,7 +135,7 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
         return SetupResult(state=state, direction=Direction.LONG,
                            reason=reason, macro_regime=macro, signal_trend=trend)
     elif macro in _VOLATILE_REGIMES and trend == -1:
-        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        sig_score = float(signal.signal_score or 0.0)
         state = (TradeState.CONFIRMED_SETUP_ACTIVE
                  if signal.all_red and sig_score >= _HIGH_SCORE_CONFIRM
                  else TradeState.EARLY_SETUP_ACTIVE)

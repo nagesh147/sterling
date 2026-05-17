@@ -88,3 +88,27 @@ def test_trending_regime_unchanged():
     result = evaluate_setup(regime, signal)
     assert result.state == TradeState.CONFIRMED_SETUP_ACTIVE
     assert result.direction == Direction.LONG
+
+
+def test_ranging_score_exactly_at_threshold_confirms():
+    """score == 16.0 exactly (on-boundary) must confirm."""
+    regime = _regime(MacroRegime.RANGING)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=16.0)
+    result = evaluate_setup(regime, signal)
+    assert result.state == TradeState.CONFIRMED_SETUP_ACTIVE
+
+
+def test_ranging_score_just_below_threshold_stays_early():
+    """score == 15.99 (just below) must stay EARLY."""
+    regime = _regime(MacroRegime.RANGING)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=15.99)
+    result = evaluate_setup(regime, signal)
+    assert result.state == TradeState.EARLY_SETUP_ACTIVE
+
+
+def test_neutral_regime_high_score_confirms():
+    """NEUTRAL is in _RANGING_REGIMES — same promotion must apply."""
+    regime = _regime(MacroRegime.NEUTRAL)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=17.0)
+    result = evaluate_setup(regime, signal)
+    assert result.state == TradeState.CONFIRMED_SETUP_ACTIVE
