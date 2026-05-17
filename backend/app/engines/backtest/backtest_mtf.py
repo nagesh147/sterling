@@ -4,7 +4,7 @@ Bar-by-bar strategy replay for scalping (15M/1H) and intraday (1H/4H, 4H/1D) pro
 Pure functions — no I/O.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
 
@@ -81,11 +81,12 @@ def _fwd_return(candles: List[Candle], from_idx: int, n_bars: int) -> Optional[f
     return round((candles[to_idx].close - base) / base * 100.0, 4)
 
 
-def _zero_result(profile: TFProfile, n_signal: int = 0, n_regime: int = 0) -> Dict[str, Any]:
+def _zero_result(profile: TFProfile, n_signal: int = 0, n_regime: int = 0, underlying: str = "") -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "label": profile.label,
         "signal_tf": profile.signal_tf,
         "regime_tf": profile.regime_tf,
+        "underlying": underlying,
         "total_signal_bars": n_signal,
         "total_regime_bars": n_regime,
         "total_trades": 0,
@@ -112,6 +113,7 @@ def _replay_profile(
     candles_regime: List[Candle],
     score_min: float = 0.0,
     fee_rt_pct: float = _FEE_RT_PCT,
+    underlying: str = "",
 ) -> Dict[str, Any]:
     """
     Bar-by-bar trade replay for one TF profile.
@@ -122,7 +124,7 @@ def _replay_profile(
     n_regime = len(candles_regime)
 
     if n_signal < profile.min_signal_bars or n_regime < profile.min_regime_bars:
-        return _zero_result(profile, n_signal, n_regime)
+        return _zero_result(profile, n_signal, n_regime, underlying=underlying)
 
     regime_bar_ms = profile.regime_bar_ms
     trades: List[Dict[str, Any]] = []
@@ -147,6 +149,7 @@ def _replay_profile(
         setup  = evaluate_setup(regime, signal)
 
         # ── Exit logic ─────────────────────────────────────────────────────────
+        just_exited = False
         if in_trade:
             cur  = candles_signal[i].close
             held = i - entry_bar
@@ -171,10 +174,11 @@ def _replay_profile(
                     "exit_bar":  i,
                     "direction": "long" if entry_dir == 1 else "short",
                 })
-                in_trade = False
+                in_trade    = False
+                just_exited = True
 
         # ── Entry logic ────────────────────────────────────────────────────────
-        if not in_trade:
+        if not in_trade and not just_exited:
             sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
             if (
                 setup.state == TradeState.CONFIRMED_SETUP_ACTIVE
@@ -209,29 +213,37 @@ def _replay_profile(
         })
 
     # ── Forward-return win rates per horizon (arrow-based) ────────────────────
+    # Pass 1: compute signals and regime slices once per bar
+    _bar_signals: Dict[int, Any] = {}
+    for j in range(profile.min_signal_bars, n_signal):
+        ts_j    = candles_signal[j].timestamp_ms
+        c_reg_j = [c for c in candles_regime
+                   if c.timestamp_ms + regime_bar_ms <= ts_j]
+        if len(c_reg_j) < profile.min_regime_bars:
+            continue
+        c_sig_j = candles_signal[max(0, j - 200): j + 1]
+        try:
+            _bar_signals[j] = compute_signal(c_sig_j, st_configs=profile.st_configs)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "compute_signal failed at bar %d: %s", j, exc
+            )
+            continue
+
+    # Pass 2: collect forward returns per horizon (reuses precomputed signals)
     fwd_win_rates: List[Tuple[str, Optional[float], Optional[float]]] = []
     for n_bars, lbl in zip(profile.fwd_bars, profile.fwd_labels):
         long_rets: List[float]  = []
         short_rets: List[float] = []
-        for j in range(profile.min_signal_bars, n_signal):
-            ts_j = candles_signal[j].timestamp_ms
-            c_reg_j = [c for c in candles_regime
-                       if c.timestamp_ms + regime_bar_ms <= ts_j]
-            if len(c_reg_j) < profile.min_regime_bars:
+        for j, sig_j in _bar_signals.items():
+            fwd = _fwd_return(candles_signal, j, n_bars)
+            if fwd is None:
                 continue
-            c_sig_j = candles_signal[max(0, j - 200): j + 1]
-            try:
-                sig_j = compute_signal(c_sig_j, st_configs=profile.st_configs)
-                fwd   = _fwd_return(candles_signal, j, n_bars)
-                if fwd is None:
-                    continue
-                if sig_j.green_arrow:
-                    long_rets.append(fwd)
-                elif sig_j.red_arrow:
-                    short_rets.append(fwd)
-            except Exception:
-                continue
-
+            if sig_j.green_arrow:
+                long_rets.append(fwd)
+            elif sig_j.red_arrow:
+                short_rets.append(fwd)
         long_wr = (
             round(sum(1 for r in long_rets  if r > 0) / len(long_rets)  * 100, 1)
             if long_rets else None
@@ -244,7 +256,7 @@ def _replay_profile(
 
     # ── Build result dict ─────────────────────────────────────────────────────
     if not trades:
-        result = _zero_result(profile, n_signal, n_regime)
+        result = _zero_result(profile, n_signal, n_regime, underlying=underlying)
         for k, (lbl, lwr, swr) in enumerate(fwd_win_rates):
             result[f"fwd{k+1}_label"]          = lbl
             result[f"fwd{k+1}_long_win_rate"]  = lwr
@@ -262,6 +274,7 @@ def _replay_profile(
         "label":             profile.label,
         "signal_tf":         profile.signal_tf,
         "regime_tf":         profile.regime_tf,
+        "underlying":        underlying,
         "total_signal_bars": n_signal,
         "total_regime_bars": n_regime,
         "total_trades":      len(trades),
@@ -269,7 +282,7 @@ def _replay_profile(
         "sharpe":            round(rpt.sharpe, 3),
         "calmar":            round(rpt.calmar, 3),
         "sortino":           round(rpt.sortino, 3),
-        "profit_factor":     round(rpt.profit_factor, 3) if rpt.profit_factor else None,
+        "profit_factor":     round(rpt.profit_factor, 3) if rpt.profit_factor is not None else None,
         "max_drawdown":      round(rpt.max_drawdown * 100, 2),
         "avg_rr":            round(rpt.avg_rr, 3),
         "equity_curve":      [round(v, 6) for v in curve.tolist()],
@@ -309,7 +322,7 @@ def run_mtf_backtest(
         profile = PROFILES[key]
         sig_candles, reg_candles = _candle_map.get(key, ([], []))
         results[key] = _replay_profile(
-            profile, sig_candles, reg_candles, score_min=score_min
+            profile, sig_candles, reg_candles, score_min=score_min, underlying=underlying
         )
 
     return results
