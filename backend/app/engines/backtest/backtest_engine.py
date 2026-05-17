@@ -37,6 +37,8 @@ def run_backtest(
     sample_every_n_bars: int = 4,
     atm_iv: Optional[float] = None,
     option_dte: int = 30,
+    st_configs: Optional[List[tuple]] = None,
+    st_threshold: int = 3,
 ) -> BacktestResult:
     now_ms = int(time.time() * 1000)
     bars: List[BacktestBarResult] = []
@@ -70,7 +72,9 @@ def run_backtest(
         c1h_slice = candles_1h[max(0, i - 200): i + 1]
 
         regime = compute_regime(c4h_slice)
-        signal = compute_signal(c1h_slice)
+        signal = compute_signal(c1h_slice,
+                                st_configs=st_configs,
+                                st_threshold=st_threshold)
         setup = evaluate_setup(regime, signal)
 
         bars.append(
