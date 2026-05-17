@@ -30,3 +30,71 @@ def test_compute_signal_default_unchanged():
     r2 = compute_signal(candles, st_configs=None, st_threshold=3)
     assert r1.signal_score == r2.signal_score
     assert r1.trend == r2.trend
+
+
+# ── MTF engine tests ──────────────────────────────────────────────────────────
+
+import time as _time
+from app.schemas.market import Candle as _Candle
+
+def _make_candles_ms(n, base, trend, bar_ms):
+    """Make candles with realistic timestamps spaced bar_ms apart."""
+    now_ms = int(_time.time() * 1000)
+    candles = []
+    for i in range(n):
+        ts = now_ms - (n - i) * bar_ms
+        price = base + trend * i + (i % 3) * 0.5
+        candles.append(_Candle(
+            timestamp_ms=ts, open=price, high=price * 1.001,
+            low=price * 0.999, close=price, volume=100.0 + i,
+        ))
+    return candles
+
+
+def test_run_mtf_backtest_scalping_returns_result():
+    """run_mtf_backtest must return a dict with scalping_15m key."""
+    from app.engines.backtest.backtest_mtf import run_mtf_backtest
+    c_15m = _make_candles_ms(200, 30000, 5, 15 * 60_000)
+    c_1h  = _make_candles_ms(120, 30000, 5, 60 * 60_000)
+    c_4h  = _make_candles_ms(80,  30000, 5, 4 * 60 * 60_000)
+    result = run_mtf_backtest("BTC", c_15m, c_1h, c_4h, profiles=["scalping_15m"])
+    assert "scalping_15m" in result
+    r = result["scalping_15m"]
+    assert "label" in r
+    assert "sharpe" in r
+    assert "win_rate" in r
+    assert "total_trades" in r
+    assert "equity_curve" in r
+
+
+def test_run_mtf_backtest_intraday_1h_returns_result():
+    """intraday_1h profile must return same shape as scalping."""
+    from app.engines.backtest.backtest_mtf import run_mtf_backtest
+    c_15m = _make_candles_ms(200, 30000, 5, 15 * 60_000)
+    c_1h  = _make_candles_ms(120, 30000, 5, 60 * 60_000)
+    c_4h  = _make_candles_ms(80,  30000, 5, 4 * 60 * 60_000)
+    result = run_mtf_backtest("BTC", c_15m, c_1h, c_4h, profiles=["intraday_1h"])
+    assert "intraday_1h" in result
+    r = result["intraday_1h"]
+    for key in ("label", "sharpe", "win_rate", "total_trades", "equity_curve",
+                "profit_factor", "max_drawdown", "fwd1_label", "fwd1_long_win_rate"):
+        assert key in r, f"missing key: {key}"
+
+
+def test_run_mtf_backtest_all_profiles():
+    """Running all 3 profiles returns all 3 keys."""
+    from app.engines.backtest.backtest_mtf import run_mtf_backtest
+    c_15m = _make_candles_ms(300, 30000, 5, 15 * 60_000)
+    c_1h  = _make_candles_ms(150, 30000, 5, 60 * 60_000)
+    c_4h  = _make_candles_ms(100, 30000, 5, 4 * 60 * 60_000)
+    c_1d  = _make_candles_ms(40,  30000, 5, 24 * 60 * 60_000)
+    result = run_mtf_backtest("BTC", c_15m, c_1h, c_4h, c_1d=c_1d)
+    for key in ("scalping_15m", "intraday_1h", "intraday_4h"):
+        assert key in result
+
+
+def test_run_mtf_empty_candles_returns_gracefully():
+    """Empty candle lists must not raise — return zero-trade result."""
+    from app.engines.backtest.backtest_mtf import run_mtf_backtest
+    result = run_mtf_backtest("BTC", [], [], [], profiles=["scalping_15m"])
+    assert result["scalping_15m"]["total_trades"] == 0
