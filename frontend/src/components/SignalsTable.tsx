@@ -1298,10 +1298,27 @@ function useSignalsPanelState() {
 
 type PanelState = ReturnType<typeof useSignalsPanelState>;
 
+type FeedFilter  = 'active' | 'armed' | 'expired' | 'all';
+type ModeFilter  = 'all' | 'scalping' | 'intraday' | 'swing' | 'positional';
+
+const ARMED_STATES = new Set([
+  'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE',
+]);
+
 // ── feed body: empty-state + rows + footer (no outer wrapper, no header) ──────
 
-function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: PanelState }) {
-  const { feed, dismiss, signals, currentMode, isLive, availFunds, openByUnderlying } = state;
+function SignalsFeedBody({
+  type, state, filter, localMode,
+}: {
+  type: 'futures' | 'options';
+  state: PanelState;
+  filter: FeedFilter;
+  localMode: ModeFilter;
+}) {
+  const { feed, dismiss, signals, isLive, availFunds, openByUnderlying } = state;
+  // localMode='all' means show every mode; otherwise filter to matching mode.
+  // This overrides the global currentMode so the pills are truly independent.
+  const effectiveMode = localMode === 'all' ? '' : localMode;
 
   const isFut = type === 'futures';
 
@@ -1310,8 +1327,14 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
   const visible = (() => {
     const seen = new Set<string>();
     return feed.filter(e => {
-      if (e.dismissed || e.type !== type) return false;
-      if (currentMode !== 'all' && currentMode && resolveMode(e) !== currentMode) return false;
+      if (e.type !== type) return false;
+      // Local mode filter (overrides global)
+      if (effectiveMode && resolveMode(e) !== effectiveMode) return false;
+      // Status filter
+      if (filter === 'expired')  { if (!e.dismissed) return false; }
+      else if (filter === 'armed') { if (e.dismissed || !ARMED_STATES.has(e.currentState)) return false; }
+      else if (filter === 'active') { if (e.dismissed) return false; }
+      // 'all': show everything
       const key = `${e.underlying}_${resolveMode(e)}_${e.direction}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -1327,8 +1350,8 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
           {(() => {
             const fresh = (signals?.signals ?? []).filter((s: any) => s.fresh &&
               (type === 'options' ? s.has_options : true));
-            const modeLabel = currentMode
-              ? currentMode.charAt(0).toUpperCase() + currentMode.slice(1)
+            const modeLabel = effectiveMode
+              ? effectiveMode.charAt(0).toUpperCase() + effectiveMode.slice(1)
               : '';
             const allIdle        = fresh.length > 0 && fresh.every((s: any) => s.regime === 'IDLE');
             const allFiltered    = fresh.length > 0 && fresh.every((s: any) => s.state === 'FILTERED' || s.state === 'IDLE');
@@ -1417,7 +1440,7 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
               hasOpen={(openByUnderlying[entry.underlying] ?? 0) > 0}
               isLive={isLive}
               availFunds={availFunds}
-              showModeTag={currentMode === 'all'}
+              showModeTag={localMode === 'all'}
               dismiss={dismiss}
             />
           ))}
@@ -1429,10 +1452,18 @@ function SignalsFeedBody({ type, state }: { type: 'futures' | 'options'; state: 
         padding: '6px 14px', background: 'var(--bg)',
         borderTop: '1px solid var(--border)',
         fontSize: 9, color: 'var(--text-faint)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        {isFut
-          ? 'Prices frozen at signal time · NOW = live · Leverage pre-set on Delta'
-          : 'Premium estimated · verify on exchange · Strike = nearest round'}
+        <span>
+          {isFut
+            ? 'Prices frozen at signal time · NOW = live · Leverage pre-set on Delta'
+            : 'Premium estimated · verify on exchange · Strike = nearest round'}
+        </span>
+        {filter === 'expired' && (
+          <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+            Showing dismissed signals
+          </span>
+        )}
       </div>
     </>
   );
@@ -1443,7 +1474,7 @@ function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
   const state = useSignalsPanelState();
   return (
     <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
-      <SignalsFeedBody type={type} state={state} />
+      <SignalsFeedBody type={type} state={state} filter="active" localMode="all" />
     </div>
   );
 }
@@ -1453,101 +1484,180 @@ function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
 // ── tabbed public component ───────────────────────────────────────────────────
 
 export function SignalsTable() {
-  const [tab, setTab] = React.useState<'futures' | 'options'>('futures');
+  const [tab,       setTab]       = React.useState<'futures' | 'options'>('futures');
+  const [filter,    setFilter]    = React.useState<FeedFilter>('active');
+  const [localMode, setLocalMode] = React.useState<ModeFilter>('all');
+
   // Single hook instance — both tab-bar counts and SignalsFeedBody share this state.
-  // Calling useSignalsPanelState() a second time (inside SignalsFeedBody) would create
-  // a separate useState, causing counts and displayed cards to diverge.
   const state = useSignalsPanelState();
-  const { feed, signals, currentMode, streamStatus } = state;
+  const { feed, signals, streamStatus } = state;
 
-  // Count actionable entries per type so tabs can show a badge
-  const count = (type: 'futures' | 'options') =>
-    feed.filter(e =>
-      !e.dismissed && e.type === type &&
-      (currentMode === 'all' || !currentMode || resolveMode(e) === currentMode) &&
-      ['ENTRY_ARMED_PULLBACK','ENTRY_ARMED_CONTINUATION','CONFIRMED_SETUP_ACTIVE','EARLY_SETUP_ACTIVE']
-        .includes(e.currentState)
-    ).length;
+  const effectiveMode = localMode === 'all' ? '' : localMode;
 
-  const futCount = count('futures');
-  const optCount = count('options');
+  // Count helpers
+  const countByFilter = (type: 'futures' | 'options', f: FeedFilter) =>
+    feed.filter(e => {
+      if (e.type !== type) return false;
+      if (effectiveMode && resolveMode(e) !== effectiveMode) return false;
+      if (f === 'expired')  return e.dismissed;
+      if (f === 'armed')    return !e.dismissed && ARMED_STATES.has(e.currentState);
+      if (f === 'active')   return !e.dismissed;
+      return true; // 'all'
+    }).length;
 
-  const TAB: Array<{ id: 'futures' | 'options'; label: string; icon: string; accent: string; bg: string; cnt: number }> = [
-    { id: 'futures', label: 'FUTURES', icon: '▣', accent: 'var(--accent)', bg: '#003d2e', cnt: futCount },
-    { id: 'options', label: 'OPTIONS', icon: '◈', accent: '#a78bfa',      bg: '#1a0d2e', cnt: optCount },
+  const countByMode = (type: 'futures' | 'options', m: ModeFilter) =>
+    feed.filter(e => {
+      if (e.type !== type || e.dismissed) return false;
+      return m === 'all' ? true : resolveMode(e) === m;
+    }).length;
+
+  const futArmed = countByFilter('futures', 'armed');
+  const optArmed = countByFilter('options', 'armed');
+
+  const INSTRUMENT_TABS: Array<{ id: 'futures' | 'options'; label: string; icon: string; accent: string; armed: number }> = [
+    { id: 'futures', label: 'FUTURES', icon: '▣', accent: 'var(--accent)', armed: futArmed },
+    { id: 'options', label: 'OPTIONS', icon: '◈', accent: '#a78bfa',      armed: optArmed },
   ];
 
-  // Notify when options panel gets a new actionable signal while futures is active
-  const hasOptAlert = tab === 'futures' && optCount > 0;
+  const hasOptAlert = tab === 'futures' && optArmed > 0;
+  const freshCount  = (signals?.signals ?? []).filter((s: any) => s.fresh).length;
 
-  const freshCount = (signals?.signals ?? []).filter((s: any) => s.fresh).length;
+  const MODE_PILLS: Array<{ id: ModeFilter; label: string }> = [
+    { id: 'all',        label: 'ALL' },
+    { id: 'scalping',   label: 'SCALPING' },
+    { id: 'intraday',   label: 'INTRADAY' },
+    { id: 'swing',      label: 'SWING' },
+    { id: 'positional', label: 'POSITIONAL' },
+  ];
+
+  const STATUS_PILLS: Array<{ id: FeedFilter; label: string }> = [
+    { id: 'active',  label: 'ACTIVE' },
+    { id: 'armed',   label: 'ARMED' },
+    { id: 'all',     label: 'ALL' },
+    { id: 'expired', label: 'EXPIRED' },
+  ];
+
+  const pillBase = (active: boolean): React.CSSProperties => ({
+    padding: '3px 10px',
+    borderRadius: 5,
+    fontSize: 9,
+    fontWeight: 600,
+    letterSpacing: '0.07em',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    border: active ? '1px solid var(--border-light)' : '1px solid transparent',
+    background: active ? 'var(--bg-card)' : 'transparent',
+    color: active ? 'var(--text-primary)' : 'var(--text-dim)',
+    transition: 'all 0.1s',
+  });
 
   return (
-    <div style={{ marginBottom: 16, borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+    <div style={{ marginBottom: 16, borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
 
-      {/* ── tab bar ─────────────────────────────────────────────────────── */}
+      {/* ── Header bar ── */}
       <div style={{
         background: 'var(--bg-card)',
         borderBottom: '1px solid var(--border)',
-        padding: '0 12px',
-        display: 'flex', alignItems: 'stretch', gap: 0,
+        padding: '10px 14px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        {TAB.map(t => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                background: active ? t.accent + '0a' : 'none',
-                border: 'none', cursor: 'pointer',
-                padding: '11px 18px', fontFamily: 'inherit',
-                borderBottom: active ? `2px solid ${t.accent}` : '2px solid transparent',
-                marginBottom: -1,
-                display: 'flex', alignItems: 'center', gap: 7,
-                color: active ? t.accent : 'var(--text-faint)',
-                transition: 'color 0.15s, border-color 0.15s, background 0.15s',
-              }}
-            >
-              <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.5 }}>
-                {t.icon} {t.label}
-              </span>
-              {t.cnt > 0 && (
-                <span style={{
-                  fontSize: 10, fontWeight: 800, letterSpacing: 0.3,
-                  color: active ? t.accent : 'var(--warning)',
-                  background: active ? t.accent + '20' : 'rgba(255,165,2,0.12)',
-                  border: `1px solid ${active ? t.accent + '55' : 'rgba(255,165,2,0.3)'}`,
-                  borderRadius: 12, padding: '1px 7px', minWidth: 18, textAlign: 'center',
-                }}>
-                  {t.cnt}
-                </span>
-              )}
-              {t.id === 'options' && hasOptAlert && !active && (
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#a78bfa', flexShrink: 0, boxShadow: '0 0 4px #a78bfa' }} />
-              )}
-            </button>
-          );
-        })}
-
-        {/* right-side: stream status + instrument count */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingRight: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text-primary)' }}>
+            SIGNAL FEED
+          </span>
           <StreamBadge status={streamStatus} />
           {freshCount > 0 && (
             <span style={{
-              fontSize: 9, color: 'var(--text-faint)',
-              background: 'var(--bg-input)', border: '1px solid var(--border)',
-              borderRadius: 3, padding: '1px 6px', fontFamily: 'inherit',
-              letterSpacing: 0.5,
+              fontSize: 9, fontWeight: 600, color: 'var(--accent)',
+              background: 'var(--accent)14', borderRadius: 4, padding: '2px 7px',
             }}>
               {freshCount} live
             </span>
           )}
         </div>
+        {/* Instrument type tabs */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {INSTRUMENT_TABS.map(t => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  padding: '4px 14px',
+                  borderRadius: 6,
+                  border: active ? `1px solid ${t.accent}40` : '1px solid transparent',
+                  background: active ? t.accent + '12' : 'transparent',
+                  color: active ? t.accent : 'var(--text-dim)',
+                  fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
+                  letterSpacing: '0.08em', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  transition: 'all 0.1s',
+                }}
+              >
+                {t.icon} {t.label}
+                {t.armed > 0 && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 800,
+                    color: 'var(--warning)', background: 'var(--warning)18',
+                    borderRadius: 10, padding: '1px 6px',
+                  }}>{t.armed}</span>
+                )}
+                {t.id === 'options' && hasOptAlert && !active && (
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 4px #a78bfa' }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── active tab body — same state instance as the tab-bar counts above ── */}
-      <SignalsFeedBody type={tab} state={state} />
+      {/* ── Dual filter row: mode pills LEFT · status pills RIGHT ── */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '6px 14px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)',
+        gap: 8,
+      }}>
+        {/* LEFT — trading mode */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {MODE_PILLS.map(m => {
+            const cnt    = countByMode(tab, m.id);
+            const active = localMode === m.id;
+            return (
+              <button key={m.id} onClick={() => setLocalMode(m.id)} style={pillBase(active)}>
+                {m.label}
+                {cnt > 0 && (
+                  <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400 }}>{cnt}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Subtle vertical divider */}
+        <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+        {/* RIGHT — status filter */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {STATUS_PILLS.map(f => {
+            const cnt    = countByFilter(tab, f.id);
+            const active = filter === f.id;
+            return (
+              <button key={f.id} onClick={() => setFilter(f.id)} style={pillBase(active)}>
+                {f.label}
+                <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400 }}>{cnt}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Feed body ── */}
+      <SignalsFeedBody type={tab} state={state} filter={filter} localMode={localMode} />
     </div>
   );
 }

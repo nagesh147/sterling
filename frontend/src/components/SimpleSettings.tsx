@@ -700,9 +700,9 @@ function AlgoSection() {
                 title={canEnable ? 'Credentials verified — enable algo' : 'Preflight must succeed first'}
                 style={{
                   flex: 2, padding: '9px 0',
-                  background: canEnable ? '#2a0808' : 'var(--bg)',
-                  color: canEnable ? '#ff4757' : 'var(--text-dim)',
-                  border: `1px solid ${canEnable ? '#ff475766' : 'var(--border)'}`,
+                  background: canEnable ? '#86c9a820' : 'var(--bg)',
+                  color: canEnable ? '#86c9a8' : 'var(--text-dim)',
+                  border: `1px solid ${canEnable ? '#86c9a866' : 'var(--border)'}`,
                   borderRadius: 5, cursor: canEnable ? 'pointer' : 'not-allowed',
                   fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
                   opacity: canEnable ? 1 : 0.6,
@@ -719,7 +719,7 @@ function AlgoSection() {
 }
 
 // ── Compact algo toggle for header bar ────────────────────────────────────────
-export function AlgoToggle() {
+export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = {}) {
   const { data: algoData, isLoading } = useAlgoMode();
   const setAlgoMode = useSetAlgoMode();
   const [confirming, setConfirming] = useState(false);
@@ -791,14 +791,15 @@ export function AlgoToggle() {
         disabled={pending || isLoading}
         title={enabled ? 'Algo ON — click to disable auto-trading' : 'Algo OFF — click to enable auto-trading on Delta Exchange'}
         style={{
-          padding: '3px 10px',
-          background: enabled ? '#2a0808' : 'var(--t-bg2, var(--bg))',
-          color: enabled ? '#ff4757' : 'var(--t-dim, var(--text-faint))',
-          border: `1px solid ${enabled ? '#ff475766' : 'var(--t-border, var(--border))'}`,
-          borderRadius: 4, cursor: pending ? 'wait' : 'pointer',
-          fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1,
+          ...chipStyle,
+          background: enabled ? 'var(--accent, #10B981)18' : (chipStyle?.background ?? 'var(--bg-surface)'),
+          color: enabled ? 'var(--accent, #10B981)' : (chipStyle?.color ?? 'var(--text-dim)'),
+          border: enabled
+            ? '1px solid var(--accent, #10B981)50'
+            : `1px solid ${(chipStyle as any)?.borderColor ?? 'var(--border)'}`,
+          cursor: pending ? 'wait' : 'pointer',
           opacity: pending ? 0.6 : 1,
-          boxShadow: enabled ? '0 0 8px #ff475733' : 'none',
+          boxShadow: enabled ? '0 0 8px var(--accent, #10B981)22' : 'none',
           transition: 'all 0.15s',
         }}
       >
@@ -904,9 +905,9 @@ export function AlgoToggle() {
                 title={canEnable ? 'Credentials verified — enable algo' : 'Preflight must succeed first'}
                 style={{
                   flex: 2, padding: '9px 0',
-                  background: canEnable ? '#2a0808' : 'var(--bg)',
-                  color: canEnable ? '#ff4757' : 'var(--text-dim)',
-                  border: `1px solid ${canEnable ? '#ff475766' : 'var(--border)'}`,
+                  background: canEnable ? '#86c9a820' : 'var(--bg)',
+                  color: canEnable ? '#86c9a8' : 'var(--text-dim)',
+                  border: `1px solid ${canEnable ? '#86c9a866' : 'var(--border)'}`,
                   borderRadius: 5, cursor: canEnable ? 'pointer' : 'not-allowed',
                   fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
                   opacity: canEnable ? 1 : 0.6,
@@ -928,18 +929,55 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000 }} />
+      <div
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 2000, backdropFilter: 'blur(2px)' }}
+      />
       <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 360,
-        zIndex: 2001, background: 'var(--bg-card)',
+        position: 'fixed',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 380,
+        zIndex: 2001,
+        background: 'var(--bg-card)',
         borderLeft: '1px solid var(--border)',
-        overflowY: 'auto', scrollbarWidth: 'thin',
-        padding: '20px 20px 40px',
-        boxShadow: '-4px 0 32px rgba(0,0,0,0.5)',
+        overflowY: 'auto',
+        scrollbarWidth: 'thin',
+        padding: '20px 22px 48px',
+        boxShadow: '-12px 0 48px rgba(0,0,0,0.6)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-          <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>SETTINGS</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1 }}>✕</button>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 24,
+          paddingBottom: 16,
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            letterSpacing: '0.12em',
+          }}>
+            SETTINGS
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: 14,
+              padding: '4px 10px',
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
         </div>
         <AlgoSection />
         <ExchangeSection />

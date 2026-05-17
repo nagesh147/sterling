@@ -32,6 +32,26 @@ function CbChip() {
   );
 }
 
+// Shared chip style for every header control button
+const chip: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  background: 'var(--t-bg3)',
+  border: '1px solid var(--t-border)',
+  borderRadius: 5,
+  color: 'var(--t-dim)',
+  cursor: 'pointer',
+  padding: '4px 10px',
+  fontFamily: 'inherit',
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  lineHeight: 1,
+  whiteSpace: 'nowrap' as const,
+  transition: 'color 0.1s, border-color 0.1s',
+};
+
 export function SimpleTerminal() {
   const setAppMode = useSetAppMode();
   const theme = useTheme();
@@ -44,83 +64,106 @@ export function SimpleTerminal() {
     <div className="term-root">
       <DrawdownBreakerBadge />
 
-      {/* Ticker strip — live prices all symbols */}
-      <TickerStrip />
-
-      {/* Header bar */}
+      {/* ── Floating header pill ─────────────────────────────────────── */}
       <div style={{
-        height: 40, background: 'var(--t-bg2)',
-        borderBottom: '1px solid var(--t-border)',
-        display: 'flex', alignItems: 'center',
-        gap: 8, flexShrink: 0, paddingLeft: 12, paddingRight: 12,
+        flexShrink: 0,
+        padding: '10px 16px 0',
+        background: 'var(--t-bg)',
       }}>
-        <span style={{
-          color: 'var(--t-bright)', fontWeight: 700, fontSize: 13, letterSpacing: 2,
-          fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          height: 46,
+          background: 'rgba(13, 17, 26, 0.92)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: 14,
+          padding: '0 20px',
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)',
         }}>
-          STERLING
-        </span>
-        <TradingModeSelector />
+          {/* Wordmark */}
+          <span style={{
+            fontSize: 17,
+            fontWeight: 800,
+            letterSpacing: '0.18em',
+            color: 'rgba(220, 232, 245, 0.92)',
+            fontFamily: 'inherit',
+            userSelect: 'none',
+          }}>
+            STERLING
+          </span>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <PaperLiveToggle />
-          <AlgoToggle />
-          <DataSourceSelector />
-          <CbChip />
-          <button
-            onClick={toggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            style={{
-              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
-              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 7px',
-              fontFamily: 'inherit', fontSize: 12, lineHeight: 1,
-            }}
-          >
-            {theme === 'dark' ? '☀' : '◑'}
-          </button>
-          <button
-            onClick={() => setShowLive(true)}
-            title="Live Control — kill switch · daily loss · retry queue"
-            style={{
-              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
-              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 8px',
-              fontFamily: 'inherit', fontSize: 10, lineHeight: 1, letterSpacing: 1,
-            }}
-          >
-            LIVE
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-            style={{
-              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
-              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 8px',
-              fontFamily: 'inherit', fontSize: 11, lineHeight: 1,
-            }}
-          >
-            ⚙
-          </button>
-          <button
-            onClick={() => setAppMode('pro')}
-            title="Switch to Bloomberg Terminal 3-pane layout"
-            style={{
-              background: 'none', border: '1px solid var(--t-border)', borderRadius: 3,
-              color: 'var(--t-dim)', cursor: 'pointer', padding: '3px 10px',
-              fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
-            }}
-          >
-            TERMINAL
-          </button>
+          {/* Right icons — bell · avatar · gear */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Notification bell */}
+            <button
+              onClick={() => setShowLive(true)}
+              title="Live alerts & controls"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                width: 34, height: 34, borderRadius: 9,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'rgba(150,170,200,0.7)', fontSize: 15,
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.color = 'rgba(220,232,245,0.9)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = 'rgba(150,170,200,0.7)'; }}
+            >
+              🔔
+            </button>
+
+            {/* Profile avatar placeholder */}
+            <div
+              title="User profile"
+              style={{
+                width: 30, height: 30, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
+                border: '2px solid rgba(255,255,255,0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 800, color: '#fff',
+                letterSpacing: '0.02em', cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              S
+            </div>
+
+            {/* Settings gear */}
+            <button
+              onClick={() => setShowSettings(true)}
+              title="Settings"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                width: 34, height: 34, borderRadius: 9,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'rgba(150,170,200,0.7)', fontSize: 15,
+                transition: 'background 0.15s, color 0.15s',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.color = 'rgba(220,232,245,0.9)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = 'rgba(150,170,200,0.7)'; }}
+            >
+              ⚙
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* ── Ticker strip ─────────────────────────────────────────────── */}
+      <TickerStrip />
 
-      {/* Section tabs */}
+      {/* ── Section tabs + functional controls ───────────────────────── */}
       <div style={{
-        display: 'flex', background: 'var(--t-bg2)',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
-        flexShrink: 0, paddingLeft: 12,
+        flexShrink: 0,
+        paddingLeft: 12,
+        paddingRight: 10,
+        gap: 0,
       }}>
+        {/* Section tabs */}
         {([
           ['signals',     'SIGNALS'],
           ['positions',   'POSITIONS'],
@@ -130,16 +173,45 @@ export function SimpleTerminal() {
             key={id}
             onClick={() => setActiveSection(id)}
             style={{
-              background: 'none', border: 'none',
+              background: 'none',
+              border: 'none',
               borderBottom: `2px solid ${activeSection === id ? 'var(--t-blue)' : 'transparent'}`,
               color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
-              padding: '7px 16px', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: 11, letterSpacing: 1, marginBottom: -1,
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 11,
+              fontWeight: activeSection === id ? 700 : 400,
+              letterSpacing: '0.08em',
+              marginBottom: -1,
+              transition: 'color 0.1s',
             }}
           >
             {label}
           </button>
         ))}
+
+        {/* Right: compact functional controls */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, paddingRight: 2 }}>
+          <PaperLiveToggle />
+          <AlgoToggle chipStyle={chip} />
+          <DataSourceSelector chipStyle={chip} />
+          <CbChip />
+          <button
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            style={chip}
+          >
+            {theme === 'dark' ? '☀' : '◑'}
+          </button>
+          <button
+            onClick={() => setAppMode('pro')}
+            title="Switch to 3-pane Terminal"
+            style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}
+          >
+            TERMINAL
+          </button>
+        </div>
       </div>
 
       {/* Main content */}

@@ -15,7 +15,7 @@ const SHORT: Record<string, string> = {
   delta_india: 'DELTA EXCHANGE',
 };
 
-export function DataSourceSelector() {
+export function DataSourceSelector({ chipStyle }: { chipStyle?: React.CSSProperties } = {}) {
   const { data: ds, isLoading } = useDataSource();
   const { data: cfg }           = useConfigInfo();
   const { mutate: setSource, isPending }       = useSetDataSource();
@@ -74,9 +74,18 @@ export function DataSourceSelector() {
 
   if (!hasData && !current) return null;
 
+  const baseBorder = reachable === false ? 'var(--t-red)55' : (chipStyle ? 'inherit' : 'var(--t-border)');
+
   return (
     <div
-      style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0,
+        ...(chipStyle ?? {}),
+        padding: 0,
+        overflow: 'hidden',
+      }}
       title={ds
         ? `${ds.display_name} — ${reachable ? 'reachable' : 'unreachable'}. Click ↺ to reconnect.`
         : 'Market data source'}
@@ -85,6 +94,7 @@ export function DataSourceSelector() {
       <span style={{
         width: 6, height: 6, borderRadius: '50%',
         background: dotColor, display: 'inline-block', flexShrink: 0,
+        marginLeft: 10,
         transition: 'background 0.3s',
         boxShadow: reachable ? `0 0 4px ${dotColor}` : 'none',
       }} />
@@ -95,13 +105,19 @@ export function DataSourceSelector() {
         onChange={handleChange}
         disabled={busy}
         style={{
-          background: 'none',
-          color: busy ? 'var(--t-amber)' : 'var(--t-bright)',
-          border: `1px solid ${reachable === false ? 'var(--t-red)55' : 'var(--t-border)'}`,
-          borderRadius: 3, padding: '2px 4px',
-          fontSize: 10, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
-          cursor: busy ? 'wait' : 'pointer', outline: 'none',
-          appearance: 'none', WebkitAppearance: 'none', minWidth: 56,
+          background: 'transparent',
+          color: busy ? 'var(--t-amber)' : (chipStyle ? 'inherit' : 'var(--t-bright)'),
+          border: 'none',
+          padding: '4px 8px',
+          fontSize: chipStyle?.fontSize ?? 10,
+          fontFamily: chipStyle?.fontFamily ?? 'JetBrains Mono, monospace',
+          fontWeight: chipStyle?.fontWeight ?? 600,
+          letterSpacing: chipStyle?.letterSpacing ?? '0.04em',
+          cursor: busy ? 'wait' : 'pointer',
+          outline: 'none',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          minWidth: 56,
         }}
       >
         {hasData
@@ -119,12 +135,15 @@ export function DataSourceSelector() {
         disabled={busy}
         title="Reconnect market data (force-reload adapter + clear price cache)"
         style={{
-          background: 'none',
-          border: `1px solid ${reachable === false ? 'var(--t-red)55' : 'var(--t-border)'}`,
-          borderRadius: 3, padding: '1px 5px',
-          color: busy ? 'var(--t-amber)' : reachable === false ? 'var(--t-red)' : 'var(--t-dim)',
+          background: 'transparent',
+          border: 'none',
+          borderLeft: `1px solid ${baseBorder}`,
+          padding: '4px 8px',
+          color: busy ? 'var(--t-amber)' : reachable === false ? 'var(--t-red)' : (chipStyle?.color ?? 'var(--t-dim)'),
           cursor: busy ? 'wait' : 'pointer',
-          fontFamily: 'inherit', fontSize: 11, lineHeight: 1,
+          fontFamily: 'inherit',
+          fontSize: 12,
+          lineHeight: 1,
           animation: busy ? 't-blink 0.6s infinite' : undefined,
         }}
       >

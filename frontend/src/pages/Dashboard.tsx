@@ -60,17 +60,25 @@ import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSett
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
-const page: React.CSSProperties = { maxWidth: 1200, margin: '0 auto', padding: '0 20px 40px' };
+const page: React.CSSProperties = { maxWidth: 1280, margin: '0 auto', padding: '0 24px 48px' };
 
 const header: React.CSSProperties = {
-  borderBottom: '1px solid var(--border)', padding: '14px 0', marginBottom: 20,
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  flexWrap: 'wrap', gap: 10,
+  borderBottom: '1px solid var(--border)',
+  padding: '12px 0',
+  marginBottom: 24,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  flexWrap: 'wrap',
+  gap: 12,
 };
 
 const TAB_BAR: React.CSSProperties = {
-  display: 'flex', gap: 4, marginBottom: 20,
-  borderBottom: '1px solid var(--border)', paddingBottom: 0,
+  display: 'flex',
+  gap: 2,
+  marginBottom: 24,
+  borderBottom: '1px solid var(--border)',
+  paddingBottom: 0,
   flexWrap: 'wrap',
 };
 
@@ -79,16 +87,32 @@ function TabBtn({ label, shortcut, active, onClick }: {
 }) {
   return (
     <button onClick={onClick} title={`Press ${shortcut} to switch`} style={{
-      background: 'none', border: 'none', cursor: 'pointer',
-      fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontFamily: 'inherit',
+      fontSize: 11,
+      fontWeight: active ? 600 : 400,
+      letterSpacing: '0.08em',
       color: active ? 'var(--text-primary)' : 'var(--text-dim)',
-      padding: '8px 14px',
+      padding: '10px 16px',
       borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
       marginBottom: -1,
-      display: 'flex', alignItems: 'center', gap: 5,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      transition: 'color 0.1s',
     }}>
       {label}
-      <span style={{ fontSize: 9, color: active ? '#44cc8866' : 'var(--text-faint)', fontWeight: 400 }}>{shortcut}</span>
+      <span style={{
+        fontSize: 9,
+        color: active ? 'var(--accent)' : 'var(--text-faint)',
+        fontWeight: 400,
+        background: active ? 'var(--accent)18' : 'transparent',
+        borderRadius: 3,
+        padding: active ? '1px 4px' : undefined,
+        letterSpacing: 0,
+      }}>{shortcut}</span>
     </button>
   );
 }
@@ -149,25 +173,41 @@ export function Dashboard() {
       </PanelBoundary>
 
       <div style={header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {/* App name */}
-          <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: 2, color: 'var(--text-primary)' }}>
-            STERLING
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          {/* App wordmark */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              fontSize: 15,
+              fontWeight: 800,
+              letterSpacing: '0.12em',
+              color: 'var(--text-primary)',
+            }}>
+              STERLING
+            </span>
+            <span style={{
+              fontSize: 9,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: 'var(--accent)',
+              background: 'var(--accent)14',
+              border: '1px solid var(--accent)30',
+              borderRadius: 4,
+              padding: '2px 6px',
+            }}>v3</span>
+          </div>
 
-          {/* Simple mode: just mode selector */}
-          {appMode === 'basic' && <TradingModeSelector />}
+          {/* Separator */}
+          <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
 
-          {/* Pro mode: full badge set */}
+          {/* Pro mode: status badges (TradingModeSelector lives in SignalsTable filter row) */}
           {appMode === 'pro' && <>
             <PanelBoundary><StreamBadge underlying={selectedUnderlying} /></PanelBoundary>
             <PanelBoundary><ExchangeBadge /></PanelBoundary>
             <PanelBoundary><AlertBadge /></PanelBoundary>
-            <PanelBoundary><TradingModeSelector /></PanelBoundary>
           </>}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {/* Pro mode: instrument selector */}
           {appMode === 'pro' && <InstrumentSelector />}
 
@@ -182,9 +222,16 @@ export function Dashboard() {
                 onClick={() => setShowSettings(true)}
                 title="Settings"
                 style={{
-                  background: 'none', border: '1px solid var(--border)', borderRadius: 3,
-                  color: 'var(--text-dim)', cursor: 'pointer', padding: '3px 8px',
-                  fontFamily: 'inherit', fontSize: 13, lineHeight: 1,
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '5px 9px',
+                  fontFamily: 'inherit',
+                  fontSize: 13,
+                  lineHeight: 1,
+                  transition: 'border-color 0.1s, color 0.1s',
                 }}
               >
                 ⚙
@@ -197,9 +244,15 @@ export function Dashboard() {
             onClick={toggleTheme}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             style={{
-              background: 'none', border: '1px solid var(--border)', borderRadius: 3,
-              color: 'var(--text-dim)', cursor: 'pointer', padding: '3px 8px',
-              fontFamily: 'inherit', fontSize: 11,
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '5px 9px',
+              fontFamily: 'inherit',
+              fontSize: 11,
+              lineHeight: 1,
             }}
           >
             {theme === 'dark' ? '☀' : '◑'}
@@ -209,15 +262,19 @@ export function Dashboard() {
           <button
             onClick={() => setAppMode(appMode === 'basic' ? 'pro' : 'basic')}
             style={{
-              background: appMode === 'pro' ? '#0f2a1a' : 'var(--bg)',
-              border: `1px solid ${appMode === 'pro' ? 'var(--accent)' : 'var(--border)'}`,
-              borderRadius: 3,
+              background: appMode === 'pro' ? 'var(--accent)14' : 'var(--bg-surface)',
+              border: `1px solid ${appMode === 'pro' ? 'var(--accent)40' : 'var(--border)'}`,
+              borderRadius: 6,
               color: appMode === 'pro' ? 'var(--accent)' : 'var(--text-dim)',
-              cursor: 'pointer', padding: '3px 10px',
-              fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
+              cursor: 'pointer',
+              padding: '5px 12px',
+              fontFamily: 'inherit',
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.08em',
             }}
           >
-            {appMode === 'pro' ? '⚙ ADVANCED' : '◎ SIMPLE'}
+            {appMode === 'pro' ? 'ADVANCED' : 'SIMPLE'}
           </button>
         </div>
       </div>

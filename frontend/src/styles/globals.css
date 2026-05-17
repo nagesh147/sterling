@@ -1,41 +1,47 @@
 /* ─────────────────────────────────────────────────────────────────
- * Sterling Design Tokens — Bloomberg-grade trading terminal
+ * Sterling Design Tokens — Premium HFT Trading Terminal
  * Pure CSS custom properties; no Tailwind, no shadcn dependency.
  * ───────────────────────────────────────────────────────────────── */
 
 :root,
 [data-theme="dark"] {
-  --bg:           #070d1a;
-  --bg-card:      #0d1526;
-  --bg-input:     #111e33;
-  --border:       #1a2d4a;
-  --border-light: #243d60;
-  --text-primary: #d4e4f7;
-  --text-muted:   #7a9ec2;
-  --text-dim:     #3d5a7a;
-  --text-faint:   #1e3350;
-  --accent:       #00d4aa;
-  --danger:       #ff4757;
-  --warning:      #ffa502;
-  --blue:         #3d9ef0;
-  --purple:       #a855f7;
+  /* Backgrounds — deep premium slate/zinc */
+  --bg:           #0B0E14;
+  --bg-card:      #0F1117;
+  --bg-surface:   #141821;
+  --bg-input:     #1A1F2E;
+  /* Borders — subtle, low-opacity zinc */
+  --border:       #1E2535;
+  --border-light: #2A3447;
+  /* Text — high-contrast crisp hierarchy */
+  --text-primary: #F1F5F9;
+  --text-muted:   #94A3B8;
+  --text-dim:     #475569;
+  --text-faint:   #2D3748;
+  /* Signal colors — sharp, high-visibility */
+  --accent:       #10B981;   /* emerald green — BUY / profit */
+  --danger:       #EF4444;   /* crisp crimson — SELL / loss  */
+  --warning:      #F59E0B;   /* amber — caution              */
+  --blue:         #3B82F6;   /* info / ARMED                 */
+  --purple:       #A855F7;
 }
 
 [data-theme="light"] {
-  --bg:           #f0f4fa;
-  --bg-card:      #ffffff;
-  --bg-input:     #e8eef8;
-  --border:       #c8d8ec;
-  --border-light: #dce8f4;
-  --text-primary: #0d1a2e;
-  --text-muted:   #3d6080;
-  --text-dim:     #7a9ab8;
-  --text-faint:   #b0c4d8;
-  --accent:       #00a87a;
-  --danger:       #e02020;
-  --warning:      #c07000;
-  --blue:         #1a6ec0;
-  --purple:       #7c3aed;
+  --bg:           #F8FAFC;
+  --bg-card:      #FFFFFF;
+  --bg-surface:   #F1F5F9;
+  --bg-input:     #E2E8F0;
+  --border:       #CBD5E1;
+  --border-light: #E2E8F0;
+  --text-primary: #0F172A;
+  --text-muted:   #475569;
+  --text-dim:     #94A3B8;
+  --text-faint:   #CBD5E1;
+  --accent:       #059669;
+  --danger:       #DC2626;
+  --warning:      #D97706;
+  --blue:         #2563EB;
+  --purple:       #7C3AED;
 }
 
 /* ─── Base resets ─── */
@@ -44,11 +50,13 @@
 html, body { margin: 0; padding: 0; }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', 'SF Pro Display', system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text-primary);
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
 }
 
 /* Tabular numbers for any currency / pnl figures */

@@ -115,24 +115,55 @@ export function PaperLiveToggle() {
     <>
       {/* Toggle pill */}
       <div style={{
-        display: 'flex', alignItems: 'center',
-        background: 'var(--bg)', border: `1px solid ${isLive ? 'var(--accent)' : 'var(--border)'}`,
-        borderRadius: 4, overflow: 'hidden', cursor: saving ? 'wait' : 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        background: 'var(--t-bg3, var(--bg-surface))',
+        border: `1px solid ${isLive ? 'var(--t-green, var(--accent))50' : 'var(--t-border, var(--border))'}`,
+        borderRadius: 5,
+        overflow: 'hidden',
+        cursor: saving ? 'wait' : 'pointer',
         opacity: saving ? 0.7 : 1,
+        padding: 2,
+        gap: 2,
       }}>
-        <button onClick={isLive ? switchToPaper : undefined} disabled={saving || !isLive}
-          style={{ padding: '3px 10px', border: 'none', cursor: isLive ? 'pointer' : 'default',
-            background: !isLive ? '#1a1a2a' : 'transparent',
-            color: !isLive ? '#88aaff' : 'var(--text-faint)',
-            fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+        <button
+          onClick={isLive ? switchToPaper : undefined}
+          disabled={saving || !isLive}
+          style={{
+            padding: '3px 10px',
+            border: 'none',
+            borderRadius: 4,
+            cursor: isLive ? 'pointer' : 'default',
+            background: !isLive ? 'var(--t-bg2, var(--bg-card))' : 'transparent',
+            color: !isLive ? 'var(--t-blue, var(--blue))' : 'var(--t-dim, var(--text-dim))',
+            fontFamily: 'inherit',
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            transition: 'background 0.15s, color 0.15s',
+            lineHeight: 1,
+          }}
+        >
           PAPER
         </button>
-        <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
-        <button onClick={isLive ? switchToPaper : handleLiveClick} disabled={saving}
-          style={{ padding: '3px 10px', border: 'none', cursor: 'pointer',
-            background: isLive ? '#0f2a1a' : 'transparent',
-            color: isLive ? 'var(--accent)' : 'var(--text-faint)',
-            fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: 1 }}>
+        <button
+          onClick={isLive ? switchToPaper : handleLiveClick}
+          disabled={saving}
+          style={{
+            padding: '3px 10px',
+            border: 'none',
+            borderRadius: 4,
+            cursor: 'pointer',
+            background: isLive ? 'var(--t-green, var(--accent))18' : 'transparent',
+            color: isLive ? 'var(--t-green, var(--accent))' : 'var(--t-dim, var(--text-dim))',
+            fontFamily: 'inherit',
+            fontSize: 10,
+            fontWeight: isLive ? 700 : 600,
+            letterSpacing: '0.08em',
+            transition: 'background 0.15s, color 0.15s',
+            lineHeight: 1,
+          }}
+        >
           {isLive ? '● LIVE' : exLoading ? '…' : 'LIVE'}
         </button>
       </div>
@@ -276,23 +307,44 @@ function StatusBar({ status }: { status: Status }) {
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
 const btnPrimary: React.CSSProperties = {
-  flex: 2, padding: '9px 0', background: '#0f2a1a',
-  color: 'var(--accent)', border: '1px solid var(--accent)',
-  borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
+  flex: 2,
+  padding: '10px 0',
+  background: 'var(--accent)',
+  color: '#000',
+  border: 'none',
+  borderRadius: 7,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: '0.08em',
 };
 const btnSecondary: React.CSSProperties = {
-  flex: 1, padding: '9px 0', background: 'var(--bg)',
-  color: 'var(--text-dim)', border: '1px solid var(--border)',
-  borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+  flex: 1,
+  padding: '10px 0',
+  background: 'var(--bg-surface)',
+  color: 'var(--text-muted)',
+  border: '1px solid var(--border)',
+  borderRadius: 7,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 11,
 };
 
 function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div style={{
-        background: 'var(--bg-card)', border: '1px solid var(--accent)33',
-        borderTop: '3px solid var(--accent)', borderRadius: 8, padding: '22px 24px', width: 360,
-        boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderTop: '2px solid var(--accent)',
+        borderRadius: 12,
+        padding: '24px 26px',
+        width: 380,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
       }}>
         {children}
       </div>

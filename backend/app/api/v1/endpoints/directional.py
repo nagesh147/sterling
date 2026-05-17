@@ -188,18 +188,57 @@ _MODE_CODES = {
     "all":        "AL",
 }
 
-def _make_signal_id(sym: str, now_ms: int, mode=None, is_options: bool = False) -> str:
+def _infer_mode_tag(adx: float, atr_pct: float, score: float) -> str:
+    """
+    Mirror of frontend utils/fmt.ts::inferModeTag. When the user is in
+    "all" mode, signal IDs benefit from a tag that reflects the *actual*
+    character of the signal — not the literal "AL" placeholder. Same
+    thresholds as the frontend so client and server agree.
+
+      atr_pct < 35           → scalping (cooldown territory)
+      score ≥ 95 + adx ≥ 25  → positional (strong, persistent trend)
+      score ≥ 95 + adx ≥ 20  → swing
+      score ≥ 60 + adx ≥ 15  → intraday
+      else                   → scalping (catch-all)
+    """
+    if atr_pct < 35:
+        return "scalping"
+    if score >= 95 and adx >= 25:
+        return "positional"
+    if score >= 95 and adx >= 20:
+        return "swing"
+    if score >= 60 and adx >= 15:
+        return "intraday"
+    return "scalping"
+
+
+def _make_signal_id(
+    sym: str,
+    now_ms: int,
+    mode=None,
+    is_options: bool = False,
+    inferred_mode_name: str | None = None,
+) -> str:
     """
     Human-readable signal ID — format: SYMINSTR-MODE-SEQ
     e.g. BTCFUT-SW-A3K (BTC Futures Swing), ETHOPT-IN-X9P (ETH Options Intraday)
 
     SYMINSTR = asset + instrument type (FUT or OPT)
-    MODE = SC/IN/SW/PO/AL (scalping/intraday/swing/positional/all)
-    SEQ = 3-char base36 mixed from sym + mode + timestamp — unique per (sym, mode, ts).
+    MODE = SC/IN/SW/PO (scalping/intraday/swing/positional). When the active
+    mode is "all", callers pass `inferred_mode_name` derived from the live
+    signal data so the ID reads e.g. BTCFUT-IN-... instead of BTCFUT-AL-...
+    SEQ = 3-char base36 mixed from sym + mode + timestamp — unique per
+    (sym, mode, ts).
     """
     _chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    mode_name = (mode.name if mode else None) or "swing"
-    mode_code = _MODE_CODES.get(mode_name, "SW")
+    raw_mode_name = (mode.name if mode else None) or "swing"
+    # When in "all" mode, prefer the caller-supplied inferred tag.
+    effective_mode_name = (
+        inferred_mode_name
+        if (raw_mode_name == "all" and inferred_mode_name)
+        else raw_mode_name
+    )
+    mode_code = _MODE_CODES.get(effective_mode_name, "SW")
 
     # Asset prefix + instrument type
     asset = sym[:3].upper()
@@ -337,7 +376,9 @@ async def _fire_signal_alert(
         # Generate / reuse signal ID: one ID per (sym, mode, direction) until direction flips
         mode_name = _alert_mode.name if _alert_mode else "swing"
         _key = f"{sym}_{mode_name}_{dir_str}"
-        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, _alert_mode, is_options)
+        _score = signal.score_long if dir_str == 'long' else signal.score_short
+        _inferred = _infer_mode_tag(regime.adx, regime.atr_percentile, _score)
+        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, _alert_mode, is_options, inferred_mode_name=_inferred)
         _active_signal_ids[_key] = signal_id
         # Record the SL at alert time for future improvement detection
         if stop_price is not None:

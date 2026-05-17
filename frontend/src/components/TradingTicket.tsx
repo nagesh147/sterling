@@ -97,21 +97,25 @@ function buildOptionSymbol(
 
 // ─── Style constants ──────────────────────────────────────────────────────────
 
-const LONG_COLOR = '#44cc88';
-const SHORT_COLOR = '#cc4444';
-const NEUTRAL_COLOR = '#888';
+const LONG_COLOR  = 'var(--accent)';   // emerald — BUY / profit
+const SHORT_COLOR = 'var(--danger)';   // crimson — SELL / loss
+const NEUTRAL_COLOR = 'var(--text-dim)';
 
 const sectionLabel: React.CSSProperties = {
-  fontSize: 9, color: 'var(--text-faint)', letterSpacing: 2,
-  marginBottom: 4, textTransform: 'uppercase' as const,
+  fontSize: 9,
+  color: 'var(--text-dim)',
+  letterSpacing: '0.12em',
+  marginBottom: 6,
+  textTransform: 'uppercase' as const,
+  fontWeight: 600,
 };
 
 const inputStyle: React.CSSProperties = {
-  background: 'var(--bg)',
+  background: 'var(--bg-surface)',
   color: 'var(--text-primary)',
-  border: '1px solid var(--border-light)',
-  borderRadius: 3,
-  padding: '6px 9px',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  padding: '7px 10px',
   fontFamily: 'inherit',
   fontSize: 13,
   fontVariantNumeric: 'tabular-nums',
@@ -121,9 +125,9 @@ const inputStyle: React.CSSProperties = {
 const card: React.CSSProperties = {
   background: 'var(--bg-card)',
   border: '1px solid var(--border)',
-  borderRadius: 6,
-  padding: 16,
+  borderRadius: 10,
   marginBottom: 12,
+  overflow: 'hidden',
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -149,8 +153,12 @@ function RegimeBadge({ regime, direction }: { regime: string; direction: string 
   const label = regime.replace(/_/g, ' ').toUpperCase();
   return (
     <span style={{
-      background: `${color}22`, color, border: `1px solid ${color}44`,
-      borderRadius: 3, padding: '2px 8px', fontSize: 10, letterSpacing: 1,
+      background: `${color}18`,
+      color,
+      borderRadius: 5,
+      padding: '3px 9px',
+      fontSize: 10,
+      letterSpacing: '0.06em',
       fontWeight: 700,
     }}>
       {icon} {label}
@@ -168,11 +176,15 @@ function ToggleBtn({
     <button
       onClick={onClick}
       style={{
-        background: active ? `${activeColor}22` : 'var(--bg)',
+        background: active ? `${activeColor}18` : 'var(--bg-surface)',
         color: active ? activeColor : 'var(--text-dim)',
-        border: `1px solid ${active ? activeColor : 'var(--border)'}`,
-        borderRadius: 3, padding: '5px 14px', cursor: 'pointer',
-        fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
+        border: `1px solid ${active ? `${activeColor}50` : 'var(--border)'}`,
+        borderRadius: 7,
+        padding: '6px 16px',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontSize: 12,
+        letterSpacing: '0.05em',
         fontWeight: active ? 700 : 400,
         transition: 'all 0.1s',
         ...style,
@@ -203,10 +215,31 @@ function PriceRow({
     : '';
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--border-faint)' }}>
-      <span style={{ width: 110, fontSize: 10, color: 'var(--text-faint)', letterSpacing: 1, flexShrink: 0 }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      flex: 1,
+      padding: '10px 14px',
+      borderRight: '1px solid var(--border)',
+    }}>
+      {/* Label — small, muted, uppercase */}
+      <span style={{
+        fontSize: 9,
+        fontWeight: 600,
+        letterSpacing: '0.1em',
+        color: 'var(--text-dim)',
+        marginBottom: 5,
+        textTransform: 'uppercase' as const,
+      }}>
         {label}
+        {subLabel && (
+          <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400, letterSpacing: 0 }}>
+            · {subLabel}
+          </span>
+        )}
       </span>
+
+      {/* Price — large, bold, tabular */}
       {editable && editing ? (
         <input
           autoFocus
@@ -214,28 +247,35 @@ function PriceRow({
           onChange={(e) => setRaw(e.target.value)}
           onBlur={handleCommit}
           onKeyDown={(e) => { if (e.key === 'Enter') handleCommit(); if (e.key === 'Escape') setEditing(false); }}
-          style={{ ...inputStyle, width: 120 }}
+          style={{ ...inputStyle, padding: '2px 6px', fontSize: 14, width: '100%' }}
         />
       ) : (
         <span
           onClick={() => { if (editable) { setRaw(fmtN(price, 0)); setEditing(true); } }}
           style={{
-            fontSize: 14, fontVariantNumeric: 'tabular-nums', color: color ?? 'var(--text-primary)',
-            cursor: editable ? 'pointer' : 'default', minWidth: 90,
+            fontSize: 15,
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 700,
+            color: color ?? 'var(--text-primary)',
+            cursor: editable ? 'pointer' : 'default',
+            letterSpacing: '-0.01em',
           }}
           title={editable ? 'Click to edit' : undefined}
         >
           ${fmtUSD(price, price < 10 ? 2 : 0)}
         </span>
       )}
+
+      {/* % diff — small below price */}
       {pctStr && (
-        <span style={{ fontSize: 11, color: color ?? 'var(--text-dim)', fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{
+          fontSize: 10,
+          fontWeight: 500,
+          color: color ?? 'var(--text-dim)',
+          fontVariantNumeric: 'tabular-nums',
+          marginTop: 2,
+        }}>
           {pctStr}
-        </span>
-      )}
-      {subLabel && (
-        <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 4 }}>
-          {subLabel}
         </span>
       )}
     </div>
@@ -438,21 +478,48 @@ export function TradingTicket({ underlying }: Props) {
     <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
       {/* ═══ ROW 1 — Header ══════════════════════════════════════════════════ */}
       <div style={{
-        background: 'var(--bg)', borderBottom: '1px solid var(--border)',
-        padding: '10px 16px', display: 'flex', alignItems: 'center',
-        gap: 14, flexWrap: 'wrap',
+        background: 'var(--bg-card)',
+        borderBottom: '1px solid var(--border)',
+        padding: '12px 18px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        flexWrap: 'wrap',
       }}>
-        {/* Symbol + price */}
-        <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: 2, color: 'var(--text-primary)' }}>
-          ◎ {underlying}
+        {/* Symbol */}
+        <span style={{
+          fontSize: 14,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          color: 'var(--text-primary)',
+        }}>
+          {underlying}
         </span>
-        <span style={{ fontSize: 18, fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--text-primary)' }}>
+
+        {/* Vertical divider */}
+        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+
+        {/* Spot price */}
+        <span style={{
+          fontSize: 20,
+          fontVariantNumeric: 'tabular-nums',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          letterSpacing: '-0.01em',
+        }}>
           ${fmtUSD(spot, spot < 100 ? 2 : 0)}
         </span>
+
+        {/* % change */}
         {spotChangePct !== null && (
           <span style={{
-            fontSize: 12, fontVariantNumeric: 'tabular-nums',
+            fontSize: 12,
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 600,
             color: spotChangePct >= 0 ? LONG_COLOR : SHORT_COLOR,
+            background: spotChangePct >= 0 ? 'var(--accent)14' : 'var(--danger)14',
+            borderRadius: 5,
+            padding: '2px 7px',
           }}>
             {spotChangePct >= 0 ? '+' : ''}{fmtN(spotChangePct, 2)}%
           </span>
@@ -463,24 +530,35 @@ export function TradingTicket({ underlying }: Props) {
           <>
             <RegimeBadge regime={snap.macro_regime ?? 'unknown'} direction={snap.direction ?? 'neutral'} />
             <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-              Score <span style={{ color: score >= 60 ? LONG_COLOR : score >= 40 ? '#f0c040' : SHORT_COLOR, fontWeight: 600 }}>
+              Score{' '}
+              <span style={{
+                color: score >= 60 ? LONG_COLOR : score >= 40 ? 'var(--warning)' : SHORT_COLOR,
+                fontWeight: 700,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
                 {Math.round(score)}
               </span>
             </span>
           </>
         )}
+
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             onClick={() => setAlgoMode.mutate(!algoEnabled)}
             disabled={setAlgoMode.isPending}
             title={algoEnabled ? 'Algo ON — orders go live to Delta Exchange' : 'Algo OFF — orders are paper only'}
             style={{
-              background: algoEnabled ? '#ff4757' : 'var(--bg)',
-              color: algoEnabled ? '#fff' : 'var(--text-dim)',
-              border: `1px solid ${algoEnabled ? '#ff4757' : 'var(--border)'}`,
-              borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
-              fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
-              letterSpacing: 1.5, transition: 'all 0.15s',
+              background: algoEnabled ? 'var(--accent)18' : 'var(--bg-surface)',
+              color: algoEnabled ? 'var(--accent)' : 'var(--text-dim)',
+              border: `1px solid ${algoEnabled ? 'var(--accent)50' : 'var(--border)'}`,
+              borderRadius: 6,
+              padding: '4px 12px',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              transition: 'all 0.15s',
               opacity: setAlgoMode.isPending ? 0.6 : 1,
             }}
           >
@@ -493,37 +571,52 @@ export function TradingTicket({ underlying }: Props) {
       {/* ═══ ROW 2 — Signal context strip ════════════════════════════════════ */}
       {snap && (
         <div style={{
-          background: 'var(--bg-card)', borderBottom: '1px solid var(--border)',
-          padding: '6px 16px', display: 'flex', alignItems: 'center',
-          gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-dim)',
+          background: 'var(--bg)',
+          borderBottom: '1px solid var(--border)',
+          padding: '7px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0,
+          flexWrap: 'wrap',
+          fontSize: 11,
         }}>
           {snap.adx !== undefined && snap.adx !== null && (
-            <span>
-              ADX <span style={{ color: snap.adx >= 25 ? LONG_COLOR : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ color: 'var(--text-dim)', paddingRight: 14 }}>
+              ADX{' '}
+              <span style={{ color: snap.adx >= 25 ? LONG_COLOR : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                 {fmtN(snap.adx, 0)}
               </span>
             </span>
           )}
           {snap.rsi !== undefined && snap.rsi !== null && (
-            <span>· RSI <span style={{ fontVariantNumeric: 'tabular-nums', color: snap.rsi >= 70 ? SHORT_COLOR : snap.rsi <= 30 ? LONG_COLOR : 'var(--text-muted)' }}>
-              {fmtN(snap.rsi, 0)}
-            </span></span>
+            <span style={{ color: 'var(--text-dim)', borderLeft: '1px solid var(--border)', paddingLeft: 14, paddingRight: 14 }}>
+              RSI{' '}
+              <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: snap.rsi >= 70 ? SHORT_COLOR : snap.rsi <= 30 ? LONG_COLOR : 'var(--text-muted)' }}>
+                {fmtN(snap.rsi, 0)}
+              </span>
+            </span>
           )}
           {atr0 > 0 && (
-            <span>· ATR <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)' }}>
-              ${fmtUSD(atr0, atr0 < 10 ? 2 : 0)}
-            </span></span>
+            <span style={{ color: 'var(--text-dim)', borderLeft: '1px solid var(--border)', paddingLeft: 14, paddingRight: 14 }}>
+              ATR{' '}
+              <span style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--text-muted)', fontWeight: 600 }}>
+                ${fmtUSD(atr0, atr0 < 10 ? 2 : 0)}
+              </span>
+            </span>
           )}
           {snap.ivr !== undefined && snap.ivr !== null && (
-            <span style={{ color: ivrColor(snap.ivr) }}>
-              · IVR {fmtN(snap.ivr, 0)} <span style={{ color: 'var(--text-faint)' }}>{snap.ivr_band}</span>
+            <span style={{ color: ivrColor(snap.ivr), borderLeft: '1px solid var(--border)', paddingLeft: 14, paddingRight: 14, fontWeight: 600 }}>
+              IVR {fmtN(snap.ivr, 0)}
+              <span style={{ color: 'var(--text-faint)', fontWeight: 400, marginLeft: 4 }}>{snap.ivr_band}</span>
             </span>
           )}
           {snap.squeezed && (
-            <span style={{ color: '#f0c040', fontWeight: 600, letterSpacing: 1 }}>· SQUEEZE</span>
+            <span style={{ color: 'var(--warning)', fontWeight: 700, letterSpacing: '0.08em', borderLeft: '1px solid var(--border)', paddingLeft: 14, paddingRight: 14, fontSize: 10 }}>
+              SQUEEZE
+            </span>
           )}
           {snap.exec_mode && (
-            <span style={{ marginLeft: 'auto', color: '#88aaff', letterSpacing: 1, fontWeight: 600, fontSize: 10 }}>
+            <span style={{ marginLeft: 'auto', color: 'var(--blue)', letterSpacing: '0.08em', fontWeight: 700, fontSize: 10 }}>
               {snap.exec_mode.toUpperCase()} MODE
             </span>
           )}
@@ -718,18 +811,19 @@ function FuturesSection({
         )}
       </div>
 
-      {/* ROW 7 — Price levels */}
+      {/* ROW 7 — Price levels (clean inline grid, no box-in-box) */}
       {levels && (
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 16 }}>
           <div style={sectionLabel}>PRICE LEVELS</div>
           <div style={{
-            background: 'var(--bg)',
+            display: 'flex',
             border: '1px solid var(--border)',
-            borderRadius: 4,
-            padding: '8px 12px',
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: 'var(--bg-card)',
           }}>
             <PriceRow
-              label="ENTRY PRICE"
+              label="ENTRY"
               price={levels.entry}
               subLabel="MARKET"
             />
@@ -751,20 +845,43 @@ function FuturesSection({
               editable
               onChange={(v) => setCustomTP(v)}
             />
-            <PriceRow
-              label="LIQUIDATION"
-              price={levels.liquidation}
-              pctDiff={(levels.liquidation - levels.entry) / levels.entry * 100}
-              subLabel={levels.liqSafe ? 'safe ✓' : '⚠ near SL!'}
-              color={levels.liqSafe ? 'var(--text-faint)' : SHORT_COLOR}
-            />
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              flex: 1,
+              padding: '10px 14px',
+            }}>
+              <span style={{
+                fontSize: 9, fontWeight: 600, letterSpacing: '0.1em',
+                color: 'var(--text-dim)', marginBottom: 5, textTransform: 'uppercase' as const,
+              }}>
+                LIQ · <span style={{ fontWeight: 400, letterSpacing: 0 }}>{levels.liqSafe ? 'safe ✓' : '⚠ near SL'}</span>
+              </span>
+              <span style={{
+                fontSize: 15, fontVariantNumeric: 'tabular-nums', fontWeight: 700,
+                color: levels.liqSafe ? 'var(--text-dim)' : SHORT_COLOR,
+                letterSpacing: '-0.01em',
+              }}>
+                ${fmtUSD(levels.liquidation, levels.liquidation < 10 ? 2 : 0)}
+              </span>
+              <span style={{
+                fontSize: 10, fontWeight: 500, color: levels.liqSafe ? 'var(--text-faint)' : SHORT_COLOR,
+                fontVariantNumeric: 'tabular-nums', marginTop: 2,
+              }}>
+                {`${((levels.liquidation - levels.entry) / levels.entry * 100).toFixed(1)}%`}
+              </span>
+            </div>
           </div>
           {!levels.liqSafe && (
             <div style={{
-              marginTop: 6, fontSize: 10, color: SHORT_COLOR,
-              background: `${SHORT_COLOR}11`, padding: '4px 8px', borderRadius: 3,
+              marginTop: 6, fontSize: 10,
+              color: SHORT_COLOR,
+              background: 'var(--danger)10',
+              border: '1px solid var(--danger)25',
+              padding: '6px 10px',
+              borderRadius: 6,
             }}>
-              ⚠ Stop loss is within 15% of liquidation price — reduce leverage or widen stop
+              ⚠ Stop loss within 15% of liquidation — reduce leverage or widen stop
             </div>
           )}
         </div>
@@ -803,40 +920,51 @@ function FuturesSection({
       {/* ROW 9 — Risk summary bar */}
       {levels && (
         <div style={{
-          marginBottom: 14, display: 'flex', gap: 0,
-          border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden',
-          fontSize: 11, fontVariantNumeric: 'tabular-nums',
+          marginBottom: 16,
+          display: 'flex',
+          gap: 0,
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          overflow: 'hidden',
+          fontSize: 11,
+          fontVariantNumeric: 'tabular-nums',
         }}>
           <div style={{
-            flex: 1, padding: '7px 10px',
-            background: `${SHORT_COLOR}11`, borderRight: '1px solid var(--border)',
+            flex: 1,
+            padding: '8px 14px',
+            borderRight: '1px solid var(--border)',
           }}>
-            <span style={{ color: 'var(--text-faint)', fontSize: 9, letterSpacing: 1 }}>RISK </span>
-            <span style={{ color: SHORT_COLOR, fontWeight: 600 }}>
+            <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 3 }}>RISK</div>
+            <span style={{ color: SHORT_COLOR, fontWeight: 700, fontSize: 13 }}>
               ${fmtUSD(levels.riskUsd, 0)}
             </span>
-            <span style={{ color: 'var(--text-faint)' }}> ({fmtN(levels.stopPct, 1)}%)</span>
+            <span style={{ color: 'var(--text-dim)', marginLeft: 4, fontSize: 10 }}>
+              {fmtN(levels.stopPct, 1)}%
+            </span>
           </div>
           <div style={{
-            flex: 1, padding: '7px 10px',
-            background: `${LONG_COLOR}11`, borderRight: '1px solid var(--border)',
+            flex: 1,
+            padding: '8px 14px',
+            borderRight: '1px solid var(--border)',
           }}>
-            <span style={{ color: 'var(--text-faint)', fontSize: 9, letterSpacing: 1 }}>REWARD </span>
-            <span style={{ color: LONG_COLOR, fontWeight: 600 }}>
+            <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 3 }}>REWARD</div>
+            <span style={{ color: LONG_COLOR, fontWeight: 700, fontSize: 13 }}>
               ${fmtUSD(levels.rewardUsd, 0)}
             </span>
-            <span style={{ color: 'var(--text-faint)' }}> ({fmtN(levels.stopPct * (modeData?.config?.rr_target ?? 2), 1)}%)</span>
+            <span style={{ color: 'var(--text-dim)', marginLeft: 4, fontSize: 10 }}>
+              {fmtN(levels.stopPct * (modeData?.config?.rr_target ?? 2), 1)}%
+            </span>
           </div>
-          <div style={{ flex: 0.7, padding: '7px 10px', borderRight: '1px solid var(--border)' }}>
-            <span style={{ color: 'var(--text-faint)', fontSize: 9, letterSpacing: 1 }}>R:R </span>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+          <div style={{ padding: '8px 14px', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 3 }}>R:R</div>
+            <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 13 }}>
               {fmtN(modeData?.config?.rr_target ?? 2, 1)}:1
             </span>
           </div>
-          <div style={{ flex: 0.6, padding: '7px 10px', textAlign: 'center' }}>
+          <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center' }}>
             {levels.liqSafe
-              ? <span style={{ color: LONG_COLOR, fontWeight: 600 }}>Liq ✓</span>
-              : <span style={{ color: SHORT_COLOR, fontWeight: 600 }}>Liq ⚠</span>}
+              ? <span style={{ color: LONG_COLOR, fontWeight: 700, fontSize: 11 }}>Liq ✓</span>
+              : <span style={{ color: SHORT_COLOR, fontWeight: 700, fontSize: 11 }}>Liq ⚠</span>}
           </div>
         </div>
       )}
@@ -866,22 +994,38 @@ function FuturesSection({
             onClick={onPlace}
             disabled={!canTrade || placing}
             style={{
-              width: '100%', padding: '14px 0', borderRadius: 4, cursor: canTrade ? 'pointer' : 'default',
-              border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
-              letterSpacing: 2, textTransform: 'uppercase' as const,
-              background: canTrade ? dirColor : 'var(--border)',
-              color: canTrade ? '#000' : 'var(--text-faint)',
-              opacity: (!canTrade || placing) ? 0.6 : 1,
-              transition: 'all 0.15s',
+              width: '100%',
+              padding: '15px 0',
+              borderRadius: 8,
+              cursor: canTrade ? 'pointer' : 'not-allowed',
+              border: 'none',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase' as const,
+              background: canTrade
+                ? direction === 'long'
+                  ? 'var(--accent)'
+                  : 'var(--danger)'
+                : 'var(--bg-surface)',
+              color: canTrade ? '#000' : 'var(--text-dim)',
+              opacity: (!canTrade || placing) ? 0.65 : 1,
+              transition: 'opacity 0.15s',
+              boxShadow: canTrade
+                ? direction === 'long'
+                  ? '0 0 20px var(--accent)30'
+                  : '0 0 20px var(--danger)30'
+                : 'none',
             }}
           >
             {placing
-              ? 'Placing…'
-              : `▶  ${direction === 'long' ? 'BUY LONG' : 'SELL SHORT'} · ${contracts} contract${contracts > 1 ? 's' : ''} · ${leverage}× leverage`}
+              ? 'Placing Order…'
+              : `${direction === 'long' ? '▲ BUY LONG' : '▼ SELL SHORT'}  ·  ${contracts} contract${contracts > 1 ? 's' : ''}  ·  ${leverage}×`}
           </button>
           {!canTrade && spot > 0 && (
             <div style={{ marginTop: 6, fontSize: 10, color: 'var(--text-faint)', textAlign: 'center' }}>
-              {openPos ? 'Position already open' : 'No trade signal — direction is neutral'}
+              {openPos ? 'Position already open' : 'No signal — direction is neutral'}
             </div>
           )}
         </>
@@ -1084,18 +1228,27 @@ function OptionsSection({
             onClick={onPlace}
             disabled={!canTrade || placing}
             style={{
-              width: '100%', padding: '14px 0', borderRadius: 4,
-              cursor: canTrade ? 'pointer' : 'default',
-              border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
-              letterSpacing: 2, textTransform: 'uppercase' as const,
-              background: canTrade ? dirColor : 'var(--border)',
-              color: canTrade ? '#000' : 'var(--text-faint)',
-              opacity: (!canTrade || placing) ? 0.6 : 1,
+              width: '100%',
+              padding: '15px 0',
+              borderRadius: 8,
+              cursor: canTrade ? 'pointer' : 'not-allowed',
+              border: 'none',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              fontWeight: 800,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase' as const,
+              background: canTrade
+                ? optionDir === 'call' ? 'var(--accent)' : 'var(--danger)'
+                : 'var(--bg-surface)',
+              color: canTrade ? '#000' : 'var(--text-dim)',
+              opacity: (!canTrade || placing) ? 0.65 : 1,
+              transition: 'opacity 0.15s',
             }}
           >
             {placing
-              ? 'Placing…'
-              : `▶  BUY ${optionDir.toUpperCase()} · ${fmtUSD(currentStrike, 0)} strike · ${currentExp?.label ?? '—'}`}
+              ? 'Placing Order…'
+              : `BUY ${optionDir.toUpperCase()}  ·  ${fmtUSD(currentStrike, 0)} strike  ·  ${currentExp?.label ?? '—'}`}
           </button>
         </>
       )}
@@ -1121,11 +1274,19 @@ function OpenPositionCard({
 
   return (
     <div style={{
-      border: `1px solid ${LONG_COLOR}44`, borderRadius: 4,
-      padding: '10px 12px', background: `${LONG_COLOR}08`,
+      border: '1px solid var(--accent)30',
+      borderLeft: '3px solid var(--accent)',
+      borderRadius: 8,
+      padding: '12px 14px',
+      background: 'var(--accent)08',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 10, color: LONG_COLOR, letterSpacing: 2, fontWeight: 700 }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+        <span style={{
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          color: 'var(--accent)',
+        }}>
           OPEN POSITION
         </span>
         <button
@@ -1133,37 +1294,48 @@ function OpenPositionCard({
           disabled={closing}
           style={{
             marginLeft: 'auto',
-            background: `${SHORT_COLOR}22`, color: SHORT_COLOR, border: `1px solid ${SHORT_COLOR}55`,
-            borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: 11, opacity: closing ? 0.5 : 1,
+            background: 'var(--danger)18',
+            color: 'var(--danger)',
+            border: '1px solid var(--danger)40',
+            borderRadius: 6,
+            padding: '4px 12px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            fontSize: 11,
+            fontWeight: 600,
+            opacity: closing ? 0.5 : 1,
           }}
         >
-          {closing ? 'Closing…' : '✕ Close'}
+          {closing ? 'Closing…' : '✕ Close Position'}
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
         <div>
-          <span style={{ color: dir === 'long' ? LONG_COLOR : SHORT_COLOR, fontWeight: 700 }}>
-            {dir.toUpperCase()}
+          <span style={{ color: dir === 'long' ? 'var(--accent)' : 'var(--danger)', fontWeight: 700 }}>
+            {dir === 'long' ? '↑' : '↓'} {dir.toUpperCase()}
           </span>
           <span style={{ color: 'var(--text-dim)', marginLeft: 6 }}>
-            {pos.sized_trade?.contracts ?? 1} contract{(pos.sized_trade?.contracts ?? 1) > 1 ? 's' : ''}
+            {pos.sized_trade?.contracts ?? 1} ct
           </span>
         </div>
         <div style={{ color: 'var(--text-dim)' }}>
-          Entry: <span style={{ color: 'var(--text-primary)' }}>${fmtUSD(entrySpot, 0)}</span>
+          Entry <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>${fmtUSD(entrySpot, 0)}</span>
         </div>
         {spot > 0 && (
           <div style={{ color: 'var(--text-dim)' }}>
-            Current: <span style={{ color: 'var(--text-primary)' }}>${fmtUSD(spot, 0)}</span>
+            Now <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>${fmtUSD(spot, 0)}</span>
           </div>
         )}
         {pnlUsd !== null && (
-          <div>
-            P&L: <span style={{ color: pnlColor, fontWeight: 600 }}>
+          <div style={{ marginLeft: 'auto' }}>
+            <span style={{ color: pnlColor, fontWeight: 700, fontSize: 13 }}>
               {pnlUsd >= 0 ? '+' : ''}${fmtUSD(pnlUsd, 0)}
-              {pnlPct !== null && ` (${fmtN(pnlPct, 1)}%)`}
+              {pnlPct !== null && (
+                <span style={{ fontSize: 11, fontWeight: 500, marginLeft: 4 }}>
+                  ({fmtN(pnlPct, 1)}%)
+                </span>
+              )}
             </span>
           </div>
         )}

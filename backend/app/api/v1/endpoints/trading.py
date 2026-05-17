@@ -411,14 +411,25 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         from app.engines.directional.sizing_engine import size_trade
         from app.schemas.risk import RiskParams
 
+        # Best-effort spot price: limit_price from request → stream cache → 0
+        spot_price: float = 0.0
+        if body.limit_price and body.limit_price > 0:
+            spot_price = float(body.limit_price)
+        else:
+            try:
+                from app.api.v1.endpoints.directional import _stream_last_prices
+                spot_price = float(_stream_last_prices.get(sym, 0.0))
+            except Exception:
+                pass
+
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
             underlying=sym,
-            strike=0.0, expiry_date="", dte=0,
+            strike=spot_price, expiry_date="", dte=0,
             option_type=body.instrument_type,
-            bid=0.0, ask=0.0,
-            mark_price=0.0, mid_price=0.0, mark_iv=0.0,
+            bid=spot_price, ask=spot_price,
+            mark_price=spot_price, mid_price=spot_price, mark_iv=0.0,
             delta=1.0 if body.direction == "long" else -1.0,
             open_interest=0.0, volume_24h=0.0,
             spread_pct=0.0, health_score=0.0, healthy=True,
@@ -426,7 +437,7 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         structure = TradeStructure(
             structure_type=body.instrument_type,
             direction=direction, legs=[leg],
-            net_premium=0.0, max_loss=0.0,
+            net_premium=spot_price, max_loss=0.0,
             max_gain=None, risk_reward=2.0,
             score=0.0, score_breakdown={},
         )
@@ -434,7 +445,7 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         sized = size_trade(structure, risk, leverage=int(body.leverage))
         pos = paper_store.add_position(
             underlying=sym, sized_trade=sized,
-            entry_spot_price=0.0,
+            entry_spot_price=spot_price,
             notes=f"[ALGO-FAILED] {error}",
             is_paper=False,
             order_status="failed",

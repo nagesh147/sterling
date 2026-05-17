@@ -479,7 +479,11 @@ async def enter_direct_position(body: DirectEntryRequest, request: Request) -> P
     try:
         spot_price = float(await adapter.get_index_price(inst))
     except Exception:
-        spot_price = 0.0
+        try:
+            from app.api.v1.endpoints.directional import _stream_last_prices
+            spot_price = float(_stream_last_prices.get(sym, 0.0))
+        except Exception:
+            spot_price = 0.0
 
     # Synthetic futures leg
     direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
