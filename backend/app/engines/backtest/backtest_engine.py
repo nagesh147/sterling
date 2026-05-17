@@ -263,6 +263,7 @@ def simulate_capital_curve(
     risk_pct: float = 0.02,
     hold_bars: int = 3,
     score_min: float = 0.0,
+    fwd_horizon: str = '12h',
 ) -> dict:
     """
     Non-overlapping position simulation over sampled backtest bars.
@@ -285,7 +286,12 @@ def simulate_capital_curve(
     for i, bar in enumerate(bars):
         if in_trade and (i - entry_idx >= hold_bars or i == len(bars) - 1):
             entry_bar  = bars[entry_idx]
-            raw_ret    = entry_bar.fwd_return_12h
+            if fwd_horizon == '4h':
+                raw_ret = entry_bar.fwd_return_4h
+            elif fwd_horizon == '24h':
+                raw_ret = entry_bar.fwd_return_24h
+            else:
+                raw_ret = entry_bar.fwd_return_12h
             raw_ret    = (raw_ret / 100.0) if raw_ret is not None else 0.0
             if entry_dir == -1:
                 raw_ret = -raw_ret

@@ -88,6 +88,7 @@ class SignalResult(BaseModel):
     # v3 unified engine fields
     ha_real_divergence_pct: float = 0.0  # |Real close − HA close| / Real close * 100
     vol_confirm: bool = False             # volume > 1.5× median
+    bars_since_flip: int = 0             # consecutive prior bars with same ST alignment
 
 
 class SetupResult(BaseModel):

@@ -39,6 +39,16 @@ def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
         )
 
 
+def _rsi_ok_long(rsi: float) -> bool:
+    """Long entry RSI gate: not overbought (< 70), not extreme low (> 42)."""
+    return 42.0 < rsi < 70.0
+
+
+def _rsi_ok_short(rsi: float) -> bool:
+    """Short entry RSI gate: not oversold (> 30), not extreme high (< 57)."""
+    return 30.0 < rsi < 57.0
+
+
 def compute_signal(
     candles_1h: List[Candle],
     st_threshold: int = 3,
@@ -156,11 +166,11 @@ def compute_signal(
     # Bull 40-60 / Bear 40-60 earns half weight (neutral zone, valid but weaker).
     # Outside overbought/oversold bounds vetoed elsewhere.
     if trend_val == 1:
-        rsi_ok = 40.0 < cur_rsi < 78.0        # hard gate (unchanged)
-        rsi_momentum = cur_rsi > 60.0          # bonus: RSI confirms momentum
+        rsi_ok = _rsi_ok_long(cur_rsi)
+        rsi_momentum = 55.0 < cur_rsi < 68.0   # momentum but not overbought
     elif trend_val == -1:
-        rsi_ok = 22.0 < cur_rsi < 60.0
-        rsi_momentum = cur_rsi < 40.0
+        rsi_ok = _rsi_ok_short(cur_rsi)
+        rsi_momentum = 32.0 < cur_rsi < 45.0   # not yet oversold
     else:
         rsi_ok = False
         rsi_momentum = False
@@ -185,7 +195,24 @@ def compute_signal(
     }
     total_weight = sum(weights.values())  # 20
     earned = sum(w for k, w in weights.items() if flags[k])
-    pct = earned / total_weight
+
+    # Staleness: count how many consecutive prior bars had the same alignment.
+    # Uses already-computed st1/2/3_trend arrays — O(16) lookback, no recursion.
+    bars_active = 0
+    if trend_val != 0:
+        direction_count = 1 if trend_val == 1 else -1
+        n_arr = len(st1_trend)
+        for j in range(n_arr - 2, max(-1, n_arr - 17), -1):
+            gc_prev = [int(st1_trend[j]), int(st2_trend[j]), int(st3_trend[j])].count(direction_count)
+            if gc_prev >= st_threshold:
+                bars_active += 1
+            else:
+                break
+        else:
+            bars_active = 16  # all 16 lookback bars were already aligned
+    stale_penalty = min(3, bars_active // 5)
+    earned_adj = max(0.0, earned - stale_penalty)
+    pct = earned_adj / total_weight
 
     if pct >= 0.75:
         signal_strength = "STRONG"
@@ -214,4 +241,5 @@ def compute_signal(
         squeezed=squeezed,
         ha_real_divergence_pct=round(ha_real_div_pct, 4),
         vol_confirm=vol_spike,
+        bars_since_flip=bars_active,
     )
