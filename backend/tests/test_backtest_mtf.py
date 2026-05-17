@@ -109,3 +109,10 @@ def test_mtf_endpoint_schema():
     assert req.underlying == "BTC"
     assert "scalping_15m" in req.profiles
     assert "intraday_1h" in req.profiles
+    # MTFBacktestResult is instantiable
+    result = MTFBacktestResult(
+        underlying="BTC",
+        profiles={"scalping_15m": {"total_trades": 0}},
+        timestamp_ms=0,
+    )
+    assert result.recommended is None

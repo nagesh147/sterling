@@ -1,3 +1,4 @@
+import time
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.backtest import (
     BacktestRequest, BacktestResult,
@@ -91,7 +92,7 @@ async def run_backtest_endpoint(
 async def run_mtf_backtest_endpoint(
     body: MTFBacktestRequest,
     request: Request,
-) -> dict:
+) -> MTFBacktestResult:
     from app.core.rate_limit import check_backtest
     check_backtest(request)
 
@@ -111,7 +112,9 @@ async def run_mtf_backtest_endpoint(
     adapter = _adm.get_adapter() or request.app.state.adapter
 
     needs_15m = "scalping_15m" in body.profiles
-    needs_1d  = "intraday_4h"  in body.profiles
+    needs_1h  = "scalping_15m" in body.profiles or "intraday_1h" in body.profiles
+    needs_4h  = "intraday_1h"  in body.profiles or "intraday_4h" in body.profiles
+    needs_1d  = "intraday_4h"  in body.profiles  # 1D regime for intraday_4h profile
 
     limit_15m = min(body.lookback_days * 96 + 100, 4000)
     limit_1h  = min(body.lookback_days * 24 + 100, 5000)
@@ -119,20 +122,25 @@ async def run_mtf_backtest_endpoint(
     limit_1d  = body.lookback_days + 30
 
     try:
-        candles_1h = await adapter.get_candles(inst, "1H", limit=limit_1h)
-        candles_4h = await adapter.get_candles(inst, "4H", limit=limit_4h)
         candles_15m = (
             await adapter.get_candles(inst, "15m", limit=limit_15m)
             if needs_15m else []
         )
+        candles_1h = (
+            await adapter.get_candles(inst, "1H",  limit=limit_1h)
+            if needs_1h else []
+        )
+        candles_4h = (
+            await adapter.get_candles(inst, "4H",  limit=limit_4h)
+            if needs_4h else []
+        )
         candles_1d = (
-            await adapter.get_candles(inst, "1D", limit=limit_1d)
+            await adapter.get_candles(inst, "1D",  limit=limit_1d)
             if needs_1d else []
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
 
-    import time
     raw = run_mtf_backtest(
         underlying=sym,
         candles_15m=candles_15m,

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 
 class BacktestRequest(BaseModel):
@@ -138,6 +138,6 @@ class MTFBacktestRequest(BaseModel):
 
 class MTFBacktestResult(BaseModel):
     underlying:   str
-    profiles:     dict
+    profiles:     Dict[str, Any]
     timestamp_ms: int
     recommended:  Optional[str] = None
