@@ -27,6 +27,7 @@ class BacktestBarResult(BaseModel):
     st_values: List[float] = []
     state: str
     direction: str
+    signal_score: Optional[float] = None   # 0-20 confluence score from signal engine
     # Spot forward returns (% change)
     fwd_return_4h: Optional[float] = None
     fwd_return_12h: Optional[float] = None

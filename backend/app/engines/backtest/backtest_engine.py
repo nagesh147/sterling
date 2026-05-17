@@ -89,6 +89,7 @@ def run_backtest(
                 st_values=signal.st_values,
                 state=setup.state.value,
                 direction=setup.direction.value,
+                signal_score=round(float(signal.signal_score or 0.0), 2),
                 fwd_return_4h=_fwd_return(candles_1h, i, 4),
                 fwd_return_12h=_fwd_return(candles_1h, i, 12),
                 fwd_return_24h=_fwd_return(candles_1h, i, 24),
@@ -257,6 +258,7 @@ def simulate_capital_curve(
     fee_rt_pct: float = FEE_RT_PCT,
     risk_pct: float = 0.02,
     hold_bars: int = 3,
+    score_min: float = 0.0,
 ) -> dict:
     """
     Non-overlapping position simulation over sampled backtest bars.
@@ -294,6 +296,8 @@ def simulate_capital_curve(
             in_trade = False
 
         if not in_trade and bar.state == conf:
+            if (bar.signal_score or 0.0) < score_min:
+                continue
             d = 1 if bar.direction == "long" else (-1 if bar.direction == "short" else 0)
             if d != 0:
                 in_trade  = True
