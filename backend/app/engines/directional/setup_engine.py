@@ -29,6 +29,7 @@ _VOLATILE_REGIMES = {MacroRegime.VOLATILE}
 _VETO_REGIMES = {MacroRegime.CHOPPY, MacroRegime.IDLE}
 
 _PARTIAL_ST_MIN = 2
+_HIGH_SCORE_CONFIRM = 16.0  # min signal_score to confirm in RANGING/VOLATILE
 
 
 def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
@@ -79,6 +80,15 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
 
     # ── Ranging — allow when 2/3 STs strongly aligned ────────────────────────
     elif macro in _RANGING_REGIMES and green_count >= _PARTIAL_ST_MIN and trend == 1:
+        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        if signal.all_green and sig_score >= _HIGH_SCORE_CONFIRM:
+            return SetupResult(
+                state=TradeState.CONFIRMED_SETUP_ACTIVE,
+                direction=Direction.LONG,
+                reason=f"Ranging regime — all STs bullish + high score ({sig_score:.0f}/20)",
+                macro_regime=macro,
+                signal_trend=trend,
+            )
         return SetupResult(
             state=TradeState.EARLY_SETUP_ACTIVE,
             direction=Direction.LONG,
@@ -86,32 +96,53 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
             macro_regime=macro,
             signal_trend=trend,
         )
-    elif macro in _RANGING_REGIMES and red_count >= _PARTIAL_ST_MIN and trend == -1:
+    elif macro in _RANGING_REGIMES and trend == -1:
+        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        if signal.all_red and sig_score >= _HIGH_SCORE_CONFIRM:
+            return SetupResult(
+                state=TradeState.CONFIRMED_SETUP_ACTIVE,
+                direction=Direction.SHORT,
+                reason=f"Ranging regime — all STs bearish + high score ({sig_score:.0f}/20)",
+                macro_regime=macro,
+                signal_trend=trend,
+            )
+        if red_count >= _PARTIAL_ST_MIN:
+            return SetupResult(
+                state=TradeState.EARLY_SETUP_ACTIVE,
+                direction=Direction.SHORT,
+                reason=f"Ranging regime, {red_count}/3 ST bearish — lower confidence.",
+                macro_regime=macro,
+                signal_trend=trend,
+            )
         return SetupResult(
-            state=TradeState.EARLY_SETUP_ACTIVE,
-            direction=Direction.SHORT,
-            reason=f"Ranging regime, {red_count}/3 ST bearish — lower confidence.",
+            state=TradeState.FILTERED,
+            direction=Direction.NEUTRAL,
+            reason=f"Ranging regime / short — insufficient ST alignment ({red_count}/3)",
             macro_regime=macro,
             signal_trend=trend,
         )
 
     # ── Volatile — momentum direction when all STs agree ─────────────────────
     elif macro in _VOLATILE_REGIMES and trend == 1:
-        return SetupResult(
-            state=TradeState.EARLY_SETUP_ACTIVE,
-            direction=Direction.LONG,
-            reason="Volatile regime, all STs bullish — momentum long.",
-            macro_regime=macro,
-            signal_trend=trend,
-        )
+        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        state = (TradeState.CONFIRMED_SETUP_ACTIVE
+                 if signal.all_green and sig_score >= _HIGH_SCORE_CONFIRM
+                 else TradeState.EARLY_SETUP_ACTIVE)
+        reason = (f"Volatile regime — all STs bullish + high score ({sig_score:.0f}/20)"
+                  if state == TradeState.CONFIRMED_SETUP_ACTIVE
+                  else "Volatile regime, all STs bullish — momentum long.")
+        return SetupResult(state=state, direction=Direction.LONG,
+                           reason=reason, macro_regime=macro, signal_trend=trend)
     elif macro in _VOLATILE_REGIMES and trend == -1:
-        return SetupResult(
-            state=TradeState.EARLY_SETUP_ACTIVE,
-            direction=Direction.SHORT,
-            reason="Volatile regime, all STs bearish — momentum short.",
-            macro_regime=macro,
-            signal_trend=trend,
-        )
+        sig_score = float(getattr(signal, 'signal_score', 0.0) or 0.0)
+        state = (TradeState.CONFIRMED_SETUP_ACTIVE
+                 if signal.all_red and sig_score >= _HIGH_SCORE_CONFIRM
+                 else TradeState.EARLY_SETUP_ACTIVE)
+        reason = (f"Volatile regime — all STs bearish + high score ({sig_score:.0f}/20)"
+                  if state == TradeState.CONFIRMED_SETUP_ACTIVE
+                  else "Volatile regime, all STs bearish — momentum short.")
+        return SetupResult(state=state, direction=Direction.SHORT,
+                           reason=reason, macro_regime=macro, signal_trend=trend)
 
     # ── No alignment ─────────────────────────────────────────────────────────
     else:
