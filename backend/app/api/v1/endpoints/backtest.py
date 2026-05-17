@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request
-from app.schemas.backtest import BacktestRequest, BacktestResult
+from app.schemas.backtest import (
+    BacktestRequest, BacktestResult,
+    MTFBacktestRequest, MTFBacktestResult,
+)
 from app.services.exchanges import instrument_registry as registry
 from app.engines.backtest.backtest_engine import run_backtest
+from app.engines.backtest.backtest_mtf import run_mtf_backtest
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
@@ -81,3 +85,75 @@ async def run_backtest_endpoint(
         pass
 
     return result_dict
+
+
+@router.post("/mtf")
+async def run_mtf_backtest_endpoint(
+    body: MTFBacktestRequest,
+    request: Request,
+) -> dict:
+    from app.core.rate_limit import check_backtest
+    check_backtest(request)
+
+    sym  = body.underlying.upper()
+    inst = registry.get_instrument(sym)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+
+    from app.services import adapter_manager as _adm
+    from app.api.v1.endpoints.directional import _adapter_can_serve
+    src = _adm.get_data_source()
+    if not _adapter_can_serve(inst, src):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{sym} is not available on {src} data source",
+        )
+    adapter = _adm.get_adapter() or request.app.state.adapter
+
+    needs_15m = "scalping_15m" in body.profiles
+    needs_1d  = "intraday_4h"  in body.profiles
+
+    limit_15m = min(body.lookback_days * 96 + 100, 4000)
+    limit_1h  = min(body.lookback_days * 24 + 100, 5000)
+    limit_4h  = min(body.lookback_days * 6  + 100, 1000)
+    limit_1d  = body.lookback_days + 30
+
+    try:
+        candles_1h = await adapter.get_candles(inst, "1H", limit=limit_1h)
+        candles_4h = await adapter.get_candles(inst, "4H", limit=limit_4h)
+        candles_15m = (
+            await adapter.get_candles(inst, "15m", limit=limit_15m)
+            if needs_15m else []
+        )
+        candles_1d = (
+            await adapter.get_candles(inst, "1D", limit=limit_1d)
+            if needs_1d else []
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+
+    import time
+    raw = run_mtf_backtest(
+        underlying=sym,
+        candles_15m=candles_15m,
+        candles_1h=candles_1h,
+        candles_4h=candles_4h,
+        c_1d=candles_1d,
+        profiles=body.profiles,
+        score_min=body.score_min,
+    )
+
+    best_key    = None
+    best_sharpe = -999.0
+    for key, r in raw.items():
+        s = r.get("sharpe")
+        if s is not None and r.get("total_trades", 0) >= 5 and s > best_sharpe:
+            best_sharpe = s
+            best_key    = key
+
+    return {
+        "underlying":   sym,
+        "profiles":     raw,
+        "timestamp_ms": int(time.time() * 1000),
+        "recommended":  best_key,
+    }

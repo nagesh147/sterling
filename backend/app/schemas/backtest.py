@@ -94,3 +94,50 @@ class BacktestResult(BaseModel):
     sim_max_drawdown:   Optional[float]       = None
     sim_sharpe:         Optional[float]       = None
     sim_fee_rt_pct:     Optional[float]       = None
+
+
+# ── Multi-Timeframe Backtest ──────────────────────────────────────────────────
+
+class MTFProfileResult(BaseModel):
+    underlying:          str
+    label:               str
+    signal_tf:           str
+    regime_tf:           str
+    total_signal_bars:   int
+    total_regime_bars:   int
+    total_trades:        int
+    win_rate:            Optional[float] = None
+    sharpe:              Optional[float] = None
+    calmar:              Optional[float] = None
+    sortino:             Optional[float] = None
+    profit_factor:       Optional[float] = None
+    max_drawdown:        Optional[float] = None
+    avg_rr:              Optional[float] = None
+    fwd1_label:          str = ""
+    fwd1_long_win_rate:  Optional[float] = None
+    fwd1_short_win_rate: Optional[float] = None
+    fwd2_label:          str = ""
+    fwd2_long_win_rate:  Optional[float] = None
+    fwd2_short_win_rate: Optional[float] = None
+    fwd3_label:          str = ""
+    fwd3_long_win_rate:  Optional[float] = None
+    fwd3_short_win_rate: Optional[float] = None
+    equity_curve:        List[float] = []
+    regime_breakdown:    dict = {}
+
+
+class MTFBacktestRequest(BaseModel):
+    underlying:    str
+    lookback_days: int = Field(default=30, ge=7, le=90)
+    profiles:      List[str] = Field(
+        default=["scalping_15m", "intraday_1h"],
+        description="Profile keys to run. Options: scalping_15m, intraday_1h, intraday_4h",
+    )
+    score_min: float = Field(default=0.0, ge=0.0, le=20.0)
+
+
+class MTFBacktestResult(BaseModel):
+    underlying:   str
+    profiles:     dict
+    timestamp_ms: int
+    recommended:  Optional[str] = None

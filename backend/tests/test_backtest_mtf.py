@@ -98,3 +98,14 @@ def test_run_mtf_empty_candles_returns_gracefully():
     from app.engines.backtest.backtest_mtf import run_mtf_backtest
     result = run_mtf_backtest("BTC", [], [], [], profiles=["scalping_15m"])
     assert result["scalping_15m"]["total_trades"] == 0
+
+
+# ── Schema test ───────────────────────────────────────────────────────────────
+
+def test_mtf_endpoint_schema():
+    """MTFBacktestRequest and MTFBacktestResult must be importable and valid."""
+    from app.schemas.backtest import MTFBacktestRequest, MTFBacktestResult
+    req = MTFBacktestRequest(underlying="BTC", lookback_days=30)
+    assert req.underlying == "BTC"
+    assert "scalping_15m" in req.profiles
+    assert "intraday_1h" in req.profiles
