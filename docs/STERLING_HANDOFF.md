@@ -1,8 +1,8 @@
-# Sterling — Engineer Handoff (v3 + MTF, v4 spec in flight)
+# Sterling — Engineer Handoff (v3 + MTF + TTACE foundation, v4 spec in flight)
 
 > **Audience.** A new engineer or quant joining the project who needs to read code, ship changes, and reason about strategy outcomes within their first week.
-> **Status as of 2026-05-18.** v3 unified engine in production, MTF backtest landed 2026-05-17, v4 spec written but live OrderRouter NOT yet implemented. Strategy is currently **paper-only**.
-> **Companion docs.** `README.md` (user-facing), `STERLING-V4-SPEC.md` (canonical strategy spec & C1–C4 contradiction resolutions). When this doc and code disagree, code wins; when this doc and `STERLING-V4-SPEC.md` disagree on a number, the spec wins and the code is the bug.
+> **Status as of 2026-05-18.** v3 unified engine in production, MTF backtest landed 2026-05-17, **TTACE foundation landed on branch `ttace` 2026-05-18** (Phases 1–5: truthful costs, honest metrics, cold-start safety, research event ledger, baseline report). v4 spec written but live OrderRouter NOT yet implemented. Strategy is currently **paper-only**.
+> **Companion docs.** `README.md` (user-facing), `STERLING-V4-SPEC.md` (canonical strategy spec & C1–C4 contradiction resolutions), `docs/TTACE_NEXT_STEPS.md` (revised task order after TTACE foundation). When this doc and code disagree, code wins; when this doc and `STERLING-V4-SPEC.md` disagree on a number, the spec wins and the code is the bug.
 
 ---
 
@@ -15,8 +15,8 @@
   3. `structure.score` (0–100) — composite ranking of a *specific candidate structure*. This is what the **75 / 85** hard gates compare against.
   - Walk-forward tunes against `signal.signal_score`. Live execution gates on `structure.score`. Mixing them up will burn you.
 - **The strategy you'll touch most.** Files under `backend/app/engines/directional/` (regime/signal/setup/scoring/structure/sizing) and `backend/app/engines/backtest/backtest_mtf.py`. Indicators live in `backend/app/engines/indicators/`. Risk gates in `backend/app/engines/risk/`. Adaptive state in `backend/app/services/calibration.py`.
-- **The known-bad state.** Latest persisted walk-forward (`wf_results` row 3): **OOS Sharpe -207.72, 0% win rate over 26 windows, 5 trades total**. A fresh 6-month replay across BTC/ETH/SOL on 15m+1H produced PF < 1 for 5/6 configurations. The strategy in its current form does **not** meet elite benchmarks. See § 11 for the playbook out of this.
-- **The fastest way to learn the system.** Run `pytest -q` (718 tests, no network), then read `engines/directional/orchestrator.py` top-to-bottom — every other module is reached through it.
+- **The known-bad state — partially fixed on the `ttace` branch.** The persisted walk-forward (`wf_results` row 3) was OOS Sharpe **-207.72**, 0% WR over 26 windows. That number was always a measurement bug *as well as* a strategy problem. TTACE fixes the measurement layer (Phase 1: next-bar-open fills + slippage + funding + option spread; Phase 2: calendar-time Sharpe, LPM Sortino, PF=+inf on no-loss, deflated Sharpe). It does **not** yet claim the strategy has edge — that requires re-running the baseline against real data on `ttace`. The replay numbers below (BTC PF 0.70, ETH PF 0.39, etc.) are from the pre-TTACE engine and should be regenerated before any further decision. See § 11 for resolved items and the remaining playbook.
+- **The fastest way to learn the system.** Run `pytest -q` (~1100 tests, no network; 2 pre-existing wall-clock failures in `test_scorer_funding_veto.py` — unrelated), then read `engines/directional/orchestrator.py` top-to-bottom — every other module is reached through it. On the `ttace` branch, also read `engines/backtest/costs.py`, `engines/backtest/event_ledger.py`, `engines/analytics/performance.py`, and `docs/TTACE_NEXT_STEPS.md`.
 
 ---
 
@@ -37,8 +37,10 @@ Sterling/
 │   ├── sterling_paper.db          SQLite (positions, signals, calibration, ohlcv, …)
 │   ├── pytest.ini
 │   ├── requirements.txt
-│   ├── tests/                     718+ tests, all mocked. `pytest -q`.
+│   ├── tests/                     1100+ tests, all mocked. `pytest -q`.
 │   ├── evidence_report.py         CLI evidence dump for an underlying
+│   ├── baseline_report.py         TTACE Phase 5 — truthful post-fix report
+│   │                              (in-memory + JSON-fixture CLI)
 │   └── app/
 │       ├── core/                  config, logging, rate_limit, trading_mode
 │       ├── schemas/               Pydantic models (market, directional, execution,
@@ -52,12 +54,17 @@ Sterling/
 │       │   │                      sizing_engine, scoring, monitor_engine,
 │       │   │                      contract_health_engine, dynamic_tp,
 │       │   │                      orchestrator, mtf, microstructure
-│       │   ├── analytics/         walk_forward, performance, sensitivity,
-│       │   │                      correlation  — v3, pure functions
+│       │   ├── analytics/         walk_forward, performance (TTACE-rewritten:
+│       │   │                      calendar-time Sharpe, LPM Sortino, PF=+inf,
+│       │   │                      CAGR, ulcer, pain ratio, tail ratio,
+│       │   │                      deflated_sharpe), sensitivity, correlation
 │       │   ├── risk/              circuit_breaker, slippage, greeks_budget,
 │       │   │                      cooldown, microstructure_veto, vol_of_vol_gate,
 │       │   │                      regime_adaptive_sizer  — v3 stateful singletons
-│       │   └── backtest/          backtest_engine, backtest_mtf, sweep, bs_pricing
+│       │   └── backtest/          backtest_engine, backtest_mtf (TTACE next-bar-
+│       │                          open fills + costs + opt-in events), sweep,
+│       │                          bs_pricing, costs (TTACE Phase 1 attribution),
+│       │                          event_ledger (TTACE Phase 4 pure ledger)
 │       ├── services/              cache, retry, db, paper_store, calibration,
 │       │                          alert_service/store, eval_history, snapshot_cache,
 │       │                          arrow_store, ohlcv_store, pnl_history, fees,
@@ -282,7 +289,21 @@ Entry on `state == CONFIRMED_SETUP_ACTIVE` with `signal_score >= score_min` and 
 2. ATR R-multiple: `+2R` gain OR `-1R` loss (R = ATR(14) on regime TF)
 3. Trend reversal: `signal.trend` flips against the position
 
-Per-trade cost = flat `_FEE_RT_PCT = 0.001` (10 bps round-trip). Slippage and funding are **not** modeled.
+**TTACE Phase 1 execution model (branch `ttace`).** Fills now land on the **OPEN of the bar after the signal bar**. Signal-bar close execution is gone, eliminating the 50–150 bps lookahead bias the legacy engine carried. End-of-data closeouts are explicit (`forced_end=True` on the trade record). The cost model now attributes per-trade:
+
+```
+gross_pnl_pct  = direction * (exit - entry) / entry           # clean prices
+slippage_pct   = round-trip via risk/slippage.slippage_bps    # leverage × OI tier
+fee_pct        = fee_rt_pct                                   # default 0.001
+funding_pct    = direction * funding_8h_pct * (hold_hours/8)  # signed
+option_spread  = option_spread_pct or 0.0                     # None → 0, no fabrication
+total_cost     = slippage + fee + funding + spread
+net_pnl_pct    = gross - total_cost
+```
+
+Implementation: `engines/backtest/costs.py:compute_trade_costs`. The MTF result dict adds `gross_pnl_pct_sum`, `cost_pct_sum`, `net_pnl_sum`. Each trade record carries `gross_pnl_pct`, `net_pnl_pct`, `cost_pct`, `slippage_pct`, `fee_pct`, `funding_pct`, `option_spread_pct`, `effective_entry_price`, `effective_exit_price`, `hold_hours`, `forced_end`. `pnl_pct` is now the net value (was: net-of-fees only).
+
+`run_mtf_backtest` adds optional kwargs: `leverage`, `oi`, `funding_8h_pct`, `option_spread_pct`, `apply_slippage`, and `emit_events`. Defaults preserve the previous response shape; the `events` key only appears when `emit_events=True`.
 
 Endpoint: `POST /backtest/mtf` returns one `MTFProfileResult` per profile, with regime breakdown, equity curve, forward-return win rates, and the standard four ratios. Frontend renders it in `BacktestPanel.tsx` (`MTFSection` comparison table + `MTFSparkline` per profile).
 
@@ -301,21 +322,26 @@ Result persisted to `wf_results` table (config_json, result_json, recommended_th
 
 **Beware:** The 1H walk-forward uses a hard-coded `hold_bars=8` in `_engine_replay_trades`. MTF profiles cannot be tuned via WF in the current code.
 
-### 3.4 Performance metrics — `analytics/performance.py`
+### 3.4 Performance metrics — `analytics/performance.py` (TTACE Phase 2 rewrite)
 
-`PerformanceReport(sharpe, calmar, sortino, max_drawdown, win_rate, avg_rr, profit_factor, total_trades, regime_breakdown)`.
+`PerformanceReport(sharpe, calmar, sortino, max_drawdown, win_rate, avg_rr, profit_factor, total_trades, cagr, ulcer_index, pain_ratio, tail_ratio, sharpe_method, regime_breakdown)`.
 
-| Metric | Implementation | Caveat |
+| Metric | Implementation | Notes |
 |---|---|---|
-| `sharpe` | `mean(rets)/std(rets) × √8760` (hourly annualisation) | Hard-coded periods_per_year; fed a *per-trade* curve, so the √8760 is wrong by a factor of √(hold_bars). See § 11 W10. |
-| `sortino` | `mean / std(negatives) × √8760` | Uses std of only negative returns, not LPM(0). Overstates Sortino vs. convention. |
-| `max_drawdown` | `(eq - cummax)/cummax → min` | Standard. |
-| `calmar` | `annualised_return / |MDD|` | Inherits the Sharpe annualisation bug. |
-| `profit_factor` | `Σwins / Σ|losses|` | Returns `0.0` when there are no losers (should be `inf`). |
-| `avg_rr` | `mean(wins) / |mean(losses)|` | Mislabeled — this is "expectancy ratio", not R-multiple. |
-| `regime_breakdown` | per-regime trade_count / win_rate / avg_pnl / sharpe_proxy | `sharpe_proxy = mean/std` (no annualisation). |
+| `sharpe` | Calendar-time **daily** returns × √365 when trade `exit_ts_ms` exists; per-bar × √(365·86_400_000 / signal_bar_ms) otherwise; legacy `periods_per_year` only when nothing better available. | The blanket √8760 annualisation on per-trade curves is gone. Crypto trades 24/7 → 365 calendar days, not 252 trading days. |
+| `sortino` | LPM downside deviation: `mean / sqrt(mean(min(0, r - target)²)) × ann_factor`. | Was: `std(negatives)` — not the LPM definition; overstated Sortino when losses were rare. |
+| `max_drawdown` | `(eq − cummax) / cummax → min`. | Unchanged. |
+| `calmar` | CAGR (when timestamps allow) / `|MDD|`; else mean-return × ann_factor / `|MDD|`. | Inherits the new honest annualisation. |
+| `profit_factor` | `Σwins / |Σlosses|`. **`+inf` when winners exist and no losers**; `0.0` when only losers; `None` when no trades. | Was: silent `0.0` on no-losers — masked perfect runs as nothing. |
+| `cagr` | `(eq[-1]/eq[0])^(1/years) − 1` over actual date span; `None` when timestamps unavailable. | New. |
+| `ulcer_index` | RMS of drawdowns as percent. | New. |
+| `pain_ratio` | Annualised return × 100 / `ulcer_index`. | New. |
+| `tail_ratio` | `|p95| / |p5|` of trade pnls; `None` if n < 10. | New. |
+| `deflated_sharpe(observed, n_trials, n_obs)` | Bailey / Lopez de Prado significance probability. Monotonic: more trials → lower; higher observed → higher. Uses Acklam's rational approximation of the inverse normal CDF (no scipy dep). | New. |
 
-The metrics module is **the surface where new contributors get tripped up most often** — every "Sharpe = 27" or "Sharpe = -207" in `wf_results` rolls out of these formulas, not from the trading itself.
+Annualisation method is exposed on the report as `sharpe_method ∈ {"calendar_daily", "per_bar", "legacy_periods"}` so callers can tell which regime applied.
+
+The metrics module **was** the surface where new contributors got tripped up most often — TTACE Phase 2 closes that gap. Most of the historical "Sharpe = 27" or "Sharpe = -207" values in `wf_results` rolled out of the old formulas; before treating those as evidence of strategy quality (or its absence), regenerate them through the new metrics on the `ttace` branch.
 
 ### 3.5 Parameter sensitivity — `analytics/sensitivity.py`
 
@@ -324,6 +350,18 @@ Runs a Cartesian sweep across configurable parameters at startup (background tas
 ### 3.6 Correlation tracker — `analytics/correlation.py`
 
 Fed 1H close prices on every `evaluate()`. Computes pairwise 30-bar rolling Pearson correlation across all watched underlyings. Used by `OrderRouter` (future v4) and the `CorrelationHeatmap.tsx` UI.
+
+### 3.7 Research event ledger — `engines/backtest/event_ledger.py` (TTACE Phase 4)
+
+Pure, append-only, in-memory audit trail emitted by `_replay_profile` when `emit_events=True`. Five event kinds: `candidate`, `skip`, `entry_fill`, `exit_fill`, `trade`. Each event carries `seq`, `kind`, `ts_ms`, `bar_idx`, `asset`, `profile`, `track`, and a `payload` dict. Trade events include both `gross_pnl_pct` and `net_pnl_pct` plus the cost breakdown; skip events carry an explicit `reason` and optional feature snapshot. Append order is preserved as discovery order — chronological within a single replay.
+
+This is the surface future tracks (mean-reversion / breakout / ML) will read from; the engines themselves stay pure and the default API response shape is unchanged.
+
+### 3.8 Baseline report — `backend/baseline_report.py` (TTACE Phase 5)
+
+`build_report(asset, profile, trades, equity_curve, signal_bar_ms, n_trials_search)` composes a truthful post-fix report from in-memory trade records. Deflated Sharpe is gated on n ≥ 50; thin regime buckets (n < 10) are flagged in the `warnings` list; cost drag is aggregated from per-trade attribution. The script **does not** read from the live `positions` table — those aggregates are pre-TTACE contaminated (see § 6 gotchas).
+
+A CLI wrapper (`python baseline_report.py --fixtures <path>`) makes the report inspectable without booting the API.
 
 ---
 
@@ -350,7 +388,7 @@ All v3, all stateful singletons on `app.state.*`. **Confusingly, two circuit bre
 
 ---
 
-## 5. Adaptive state — `services/calibration.py`
+## 5. Adaptive state — `services/calibration.py` (TTACE Phase 3 hardened)
 
 `CalibrationService` keeps:
 - A 90-reading IVR history per underlying (deque, persisted in `calibration_state.ivr_history_json`).
@@ -360,13 +398,20 @@ API:
 - `record_ivr(underlying, ivr)` — call on every snapshot.
 - `record_trade(pnl_pct, regime)` — call on every position close.
 - `ivr_bands(underlying)` → 30th/70th percentile, falls back to `(30, 70)` if < 20 readings.
-- `win_rate(regime=None)` → trailing WR from last 50 trades, regime-filtered if requested, falls back to `0.52` if < 10 trades.
+- `win_rate(regime=None, track=None, *, fallback=None)` → trailing WR from last 50 trades, optionally regime- or track-filtered. **TTACE Phase 3:** returns `Optional[float]` and is `None` on cold start (< 10 trades). The legacy 0.52 fallback is **opt-in only** via `fallback=0.52`. Sizing now fails closed on `None` (see below) instead of silently sizing off a fake 52% edge.
+- `is_cold_start(regime=None)` → bool helper for explicit branching.
+
+**Sizing chain after TTACE Phase 3.** `RiskParams` gains `win_rate_known: bool = True` (additive, default preserves direct constructors). `SizedTrade` gains `blocked_reason: Optional[str] = None`. `sizing_engine.size_trade` returns `contracts=0` + `blocked_reason` when:
+- `win_rate_known=False` or `win_rate is None` → `"cold_start_win_rate_unknown"`
+- Fractional Kelly ≤ 0 (win rate below breakeven for the structure's RR) → `"non_positive_kelly_edge"`
+
+The positions endpoint at `app/api/v1/endpoints/positions.py` sets `win_rate_known=False` on the runtime `RiskParams` when calibration is cold; the `/risk_dashboard/calibration/{underlying}` endpoint exposes `cold_start: bool` for the UI.
 
 **Current state of these tables in `sterling_paper.db`:**
 - `calibration_state`: **0 rows**.
 - `calibration_trades`: **0 rows**.
 
-The adaptive loop is wired but cold. Sizing therefore uses the static 0.52 fallback — see § 11 W7.
+The adaptive loop is wired and cold. Sizing therefore now **refuses to open new positions** until enough trades have been recorded, instead of using the old static 0.52. This is intentional fail-closed behavior; if you need to seed live paper trading before 10 trades exist, populate `calibration_trades` from a fixture or wire an explicit operator flag — do not re-introduce the silent fallback.
 
 ---
 
@@ -503,7 +548,9 @@ The MTF backtest profiles in `backtest_mtf.PROFILES` should be kept symmetricall
 
 ## 11. Known weaknesses & upgrade playbook
 
-This is the most important section. The strategy is currently a **negative-expectancy** filter; the persisted walk-forward (`wf_results` row 3) reads OOS Sharpe -207 / 0% WR for a reason. A clean replay across 6 months of OHLCV in `sterling_paper.db` confirms the picture:
+This is the most important section. The strategy *was* a **negative-expectancy** filter under pre-TTACE measurement; the persisted walk-forward (`wf_results` row 3) read OOS Sharpe -207 / 0% WR for *two* reasons — broken metrics and a thin edge. TTACE (branch `ttace`) fixes the metrics layer; the remaining strategy question is now testable rather than confounded.
+
+A clean replay across 6 months of OHLCV in `sterling_paper.db` confirms the picture under the **legacy** engine:
 
 | Asset / TF | n | WR | PF | MDD | Total |
 |---|---|---|---|---|---|
@@ -518,35 +565,35 @@ Artefacts: `/tmp/sterling_summary.json` (per-threshold sweep + Monte Carlo boots
 
 ### Weakness register (ranked by P&L impact)
 
-| # | Where | Issue | Effect |
+| # | Where | Issue | Status |
 |---|---|---|---|
-| W1 | regime_engine + setup_engine | Signal starvation: only 0.6–1.4% of bars produce a CONFIRMED setup. IDLE consumes ~38% of bars. | < 30 trades / 6 mo on 1H. Below significance floor. |
-| W2 | scoring + sweep | `signal_score` thresholds 0/4/8 produce identical PF in most assets — score is non-discriminating. | Threshold-tuning doesn't separate winners from losers. |
-| W3 | walk_forward.run_real | Train Sharpe with 1–3 trades is noise. `best_threshold` flips 0/8/12/15 across windows. | Overfit. |
-| W4 | backtest_mtf | `_FEE_RT_PCT=0.001` only; **no slippage, no funding, no options spread**, even though `risk/slippage.py` exists. | Backtest is optimistic by ~10–30 bps per trade. |
-| W5 | backtest_mtf | Entry fill at `candles[i].close`, not `candles[i+1].open`. | Look-ahead bias of 50–150 bps per trade. |
-| W6 | backtest_mtf | Stop / target use ATR(regime_TF) on signal_TF prices — 4H ATR is too wide for 1H entries. | Asymmetric exit; consec losses up to 8. |
-| W7 | sizing_engine | `getattr(risk_params, "win_rate", 0.52)` — calibration_trades is empty, so Kelly always uses 0.52. | Recommends positive size even on negative-expectancy combos. |
-| W8 | scoring.score_no_trade | Purely additive 20+40+20+20+15 — does not encode adverse selection. | "No-trade" message fires too often / for the wrong reasons. |
-| W9 | scoring._check_hard_vetoes | Funding-window + dead-zone vetoes remove ~25% of bars before scoring. | Compounds W1. |
-| W10 | analytics/performance.py | `periods_per_year=8760` on a per-trade equity curve; PF returns 0 when no losses; Sortino uses std of negatives. | Every reported ratio is biased. |
-| W11 | backtest_mtf._replay_profile | O(N²) regime slice rebuild per bar. | 5 min+ for one 6-month run; frontend timeouts. |
-| W12 | overall | Strategy is pure trend-following on a tape that's only ~37% trending. | Structural cap on edge. |
+| W1 | regime_engine + setup_engine | Signal starvation: only 0.6–1.4% of bars produce a CONFIRMED setup. IDLE consumes ~38% of bars. | **Open.** < 30 trades / 6 mo on 1H is still below significance floor. |
+| W2 | scoring + sweep | `signal_score` thresholds 0/4/8 produce identical PF in most assets — score is non-discriminating. | **Open.** Re-run on TTACE branch; the legacy PF was noise. |
+| W3 | walk_forward.run_real | Train Sharpe with 1–3 trades is noise. `best_threshold` flips 0/8/12/15 across windows. | **Open.** Should also gate threshold acceptance on `deflated_sharpe(...)` ≥ 0.95 (now available). |
+| W4 | backtest_mtf | `_FEE_RT_PCT=0.001` only; **no slippage, no funding, no options spread**. | **RESOLVED (TTACE Phase 1).** `engines/backtest/costs.py` attributes slippage (via `risk/slippage.py`), fees, funding, and optional option spread; trade records carry the breakdown. |
+| W5 | backtest_mtf | Entry fill at `candles[i].close`, not `candles[i+1].open`. | **RESOLVED (TTACE Phase 1).** `next_bar_open_fill` enforces next-bar-open for entries and exits; last-bar entries are skipped; end-of-data exits are explicitly `forced_end=True`. |
+| W6 | backtest_mtf | Stop / target use ATR(regime_TF) on signal_TF prices — 4H ATR is too wide for 1H entries. | **Open.** Asymmetric exit logic still in `_replay_profile`. |
+| W7 | sizing_engine | `getattr(risk_params, "win_rate", 0.52)` — calibration_trades is empty, so Kelly always uses 0.52. | **RESOLVED (TTACE Phase 3).** Calibration returns `None` on cold start; `RiskParams.win_rate_known=False` makes the sizer return `contracts=0` + `blocked_reason`; positions endpoint sets the flag explicitly. |
+| W8 | scoring.score_no_trade | Purely additive 20+40+20+20+15 — does not encode adverse selection. | **Open.** |
+| W9 | scoring._check_hard_vetoes | Funding-window + dead-zone vetoes remove ~25% of bars before scoring. | **Open.** Two pre-existing tests (`test_scorer_funding_veto.py`) depend on wall-clock and fail in dead zone — not a TTACE regression. |
+| W10 | analytics/performance.py | `periods_per_year=8760` on a per-trade equity curve; PF returns 0 when no losses; Sortino uses std of negatives. | **RESOLVED (TTACE Phase 2).** Calendar-time Sharpe (sqrt(365)), per-bar fallback by `signal_bar_ms`, LPM Sortino, PF=`+inf` on no-loss, plus CAGR / ulcer / pain / tail ratio / deflated Sharpe. |
+| W11 | backtest_mtf._replay_profile | O(N²) regime slice rebuild per bar. | **Open.** TTACE preserved the current control flow; vectorisation is a future task. |
+| W12 | overall | Strategy is pure trend-following on a tape that's only ~37% trending. | **Open.** Addressed by future mean-reversion / breakout tracks in `TTACE_NEXT_STEPS.md`. |
 
 ### Upgrade playbook (Tier S/A/B/C in priority order)
 
-**Tier S — must-do before any live capital flips.**
+**Tier S — must-do before any live capital flips.** Items 1–3 landed on `ttace`.
 
-1. **Truthful cost model.** `backtest_mtf.py:19` — wire `risk/slippage.effective_entry` by leverage/OI tier, add funding accrual `0.0001 × (hold_hours/8)` for futures, add option half-spread `(ask-bid)/(2*mid)` per leg.
-2. **Entry-fill realism.** Enter at `candles[i+1].open + slippage`, symmetric on exit.
-3. **Fix performance metrics.** Compute Sharpe in calendar time (use trade durations), add CAGR/Calmar/MAR/Ulcer/Pain/tail_ratio, fix PF inf-case, use LPM(0) for Sortino.
-4. **Stop tuning thresholds with Sharpe on n<10 train trades.** Switch to bootstrap-stable composite (median of `Calmar × √(n/30)` over 500 samples) and run a **deflated Sharpe** test before accepting a threshold. If no threshold has deflated p < 0.10, report **no edge**.
+1. ~~**Truthful cost model.**~~ **DONE (TTACE Phase 1).** `engines/backtest/costs.py` wires `risk/slippage.effective_entry` by leverage/OI tier, adds funding accrual `direction × funding_8h_pct × (hold_hours/8)`, supports option half-spread `option_spread_pct` per round-trip. Wiring lives in `backtest_mtf._replay_profile`.
+2. ~~**Entry-fill realism.**~~ **DONE (TTACE Phase 1).** `next_bar_open_fill` enforces `candles[i+1].open + slippage`, symmetric on exit; last-bar entries refused; end-of-data closeouts marked `forced_end=True`.
+3. ~~**Fix performance metrics.**~~ **DONE (TTACE Phase 2).** Sharpe = calendar-time daily × √365 when timestamps exist (per-bar × √(365·86400000/signal_bar_ms) otherwise); CAGR / ulcer / pain / tail ratio added; PF returns `+inf` on no-loss; Sortino uses LPM(0); `deflated_sharpe(...)` added.
+4. **Stop tuning thresholds with Sharpe on n<10 train trades.** Use the new `deflated_sharpe` helper as the acceptance gate: a threshold is acceptable only if deflated p > 0.95 on the train window. Otherwise the run is "no edge", not "weak edge". (Still open — needs to be wired into `walk_forward.run_real`.)
 
 **Tier A — real edge upgrades.**
 
 5. **Asymmetric exits + Chandelier trail.** Replace fixed 1R/2R with 1.2× ATR(signal_TF) stop and Chandelier(N) trail; book 50% at +1R, trail the rest.
 6. **HTF momentum z-score.** Add 4H 50-bar momentum z-score gate (long if z>+0.5, short if z<-0.5) as a regime-score component.
-7. **Adaptive Kelly with regime priors.** Replace static 0.52 fallback with `calibration_service.win_rate(regime=…)`. Cold start = 0.0 (not 0.52). Add a negative-edge zero gate.
+7. ~~**Adaptive Kelly with regime priors.**~~ **DONE (TTACE Phase 3).** `calibration_service.win_rate(regime=…, track=…)` returns `None` on cold start; sizer fails closed; opt-in fallback only.
 8. **Volatility-bucket sizing instead of IDLE veto.** Don't drop 38% of bars; size them down to `risk_pct × 0.25`.
 9. **Wire microstructure_veto and vol_of_vol_gate into backtest.** Keep train/live distributions identical.
 
@@ -557,11 +604,22 @@ Artefacts: `/tmp/sterling_summary.json` (per-threshold sweep + Monte Carlo boots
 12. **Live vs. backtest reconciliation** — write `expected_pnl_pct` next to `realized_pnl_pct` on every trade; alert on > 2σ drift across 5 trades.
 13. **Vectorize `_replay_profile`** — pre-compute indicators once (see `/tmp/sterling_fast.py`); 60× faster.
 
-**Tier C — new alpha sources.**
+**Tier C — new alpha sources** (see `docs/TTACE_NEXT_STEPS.md` for the gated track plan).
 
 14. Order-flow delta-volume proxy.
 15. Multi-asset correlation drawdown limiter (uses existing `correlation_tracker`).
-16. Mean-reversion track for IDLE/low-ATR regimes (counter-trend, tight 0.5R stops).
+16. Mean-reversion track for IDLE/low-ATR regimes (range-quality + ADX ceiling; counter-trend; tight 0.5R stops).
+17. Breakout-quality track (squeeze + ATR percentile + volume z-score gating; ATR-trailing exit).
+
+### TTACE acceptance gates before ML / frontend expansion
+
+Per `docs/TTACE_NEXT_STEPS.md`, no XGBoost / DRiFT / live-paper / demo-replay work should resume until:
+
+1. Step 1 replay (this branch) produces a baseline with no `low_sample_size` in `warnings`.
+2. Walk-forward returns `deflated_sharpe ≥ 0.95` on ≥ 2/3 windows for at least one profile.
+3. Cross-asset (BTC + ETH minimum) agrees on the sign of expectancy.
+
+If any of those fails, the right move is to fix the engine — not to paper over with UI copy or more profiles.
 
 ---
 
@@ -602,11 +660,15 @@ Artefacts: `/tmp/sterling_summary.json` (per-threshold sweep + Monte Carlo boots
 |---|---|
 | "Why no signal on BTC right now?" | `engines/directional/orchestrator.py` then `setup_engine.evaluate_setup` |
 | "Why was this trade filtered?" | `engines/directional/scoring.py:_check_hard_vetoes` |
+| "Why is sizing 0 contracts / blocked_reason set?" | `engines/directional/sizing_engine.py` (TTACE fail-closed paths) + `services/calibration.py:is_cold_start` |
 | "Why is sizing X contracts?" | `engines/directional/sizing_engine.py` |
 | "Why is the score 78 vs 82?" | `engines/directional/scoring.py:score_structure` (look at `score_breakdown` in the response) |
 | "Why is the regime IDLE?" | `engines/directional/regime_engine.py:compute_regime` (ATR percentile + slope) |
 | "Why does the MTF backtest take so long?" | `engines/backtest/backtest_mtf.py:_replay_profile` (O(N²) regime slice) |
-| "Sharpe number looks wrong" | `engines/analytics/performance.py` (annualisation bugs) |
+| "Where did the trade's cost come from?" | `engines/backtest/costs.py:compute_trade_costs` (TTACE Phase 1) |
+| "How do I get a per-event audit trail?" | `run_mtf_backtest(..., emit_events=True)` → `events` list; `engines/backtest/event_ledger.py` |
+| "Sharpe number looks wrong" | `engines/analytics/performance.py` — check `sharpe_method` on the report; TTACE Phase 2 rewrite |
+| "Is this Sharpe statistically significant?" | `performance.deflated_sharpe(observed, n_trials, n_observations)` |
 | "Walk-forward picked threshold X" | `engines/analytics/walk_forward.py:run_real` |
 | "Position closed with weird PnL" | `services/paper_store.py` + `engines/directional/monitor_engine.py` |
 | "Frontend chart blank" | matching React Query hook in `frontend/src/hooks/use<Resource>.ts` |
@@ -617,13 +679,15 @@ Artefacts: `/tmp/sterling_summary.json` (per-threshold sweep + Monte Carlo boots
 
 ## 15. Suggested first-week checklist
 
-- [ ] `pytest -q` passes (~30 s).
+- [ ] `git checkout ttace`; `pytest -q` passes (~90 s; 2 pre-existing wall-clock failures in `test_scorer_funding_veto.py` are expected).
+- [ ] Read `docs/TTACE_NEXT_STEPS.md` end-to-end before writing any strategy code.
+- [ ] Skim `engines/backtest/costs.py`, `engines/backtest/event_ledger.py`, and `engines/analytics/performance.py` — these are the TTACE foundation modules.
 - [ ] `uvicorn main:app --reload` + `npm run dev`; open Dashboard, switch underlyings.
-- [ ] Hit `POST /api/v1/directional/run-once?underlying=BTC` and read every field of the response against this doc.
-- [ ] Hit `POST /api/v1/backtest/mtf` for BTC with the three profiles; verify the result matches `BacktestPanel` UI.
+- [ ] Hit `POST /api/v1/directional/run-once?underlying=BTC` and read every field of the response against this doc. Confirm sizing reports `blocked_reason="cold_start_win_rate_unknown"` until calibration is seeded.
+- [ ] Hit `POST /api/v1/backtest/mtf` for BTC with the three profiles; verify the new `gross_pnl_pct_sum` / `cost_pct_sum` / `net_pnl_pct_sum` fields are present.
+- [ ] Run `backend/baseline_report.py --fixtures <a-trades.json>` against a synthetic trade fixture and read the `warnings` list.
 - [ ] Read `engines/directional/orchestrator.py` top to bottom, then `scoring.py`.
-- [ ] Run `/tmp/sterling_fast.py` (vectorized replay) for SOL on `intraday_1h` and verify your number matches `/tmp/sterling_summary.json`.
 - [ ] Read `STERLING-V4-SPEC.md` for the canonical resolution of C1–C4 (score×leverage, IVR `None`, sizing chain, veto order).
-- [ ] Pick one item from § 11 Tier S and write the unit test for it before touching code.
+- [ ] Pick one **open** item from § 11 (W1, W2, W3, W6, W8, W9, W11, W12) and write the unit test for it before touching code. Resolved items (W4, W5, W7, W10) already have tests under `tests/test_backtest_costs.py`, `tests/test_analytics_performance_honest.py`, `tests/test_cold_start_safety.py`, `tests/test_event_ledger.py`, `tests/test_baseline_report.py`.
 
 Welcome aboard.
