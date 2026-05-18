@@ -10,7 +10,11 @@ class RiskParams(BaseModel):
     partial_profit_r2: float = 2.0
     time_stop_dte: int = 3
     financial_stop_pct: float = 0.50
-    win_rate: float = 0.52  # for Kelly sizing
+    win_rate: float = 0.52  # for Kelly sizing — used only when win_rate_known
+    # TTACE Phase 3: callers must explicitly affirm the edge is calibrated.
+    # Cold-start callers (calibration sample < MIN_TRADES_FOR_WIN_RATE) set
+    # this to False, which causes size_trade to fail closed.
+    win_rate_known: bool = True
 
 
 class ExitSignal(BaseModel):

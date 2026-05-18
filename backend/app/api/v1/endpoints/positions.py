@@ -607,12 +607,19 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
             )
 
     # ── Calibration: inject adaptive win_rate into RiskParams for Kelly ──────
+    # TTACE Phase 3: when the calibration sample is too small we explicitly
+    # mark win_rate_known=False so the sizer fails closed instead of
+    # silently sizing off the 0.52 default.
     _risk = get_runtime_risk()
     _cal  = getattr(request.app.state, "calibration_service", None)
-    if _cal is not None and _cal.trade_count() >= 10:
-        _adaptive_wr = _cal.win_rate()
-        if 0.10 <= _adaptive_wr <= 0.90:
-            _risk = _risk.model_copy(update={"win_rate": round(_adaptive_wr, 4)})
+    _adaptive_wr = _cal.win_rate() if _cal is not None else None
+    if _adaptive_wr is not None and 0.10 <= _adaptive_wr <= 0.90:
+        _risk = _risk.model_copy(update={
+            "win_rate":       round(_adaptive_wr, 4),
+            "win_rate_known": True,
+        })
+    else:
+        _risk = _risk.model_copy(update={"win_rate_known": False})
 
     result = await engine_run_once(inst, adapter, _risk)
 

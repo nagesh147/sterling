@@ -27,10 +27,27 @@ def size_trade(
     leverage: int = 1,
 ) -> SizedTrade:
     capital = risk_params.capital
-    win_rate = getattr(risk_params, "win_rate", 0.52)
+    win_rate = getattr(risk_params, "win_rate", None)
+    win_rate_known = bool(getattr(risk_params, "win_rate_known", True))
+
+    # TTACE Phase 3: cold-start / unknown edge → refuse to size.
+    if not win_rate_known or win_rate is None:
+        return SizedTrade(
+            structure=structure, contracts=0,
+            position_value=0.0, max_risk_usd=0.0, capital_at_risk_pct=0.0,
+            blocked_reason="cold_start_win_rate_unknown",
+        )
 
     rr = structure.risk_reward if structure.risk_reward and structure.risk_reward > 0 else 1.0
     frac_kelly = _fractional_kelly(win_rate, rr)
+
+    # TTACE Phase 3: weak/negative calibrated edge → refuse to size.
+    if frac_kelly <= 0.0:
+        return SizedTrade(
+            structure=structure, contracts=0,
+            position_value=0.0, max_risk_usd=0.0, capital_at_risk_pct=0.0,
+            blocked_reason="non_positive_kelly_edge",
+        )
 
     # Base per-trade cap by instrument type
     struct_type = structure.structure_type

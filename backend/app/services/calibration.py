@@ -45,17 +45,37 @@ class CalibrationService:
         self._closed_trades.append({'pnl': pnl_pct, 'regime': regime, 'ts': time.time()})
         self._persist_trade(pnl_pct, regime)
 
-    def win_rate(self, regime: str | None = None) -> float:
+    MIN_TRADES_FOR_WIN_RATE = 10
+
+    def win_rate(
+        self,
+        regime: str | None = None,
+        track: str | None = None,
+        *,
+        fallback: float | None = None,
+    ) -> float | None:
         """
-        Trailing win rate from last WIN_RATE_N trades.
-        Regime-specific if provided (min 10 trades). Falls back to 0.52.
+        Trailing win rate from the last `WIN_RATE_N` closed trades.
+
+        TTACE Phase 3: returns `None` when the sample is insufficient
+        (< MIN_TRADES_FOR_WIN_RATE) unless the caller passes an explicit
+        `fallback`. The previous silent 0.52 fallback has been removed —
+        cold start must fail closed at the sizing boundary.
+
+        Optional `regime` / `track` filters narrow the sample.
         """
         trades = list(self._closed_trades)
         if regime:
-            trades = [t for t in trades if t['regime'] == regime]
-        if len(trades) < 10:
-            return 0.52
+            trades = [t for t in trades if t.get('regime') == regime]
+        if track:
+            trades = [t for t in trades if t.get('track') == track]
+        if len(trades) < self.MIN_TRADES_FOR_WIN_RATE:
+            return fallback
         return float(np.mean([t['pnl'] > 0 for t in trades]))
+
+    def is_cold_start(self, regime: str | None = None) -> bool:
+        """True when win_rate cannot be calibrated from the current sample."""
+        return self.win_rate(regime=regime, fallback=None) is None
 
     def trade_count(self) -> int:
         return len(self._closed_trades)

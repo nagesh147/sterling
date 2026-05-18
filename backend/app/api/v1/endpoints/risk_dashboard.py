@@ -135,9 +135,11 @@ async def get_calibration(underlying: str, request: Request) -> dict:
         }
     sym = underlying.upper()
     buy_thr, sell_thr = svc.ivr_bands(sym)
+    wr = svc.win_rate()  # None on cold start
     return {
         'underlying': sym,
-        'win_rate': round(svc.win_rate(), 4),
+        'win_rate': round(wr, 4) if wr is not None else None,
+        'cold_start': wr is None,
         'ivr_buy_threshold': round(buy_thr, 2),
         'ivr_sell_threshold': round(sell_thr, 2),
         'trade_count': svc.trade_count(),

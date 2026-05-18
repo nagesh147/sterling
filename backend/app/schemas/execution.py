@@ -45,6 +45,9 @@ class SizedTrade(BaseModel):
     position_value: float
     max_risk_usd: float
     capital_at_risk_pct: float
+    # TTACE Phase 3: populated when the sizer fails closed (cold-start /
+    # unknown edge / kelly<=0). Defaults to None when sized normally.
+    blocked_reason: Optional[str] = None
 
 
 class RunOnceResponse(BaseModel):

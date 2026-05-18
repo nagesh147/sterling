@@ -11,9 +11,21 @@ def _make_svc() -> CalibrationService:
     return svc
 
 
-def test_win_rate_fallback():
+def test_win_rate_empty_returns_none_by_default():
+    """TTACE Phase 3: cold start returns None (was: silent 0.52)."""
     svc = _make_svc()
-    assert svc.win_rate() == pytest.approx(0.52)
+    assert svc.win_rate() is None
+
+
+def test_win_rate_explicit_fallback_works():
+    """Old fallback behaviour available only when explicitly requested."""
+    svc = _make_svc()
+    assert svc.win_rate(fallback=0.52) == pytest.approx(0.52)
+
+
+def test_is_cold_start_flags_empty_sample():
+    svc = _make_svc()
+    assert svc.is_cold_start() is True
 
 
 def test_win_rate_adapts():
