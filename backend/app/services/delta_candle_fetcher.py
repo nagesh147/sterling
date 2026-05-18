@@ -18,7 +18,7 @@ log = get_logger(__name__)
 DELTA_CANDLE_URL = "https://api.india.delta.exchange/v2/history/candles"
 MAX_PER_REQUEST = 2000       # Delta Exchange cap
 REQUEST_DELAY   = 0.35       # seconds between requests (avoid 429)
-LOOKBACK_SECS   = 180 * 86_400  # 6 months
+LOOKBACK_SECS   = 730 * 86_400  # 2 years
 
 SYMBOLS     = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]
 RESOLUTIONS = ["5m", "15m", "30m", "1h", "2h", "4h"]
@@ -112,6 +112,24 @@ async def fetch_symbol_resolution(symbol: str, resolution: str) -> int:
     return total
 
 
+async def get_all_delta_symbols() -> List[str]:
+    """Fetch all operational perpetual futures symbols from Delta Exchange."""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("https://api.india.delta.exchange/v2/products", timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            symbols = [
+                p["symbol"] for p in data.get("result", [])
+                if p.get("contract_type") == "perpetual_futures" and p.get("trading_status") == "operational"
+            ]
+            if symbols:
+                return sorted(symbols)
+    except Exception as exc:
+        log.warning("Failed to fetch symbols from Delta: %s", exc)
+    return SYMBOLS
+
+
 async def run_full_fetch(symbols: Optional[List[str]] = None) -> Dict[str, int]:
     """
     Fetch/update all symbols × resolutions.
@@ -124,7 +142,7 @@ async def run_full_fetch(symbols: Optional[List[str]] = None) -> Dict[str, int]:
 
     _is_fetching = True
     summary: Dict[str, int] = {}
-    target_syms = symbols or SYMBOLS
+    target_syms = symbols or await get_all_delta_symbols()
 
     try:
         for sym in target_syms:
