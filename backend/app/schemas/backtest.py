@@ -135,6 +135,22 @@ class MTFBacktestRequest(BaseModel):
         description="Profile keys to run. Options: scalping_15m, intraday_1h, intraday_4h",
     )
     score_min: float = Field(default=0.0, ge=0.0, le=20.0)
+    # Issue 11 — per-8h funding rate override. None → endpoint applies the
+    # conservative default from app/services/funding.py for the underlying.
+    funding_8h_pct: Optional[float] = Field(
+        default=None,
+        description="Override perpetual funding rate per 8h period (e.g. 0.0001 = 1 bp). None uses a per-underlying default.",
+    )
+    # Issue 6 — exit ATR timeframe override.
+    exit_atr_tf: Optional[str] = Field(
+        default=None,
+        description='"signal" or "regime". None uses each profile\'s default.',
+    )
+    # Issue 7 — payoff mode override.
+    payoff_mode: Optional[str] = Field(
+        default=None,
+        description='"fixed_2r" (legacy) or "chandelier_trail". None uses each profile\'s default.',
+    )
 
 
 class MTFBacktestResult(BaseModel):

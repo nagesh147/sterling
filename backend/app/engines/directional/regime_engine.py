@@ -1,10 +1,22 @@
+import os
 import numpy as np
-from typing import List
+from typing import List, Literal
 from app.schemas.market import Candle
 from app.schemas.directional import RegimeResult, MacroRegime
 from app.engines.indicators.ema import compute_ema, ema_dual
 from app.engines.indicators.atr import compute_atr
 from app.engines.indicators.adx import adx as compute_adx_arr
+
+
+# Issue 3 — IDLE strictness profile.
+# "strict" (legacy):  pct < 30 on 2 consecutive bars OR (slope<0 AND pct<35).
+# "loose":            pct < 25 on 2 consecutive bars OR (slope<0 AND pct<30).
+# The default reads from the STERLING_IDLE_STRICTNESS env var; callers can
+# override per-call via the `idle_strictness` kwarg below.
+_DEFAULT_IDLE_STRICTNESS: Literal["strict", "loose"] = (
+    "loose" if os.environ.get("STERLING_IDLE_STRICTNESS", "").lower() == "loose"
+    else "strict"
+)
 
 
 def _atr_pct_at(atr_arr: np.ndarray, pos: int, lookback: int = 100) -> float:
@@ -35,6 +47,8 @@ def compute_regime(
     candles_4h: List[Candle],
     ema_period: int = 50,
     macro_filter: str = "adx_4h",
+    *,
+    idle_strictness: Literal["strict", "loose", "auto"] = "auto",
 ) -> RegimeResult:
     if not candles_4h:
         return RegimeResult(
@@ -58,12 +72,21 @@ def compute_regime(
     cur_atr_pct = _atr_pct_at(atr_arr, n - 1, 100)
     cur_atr_slope = _atr_slope(atr_arr, closes, n - 1)
 
-    # IDLE when ATR percentile < 30 on 2 consecutive bars (original cooldown)
-    # OR when ATR/Close slope is negative AND percentile < 35 (spec: ATR falling → IDLE + 2-bar cooldown).
-    # Slope-only veto is intentionally NOT used to avoid false IDLE on mean-reversion dips.
-    pct_low_now  = _atr_pct_at(atr_arr, n - 1, 100) < 30
-    pct_low_prev = n >= 2 and _atr_pct_at(atr_arr, n - 2, 100) < 30
-    slope_contraction = cur_atr_slope < 0 and cur_atr_pct < 35
+    # IDLE detection — strict (legacy) vs loose (Issue 3) thresholds.
+    # strict:  pct<30 on 2 consecutive bars OR (slope<0 AND pct<35)
+    # loose:   pct<25 on 2 consecutive bars OR (slope<0 AND pct<30)
+    strictness = idle_strictness
+    if strictness == "auto":
+        strictness = _DEFAULT_IDLE_STRICTNESS
+    if strictness == "loose":
+        pct_thr_low = 25
+        slope_pct_thr = 30
+    else:
+        pct_thr_low = 30
+        slope_pct_thr = 35
+    pct_low_now  = _atr_pct_at(atr_arr, n - 1, 100) < pct_thr_low
+    pct_low_prev = n >= 2 and _atr_pct_at(atr_arr, n - 2, 100) < pct_thr_low
+    slope_contraction = cur_atr_slope < 0 and cur_atr_pct < slope_pct_thr
     cooldown_active = (pct_low_now and pct_low_prev) or slope_contraction
 
     _common = dict(

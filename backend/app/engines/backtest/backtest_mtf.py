@@ -4,8 +4,8 @@ Bar-by-bar strategy replay for scalping (15M/1H) and intraday (1H/4H, 4H/1D) pro
 Pure functions — no I/O.
 """
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Literal, Optional, Any, Tuple
 import numpy as np
 
 from app.schemas.market import Candle
@@ -33,6 +33,16 @@ class TFProfile:
     fwd_labels: List[str]
     fwd_bars: List[int]      # n signal bars for each forward horizon
     hold_bars: int
+    # Issue 6 — exit ATR timeframe.
+    # "regime" (legacy): exits scale to regime-TF ATR; "signal": exits scale to
+    # signal-TF ATR — tighter stops when signal_TF << regime_TF (e.g. 1H trades
+    # under 4H regime). Default preserves legacy behavior.
+    exit_atr_tf: Literal["signal", "regime"] = "regime"
+    # Issue 7 — payoff mode.
+    # "fixed_2r" (legacy): one-shot exit at +2R / -1R / hold_bars / trend flip.
+    # "chandelier_trail": 50% partial at +1R, breakeven move, then trail rest
+    # with Chandelier(N=22, mult=3.0*ATR(signal_TF)). Default preserves legacy.
+    payoff_mode: Literal["fixed_2r", "chandelier_trail"] = "fixed_2r"
 
 
 PROFILES: Dict[str, TFProfile] = {
@@ -108,6 +118,16 @@ def _zero_result(profile: TFProfile, n_signal: int = 0, n_regime: int = 0, under
     return result
 
 
+def _build_atr_series(candles: List[Candle], period: int = 14) -> np.ndarray:
+    """Pre-compute ATR over the entire candle series once (Issue 15)."""
+    if not candles:
+        return np.array([], dtype=np.float64)
+    highs = np.array([c.high for c in candles], dtype=np.float64)
+    lows  = np.array([c.low  for c in candles], dtype=np.float64)
+    closes = np.array([c.close for c in candles], dtype=np.float64)
+    return compute_atr(highs, lows, closes, period)
+
+
 def _replay_profile(
     profile: TFProfile,
     candles_signal: List[Candle],
@@ -127,7 +147,9 @@ def _replay_profile(
     Bar-by-bar trade replay for one TF profile with truthful fills and costs.
 
     Entry: CONFIRMED_SETUP_ACTIVE + signal_score >= score_min.
-    Exit:  trend reversal | ATR-based +2R/-1R | hold_bars elapsed.
+    Exit:  trend reversal | ATR-based +2R/-1R | hold_bars elapsed
+           (legacy `fixed_2r`), or partial 50% at +1R + breakeven + chandelier
+           trail (opt-in `chandelier_trail`).
 
     Fills land on the OPEN of the bar following the signal bar (no signal-bar
     close execution). Slippage, fees, perpetual funding (by actual hold time),
@@ -137,6 +159,10 @@ def _replay_profile(
     When `emit_events=True`, the result includes an `events` list containing
     candidate/skip/entry/exit records in chronological order. Default output
     shape is unchanged.
+
+    Issue 15: regime slicing was O(N) inside an O(N) loop; we now maintain a
+    monotonically advancing cursor `regime_idx` and pre-compute the regime
+    and signal ATR series once.
     """
     n_signal = len(candles_signal)
     n_regime = len(candles_regime)
@@ -156,6 +182,20 @@ def _replay_profile(
 
     signal_bar_ms = profile.signal_bar_ms
     regime_bar_ms = profile.regime_bar_ms
+
+    # Issue 15 — pre-compute regime and signal ATR series once.
+    regime_atr_full = _build_atr_series(candles_regime, period=14)
+    signal_atr_full = _build_atr_series(candles_signal, period=14)
+    # For trail/chandelier: ATR(22) on signal TF.
+    signal_atr22_full = _build_atr_series(candles_signal, period=22)
+    # Regime timestamps for monotonic cursor.
+    regime_ts = np.array(
+        [c.timestamp_ms for c in candles_regime], dtype=np.int64,
+    )
+
+    use_signal_atr = profile.exit_atr_tf == "signal"
+    use_trail = profile.payoff_mode == "chandelier_trail"
+
     trades: List[Dict[str, Any]] = []
     in_trade      = False
     entry_bar     = 0           # index of the signal bar that triggered entry
@@ -165,14 +205,25 @@ def _replay_profile(
     entry_atr     = 0.0
     entry_regime  = "unknown"
     entry_ts_ms   = 0
+    # Trail state (only used in chandelier_trail mode)
+    trail_partial_taken = False
+    trail_extreme_price = 0.0       # max high (long) / min low (short) since entry
+    trail_stop_price    = 0.0
+    trail_remaining_ratio = 1.0     # 1.0 then 0.5 after partial
+
+    regime_idx = 0  # cursor: number of regime bars whose close <= current ts
 
     for i in range(profile.min_signal_bars, n_signal - 1):
         ts = candles_signal[i].timestamp_ms
 
-        # Regime slice: bars whose close time is <= current signal bar ts
-        c_regime = [c for c in candles_regime if c.timestamp_ms + regime_bar_ms <= ts]
-        if len(c_regime) < profile.min_regime_bars:
+        # Issue 15 — advance the regime cursor monotonically instead of
+        # re-slicing on every iteration. A regime bar at index k "closes"
+        # at regime_ts[k] + regime_bar_ms.
+        while regime_idx < n_regime and regime_ts[regime_idx] + regime_bar_ms <= ts:
+            regime_idx += 1
+        if regime_idx < profile.min_regime_bars:
             continue
+        c_regime = candles_regime[:regime_idx]
         c_signal = candles_signal[max(0, i - 200): i + 1]
 
         regime = compute_regime(c_regime)
@@ -183,17 +234,127 @@ def _replay_profile(
         just_exited = False
         if in_trade:
             cur_close = candles_signal[i].close
+            cur_high  = candles_signal[i].high
+            cur_low   = candles_signal[i].low
             held = i - entry_bar
+            gain_abs = entry_dir * (cur_close - entry_price)
 
-            exit_now = held >= profile.hold_bars
-            if not exit_now and entry_atr > 0 and entry_price > 0:
-                gain_abs = entry_dir * (cur_close - entry_price)
-                exit_now = gain_abs >= 2 * entry_atr or gain_abs <= -entry_atr
-            if not exit_now:
-                if entry_dir == 1 and signal.trend == -1:
-                    exit_now = True
-                elif entry_dir == -1 and signal.trend == 1:
-                    exit_now = True
+            # Trail/chandelier path is computed alongside legacy exits so
+            # both modes follow the same hold-bars / trend-reversal guards.
+            if use_trail and entry_atr > 0 and entry_price > 0:
+                # Update extreme since entry
+                if entry_dir == 1:
+                    if cur_high > trail_extreme_price:
+                        trail_extreme_price = cur_high
+                else:
+                    if cur_low < trail_extreme_price or trail_extreme_price == 0.0:
+                        trail_extreme_price = cur_low
+
+                # Partial-take at +1R
+                if (not trail_partial_taken) and gain_abs >= entry_atr:
+                    fill = next_bar_open_fill(candles_signal, i)
+                    if fill is not None:
+                        partial_px, partial_fill_bar = fill
+                        partial_ts_ms = candles_signal[partial_fill_bar].timestamp_ms
+                        partial_hold_hours = max(
+                            0.0, (partial_ts_ms - entry_ts_ms) / 3_600_000.0
+                        )
+                        partial_breakdown = compute_trade_costs(
+                            direction=entry_dir,
+                            entry_price=entry_price,
+                            exit_price=partial_px,
+                            leverage=leverage,
+                            oi=oi,
+                            fee_rt_pct=fee_rt_pct * 0.5,  # half RT for partial
+                            hold_hours=partial_hold_hours,
+                            funding_8h_pct=funding_8h_pct,
+                            option_spread_pct=option_spread_pct,
+                            apply_slippage=apply_slippage,
+                            forced_end=False,
+                        )
+                        # Book the partial as a synthetic half-trade.
+                        partial_trade = {
+                            "pnl_pct":         partial_breakdown.net_pnl_pct * 0.5,
+                            "gross_pnl_pct":   partial_breakdown.gross_pnl_pct * 0.5,
+                            "net_pnl_pct":     partial_breakdown.net_pnl_pct * 0.5,
+                            "cost_pct":        partial_breakdown.total_cost_pct * 0.5,
+                            "slippage_pct":    partial_breakdown.slippage_pct,
+                            "fee_pct":         partial_breakdown.fee_pct,
+                            "funding_pct":     partial_breakdown.funding_pct,
+                            "option_spread_pct": partial_breakdown.option_spread_pct,
+                            "entry_price":     partial_breakdown.effective_entry_price,
+                            "exit_price":      partial_breakdown.effective_exit_price,
+                            "hold_hours":      partial_breakdown.hold_hours,
+                            "regime":          entry_regime,
+                            "entry_bar":       entry_bar,
+                            "exit_bar":        partial_fill_bar,
+                            "entry_ts_ms":     entry_ts_ms,
+                            "exit_ts_ms":      partial_ts_ms,
+                            "direction":       "long" if entry_dir == 1 else "short",
+                            "forced_end":      False,
+                            "partial":         True,
+                            "asset":           underlying,
+                            "profile":         profile.label,
+                            "track":           "directional",
+                        }
+                        trades.append(partial_trade)
+                        if ledger is not None:
+                            ledger.record_exit(partial_trade)
+                            ledger.record_trade(partial_trade)
+                        trail_partial_taken = True
+                        trail_remaining_ratio = 0.5
+                        # Move stop to breakeven
+                        trail_stop_price = entry_price
+
+                # Chandelier trail on remaining position
+                idx22 = i if i < len(signal_atr22_full) else len(signal_atr22_full) - 1
+                atr22 = float(signal_atr22_full[idx22]) if (
+                    idx22 >= 0 and not np.isnan(signal_atr22_full[idx22])
+                ) else entry_atr
+                if atr22 <= 0:
+                    atr22 = entry_atr
+                proposed = (
+                    trail_extreme_price - 3.0 * atr22 if entry_dir == 1
+                    else trail_extreme_price + 3.0 * atr22
+                )
+                if trail_partial_taken:
+                    # After breakeven move, trail can only tighten the stop
+                    if entry_dir == 1:
+                        trail_stop_price = max(trail_stop_price, proposed)
+                    else:
+                        trail_stop_price = (
+                            min(trail_stop_price, proposed) if trail_stop_price > 0
+                            else proposed
+                        )
+
+                # Exit on stop hit
+                if trail_partial_taken:
+                    if entry_dir == 1 and cur_low <= trail_stop_price:
+                        exit_now = True
+                    elif entry_dir == -1 and cur_high >= trail_stop_price:
+                        exit_now = True
+                    else:
+                        exit_now = False
+                else:
+                    # Pre-partial: only the original -1R stop applies
+                    exit_now = gain_abs <= -entry_atr
+
+                if not exit_now:
+                    exit_now = held >= profile.hold_bars
+                if not exit_now:
+                    if entry_dir == 1 and signal.trend == -1:
+                        exit_now = True
+                    elif entry_dir == -1 and signal.trend == 1:
+                        exit_now = True
+            else:
+                exit_now = held >= profile.hold_bars
+                if not exit_now and entry_atr > 0 and entry_price > 0:
+                    exit_now = gain_abs >= 2 * entry_atr or gain_abs <= -entry_atr
+                if not exit_now:
+                    if entry_dir == 1 and signal.trend == -1:
+                        exit_now = True
+                    elif entry_dir == -1 and signal.trend == 1:
+                        exit_now = True
 
             if exit_now:
                 # Exit fills at next bar open (no signal-bar close execution)
@@ -207,13 +368,14 @@ def _replay_profile(
                     hold_hours = max(
                         0.0, (exit_ts_ms - entry_ts_ms) / 3_600_000.0
                     )
+                    rem_fee = fee_rt_pct * trail_remaining_ratio
                     breakdown = compute_trade_costs(
                         direction=entry_dir,
                         entry_price=entry_price,
                         exit_price=exit_px,
                         leverage=leverage,
                         oi=oi,
-                        fee_rt_pct=fee_rt_pct,
+                        fee_rt_pct=rem_fee,
                         hold_hours=hold_hours,
                         funding_8h_pct=funding_8h_pct,
                         option_spread_pct=option_spread_pct,
@@ -221,10 +383,10 @@ def _replay_profile(
                         forced_end=False,
                     )
                     trade = {
-                        "pnl_pct":         breakdown.net_pnl_pct,
-                        "gross_pnl_pct":   breakdown.gross_pnl_pct,
-                        "net_pnl_pct":     breakdown.net_pnl_pct,
-                        "cost_pct":        breakdown.total_cost_pct,
+                        "pnl_pct":         breakdown.net_pnl_pct * trail_remaining_ratio,
+                        "gross_pnl_pct":   breakdown.gross_pnl_pct * trail_remaining_ratio,
+                        "net_pnl_pct":     breakdown.net_pnl_pct * trail_remaining_ratio,
+                        "cost_pct":        breakdown.total_cost_pct * trail_remaining_ratio,
                         "slippage_pct":    breakdown.slippage_pct,
                         "fee_pct":         breakdown.fee_pct,
                         "funding_pct":     breakdown.funding_pct,
@@ -239,6 +401,7 @@ def _replay_profile(
                         "exit_ts_ms":      exit_ts_ms,
                         "direction":       "long" if entry_dir == 1 else "short",
                         "forced_end":      False,
+                        "partial":         False,
                         "asset":           underlying,
                         "profile":         profile.label,
                         "track":           "directional",
@@ -249,6 +412,10 @@ def _replay_profile(
                         ledger.record_trade(trade)
                     in_trade    = False
                     just_exited = True
+                    trail_partial_taken = False
+                    trail_remaining_ratio = 1.0
+                    trail_extreme_price = 0.0
+                    trail_stop_price = 0.0
 
         # ── Entry logic ────────────────────────────────────────────────────────
         if not in_trade and not just_exited:
@@ -277,13 +444,25 @@ def _replay_profile(
                 entry_price    = entry_px
                 entry_ts_ms    = candles_signal[entry_fill_bar].timestamp_ms
                 entry_regime   = regime.macro_regime.value
-                # ATR from recent regime bars for R-multiple exits
-                h_arr = np.array([c.high  for c in c_regime[-20:]], dtype=np.float64)
-                l_arr = np.array([c.low   for c in c_regime[-20:]], dtype=np.float64)
-                c_arr = np.array([c.close for c in c_regime[-20:]], dtype=np.float64)
-                atr_arr  = compute_atr(h_arr, l_arr, c_arr, 14)
-                v = float(atr_arr[-1]) if len(atr_arr) > 0 and not np.isnan(atr_arr[-1]) else 0.0
+                # Issue 6 — ATR source flag-controlled.
+                if use_signal_atr:
+                    arr = signal_atr_full
+                    # We use signal-bar i, but ATR is undefined at the very
+                    # first 14 bars; we already pass min_signal_bars >= 30.
+                    idx = i if i < len(arr) else len(arr) - 1
+                    v = float(arr[idx]) if (idx >= 0 and not np.isnan(arr[idx])) else 0.0
+                else:
+                    arr = regime_atr_full
+                    idx = regime_idx - 1
+                    v = float(arr[idx]) if (
+                        0 <= idx < len(arr) and not np.isnan(arr[idx])
+                    ) else 0.0
                 entry_atr = v if v > 0 else entry_price * 0.02
+                # Reset trail state on entry
+                trail_partial_taken = False
+                trail_remaining_ratio = 1.0
+                trail_extreme_price = entry_price
+                trail_stop_price = 0.0
                 if ledger is not None:
                     ledger.record_entry({
                         "bar_idx":   entry_fill_bar,
@@ -311,13 +490,14 @@ def _replay_profile(
         exit_px = candles_signal[last_i].close
         exit_ts_ms = candles_signal[last_i].timestamp_ms
         hold_hours = max(0.0, (exit_ts_ms - entry_ts_ms) / 3_600_000.0)
+        rem_fee = fee_rt_pct * trail_remaining_ratio
         breakdown = compute_trade_costs(
             direction=entry_dir,
             entry_price=entry_price,
             exit_price=exit_px,
             leverage=leverage,
             oi=oi,
-            fee_rt_pct=fee_rt_pct,
+            fee_rt_pct=rem_fee,
             hold_hours=hold_hours,
             funding_8h_pct=funding_8h_pct,
             option_spread_pct=option_spread_pct,
@@ -325,10 +505,10 @@ def _replay_profile(
             forced_end=True,
         )
         trade = {
-            "pnl_pct":         breakdown.net_pnl_pct,
-            "gross_pnl_pct":   breakdown.gross_pnl_pct,
-            "net_pnl_pct":     breakdown.net_pnl_pct,
-            "cost_pct":        breakdown.total_cost_pct,
+            "pnl_pct":         breakdown.net_pnl_pct * trail_remaining_ratio,
+            "gross_pnl_pct":   breakdown.gross_pnl_pct * trail_remaining_ratio,
+            "net_pnl_pct":     breakdown.net_pnl_pct * trail_remaining_ratio,
+            "cost_pct":        breakdown.total_cost_pct * trail_remaining_ratio,
             "slippage_pct":    breakdown.slippage_pct,
             "fee_pct":         breakdown.fee_pct,
             "funding_pct":     breakdown.funding_pct,
@@ -343,6 +523,7 @@ def _replay_profile(
             "exit_ts_ms":      exit_ts_ms,
             "direction":       "long" if entry_dir == 1 else "short",
             "forced_end":      True,
+            "partial":         False,
             "asset":           underlying,
             "profile":         profile.label,
             "track":           "directional",
@@ -353,13 +534,15 @@ def _replay_profile(
             ledger.record_trade(trade)
 
     # ── Forward-return win rates per horizon (arrow-based) ────────────────────
-    # Pass 1: compute signals and regime slices once per bar
+    # Pass 1: compute signals once per bar. Regime cursor advances monotonically.
     _bar_signals: Dict[int, Any] = {}
+    fwd_regime_idx = 0
     for j in range(profile.min_signal_bars, n_signal):
-        ts_j    = candles_signal[j].timestamp_ms
-        c_reg_j = [c for c in candles_regime
-                   if c.timestamp_ms + regime_bar_ms <= ts_j]
-        if len(c_reg_j) < profile.min_regime_bars:
+        ts_j = candles_signal[j].timestamp_ms
+        while (fwd_regime_idx < n_regime
+               and regime_ts[fwd_regime_idx] + regime_bar_ms <= ts_j):
+            fwd_regime_idx += 1
+        if fwd_regime_idx < profile.min_regime_bars:
             continue
         c_sig_j = candles_signal[max(0, j - 200): j + 1]
         try:
@@ -465,6 +648,8 @@ def run_mtf_backtest(
     option_spread_pct: Optional[float] = None,
     apply_slippage: bool = True,
     emit_events: bool = False,
+    exit_atr_tf: Optional[Literal["signal", "regime"]] = None,
+    payoff_mode: Optional[Literal["fixed_2r", "chandelier_trail"]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Run all (or selected) TF profiles and return a comparison dict.
@@ -476,6 +661,12 @@ def run_mtf_backtest(
       - option_spread_pct : optional round-trip bid/ask half-spread cost (None=ignore)
       - apply_slippage    : disable to inspect zero-slippage variants
       - emit_events       : opt-in research event ledger (default off → unchanged shape)
+      - exit_atr_tf       : Issue 6 — when set, overrides the per-profile default
+                            ("regime" preserves legacy; "signal" tightens stops to
+                            the entry timeframe).
+      - payoff_mode       : Issue 7 — when set, overrides the per-profile default
+                            ("fixed_2r" preserves legacy 2R/-1R; "chandelier_trail"
+                            takes 50% at +1R, breakeven, then trails the remainder).
     """
     _candle_map: Dict[str, Tuple[List[Candle], List[Candle]]] = {
         "scalping_15m": (candles_15m, candles_1h),
@@ -489,6 +680,15 @@ def run_mtf_backtest(
         if key not in PROFILES:
             continue
         profile = PROFILES[key]
+        # Apply caller-side overrides without mutating the module-level singleton.
+        overrides: Dict[str, Any] = {}
+        if exit_atr_tf is not None:
+            overrides["exit_atr_tf"] = exit_atr_tf
+        if payoff_mode is not None:
+            overrides["payoff_mode"] = payoff_mode
+        if overrides:
+            from dataclasses import replace as _dc_replace
+            profile = _dc_replace(profile, **overrides)
         sig_candles, reg_candles = _candle_map.get(key, ([], []))
         results[key] = _replay_profile(
             profile, sig_candles, reg_candles,

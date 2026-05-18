@@ -47,6 +47,14 @@ def add_position(
     order_id: str | None = None,
     order_status: str | None = None,
 ) -> PaperPosition:
+    # Issue 17 — refuse to record a position with a corrupt entry price.
+    # Pre-TTACE seed data has rows where entry_spot_price == 0; tightening at
+    # write-time stops the database from gaining more.
+    if entry_spot_price is None or entry_spot_price <= 0:
+        raise ValueError(
+            f"entry_spot_price must be > 0 (got {entry_spot_price!r})"
+        )
+
     from app.core.trading_mode import MODES, DEFAULT_MODE, TrailMode
     from app.engines.directional.trailing_stop import TrailState
 

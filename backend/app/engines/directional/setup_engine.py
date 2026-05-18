@@ -1,7 +1,34 @@
+import os
 from app.schemas.directional import (
     RegimeResult, SignalResult, SetupResult,
     TradeState, MacroRegime, Direction,
 )
+
+
+def _idle_loose_enabled() -> bool:
+    """Issue 4 — operator opt-in to allow CONFIRMED entries in IDLE under
+    very strict signal_score (>= 18). Off by default; enabled via env.
+    """
+    return os.environ.get("STERLING_IDLE_STRICTNESS", "").lower() == "loose"
+
+
+def _early_entry_enabled() -> bool:
+    """Issue 5 — operator opt-in to flag EARLY_SETUP_ACTIVE with signal_score
+    in [11, 14] for haircut sizing. Off by default; enabled via env."""
+    return os.environ.get("STERLING_ENABLE_EARLY_ENTRY") == "1"
+
+
+def _maybe_flag_early(setup: SetupResult, signal: SignalResult) -> SetupResult:
+    """If EARLY_SETUP_ACTIVE and operator opt-in is on, mark early_entry=True
+    so the sizing engine applies the 0.5× haircut. Idempotent."""
+    if setup.state != TradeState.EARLY_SETUP_ACTIVE:
+        return setup
+    if not _early_entry_enabled():
+        return setup
+    sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
+    if 11.0 <= sig_score <= 14.0:
+        return setup.model_copy(update={"early_entry": True})
+    return setup
 
 # v1 + v2 bullish regimes — BULL_TREND was added in v2 but not included here (bug fix)
 _BULLISH_REGIMES = {
@@ -33,6 +60,11 @@ _HIGH_SCORE_CONFIRM = 16.0  # 80% of max-20; stricter than trending (15) — ran
 
 
 def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
+    setup = _evaluate_setup_inner(regime, signal)
+    return _maybe_flag_early(setup, signal)
+
+
+def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupResult:
     macro = regime.macro_regime
     trend = signal.trend
     green_count = signal.st_trends.count(1)
@@ -40,6 +72,28 @@ def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
 
     # Hard veto: choppy / idle market blocks all entries
     if macro in _VETO_REGIMES:
+        # Issue 4 — under STERLING_IDLE_STRICTNESS=loose, allow CONFIRMED in IDLE
+        # when signal_score is very high (≥ 18/20) AND all 3 STs agree. The
+        # sizer is responsible for dropping the position to 0.25× via
+        # regime_adaptive_sizer.adapt(is_idle=True).
+        sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
+        if (
+            macro == MacroRegime.IDLE
+            and _idle_loose_enabled()
+            and sig_score >= 18.0
+            and (signal.all_green or signal.all_red)
+            and trend != 0
+        ):
+            return SetupResult(
+                state=TradeState.CONFIRMED_SETUP_ACTIVE,
+                direction=Direction.LONG if trend == 1 else Direction.SHORT,
+                reason=(
+                    f"IDLE regime (loose mode) — all STs aligned + high score "
+                    f"({sig_score:.0f}/20). Sized down 0.25×."
+                ),
+                macro_regime=macro,
+                signal_trend=trend,
+            )
         return SetupResult(
             state=TradeState.FILTERED,
             direction=Direction.NEUTRAL,

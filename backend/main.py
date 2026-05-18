@@ -28,6 +28,7 @@ from app.api.v1.endpoints.session import router as session_router
 from app.api.v1.endpoints.trading_mode import router as trading_mode_router
 from app.api.v1.endpoints.candles import router as candles_router
 from app.api.v1.endpoints.analytics import router as analytics_router
+from app.api.v1.endpoints.analytics_baseline import router as analytics_baseline_router
 from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
 from app.api.v1.endpoints.trading import router as trading_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
@@ -921,6 +922,7 @@ def create_app() -> FastAPI:
     app.include_router(candles_router, prefix="/api/v1")
     app.include_router(ohlcv_router, prefix="/api/v1")
     app.include_router(analytics_router, prefix="/api/v1")
+    app.include_router(analytics_baseline_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
     app.include_router(trading_router, prefix="/api/v1")
 

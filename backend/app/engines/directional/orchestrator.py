@@ -197,7 +197,9 @@ async def run_once(
 
     ranked = rank_structures(structures, regime, signal, exec_timing, policy)
     no_trade_scr = score_no_trade(regime, signal, policy)
-    sized_trades = [size_trade(s, risk) for s in ranked[:5]]
+    # Issue 5 — propagate setup.early_entry into sizing so the haircut applies.
+    early = bool(getattr(setup, "early_entry", False))
+    sized_trades = [size_trade(s, risk, early_entry=early) for s in ranked[:5]]
 
     best = ranked[0] if ranked else None
     if best and best.score > no_trade_scr:

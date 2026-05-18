@@ -3,6 +3,12 @@ from app.schemas.risk import RiskParams
 
 _LEV_SCALE = {50: 0.15, 25: 0.30, 10: 0.50, 5: 0.75, 3: 0.85, 1: 1.0}
 
+# Issue 12 — paper-only cold-start opt-in multiplier (hard-coded so callers
+# can't bypass it via a different risk param).
+_COLD_START_SIZE_MULT = 0.25
+# Issue 5 — early-entry haircut multiplier.
+_EARLY_ENTRY_SIZE_MULT = 0.5
+
 
 def _nearest_lev_key(leverage: int) -> int:
     keys = sorted(_LEV_SCALE.keys())
@@ -25,18 +31,31 @@ def size_trade(
     structure: TradeStructure,
     risk_params: RiskParams,
     leverage: int = 1,
+    *,
+    early_entry: bool = False,
 ) -> SizedTrade:
     capital = risk_params.capital
     win_rate = getattr(risk_params, "win_rate", None)
     win_rate_known = bool(getattr(risk_params, "win_rate_known", True))
+    cold_start_wr = getattr(risk_params, "cold_start_default_win_rate", None)
+    trading_mode = getattr(risk_params, "trading_mode", None)
 
-    # TTACE Phase 3: cold-start / unknown edge → refuse to size.
+    # Issue 12 — cold-start opt-in (paper mode only).
+    cold_start_active = False
     if not win_rate_known or win_rate is None:
-        return SizedTrade(
-            structure=structure, contracts=0,
-            position_value=0.0, max_risk_usd=0.0, capital_at_risk_pct=0.0,
-            blocked_reason="cold_start_win_rate_unknown",
-        )
+        if (
+            cold_start_wr is not None
+            and trading_mode == "paper"
+            and 0.0 < float(cold_start_wr) < 1.0
+        ):
+            win_rate = float(cold_start_wr)
+            cold_start_active = True
+        else:
+            return SizedTrade(
+                structure=structure, contracts=0,
+                position_value=0.0, max_risk_usd=0.0, capital_at_risk_pct=0.0,
+                blocked_reason="cold_start_win_rate_unknown",
+            )
 
     rr = structure.risk_reward if structure.risk_reward and structure.risk_reward > 0 else 1.0
     frac_kelly = _fractional_kelly(win_rate, rr)
@@ -71,6 +90,12 @@ def size_trade(
         max_per,
         getattr(risk_params, "max_position_pct", 0.05),
     )
+    # Issue 12 — paper-bootstrap cold-start always sizes at 0.25× of normal.
+    if cold_start_active:
+        target_risk_pct *= _COLD_START_SIZE_MULT
+    # Issue 5 — early-entry haircut.
+    if early_entry:
+        target_risk_pct *= _EARLY_ENTRY_SIZE_MULT
     max_risk_usd = capital * target_risk_pct
 
     leg_premium = structure.net_premium
@@ -87,10 +112,20 @@ def size_trade(
     position_value = contracts * leg_premium
     actual_risk = contracts * max_loss_per_contract
 
-    return SizedTrade(
+    notes = []
+    if cold_start_active:
+        notes.append("cold_start_bootstrap_paper")
+    if early_entry:
+        notes.append("early_entry_haircut")
+    sized = SizedTrade(
         structure=structure,
         contracts=contracts,
         position_value=round(position_value, 2),
         max_risk_usd=round(actual_risk, 2),
         capital_at_risk_pct=round(actual_risk / capital * 100, 3),
     )
+    if notes:
+        # SizedTrade.blocked_reason is optional and used here as an info channel
+        # for the UI when the trade was sized under an opt-in flag.
+        sized = sized.model_copy(update={"blocked_reason": ",".join(notes)})
+    return sized

@@ -1,11 +1,46 @@
 import datetime as _dt
-from typing import List, Optional
+import os as _os
+from typing import List, Optional, Tuple
 from app.schemas.execution import TradeStructure, CandidateContract
 from app.schemas.risk import ScoringWeights
 from app.schemas.directional import (
     RegimeResult, SignalResult, ExecTimingResult,
     PolicyResult, ExecMode, IVRBand,
 )
+
+
+def _resolve_now_utc(
+    hour_utc: Optional[int],
+    minute_utc: Optional[int],
+) -> Tuple[int, int]:
+    """
+    Issue 16 — single chokepoint for "what UTC time is it?". Callers should
+    pin `hour_utc` (and optionally `minute_utc`) from the candle timestamp
+    being scored. If they don't:
+      * STERLING_SCORING_NOW (HH:MM) is honored — used by tests and by the
+        live-evaluator after it computes the bar hour from the candle.
+      * Otherwise the test-suite shim STERLING_FORCE_DEAD_ZONE_PASS=1 sets
+        12:30 UTC, a safely-outside-everything default. This is opt-in; the
+        live path should never enable it.
+      * Last resort: wall-clock datetime.now(timezone.utc). This is what the
+        legacy code did unconditionally; we keep it only as a tertiary fallback
+        so live evaluation never raises if an upstream caller forgets to pin
+        the bar time.
+    Returns (hour_utc, minute_utc).
+    """
+    if hour_utc is not None:
+        return hour_utc, (minute_utc if minute_utc is not None else 30)
+    env = _os.environ.get("STERLING_SCORING_NOW")
+    if env and ":" in env:
+        try:
+            h, m = env.split(":", 1)
+            return int(h) % 24, int(m) % 60
+        except (TypeError, ValueError):
+            pass
+    if _os.environ.get("STERLING_FORCE_DEAD_ZONE_PASS") == "1":
+        return 12, 30
+    now = _dt.datetime.now(_dt.timezone.utc)
+    return now.hour, (minute_utc if minute_utc is not None else now.minute)
 
 
 def _score_macro_regime(regime: RegimeResult) -> float:
@@ -108,7 +143,7 @@ def _score_session_bonus(hour_utc: Optional[int] = None) -> float:
        0- 2  → +0.5  Asia overlap (thin but trending)
        else  → 0
     """
-    h = hour_utc if hour_utc is not None else _dt.datetime.now(_dt.timezone.utc).hour
+    h, _ = _resolve_now_utc(hour_utc, None)
     if 13 <= h <= 16:
         return 3.0
     if 17 <= h <= 20:
@@ -146,17 +181,11 @@ def _check_hard_vetoes(
             if spread_pct >= 0.05:
                 return f"naked short: spread {spread_pct:.1%} ≥ 5% (requires < 5%)"
 
-    # Use caller-supplied bar hour (backtest context) or current wall-clock hour (live).
-    # When the caller pins bar_hour_utc but not bar_minute_utc, default the minute
-    # to 30 — mid-hour is safely outside every funding window so legacy tests
-    # that only thread bar_hour_utc don't accidentally trip the A5 funding veto.
-    if bar_hour_utc is not None:
-        hour_utc = bar_hour_utc
-        minute_utc = bar_minute_utc if bar_minute_utc is not None else 30
-    else:
-        now = _dt.datetime.now(_dt.timezone.utc)
-        hour_utc = now.hour
-        minute_utc = bar_minute_utc if bar_minute_utc is not None else now.minute
+    # Issue 16 — route every time read through `_resolve_now_utc` so the
+    # dead-zone / funding-window vetoes are deterministic when callers pin
+    # the bar timestamp. The wall-clock fallback only fires for live code
+    # paths that haven't been threaded yet.
+    hour_utc, minute_utc = _resolve_now_utc(bar_hour_utc, bar_minute_utc)
     if hour_utc in {2, 3, 4, 5}:
         return f"hour {hour_utc}:00 UTC in dead zone"
 
@@ -264,7 +293,25 @@ def score_structure(
     return structure.model_copy(update={"score": total, "score_breakdown": breakdown})
 
 
+def _regime_direction_sign(regime: RegimeResult) -> int:
+    """Best-effort regime direction: +1 bull, -1 bear, 0 otherwise."""
+    macro = getattr(regime, "macro_regime", None)
+    name = macro.value if macro is not None else ""
+    if "BULL" in name:
+        return 1
+    if "BEAR" in name:
+        return -1
+    return 0
+
+
 def score_no_trade(regime: RegimeResult, signal: SignalResult, policy: PolicyResult) -> float:
+    """
+    Issue 8 — non-additive no-trade score. Adverse-selection penalty plus a
+    multiplicative amplifier when multiple "don't trade" signals stack.
+
+    The 75/85 hard gate on `structure.score` (passes_score_threshold) is
+    unchanged — this only affects the no-trade vs best-structure tie-break.
+    """
     base = 20.0
     if policy.avoid_long_premium:
         base += 40.0
@@ -274,7 +321,24 @@ def score_no_trade(regime: RegimeResult, signal: SignalResult, policy: PolicyRes
         base += 20.0
     if policy.ivr is None:
         base += 15.0
-    return min(100.0, base)
+
+    # Issue 8 — adverse selection: signal trend points one way, macro
+    # regime points the other → big bonus to "do nothing".
+    rd = _regime_direction_sign(regime)
+    if rd != 0 and signal.trend != 0 and rd != signal.trend:
+        base += 25.0
+
+    # Issue 8 — bigger bonus to "do nothing" when IVR is unavailable AND macro
+    # is very weak. These two failure modes together amplify the case for skip.
+    if policy.ivr is None and regime.score < 5.0:
+        base += 30.0
+
+    # Issue 8 — multi-factor amplifier: when we're already discouraging long
+    # premium AND the signal is flat, push base up nonlinearly.
+    if policy.avoid_long_premium and signal.trend == 0:
+        base *= 1.4
+
+    return float(min(100.0, max(0.0, base)))
 
 
 def rank_structures(

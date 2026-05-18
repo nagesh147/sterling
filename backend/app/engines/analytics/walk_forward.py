@@ -7,13 +7,19 @@ run_real() — real engine replay using actual regime/signal/setup pipeline
 """
 import numpy as np
 from dataclasses import dataclass, field
-from typing import List, TYPE_CHECKING
-from app.engines.analytics.performance import PerformanceReport, full_report
+from typing import List, Optional, TYPE_CHECKING
+from app.engines.analytics.performance import (
+    PerformanceReport, full_report, deflated_sharpe,
+)
 
 _FEE_RT_PCT = 0.001   # 0.10% round-trip (taker on both legs)
 _MIN_1H     = 30
 _MIN_4H     = 55
 _4H_MS      = 4 * 3_600_000
+
+# Issue 9 — deflated-Sharpe p-value threshold above which a window's selected
+# threshold is treated as a real edge. Below this, the window is "no_edge".
+_DEFLATED_P_GATE = 0.95
 
 
 @dataclass
@@ -23,6 +29,13 @@ class WalkForwardConfig:
     step_bars:  int = 30
     score_thresholds_to_test: list = field(default_factory=lambda: [0, 3, 5, 8, 10, 12, 15])
     underlying: str = "BTC"
+    # Issue 9 — when True, threshold selection requires deflated_sharpe ≥ 0.95
+    # on the train window. Windows that don't clear the gate are flagged
+    # `no_edge=True` and their recommended_threshold is None. Default is
+    # False to preserve back-compat with existing tests; the baseline runner
+    # enables it.
+    require_deflated_significance: bool = False
+    deflated_p_gate: float = _DEFLATED_P_GATE
 
 
 @dataclass
@@ -32,17 +45,24 @@ class WalkForwardWindow:
     test_start:      int
     test_end:        int
     report:          PerformanceReport
-    best_threshold:  float
+    best_threshold:  Optional[float]
     equity_curve:    list
+    # Issue 9 — additive fields for the deflated-Sharpe gate.
+    train_sharpe:    Optional[float] = None
+    deflated_p:      Optional[float] = None
+    no_edge:         bool = False
 
 
 @dataclass
 class WalkForwardResult:
     windows:               list
     aggregate_report:      PerformanceReport
-    recommended_threshold: float
+    recommended_threshold: Optional[float]
     regime_sharpes:        dict
     oos_equity_curve:      list
+    # Issue 9 — count of windows that cleared the deflated_sharpe gate.
+    windows_with_edge:     int = 0
+    deflated_p_per_window: list = field(default_factory=list)
 
 
 # ── Legacy proxy (kept for backward-compat tests) ──────────────────────────
@@ -253,6 +273,12 @@ def run_real(
     Walk-forward using real engine replay.
     score_thresholds_to_test are signal_score values (0–20 scale).
     Threshold selected on train window only; OOS equity evaluated on test window.
+
+    Issue 9: when `config.require_deflated_significance` is True, the per-window
+    train Sharpe must clear a deflated-Sharpe probability ≥ `config.deflated_p_gate`
+    given the number of thresholds searched and the number of train trades.
+    Windows that don't clear are flagged `no_edge=True` and their recommended
+    threshold is None — they do NOT contribute trades to the OOS aggregate.
     """
     from app.engines.analytics.performance import sharpe as _sharpe
 
@@ -261,6 +287,7 @@ def run_real(
     total          = len(candles_1h)
     idx = win_idx  = 0
     step           = max(config.step_bars, 1)
+    n_thresholds   = max(1, len(config.score_thresholds_to_test))
 
     while idx + config.train_bars + config.test_bars <= total:
         train_end = idx + config.train_bars
@@ -274,8 +301,9 @@ def run_real(
         tr_4h = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= tr_cutoff]
         ts_4h = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= ts_cutoff]
 
-        best_thr    = config.score_thresholds_to_test[0]
-        best_sharpe = -999.0
+        best_thr        = config.score_thresholds_to_test[0]
+        best_sharpe     = -999.0
+        best_train_n    = 0
         for thr in config.score_thresholds_to_test:
             tr_trades = _engine_replay_trades(tr_1h, tr_4h, score_min=thr, fee_rt_pct=fee_rt_pct)
             if not tr_trades:
@@ -284,8 +312,28 @@ def run_real(
             if s > best_sharpe:
                 best_sharpe = s
                 best_thr    = thr
+                best_train_n = len(tr_trades)
 
-        test_trades = _engine_replay_trades(ts_1h, ts_4h, score_min=best_thr, fee_rt_pct=fee_rt_pct)
+        # Issue 9 — deflated-Sharpe gate on the train-window winner.
+        deflated_p = None
+        if best_train_n >= 2 and best_sharpe > -999.0:
+            deflated_p = deflated_sharpe(
+                observed_sharpe=best_sharpe,
+                n_trials=n_thresholds,
+                n_observations=best_train_n,
+            )
+        gate = config.deflated_p_gate
+        no_edge = (
+            config.require_deflated_significance
+            and (deflated_p is None or deflated_p < gate)
+        )
+
+        if no_edge:
+            test_trades = []
+        else:
+            test_trades = _engine_replay_trades(
+                ts_1h, ts_4h, score_min=best_thr, fee_rt_pct=fee_rt_pct,
+            )
         oos_trades_all.extend(test_trades)
 
         if test_trades:
@@ -298,24 +346,38 @@ def run_real(
         windows.append(WalkForwardWindow(
             window_idx=win_idx,
             train_start=idx, test_start=train_end, test_end=test_end,
-            report=rpt, best_threshold=best_thr,
+            report=rpt,
+            best_threshold=(None if no_edge else best_thr),
             equity_curve=list(ec),
+            train_sharpe=(None if best_sharpe <= -999.0 else float(best_sharpe)),
+            deflated_p=(None if deflated_p is None else float(deflated_p)),
+            no_edge=no_edge,
         ))
         idx     += step
         win_idx += 1
 
     oos_ec = _equity_from_trades(oos_trades_all) if oos_trades_all else np.array([1.0, 1.0])
     agg    = full_report(oos_ec, oos_trades_all) if oos_trades_all else PerformanceReport(0,0,0,0,0,0,0,0,{})
-    thr_arr = [w.best_threshold for w in windows]
-    rec_thr = float(np.median(thr_arr)) if thr_arr else config.score_thresholds_to_test[0]
+    thr_arr = [w.best_threshold for w in windows if w.best_threshold is not None]
+    if thr_arr:
+        rec_thr = float(np.median(thr_arr))
+    elif config.require_deflated_significance:
+        rec_thr = None  # no windows survived the gate
+    else:
+        rec_thr = config.score_thresholds_to_test[0]
 
     regime_sharpes = {}
     if agg.regime_breakdown:
         for reg, stats in agg.regime_breakdown.items():
             regime_sharpes[reg] = stats.get("sharpe_proxy", 0.0)
 
+    windows_with_edge = sum(1 for w in windows if not w.no_edge and w.best_threshold is not None)
+    deflated_per_window = [w.deflated_p for w in windows]
+
     return WalkForwardResult(
         windows=windows, aggregate_report=agg,
         recommended_threshold=rec_thr, regime_sharpes=regime_sharpes,
         oos_equity_curve=list(oos_ec),
+        windows_with_edge=windows_with_edge,
+        deflated_p_per_window=deflated_per_window,
     )

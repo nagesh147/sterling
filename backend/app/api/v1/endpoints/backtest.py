@@ -141,6 +141,10 @@ async def run_mtf_backtest_endpoint(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
 
+    # Issue 11 — apply per-underlying funding default when caller omits the field.
+    from app.services.funding import resolve_funding_8h_pct
+    funding = resolve_funding_8h_pct(sym, body.funding_8h_pct)
+
     raw = run_mtf_backtest(
         underlying=sym,
         candles_15m=candles_15m,
@@ -149,6 +153,9 @@ async def run_mtf_backtest_endpoint(
         c_1d=candles_1d,
         profiles=body.profiles,
         score_min=body.score_min,
+        funding_8h_pct=funding,
+        exit_atr_tf=body.exit_atr_tf,
+        payoff_mode=body.payoff_mode,
     )
 
     best_key    = None

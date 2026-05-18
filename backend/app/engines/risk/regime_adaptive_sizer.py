@@ -31,20 +31,33 @@ class AdaptiveSizingConfig:
     mult_normal:        float = 1.0
     mult_healthy:       float = 1.25
     mult_hyper:         float = 0.75
+    # Issue 4 — IDLE bucket multiplier. When the macro_regime is IDLE but the
+    # caller wants to size *down* instead of veto entirely (loose mode), the
+    # sizer applies this multiplier on top of the percentile-based one.
+    mult_idle:          float = 0.25
 
 
 def adapt(
     atr_percentile: Optional[float],
     config: Optional[AdaptiveSizingConfig] = None,
+    *,
+    is_idle: bool = False,
 ) -> float:
     """
-    Returns the sizing multiplier ∈ {0.5, 1.0, 1.25, 0.75} keyed on ATR pct.
+    Returns the sizing multiplier keyed on ATR pct.
+
+    When `is_idle=True` (Issue 4), returns `mult_idle` regardless of ATR pct
+    so the caller can size IDLE bars down to ~0.25× instead of vetoing them.
+    Default is_idle=False to preserve back-compat.
 
     When `atr_percentile is None` (insufficient candles to compute), returns
     1.0 — fail-open is correct here because the upstream Kelly + caps already
     bound the risk; this multiplier is an *enhancer*, not a *guard*.
     """
     cfg = config or AdaptiveSizingConfig()
+
+    if is_idle:
+        return cfg.mult_idle
 
     if atr_percentile is None:
         return 1.0

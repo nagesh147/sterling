@@ -97,6 +97,11 @@ class SetupResult(BaseModel):
     reason: str
     macro_regime: MacroRegime
     signal_trend: int
+    # Issue 5 — set True when state=EARLY_SETUP_ACTIVE but the operator
+    # opt-in flag enable_early_entry is on AND signal_score is in the
+    # 11–14 band. The sizer applies a 0.5× haircut when this is set.
+    # Does NOT change the TradeState enum (preserves SQLite serialization).
+    early_entry: bool = False
 
 
 class PolicyResult(BaseModel):

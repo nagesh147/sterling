@@ -196,10 +196,21 @@ async def trade_analytics_performance() -> dict:
     closed = _db.get_closed_positions_for()
     snapshots = _db.get_equity_snapshots(limit=1000)
 
+    # Issue 17 — filter rows with corrupt entry_spot_price (= 0 or missing).
+    # Pre-TTACE seed data has rows where entry_spot_price == 0 which fabricates
+    # nonsense "wins" through the pnl_pct = pnl / entry_spot division.
     trades = []
+    corrupt_row_count = 0
     for pos in closed:
+        entry_spot_raw = pos.get('entry_spot_price', 0.0)
+        try:
+            entry_spot = float(entry_spot_raw or 0.0)
+        except (TypeError, ValueError):
+            entry_spot = 0.0
+        if entry_spot <= 0:
+            corrupt_row_count += 1
+            continue
         pnl = pos.get('realized_pnl_usd', 0.0) or 0.0
-        entry_spot = pos.get('entry_spot_price', 1.0) or 1.0
         pnl_pct = pnl / max(entry_spot * 10, 1.0)
         regime = pos.get('regime', 'unknown') or 'unknown'
         trades.append({'pnl_pct': float(pnl_pct), 'regime': str(regime)})
@@ -214,12 +225,14 @@ async def trade_analytics_performance() -> dict:
     if len(trades) < 2:
         return {
             'total_trades': len(trades),
+            'corrupt_row_count': corrupt_row_count,
             'message': 'Insufficient closed trades for performance metrics',
             'sharpe': 0.0, 'calmar': 0.0, 'sortino': 0.0, 'max_drawdown': 0.0,
             'win_rate': 0.0, 'regime_breakdown': {},
         }
 
     report = full_report(equity_curve, trades)
+    pf = report.profit_factor
     return {
         'sharpe': round(report.sharpe, 4),
         'calmar': round(report.calmar, 4),
@@ -227,8 +240,11 @@ async def trade_analytics_performance() -> dict:
         'max_drawdown': round(report.max_drawdown, 4),
         'win_rate': round(report.win_rate, 4),
         'avg_rr': round(report.avg_rr, 4),
-        'profit_factor': round(report.profit_factor, 4),
+        'profit_factor': (None if pf is None
+                          else (float('inf') if pf == float('inf')
+                                else round(pf, 4))),
         'total_trades': report.total_trades,
+        'corrupt_row_count': corrupt_row_count,
         'regime_breakdown': report.regime_breakdown,
         'slippage_adjusted': True,
     }

@@ -15,6 +15,17 @@ class RiskParams(BaseModel):
     # Cold-start callers (calibration sample < MIN_TRADES_FOR_WIN_RATE) set
     # this to False, which causes size_trade to fail closed.
     win_rate_known: bool = True
+    # Issue 12 — operator opt-in to size during cold start (paper mode only).
+    # When set AND trading_mode == "paper" AND win_rate_known is False, the
+    # sizer uses this value for Kelly with a hard 0.25× multiplier. In any
+    # other context the field is ignored (fail-closed).
+    cold_start_default_win_rate: Optional[float] = None
+    # Issue 5 — operator opt-in to allow EARLY_SETUP_ACTIVE entries with a
+    # 0.5× sizing haircut when signal_score lands in the 11–14 band.
+    enable_early_entry: bool = False
+    # Honored by callers that read `app.state.trading_mode` to decide whether
+    # an opt-in flag like cold_start_default_win_rate is actually safe to use.
+    trading_mode: Optional[str] = None
 
 
 class ExitSignal(BaseModel):
