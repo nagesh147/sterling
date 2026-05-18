@@ -34,6 +34,72 @@ function CbChip() {
   );
 }
 
+// ── Backtest tab — chart toggle + panels ──────────────────────────────────────
+
+function BacktestView() {
+  const [showChart, setShowChart] = useState(true);
+  const [symbol, setSymbol]       = useState('BTC');
+
+  const headerBtn = (active: boolean): React.CSSProperties => ({
+    padding: '3px 9px', borderRadius: 5, fontSize: 9, fontWeight: 600,
+    cursor: 'pointer', fontFamily: 'inherit',
+    border: active ? '1px solid var(--t-blue)44' : '1px solid var(--t-border)',
+    background: active ? 'var(--t-bg3)' : 'transparent',
+    color: active ? 'var(--t-blue)' : 'var(--t-dim)',
+    transition: 'all 0.1s',
+  });
+
+  return (
+    <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 14px' }}>
+
+      {/* ── Chart panel ── */}
+      <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+        {/* Chart header with toggle */}
+        <div style={{ padding: '8px 14px', borderBottom: showChart ? '1px solid var(--t-border)' : 'none',
+          display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
+            HISTORICAL CANDLES
+          </span>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>Delta Exchange · 6m · 5m–4h</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Symbol selector */}
+            <div style={{ display: 'flex', gap: 3 }}>
+              {['BTC', 'ETH', 'SOL', 'XRP'].map(s => (
+                <button key={s} onClick={() => setSymbol(s)} style={headerBtn(symbol === s)}>{s}</button>
+              ))}
+            </div>
+            {/* Chart toggle */}
+            <button
+              onClick={() => setShowChart(v => !v)}
+              title={showChart ? 'Hide chart' : 'Show chart'}
+              style={{ ...headerBtn(showChart), color: showChart ? 'var(--t-green)' : 'var(--t-dim)', borderColor: showChart ? 'var(--t-green)44' : undefined }}
+            >
+              {showChart ? '◉ CHART ON' : '○ CHART OFF'}
+            </button>
+          </div>
+        </div>
+        {showChart && <OHLCVChart />}
+      </div>
+
+      {/* ── Signal backtest panel ── */}
+      <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 10, overflow: 'hidden' }}>
+        <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--t-border)',
+          display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
+            SIGNAL BACKTEST + SIMULATION
+          </span>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
+            Sterling regime · signal quality · capital simulation with fees, SL/TP, trail, Kelly
+          </span>
+        </div>
+        <div style={{ padding: 14 }}>
+          <BacktestPanel underlying={symbol} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Shared chip style for every header control button
 const chip: React.CSSProperties = {
   display: 'inline-flex',
@@ -230,52 +296,7 @@ export function SimpleTerminal() {
           </div>
         )}
         {activeSection === 'backtest' && (
-          <div style={{ flex: 1, padding: '10px 14px', overflow: 'auto' }}>
-            {/* OHLCV candlestick chart — top section */}
-            <div style={{
-              background: 'var(--t-bg2)',
-              border: '1px solid var(--t-border)',
-              borderRadius: 10,
-              overflow: 'hidden',
-              marginBottom: 14,
-            }}>
-              <div style={{
-                padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
-                  HISTORICAL CANDLES
-                </span>
-                <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
-                  Stored from Delta Exchange — 6 months · 5m 15m 30m 1h 2h 4h
-                </span>
-              </div>
-              <OHLCVChart />
-            </div>
-
-            {/* Sterling signal backtest — bottom section */}
-            <div style={{
-              background: 'var(--t-bg2)',
-              border: '1px solid var(--t-border)',
-              borderRadius: 10,
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
-                  SIGNAL BACKTEST
-                </span>
-                <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
-                  Sterling regime + supertrend signal quality analysis
-                </span>
-              </div>
-              <div style={{ padding: 14 }}>
-                <BacktestPanel underlying="BTC" />
-              </div>
-            </div>
-          </div>
+          <BacktestView />
         )}
         {activeSection === 'calibration' && (
           <div style={{ flex: 1, padding: '10px 14px', maxWidth: 700 }}>

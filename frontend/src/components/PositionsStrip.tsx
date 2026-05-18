@@ -18,6 +18,17 @@ function fmtPrice(v: number | null | undefined, decimals = 0): string {
   return `$${fmtUSD(v, v < 10 ? 2 : decimals)}`;
 }
 
+/** Format a P&L value with appropriate precision — never rounds small amounts to $0. */
+function fmtPnl(v: number | null | undefined): string {
+  if (v == null || v === 0) return '—';
+  const abs = Math.abs(v);
+  const sign = v >= 0 ? '+' : '-';
+  if (abs >= 1000) return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  if (abs >= 1)    return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 0.01) return `${sign}$${abs.toFixed(2)}`;
+  return '—';   // sub-cent noise — not meaningful
+}
+
 // For failed positions where entry is 0, use exit price as a reference if available
 function resolveEntryPrice(pos: { entry_spot_price: number; exit_spot_price?: number; order_status?: string | null }): { price: number | null; isProxy: boolean } {
   if (pos.entry_spot_price > 0) return { price: pos.entry_spot_price, isProxy: false };
@@ -28,10 +39,14 @@ function resolveEntryPrice(pos: { entry_spot_price: number; exit_spot_price?: nu
 
 function fmtDuration(openMs: number, closeMs?: number): string {
   const diff = (closeMs ?? Date.now()) - openMs;
+  if (diff <= 0) return '—';
   const h = Math.floor(diff / 3_600_000);
   const m = Math.floor((diff % 3_600_000) / 60_000);
+  const s = Math.floor((diff % 60_000) / 1_000);
   if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  if (s > 0) return `${s}s`;
+  return '<1s';
 }
 
 const ACCENT  = 'var(--accent)';
@@ -158,14 +173,14 @@ export function PositionsStrip() {
           {open.length > 0 && (
             <StatChip
               label="LIVE P&L"
-              value={(livePnl >= 0 ? '+' : '') + '$' + Math.abs(livePnl).toFixed(0)}
+              value={fmtPnl(livePnl)}
               color={livePnl >= 0 ? ACCENT : DANGER}
             />
           )}
           {closed.length > 0 && (
             <StatChip
               label="REALIZED"
-              value={(realizedPnl >= 0 ? '+' : '') + '$' + Math.abs(realizedPnl).toFixed(0)}
+              value={fmtPnl(realizedPnl)}
               color={realizedPnl >= 0 ? ACCENT : DANGER}
             />
           )}
@@ -324,9 +339,7 @@ export function PositionsStrip() {
                     {isOpen ? 'LIVE P&L' : 'REALIZED'}
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
-                    {pnlUsd != null
-                      ? `${pnlUsd >= 0 ? '+' : ''}$${Math.abs(pnlUsd).toFixed(0)}`
-                      : '—'}
+                    {fmtPnl(pnlUsd)}
                   </div>
                   <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>
                     {fmtDuration(pos.entry_timestamp_ms, pos.exit_timestamp_ms ?? undefined)}
@@ -448,10 +461,10 @@ export function PositionsStrip() {
                   <DetailField label="MODE" value={pos.is_paper ? 'PAPER' : 'LIVE'} />
 
                   {/* P&L */}
-                  {pos.realized_pnl_usd != null && entryIsValid && (
+                  {pos.realized_pnl_usd != null && (
                     <DetailField
                       label="REALIZED P&L"
-                      value={`${pos.realized_pnl_usd >= 0 ? '+' : ''}${fmtPrice(Math.abs(pos.realized_pnl_usd))}`}
+                      value={fmtPnl(pos.realized_pnl_usd)}
                       mono
                       color={pos.realized_pnl_usd >= 0 ? ACCENT : DANGER}
                     />
@@ -459,7 +472,7 @@ export function PositionsStrip() {
                   {livePnlUsd != null && isOpen && entryIsValid && (
                     <DetailField
                       label="LIVE P&L"
-                      value={`${livePnlUsd >= 0 ? '+' : ''}${fmtPrice(Math.abs(livePnlUsd))}`}
+                      value={fmtPnl(livePnlUsd)}
                       mono
                       color={livePnlUsd >= 0 ? ACCENT : DANGER}
                     />
