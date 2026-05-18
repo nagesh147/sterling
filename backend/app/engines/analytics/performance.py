@@ -330,8 +330,14 @@ def deflated_sharpe(
     assumption (0, 3) which makes the formula well-defined for synthetic
     tests. Real usage should pass sample skew/kurtosis.
     """
-    if n_trials <= 0:
-        n_trials = 1
+    # Bailey & Lopez de Prado's "max of n_trials" formula is undefined for
+    # n_trials < 2 — inv_phi(1 - 1/1) = inv_phi(0) = -inf, which makes
+    # sr_expected_max = -inf and any observed Sharpe (including very negative)
+    # land at z=+inf → deflated_p = 1.0. Clamp to >= 2 so a single-strategy
+    # baseline still gets a meaningful significance probability against one
+    # implicit comparison strategy.
+    if n_trials < 2:
+        n_trials = 2
     if n_observations < 2:
         return 0.0
     # Expected maximum Sharpe under the null across n_trials i.i.d. tests

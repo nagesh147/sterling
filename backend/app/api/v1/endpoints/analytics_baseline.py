@@ -161,9 +161,20 @@ async def _fetch_candles(
 
 
 def _build_verdict(payload: Dict[str, Any]) -> bool:
+    """
+    Edge is "proven" only when ALL of:
+      - n_trades >= 50
+      - observed sharpe > 0 (negative-Sharpe runs can never be an edge)
+      - deflated_sharpe probability >= 0.95
+    """
     n = int(payload.get("trade_count", 0) or 0)
     ds = payload.get("deflated_sharpe")
-    if ds is None:
+    sharpe_v = payload.get("sharpe")
+    try:
+        sharpe_f = float(sharpe_v) if sharpe_v is not None else None
+    except (TypeError, ValueError):
+        sharpe_f = None
+    if ds is None or sharpe_f is None or sharpe_f <= 0:
         return False
     try:
         return n >= 50 and float(ds) >= 0.95
