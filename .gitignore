@@ -39,3 +39,5 @@ backups/*.tmp
 !superpowers/
 !ui-ux-pro-max-skill/
 .gstack/
+backend/sterling_paper.db
+frontend/sterling_paper.db
