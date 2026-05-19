@@ -39,6 +39,31 @@ class CPCVConfig:
     embargo_bars: int = 16    # bars to embargo around each test set
     train_min_trades: int = 30
 
+    @classmethod
+    def from_hold_bars(
+        cls,
+        hold_bars: int,
+        *,
+        n_groups: int = 6,
+        k_test: int = 2,
+        train_min_trades: int = 30,
+    ) -> "CPCVConfig":
+        """
+        Construct a CPCVConfig with `embargo_bars = 2 * hold_bars`.
+
+        López de Prado's purging recipe requires the embargo to span at least
+        the maximum hold horizon either side of the test fold so a train
+        trade whose holding window touches a test trade's bar range is
+        dropped. Doubling the profile's `hold_bars` is the conservative
+        single-knob default the engineer-handoff doc settled on.
+        """
+        return cls(
+            n_groups=n_groups,
+            k_test=k_test,
+            embargo_bars=int(max(0, 2 * int(hold_bars))),
+            train_min_trades=train_min_trades,
+        )
+
 
 @dataclass
 class CPCVPath:
@@ -191,6 +216,73 @@ def run_cpcv(
         deflated_sharpe_oos=deflated_oos,
         warnings=warnings,
     )
+
+
+def calculate_pbo(
+    trades: List[Dict[str, Any]],
+    *,
+    hold_bars: int,
+    n_groups: int = 6,
+    k_test: int = 2,
+    train_min_trades: int = 30,
+) -> Dict[str, Any]:
+    """
+    Tier-B #10 — top-level Probability of Backtest Overfitting from a single
+    trade list.
+
+    Builds a CPCVConfig with `embargo_bars = 2 * hold_bars` (the canonical
+    purge window for a strategy whose typical position duration is
+    `hold_bars` signal bars), runs the combinatorial cross-validation, and
+    returns the headline numbers consumers want:
+
+      {
+        "pbo": float,                   # in [0, 1]; lower = more robust
+        "mean_train_sharpe": float,
+        "mean_test_sharpe": float,
+        "median_test_sharpe": float,
+        "n_paths": int,
+        "embargo_bars": int,
+        "deflated_sharpe_oos": float | None,
+        "warnings": list[str],
+        "paths": list[dict],            # per-path train/test Sharpe summary
+      }
+
+    With a single strategy variant the PBO is the share of paths whose OOS
+    Sharpe is below the OOS median — this is the López de Prado single-
+    strategy proxy. When the caller has multiple strategy variants they
+    should aggregate IS/OOS Sharpe matrices and call
+    `cpcv_pbo_from_paths(is_scores, oos_scores)` directly.
+
+    Pure: no I/O. The hold_bars argument is the only strategy-specific
+    knob — everything else is CPCV plumbing.
+    """
+    cfg = CPCVConfig.from_hold_bars(
+        hold_bars,
+        n_groups=n_groups,
+        k_test=k_test,
+        train_min_trades=train_min_trades,
+    )
+    result = run_cpcv(trades, config=cfg)
+    return {
+        "pbo": result.pbo,
+        "mean_train_sharpe": result.mean_train_sharpe,
+        "mean_test_sharpe": result.mean_test_sharpe,
+        "median_test_sharpe": result.median_test_sharpe,
+        "n_paths": result.n_paths,
+        "embargo_bars": cfg.embargo_bars,
+        "deflated_sharpe_oos": result.deflated_sharpe_oos,
+        "warnings": result.warnings,
+        "paths": [
+            {
+                "test_groups": list(p.test_groups),
+                "n_train": p.n_train,
+                "n_test": p.n_test,
+                "train_sharpe": p.train_sharpe,
+                "test_sharpe": p.test_sharpe,
+            }
+            for p in result.paths
+        ],
+    }
 
 
 def cpcv_pbo_from_paths(

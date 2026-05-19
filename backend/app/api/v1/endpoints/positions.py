@@ -740,7 +740,7 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                 if not inst:
                     return None
                 adapter = _live_adapter
-                c1h = await adapter.get_candles(inst, "1H", limit=200)
+                c1h = await adapter.get_candles(inst, "1H", limit=400)
                 signal = compute_signal(c1h)
                 current_spot = await adapter.get_index_price(inst)
                 leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
@@ -957,7 +957,7 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     now_ms = int(time.time() * 1000)
 
     try:
-        c1h = await adapter.get_candles(inst, "1H", limit=200)
+        c1h = await adapter.get_candles(inst, "1H", limit=400)
         signal = compute_signal(c1h)
         current_spot = await adapter.get_index_price(inst)
     except Exception as exc:

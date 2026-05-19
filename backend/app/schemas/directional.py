@@ -67,6 +67,12 @@ class RegimeResult(BaseModel):
     ema55: float = 0.0
     # v3 unified engine fields
     atr_slope: float = 0.0       # normalized: Δ(ATR/Close) over last 2 bars; negative = contracting
+    # Tier A #6 — 50-bar rolling momentum Z-score on regime-TF close.
+    # z = (close − rolling_mean_50) / rolling_std_50. None until 50 bars available.
+    # When |z| > 0.5 in the trend direction, regime score gets +2 (handled in
+    # compute_regime). Optional/None default so existing serialised RegimeResult
+    # rows continue to deserialise.
+    momentum_z: Optional[float] = None
 
 
 class SignalResult(BaseModel):
@@ -89,6 +95,12 @@ class SignalResult(BaseModel):
     ha_real_divergence_pct: float = 0.0  # |Real close − HA close| / Real close * 100
     vol_confirm: bool = False             # volume > 1.5× median
     bars_since_flip: int = 0             # consecutive prior bars with same ST alignment
+    # Tier C #14 — 10-bar Cumulative Volume Delta proxy.
+    # per-bar delta = volume * ((close - open) / (high - low)); cvd_proxy is the
+    # rolling 10-bar sum. When trend disagrees with the sign of cvd_proxy heavily,
+    # signal_score gets a -3 penalty (applied in compute_signal). Optional/None
+    # default keeps existing serialised rows readable.
+    cvd_proxy: Optional[float] = None
 
 
 class SetupResult(BaseModel):

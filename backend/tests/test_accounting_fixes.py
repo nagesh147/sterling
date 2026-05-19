@@ -237,17 +237,22 @@ class TestWalkForwardReal:
         assert len(result.oos_equity_curve) >= 1
 
     def test_threshold_in_signal_score_range(self):
-        """Recommended threshold is a signal_score value (0–20), not bps."""
+        """Recommended threshold is a signal_score value (0–20), not bps.
+        With Tier S #4 the deflated-Sharpe gate is always-on by default, so
+        None is a valid result when no train window clears the gate. We pin
+        the gate off for this back-compat test since the assertion is about
+        the *units* of the threshold, not edge significance."""
         from app.engines.analytics.walk_forward import run_real, WalkForwardConfig
         c1h, c4h = self._make_candles_with_4h()
         cfg = WalkForwardConfig(
             train_bars=150, test_bars=80, step_bars=80,
             score_thresholds_to_test=[0, 5, 10, 15, 20],
+            require_deflated_significance=False,
         )
         result = run_real(c1h, c4h, cfg)
-        assert 0 <= result.recommended_threshold <= 20, (
-            f"recommended_threshold {result.recommended_threshold} outside 0-20"
-        )
+        assert result.recommended_threshold is None or (
+            0 <= result.recommended_threshold <= 20
+        ), f"recommended_threshold {result.recommended_threshold} outside 0-20"
 
     def test_oos_curve_starts_at_one(self):
         from app.engines.analytics.walk_forward import run_real, WalkForwardConfig, _equity_from_trades

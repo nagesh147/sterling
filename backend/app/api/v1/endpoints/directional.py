@@ -615,8 +615,8 @@ async def _watchlist_item(
     now_ms = int(time.time() * 1000)
     try:
         spot = await adapter.get_index_price(inst)
-        c4h = await adapter.get_candles(inst, "4H", limit=100)
-        c1h = await adapter.get_candles(inst, "1H", limit=200)
+        c4h = await adapter.get_candles(inst, "4H", limit=200)
+        c1h = await adapter.get_candles(inst, "1H", limit=400)
         regime = compute_regime(c4h, macro_filter=macro_filter)
         signal = compute_signal(c1h, st_threshold=st_threshold)
         setup = evaluate_setup(regime, signal)
@@ -739,8 +739,8 @@ async def market_snapshot(
     try:
         spot = await adapter.get_index_price(inst)
         perp = await adapter.get_perp_price(inst)
-        c4h = await adapter.get_candles(inst, "4H", limit=100)
-        c1h = await adapter.get_candles(inst, "1H", limit=200)
+        c4h = await adapter.get_candles(inst, "4H", limit=200)
+        c1h = await adapter.get_candles(inst, "1H", limit=400)
         c15m = await adapter.get_candles(inst, "15m", limit=50)
         dvol = await adapter.get_dvol(inst)
     except Exception as exc:
@@ -943,9 +943,9 @@ async def _compute_signal_item(
         try:
             spot, c4h, c1h, c15m = await asyncio.gather(
                 adapter.get_index_price(inst),
-                adapter.get_candles(inst, macro_tf,  limit=100),
-                adapter.get_candles(inst, signal_tf, limit=200),
-                adapter.get_candles(inst, exec_tf,   limit=50),
+                adapter.get_candles(inst, macro_tf,  limit=200),
+                adapter.get_candles(inst, signal_tf, limit=400),
+                adapter.get_candles(inst, exec_tf,   limit=100),
             )
         except ValueError as exc:
             # Adapter rejected a mode-specific timeframe (e.g. "1m" / "5m" /
@@ -963,9 +963,9 @@ async def _compute_signal_item(
             macro_tf, signal_tf, exec_tf = "4H", "1H", "15m"
             spot, c4h, c1h, c15m = await asyncio.gather(
                 adapter.get_index_price(inst),
-                adapter.get_candles(inst, "4H",  limit=100),
-                adapter.get_candles(inst, "1H",  limit=200),
-                adapter.get_candles(inst, "15m", limit=50),
+                adapter.get_candles(inst, "4H",  limit=200),
+                adapter.get_candles(inst, "1H",  limit=400),
+                adapter.get_candles(inst, "15m", limit=100),
             )
         regime      = compute_regime(c4h, macro_filter=macro_filter)
         signal      = compute_signal(c1h, st_threshold=st_threshold)
@@ -1277,9 +1277,9 @@ async def snapshot(
         spot, perp, c4h, c1h, c15m = await asyncio.gather(
             adapter.get_index_price(inst),
             adapter.get_perp_price(inst),
-            adapter.get_candles(inst, "4H", limit=100),
-            adapter.get_candles(inst, "1H", limit=200),
-            adapter.get_candles(inst, "15m", limit=50),
+            adapter.get_candles(inst, "4H", limit=200),
+            adapter.get_candles(inst, "1H", limit=400),
+            adapter.get_candles(inst, "15m", limit=100),
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}")
@@ -1383,8 +1383,8 @@ async def _sse_generator(
             _macro_filter = _mode.macro_filter if _mode else "adx_4h"
             _st_threshold = _mode.st_threshold if _mode else 3
 
-            c4h = await adapter.get_candles(inst, "4H", limit=100)
-            c1h = await adapter.get_candles(inst, "1H", limit=200)
+            c4h = await adapter.get_candles(inst, "4H", limit=200)
+            c1h = await adapter.get_candles(inst, "1H", limit=400)
             regime = compute_regime(c4h, macro_filter=_macro_filter)
             signal = compute_signal(c1h, st_threshold=_st_threshold)
             setup = evaluate_setup(regime, signal)

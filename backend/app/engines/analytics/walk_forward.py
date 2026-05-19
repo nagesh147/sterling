@@ -29,12 +29,13 @@ class WalkForwardConfig:
     step_bars:  int = 30
     score_thresholds_to_test: list = field(default_factory=lambda: [0, 3, 5, 8, 10, 12, 15])
     underlying: str = "BTC"
-    # Issue 9 — when True, threshold selection requires deflated_sharpe ≥ 0.95
-    # on the train window. Windows that don't clear the gate are flagged
-    # `no_edge=True` and their recommended_threshold is None. Default is
-    # False to preserve back-compat with existing tests; the baseline runner
-    # enables it.
-    require_deflated_significance: bool = False
+    # Tier S #4 — deflated-Sharpe gate is now ALWAYS-ON by default. Threshold
+    # selection requires deflated_sharpe ≥ deflated_p_gate (default 0.95) on
+    # the train window. Windows that don't clear the gate are flagged
+    # `no_edge=True` and contribute zero trades to the OOS aggregate.
+    # Legacy callers that want the pre-Tier-S behaviour must set this to False
+    # explicitly.
+    require_deflated_significance: bool = True
     deflated_p_gate: float = _DEFLATED_P_GATE
 
 

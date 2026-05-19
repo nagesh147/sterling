@@ -15,7 +15,7 @@ const TF_SECONDS: Record<string, number> = {
   '1H': 3600, '4H': 14400, 'D': 86400,
 };
 
-export function useCandles(underlying: string, tf: string, limit = 300) {
+export function useCandles(underlying: string, tf: string, limit = 1825) {
   const refetchMs = Math.max(30_000, ((TF_SECONDS[tf] ?? 900) / 2) * 1000);
   return useQuery<OHLCVBar[]>({
     queryKey: ['candles', underlying, tf, limit],

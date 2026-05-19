@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from typing import List, Literal
+from typing import List, Literal, Optional
 from app.schemas.market import Candle
 from app.schemas.directional import RegimeResult, MacroRegime
 from app.engines.indicators.ema import compute_ema, ema_dual
@@ -27,6 +27,27 @@ def _atr_pct_at(atr_arr: np.ndarray, pos: int, lookback: int = 100) -> float:
     if len(valid) < 5 or np.isnan(atr_arr[pos]):
         return 50.0
     return float(np.sum(atr_arr[pos] > valid) / len(valid) * 100)
+
+
+# Tier A #6 — HTF momentum z-score constants.
+_MOMENTUM_Z_LOOKBACK = 50
+_MOMENTUM_Z_THRESHOLD = 0.5
+_MOMENTUM_Z_BONUS = 2.0
+
+
+def _momentum_z(closes: np.ndarray, pos: int, lookback: int = _MOMENTUM_Z_LOOKBACK) -> Optional[float]:
+    """50-bar rolling momentum Z-score: (close - mean) / std on the last `lookback` closes.
+    Returns None until `lookback` bars are available or std is zero."""
+    if pos + 1 < lookback:
+        return None
+    window = closes[pos + 1 - lookback: pos + 1]
+    if window.size < lookback:
+        return None
+    mean = float(np.mean(window))
+    std = float(np.std(window, ddof=0))
+    if std <= 1e-12:
+        return None
+    return float((window[-1] - mean) / std)
 
 
 def _atr_slope(atr_arr: np.ndarray, closes: np.ndarray, pos: int) -> float:
@@ -71,6 +92,7 @@ def compute_regime(
     cur_adx = float(adx_arr[-1])
     cur_atr_pct = _atr_pct_at(atr_arr, n - 1, 100)
     cur_atr_slope = _atr_slope(atr_arr, closes, n - 1)
+    cur_momentum_z = _momentum_z(closes, n - 1)
 
     # IDLE detection — strict (legacy) vs loose (Issue 3) thresholds.
     # strict:  pct<30 on 2 consecutive bars OR (slope<0 AND pct<35)
@@ -95,6 +117,7 @@ def compute_regime(
         ema21=round(cur_ema21, 4),
         ema55=round(cur_ema55, 4),
         atr_slope=round(cur_atr_slope, 6),
+        momentum_z=(round(cur_momentum_z, 4) if cur_momentum_z is not None else None),
     )
 
     if cur_ema21 == 0.0 or cur_ema55 == 0.0:
@@ -135,12 +158,24 @@ def compute_regime(
         regime = MacroRegime.BULL_TREND
         adx_component = min(cur_adx / 40.0, 1.0) * 12
         atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
-        score = round(adx_component + atr_component, 2)
+        # Tier A #6 — +2 when momentum z aligns with the BULL trend.
+        mom_bonus = (
+            _MOMENTUM_Z_BONUS
+            if cur_momentum_z is not None and cur_momentum_z > _MOMENTUM_Z_THRESHOLD
+            else 0.0
+        )
+        score = round(adx_component + atr_component + mom_bonus, 2)
     elif cur_ema21 < cur_ema55 and cur_close < cur_ema21 and cur_adx >= ADX_WEAK:
         regime = MacroRegime.BEAR_TREND
         adx_component = min(cur_adx / 40.0, 1.0) * 12
         atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
-        score = round(adx_component + atr_component, 2)
+        # Tier A #6 — +2 when momentum z aligns with the BEAR trend.
+        mom_bonus = (
+            _MOMENTUM_Z_BONUS
+            if cur_momentum_z is not None and cur_momentum_z < -_MOMENTUM_Z_THRESHOLD
+            else 0.0
+        )
+        score = round(adx_component + atr_component + mom_bonus, 2)
     else:
         regime = MacroRegime.RANGING
         score = 0.0

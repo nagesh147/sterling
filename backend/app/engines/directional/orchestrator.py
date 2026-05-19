@@ -101,9 +101,9 @@ async def run_once(
         )
 
     try:
-        candles_4h  = await adapter.get_candles(instrument, macro_tf,  limit=100)
-        candles_1h  = await adapter.get_candles(instrument, signal_tf, limit=200)
-        candles_15m = await adapter.get_candles(instrument, exec_tf,   limit=50)
+        candles_4h  = await adapter.get_candles(instrument, macro_tf,  limit=200)
+        candles_1h  = await adapter.get_candles(instrument, signal_tf, limit=400)
+        candles_15m = await adapter.get_candles(instrument, exec_tf,   limit=100)
     except Exception as exc:
         log.error("Candle fetch failed for %s: %s", instrument.underlying, exc)
         return RunOnceResponse(
@@ -257,8 +257,8 @@ async def preview(
         )
 
     try:
-        candles_4h = await adapter.get_candles(instrument, "4H", limit=100)
-        candles_1h = await adapter.get_candles(instrument, "1H", limit=200)
+        candles_4h = await adapter.get_candles(instrument, "4H", limit=200)
+        candles_1h = await adapter.get_candles(instrument, "1H", limit=400)
     except Exception as exc:
         return PreviewResponse(
             underlying=instrument.underlying,
@@ -306,7 +306,7 @@ async def preview(
 
     candles_15m = []
     try:
-        candles_15m = await adapter.get_candles(instrument, "15m", limit=50)
+        candles_15m = await adapter.get_candles(instrument, "15m", limit=100)
     except Exception:
         pass
 

@@ -89,8 +89,8 @@ async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
 
                     # Cache miss — UI not streaming; fetch fresh
                     spot = await ad.get_index_price(inst)
-                    c4h = await ad.get_candles(inst, "4H", limit=100)
-                    c1h = await ad.get_candles(inst, "1H", limit=200)
+                    c4h = await ad.get_candles(inst, "4H", limit=200)
+                    c1h = await ad.get_candles(inst, "1H", limit=400)
                     ivr = await compute_ivr(ad, inst, c1h)
                     _bg_mode = getattr(app.state, "trading_mode", None)
                     regime = compute_regime(

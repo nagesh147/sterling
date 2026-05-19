@@ -80,7 +80,7 @@ const REGIME_BG: Record<string, string> = {
 
 export function ChartPane({ underlying }: Props) {
   const [tf, setTf] = useState('4H');
-  const { data: candles = [], isLoading } = useCandles(underlying, tf, 120);
+  const { data: candles = [], isLoading } = useCandles(underlying, tf, 1825);
   const { data: snap } = useSnapshot(underlying);
 
   const containerRef = useRef<HTMLDivElement>(null);

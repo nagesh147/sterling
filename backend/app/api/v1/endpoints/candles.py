@@ -15,7 +15,7 @@ async def get_candles(
     underlying: str,
     request: Request,
     tf: str = Query(default="15m"),
-    limit: int = Query(default=300, ge=1, le=500),
+    limit: int = Query(default=1825, ge=1, le=1825),
 ) -> List[dict]:
     if tf not in _VALID_TFS:
         raise HTTPException(status_code=400, detail=f"Invalid tf: {tf!r}. Valid: {sorted(_VALID_TFS)}")

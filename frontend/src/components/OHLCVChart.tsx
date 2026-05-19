@@ -242,7 +242,7 @@ const SYMBOLS = ['BTCUSD', 'ETHUSD', 'SOLUSD', 'XRPUSD'] as const;
 export function OHLCVChart() {
   const [symbol,     setSymbol]     = useState<string>('BTCUSD');
   const [resolution, setResolution] = useState<OhlcvResolution>('1h');
-  const [limit,      setLimit]      = useState(300);
+  const [limit,      setLimit]      = useState(1825);
   const [fetching,   setFetching]   = useState(false);
   const [fetchMsg,   setFetchMsg]   = useState('');
 
@@ -315,7 +315,7 @@ export function OHLCVChart() {
 
         {/* Bar count */}
         <div style={{ display: 'flex', gap: 3 }}>
-          {[100, 300, 500].map(l => (
+          {[300, 730, 1825].map(l => (
             <button key={l} onClick={() => setLimit(l)} style={pill(limit === l)}>{l}</button>
           ))}
         </div>

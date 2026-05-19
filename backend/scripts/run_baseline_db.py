@@ -33,7 +33,9 @@ _RESOLUTION_MAP = {
 
 def _load_candles(symbol: str, resolution: str, db_path: Path) -> List[Candle]:
     db_res = _RESOLUTION_MAP.get(resolution, resolution.lower())
-    conn = sqlite3.connect(str(db_path))
+    # Read-only URI so we don't fight the running backend's write lock.
+    uri = f"file:{db_path}?mode=ro&immutable=1"
+    conn = sqlite3.connect(uri, uri=True, timeout=30.0)
     rows = conn.execute(
         "SELECT time, open, high, low, close, volume FROM ohlcv "
         "WHERE symbol=? AND resolution=? ORDER BY time ASC",
@@ -51,14 +53,52 @@ def _load_candles(symbol: str, resolution: str, db_path: Path) -> List[Candle]:
     return out
 
 
+_DAY_MS = 24 * 3_600_000
+
+
+def _aggregate_to_1d(c_4h: List[Candle]) -> List[Candle]:
+    """
+    Build 1D candles from 4H bars by UTC-day bucketing.
+
+    Each 4H bar's `timestamp_ms` is its OPEN time. We bucket by
+    `floor(open_ms / 86_400_000)` so each UTC day groups its 6 4H opens.
+    O = first open in bucket, H = max(high), L = min(low),
+    C = last close in bucket, V = sum(volume). Only buckets with 6 bars
+    are emitted to avoid partial-day distortion at the series edges.
+    """
+    if not c_4h:
+        return []
+    buckets: Dict[int, List[Candle]] = {}
+    for c in c_4h:
+        day = c.timestamp_ms // _DAY_MS
+        buckets.setdefault(day, []).append(c)
+    out: List[Candle] = []
+    for day in sorted(buckets):
+        bars = buckets[day]
+        if len(bars) != 6:
+            continue  # skip incomplete day
+        bars.sort(key=lambda b: b.timestamp_ms)
+        out.append(Candle(
+            timestamp_ms=day * _DAY_MS,
+            open=bars[0].open,
+            high=max(b.high for b in bars),
+            low=min(b.low for b in bars),
+            close=bars[-1].close,
+            volume=sum(b.volume for b in bars),
+        ))
+    return out
+
+
 def _run_one(symbol: str, profile_key: str, db_path: Path) -> Dict[str, Any]:
     profile = PROFILES[profile_key]
     print(f"  [{symbol} / {profile_key}] loading candles...")
     c_15m = _load_candles(symbol, "15m", db_path)
     c_1h  = _load_candles(symbol, "1H",  db_path)
     c_4h  = _load_candles(symbol, "4H",  db_path)
-    c_1d: List[Candle] = []  # not stored in the seed DB
-    print(f"    sizes: 15m={len(c_15m)} 1H={len(c_1h)} 4H={len(c_4h)}")
+    # Seed DB has no 1D series — synthesise from complete 4H days so
+    # intraday_4h (signal=4H, regime=1D) is not silently skipped.
+    c_1d  = _aggregate_to_1d(c_4h)
+    print(f"    sizes: 15m={len(c_15m)} 1H={len(c_1h)} 4H={len(c_4h)} 1D={len(c_1d)}")
     underlying = symbol.replace("USD", "").replace("USDT", "")
     funding = default_funding_8h_pct(underlying)
     results = run_mtf_backtest(
@@ -101,12 +141,24 @@ def _run_one(symbol: str, profile_key: str, db_path: Path) -> Dict[str, Any]:
         ds_val = float(ds) if ds is not None else None
     except (TypeError, ValueError):
         ds_val = None
-    report["edge_proven"] = (n >= 50 and (ds_val is not None) and ds_val >= 0.95)
+    # Tri-state edge status so reporting can distinguish "no edge" from
+    # "no data". `edge_proven` stays a bool for back-compat consumers, but
+    # `edge_status` is the field reports/dashboards should display.
+    if n == 0:
+        edge_status = "insufficient_data"
+    elif n < 50 or ds_val is None:
+        edge_status = "insufficient_sample"
+    elif ds_val >= 0.95:
+        edge_status = "edge_proven"
+    else:
+        edge_status = "no_edge"
+    report["edge_proven"] = (edge_status == "edge_proven")
+    report["edge_status"] = edge_status
     report["funding_8h_pct_used"] = funding
     report["exit_atr_tf"] = "signal"
     report["payoff_mode"] = "chandelier_trail"
     print(f"    trades={n} sharpe={report['sharpe']:.3f} "
-          f"deflated_p={ds_val} edge_proven={report['edge_proven']}")
+          f"deflated_p={ds_val} edge_status={edge_status}")
     return report
 
 
@@ -138,6 +190,7 @@ def main() -> int:
                 "sharpe":          report.get("sharpe"),
                 "deflated_sharpe": report.get("deflated_sharpe"),
                 "edge_proven":     report.get("edge_proven"),
+                "edge_status":     report.get("edge_status", "unknown"),
                 "warnings":        report.get("warnings", [])[:3],
                 "file":            str(out_file.relative_to(_HERE)),
             }

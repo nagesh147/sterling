@@ -1,0 +1,29 @@
+{
+  "asset": "BTC",
+  "profile": "intraday_4h",
+  "trade_count": 0,
+  "win_rate": 0.0,
+  "profit_factor": null,
+  "sharpe": 0.0,
+  "sortino": 0.0,
+  "calmar": 0.0,
+  "cagr": null,
+  "max_drawdown": 0.0,
+  "ulcer_index": 0.0,
+  "pain_ratio": 0.0,
+  "tail_ratio": null,
+  "avg_net_pnl_pct": 0.0,
+  "gross_pnl_sum": 0.0,
+  "cost_drag_sum": 0.0,
+  "net_pnl_sum": 0.0,
+  "deflated_sharpe": null,
+  "sharpe_method": "per_bar",
+  "regime_breakdown": {},
+  "warnings": [
+    "low_sample_size:n=0<30"
+  ],
+  "edge_proven": false,
+  "funding_8h_pct_used": 0.0001,
+  "exit_atr_tf": "signal",
+  "payoff_mode": "chandelier_trail"
+}

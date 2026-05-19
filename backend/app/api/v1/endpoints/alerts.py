@@ -104,8 +104,8 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             continue
         try:
             spot = await adapter.get_index_price(inst)
-            c4h = await adapter.get_candles(inst, "4H", limit=100)
-            c1h = await adapter.get_candles(inst, "1H", limit=200)
+            c4h = await adapter.get_candles(inst, "4H", limit=200)
+            c1h = await adapter.get_candles(inst, "1H", limit=400)
             regime = compute_regime(c4h, macro_filter=_macro_filter)
             signal = compute_signal(c1h, st_threshold=_st_threshold)
             setup = evaluate_setup(regime, signal)

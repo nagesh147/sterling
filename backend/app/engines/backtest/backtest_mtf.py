@@ -5,17 +5,27 @@ Pure functions — no I/O.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Any, Tuple
+from typing import Callable, Dict, List, Literal, Optional, Any, Tuple
 import numpy as np
 
 from app.schemas.market import Candle
-from app.engines.directional.regime_engine import compute_regime
-from app.engines.directional.signal_engine import compute_signal
+from app.engines.directional.regime_engine import compute_regime  # noqa: F401 — back-compat
+from app.engines.directional.signal_engine import compute_signal  # noqa: F401 — back-compat
 from app.engines.directional.setup_engine import evaluate_setup
 from app.schemas.directional import TradeState
 from app.engines.indicators.atr import compute_atr
 from app.engines.analytics.performance import full_report
 from app.engines.backtest.costs import compute_trade_costs, next_bar_open_fill
+from app.engines.backtest.mtf_vectorizer import vectorize_replay
+# Tier A #9 — stateless veto modules wired into the backtest entry path.
+from app.engines.risk import microstructure_veto as _micro_veto
+from app.engines.risk import vol_of_vol_gate as _vov_gate
+
+# Providers translate a bar index → the snapshot/history the corresponding
+# veto needs. Returning None means "no data; do not veto". Pure functions —
+# callers supply them; the backtest never reaches out.
+MicroSnapshotProvider = Callable[[int], Optional[_micro_veto.MicroSnapshot]]
+IvrHistoryProvider    = Callable[[int], Optional[List[float]]]
 
 _FEE_RT_PCT = 0.001  # 0.10% round-trip taker
 
@@ -42,7 +52,16 @@ class TFProfile:
     # "fixed_2r" (legacy): one-shot exit at +2R / -1R / hold_bars / trend flip.
     # "chandelier_trail": 50% partial at +1R, breakeven move, then trail rest
     # with Chandelier(N=22, mult=3.0*ATR(signal_TF)). Default preserves legacy.
-    payoff_mode: Literal["fixed_2r", "chandelier_trail"] = "fixed_2r"
+    # "signal_atr_v4" (W6 fix): asymmetric exits anchored to *signal*-TF ATR.
+    #   - Initial stop: 1.2 * signal_ATR (no HTF stop)
+    #   - Take profit: 2.0 * signal_ATR → 50% partial + move stop to breakeven
+    #   - Trail remainder: extreme - 1.5 * signal_ATR (ratchet only)
+    #   - Time stop: hold_bars (legacy)
+    #   - Trend-flip exit (legacy)
+    # signal_atr_v4 forces signal-TF ATR even if exit_atr_tf="regime".
+    payoff_mode: Literal[
+        "fixed_2r", "chandelier_trail", "signal_atr_v4",
+    ] = "fixed_2r"
 
 
 PROFILES: Dict[str, TFProfile] = {
@@ -142,6 +161,13 @@ def _replay_profile(
     option_spread_pct: Optional[float] = None,
     apply_slippage: bool = True,
     emit_events: bool = False,
+    # Tier A #9 — optional live risk gate providers. When supplied, each
+    # candidate entry is run through the stateless microstructure and
+    # vol-of-vol vetoes; vetoed candidates are skipped and logged.
+    micro_snapshot_provider: Optional[MicroSnapshotProvider] = None,
+    ivr_history_provider:    Optional[IvrHistoryProvider]    = None,
+    micro_veto_config:       Optional[_micro_veto.MicroVetoConfig]  = None,
+    vov_thresholds:          Optional[_vov_gate.VolOfVolThresholds] = None,
 ) -> Dict[str, Any]:
     """
     Bar-by-bar trade replay for one TF profile with truthful fills and costs.
@@ -183,18 +209,35 @@ def _replay_profile(
     signal_bar_ms = profile.signal_bar_ms
     regime_bar_ms = profile.regime_bar_ms
 
-    # Issue 15 — pre-compute regime and signal ATR series once.
-    regime_atr_full = _build_atr_series(candles_regime, period=14)
-    signal_atr_full = _build_atr_series(candles_signal, period=14)
-    # For trail/chandelier: ATR(22) on signal TF.
-    signal_atr22_full = _build_atr_series(candles_signal, period=22)
-    # Regime timestamps for monotonic cursor.
+    # W11 — vectorise all per-bar regime/signal/indicator work in O(N) up
+    # front. The replay loop below uses O(1) array lookups instead of the
+    # legacy per-bar compute_regime / compute_signal calls.
+    vec = vectorize_replay(
+        candles_signal, candles_regime,
+        signal_bar_ms=signal_bar_ms,
+        regime_bar_ms=regime_bar_ms,
+        st_configs=profile.st_configs,
+    )
+    regime_atr_full = vec.regime_atr14
+    signal_atr_full = vec.signal_atr14
+    signal_atr22_full = vec.signal_atr22
     regime_ts = np.array(
         [c.timestamp_ms for c in candles_regime], dtype=np.int64,
     )
 
     use_signal_atr = profile.exit_atr_tf == "signal"
     use_trail = profile.payoff_mode == "chandelier_trail"
+    use_v4    = profile.payoff_mode == "signal_atr_v4"
+    if use_v4:
+        # W6 fix mandates signal-TF ATR for stops/trail regardless of the
+        # exit_atr_tf flag, so callers can't accidentally re-introduce the
+        # HTF-anchored stop that caused outsized drawdowns.
+        use_signal_atr = True
+    # v4 exit constants (anchored to signal-TF ATR at entry).
+    V4_STOP_MULT       = 1.2
+    V4_TP_MULT         = 2.0
+    V4_TRAIL_MULT      = 1.5
+    V4_PARTIAL_RATIO   = 0.5
 
     trades: List[Dict[str, Any]] = []
     in_trade      = False
@@ -211,23 +254,17 @@ def _replay_profile(
     trail_stop_price    = 0.0
     trail_remaining_ratio = 1.0     # 1.0 then 0.5 after partial
 
-    regime_idx = 0  # cursor: number of regime bars whose close <= current ts
-
     for i in range(profile.min_signal_bars, n_signal - 1):
         ts = candles_signal[i].timestamp_ms
 
-        # Issue 15 — advance the regime cursor monotonically instead of
-        # re-slicing on every iteration. A regime bar at index k "closes"
-        # at regime_ts[k] + regime_bar_ms.
-        while regime_idx < n_regime and regime_ts[regime_idx] + regime_bar_ms <= ts:
-            regime_idx += 1
+        # W11 — regime_idx is now a precomputed lookup. regime and signal
+        # are O(1) array lookups from the vectoriser; the per-bar
+        # compute_regime / compute_signal calls have been removed.
+        regime_idx = int(vec.regime_idx_at_signal[i])
         if regime_idx < profile.min_regime_bars:
             continue
-        c_regime = candles_regime[:regime_idx]
-        c_signal = candles_signal[max(0, i - 200): i + 1]
-
-        regime = compute_regime(c_regime)
-        signal = compute_signal(c_signal, st_configs=profile.st_configs)
+        regime = vec.regimes_per_regime_bar[regime_idx - 1]
+        signal = vec.signals[i]
         setup  = evaluate_setup(regime, signal)
 
         # ── Exit logic ─────────────────────────────────────────────────────────
@@ -239,9 +276,116 @@ def _replay_profile(
             held = i - entry_bar
             gain_abs = entry_dir * (cur_close - entry_price)
 
+            # ── W6 fix: signal-TF asymmetric exits ──────────────────────────
+            # Initial 1.2x ATR stop / 2.0x ATR TP (50% partial → breakeven →
+            # 1.5x ATR chandelier trail) / hold_bars / trend flip.
+            if use_v4 and entry_atr > 0 and entry_price > 0:
+                # Update extreme since entry (used by the 1.5x trail).
+                if entry_dir == 1:
+                    if cur_high > trail_extreme_price:
+                        trail_extreme_price = cur_high
+                else:
+                    if cur_low < trail_extreme_price or trail_extreme_price == 0.0:
+                        trail_extreme_price = cur_low
+
+                # Initial stop level: entry ∓ 1.2 * ATR (stored at entry time).
+                # trail_stop_price holds the active stop; pre-partial it equals
+                # the initial 1.2x ATR stop; post-partial it ratchets via the
+                # chandelier trail and can only tighten in the trade's favour.
+                if (not trail_partial_taken) and gain_abs >= V4_TP_MULT * entry_atr:
+                    # 2x ATR target hit → book V4_PARTIAL_RATIO at next-bar open
+                    # and move the stop to breakeven for the remainder.
+                    fill = next_bar_open_fill(candles_signal, i)
+                    if fill is not None:
+                        partial_px, partial_fill_bar = fill
+                        partial_ts_ms = candles_signal[partial_fill_bar].timestamp_ms
+                        partial_hold_hours = max(
+                            0.0, (partial_ts_ms - entry_ts_ms) / 3_600_000.0
+                        )
+                        partial_breakdown = compute_trade_costs(
+                            direction=entry_dir,
+                            entry_price=entry_price,
+                            exit_price=partial_px,
+                            leverage=leverage, oi=oi,
+                            fee_rt_pct=fee_rt_pct * V4_PARTIAL_RATIO,
+                            hold_hours=partial_hold_hours,
+                            funding_8h_pct=funding_8h_pct,
+                            option_spread_pct=option_spread_pct,
+                            apply_slippage=apply_slippage, forced_end=False,
+                        )
+                        partial_trade = {
+                            "pnl_pct":         partial_breakdown.net_pnl_pct * V4_PARTIAL_RATIO,
+                            "gross_pnl_pct":   partial_breakdown.gross_pnl_pct * V4_PARTIAL_RATIO,
+                            "net_pnl_pct":     partial_breakdown.net_pnl_pct * V4_PARTIAL_RATIO,
+                            "cost_pct":        partial_breakdown.total_cost_pct * V4_PARTIAL_RATIO,
+                            "slippage_pct":    partial_breakdown.slippage_pct,
+                            "fee_pct":         partial_breakdown.fee_pct,
+                            "funding_pct":     partial_breakdown.funding_pct,
+                            "option_spread_pct": partial_breakdown.option_spread_pct,
+                            "entry_price":     partial_breakdown.effective_entry_price,
+                            "exit_price":      partial_breakdown.effective_exit_price,
+                            "hold_hours":      partial_breakdown.hold_hours,
+                            "regime":          entry_regime,
+                            "entry_bar":       entry_bar,
+                            "exit_bar":        partial_fill_bar,
+                            "entry_ts_ms":     entry_ts_ms,
+                            "exit_ts_ms":      partial_ts_ms,
+                            "direction":       "long" if entry_dir == 1 else "short",
+                            "forced_end":      False,
+                            "partial":         True,
+                            "asset":           underlying,
+                            "profile":         profile.label,
+                            "track":           "directional",
+                        }
+                        trades.append(partial_trade)
+                        if ledger is not None:
+                            ledger.record_exit(partial_trade)
+                            ledger.record_trade(partial_trade)
+                        trail_partial_taken = True
+                        trail_remaining_ratio = 1.0 - V4_PARTIAL_RATIO
+                        trail_stop_price = entry_price  # breakeven
+
+                # Chandelier trail (1.5x ATR) — ratchet only after partial.
+                proposed_trail = (
+                    trail_extreme_price - V4_TRAIL_MULT * entry_atr if entry_dir == 1
+                    else trail_extreme_price + V4_TRAIL_MULT * entry_atr
+                )
+                if trail_partial_taken:
+                    if entry_dir == 1:
+                        trail_stop_price = max(trail_stop_price, proposed_trail)
+                    else:
+                        trail_stop_price = (
+                            min(trail_stop_price, proposed_trail)
+                            if trail_stop_price > 0 else proposed_trail
+                        )
+                else:
+                    # Pre-partial stop is fixed at entry ∓ 1.2x ATR.
+                    initial_stop = (
+                        entry_price - V4_STOP_MULT * entry_atr if entry_dir == 1
+                        else entry_price + V4_STOP_MULT * entry_atr
+                    )
+                    trail_stop_price = initial_stop
+
+                # Exit on stop hit (intrabar low/high vs current stop).
+                if entry_dir == 1 and cur_low <= trail_stop_price:
+                    exit_now = True
+                elif entry_dir == -1 and cur_high >= trail_stop_price:
+                    exit_now = True
+                else:
+                    exit_now = False
+
+                # Legacy time stop.
+                if not exit_now:
+                    exit_now = held >= profile.hold_bars
+                # Legacy trend-flip exit.
+                if not exit_now:
+                    if entry_dir == 1 and signal.trend == -1:
+                        exit_now = True
+                    elif entry_dir == -1 and signal.trend == 1:
+                        exit_now = True
             # Trail/chandelier path is computed alongside legacy exits so
             # both modes follow the same hold-bars / trend-reversal guards.
-            if use_trail and entry_atr > 0 and entry_price > 0:
+            elif use_trail and entry_atr > 0 and entry_price > 0:
                 # Update extreme since entry
                 if entry_dir == 1:
                     if cur_high > trail_extreme_price:
@@ -426,6 +570,46 @@ def _replay_profile(
                 and signal.trend != 0
             )
             if qualifies:
+                # ── Tier A #9: stateless live risk gates ────────────────
+                # When providers are supplied we evaluate microstructure and
+                # vol-of-vol vetoes BEFORE the next-bar fill. A veto skips the
+                # trade and logs a skip event; we do not record an entry.
+                veto_code: Optional[str] = None
+                veto_reason: Optional[str] = None
+                proposed_direction = "long" if signal.trend == 1 else "short"
+
+                if micro_snapshot_provider is not None:
+                    snap = micro_snapshot_provider(i)
+                    if snap is not None:
+                        m_decision = _micro_veto.evaluate(
+                            direction=proposed_direction,
+                            snapshot=snap,
+                            config=micro_veto_config,
+                        )
+                        if m_decision.veto:
+                            veto_code, veto_reason = m_decision.code, m_decision.reason
+
+                if veto_code is None and ivr_history_provider is not None:
+                    ivr_hist = ivr_history_provider(i)
+                    if ivr_hist:
+                        v_decision = _vov_gate.compute(
+                            ivr_history=ivr_hist,
+                            thresholds=vov_thresholds,
+                        )
+                        if v_decision.block_naked:
+                            veto_code = "vol_of_vol_block_naked"
+                            veto_reason = v_decision.reason
+
+                if veto_code is not None:
+                    if ledger is not None:
+                        ledger.record_skip(
+                            bar_idx=i, ts_ms=ts, asset=underlying,
+                            profile=profile.label, track="directional",
+                            reason=f"live_risk_gate:{veto_code}",
+                            features={"detail": veto_reason or ""},
+                        )
+                    continue
+
                 fill = next_bar_open_fill(candles_signal, i)
                 if fill is None:
                     # Signal on the last evaluable bar with no future open —
@@ -534,25 +718,14 @@ def _replay_profile(
             ledger.record_trade(trade)
 
     # ── Forward-return win rates per horizon (arrow-based) ────────────────────
-    # Pass 1: compute signals once per bar. Regime cursor advances monotonically.
+    # W11 — signals are precomputed by the vectoriser; pass 1 collapses to
+    # a regime-cursor filter against the already-built array.
     _bar_signals: Dict[int, Any] = {}
-    fwd_regime_idx = 0
     for j in range(profile.min_signal_bars, n_signal):
-        ts_j = candles_signal[j].timestamp_ms
-        while (fwd_regime_idx < n_regime
-               and regime_ts[fwd_regime_idx] + regime_bar_ms <= ts_j):
-            fwd_regime_idx += 1
+        fwd_regime_idx = int(vec.regime_idx_at_signal[j])
         if fwd_regime_idx < profile.min_regime_bars:
             continue
-        c_sig_j = candles_signal[max(0, j - 200): j + 1]
-        try:
-            _bar_signals[j] = compute_signal(c_sig_j, st_configs=profile.st_configs)
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "compute_signal failed at bar %d: %s", j, exc
-            )
-            continue
+        _bar_signals[j] = vec.signals[j]
 
     # Pass 2: collect forward returns per horizon (reuses precomputed signals)
     fwd_win_rates: List[Tuple[str, Optional[float], Optional[float]]] = []
@@ -650,6 +823,11 @@ def run_mtf_backtest(
     emit_events: bool = False,
     exit_atr_tf: Optional[Literal["signal", "regime"]] = None,
     payoff_mode: Optional[Literal["fixed_2r", "chandelier_trail"]] = None,
+    # Tier A #9 — same shape as `_replay_profile`. Applied to every profile.
+    micro_snapshot_provider: Optional[MicroSnapshotProvider] = None,
+    ivr_history_provider:    Optional[IvrHistoryProvider]    = None,
+    micro_veto_config:       Optional[_micro_veto.MicroVetoConfig]  = None,
+    vov_thresholds:          Optional[_vov_gate.VolOfVolThresholds] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Run all (or selected) TF profiles and return a comparison dict.
@@ -698,6 +876,10 @@ def run_mtf_backtest(
             option_spread_pct=option_spread_pct,
             apply_slippage=apply_slippage,
             emit_events=emit_events,
+            micro_snapshot_provider=micro_snapshot_provider,
+            ivr_history_provider=ivr_history_provider,
+            micro_veto_config=micro_veto_config,
+            vov_thresholds=vov_thresholds,
         )
 
     return results

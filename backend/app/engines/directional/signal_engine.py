@@ -39,6 +39,48 @@ def _to_vwap_candles(candles: List[Candle]) -> Generator[Candle, None, None]:
         )
 
 
+# Tier C #14 — CVD proxy constants. We don't have tick footprint data, so the
+# per-bar delta is a position-weighted volume proxy:
+#     delta = volume * ((close - open) / (high - low))
+# A 10-bar rolling sum then proxies cumulative buying/selling pressure.
+# Divergence: trend agrees on direction but the 10-bar CVD is heavily opposed.
+_CVD_WINDOW = 10
+_CVD_DIVERGENCE_PENALTY = 3.0
+# "Heavily opposed" = |cvd_10| / sum(|delta_10|) > 0.5 AND sign opposite to trend.
+_CVD_DIVERGENCE_RATIO = 0.5
+
+
+def _cvd_proxy(
+    open_: np.ndarray,
+    high:  np.ndarray,
+    low:   np.ndarray,
+    close: np.ndarray,
+    volume: np.ndarray,
+    window: int = _CVD_WINDOW,
+) -> Tuple[float, float]:
+    """
+    Compute the rolling-window CVD proxy at the latest bar.
+    Returns `(cvd_window_sum, abs_delta_window_sum)`. Bars with zero true-range
+    contribute zero delta. Pure / O(window).
+    """
+    n = len(close)
+    if n == 0:
+        return 0.0, 0.0
+    take = min(window, n)
+    o = open_[-take:]
+    h = high[-take:]
+    l = low[-take:]
+    c = close[-take:]
+    v = volume[-take:]
+    tr = h - l
+    safe_tr = np.where(tr > 0, tr, np.nan)
+    pos = (c - o) / safe_tr
+    pos = np.nan_to_num(pos, nan=0.0)
+    pos = np.clip(pos, -1.0, 1.0)
+    delta = v * pos
+    return float(np.sum(delta)), float(np.sum(np.abs(delta)))
+
+
 def _rsi_ok_long(rsi: float) -> bool:
     """Long entry RSI gate: not overbought (< 70), not extreme low (> 42)."""
     return 42.0 < rsi < 70.0
@@ -211,7 +253,21 @@ def compute_signal(
         else:
             bars_active = 16  # all 16 lookback bars were already aligned
     stale_penalty = min(3, bars_active // 5)
-    earned_adj = max(0.0, earned - stale_penalty)
+
+    # Tier C #14 — 10-bar CVD divergence penalty.
+    cvd_sum, abs_delta_sum = _cvd_proxy(o, h, l, c, volume, _CVD_WINDOW)
+    cvd_penalty = 0.0
+    if (
+        trend_val != 0
+        and abs_delta_sum > 0
+        and abs(cvd_sum) / abs_delta_sum > _CVD_DIVERGENCE_RATIO
+    ):
+        # trend_val = 1 (bull) but CVD heavily negative → bearish divergence
+        # trend_val = -1 (bear) but CVD heavily positive → bullish divergence
+        if (trend_val == 1 and cvd_sum < 0) or (trend_val == -1 and cvd_sum > 0):
+            cvd_penalty = _CVD_DIVERGENCE_PENALTY
+
+    earned_adj = max(0.0, earned - stale_penalty - cvd_penalty)
     pct = earned_adj / total_weight
 
     if pct >= 0.75:
@@ -242,4 +298,5 @@ def compute_signal(
         ha_real_divergence_pct=round(ha_real_div_pct, 4),
         vol_confirm=vol_spike,
         bars_since_flip=bars_active,
+        cvd_proxy=round(cvd_sum, 4),
     )

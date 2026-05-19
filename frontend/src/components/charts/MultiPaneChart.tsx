@@ -37,7 +37,7 @@ interface MultiPaneChartProps {
 
 export function MultiPaneChart({ underlying, tf: defaultTf = '15m' }: MultiPaneChartProps) {
   const [activeTf, setActiveTf] = useState(defaultTf);
-  const { data: candles = [], isLoading } = useCandles(underlying, activeTf, 300);
+  const { data: candles = [], isLoading } = useCandles(underlying, activeTf, 1825);
 
   const last = candles[candles.length - 1];
 

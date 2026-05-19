@@ -58,6 +58,87 @@ _VETO_REGIMES = {MacroRegime.CHOPPY, MacroRegime.IDLE}
 _PARTIAL_ST_MIN = 2
 _HIGH_SCORE_CONFIRM = 16.0  # 80% of max-20; stricter than trending (15) — ranging has weaker directional edge
 
+# ── W1/W12 promotions ────────────────────────────────────────────────────────
+# Mean-reversion in IDLE / RANGING uses RSI extremes + a moderate score gate.
+# Volatility breakout in VOLATILE uses a fired squeeze + a strong score gate.
+# Numbers come from the v4 spec — engines stay pure; no env reads here.
+_MR_RSI_LONG_MAX   = 35.0   # RSI < 35 ⇒ oversold → mean-revert long candidate
+_MR_RSI_SHORT_MIN  = 65.0   # RSI > 65 ⇒ overbought → mean-revert short candidate
+_MR_SCORE_MIN      = 12.0   # 60% of max-20 confluence required
+_BREAKOUT_SCORE_MIN = 16.0  # same hurdle as _HIGH_SCORE_CONFIRM
+
+
+def _mean_reversion_setup(
+    macro: MacroRegime, signal: SignalResult,
+) -> SetupResult | None:
+    """
+    W1/W12 — promote to CONFIRMED in IDLE/RANGING on an RSI extreme +
+    moderate confluence. Pure: only inspects the SignalResult fields.
+
+    Returns a SetupResult when the mean-reversion criteria fire, else None
+    so the caller can fall through to its existing branch logic.
+    """
+    rsi = getattr(signal, "rsi", None)
+    if rsi is None:
+        return None
+    sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
+    if sig_score < _MR_SCORE_MIN:
+        return None
+    if float(rsi) < _MR_RSI_LONG_MAX:
+        return SetupResult(
+            state=TradeState.CONFIRMED_SETUP_ACTIVE,
+            direction=Direction.LONG,
+            reason=(
+                f"{macro.value} regime — mean-reversion long "
+                f"(RSI {rsi:.1f} < {_MR_RSI_LONG_MAX:.0f}, "
+                f"score {sig_score:.0f}/20 ≥ {_MR_SCORE_MIN:.0f})"
+            ),
+            macro_regime=macro,
+            signal_trend=signal.trend,
+        )
+    if float(rsi) > _MR_RSI_SHORT_MIN:
+        return SetupResult(
+            state=TradeState.CONFIRMED_SETUP_ACTIVE,
+            direction=Direction.SHORT,
+            reason=(
+                f"{macro.value} regime — mean-reversion short "
+                f"(RSI {rsi:.1f} > {_MR_RSI_SHORT_MIN:.0f}, "
+                f"score {sig_score:.0f}/20 ≥ {_MR_SCORE_MIN:.0f})"
+            ),
+            macro_regime=macro,
+            signal_trend=signal.trend,
+        )
+    return None
+
+
+def _volatile_breakout_setup(
+    macro: MacroRegime, signal: SignalResult,
+) -> SetupResult | None:
+    """
+    W12 — promote to CONFIRMED in VOLATILE when a BB/KC squeeze has fired
+    with strong confluence. Direction follows `signal.trend` (no contrarian
+    breakouts).
+    """
+    if not getattr(signal, "squeezed", False):
+        return None
+    if signal.trend == 0:
+        return None
+    sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
+    if sig_score < _BREAKOUT_SCORE_MIN:
+        return None
+    direction = Direction.LONG if signal.trend == 1 else Direction.SHORT
+    return SetupResult(
+        state=TradeState.CONFIRMED_SETUP_ACTIVE,
+        direction=direction,
+        reason=(
+            f"{macro.value} regime — squeeze breakout "
+            f"({'long' if direction == Direction.LONG else 'short'}, "
+            f"score {sig_score:.0f}/20 ≥ {_BREAKOUT_SCORE_MIN:.0f})"
+        ),
+        macro_regime=macro,
+        signal_trend=signal.trend,
+    )
+
 
 def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
     setup = _evaluate_setup_inner(regime, signal)
@@ -72,6 +153,13 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
 
     # Hard veto: choppy / idle market blocks all entries
     if macro in _VETO_REGIMES:
+        # W1/W12 — mean-reversion promotion runs *first* in IDLE (not CHOPPY)
+        # so a clear RSI extreme isn't lost to the regime veto. CHOPPY stays
+        # vetoed because the regime engine explicitly flags un-tradable noise.
+        if macro == MacroRegime.IDLE:
+            mr = _mean_reversion_setup(macro, signal)
+            if mr is not None:
+                return mr
         # Issue 4 — under STERLING_IDLE_STRICTNESS=loose, allow CONFIRMED in IDLE
         # when signal_score is very high (≥ 18/20) AND all 3 STs agree. The
         # sizer is responsible for dropping the position to 0.25× via
@@ -132,6 +220,13 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
             signal_trend=trend,
         )
 
+    # ── W1/W12: mean-reversion override for RANGING / NEUTRAL ───────────────
+    # Runs before the partial-ST branches so an RSI extreme can trigger an
+    # entry even when STs are mixed (the whole point of mean-reverting in
+    # range-bound conditions).
+    elif macro in _RANGING_REGIMES and (mr := _mean_reversion_setup(macro, signal)):
+        return mr
+
     # ── Ranging — allow when 2/3 STs strongly aligned ────────────────────────
     # LONG: outer gate requires 2+ green STs; SHORT allows trend==-1 with 1 red (handled via inner FILTERED fallback)
     elif macro in _RANGING_REGIMES and green_count >= _PARTIAL_ST_MIN and trend == 1:
@@ -176,6 +271,12 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
             macro_regime=macro,
             signal_trend=trend,
         )
+
+    # ── W12: squeeze-breakout promotion for VOLATILE ───────────────────────
+    # Fires before the legacy all-aligned branches so a squeeze release with
+    # strong confluence confirms even when only 2/3 STs are aligned.
+    elif macro in _VOLATILE_REGIMES and (br := _volatile_breakout_setup(macro, signal)):
+        return br
 
     # ── Volatile — momentum direction when all STs agree ─────────────────────
     elif macro in _VOLATILE_REGIMES and trend == 1:
