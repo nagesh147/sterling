@@ -73,6 +73,9 @@ class RegimeResult(BaseModel):
     # compute_regime). Optional/None default so existing serialised RegimeResult
     # rows continue to deserialise.
     momentum_z: Optional[float] = None
+    # --- V4 HMM Integration ---
+    hmm_primary_regime: Optional[int] = None
+    hmm_confidence: Optional[float] = None
 
 
 class SignalResult(BaseModel):
@@ -101,6 +104,8 @@ class SignalResult(BaseModel):
     # signal_score gets a -3 penalty (applied in compute_signal). Optional/None
     # default keeps existing serialised rows readable.
     cvd_proxy: Optional[float] = None
+    # --- V4 SMC Integration ---
+    smc_trend: Optional[int] = None
 
 
 class SetupResult(BaseModel):
@@ -132,6 +137,9 @@ class ExecTimingResult(BaseModel):
     confidence: float
     reason: str
     exec_score: float = 0.0  # v2: 0-15 points for scoring
+    # --- V4 SMC Integration ---
+    tapped_fvg: bool = False
+    inside_order_block: bool = False
 
 
 class DirectionalStatusResponse(BaseModel):

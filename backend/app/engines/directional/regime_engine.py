@@ -1,7 +1,8 @@
 import os
 import numpy as np
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Dict, Any
 from app.schemas.market import Candle
+from app.engines.directional.regime_hmm import RegimeHMMModel
 from app.schemas.directional import RegimeResult, MacroRegime
 from app.engines.indicators.ema import compute_ema, ema_dual
 from app.engines.indicators.atr import compute_atr
@@ -70,6 +71,7 @@ def compute_regime(
     macro_filter: str = "adx_4h",
     *,
     idle_strictness: Literal["strict", "loose", "auto"] = "auto",
+    hmm_prediction: Optional[Dict[str, Any]] = None,
 ) -> RegimeResult:
     if not candles_4h:
         return RegimeResult(
@@ -111,6 +113,10 @@ def compute_regime(
     slope_contraction = cur_atr_slope < 0 and cur_atr_pct < slope_pct_thr
     cooldown_active = (pct_low_now and pct_low_prev) or slope_contraction
 
+    # Parse HMM prediction if provided by the orchestrator
+    hmm_regime = hmm_prediction.get("regime") if hmm_prediction else None
+    hmm_conf = hmm_prediction.get("confidence") if hmm_prediction else None
+
     _common = dict(
         atr_percentile=round(cur_atr_pct, 2),
         adx=round(cur_adx, 4),
@@ -118,6 +124,8 @@ def compute_regime(
         ema55=round(cur_ema55, 4),
         atr_slope=round(cur_atr_slope, 6),
         momentum_z=(round(cur_momentum_z, 4) if cur_momentum_z is not None else None),
+        hmm_primary_regime=hmm_regime,
+        hmm_confidence=hmm_conf,
     )
 
     if cur_ema21 == 0.0 or cur_ema55 == 0.0:

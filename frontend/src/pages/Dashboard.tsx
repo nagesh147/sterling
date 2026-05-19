@@ -57,6 +57,7 @@ import { GoLivePanel } from '../components/GoLivePanel';
 import { SignalsTable } from '../components/SignalsTable';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSettings';
+import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -171,6 +172,9 @@ export function Dashboard() {
       <PanelBoundary title="NEW SIGNAL ALERT">
         <ArrowAlert underlying={selectedUnderlying} />
       </PanelBoundary>
+      <div style={{ marginBottom: 24 }}>
+        <V4AnalyticsDashboard activeSymbol={selectedUnderlying} />
+      </div>
 
       <div style={header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>

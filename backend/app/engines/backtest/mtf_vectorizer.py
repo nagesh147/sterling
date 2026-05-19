@@ -46,6 +46,7 @@ from app.engines.indicators.ema import compute_ema, ema_dual
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi, ha_body_bull
 from app.engines.indicators.rsi import rsi as compute_rsi
 from app.engines.indicators.supertrend import compute_supertrend
+from app.engines.indicators.smc import compute_smc
 
 
 # Mirrors regime_engine.compute_regime crypto-tuned thresholds.
@@ -434,6 +435,14 @@ def build_signals_full(
     # Volume median over rolling 20 bars — used for the 1.5× spike gate.
     vol_median = pd.Series(volume).rolling(20, min_periods=1).median().values
 
+    # --- V4 SMC Vectorization ---
+    smc_df = compute_smc(candles_signal)
+    if not smc_df.empty and "CHOCH" in smc_df.columns and "BOS" in smc_df.columns:
+        smc_signal = np.where(smc_df["CHOCH"] != 0, smc_df["CHOCH"], smc_df["BOS"])
+        smc_trend_arr = pd.Series(smc_signal).replace(0, np.nan).ffill().fillna(0).values
+    else:
+        smc_trend_arr = np.zeros(n, dtype=np.int64)
+
     # ─ Vectorised flags ────────────────────────────────────────────────────
     green_count = (
         (st1_t == 1).astype(np.int64)
@@ -567,6 +576,7 @@ def build_signals_full(
                 st_trends=[0, 0, 0], st_values=[0.0, 0.0, 0.0],
                 close_1h=float(close[i]),
                 score_long=0.0, score_short=0.0,
+                smc_trend=0,
             ))
             continue
         out.append(SignalResult(
@@ -588,6 +598,7 @@ def build_signals_full(
             vol_confirm=bool(vol_spike[i]),
             bars_since_flip=int(bars_active[i]),
             cvd_proxy=round(float(cvd_sum_arr[i]), 4),
+            smc_trend=int(smc_trend_arr[i]),
         ))
     return out, atr14, atr22
 

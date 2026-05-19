@@ -12,6 +12,7 @@ import { DataSourceSelector } from '../components/DataSourceSelector';
 import LiveControlPanel from '../components/LiveControlPanel';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
+import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
 import '../styles/terminal.css';
@@ -124,6 +125,7 @@ export function SimpleTerminal() {
   const setAppMode = useSetAppMode();
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
+  const underlying = useSelectedUnderlying();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [activeSection, setActiveSection] = useState<'signals' | 'positions' | 'backtest' | 'calibration'>('signals');
@@ -285,6 +287,9 @@ export function SimpleTerminal() {
 
       {/* Main content */}
       <div style={{ flex: 1, overflow: 'auto', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--t-border)' }}>
+          <V4AnalyticsDashboard activeSymbol={underlying} />
+        </div>
         {activeSection === 'signals' && (
           <div className="term-signals-wrap" style={{ flex: 1, minHeight: 0 }}>
             <SignalsTable />

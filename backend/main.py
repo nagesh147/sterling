@@ -33,6 +33,7 @@ from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
 from app.api.v1.endpoints.trading import router as trading_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.services import alert_store as _alert_store_svc
+from app.services.db_postgres import init_db_schema
 
 log = get_logger(__name__)
 
@@ -724,6 +725,35 @@ async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
         await asyncio.sleep(interval_hours * 3600)
 
 
+async def _broadcast_ofi(app: FastAPI) -> None:
+    """
+    Broadcasts Level 2 Order Flow Imbalance (OFI) to the active websocket channels.
+    """
+    import asyncio
+    from app.api.v1.endpoints.stream import stream_manager
+    from app.services.delta_l2_socket import l2_manager
+    
+    # Symbols to track/broadcast
+    active_symbols = ["BTCUSD", "ETHUSD", "SOLUSD"]
+    
+    while True:
+        await asyncio.sleep(0.5)
+        try:
+            for sym in active_symbols:
+                ofi_val = l2_manager.get_ofi(sym)
+                if ofi_val != 0:
+                    await stream_manager.broadcast_to_channel(
+                        sym,
+                        {
+                            "type": "metrics_update",
+                            "symbol": sym,
+                            "data": {"ofi": ofi_val}
+                        }
+                    )
+        except Exception as exc:
+            log.warning("OFI broadcaster error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -740,6 +770,13 @@ async def lifespan(app: FastAPI):
     # Init OHLCV table and kick off first fetch in background (non-blocking)
     from app.services.ohlcv_store import init_ohlcv_table
     init_ohlcv_table()
+    
+    # --- V4 TimescaleDB / Postgres Bootstrap ---
+    try:
+        await init_db_schema()
+        log.info("V4 Postgres schema bootstrap complete.")
+    except Exception as e:
+        log.warning(f"V4 Postgres bootstrap skipped (falling back to SQLite): {e}")
 
     # Restore signal tracker state — prevents re-firing Telegram on server restart
     from app.api.v1.endpoints.directional import _load_signal_tracker_state, _migrate_signal_ids_to_v2
@@ -845,8 +882,16 @@ async def lifespan(app: FastAPI):
     log.info("Background retry worker started (every 60s + exponential backoff)")
     ohlcv_task = asyncio.create_task(_background_ohlcv_updater(interval_hours=1))
     log.info("OHLCV background updater started (hourly)")
+    ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
+    log.info("OFI Broadcaster started (every 0.5s)")
 
     yield
+
+    ofi_broadcast_task.cancel()
+    try:
+        await ofi_broadcast_task
+    except (Exception, BaseException):
+        pass
 
     ohlcv_task.cancel()
     try:
@@ -925,6 +970,10 @@ def create_app() -> FastAPI:
     app.include_router(analytics_baseline_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
     app.include_router(trading_router, prefix="/api/v1")
+    
+    # V4 WebSocket Manager Router
+    from app.api.v1.endpoints import stream
+    app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
 
     return app
 

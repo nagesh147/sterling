@@ -7,6 +7,7 @@ from app.engines.indicators.ema import compute_ema
 from app.engines.directional.microstructure import (
     detect_liquidity_sweep, detect_displacement,
 )
+from app.engines.indicators.smc import compute_smc
 
 
 def assess_timing(
@@ -41,6 +42,25 @@ def assess_timing(
 
     vol_median = float(np.median(volume[-20:])) if len(volume) >= 20 else float(np.median(volume))
 
+    # --- V4 SMC Context ---
+    smc_df = compute_smc(candles_15m[-100:])
+    tapped_fvg = False
+    inside_ob = False
+    if not smc_df.empty:
+        last_row = smc_df.iloc[-1]
+        
+        if "FVG" in last_row and pd.notna(last_row["FVG"]):
+            fvg_dir = last_row["FVG"]
+            if (signal.trend == 1 and fvg_dir == 1) or (signal.trend == -1 and fvg_dir == -1):
+                if last_row.get("Top", 0) >= current_close >= last_row.get("Bottom", 0):
+                    tapped_fvg = True
+                    
+        if "OB" in last_row and pd.notna(last_row["OB"]):
+            ob_dir = last_row["OB"]
+            if (signal.trend == 1 and ob_dir == 1) or (signal.trend == -1 and ob_dir == -1):
+                if last_row.get("Top", 0) >= current_close >= last_row.get("Bottom", 0):
+                    inside_ob = True
+
     # ── B1/B2: microstructure detectors ────────────────────────────────────
     # Direction inferred from signal.trend; sweep + displacement give additive
     # exec_score bumps on top of pullback (14) or continuation (10).
@@ -73,6 +93,18 @@ def assess_timing(
 
     if signal.trend == 1:
         # ── Mode A: PULLBACK to ST support + EMA20 confirmation ──────────
+        if tapped_fvg or inside_ob:
+            reason = f"Pullback tapped {'Bullish FVG' if tapped_fvg else 'Bullish Order Block'}"
+            if micro_reason_parts:
+                reason += " | " + " + ".join(micro_reason_parts)
+            return ExecTimingResult(
+                mode=ExecMode.PULLBACK, confidence=1.0,
+                reason=reason,
+                exec_score=15.0,
+                tapped_fvg=tapped_fvg,
+                inside_order_block=inside_ob
+            )
+            
         if st_73_level > 0:
             distance_above_st = current_close - st_73_level
             ema20_ok = current_close > current_ema20
@@ -116,6 +148,18 @@ def assess_timing(
 
     elif signal.trend == -1:
         # ── Mode A: PULLBACK to ST resistance + EMA20 confirmation ───────
+        if tapped_fvg or inside_ob:
+            reason = f"Pullback tapped {'Bearish FVG' if tapped_fvg else 'Bearish Order Block'}"
+            if micro_reason_parts:
+                reason += " | " + " + ".join(micro_reason_parts)
+            return ExecTimingResult(
+                mode=ExecMode.PULLBACK, confidence=1.0,
+                reason=reason,
+                exec_score=15.0,
+                tapped_fvg=tapped_fvg,
+                inside_order_block=inside_ob
+            )
+            
         if st_73_level > 0:
             distance_below_st = st_73_level - current_close
             ema20_ok = current_close < current_ema20

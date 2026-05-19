@@ -7,6 +7,7 @@ from app.schemas.directional import (
     RegimeResult, SignalResult, ExecTimingResult,
     PolicyResult, ExecMode, IVRBand,
 )
+from app.engines.directional.options_pricing import sabr_implied_vol
 
 
 def _resolve_now_utc(
@@ -55,7 +56,10 @@ def _score_signal_v2(signal: SignalResult, direction: str) -> float:
 
 def _score_exec_timing_v2(exec_timing: ExecTimingResult) -> float:
     """Returns 0-15 points."""
-    return min(15.0, max(0.0, float(exec_timing.exec_score)))
+    base = float(exec_timing.exec_score)
+    if getattr(exec_timing, "tapped_fvg", False) or getattr(exec_timing, "inside_order_block", False):
+        base += 5.0
+    return min(15.0, max(0.0, base))
 
 
 def _score_contract_health_v2(
@@ -77,8 +81,25 @@ def _score_contract_health_v2(
         if not structure.legs:
             return 0.0
         leg = structure.legs[0]
-        # Composite health_score is 0-100; scale to 0-20.
         health = float(getattr(leg, "health_score", 0.0))
+        
+        # --- V4 SABR Deep OTM Volatility Check ---
+        delta = abs(getattr(leg, "delta", 1.0))
+        mark_iv = getattr(leg, "mark_iv", 0.0)
+        
+        if delta < 0.15 and (mark_iv <= 0.01 or mark_iv > 3.0):
+            try:
+                spot = getattr(leg, "mark_price", leg.strike)
+                dte_years = max(1.0, leg.dte) / 365.0
+                sabr_iv = sabr_implied_vol(
+                    f=spot, k=leg.strike, t=dte_years, 
+                    alpha=0.8, beta=0.5, rho=-0.2, nu=0.6
+                )
+                if sabr_iv > 2.0:
+                    health = max(0.0, health - 25.0)
+            except Exception:
+                pass
+                
         base = max(0.0, min(20.0, health / 5.0))
 
     if funding_rate is not None:

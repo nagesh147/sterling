@@ -10,6 +10,7 @@ import { InstrumentSelector } from '../components/InstrumentSelector';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
+import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { useSelectedUnderlying, useAppMode, useSetAppMode, useTheme, useToggleTheme } from '../store/useStore';
 
 import '../styles/terminal.css';
@@ -139,6 +140,9 @@ export function Terminal() {
 
       {/* Main workspace */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '12px', background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)' }}>
+          <V4AnalyticsDashboard activeSymbol={underlying} />
+        </div>
         {/* Three-pane area */}
         <div style={{ flex: bottomCollapsed ? 1 : '1 1 auto', minHeight: 0 }}>
           <PanelGroup
