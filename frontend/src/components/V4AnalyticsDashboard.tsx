@@ -96,7 +96,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
               letterSpacing: '0.08em',
               color: 'var(--text-muted, #9ca3af)'
             }}>
-              SHADOW MODE
+              SHADOW TRADING
             </span>
           </div>
         </div>
@@ -127,7 +127,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             cursor: 'default',
           }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim, #6b7280)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Order Flow Imbalance (OFI)
+              Live Market Pressure
             </div>
             <div style={{
               fontSize: '24px',
@@ -141,7 +141,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             </div>
             
             {/* Veto Active Badge */}
-            {isOFIThresholdBreached && (
+            {isOFIThresholdBreached ? (
               <div style={{
                 position: 'absolute',
                 top: '12px',
@@ -157,7 +157,23 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
                 animation: 'pulse 1.5s infinite',
                 boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)'
               }}>
-                VETO ACTIVE
+                TRADE OFF
+              </div>
+            ) : (
+              <div style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                padding: '2px 6px',
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                color: '#10b981',
+                fontSize: '9px',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                borderRadius: '4px',
+              }}>
+                TRADE ON
               </div>
             )}
             
@@ -180,7 +196,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             border: '1px solid rgba(255, 255, 255, 0.04)',
           }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim, #6b7280)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Unrealized PnL
+              Open Profit/Loss
             </div>
             <div style={{
               fontSize: '24px',
@@ -200,7 +216,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             border: '1px solid rgba(255, 255, 255, 0.04)',
           }}>
             <div style={{ fontSize: '11px', color: 'var(--text-dim, #6b7280)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Execution Drift
+              Execution Slippage
             </div>
             <div style={{
               fontSize: '24px',

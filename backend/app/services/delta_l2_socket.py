@@ -44,8 +44,8 @@ class DeltaL2Manager:
                             sell = data.get("sell", [])
                             
                             if buy and sell:
-                                b_price, b_size = float(buy[0]["price"]), float(buy[0]["size"])
-                                a_price, a_size = float(sell[0]["price"]), float(sell[0]["size"])
+                                b_price, b_size = float(buy[0]["limit_price"]), float(buy[0]["size"])
+                                a_price, a_size = float(sell[0]["limit_price"]), float(sell[0]["size"])
                                 
                                 prev_b = self.best_bid.get(sym, (0, 0))
                                 prev_a = self.best_ask.get(sym, (0, 0))
