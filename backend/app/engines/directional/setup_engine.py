@@ -56,7 +56,12 @@ _VOLATILE_REGIMES = {MacroRegime.VOLATILE}
 _VETO_REGIMES = {MacroRegime.CHOPPY, MacroRegime.IDLE}
 
 _PARTIAL_ST_MIN = 2
-_HIGH_SCORE_CONFIRM = 14.0  # 70% of max-20
+# v4 — Lifted 14 → 15 to compensate for the v4 weight rebase. Pre-v4 a 14
+# score required st_flip + RSI + HA + HA-real; post-v4 the same combo still
+# scores ~14 but rsi_momentum at the doubled weight (1 → 2) makes hitting 14
+# noticeably easier, so the RANGING / VOLATILE confirm gate had to lift to
+# keep the same selectivity.
+_HIGH_SCORE_CONFIRM = 15.0  # 75% of max-20
 
 # ── W1/W12 promotions ────────────────────────────────────────────────────────
 # Mean-reversion in IDLE / RANGING uses RSI extremes + a moderate score gate.
@@ -64,8 +69,10 @@ _HIGH_SCORE_CONFIRM = 14.0  # 70% of max-20
 # Numbers come from the v4 spec — engines stay pure; no env reads here.
 _MR_RSI_LONG_MAX   = 35.0   # RSI < 35 (tightened from 40) — deeper oversold
 _MR_RSI_SHORT_MIN  = 65.0   # RSI > 65 (tightened from 60) — deeper overbought
-_MR_SCORE_MIN      = 14.0   # 70% of max-20 (was 10) — kill MR overtrading
-_BREAKOUT_SCORE_MIN = 14.0  # same hurdle as _HIGH_SCORE_CONFIRM
+# v4 — lifted 14 → 15 to match the shifted score distribution under the
+# unified weights (see _HIGH_SCORE_CONFIRM note above).
+_MR_SCORE_MIN      = 15.0   # 75% of max-20 — kill MR overtrading
+_BREAKOUT_SCORE_MIN = 15.0  # same hurdle as _HIGH_SCORE_CONFIRM
 
 
 def _mean_reversion_setup(
@@ -204,12 +211,14 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
     # (BTC -0.20% across 70 trades, ETH -0.21% across 65 trades) but on the
     # 4H profile IDLE bars actually had +0.46% avg. To preserve 4H winners
     # without leaking into 1H, allow IDLE entries only when signal_score is
-    # near-max (>= 17/20). 1H rarely reaches that ceiling; 4H signals can.
+    # near-max. v4 weight rebase shifted the score distribution upward (rsi
+    # weight doubled from the old vectoriser's value), so the IDLE bypass
+    # threshold was lifted 17 → 18 to keep the trade count from doubling.
     if macro in _VETO_REGIMES:
         sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
         if (
             macro == MacroRegime.IDLE
-            and sig_score >= 17.0
+            and sig_score >= 18.0
             and trend != 0
             and (signal.all_green or signal.all_red)
         ):
@@ -355,11 +364,11 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
     has_arrow = signal.green_arrow if direction == Direction.LONG else signal.red_arrow
 
     # Strong confluence can confirm even without a fresh arrow.
-    # Raised threshold 15 -> 17 (was 75% of max-20, now 85%). At 15 the
-    # "chase rule" was buying every still-aligned bar after the flip — the
-    # worst R:R region of the move. 17 forces near-max confluence to skip
-    # the arrow requirement.
-    strong_confluence = getattr(signal, 'signal_score', 0) >= 17.0
+    # v4 — lifted 17 → 18 to match the v4 score-distribution shift (see
+    # _HIGH_SCORE_CONFIRM comment). At 17 the chase rule was buying every
+    # still-aligned bar 5–8 bars after the flip — the worst R:R region of
+    # the move. 18 forces near-max confluence to skip the arrow requirement.
+    strong_confluence = getattr(signal, 'signal_score', 0) >= 18.0
 
     if signal.all_green or signal.all_red:
         if has_arrow or strong_confluence:

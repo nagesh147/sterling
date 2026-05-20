@@ -115,7 +115,13 @@ async def run_once(
         )
 
     regime = compute_regime(candles_4h, macro_filter=macro_filter)
-    signal = compute_signal(candles_1h)
+    # v4 — pass regime label to compute_signal so confluence weights are
+    # rescaled per regime (trending bars favour st_flip+ha; volatile bars
+    # favour squeeze+volume). Backtest does the same via the vectoriser.
+    signal = compute_signal(
+        candles_1h,
+        regime_label=regime.macro_regime.value if regime else "",
+    )
     setup = evaluate_setup(regime, signal, profile_label=mode)
 
     if setup.state in (TradeState.IDLE, TradeState.FILTERED):
@@ -269,7 +275,13 @@ async def preview(
         )
 
     regime = compute_regime(candles_4h, macro_filter=macro_filter)
-    signal = compute_signal(candles_1h)
+    # v4 — pass regime label to compute_signal so confluence weights are
+    # rescaled per regime (trending bars favour st_flip+ha; volatile bars
+    # favour squeeze+volume). Backtest does the same via the vectoriser.
+    signal = compute_signal(
+        candles_1h,
+        regime_label=regime.macro_regime.value if regime else "",
+    )
     setup = evaluate_setup(regime, signal, profile_label=mode)
     ivr = await compute_ivr(adapter, instrument, candles_1h)
     policy = apply_policy(setup.direction, instrument, ivr)

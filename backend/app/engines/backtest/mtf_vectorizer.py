@@ -58,23 +58,28 @@ _MOMENTUM_Z_LOOKBACK = 50
 _MOMENTUM_Z_THRESHOLD = 0.5
 _MOMENTUM_Z_BONUS = 2.0
 
-# Tier C #14 — CVD proxy constants (mirror signal_engine).
-_CVD_WINDOW = 10
-_CVD_DIVERGENCE_PENALTY = 3.0
-# Heavily-divergent threshold: |CVD_10| / sum(|delta_10|) > 0.5 AND opposite sign to trend.
-_CVD_DIVERGENCE_RATIO = 0.5
-
-# Mirrors signal_engine.compute_signal scoring weights / strength bands.
-_SIG_WEIGHTS = {
-    "st_flip":         3,
-    "rsi":             2,
-    "rsi_momentum":    1,
-    "squeeze":         4,
-    "volume":          4,
-    "ha_aligned":      4,
-    "ha_real_aligned": 2,
-}
-_SIG_TOTAL_WEIGHT = sum(_SIG_WEIGHTS.values())  # 20
+# v4 — Confluence weights / thresholds are imported from the single source
+# of truth in signal_weights. Pre-v4 this module had its own copy that
+# diverged from signal_engine's copy; baselines and live computed different
+# scores from the same data. Now both call sites share the same constants.
+from app.engines.directional.signal_weights import (
+    V4_BASE_WEIGHTS as _SIG_WEIGHTS,
+    V4_TOTAL_WEIGHT as _SIG_TOTAL_WEIGHT,
+    V4_CVD_WINDOW as _CVD_WINDOW,
+    V4_CVD_DIVERGENCE_PENALTY as _CVD_DIVERGENCE_PENALTY,
+    V4_CVD_DIVERGENCE_RATIO as _CVD_DIVERGENCE_RATIO,
+    V4_RSI_LONG_LO, V4_RSI_LONG_HI,
+    V4_RSI_SHORT_LO, V4_RSI_SHORT_HI,
+    V4_RSI_LONG_MOM_LO, V4_RSI_LONG_MOM_HI,
+    V4_RSI_SHORT_MOM_LO, V4_RSI_SHORT_MOM_HI,
+    V4_VOL_SPIKE_MULT,
+    V4_BB_PERIOD, V4_BB_STD,
+    V4_KC_PERIOD, V4_KC_ATR_PERIOD, V4_KC_MULT,
+    V4_HA_REAL_DIV_PCT,
+    V4_STRENGTH_STRONG_PCT, V4_STRENGTH_SIGNAL_PCT,
+    V4_STALENESS_LOOKBACK,
+    regime_aware_weights,
+)
 
 _MS_PER_DAY = 86_400_000
 
@@ -369,6 +374,7 @@ def build_signals_full(
     *,
     st_configs: Optional[List[Tuple[int, float]]] = None,
     st_threshold: int = 3,
+    regime_labels: Optional[np.ndarray] = None,
 ) -> Tuple[List[SignalResult], np.ndarray, np.ndarray]:
     """
     Vectorised signal computation — one SignalResult per signal bar plus the
@@ -378,6 +384,12 @@ def build_signals_full(
     the full series via Pandas .rolling() / .ewm() / .shift() and the existing
     numpy helpers. The early warmup window (≲ 30 bars) returns a degenerate
     SignalResult to match the legacy short-circuit.
+
+    When `regime_labels` is supplied (one label per signal bar, e.g. from
+    `vectorize_replay`'s regime_idx_at_signal mapping), each bar's flag
+    weights are scaled by the v4 regime profile. Trending bars favour
+    st_flip + ha_aligned; volatile bars favour squeeze + volume; ranging
+    bars favour rsi + rsi_momentum. See `signal_weights.V4_REGIME_PROFILES`.
     """
     df = _candles_to_df(candles_signal)
     n = len(df)
@@ -421,16 +433,16 @@ def build_signals_full(
 
     # Bollinger Bands — .rolling() mean / std (sample, ddof=1).
     s_close = pd.Series(close)
-    bb_mid = s_close.rolling(20, min_periods=20).mean()
-    bb_std = s_close.rolling(20, min_periods=20).std(ddof=1)
-    bb_hi_arr = (bb_mid + 2.0 * bb_std).values
-    bb_lo_arr = (bb_mid - 2.0 * bb_std).values
+    bb_mid = s_close.rolling(V4_BB_PERIOD, min_periods=V4_BB_PERIOD).mean()
+    bb_std = s_close.rolling(V4_BB_PERIOD, min_periods=V4_BB_PERIOD).std(ddof=1)
+    bb_hi_arr = (bb_mid + V4_BB_STD * bb_std).values
+    bb_lo_arr = (bb_mid - V4_BB_STD * bb_std).values
 
-    # Keltner Channels via EMA20 ± 1.5 · ATR10.
-    kc_mid = compute_ema(close, 20)
-    kc_atr = compute_atr(high, low, close, 10)
-    kc_hi_arr = kc_mid + 1.5 * kc_atr
-    kc_lo_arr = kc_mid - 1.5 * kc_atr
+    # Keltner Channels via EMA(period) ± mult · ATR(atr_period).
+    kc_mid = compute_ema(close, V4_KC_PERIOD)
+    kc_atr = compute_atr(high, low, close, V4_KC_ATR_PERIOD)
+    kc_hi_arr = kc_mid + V4_KC_MULT * kc_atr
+    kc_lo_arr = kc_mid - V4_KC_MULT * kc_atr
 
     # Volume median over rolling 20 bars — used for the 1.5× spike gate.
     vol_median = pd.Series(volume).rolling(20, min_periods=1).median().values
@@ -479,9 +491,9 @@ def build_signals_full(
     breakout_short = close < bb_lo_arr
     squeeze_ok = squeezed & (breakout_long | breakout_short)
 
-    # Volume spike: vol > 1.5 × rolling-median volume.
+    # Volume spike: vol > V4_VOL_SPIKE_MULT × rolling-median volume.
     with np.errstate(invalid="ignore", divide="ignore"):
-        vol_spike = (vol_median > 0) & (volume > 1.5 * vol_median)
+        vol_spike = (vol_median > 0) & (volume > V4_VOL_SPIKE_MULT * vol_median)
 
     # HA body alignment with trend.
     ha_aligned = np.where(
@@ -502,32 +514,60 @@ def build_signals_full(
             close > 0, np.abs(close - ha_c) / safe_close * 100.0, 0.0,
         )
     ha_real_div_pct = np.nan_to_num(ha_real_div_pct, nan=0.0)
-    ha_real_aligned = ha_real_div_pct < 0.3
+    ha_real_aligned = ha_real_div_pct < V4_HA_REAL_DIV_PCT
 
-    # RSI gates / momentum bonus.
-    rsi_ok_long = (rsi_arr > 42.0) & (rsi_arr < 70.0)
-    rsi_ok_short = (rsi_arr > 30.0) & (rsi_arr < 57.0)
+    # RSI gates / momentum bonus — v4 thresholds (signal_weights.py).
+    rsi_ok_long  = (rsi_arr > V4_RSI_LONG_LO)  & (rsi_arr < V4_RSI_LONG_HI)
+    rsi_ok_short = (rsi_arr > V4_RSI_SHORT_LO) & (rsi_arr < V4_RSI_SHORT_HI)
     rsi_ok = np.where(
         trend == 1, rsi_ok_long,
         np.where(trend == -1, rsi_ok_short, False),
     ).astype(bool)
-    rsi_momentum_long = (rsi_arr > 55.0) & (rsi_arr < 68.0)
-    rsi_momentum_short = (rsi_arr > 32.0) & (rsi_arr < 45.0)
+    rsi_momentum_long  = (rsi_arr > V4_RSI_LONG_MOM_LO)  & (rsi_arr < V4_RSI_LONG_MOM_HI)
+    rsi_momentum_short = (rsi_arr > V4_RSI_SHORT_MOM_LO) & (rsi_arr < V4_RSI_SHORT_MOM_HI)
     rsi_momentum = np.where(
         trend == 1, rsi_momentum_long,
         np.where(trend == -1, rsi_momentum_short, False),
     ).astype(bool)
 
-    # Earned weight per bar.
-    earned = (
-        st_flip * _SIG_WEIGHTS["st_flip"]
-        + rsi_ok * _SIG_WEIGHTS["rsi"]
-        + rsi_momentum * _SIG_WEIGHTS["rsi_momentum"]
-        + squeeze_ok * _SIG_WEIGHTS["squeeze"]
-        + vol_spike * _SIG_WEIGHTS["volume"]
-        + ha_aligned * _SIG_WEIGHTS["ha_aligned"]
-        + ha_real_aligned * _SIG_WEIGHTS["ha_real_aligned"]
-    ).astype(np.float64)
+    # v4 — Regime-aware per-bar weight arrays. When `regime_labels` is None
+    # all bars use V4_BASE_WEIGHTS; when supplied, each bar's weights are
+    # scaled by the regime profile so trending bars favour st_flip + ha and
+    # volatile bars favour squeeze + volume.
+    flag_arrays = {
+        "st_flip":         st_flip.astype(np.float64),
+        "rsi":             rsi_ok.astype(np.float64),
+        "rsi_momentum":    rsi_momentum.astype(np.float64),
+        "squeeze":         squeeze_ok.astype(np.float64),
+        "volume":          vol_spike.astype(np.float64),
+        "ha_aligned":      ha_aligned.astype(np.float64),
+        "ha_real_aligned": ha_real_aligned.astype(np.float64),
+    }
+    if regime_labels is None:
+        # Static weights — fastest path.
+        weight_arrays = {
+            k: np.full(n, _SIG_WEIGHTS[k], dtype=np.float64)
+            for k in _SIG_WEIGHTS
+        }
+    else:
+        # Per-bar weights driven by regime label. At most ~8 unique labels in
+        # a series so this stays O(N) with a small constant.
+        weight_arrays = {
+            k: np.full(n, _SIG_WEIGHTS[k], dtype=np.float64)
+            for k in _SIG_WEIGHTS
+        }
+        labels_arr = np.asarray(regime_labels)
+        for label in np.unique(labels_arr):
+            if not label:
+                continue
+            mask = labels_arr == label
+            if not mask.any():
+                continue
+            reg_w = regime_aware_weights(str(label))
+            for k in _SIG_WEIGHTS:
+                weight_arrays[k][mask] = reg_w[k]
+    earned = sum(flag_arrays[k] * weight_arrays[k] for k in _SIG_WEIGHTS).astype(np.float64)
+    total_weight_per_bar = sum(weight_arrays[k] for k in _SIG_WEIGHTS).astype(np.float64)
 
     bars_active = _staleness_lookback(trend, st1_t, st2_t, st3_t, st_threshold)
     stale_penalty = np.minimum(3, bars_active // 5)
@@ -557,12 +597,15 @@ def build_signals_full(
     cvd_penalty = np.where(cvd_divergent, _CVD_DIVERGENCE_PENALTY, 0.0)
 
     earned_adj = np.maximum(0.0, earned - stale_penalty - cvd_penalty)
-    pct = earned_adj / _SIG_TOTAL_WEIGHT
+    # Per-bar total because regime-aware weights make the sum vary across bars.
+    # Falls back to the static total when no regime_labels supplied (the
+    # division divides by an array of all V4_TOTAL_WEIGHT, which is identical).
+    pct = np.where(total_weight_per_bar > 0, earned_adj / total_weight_per_bar, 0.0)
     signal_score = np.round(pct * 20.0, 2)
 
     signal_strength = np.where(
-        pct >= 0.75, "STRONG",
-        np.where(pct >= 0.35, "SIGNAL", "NONE"),
+        pct >= V4_STRENGTH_STRONG_PCT, "STRONG",
+        np.where(pct >= V4_STRENGTH_SIGNAL_PCT, "SIGNAL", "NONE"),
     )
 
     # ─ Assemble SignalResult per bar ──────────────────────────────────────
@@ -631,9 +674,6 @@ def vectorize_replay(
     regimes, regime_atr14 = build_regimes_full(
         candles_regime, idle_strictness=idle_strictness,
     )
-    signals, signal_atr14, signal_atr22 = build_signals_full(
-        candles_signal, st_configs=st_configs,
-    )
 
     signal_ts = np.array(
         [c.timestamp_ms for c in candles_signal], dtype=np.int64,
@@ -643,6 +683,22 @@ def vectorize_replay(
     )
     regime_idx_at_signal = map_regime_idx_to_signal(
         signal_ts, regime_ts, regime_bar_ms,
+    )
+
+    # v4 — Build per-signal-bar regime label array so build_signals_full can
+    # apply regime-aware weights. A label of "" indicates "no regime yet"
+    # (warmup bars) which falls back to base weights.
+    regime_labels_per_signal_bar: List[str] = []
+    for idx_at_sig in regime_idx_at_signal:
+        if idx_at_sig < 1 or idx_at_sig > len(regimes):
+            regime_labels_per_signal_bar.append("")
+        else:
+            regime_labels_per_signal_bar.append(regimes[int(idx_at_sig) - 1].macro_regime.value)
+    regime_labels_arr = np.asarray(regime_labels_per_signal_bar, dtype=object)
+
+    signals, signal_atr14, signal_atr22 = build_signals_full(
+        candles_signal, st_configs=st_configs,
+        regime_labels=regime_labels_arr,
     )
 
     return VectorizedReplay(

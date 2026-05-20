@@ -65,6 +65,13 @@ class TFProfile:
     v4_stop_mult: float = 1.2
     v4_tp_mult: float = 2.0
     v4_trail_mult: float = 1.5
+    # v4 — expected round-trip cost per trade (bps). Used by the cost-aware
+    # entry gate: signal.signal_score must clear `score_min` net of an uplift
+    # equal to `expected_cost_bps / 50` score-points (i.e. each 50 bps of
+    # cost requires +1 score-point of conviction). Defaults are calibrated
+    # from prior baselines: short TFs carry larger fee+slippage drag per
+    # trade because their hold-time amortisation is shorter.
+    expected_cost_bps: float = 30.0
 
 
 PROFILES: Dict[str, TFProfile] = {
@@ -82,6 +89,8 @@ PROFILES: Dict[str, TFProfile] = {
         # exited at the chandelier trail before the move fully developed,
         # leaving the per-trade fee/slippage drag dominant over gross PnL.
         hold_bars=16,
+        # Highest fee+slippage drag per trade — 80 min hold + ~10 bps fee + ~10 bps slip + ~5 bps funding ≈ 100 bps
+        expected_cost_bps=100.0,
     ),
     "scalping_15m": TFProfile(
         label="Scalping 15M",
@@ -97,6 +106,8 @@ PROFILES: Dict[str, TFProfile] = {
         # 16 bars at 15m = 4 hours — long enough to amortize fees over a
         # bigger move; 12 hurt BTC 15m by ~0.3 Sharpe vs 16 in tuning.
         hold_bars=16,
+        # 4h hold amortises better than 5m but still cost-heavy: ~80 bps total.
+        expected_cost_bps=80.0,
     ),
     "scalping_30m": TFProfile(
         label="Scalping 30M",
@@ -108,6 +119,7 @@ PROFILES: Dict[str, TFProfile] = {
         fwd_labels=["2H", "8H", "24H"],
         fwd_bars=[4, 16, 48],
         hold_bars=10,  # revert from 12; ETH 30m winner lost 0.24 Sharpe at 12.
+        expected_cost_bps=60.0,
     ),
     "intraday_1h": TFProfile(
         label="Intraday 1H",
@@ -119,6 +131,7 @@ PROFILES: Dict[str, TFProfile] = {
         fwd_labels=["4H", "12H", "24H"],
         fwd_bars=[4, 12, 24],
         hold_bars=8,
+        expected_cost_bps=50.0,
     ),
     "intraday_4h": TFProfile(
         label="Intraday 4H",
@@ -130,6 +143,7 @@ PROFILES: Dict[str, TFProfile] = {
         fwd_labels=["24H", "48H", "96H"],
         fwd_bars=[6, 12, 24],
         hold_bars=12,
+        expected_cost_bps=40.0,
     ),
 }
 
@@ -638,9 +652,29 @@ def _replay_profile(
                 True if not _is_scalping_label(profile.label)
                 else _allowed_entry_hour_utc(ts)
             )
+            # v4 — cost-aware effective score gate. Each 50 bps of expected
+            # round-trip cost requires +1 score-point of signal conviction.
+            # A 100-bps profile (5m scalping) needs sig_score ≥ score_min + 2;
+            # a 40-bps profile (intraday_4h) needs sig_score ≥ score_min + 0.8.
+            # This compensates for the cost-drag-eats-edge regime: short TFs
+            # naturally need higher conviction to justify the per-trade tax.
+            cost_uplift = float(profile.expected_cost_bps) / 50.0
+            # MTF agreement gate: signal trend must match regime trend bias.
+            # When directionally opposed, the setup_engine usually filters but
+            # ranging/volatile branches can let counter-trend through; tighten
+            # those by requiring an additional 2 points of conviction.
+            macro_name = regime.macro_regime.value
+            macro_is_bull = "BULL" in macro_name
+            macro_is_bear = "BEAR" in macro_name
+            mtf_disagreement = (
+                (macro_is_bull and signal.trend == -1)
+                or (macro_is_bear and signal.trend == 1)
+            )
+            mtf_uplift = 2.0 if mtf_disagreement else 0.0
+            effective_score = sig_score - cost_uplift - mtf_uplift
             qualifies = (
                 setup.state == TradeState.CONFIRMED_SETUP_ACTIVE
-                and sig_score >= score_min
+                and effective_score >= score_min
                 and signal.trend != 0
                 and in_session
             )
