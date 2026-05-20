@@ -30,8 +30,8 @@ Pure module: no DB, no I/O, no `time.time()`.
 from __future__ import annotations
 import math
 import os
-from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -110,6 +110,10 @@ class VectorizedReplay:
     signal_atr14: np.ndarray
     signal_atr22: np.ndarray
     regime_atr14: np.ndarray
+    # v4 Phase 1 — Per-bar mean-reversion SignalResult (fade-extremes track).
+    # Populated when `track="mean_reversion"` is supplied to vectorize_replay;
+    # else stays as the same trend-following signals (defensive default).
+    mr_signals: Optional[List[SignalResult]] = None
 
 
 # ── Candle → DataFrame helpers ────────────────────────────────────────────────
@@ -646,6 +650,181 @@ def build_signals_full(
     return out, atr14, atr22
 
 
+# ── v4 Phase 1 — Mean-reversion (fade-extremes) signal vectorizer ──────────
+
+# Imported lazily inside the function to avoid a circular import — tracks/
+# package depends on signal_features which depends on signal_weights, all of
+# which are siblings of mtf_vectorizer in the call graph. Lazy import keeps
+# module-load ordering robust.
+
+_MR_BULL_REGIMES = {"BULL_TREND", "BULLISH", "BULL_TRENDING", "BULL_RANGING", "BULL_WEAK"}
+_MR_BEAR_REGIMES = {"BEAR_TREND", "BEARISH", "BEAR_TRENDING", "BEAR_RANGING", "BEAR_WEAK"}
+
+
+def build_mr_signals_full(
+    candles_signal: List[Candle],
+    regime_labels: np.ndarray,
+    *,
+    rsi_extreme_high: float = 75.0,
+    rsi_extreme_low:  float = 25.0,
+    bb_period:        int   = 20,
+    bb_std:           float = 2.0,
+    vol_climax_window:int   = 100,
+    vol_climax_pct:   float = 0.95,
+    cvd_window:       int   = 10,
+    cvd_min_ratio:    float = 0.3,
+    short_bias_boost: float = 2.0,
+) -> List[SignalResult]:
+    """
+    Vectorised counterpart to `tracks.fade_extremes.FadeExtremesTrack.compute`.
+
+    For each signal bar emit a SignalResult whose `trend` field encodes the
+    TRADE direction (counter-trend) and `signal_score` / `signal_strength`
+    encode the fade-extremes confluence. The downstream backtest entry gate
+    consumes these exactly like a regular SignalResult — no path-special
+    casing required beyond picking which array to read (`vec.signals` vs
+    `vec.mr_signals`).
+
+    Knob defaults are FadeExtremesConfig defaults; the search driver
+    (`scripts/btc_mr_search.py`) sweeps them.
+    """
+    df = _candles_to_df(candles_signal)
+    n = len(df)
+    if n == 0:
+        return []
+
+    open_  = df["open"].values
+    high   = df["high"].values
+    low    = df["low"].values
+    close  = df["close"].values
+    volume = df["volume"].values
+
+    rsi_arr = compute_rsi(close, 14)
+
+    s_close = pd.Series(close)
+    bb_mid = s_close.rolling(bb_period, min_periods=bb_period).mean()
+    bb_sd  = s_close.rolling(bb_period, min_periods=bb_period).std(ddof=1)
+    bb_hi_arr = (bb_mid + bb_std * bb_sd).values
+    bb_lo_arr = (bb_mid - bb_std * bb_sd).values
+
+    # Rolling volume percentile rank (top-X% climax).
+    # For each bar i: fraction of last vol_climax_window bars where vol[i] >= vol[j].
+    # Implemented as a rolling rank — keeps O(N·log W) which is fast.
+    vol_series = pd.Series(volume)
+    vol_pct_rank = vol_series.rolling(vol_climax_window, min_periods=10).apply(
+        lambda w: float(np.sum(w[-1] >= w)) / len(w),
+        raw=True,
+    ).values
+
+    # CVD-window — same logic as build_signals_full but exposed for MR.
+    tr = high - low
+    safe_tr = np.where(tr > 0, tr, np.nan)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        per_bar_delta = volume * ((close - open_) / safe_tr)
+    per_bar_delta = np.nan_to_num(per_bar_delta, nan=0.0)
+    per_bar_delta = np.clip(per_bar_delta, -np.abs(volume), np.abs(volume))
+    s_delta = pd.Series(per_bar_delta)
+    cvd_sum_arr = s_delta.rolling(cvd_window, min_periods=1).sum().values
+    abs_sum_arr = s_delta.abs().rolling(cvd_window, min_periods=1).sum().values
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cvd_ratio = np.where(abs_sum_arr > 0,
+                             np.abs(cvd_sum_arr) / abs_sum_arr, 0.0)
+
+    # Trade-direction array: -1 (short = fade rally) in BULL regimes,
+    # +1 (long = fade dip) in BEAR regimes, 0 elsewhere (no MR trade).
+    entry_dir = np.zeros(n, dtype=np.int64)
+    if regime_labels is not None and len(regime_labels) == n:
+        for i in range(n):
+            lbl = str(regime_labels[i]) if regime_labels[i] else ""
+            if lbl in _MR_BULL_REGIMES:
+                entry_dir[i] = -1
+            elif lbl in _MR_BEAR_REGIMES:
+                entry_dir[i] = 1
+
+    # Per-bar feature scores (0..1) given the entry_dir at that bar.
+    rsi_extreme_short = rsi_arr > rsi_extreme_high
+    rsi_extreme_long  = rsi_arr < rsi_extreme_low
+    rsi_extreme_ok = np.where(
+        entry_dir == -1, rsi_extreme_short,
+        np.where(entry_dir == 1, rsi_extreme_long, False),
+    )
+    # RSI magnitude score: 0 at threshold, 1 at threshold±10, clipped.
+    rsi_mag = np.where(
+        entry_dir == -1, np.clip((rsi_arr - rsi_extreme_high) / 10.0, 0.0, 1.0),
+        np.where(entry_dir == 1, np.clip((rsi_extreme_low - rsi_arr) / 10.0, 0.0, 1.0), 0.0),
+    )
+    # BB breach score: 0 if close still inside band, scaled to 1 at half-width past.
+    with np.errstate(invalid="ignore"):
+        bb_width = np.maximum(bb_hi_arr - bb_lo_arr, 1e-9)
+        bb_short = np.where(close > bb_hi_arr, (close - bb_hi_arr) / (bb_width * 0.5), 0.0)
+        bb_long  = np.where(close < bb_lo_arr, (bb_lo_arr - close) / (bb_width * 0.5), 0.0)
+    bb_score = np.clip(np.where(entry_dir == -1, bb_short,
+                                np.where(entry_dir == 1, bb_long, 0.0)),
+                       0.0, 1.0)
+    # Volume climax (binary).
+    vol_score = (vol_pct_rank >= vol_climax_pct).astype(np.float64)
+    # CVD confirmation: sign aligns with fade direction AND ratio above floor.
+    sign_ok = np.where(
+        entry_dir == -1, cvd_sum_arr < 0,
+        np.where(entry_dir == 1, cvd_sum_arr > 0, False),
+    )
+    cvd_score = np.where(sign_ok & (cvd_ratio >= cvd_min_ratio),
+                         np.minimum(cvd_ratio, 1.0), 0.0)
+
+    # Score assembly: matches FadeExtremesConfig default weights.
+    w_regime, w_rsi, w_bb, w_vol, w_cvd = 6.0, 4.0, 4.0, 3.0, 3.0
+    earned = (
+        w_regime * 1.0
+        + w_rsi * rsi_mag
+        + w_bb * bb_score
+        + w_vol * vol_score
+        + w_cvd * cvd_score
+    )
+    total = w_regime + w_rsi + w_bb + w_vol + w_cvd   # 20
+    pct = earned / total
+
+    # The regime+rsi gates must pass for any trade — else score=0.
+    gate_ok = (entry_dir != 0) & rsi_extreme_ok & (bb_score > 0)
+    pct = np.where(gate_ok, pct, 0.0)
+    score = np.round(pct * 20.0, 2)
+    # Short-side boost (BTC asymmetry).
+    score = np.where(entry_dir == -1, np.minimum(20.0, score + short_bias_boost), score)
+
+    strength = np.where(pct >= 0.75, "STRONG",
+                        np.where(pct >= 0.35, "SIGNAL", "NONE"))
+
+    out: List[SignalResult] = []
+    for i in range(n):
+        if i < 30 or not gate_ok[i]:
+            out.append(SignalResult(
+                trend=0, all_green=False, all_red=False,
+                green_arrow=False, red_arrow=False,
+                st_trends=[0, 0, 0], st_values=[0.0, 0.0, 0.0],
+                close_1h=float(close[i]),
+                score_long=0.0, score_short=0.0,
+            ))
+            continue
+        d = int(entry_dir[i])
+        out.append(SignalResult(
+            trend=d,
+            all_green=False, all_red=False,
+            green_arrow=False, red_arrow=False,
+            st_trends=[0, 0, 0], st_values=[0.0, 0.0, 0.0],
+            close_1h=float(close[i]),
+            score_long=float(score[i]) if d == 1 else 0.0,
+            score_short=float(score[i]) if d == -1 else 0.0,
+            signal_strength=str(strength[i]),
+            signal_score=float(score[i]),
+            rsi=round(float(rsi_arr[i]), 2),
+            squeezed=False,
+            vol_confirm=bool(vol_score[i]),
+            bars_since_flip=0,
+            cvd_proxy=round(float(cvd_sum_arr[i]), 4),
+            ha_real_divergence_pct=0.0,
+        ))
+    return out
+
+
 # ── Top-level API ─────────────────────────────────────────────────────────────
 
 
@@ -657,6 +836,8 @@ def vectorize_replay(
     regime_bar_ms: int,
     st_configs: Optional[List[Tuple[int, float]]] = None,
     idle_strictness: str = "auto",
+    build_mr: bool = False,
+    mr_config: Optional[Dict[str, Any]] = None,
 ) -> VectorizedReplay:
     """
     Pre-compute everything the MTF replay loop needs in O(N) time.
@@ -701,6 +882,19 @@ def vectorize_replay(
         regime_labels=regime_labels_arr,
     )
 
+    # v4 Phase 1 — Mean-reversion signals (fade-extremes). Only computed when
+    # the caller asks for them via `build_mr=True`; the cost is roughly an
+    # extra 0.5x of the trend-following compute (rolling RSI/BB/volume rank +
+    # CVD reused from build_signals_full's internals — we recompute here so
+    # the MR vectorizer stays self-contained). Defaults to None to keep
+    # existing callers byte-identical.
+    mr_signals: Optional[List[SignalResult]] = None
+    if build_mr:
+        mr_kwargs = dict(mr_config or {})
+        mr_signals = build_mr_signals_full(
+            candles_signal, regime_labels_arr, **mr_kwargs,
+        )
+
     return VectorizedReplay(
         n_signal=len(signals),
         n_regime=len(regimes),
@@ -710,4 +904,5 @@ def vectorize_replay(
         signal_atr14=signal_atr14,
         signal_atr22=signal_atr22,
         regime_atr14=regime_atr14,
+        mr_signals=mr_signals,
     )

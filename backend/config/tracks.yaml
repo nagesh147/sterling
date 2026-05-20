@@ -1,0 +1,46 @@
+# Sterling v4 — per-(asset, profile) track routing.
+#
+# Each (asset, profile) maps to an ordered list of tracks the orchestrator
+# evaluates. When multiple tracks fire on the same bar the entry-gate keeps
+# the highest-score TrackSignal (per the Phase-4 risk budgeting rules).
+#
+# Asset keys are case-insensitive and stripped of quote suffixes:
+# "BTCUSD" / "BTC-USDT" / "btc" all match "BTC". Profile keys must match
+# the TFProfile dict keys in `backtest_mtf.py:PROFILES`.
+#
+# Use "_default_" inside an asset block as that asset's fallback. Use the
+# top-level "_default_" asset for assets not listed at all. The global
+# fallback (always trend_following) is hard-coded so config errors can never
+# leave a route empty.
+#
+# Reload: edits take effect on next process restart. For runtime override
+# (tests, hot-reload) call track_selector.set_routes() programmatically.
+
+routes:
+  BTC:
+    scalping_5m:  [mean_reversion]
+    scalping_15m: [mean_reversion]
+    scalping_30m: [mean_reversion]
+    intraday_1h:  [trend_following]
+    intraday_4h:  [trend_following]
+    _default_:    [trend_following]
+
+  ETH:
+    # ETH NEVER routes to mean_reversion — the trend-following winner at 30m
+    # (Sharpe 1.27, edge_proven) must remain byte-identical.
+    _default_:    [trend_following]
+
+  # Altcoin examples — opt-in here when the calibration search confirms the
+  # short-side asymmetry exists on the asset. Leaving these commented out
+  # falls through to the global `_default_` which is trend_following only.
+  #
+  # SOL:
+  #   scalping_15m: [mean_reversion]
+  #   scalping_30m: [mean_reversion]
+  #   _default_:    [trend_following]
+  #
+  # AVAX:
+  #   _default_:    [trend_following]
+
+  _default_:
+    _default_:    [trend_following]

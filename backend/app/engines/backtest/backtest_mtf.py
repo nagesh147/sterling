@@ -12,7 +12,7 @@ from app.schemas.market import Candle
 from app.engines.directional.regime_engine import compute_regime  # noqa: F401 — back-compat
 from app.engines.directional.signal_engine import compute_signal  # noqa: F401 — back-compat
 from app.engines.directional.setup_engine import evaluate_setup
-from app.schemas.directional import TradeState
+from app.schemas.directional import TradeState, SetupResult
 from app.engines.indicators.atr import compute_atr
 from app.engines.analytics.performance import full_report
 from app.engines.backtest.costs import compute_trade_costs, next_bar_open_fill, make_cost_model
@@ -313,6 +313,13 @@ def _replay_profile(
     vov_thresholds:          Optional[_vov_gate.VolOfVolThresholds] = None,
     # v4 BTC tune — restrict entries to one side. None = both sides (back-compat).
     direction_filter:        Optional[Literal["long_only", "short_only", "both"]] = None,
+    # v4 Phase 1 — multi-track support. `profile_key` lets the router resolve
+    # the active track list. `active_tracks` (set by the caller) selects which
+    # SignalResult source the entry loop reads from. Defaults preserve the
+    # legacy trend_following-only behaviour byte-identical.
+    profile_key:             Optional[str] = None,
+    active_tracks:           Optional[List[str]] = None,
+    mr_config:               Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Bar-by-bar trade replay for one TF profile with truthful fills and costs.
@@ -357,6 +364,18 @@ def _replay_profile(
     signal_bar_ms = profile.signal_bar_ms
     regime_bar_ms = profile.regime_bar_ms
 
+    # v4 Phase 1 — Pre-resolve the active track set. If `active_tracks` was
+    # passed by `run_mtf_backtest`, honour it. Otherwise fall back to the
+    # router (lets `_replay_profile` be called directly with sensible
+    # defaults). The "active track" decides whether we read MR signals.
+    if active_tracks is None:
+        try:
+            from app.engines.directional.track_selector import select_tracks
+            active_tracks = select_tracks(underlying, profile_key)
+        except Exception:
+            active_tracks = ["trend_following"]
+    _mr_active = ("mean_reversion" in active_tracks)
+
     # W11 — vectorise all per-bar regime/signal/indicator work in O(N) up
     # front. The replay loop below uses O(1) array lookups instead of the
     # legacy per-bar compute_regime / compute_signal calls.
@@ -365,6 +384,8 @@ def _replay_profile(
         signal_bar_ms=signal_bar_ms,
         regime_bar_ms=regime_bar_ms,
         st_configs=profile.st_configs,
+        build_mr=_mr_active,
+        mr_config=mr_config,
     )
     regime_atr_full = vec.regime_atr14
     signal_atr_full = vec.signal_atr14
@@ -412,8 +433,33 @@ def _replay_profile(
         if regime_idx < profile.min_regime_bars:
             continue
         regime = vec.regimes_per_regime_bar[regime_idx - 1]
-        signal = vec.signals[i]
-        setup  = evaluate_setup(regime, signal, profile_label=profile.label)
+        # v4 Phase 1 — Pick the SignalResult source based on the active track.
+        # MR track has its own setup state: a non-zero trend AND score > 0 in
+        # mr_signals[i] means the fade-extremes gates fired (regime + RSI + BB
+        # all passed). We synthesise a CONFIRMED_SETUP_ACTIVE so the entry
+        # gate logic below stays identical for both tracks.
+        if _mr_active and vec.mr_signals is not None:
+            from app.schemas.directional import Direction
+            signal = vec.mr_signals[i]
+            if signal.trend != 0 and signal.signal_score > 0:
+                setup = SetupResult(
+                    state=TradeState.CONFIRMED_SETUP_ACTIVE,
+                    direction=(Direction.LONG if signal.trend == 1 else Direction.SHORT),
+                    reason=f"mean_reversion track score={signal.signal_score:.1f}",
+                    macro_regime=regime.macro_regime,
+                    signal_trend=signal.trend,
+                )
+            else:
+                setup = SetupResult(
+                    state=TradeState.FILTERED,
+                    direction=Direction.NEUTRAL,
+                    reason="mean_reversion: gates not met",
+                    macro_regime=regime.macro_regime,
+                    signal_trend=0,
+                )
+        else:
+            signal = vec.signals[i]
+            setup  = evaluate_setup(regime, signal, profile_label=profile.label)
 
         # ── Exit logic ─────────────────────────────────────────────────────────
         just_exited = False
@@ -1038,6 +1084,10 @@ def run_mtf_backtest(
     # None / "both" = trade both sides (back-compat); "long_only" / "short_only"
     # disables the other side. Applied uniformly across profiles in this call.
     direction_filter: Optional[Literal["long_only", "short_only", "both"]] = None,
+    # v4 Phase 1 — Mean-reversion track config. Passed to vectorize_replay
+    # (build_mr_signals_full) when the active track set includes "mean_reversion".
+    # Ignored for trend_following routes; defaults preserve all current call-sites.
+    mr_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Run all (or selected) TF profiles and return a comparison dict.
@@ -1090,6 +1140,14 @@ def run_mtf_backtest(
             from dataclasses import replace as _dc_replace
             profile = _dc_replace(profile, **overrides)
         sig_candles, reg_candles = _candle_map.get(key, ([], []))
+        # v4 Phase 1 — resolve track routing here so a single source of truth
+        # picks the active tracks. The router handles asset/profile lookup +
+        # YAML config + programmatic overrides.
+        try:
+            from app.engines.directional.track_selector import select_tracks as _select
+            tracks_for = _select(underlying, key)
+        except Exception:
+            tracks_for = ["trend_following"]
         results[key] = _replay_profile(
             profile, sig_candles, reg_candles,
             score_min=score_min, underlying=underlying,
@@ -1104,6 +1162,9 @@ def run_mtf_backtest(
             micro_veto_config=micro_veto_config,
             vov_thresholds=vov_thresholds,
             direction_filter=direction_filter,
+            profile_key=key,
+            active_tracks=tracks_for,
+            mr_config=mr_config,
         )
 
     return results
