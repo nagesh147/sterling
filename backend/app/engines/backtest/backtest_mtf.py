@@ -15,7 +15,7 @@ from app.engines.directional.setup_engine import evaluate_setup
 from app.schemas.directional import TradeState
 from app.engines.indicators.atr import compute_atr
 from app.engines.analytics.performance import full_report
-from app.engines.backtest.costs import compute_trade_costs, next_bar_open_fill
+from app.engines.backtest.costs import compute_trade_costs, next_bar_open_fill, make_cost_model
 from app.engines.backtest.mtf_vectorizer import vectorize_replay
 # Tier A #9 — stateless veto modules wired into the backtest entry path.
 from app.engines.risk import microstructure_veto as _micro_veto
@@ -62,6 +62,9 @@ class TFProfile:
     payoff_mode: Literal[
         "fixed_2r", "chandelier_trail", "signal_atr_v4",
     ] = "fixed_2r"
+    v4_stop_mult: float = 1.2
+    v4_tp_mult: float = 2.0
+    v4_trail_mult: float = 1.5
 
 
 PROFILES: Dict[str, TFProfile] = {
@@ -152,9 +155,10 @@ def _replay_profile(
     candles_signal: List[Candle],
     candles_regime: List[Candle],
     score_min: float = 0.0,
-    fee_rt_pct: float = _FEE_RT_PCT,
+    fee_rt_pct: Optional[float] = None,
     underlying: str = "",
     *,
+    structure_type: str = "futures",
     leverage: float = 1.0,
     oi: Optional[float] = None,
     funding_8h_pct: float = 0.0,
@@ -192,6 +196,9 @@ def _replay_profile(
     """
     n_signal = len(candles_signal)
     n_regime = len(candles_regime)
+
+    if fee_rt_pct is None:
+        fee_rt_pct = make_cost_model(structure_type)
 
     if n_signal < profile.min_signal_bars or n_regime < profile.min_regime_bars:
         zero = _zero_result(profile, n_signal, n_regime, underlying=underlying)
@@ -234,9 +241,9 @@ def _replay_profile(
         # HTF-anchored stop that caused outsized drawdowns.
         use_signal_atr = True
     # v4 exit constants (anchored to signal-TF ATR at entry).
-    V4_STOP_MULT       = 1.2
-    V4_TP_MULT         = 2.0
-    V4_TRAIL_MULT      = 1.5
+    V4_STOP_MULT       = profile.v4_stop_mult
+    V4_TP_MULT         = profile.v4_tp_mult
+    V4_TRAIL_MULT      = profile.v4_trail_mult
     V4_PARTIAL_RATIO   = 0.5
 
     trades: List[Dict[str, Any]] = []
@@ -265,7 +272,7 @@ def _replay_profile(
             continue
         regime = vec.regimes_per_regime_bar[regime_idx - 1]
         signal = vec.signals[i]
-        setup  = evaluate_setup(regime, signal)
+        setup  = evaluate_setup(regime, signal, profile_label=profile.label)
 
         # ── Exit logic ─────────────────────────────────────────────────────────
         just_exited = False
@@ -306,6 +313,7 @@ def _replay_profile(
                             direction=entry_dir,
                             entry_price=entry_price,
                             exit_price=partial_px,
+                            structure_type=structure_type,
                             leverage=leverage, oi=oi,
                             fee_rt_pct=fee_rt_pct * V4_PARTIAL_RATIO,
                             hold_hours=partial_hold_hours,
@@ -407,6 +415,7 @@ def _replay_profile(
                             direction=entry_dir,
                             entry_price=entry_price,
                             exit_price=partial_px,
+                            structure_type=structure_type,
                             leverage=leverage,
                             oi=oi,
                             fee_rt_pct=fee_rt_pct * 0.5,  # half RT for partial
@@ -517,6 +526,7 @@ def _replay_profile(
                         direction=entry_dir,
                         entry_price=entry_price,
                         exit_price=exit_px,
+                        structure_type=structure_type,
                         leverage=leverage,
                         oi=oi,
                         fee_rt_pct=rem_fee,
@@ -679,6 +689,7 @@ def _replay_profile(
             direction=entry_dir,
             entry_price=entry_price,
             exit_price=exit_px,
+            structure_type=structure_type,
             leverage=leverage,
             oi=oi,
             fee_rt_pct=rem_fee,
@@ -815,6 +826,7 @@ def run_mtf_backtest(
     profiles:    Optional[List[str]]    = None,
     score_min:   float = 0.0,
     *,
+    structure_type: str = "futures",
     leverage: float = 1.0,
     oi: Optional[float] = None,
     funding_8h_pct: float = 0.0,
@@ -871,6 +883,7 @@ def run_mtf_backtest(
         results[key] = _replay_profile(
             profile, sig_candles, reg_candles,
             score_min=score_min, underlying=underlying,
+            structure_type=structure_type,
             leverage=leverage, oi=oi,
             funding_8h_pct=funding_8h_pct,
             option_spread_pct=option_spread_pct,

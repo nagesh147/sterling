@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from app.engines.directional.setup_engine import evaluate_setup
+from app.engines.directional.setup_engine import evaluate_setup, _HIGH_SCORE_CONFIRM
 from app.schemas.directional import (
     RegimeResult, SignalResult, MacroRegime, TradeState, Direction,
 )
@@ -68,7 +68,7 @@ def test_volatile_high_score_all_green_confirms():
 def test_volatile_low_score_stays_early():
     """VOLATILE + low score -> EARLY_SETUP_ACTIVE."""
     regime = _regime(MacroRegime.VOLATILE)
-    signal = _signal(trend=1, all_green=True, green_count=3, score=14.0)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=_HIGH_SCORE_CONFIRM - 1.0)
     result = evaluate_setup(regime, signal)
     assert result.state == TradeState.EARLY_SETUP_ACTIVE
 
@@ -91,17 +91,17 @@ def test_trending_regime_unchanged():
 
 
 def test_ranging_score_exactly_at_threshold_confirms():
-    """score == 16.0 exactly (on-boundary) must confirm."""
+    """score == _HIGH_SCORE_CONFIRM exactly (on-boundary) must confirm."""
     regime = _regime(MacroRegime.RANGING)
-    signal = _signal(trend=1, all_green=True, green_count=3, score=16.0)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=_HIGH_SCORE_CONFIRM)
     result = evaluate_setup(regime, signal)
     assert result.state == TradeState.CONFIRMED_SETUP_ACTIVE
 
 
 def test_ranging_score_just_below_threshold_stays_early():
-    """score == 15.99 (just below) must stay EARLY."""
+    """score == _HIGH_SCORE_CONFIRM - 0.01 (just below) must stay EARLY."""
     regime = _regime(MacroRegime.RANGING)
-    signal = _signal(trend=1, all_green=True, green_count=3, score=15.99)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=_HIGH_SCORE_CONFIRM - 0.01)
     result = evaluate_setup(regime, signal)
     assert result.state == TradeState.EARLY_SETUP_ACTIVE
 

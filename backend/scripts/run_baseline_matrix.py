@@ -92,7 +92,7 @@ PROFILE_KEYS = ("scalping_15m", "intraday_1h", "intraday_4h")
 # Cost-component knobs (full 2×2×2×2 = 16 combos per asset×profile).
 APPLY_SLIPPAGE_OPTS = (False, True)
 FUNDING_OPTS        = ("zero", "observed")
-PAYOFF_OPTS         = ("fixed_2r", "chandelier_trail")
+PAYOFF_OPTS         = ("chandelier_trail", "signal_atr_v4")
 EXIT_ATR_OPTS       = ("regime", "signal")
 
 

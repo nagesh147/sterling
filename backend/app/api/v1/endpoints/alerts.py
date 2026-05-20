@@ -108,7 +108,7 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             c1h = await adapter.get_candles(inst, "1H", limit=400)
             regime = compute_regime(c4h, macro_filter=_macro_filter)
             signal = compute_signal(c1h, st_threshold=_st_threshold)
-            setup = evaluate_setup(regime, signal)
+            setup = evaluate_setup(regime, signal, profile_label=_mode.name if _mode else None)
             ivr = await compute_ivr(adapter, inst, c1h)
 
             # For manual check: green/red arrow fires on transition OR on

@@ -18,7 +18,7 @@ log = get_logger(__name__)
 DELTA_CANDLE_URL = "https://api.india.delta.exchange/v2/history/candles"
 MAX_PER_REQUEST = 2000       # Delta Exchange cap
 REQUEST_DELAY   = 0.35       # seconds between requests (avoid 429)
-LOOKBACK_SECS   = 730 * 86_400  # 2 years
+LOOKBACK_SECS   = 1095 * 86_400  # 3 years
 
 SYMBOLS     = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]
 RESOLUTIONS = ["5m", "15m", "30m", "1h", "2h", "4h"]

@@ -19,9 +19,9 @@ double-count.
 """
 from __future__ import annotations
 from dataclasses import dataclass, asdict
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
-from app.engines.risk.slippage import slippage_bps
+from app.engines.risk.slippage import slippage_bps, effective_entry
 
 
 @dataclass
@@ -41,9 +41,29 @@ class CostBreakdown:
     net_pnl_pct: float            # gross - total_cost
     hold_hours: float
     forced_end: bool
+    structure_type: str = "futures"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+def make_cost_model(structure_type: str) -> float:
+    """
+    Return the total round-trip taker fee rate for the given structure type.
+    """
+    struct_lower = structure_type.lower() if structure_type else "futures"
+    if struct_lower in (
+        "bull_call_spread",
+        "bear_put_spread",
+        "bull_put_spread",
+        "bear_call_spread",
+        "spread",
+    ):
+        return 0.002  # 2 legs * 0.10% RT = 0.20%
+    elif struct_lower in ("naked_call", "naked_put", "futures", "naked"):
+        return 0.001  # 1 leg * 0.10% RT = 0.10%
+    else:
+        return 0.001
 
 
 def compute_trade_costs(
@@ -51,12 +71,14 @@ def compute_trade_costs(
     entry_price: float,
     exit_price: float,
     *,
+    structure_type: str = "futures",
     leverage: float = 1.0,
     oi: Optional[float] = None,
-    fee_rt_pct: float = 0.001,
+    fee_rt_pct: Optional[float] = None,
     hold_hours: float = 0.0,
-    funding_8h_pct: float = 0.0,
+    funding_8h_pct: Optional[float] = None,
     option_spread_pct: Optional[float] = None,
+    option_legs: Optional[List[dict]] = None,
     apply_slippage: bool = True,
     forced_end: bool = False,
 ) -> CostBreakdown:
@@ -67,14 +89,15 @@ def compute_trade_costs(
     ----------
     direction : +1 for long, -1 for short.
     entry_price, exit_price : clean fill prices (e.g., next-bar open).
+    structure_type : the instrument structure type (e.g. futures, bull_call_spread, etc.)
     leverage, oi : passed to the tiered slippage model.
-    fee_rt_pct : round-trip taker fee (e.g., 0.001 = 0.10%).
+    fee_rt_pct : optional round-trip taker fee. If None, resolved via make_cost_model.
     hold_hours : actual elapsed hours between entry and exit.
-    funding_8h_pct : signed funding rate per 8h period (e.g., 0.0001 = 1bp/8h).
-                     Positive rate → longs pay shorts. Cost is direction-aware.
+    funding_8h_pct : optional signed funding rate per 8h period.
+                     If None or 0.0, defaults to 0.0001 per 8h for futures (drag).
     option_spread_pct : optional round-trip half-spread cost when option quotes
-                        are available. Pass `None` when quotes are missing
-                        (yields zero spread cost — no fabrication).
+                        are available.
+    option_legs : optional list of legs with bid/ask/mid quotes to compute option half-spread.
     apply_slippage : when False, slippage_bps and slippage_pct are zero.
     forced_end : marker for trades closed at end-of-data (no future bar).
 
@@ -87,26 +110,55 @@ def compute_trade_costs(
     if entry_price <= 0:
         raise ValueError(f"entry_price must be > 0, got {entry_price}")
 
+    # 1. Taker Fee rate resolution via make_cost_model if not explicitly set
+    if fee_rt_pct is None:
+        resolved_fee_rt = make_cost_model(structure_type)
+    else:
+        resolved_fee_rt = float(fee_rt_pct)
+
+    # 2. Slippage resolution using effective_entry
     bps = float(slippage_bps(leverage, oi)) if apply_slippage else 0.0
-    slip_one_side = bps / 10_000.0  # decimal half-spread per side
+    
+    if apply_slippage:
+        eff_entry = effective_entry(entry_price, direction, leverage, oi)
+        # Exit order direction is opposite of trade direction (-direction)
+        eff_exit = effective_entry(exit_price, -direction, leverage, oi)
+    else:
+        eff_entry = entry_price
+        eff_exit = exit_price
 
-    # Effective fills: long entry pays higher, long exit receives lower;
-    # short entry receives lower, short exit pays higher.
-    eff_entry = entry_price * (1.0 + direction * slip_one_side)
-    eff_exit  = exit_price  * (1.0 - direction * slip_one_side)
-
+    # 3. Gross PnL
     gross_pnl_pct = direction * (exit_price - entry_price) / entry_price
-    slippage_pct  = 2.0 * slip_one_side  # round-trip
-    fee_pct       = float(fee_rt_pct)
+    slippage_pct = 2.0 * (bps / 10_000.0)  # round-trip
+    fee_pct = resolved_fee_rt
 
-    # Funding: positive rate drags longs, credits shorts. Funding cost is
-    # always proportional to actual hold time.
-    funding_pct = direction * float(funding_8h_pct) * (float(hold_hours) / 8.0)
+    # 4. Perpetual Funding Accrual
+    if structure_type.lower() == "futures":
+        if funding_8h_pct is not None and funding_8h_pct != 0.0:
+            funding_pct = direction * float(funding_8h_pct) * (float(hold_hours) / 8.0)
+        else:
+            funding_pct = 0.0001 * (float(hold_hours) / 8.0)
+    else:
+        if funding_8h_pct is not None and funding_8h_pct != 0.0:
+            funding_pct = direction * float(funding_8h_pct) * (float(hold_hours) / 8.0)
+        else:
+            funding_pct = 0.0
 
-    spread_pct = float(option_spread_pct) if option_spread_pct is not None else 0.0
+    # 5. Option Half-spread Cost
+    spread_pct = 0.0
+    if option_legs:
+        # Sum of (ask - bid) / (2 * mid) for each leg
+        for leg in option_legs:
+            ask = float(leg.get("ask", 0.0))
+            bid = float(leg.get("bid", 0.0))
+            mid = float(leg.get("mid", leg.get("mid_price", (ask + bid) / 2.0)))
+            if mid > 0:
+                spread_pct += (ask - bid) / (2.0 * mid)
+    elif option_spread_pct is not None:
+        spread_pct = float(option_spread_pct)
 
     total_cost_pct = slippage_pct + fee_pct + funding_pct + spread_pct
-    net_pnl_pct    = gross_pnl_pct - total_cost_pct
+    net_pnl_pct = gross_pnl_pct - total_cost_pct
 
     return CostBreakdown(
         direction=direction,
@@ -124,6 +176,7 @@ def compute_trade_costs(
         net_pnl_pct=float(net_pnl_pct),
         hold_hours=float(hold_hours),
         forced_end=bool(forced_end),
+        structure_type=structure_type,
     )
 
 

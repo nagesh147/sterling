@@ -116,7 +116,7 @@ async def run_once(
 
     regime = compute_regime(candles_4h, macro_filter=macro_filter)
     signal = compute_signal(candles_1h)
-    setup = evaluate_setup(regime, signal)
+    setup = evaluate_setup(regime, signal, profile_label=mode)
 
     if setup.state in (TradeState.IDLE, TradeState.FILTERED):
         return RunOnceResponse(
@@ -245,6 +245,7 @@ async def preview(
     instrument: InstrumentMeta,
     adapter: BaseExchangeAdapter,
     macro_filter: str = "adx_4h",
+    mode: Optional[str] = None,
 ) -> PreviewResponse:
     now_ms = int(time.time() * 1000)
 
@@ -269,7 +270,7 @@ async def preview(
 
     regime = compute_regime(candles_4h, macro_filter=macro_filter)
     signal = compute_signal(candles_1h)
-    setup = evaluate_setup(regime, signal)
+    setup = evaluate_setup(regime, signal, profile_label=mode)
     ivr = await compute_ivr(adapter, instrument, candles_1h)
     policy = apply_policy(setup.direction, instrument, ivr)
 

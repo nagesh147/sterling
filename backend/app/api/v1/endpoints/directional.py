@@ -782,6 +782,7 @@ async def preview(
     return await engine_preview(
         inst, _adapter(request),
         macro_filter=mode.macro_filter if mode else "adx_4h",
+        mode=mode.name if mode else None,
     )
 
 
@@ -969,7 +970,7 @@ async def _compute_signal_item(
             )
         regime      = compute_regime(c4h, macro_filter=macro_filter)
         signal      = compute_signal(c1h, st_threshold=st_threshold)
-        setup       = evaluate_setup(regime, signal)
+        setup       = evaluate_setup(regime, signal, profile_label=mode.name if mode else None)
         ivr         = await compute_ivr(adapter, inst, c1h)
         exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
 
@@ -1290,7 +1291,7 @@ async def snapshot(
 
     regime = compute_regime(c4h, macro_filter=macro_filter)
     signal = compute_signal(c1h, st_threshold=st_threshold)
-    setup = evaluate_setup(regime, signal)
+    setup = evaluate_setup(regime, signal, profile_label=mode.name if mode else None)
     exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
     ivr = await compute_ivr(adapter, inst, c1h)
 
@@ -1387,7 +1388,7 @@ async def _sse_generator(
             c1h = await adapter.get_candles(inst, "1H", limit=400)
             regime = compute_regime(c4h, macro_filter=_macro_filter)
             signal = compute_signal(c1h, st_threshold=_st_threshold)
-            setup = evaluate_setup(regime, signal)
+            setup = evaluate_setup(regime, signal, profile_label=_mode.name if _mode else None)
             ivr = await compute_ivr(adapter, inst, c1h)
             spot = await adapter.get_index_price(inst)
             now_ms = int(time.time() * 1000)

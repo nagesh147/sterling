@@ -218,12 +218,12 @@ def compute_signal(
         rsi_momentum = False
 
     weights = {
-        "st_flip":     3,
-        "rsi":         2,   # base RSI gate
-        "rsi_momentum":1,   # bonus for strong RSI positioning
-        "squeeze":     4,
-        "volume":      4,
-        "ha_aligned":  4,   # was 5; split 1 pt to ha_real_aligned
+        "st_flip":     5,
+        "rsi":         3,   # base RSI gate
+        "rsi_momentum":3,   # bonus for strong RSI positioning
+        "squeeze":     3,
+        "volume":      2,
+        "ha_aligned":  2,   # was 5; split 1 pt to ha_real_aligned
         "ha_real_aligned": 2,
     }
     flags = {

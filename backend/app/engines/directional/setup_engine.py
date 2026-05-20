@@ -56,16 +56,16 @@ _VOLATILE_REGIMES = {MacroRegime.VOLATILE}
 _VETO_REGIMES = {MacroRegime.CHOPPY, MacroRegime.IDLE}
 
 _PARTIAL_ST_MIN = 2
-_HIGH_SCORE_CONFIRM = 16.0  # 80% of max-20; stricter than trending (15) — ranging has weaker directional edge
+_HIGH_SCORE_CONFIRM = 14.0  # 70% of max-20
 
 # ── W1/W12 promotions ────────────────────────────────────────────────────────
 # Mean-reversion in IDLE / RANGING uses RSI extremes + a moderate score gate.
 # Volatility breakout in VOLATILE uses a fired squeeze + a strong score gate.
 # Numbers come from the v4 spec — engines stay pure; no env reads here.
-_MR_RSI_LONG_MAX   = 35.0   # RSI < 35 ⇒ oversold → mean-revert long candidate
-_MR_RSI_SHORT_MIN  = 65.0   # RSI > 65 ⇒ overbought → mean-revert short candidate
-_MR_SCORE_MIN      = 12.0   # 60% of max-20 confluence required
-_BREAKOUT_SCORE_MIN = 16.0  # same hurdle as _HIGH_SCORE_CONFIRM
+_MR_RSI_LONG_MAX   = 40.0   # RSI < 40 ⇒ oversold → mean-revert long candidate
+_MR_RSI_SHORT_MIN  = 60.0   # RSI > 60 ⇒ overbought → mean-revert short candidate
+_MR_SCORE_MIN      = 10.0   # 50% of max-20 confluence required
+_BREAKOUT_SCORE_MIN = 14.0  # same hurdle as _HIGH_SCORE_CONFIRM
 
 
 def _mean_reversion_setup(
@@ -140,7 +140,27 @@ def _volatile_breakout_setup(
     )
 
 
-def evaluate_setup(regime: RegimeResult, signal: SignalResult) -> SetupResult:
+def evaluate_setup(
+    regime: RegimeResult, signal: SignalResult, profile_label: str | None = None
+) -> SetupResult:
+    if profile_label:
+        norm = profile_label.lower().replace(" ", "").replace("_", "")
+        if "scalping15m" in norm or norm == "intraday":
+            # W6 scalping optimizer: restrict 15m scalping to trending macro regimes only.
+            macro = regime.macro_regime
+            is_trend = macro in {
+                MacroRegime.BULLISH, MacroRegime.BEARISH,
+                MacroRegime.BULL_TRENDING, MacroRegime.BEAR_TRENDING,
+                MacroRegime.BULL_TREND, MacroRegime.BEAR_TREND
+            }
+            if not is_trend:
+                return SetupResult(
+                    state=TradeState.FILTERED,
+                    direction=Direction.NEUTRAL,
+                    reason="scalping_15m restricted to trending macro regimes only to bypass range chop",
+                    macro_regime=macro,
+                    signal_trend=signal.trend,
+                )
     setup = _evaluate_setup_inner(regime, signal)
     return _maybe_flag_early(setup, signal)
 

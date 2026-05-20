@@ -1,0 +1,1829 @@
+{
+  "run_at": "2026-05-19T14:14:26.065609Z",
+  "rows": [
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3124,
+      "gross_sum": 0.104045,
+      "cost_sum": 2.407,
+      "net_sum": -2.302955,
+      "sharpe": -5.348,
+      "profit_factor": 0.6756,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3839,
+      "gross_sum": -0.092818,
+      "cost_sum": 2.3375,
+      "net_sum": -2.430318,
+      "sharpe": -6.3874,
+      "profit_factor": 0.6597,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 2.5775,
+      "net_sum": -2.568337,
+      "sharpe": -6.4223,
+      "profit_factor": 0.6387,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 2.5775,
+      "net_sum": -2.568337,
+      "sharpe": -6.4223,
+      "profit_factor": 0.6387,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3124,
+      "gross_sum": 0.104045,
+      "cost_sum": 2.406939,
+      "net_sum": -2.302895,
+      "sharpe": -5.3485,
+      "profit_factor": 0.6756,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3839,
+      "gross_sum": -0.092818,
+      "cost_sum": 2.337609,
+      "net_sum": -2.430428,
+      "sharpe": -6.389,
+      "profit_factor": 0.6597,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 2.577534,
+      "net_sum": -2.568372,
+      "sharpe": -6.4235,
+      "profit_factor": 0.6387,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 2.577534,
+      "net_sum": -2.568372,
+      "sharpe": -6.4235,
+      "profit_factor": 0.6387,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3124,
+      "gross_sum": 0.104045,
+      "cost_sum": 3.9946,
+      "net_sum": -3.890555,
+      "sharpe": -8.837,
+      "profit_factor": 0.5223,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3839,
+      "gross_sum": -0.092818,
+      "cost_sum": 4.0403,
+      "net_sum": -4.133118,
+      "sharpe": -10.5489,
+      "profit_factor": 0.4959,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 4.2659,
+      "net_sum": -4.256737,
+      "sharpe": -10.3553,
+      "profit_factor": 0.4859,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 4.2659,
+      "net_sum": -4.256737,
+      "sharpe": -10.3553,
+      "profit_factor": 0.4859,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3124,
+      "gross_sum": 0.104045,
+      "cost_sum": 3.994539,
+      "net_sum": -3.890495,
+      "sharpe": -8.8378,
+      "profit_factor": 0.5223,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3839,
+      "gross_sum": -0.092818,
+      "cost_sum": 4.040409,
+      "net_sum": -4.133228,
+      "sharpe": -10.5511,
+      "profit_factor": 0.4959,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 4.265934,
+      "net_sum": -4.256772,
+      "sharpe": -10.357,
+      "profit_factor": 0.4859,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3287,
+      "gross_sum": 0.009163,
+      "cost_sum": 4.265934,
+      "net_sum": -4.256772,
+      "sharpe": -10.357,
+      "profit_factor": 0.4859,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 649,
+      "gross_sum": -0.208679,
+      "cost_sum": 0.472,
+      "net_sum": -0.680679,
+      "sharpe": -1.6987,
+      "profit_factor": 0.7739,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 793,
+      "gross_sum": -0.261535,
+      "cost_sum": 0.475,
+      "net_sum": -0.736535,
+      "sharpe": -2.2159,
+      "profit_factor": 0.7446,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.517,
+      "net_sum": -0.787703,
+      "sharpe": -2.2898,
+      "profit_factor": 0.7239,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.517,
+      "net_sum": -0.787703,
+      "sharpe": -2.2898,
+      "profit_factor": 0.7239,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 649,
+      "gross_sum": -0.208679,
+      "cost_sum": 0.473738,
+      "net_sum": -0.682416,
+      "sharpe": -1.7028,
+      "profit_factor": 0.7734,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 793,
+      "gross_sum": -0.261535,
+      "cost_sum": 0.476531,
+      "net_sum": -0.738067,
+      "sharpe": -2.2201,
+      "profit_factor": 0.7441,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.518212,
+      "net_sum": -0.788915,
+      "sharpe": -2.2927,
+      "profit_factor": 0.7235,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.518212,
+      "net_sum": -0.788915,
+      "sharpe": -2.2927,
+      "profit_factor": 0.7235,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 649,
+      "gross_sum": -0.208679,
+      "cost_sum": 0.7906,
+      "net_sum": -0.999279,
+      "sharpe": -2.4773,
+      "profit_factor": 0.6873,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 793,
+      "gross_sum": -0.261535,
+      "cost_sum": 0.8236,
+      "net_sum": -1.085135,
+      "sharpe": -3.2393,
+      "profit_factor": 0.6482,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.8608,
+      "net_sum": -1.131503,
+      "sharpe": -3.2635,
+      "profit_factor": 0.6318,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.8608,
+      "net_sum": -1.131503,
+      "sharpe": -3.2635,
+      "profit_factor": 0.6318,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 649,
+      "gross_sum": -0.208679,
+      "cost_sum": 0.792337,
+      "net_sum": -1.001016,
+      "sharpe": -2.4813,
+      "profit_factor": 0.6869,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 793,
+      "gross_sum": -0.261535,
+      "cost_sum": 0.825131,
+      "net_sum": -1.086667,
+      "sharpe": -3.2432,
+      "profit_factor": 0.6479,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.862012,
+      "net_sum": -1.132715,
+      "sharpe": -3.266,
+      "profit_factor": 0.6316,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 685,
+      "gross_sum": -0.270703,
+      "cost_sum": 0.862012,
+      "net_sum": -1.132715,
+      "sharpe": -3.266,
+      "profit_factor": 0.6316,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 140,
+      "gross_sum": 0.09591,
+      "cost_sum": 0.0995,
+      "net_sum": -0.00359,
+      "sharpe": -0.0081,
+      "profit_factor": 0.9975,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 185,
+      "gross_sum": -0.10545,
+      "cost_sum": 0.1025,
+      "net_sum": -0.20795,
+      "sharpe": -0.6069,
+      "profit_factor": 0.8449,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.1165,
+      "net_sum": -0.327,
+      "sharpe": -0.8192,
+      "profit_factor": 0.7824,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.1165,
+      "net_sum": -0.327,
+      "sharpe": -0.8192,
+      "profit_factor": 0.7824,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 140,
+      "gross_sum": 0.09591,
+      "cost_sum": 0.100125,
+      "net_sum": -0.004215,
+      "sharpe": -0.0095,
+      "profit_factor": 0.997,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 185,
+      "gross_sum": -0.10545,
+      "cost_sum": 0.10285,
+      "net_sum": -0.2083,
+      "sharpe": -0.6081,
+      "profit_factor": 0.8445,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.117775,
+      "net_sum": -0.328275,
+      "sharpe": -0.8223,
+      "profit_factor": 0.7816,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.117775,
+      "net_sum": -0.328275,
+      "sharpe": -0.8223,
+      "profit_factor": 0.7816,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 140,
+      "gross_sum": 0.09591,
+      "cost_sum": 0.1673,
+      "net_sum": -0.07139,
+      "sharpe": -0.1605,
+      "profit_factor": 0.9511,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 185,
+      "gross_sum": -0.10545,
+      "cost_sum": 0.1805,
+      "net_sum": -0.28595,
+      "sharpe": -0.8307,
+      "profit_factor": 0.7932,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.1951,
+      "net_sum": -0.4056,
+      "sharpe": -1.0139,
+      "profit_factor": 0.7388,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.1951,
+      "net_sum": -0.4056,
+      "sharpe": -1.0139,
+      "profit_factor": 0.7388,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 140,
+      "gross_sum": 0.09591,
+      "cost_sum": 0.167925,
+      "net_sum": -0.072015,
+      "sharpe": -0.1621,
+      "profit_factor": 0.9506,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 185,
+      "gross_sum": -0.10545,
+      "cost_sum": 0.18085,
+      "net_sum": -0.2863,
+      "sharpe": -0.8319,
+      "profit_factor": 0.7927,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.196375,
+      "net_sum": -0.406875,
+      "sharpe": -1.0169,
+      "profit_factor": 0.7378,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "BTC",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 160,
+      "gross_sum": -0.2105,
+      "cost_sum": 0.196375,
+      "net_sum": -0.406875,
+      "sharpe": -1.0169,
+      "profit_factor": 0.7378,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3012,
+      "gross_sum": -0.310527,
+      "cost_sum": 2.3295,
+      "net_sum": -2.640027,
+      "sharpe": -4.1349,
+      "profit_factor": 0.7304,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3727,
+      "gross_sum": 0.19834,
+      "cost_sum": 2.2615,
+      "net_sum": -2.06316,
+      "sharpe": -3.7207,
+      "profit_factor": 0.7788,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 2.464,
+      "net_sum": -2.438918,
+      "sharpe": -4.3102,
+      "profit_factor": 0.7417,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 2.464,
+      "net_sum": -2.438918,
+      "sharpe": -4.3102,
+      "profit_factor": 0.7417,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3012,
+      "gross_sum": -0.310527,
+      "cost_sum": 2.329878,
+      "net_sum": -2.640405,
+      "sharpe": -4.1359,
+      "profit_factor": 0.7304,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3727,
+      "gross_sum": 0.19834,
+      "cost_sum": 2.262628,
+      "net_sum": -2.064288,
+      "sharpe": -3.7232,
+      "profit_factor": 0.7787,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 2.464991,
+      "net_sum": -2.439909,
+      "sharpe": -4.3124,
+      "profit_factor": 0.7416,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 2.464991,
+      "net_sum": -2.439909,
+      "sharpe": -4.3124,
+      "profit_factor": 0.7416,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3012,
+      "gross_sum": -0.310527,
+      "cost_sum": 3.8637,
+      "net_sum": -4.174227,
+      "sharpe": -6.4382,
+      "profit_factor": 0.6119,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3727,
+      "gross_sum": 0.19834,
+      "cost_sum": 3.9115,
+      "net_sum": -3.71316,
+      "sharpe": -6.575,
+      "profit_factor": 0.6399,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 4.0846,
+      "net_sum": -4.059518,
+      "sharpe": -7.0559,
+      "profit_factor": 0.6139,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 4.0846,
+      "net_sum": -4.059518,
+      "sharpe": -7.0559,
+      "profit_factor": 0.6139,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3012,
+      "gross_sum": -0.310527,
+      "cost_sum": 3.864078,
+      "net_sum": -4.174605,
+      "sharpe": -6.4393,
+      "profit_factor": 0.6119,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3727,
+      "gross_sum": 0.19834,
+      "cost_sum": 3.912628,
+      "net_sum": -3.714288,
+      "sharpe": -6.5778,
+      "profit_factor": 0.6398,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 4.085591,
+      "net_sum": -4.060509,
+      "sharpe": -7.0583,
+      "profit_factor": 0.6139,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "scalping_15m",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 3175,
+      "gross_sum": 0.025082,
+      "cost_sum": 4.085591,
+      "net_sum": -4.060509,
+      "sharpe": -7.0583,
+      "profit_factor": 0.6139,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 607,
+      "gross_sum": -0.156698,
+      "cost_sum": 0.4435,
+      "net_sum": -0.600198,
+      "sharpe": -1.0297,
+      "profit_factor": 0.8503,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 732,
+      "gross_sum": -0.341148,
+      "cost_sum": 0.4275,
+      "net_sum": -0.768648,
+      "sharpe": -1.5672,
+      "profit_factor": 0.7989,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.475,
+      "net_sum": -0.680746,
+      "sharpe": -1.2935,
+      "profit_factor": 0.8204,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.475,
+      "net_sum": -0.680746,
+      "sharpe": -1.2935,
+      "profit_factor": 0.8204,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 607,
+      "gross_sum": -0.156698,
+      "cost_sum": 0.442681,
+      "net_sum": -0.599379,
+      "sharpe": -1.0284,
+      "profit_factor": 0.8504,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 732,
+      "gross_sum": -0.341148,
+      "cost_sum": 0.426744,
+      "net_sum": -0.767891,
+      "sharpe": -1.5661,
+      "profit_factor": 0.7991,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.475369,
+      "net_sum": -0.681115,
+      "sharpe": -1.2943,
+      "profit_factor": 0.8203,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.475369,
+      "net_sum": -0.681115,
+      "sharpe": -1.2943,
+      "profit_factor": 0.8203,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 607,
+      "gross_sum": -0.156698,
+      "cost_sum": 0.7423,
+      "net_sum": -0.898998,
+      "sharpe": -1.5382,
+      "profit_factor": 0.7852,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 732,
+      "gross_sum": -0.341148,
+      "cost_sum": 0.7449,
+      "net_sum": -1.086048,
+      "sharpe": -2.2038,
+      "profit_factor": 0.7289,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.7912,
+      "net_sum": -0.996946,
+      "sharpe": -1.8845,
+      "profit_factor": 0.7503,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.7912,
+      "net_sum": -0.996946,
+      "sharpe": -1.8845,
+      "profit_factor": 0.7503,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 607,
+      "gross_sum": -0.156698,
+      "cost_sum": 0.741481,
+      "net_sum": -0.898179,
+      "sharpe": -1.537,
+      "profit_factor": 0.7853,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 732,
+      "gross_sum": -0.341148,
+      "cost_sum": 0.744144,
+      "net_sum": -1.085291,
+      "sharpe": -2.203,
+      "profit_factor": 0.729,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.791569,
+      "net_sum": -0.997315,
+      "sharpe": -1.8853,
+      "profit_factor": 0.7502,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_1h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 631,
+      "gross_sum": -0.205746,
+      "cost_sum": 0.791569,
+      "net_sum": -0.997315,
+      "sharpe": -1.8853,
+      "profit_factor": 0.7502,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 130,
+      "gross_sum": 0.386093,
+      "cost_sum": 0.094,
+      "net_sum": 0.292093,
+      "sharpe": 0.4705,
+      "profit_factor": 1.1687,
+      "deflated_sharpe": 0.2978,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 163,
+      "gross_sum": 0.244872,
+      "cost_sum": 0.088,
+      "net_sum": 0.156872,
+      "sharpe": 0.3361,
+      "profit_factor": 1.1019,
+      "deflated_sharpe": 0.0115,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.0955,
+      "net_sum": 0.539204,
+      "sharpe": 1.0362,
+      "profit_factor": 1.384,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.0955,
+      "net_sum": 0.539204,
+      "sharpe": 1.0362,
+      "profit_factor": 1.384,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 130,
+      "gross_sum": 0.386093,
+      "cost_sum": 0.09785,
+      "net_sum": 0.288243,
+      "sharpe": 0.4642,
+      "profit_factor": 1.1662,
+      "deflated_sharpe": 0.2743,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 163,
+      "gross_sum": 0.244872,
+      "cost_sum": 0.087625,
+      "net_sum": 0.157247,
+      "sharpe": 0.3372,
+      "profit_factor": 1.1022,
+      "deflated_sharpe": 0.0119,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.09555,
+      "net_sum": 0.539154,
+      "sharpe": 1.0353,
+      "profit_factor": 1.3837,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": false,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.09555,
+      "net_sum": 0.539154,
+      "sharpe": 1.0353,
+      "profit_factor": 1.3837,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 130,
+      "gross_sum": 0.386093,
+      "cost_sum": 0.1576,
+      "net_sum": 0.228493,
+      "sharpe": 0.368,
+      "profit_factor": 1.1295,
+      "deflated_sharpe": 0.0476,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 163,
+      "gross_sum": 0.244872,
+      "cost_sum": 0.1558,
+      "net_sum": 0.089072,
+      "sharpe": 0.1907,
+      "profit_factor": 1.0565,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.1639,
+      "net_sum": 0.470804,
+      "sharpe": 0.9062,
+      "profit_factor": 1.3263,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "zero",
+        "funding_8h_pct": 0.0,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.1639,
+      "net_sum": 0.470804,
+      "sharpe": 0.9062,
+      "profit_factor": 1.3263,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 130,
+      "gross_sum": 0.386093,
+      "cost_sum": 0.16145,
+      "net_sum": 0.224643,
+      "sharpe": 0.3616,
+      "profit_factor": 1.1271,
+      "deflated_sharpe": 0.0409,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "chandelier_trail",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 163,
+      "gross_sum": 0.244872,
+      "cost_sum": 0.155425,
+      "net_sum": 0.089447,
+      "sharpe": 0.1916,
+      "profit_factor": 1.0568,
+      "deflated_sharpe": 0.0,
+      "edge_status": "no_edge"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "regime"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.16395,
+      "net_sum": 0.470754,
+      "sharpe": 0.9054,
+      "profit_factor": 1.326,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    },
+    {
+      "asset": "ETH",
+      "profile": "intraday_4h",
+      "config": {
+        "apply_slippage": true,
+        "funding_mode": "observed",
+        "funding_8h_pct": 0.0001,
+        "payoff": "signal_atr_v4",
+        "exit_atr_tf": "signal"
+      },
+      "n_trades": 151,
+      "gross_sum": 0.634704,
+      "cost_sum": 0.16395,
+      "net_sum": 0.470754,
+      "sharpe": 0.9054,
+      "profit_factor": 1.326,
+      "deflated_sharpe": 1.0,
+      "edge_status": "edge_proven"
+    }
+  ]
+}
