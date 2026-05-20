@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-05-20T21:55:39.157363Z",
+  "run_at": "2026-05-20T20:15:18.323589Z",
   "results": {
     "BTCUSD": {
       "scalping_5m": {
@@ -12,8 +12,8 @@
         "file": "baselines/BTCUSD_scalping_5m_20260520.json"
       },
       "scalping_15m": {
-        "trade_count": 69,
-        "sharpe": -1.3365,
+        "trade_count": 131,
+        "sharpe": -1.9743,
         "deflated_sharpe": 0.0,
         "edge_proven": false,
         "edge_status": "no_edge",
@@ -21,8 +21,8 @@
         "file": "baselines/BTCUSD_scalping_15m_20260520.json"
       },
       "scalping_30m": {
-        "trade_count": 109,
-        "sharpe": -0.3414,
+        "trade_count": 205,
+        "sharpe": -1.3077,
         "deflated_sharpe": 0.0,
         "edge_proven": false,
         "edge_status": "no_edge",

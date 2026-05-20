@@ -72,6 +72,11 @@ class TFProfile:
     # from prior baselines: short TFs carry larger fee+slippage drag per
     # trade because their hold-time amortisation is shorter.
     expected_cost_bps: float = 30.0
+    # v4 BTC tune — per-profile direction restriction. None / "both" trades
+    # both sides (back-compat); "long_only" / "short_only" mirrors the
+    # call-time direction_filter on run_mtf_backtest. Used to encode the
+    # BTC bear-side asymmetry in PROFILES_BY_ASSET["BTC"][...].
+    only_direction: Optional[Literal["long_only", "short_only", "both"]] = None
 
 
 PROFILES: Dict[str, TFProfile] = {
@@ -145,6 +150,71 @@ PROFILES: Dict[str, TFProfile] = {
         hold_bars=12,
         expected_cost_bps=40.0,
     ),
+}
+
+
+# v4 BTC tune — Per-asset profile overrides. A key under PROFILES_BY_ASSET[asset]
+# fully replaces PROFILES[key] when `underlying` resolves to that asset; missing
+# entries fall through to PROFILES so non-BTC behaviour is byte-identical.
+#
+# Values come from `scripts/btc_scalping_search.py` (staged combinatorial
+# search × walk-forward × deflated-Sharpe gate). The 2026-05-20 search ran
+# 132 unique knob combos per profile across 3 train/test splits and confirmed:
+#
+#   * BTC short-TF has a clear directional asymmetry — `short_only` beats
+#     `both` and `long_only` on every profile (matches the 1H regime breakdown
+#     where BEAR_TREND wins 62-67% WR while BULL_TREND loses 32-44%).
+#   * BTC scalping_5m did NOT find an edge regardless of knob choice (best OOS
+#     Sharpe still −3.67). No 5m override is added — let it fall through to
+#     PROFILES and rely on score_min in `_PROFILE_SCORE_MIN_PER_ASSET`.
+#   * BTC scalping_15m: short_only short-circuits the BULL_TREND bleed
+#     (OOS Sharpe improved from −1.97 → −0.75). Below the deflated_sharpe
+#     gate but a clear improvement over the global default.
+#   * BTC scalping_30m: short_only + signal_atr_v4 produced a *positive* OOS
+#     Sharpe (+0.27) with profit_factor 1.18, win_rate 58.3% across 24 OOS
+#     trades — directionally an edge but the sample is too thin to clear
+#     deflated_sharpe ≥ 0.95. Codified anyway because it dominates the global
+#     default (−1.31 → +0.27).
+#
+# The direction filter is a profile field (`only_direction`) consumed by the
+# entry gate in `_replay_profile` so the override applies whenever this
+# profile is used for BTC (live or backtest). See `direction_filter` kwarg
+# on `run_mtf_backtest` for the call-time override.
+PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
+    "BTC": {
+        "scalping_15m": TFProfile(
+            label="Scalping 15M (BTC)",
+            signal_tf="15m", regime_tf="1H",
+            signal_bar_ms=15 * 60_000,
+            regime_bar_ms=60 * 60_000,
+            st_configs=[(7, 3.0), (14, 2.0), (21, 2.0)],
+            min_signal_bars=50, min_regime_bars=30,
+            fwd_labels=["1H", "4H", "12H"],
+            fwd_bars=[4, 16, 48],
+            hold_bars=20,                # +4 vs base (16) → wider winners
+            expected_cost_bps=80.0,
+            payoff_mode="chandelier_trail",
+            exit_atr_tf="signal",
+            v4_stop_mult=1.2, v4_tp_mult=1.5, v4_trail_mult=1.5,
+            only_direction="short_only",  # asymmetric BTC bear edge
+        ),
+        "scalping_30m": TFProfile(
+            label="Scalping 30M (BTC)",
+            signal_tf="30m", regime_tf="2H",
+            signal_bar_ms=30 * 60_000,
+            regime_bar_ms=2 * 60 * 60_000,
+            st_configs=[(7, 3.0), (14, 2.0), (21, 2.0)],
+            min_signal_bars=40, min_regime_bars=30,
+            fwd_labels=["2H", "8H", "24H"],
+            fwd_bars=[4, 16, 48],
+            hold_bars=10,
+            expected_cost_bps=60.0,
+            payoff_mode="signal_atr_v4",   # v4 anchored stops; PF 1.18 winner
+            exit_atr_tf="signal",
+            v4_stop_mult=1.2, v4_tp_mult=2.0, v4_trail_mult=1.5,
+            only_direction="short_only",
+        ),
+    },
 }
 
 
@@ -241,6 +311,8 @@ def _replay_profile(
     ivr_history_provider:    Optional[IvrHistoryProvider]    = None,
     micro_veto_config:       Optional[_micro_veto.MicroVetoConfig]  = None,
     vov_thresholds:          Optional[_vov_gate.VolOfVolThresholds] = None,
+    # v4 BTC tune — restrict entries to one side. None = both sides (back-compat).
+    direction_filter:        Optional[Literal["long_only", "short_only", "both"]] = None,
 ) -> Dict[str, Any]:
     """
     Bar-by-bar trade replay for one TF profile with truthful fills and costs.
@@ -672,11 +744,27 @@ def _replay_profile(
             )
             mtf_uplift = 2.0 if mtf_disagreement else 0.0
             effective_score = sig_score - cost_uplift - mtf_uplift
+            # v4 BTC tune — optional one-sided trading. Asymmetric assets (BTC
+            # short-TF wins disproportionately on the short side) benefit from
+            # disabling one direction entirely. The profile field
+            # `only_direction` is the persistent setting (used by BTC overrides
+            # in PROFILES_BY_ASSET) and the `direction_filter` kwarg is the
+            # call-time override (used by the search driver). When BOTH are
+            # set, the call-time kwarg wins (last-write semantics matches the
+            # rest of the override surface).
+            effective_dir = direction_filter or profile.only_direction
+            dir_ok = (
+                effective_dir is None
+                or effective_dir == "both"
+                or (effective_dir == "long_only"  and signal.trend ==  1)
+                or (effective_dir == "short_only" and signal.trend == -1)
+            )
             qualifies = (
                 setup.state == TradeState.CONFIRMED_SETUP_ACTIVE
                 and effective_score >= score_min
                 and signal.trend != 0
                 and in_session
+                and dir_ok
             )
             if qualifies:
                 # ── Tier A #9: stateless live risk gates ────────────────
@@ -942,6 +1030,14 @@ def run_mtf_backtest(
     ivr_history_provider:    Optional[IvrHistoryProvider]    = None,
     micro_veto_config:       Optional[_micro_veto.MicroVetoConfig]  = None,
     vov_thresholds:          Optional[_vov_gate.VolOfVolThresholds] = None,
+    # v4 BTC tune — per-profile field overrides applied via dataclasses.replace
+    # without mutating PROFILES. Shape: {profile_key: {"v4_trail_mult": 2.5, ...}}.
+    # Used by the BTC scalping search driver; ignored when None.
+    profile_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
+    # v4 BTC tune — direction filter threaded into every profile's entry gate.
+    # None / "both" = trade both sides (back-compat); "long_only" / "short_only"
+    # disables the other side. Applied uniformly across profiles in this call.
+    direction_filter: Optional[Literal["long_only", "short_only", "both"]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     Run all (or selected) TF profiles and return a comparison dict.
@@ -970,16 +1066,26 @@ def run_mtf_backtest(
     run_keys = profiles if profiles is not None else list(PROFILES.keys())
     results: Dict[str, Dict[str, Any]] = {}
 
+    # v4 BTC tune — derive the asset key from `underlying` so PROFILES_BY_ASSET
+    # can shadow specific (asset, profile_key) pairs. Strips the quote suffix
+    # so "BTCUSD" and "BTC" both resolve to "BTC". Non-BTC assets see no entry
+    # and fall through to PROFILES unchanged.
+    asset_key = (underlying or "").replace("USDT", "").replace("USD", "").upper()
+
     for key in run_keys:
         if key not in PROFILES:
             continue
-        profile = PROFILES[key]
+        # Per-asset shadow lookup; fall back to PROFILES when absent.
+        profile = PROFILES_BY_ASSET.get(asset_key, {}).get(key) or PROFILES[key]
         # Apply caller-side overrides without mutating the module-level singleton.
         overrides: Dict[str, Any] = {}
         if exit_atr_tf is not None:
             overrides["exit_atr_tf"] = exit_atr_tf
         if payoff_mode is not None:
             overrides["payoff_mode"] = payoff_mode
+        if profile_overrides and key in profile_overrides:
+            # v4 BTC tune — merge search-driver overrides last so they win.
+            overrides.update(profile_overrides[key])
         if overrides:
             from dataclasses import replace as _dc_replace
             profile = _dc_replace(profile, **overrides)
@@ -997,6 +1103,7 @@ def run_mtf_backtest(
             ivr_history_provider=ivr_history_provider,
             micro_veto_config=micro_veto_config,
             vov_thresholds=vov_thresholds,
+            direction_filter=direction_filter,
         )
 
     return results
