@@ -91,6 +91,9 @@ def _rsi_ok_short(rsi: float) -> bool:
     return 30.0 < rsi < 57.0
 
 
+_SIGNAL_CACHE = {}
+
+
 def compute_signal(
     candles_1h: List[Candle],
     st_threshold: int = 3,
@@ -104,6 +107,12 @@ def compute_signal(
             close_1h=candles_1h[-1].close if candles_1h else 0.0,
             score_long=0.0, score_short=0.0,
         )
+
+    # Caching check to optimize backtesting performance
+    cfg_tuple = tuple(st_configs) if st_configs is not None else None
+    cache_key = (candles_1h[-1].timestamp_ms, len(candles_1h), st_threshold, cfg_tuple)
+    if cache_key in _SIGNAL_CACHE:
+        return _SIGNAL_CACHE[cache_key]
 
     o = np.array([c.open for c in candles_1h], dtype=np.float64)
     h = np.array([c.high for c in candles_1h], dtype=np.float64)
@@ -280,7 +289,7 @@ def compute_signal(
     signal_score = round(pct * 20, 2)
     # ─────────────────────────────────────────────────────────────────────
 
-    return SignalResult(
+    res = SignalResult(
         trend=trend_val,
         all_green=all_green_now,
         all_red=all_red_now,
@@ -300,3 +309,8 @@ def compute_signal(
         bars_since_flip=bars_active,
         cvd_proxy=round(cvd_sum, 4),
     )
+
+    if len(_SIGNAL_CACHE) > 50000:
+        _SIGNAL_CACHE.clear()
+    _SIGNAL_CACHE[cache_key] = res
+    return res

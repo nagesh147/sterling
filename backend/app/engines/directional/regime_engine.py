@@ -141,32 +141,82 @@ def compute_regime(
         adx_c = min(cur_adx / 40.0, 1.0) * 12
         atr_c = min(cur_atr_pct / 80.0, 1.0) * 8
         score = round(adx_c + atr_c, 2)
-        return RegimeResult(
+        res = RegimeResult(
             macro_regime=regime,
             ema50=cur_ema21, close_4h=cur_close, score=score,
             **_common,
         )
+        if len(_REGIME_CACHE) > 50000:
+            _REGIME_CACHE.clear()
+        _REGIME_CACHE[cache_key] = res
+        return res
 
     # ADX thresholds: crypto markets trend at lower ADX than FX/equities.
     # Strong trend: ADX >= 20 (was 25 — too strict, blocked most crypto signals)
     # Moderate trend: ADX >= 15 → RANGING (allow partial signals via setup_engine)
     ADX_TREND = 20
-    ADX_WEAK  = 15
+    strict = _DEFAULT_IDLE_STRICTNESS
+    if idle_strictness != "auto":
+        strict = idle_strictness
 
-    if cooldown_active:
+    is_idle = False
+    if n >= 2:
+        prev_atr_pct = _atr_pct_at(atr_arr, n - 2, 100)
+        if strict == "strict":
+            consec = (cur_atr_pct < 30.0 and prev_atr_pct < 30.0)
+            slope_rule = (cur_atr_slope < 0.0 and cur_atr_pct < 35.0)
+            is_idle = consec or slope_rule
+        else:
+            consec = (cur_atr_pct < 25.0 and prev_atr_pct < 25.0)
+            slope_rule = (cur_atr_slope < 0.0 and cur_atr_pct < 30.0)
+            is_idle = consec or slope_rule
+
+    # Base common metrics
+    _common = {
+        "ema21": cur_ema21,
+        "ema55": cur_ema55,
+        "adx": cur_adx,
+        "atr_pct": cur_atr_pct,
+        "atr_slope": cur_atr_slope,
+        "momentum_z": cur_momentum_z,
+        "hmm_primary_regime": hmm_prediction.get("regime") if hmm_prediction else None,
+        "hmm_confidence": hmm_prediction.get("confidence") if hmm_prediction else None,
+    }
+
+    # HMM override integration if supplied and enabled via env
+    if hmm_prediction and os.environ.get("STERLING_HMM_ENABLED", "true").lower() == "true":
+        pred_state = hmm_prediction.get("predicted_state")
+        conf = hmm_prediction.get("confidence", 0.0)
+        # If model outputs 2, it is high-vol/trend. If 0 or 1, it's low-vol/ranging/idle.
+        # Force IDLE if HMM is very confident (e.g. >80%) about a low-vol regime.
+        if pred_state in [0, 1] and conf > 0.80:
+            is_idle = True
+
+    # 1. Macro Filter Veto check (Tier B #12)
+    # If macro_filter is 'adx_4h' and ADX is under 20, force NEUTRAL (fully sidelined).
+    adx_veto = False
+    if macro_filter == "adx_4h":
+        # Check if HMM is active and overrides the ADX veto
+        hmm_override = (
+            hmm_prediction and
+            hmm_prediction.get("predicted_state") == 2
+            and hmm_prediction.get("confidence", 0.0) > 0.70
+        )
+        if cur_adx < 20.0 and not hmm_override:
+            adx_veto = True
+
+    # 2. Strict IDLE Regime Assignment
+    ADX_WEAK = 15
+    if is_idle:
         regime = MacroRegime.IDLE
         score = 0.0
-    elif cur_atr_pct > 65 and cur_adx < ADX_TREND:
-        regime = MacroRegime.VOLATILE
-        score = 8.0
-    elif cur_adx < ADX_WEAK:
-        regime = MacroRegime.RANGING
+    elif adx_veto:
+        regime = MacroRegime.NEUTRAL
         score = 0.0
     elif cur_ema21 > cur_ema55 and cur_close > cur_ema21 and cur_adx >= ADX_WEAK:
         regime = MacroRegime.BULL_TREND
         adx_component = min(cur_adx / 40.0, 1.0) * 12
         atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
-        # Tier A #6 — +2 when momentum z aligns with the BULL trend.
         mom_bonus = (
             _MOMENTUM_Z_BONUS
             if cur_momentum_z is not None and cur_momentum_z > _MOMENTUM_Z_THRESHOLD
@@ -177,7 +227,6 @@ def compute_regime(
         regime = MacroRegime.BEAR_TREND
         adx_component = min(cur_adx / 40.0, 1.0) * 12
         atr_component = min(cur_atr_pct / 80.0, 1.0) * 8
-        # Tier A #6 — +2 when momentum z aligns with the BEAR trend.
         mom_bonus = (
             _MOMENTUM_Z_BONUS
             if cur_momentum_z is not None and cur_momentum_z < -_MOMENTUM_Z_THRESHOLD
@@ -188,10 +237,16 @@ def compute_regime(
         regime = MacroRegime.RANGING
         score = 0.0
 
-    return RegimeResult(
+    res = RegimeResult(
         macro_regime=regime,
-        ema50=cur_ema21,          # kept for backward compat
+        ema50=cur_ema21,
         close_4h=cur_close,
         score=score,
-        **_common,
+        atr_percentile=round(cur_atr_pct, 2),
+        **{k: (round(v, 4) if isinstance(v, float) else v) for k, v in _common.items() if v is not None and k != "atr_pct"}
     )
+
+    if len(_REGIME_CACHE) > 50000:
+        _REGIME_CACHE.clear()
+    _REGIME_CACHE[cache_key] = res
+    return res

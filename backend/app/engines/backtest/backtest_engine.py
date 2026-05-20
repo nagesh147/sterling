@@ -3,6 +3,7 @@ Historical replay engine: indicator signals + optional Black-Scholes option P&L.
 No additional API calls — runs entirely on pre-fetched candles.
 """
 import time
+import bisect
 from typing import List, Optional
 
 from app.schemas.market import Candle
@@ -58,14 +59,16 @@ def run_backtest(
     # Track which 1H indices are sampled so we can compute forward returns
     sampled_indices: List[int] = list(range(_MIN_1H_WINDOW, len(candles_1h), sample_every_n_bars))
 
+    c4h_ts = [c.timestamp_ms for c in candles_4h]
+    _4H_MS = 4 * 3_600_000
     for i in sampled_indices:
         current_ts = candles_1h[i].timestamp_ms
 
         # Include only 4H bars whose CLOSE time is <= current bar timestamp.
         # A 4H bar that OPENS at T closes at T + 4h; using <= T would include
         # a bar whose close price is 4 hours in the future (look-ahead bias).
-        _4H_MS = 4 * 3_600_000
-        c4h_slice = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= current_ts]
+        idx_4h = bisect.bisect_right(c4h_ts, current_ts - _4H_MS)
+        c4h_slice = candles_4h[:idx_4h]
         if len(c4h_slice) < _MIN_4H_WINDOW:
             continue
 

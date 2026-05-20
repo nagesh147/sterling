@@ -6,6 +6,7 @@ run()      — legacy bps-proxy (backward compat for existing tests)
 run_real() — real engine replay using actual regime/signal/setup pipeline
 """
 import numpy as np
+import bisect
 from dataclasses import dataclass, field
 from typing import List, Optional, TYPE_CHECKING
 from app.engines.analytics.performance import (
@@ -195,9 +196,11 @@ def _engine_replay_trades(
     entry_close   = entry_atr = 0.0
     entry_regime  = "unknown"
 
+    c4h_ts = [c.timestamp_ms for c in candles_4h]
     for i in range(_MIN_1H, len(candles_1h) - 1):
         ts  = candles_1h[i].timestamp_ms
-        c4h = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= ts]
+        idx_4h = bisect.bisect_right(c4h_ts, ts - _4H_MS)
+        c4h = candles_4h[:idx_4h]
         if len(c4h) < _MIN_4H:
             continue
         c1h = candles_1h[max(0, i - 200): i + 1]
@@ -297,10 +300,13 @@ def run_real(
         tr_1h = candles_1h[idx:train_end]
         ts_1h = candles_1h[train_end:test_end]
 
+        c4h_ts = [c.timestamp_ms for c in candles_4h]
         tr_cutoff = tr_1h[-1].timestamp_ms if tr_1h else 0
         ts_cutoff = ts_1h[-1].timestamp_ms if ts_1h else 0
-        tr_4h = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= tr_cutoff]
-        ts_4h = [c for c in candles_4h if c.timestamp_ms + _4H_MS <= ts_cutoff]
+        idx_tr = bisect.bisect_right(c4h_ts, tr_cutoff - _4H_MS)
+        tr_4h = candles_4h[:idx_tr]
+        idx_ts = bisect.bisect_right(c4h_ts, ts_cutoff - _4H_MS)
+        ts_4h = candles_4h[:idx_ts]
 
         best_thr        = config.score_thresholds_to_test[0]
         best_sharpe     = -999.0

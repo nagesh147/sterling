@@ -36,14 +36,17 @@ def build_universe(seed=42, n_total=3000):
 
     prices, regime_map = [], []
     p = 50_000.0
-    for seg_n, tr, vol in segs:
-        for _ in range(seg_n):
-            p += tr + np.random.normal(0, vol)
-            p  = max(p, 5_000.0)
-            prices.append(p)
-            regime_map.append("BULL" if tr > 50 else "BEAR" if tr < -50 else "RANGING")
-    prices = prices[:n_total]
-    regime_map = regime_map[:n_total]
+    while len(prices) < n_total:
+        for seg_n, tr, vol in segs:
+            for _ in range(seg_n):
+                p += tr + np.random.normal(0, vol)
+                p  = max(p, 5_000.0)
+                prices.append(p)
+                regime_map.append("BULL" if tr > 50 else "BEAR" if tr < -50 else "RANGING")
+                if len(prices) >= n_total:
+                    break
+            if len(prices) >= n_total:
+                break
 
     def _candle(ts, o, h, l, c, v):
         return Candle(timestamp_ms=ts,
