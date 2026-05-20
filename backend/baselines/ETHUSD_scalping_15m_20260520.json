@@ -1,0 +1,41 @@
+{
+  "asset": "ETH",
+  "profile": "scalping_15m",
+  "trade_count": 215,
+  "win_rate": 0.5674,
+  "profit_factor": 0.8478,
+  "sharpe": -0.5963,
+  "sortino": -0.8507,
+  "calmar": -0.3822,
+  "cagr": -0.064628,
+  "max_drawdown": -0.169078,
+  "ulcer_index": 9.6898,
+  "pain_ratio": -0.667,
+  "tail_ratio": 0.6781,
+  "avg_net_pnl_pct": -0.000577,
+  "gross_pnl_sum": 0.083342,
+  "cost_drag_sum": 0.207436,
+  "net_pnl_sum": -0.124094,
+  "deflated_sharpe": 0.0,
+  "sharpe_method": "calendar_daily",
+  "regime_breakdown": {
+    "BULL_TREND": {
+      "trade_count": 95,
+      "win_rate": 0.5263157894736842,
+      "avg_pnl": -0.0014481791587956589,
+      "sharpe_proxy": -0.1991696924448362
+    },
+    "BEAR_TREND": {
+      "trade_count": 120,
+      "win_rate": 0.6,
+      "avg_pnl": 0.00011235965370833857,
+      "sharpe_proxy": 0.011760275075060667
+    }
+  },
+  "warnings": [],
+  "edge_proven": false,
+  "edge_status": "no_edge",
+  "funding_8h_pct_used": 0.0001,
+  "exit_atr_tf": "signal",
+  "payoff_mode": "chandelier_trail"
+}

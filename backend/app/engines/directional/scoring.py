@@ -233,18 +233,50 @@ def _needs_high_threshold(structure: TradeStructure, leverage: int = 1) -> bool:
     return is_naked_short or is_high_leverage
 
 
+def _expected_round_trip_cost_bps(
+    structure: TradeStructure,
+    leverage: int,
+) -> float:
+    """
+    Best-effort estimate of expected per-trade cost in bps, used to lift the
+    score gate proportionally so structurally-unprofitable setups (high
+    leverage on low-OI symbols) need a higher conviction score to pass.
+
+    Round-trip = entry slippage + exit slippage + fees. Funding excluded
+    (hold-time dependent). Returns 0.0 on any lookup failure.
+    """
+    try:
+        from app.engines.risk.slippage import slippage_bps as _slippage_bps
+        oi = None
+        if structure.legs:
+            oi = getattr(structure.legs[0], "open_interest", None)
+        slip_bps = float(_slippage_bps(float(leverage), oi))
+        # 0.10% round-trip taker fee ≈ 10 bps.
+        return 2.0 * slip_bps + 10.0
+    except Exception:
+        return 0.0
+
+
 def passes_score_threshold(
     structure: TradeStructure,
     leverage: int = 1,
 ) -> tuple[bool, str]:
     """
-    Returns (passes, reason). Enforces hard gates:
-      - ≥85 for naked shorts and leverage ≥ 10×
-      - ≥75 for everything else
+    Returns (passes, reason). Enforces hard gates with a cost-aware uplift:
+      - ≥85 base for naked shorts and leverage ≥ 10×
+      - ≥75 base for everything else
+      - +1 score point for every 10 bps of expected round-trip cost above
+        a 10 bps floor (so a 40 bps RT cost lifts the gate by 3 points).
     """
-    threshold = _SCORE_THRESHOLD_HIGH if _needs_high_threshold(structure, leverage) else _SCORE_THRESHOLD_NORMAL
+    base = _SCORE_THRESHOLD_HIGH if _needs_high_threshold(structure, leverage) else _SCORE_THRESHOLD_NORMAL
+    cost_bps = _expected_round_trip_cost_bps(structure, leverage)
+    cost_uplift = max(0.0, (cost_bps - 10.0) / 10.0)
+    threshold = round(base + cost_uplift, 1)
     if structure.score < threshold:
-        return False, f"score {structure.score:.1f} < threshold {threshold:.0f}"
+        return False, (
+            f"score {structure.score:.1f} < threshold {threshold:.1f} "
+            f"(base {base:.0f} + cost_uplift {cost_uplift:.1f})"
+        )
     return True, ""
 
 

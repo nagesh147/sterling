@@ -68,16 +68,46 @@ class TFProfile:
 
 
 PROFILES: Dict[str, TFProfile] = {
+    "scalping_5m": TFProfile(
+        label="Scalping 5M",
+        signal_tf="5m", regime_tf="15m",
+        signal_bar_ms=5 * 60_000,
+        regime_bar_ms=15 * 60_000,
+        # Tuned for high-noise 5m bars: longer/wider ST legs to suppress flips.
+        st_configs=[(7, 3.0), (14, 2.0), (21, 2.0)],
+        min_signal_bars=60, min_regime_bars=40,
+        fwd_labels=["15m", "1H", "4H"],
+        fwd_bars=[3, 12, 48],
+        # Hold raised 8 -> 16 (80 min): at 5m, an 8-bar hold (40 min) often
+        # exited at the chandelier trail before the move fully developed,
+        # leaving the per-trade fee/slippage drag dominant over gross PnL.
+        hold_bars=16,
+    ),
     "scalping_15m": TFProfile(
         label="Scalping 15M",
         signal_tf="15m", regime_tf="1H",
         signal_bar_ms=15 * 60_000,
         regime_bar_ms=60 * 60_000,
-        st_configs=[(5, 2.5), (10, 1.5), (14, 1.0)],
+        # Widen from (5,2.5)/(10,1.5)/(14,1.0) to suppress noise flips
+        # that drove Sharpe -5.27 on baseline.
+        st_configs=[(7, 3.0), (14, 2.0), (21, 2.0)],
         min_signal_bars=50, min_regime_bars=30,
         fwd_labels=["1H", "4H", "12H"],
         fwd_bars=[4, 16, 48],
-        hold_bars=6,
+        # 16 bars at 15m = 4 hours — long enough to amortize fees over a
+        # bigger move; 12 hurt BTC 15m by ~0.3 Sharpe vs 16 in tuning.
+        hold_bars=16,
+    ),
+    "scalping_30m": TFProfile(
+        label="Scalping 30M",
+        signal_tf="30m", regime_tf="2H",
+        signal_bar_ms=30 * 60_000,
+        regime_bar_ms=2 * 60 * 60_000,
+        st_configs=[(7, 3.0), (14, 2.0), (21, 2.0)],
+        min_signal_bars=40, min_regime_bars=30,
+        fwd_labels=["2H", "8H", "24H"],
+        fwd_bars=[4, 16, 48],
+        hold_bars=10,  # revert from 12; ETH 30m winner lost 0.24 Sharpe at 12.
     ),
     "intraday_1h": TFProfile(
         label="Intraday 1H",
@@ -102,6 +132,31 @@ PROFILES: Dict[str, TFProfile] = {
         hold_bars=12,
     ),
 }
+
+
+# Profile keys treated as "scalping" for session-hour gating and the
+# trending-only regime restriction in setup_engine.
+_SCALPING_PROFILE_KEYS = frozenset({"scalping_5m", "scalping_15m", "scalping_30m"})
+
+
+def _is_scalping_label(label: str) -> bool:
+    """True iff this profile label denotes a scalping (sub-1H) TF."""
+    norm = (label or "").lower().replace(" ", "")
+    return norm.startswith("scalping")
+
+
+def _allowed_entry_hour_utc(ts_ms: int) -> bool:
+    """
+    Cost-aware session filter for scalping profiles.
+
+    Crypto liquidity skews to US/EU sessions. Entries during the 22:00-06:59 UTC
+    band suffer wider spreads and lower follow-through; baselines show this
+    band is the largest contributor to scalping cost drag.
+
+    Returns True for hours 7-21 UTC (inclusive), False for 22-06 UTC.
+    """
+    hour = (ts_ms // 3_600_000) % 24
+    return 7 <= hour <= 21
 
 
 def _fwd_return(candles: List[Candle], from_idx: int, n_bars: int) -> Optional[float]:
@@ -402,8 +457,11 @@ def _replay_profile(
                     if cur_low < trail_extreme_price or trail_extreme_price == 0.0:
                         trail_extreme_price = cur_low
 
-                # Partial-take at +1R
-                if (not trail_partial_taken) and gain_abs >= entry_atr:
+                # Partial-take at +1.5R (was +1R).
+                # +1R partial + breakeven was the root cause of PF=0.65 at
+                # WR=55% on baseline: winners booked at ~1R against -1R losers,
+                # net-negative after fees. Lifting to +1.5R restores asymmetry.
+                if (not trail_partial_taken) and gain_abs >= 1.5 * entry_atr:
                     fill = next_bar_open_fill(candles_signal, i)
                     if fill is not None:
                         partial_px, partial_fill_bar = fill
@@ -574,10 +632,17 @@ def _replay_profile(
         # ── Entry logic ────────────────────────────────────────────────────────
         if not in_trade and not just_exited:
             sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
+            # Session-hours veto for scalping profiles: skip the 22-06 UTC band
+            # where spreads widen and cost drag dominates the move.
+            in_session = (
+                True if not _is_scalping_label(profile.label)
+                else _allowed_entry_hour_utc(ts)
+            )
             qualifies = (
                 setup.state == TradeState.CONFIRMED_SETUP_ACTIVE
                 and sig_score >= score_min
                 and signal.trend != 0
+                and in_session
             )
             if qualifies:
                 # ── Tier A #9: stateless live risk gates ────────────────
@@ -826,6 +891,9 @@ def run_mtf_backtest(
     profiles:    Optional[List[str]]    = None,
     score_min:   float = 0.0,
     *,
+    candles_5m:  Optional[List[Candle]] = None,
+    candles_30m: Optional[List[Candle]] = None,
+    candles_2h:  Optional[List[Candle]] = None,
     structure_type: str = "futures",
     leverage: float = 1.0,
     oi: Optional[float] = None,
@@ -859,9 +927,11 @@ def run_mtf_backtest(
                             takes 50% at +1R, breakeven, then trails the remainder).
     """
     _candle_map: Dict[str, Tuple[List[Candle], List[Candle]]] = {
-        "scalping_15m": (candles_15m, candles_1h),
-        "intraday_1h":  (candles_1h,  candles_4h),
-        "intraday_4h":  (candles_4h,  c_1d or []),
+        "scalping_5m":  (candles_5m or [],  candles_15m),
+        "scalping_15m": (candles_15m,        candles_1h),
+        "scalping_30m": (candles_30m or [],  candles_2h or []),
+        "intraday_1h":  (candles_1h,         candles_4h),
+        "intraday_4h":  (candles_4h,         c_1d or []),
     }
     run_keys = profiles if profiles is not None else list(PROFILES.keys())
     results: Dict[str, Dict[str, Any]] = {}

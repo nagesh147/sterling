@@ -62,9 +62,9 @@ _HIGH_SCORE_CONFIRM = 14.0  # 70% of max-20
 # Mean-reversion in IDLE / RANGING uses RSI extremes + a moderate score gate.
 # Volatility breakout in VOLATILE uses a fired squeeze + a strong score gate.
 # Numbers come from the v4 spec — engines stay pure; no env reads here.
-_MR_RSI_LONG_MAX   = 40.0   # RSI < 40 ⇒ oversold → mean-revert long candidate
-_MR_RSI_SHORT_MIN  = 60.0   # RSI > 60 ⇒ overbought → mean-revert short candidate
-_MR_SCORE_MIN      = 10.0   # 50% of max-20 confluence required
+_MR_RSI_LONG_MAX   = 35.0   # RSI < 35 (tightened from 40) — deeper oversold
+_MR_RSI_SHORT_MIN  = 65.0   # RSI > 65 (tightened from 60) — deeper overbought
+_MR_SCORE_MIN      = 14.0   # 70% of max-20 (was 10) — kill MR overtrading
 _BREAKOUT_SCORE_MIN = 14.0  # same hurdle as _HIGH_SCORE_CONFIRM
 
 
@@ -140,13 +140,21 @@ def _volatile_breakout_setup(
     )
 
 
+_SCALPING_LABEL_TOKENS = ("scalping5m", "scalping15m", "scalping30m")
+
+
 def evaluate_setup(
     regime: RegimeResult, signal: SignalResult, profile_label: str | None = None
 ) -> SetupResult:
     if profile_label:
         norm = profile_label.lower().replace(" ", "").replace("_", "")
-        if "scalping15m" in norm or norm == "intraday":
-            # W6 scalping optimizer: restrict 15m scalping to trending macro regimes only.
+        is_scalping = any(tok in norm for tok in _SCALPING_LABEL_TOKENS)
+        if is_scalping:
+            # W6 scalping optimizer + extension to 5m/30m: restrict all
+            # scalping profiles to trending macro regimes. Baseline shows
+            # short-TF in CHOPPY/IDLE/VOLATILE bleeds cost drag faster than
+            # the strategy can earn it back; trend-following on a sub-1H
+            # signal only works when the HTF regime is itself trending.
             macro = regime.macro_regime
             is_trend = macro in {
                 MacroRegime.BULLISH, MacroRegime.BEARISH,
@@ -157,7 +165,27 @@ def evaluate_setup(
                 return SetupResult(
                     state=TradeState.FILTERED,
                     direction=Direction.NEUTRAL,
-                    reason="scalping_15m restricted to trending macro regimes only to bypass range chop",
+                    reason=f"{profile_label} restricted to trending macro regimes only to bypass range chop",
+                    macro_regime=macro,
+                    signal_trend=signal.trend,
+                )
+            # Hard MTF gate on the scalping path: signal trend must match the
+            # higher-TF regime direction. Bull regime + short signal (or
+            # vice-versa) is a counter-trend trade on a noisy TF and is
+            # systematically unprofitable in our baselines.
+            if macro in {MacroRegime.BULLISH, MacroRegime.BULL_TRENDING, MacroRegime.BULL_TREND} and signal.trend == -1:
+                return SetupResult(
+                    state=TradeState.FILTERED,
+                    direction=Direction.NEUTRAL,
+                    reason="scalping MTF gate: bull macro + short signal blocked",
+                    macro_regime=macro,
+                    signal_trend=signal.trend,
+                )
+            if macro in {MacroRegime.BEARISH, MacroRegime.BEAR_TRENDING, MacroRegime.BEAR_TREND} and signal.trend == 1:
+                return SetupResult(
+                    state=TradeState.FILTERED,
+                    direction=Direction.NEUTRAL,
+                    reason="scalping MTF gate: bear macro + long signal blocked",
                     macro_regime=macro,
                     signal_trend=signal.trend,
                 )
@@ -171,33 +199,26 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
     green_count = signal.st_trends.count(1)
     red_count   = signal.st_trends.count(-1)
 
-    # Hard veto: choppy / idle market blocks all entries
+    # Hard veto: choppy / idle market blocks all entries by default.
+    # IDLE MR override was the single biggest losing regime on intraday_1h
+    # (BTC -0.20% across 70 trades, ETH -0.21% across 65 trades) but on the
+    # 4H profile IDLE bars actually had +0.46% avg. To preserve 4H winners
+    # without leaking into 1H, allow IDLE entries only when signal_score is
+    # near-max (>= 17/20). 1H rarely reaches that ceiling; 4H signals can.
     if macro in _VETO_REGIMES:
-        # W1/W12 — mean-reversion promotion runs *first* in IDLE (not CHOPPY)
-        # so a clear RSI extreme isn't lost to the regime veto. CHOPPY stays
-        # vetoed because the regime engine explicitly flags un-tradable noise.
-        if macro == MacroRegime.IDLE:
-            mr = _mean_reversion_setup(macro, signal)
-            if mr is not None:
-                return mr
-        # Issue 4 — under STERLING_IDLE_STRICTNESS=loose, allow CONFIRMED in IDLE
-        # when signal_score is very high (≥ 18/20) AND all 3 STs agree. The
-        # sizer is responsible for dropping the position to 0.25× via
-        # regime_adaptive_sizer.adapt(is_idle=True).
         sig_score = float(getattr(signal, "signal_score", 0.0) or 0.0)
         if (
             macro == MacroRegime.IDLE
-            and _idle_loose_enabled()
-            and sig_score >= 18.0
-            and (signal.all_green or signal.all_red)
+            and sig_score >= 17.0
             and trend != 0
+            and (signal.all_green or signal.all_red)
         ):
             return SetupResult(
                 state=TradeState.CONFIRMED_SETUP_ACTIVE,
                 direction=Direction.LONG if trend == 1 else Direction.SHORT,
                 reason=(
-                    f"IDLE regime (loose mode) — all STs aligned + high score "
-                    f"({sig_score:.0f}/20). Sized down 0.25×."
+                    f"IDLE regime, near-max confluence "
+                    f"({sig_score:.0f}/20) — strict opt-in."
                 ),
                 macro_regime=macro,
                 signal_trend=trend,
@@ -333,10 +354,12 @@ def _evaluate_setup_inner(regime: RegimeResult, signal: SignalResult) -> SetupRe
     # ── Full alignment: check for arrow confirmation ──────────────────────────
     has_arrow = signal.green_arrow if direction == Direction.LONG else signal.red_arrow
 
-    # Strong confluence can confirm even without a fresh arrow:
-    # all STs aligned + signal_score >= 15/20 avoids waiting for a flip
-    # that may never arrive in strong continuation moves.
-    strong_confluence = getattr(signal, 'signal_score', 0) >= 15.0
+    # Strong confluence can confirm even without a fresh arrow.
+    # Raised threshold 15 -> 17 (was 75% of max-20, now 85%). At 15 the
+    # "chase rule" was buying every still-aligned bar after the flip — the
+    # worst R:R region of the move. 17 forces near-max confluence to skip
+    # the arrow requirement.
+    strong_confluence = getattr(signal, 'signal_score', 0) >= 17.0
 
     if signal.all_green or signal.all_red:
         if has_arrow or strong_confluence:

@@ -12,16 +12,53 @@ _COLD_START_SIZE_MULT = 0.25
 # Issue 5 — early-entry haircut multiplier.
 _EARLY_ENTRY_SIZE_MULT = 0.5
 
-# Tier A #8 — non-trending regime haircut. We recently allowed mean-reversion
-# setups in IDLE / RANGING; this caps their notional aggression at 25 % of the
-# normal Kelly/leverage-derived sizing.
-_NON_TRENDING_REGIME_MULT = 0.25
-_NON_TRENDING_REGIMES = frozenset({MacroRegime.IDLE, MacroRegime.RANGING})
+# Per-regime size multipliers. Calibrated against the 2026-05-18 baseline,
+# which showed RANGING was the strategy's most profitable regime (74% WR,
+# +0.05% avg) while BULL_TREND was the worst (44% WR, -0.34% avg). The
+# legacy non-trending haircut (0.25x on RANGING/IDLE) was inversely
+# allocating exposure to where the strategy actually wins. New table:
+#   - IDLE: 0.25x (true low-vol, false signals dominate)
+#   - VOLATILE: 0.75x (high noise, but real moves)
+#   - RANGING / NEUTRAL: 1.0x (preferred — mean-reversion is where edge lives)
+#   - BULL_TREND family: 0.5x (penalize until baseline shows profitability)
+#   - BEAR_TREND family: 1.0x (close to breakeven; give it room)
+#   - default: 1.0x
+_REGIME_SIZE_MULT: Dict[MacroRegime, float] = {
+    MacroRegime.IDLE:           0.25,
+    MacroRegime.CHOPPY:         0.25,
+    MacroRegime.VOLATILE:       0.75,
+    MacroRegime.RANGING:        1.0,
+    MacroRegime.NEUTRAL:        1.0,
+    MacroRegime.BULL_TREND:     0.5,
+    MacroRegime.BULL_TRENDING:  0.5,
+    MacroRegime.BULL_WEAK:      0.5,
+    MacroRegime.BULL_RANGING:   1.0,
+    MacroRegime.BULLISH:        0.5,
+    MacroRegime.BEAR_TREND:     1.0,
+    MacroRegime.BEAR_TRENDING:  1.0,
+    MacroRegime.BEAR_WEAK:      0.75,
+    MacroRegime.BEAR_RANGING:   1.0,
+    MacroRegime.BEARISH:        1.0,
+}
+
+
+def _regime_size_mult(macro_regime: Optional[MacroRegime]) -> float:
+    """Returns the per-regime size multiplier, defaulting to 1.0."""
+    if macro_regime is None:
+        return 1.0
+    return _REGIME_SIZE_MULT.get(macro_regime, 1.0)
+
 
 # Tier C #15 — correlation drawdown limiter. If the proposed trade's underlying
 # has |corr| > 0.8 against any open position's underlying, scale size by 0.5×.
 _CORRELATION_HIGH_THRESHOLD = 0.8
 _CORRELATION_HIGH_PENALTY = 0.5
+
+# Round-trip slippage budget used when wiring slippage into the Kelly-derived
+# max_loss_per_contract. Each leg of the trade incurs slippage_bps; we count
+# entry + exit (~ 2x bps). Cost is added on top of the structure's max_loss
+# so target_risk_pct shrinks proportionally to leverage-tier slippage.
+_SLIPPAGE_LEGS = 2
 
 
 def _max_correlation_with_open_positions(
@@ -85,6 +122,7 @@ def size_trade(
     underlying: Optional[str] = None,
     open_position_assets: Optional[List[str]] = None,
     correlation_matrix: Optional[Dict[Tuple[str, str], float]] = None,
+    open_interest: Optional[float] = None,
 ) -> SizedTrade:
     """
     Risk-based sizing with Kelly, leverage scaling, and regime/correlation
@@ -165,12 +203,11 @@ def size_trade(
     if early_entry:
         target_risk_pct *= _EARLY_ENTRY_SIZE_MULT
 
-    # Tier A #8 — non-trending regime haircut.
-    non_trending_haircut = (
-        macro_regime is not None and macro_regime in _NON_TRENDING_REGIMES
-    )
-    if non_trending_haircut:
-        target_risk_pct *= _NON_TRENDING_REGIME_MULT
+    # Per-regime size multiplier (replaces the legacy non-trending haircut).
+    regime_mult = _regime_size_mult(macro_regime)
+    regime_haircut = regime_mult < 1.0
+    if regime_mult != 1.0:
+        target_risk_pct *= regime_mult
 
     # Tier C #15 — multi-asset correlation drawdown limiter.
     max_open_corr = _max_correlation_with_open_positions(
@@ -190,6 +227,20 @@ def size_trade(
     if max_loss_per_contract <= 0:
         max_loss_per_contract = leg_premium
 
+    # Wire slippage into the Kelly-derived denominator. Each leg of the trade
+    # (entry + exit) pays the tiered slippage from risk.slippage; we lift
+    # max_loss_per_contract by that round-trip cost so target_risk_pct is
+    # divided over realistic worst-case slippage and we stop oversizing.
+    try:
+        from app.engines.risk.slippage import slippage_bps as _slippage_bps
+        slip_bps = _slippage_bps(float(leverage), open_interest)
+        slip_uplift = _SLIPPAGE_LEGS * float(slip_bps) / 10_000.0
+        if slip_uplift > 0:
+            max_loss_per_contract = max_loss_per_contract * (1.0 + slip_uplift)
+    except Exception:
+        # Defensive: never fail sizing on a slippage lookup error.
+        pass
+
     raw_contracts = int(max_risk_usd / max_loss_per_contract)
     contracts = max(1, min(raw_contracts, risk_params.max_contracts))
 
@@ -201,8 +252,8 @@ def size_trade(
         notes.append("cold_start_bootstrap_paper")
     if early_entry:
         notes.append("early_entry_haircut")
-    if non_trending_haircut:
-        notes.append("non_trending_regime_haircut")
+    if regime_haircut:
+        notes.append(f"regime_size_mult={regime_mult:.2f}")
     if correlation_haircut:
         notes.append(f"correlation_haircut(|r|>{_CORRELATION_HIGH_THRESHOLD:.1f})")
     sized = SizedTrade(

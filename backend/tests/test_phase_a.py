@@ -313,34 +313,39 @@ class TestA5FundingWindow:
 # ─── A6 ──────────────────────────────────────────────────────────────────────
 
 class TestA6DynamicTp:
-    def test_long_picks_min_of_r_and_swing(self):
+    def test_long_picks_r_target_when_swing_is_further(self):
+        # Selection rule changed: take FURTHER target (was: more achievable).
+        # R-target is the floor; swing extends it when structure has more room.
         highs = np.array([102.0, 103.0, 105.0, 104.0, 102.0])
         lows  = np.array([99.0, 100.0, 101.0, 100.0, 99.0])
         # Long entry 100, stop_dist 2, rr 2 → r_target = 104
         # swing_high 105, atr 1, atr_mult 1.5 → swing_target = 106.5
-        # min(104, 106.5) = 104 → r_target wins
+        # FURTHER = 106.5 (swing) — structure has more room.
         tp, src = dynamic_tp("long", 100.0, 2.0, 2.0, highs, lows, atr=1.0)
-        assert tp == 104.0
-        assert src == "r_target"
+        assert tp == 106.5
+        assert src == "swing"
 
-    def test_long_picks_swing_when_closer(self):
+    def test_long_picks_r_target_when_swing_is_closer(self):
+        # When structural swing is CLOSER than R, R-target floors the TP.
         highs = np.array([100.5, 100.8, 101.0, 100.7, 100.6])
         lows  = np.array([99.0, 99.5, 99.8, 99.5, 99.0])
         # Long entry 100, stop_dist 2, rr 2 → r_target = 104
         # swing_high 101.0, atr 0.5, atr_mult 1.5 → swing_target = 101.75 (closer)
+        # FURTHER = 104 (r_target) — never accept less than 1R.
         tp, src = dynamic_tp("long", 100.0, 2.0, 2.0, highs, lows, atr=0.5)
-        assert tp == 101.75
-        assert src == "swing"
+        assert tp == 104.0
+        assert src == "r_target"
 
-    def test_short_picks_max_of_r_and_swing(self):
+    def test_short_picks_further_target(self):
+        # For shorts the "further" target is the LOWER price.
         highs = np.array([101.0, 100.5, 100.0, 99.5, 99.0])
         lows  = np.array([95.0, 96.0, 97.0, 98.0, 99.0])
         # Short entry 100, stop_dist 2, rr 2 → r_target = 96
         # swing_low 95.0, atr 1.0, atr_mult 1.5 → swing_target = 93.5
-        # max(96, 93.5) = 96 → r_target wins
+        # FURTHER (lower for shorts) = 93.5 (swing).
         tp, src = dynamic_tp("short", 100.0, 2.0, 2.0, highs, lows, atr=1.0)
-        assert tp == 96.0
-        assert src == "r_target"
+        assert tp == 93.5
+        assert src == "swing"
 
     def test_empty_arrays_falls_back_to_r_target(self):
         tp, src = dynamic_tp("long", 100.0, 2.0, 2.0,

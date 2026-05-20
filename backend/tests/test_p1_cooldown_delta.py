@@ -118,12 +118,13 @@ class TestCooldownEngine:
     def test_remaining_ms_decays_to_zero(self) -> None:
         cooldown.record_exit("BTC", "scalping", "long", exit_ts_ms=1_000_000)
         cfg = CooldownConfig()
-        # 1 minute in — 4 minutes left of the 5-minute scalp cooldown
+        # 1 minute in — 14 minutes left of the 15-minute scalp cooldown
+        # (scalp cooldown raised from 5 -> 15 to suppress same-bar re-entries).
         rem = cooldown.remaining_ms(
             "BTC", "scalping", "long",
             now_ms=1_000_000 + 60_000, config=cfg,
         )
-        assert 230_000 <= rem <= 240_001
+        assert 830_000 <= rem <= 840_001
 
     def test_clear_resets_state(self) -> None:
         cooldown.record_exit("BTC", "swing", "long", exit_ts_ms=1_000_000)
@@ -147,7 +148,9 @@ class TestCooldownEngine:
 
     def test_per_mode_window_lengths(self) -> None:
         cfg = CooldownConfig()
-        assert cfg.for_mode("scalping") == 5
+        # scalp cooldown raised 5 -> 15 to suppress same-bar re-entries that
+        # were compounding fee drag on short-TF scalping profiles.
+        assert cfg.for_mode("scalping") == 15
         assert cfg.for_mode("intraday") == 30
         assert cfg.for_mode("swing") == 240
         assert cfg.for_mode("positional") == 720

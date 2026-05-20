@@ -18,8 +18,14 @@ _LAST_EXITS: Dict[Tuple[str, str, str], int] = {}
 
 @dataclass(frozen=True)
 class CooldownConfig:
-    """Per-mode cooldown windows, in minutes. Pulled from MODES on the caller side."""
-    scalping_min:    int = 5      # 5 min
+    """
+    Per-mode cooldown windows, in minutes. Pulled from MODES on the caller side.
+
+    Scalping bumped from 5 -> 15 min: 5 min is shorter than a 5m candle so
+    a fresh exit could be followed immediately by a re-entry on the same
+    bar's noise, compounding cost drag.
+    """
+    scalping_min:    int = 15     # 15 min (was 5)
     intraday_min:    int = 30     # 30 min
     swing_min:       int = 240    # 4 hours
     positional_min:  int = 720    # 12 hours
@@ -85,3 +91,28 @@ def remaining_ms(
 def clear() -> None:
     """Reset all cooldown state. Test-only entry point."""
     _LAST_EXITS.clear()
+
+
+def is_blocked_cross_mode(
+    underlying: str,
+    direction: str,
+    now_ms: int,
+    config: CooldownConfig | None = None,
+) -> bool:
+    """
+    Cross-mode dedup: True iff any mode for (underlying, direction) is still
+    in its cooldown window. A scalp-long and a swing-long on the same symbol
+    at the same time are not "two trades" — they are one correlated bigger
+    trade, so any mode's recent exit blocks all modes from re-entering same
+    direction until the longest applicable window elapses.
+    """
+    cfg = config or CooldownConfig()
+    u_key = underlying.upper()
+    d_key = direction.lower()
+    for (u, m, d), last in _LAST_EXITS.items():
+        if u != u_key or d != d_key:
+            continue
+        window_ms = cfg.for_mode(m) * 60 * 1000
+        if (now_ms - last) < window_ms:
+            return True
+    return False

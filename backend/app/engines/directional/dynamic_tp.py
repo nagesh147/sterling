@@ -1,12 +1,15 @@
 """
 A6: Dynamic take-profit selection.
 
-Replaces a static R-multiple TP with the closer of two anchors:
+Replaces a static R-multiple TP with the FURTHER of two anchors:
   • r_target  = entry ± (stop_dist × rr)
   • swing     = recent swing high/low ± 1.5 ATR
 
-For longs we take min(r_target, swing) — the more achievable target,
-i.e. higher hit-rate. For shorts the analogous max(r_target, swing).
+Previously this picked the closer of the two anchors ("more achievable")
+which capped winners below the R-target and was the structural cause of
+PF=0.65 with WR=55% on baseline runs. The swing should EXTEND the target
+when structure says there's more room; it should never CAP the target
+shorter than R.
 
 Pure function: takes precomputed series; no dependencies on adapters or
 schemas, so it's trivial to unit-test on synthetic candles.
@@ -33,6 +36,10 @@ def dynamic_tp(
     direction: "long" | "short" (case-insensitive); anything else → r_target only.
     swing_lookback: bars (typically 20× 4H = ~3 days) used to find recent extreme.
     atr_mult: how far past the swing to extend the projection.
+
+    Selection rule: take max(r_target, swing) for longs / min(...) for shorts —
+    the FURTHER target. The R-target is the floor (we never accept less than R);
+    the swing extends it when structure has more room.
     """
     if entry <= 0 or stop_dist <= 0 or rr <= 0:
         # Defensive: caller should guard, but never crash a live signal.
@@ -48,16 +55,16 @@ def dynamic_tp(
     if d == "long":
         swing_high = float(np.max(highs[-n:]))
         swing_target = swing_high + atr_mult * atr
-        # min = closer to entry from above = more achievable
-        if swing_target < r_target:
+        # Use the FURTHER target. R is the floor; swing extends it.
+        if swing_target > r_target:
             return (round(swing_target, 2), "swing")
         return (round(r_target, 2), "r_target")
 
     if d == "short":
         swing_low = float(np.min(lows[-n:]))
         swing_target = swing_low - atr_mult * atr
-        # max = closer to entry from below = more achievable
-        if swing_target > r_target:
+        # Use the FURTHER target for shorts (lower price).
+        if swing_target < r_target:
             return (round(swing_target, 2), "swing")
         return (round(r_target, 2), "r_target")
 

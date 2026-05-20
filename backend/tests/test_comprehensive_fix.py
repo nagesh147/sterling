@@ -8,17 +8,19 @@ from app.schemas.backtest import BacktestBarResult
 # ── RSI helper tests ──────────────────────────────────────────────────────────
 
 def test_rsi_ok_long_bounds():
-    assert _rsi_ok_long(42.1) is True
-    assert _rsi_ok_long(42.0) is False   # lower boundary exclusive
+    # Long RSI gate raised lower bound 42 -> 48 to stop buying into pullbacks.
+    assert _rsi_ok_long(48.1) is True
+    assert _rsi_ok_long(48.0) is False   # lower boundary exclusive
     assert _rsi_ok_long(69.9) is True
     assert _rsi_ok_long(70.0) is False   # upper boundary exclusive
 
 
 def test_rsi_ok_short_bounds():
+    # Short RSI gate upper bound tightened 57 -> 52 for symmetry with longs.
     assert _rsi_ok_short(30.1) is True
     assert _rsi_ok_short(30.0) is False   # lower boundary exclusive
-    assert _rsi_ok_short(56.9) is True
-    assert _rsi_ok_short(57.0) is False   # upper boundary exclusive
+    assert _rsi_ok_short(51.9) is True
+    assert _rsi_ok_short(52.0) is False   # upper boundary exclusive
 
 
 # ── bars_since_flip field ─────────────────────────────────────────────────────

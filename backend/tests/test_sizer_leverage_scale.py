@@ -35,12 +35,22 @@ def test_50x_leverage_scales_cap_to_15_pct():
 
 
 def test_1x_leverage_uses_full_base_cap():
-    """1x leverage → no scaling reduction."""
-    risk = RiskParams(capital=100_000.0, win_rate=0.6, max_contracts=50)
-    structure = _make_structure()
+    """1x leverage → no scaling reduction.
+
+    Uses a cheap contract (max_loss=10) so both 1x and 50x produce >1
+    contracts naturally. With slippage now wired into max_loss_per_contract,
+    the int(raw_contracts) at high leverage can collapse to 0 -> max(1,0)=1,
+    which would invert the comparison.
+    """
+    risk = RiskParams(capital=100_000.0, win_rate=0.6, max_contracts=500)
+    structure = TradeStructure(
+        structure_type="futures", direction=Direction.LONG,
+        legs=[], max_loss=10.0, max_gain=20.0,
+        net_premium=10.0, risk_reward=2.0, score=90.0, score_breakdown={},
+    )
     result_1x = size_trade(structure, risk, leverage=1)
     result_50x = size_trade(structure, risk, leverage=50)
-    assert result_1x.max_risk_usd >= result_50x.max_risk_usd
+    assert result_1x.capital_at_risk_pct > result_50x.capital_at_risk_pct
 
 
 def test_nearest_lev_key():

@@ -82,13 +82,17 @@ def _cvd_proxy(
 
 
 def _rsi_ok_long(rsi: float) -> bool:
-    """Long entry RSI gate: not overbought (< 70), not extreme low (> 42)."""
-    return 42.0 < rsi < 70.0
+    """
+    Long entry RSI gate. Raised lower bound from 42 to 48: at 42 we were
+    buying into still-bleeding pullbacks, which baseline showed was the
+    primary contributor to the 44% win rate in BULL_TREND.
+    """
+    return 48.0 < rsi < 70.0
 
 
 def _rsi_ok_short(rsi: float) -> bool:
-    """Short entry RSI gate: not oversold (> 30), not extreme high (< 57)."""
-    return 30.0 < rsi < 57.0
+    """Short entry RSI gate: tightened upper bound 57 -> 52 for symmetry with longs."""
+    return 30.0 < rsi < 52.0
 
 
 _SIGNAL_CACHE = {}
@@ -203,9 +207,10 @@ def compute_signal(
     rsi_vals = compute_rsi(c, 14)
     cur_rsi = float(rsi_vals[-1])
 
-    # Volume: median (spike-resistant). Spike = > 1.5x median
+    # Volume: median (spike-resistant). Spike threshold raised 1.5x -> 2.0x:
+    # 1.5x sits inside crypto natural noise; 2.0x is real institutional flow.
     vol_median = float(np.median(volume[-20:])) if len(volume) >= 20 else float(np.median(volume))
-    vol_spike = bool(volume[-1] > 1.5 * vol_median) if vol_median > 0 else False
+    vol_spike = bool(volume[-1] > 2.0 * vol_median) if vol_median > 0 else False
 
     # BB + KC squeeze (LazyBear method)
     squeezed = False

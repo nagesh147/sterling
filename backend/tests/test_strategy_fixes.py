@@ -73,12 +73,26 @@ def test_volatile_low_score_stays_early():
     assert result.state == TradeState.EARLY_SETUP_ACTIVE
 
 
-def test_idle_still_filtered():
-    """IDLE regime is always filtered regardless of score."""
+def test_idle_filtered_below_strict_threshold():
+    """IDLE is filtered unless signal_score reaches the strict 17/20 opt-in.
+
+    The IDLE veto was tightened to allow only near-max-confluence entries
+    (>=17/20 with all STs aligned). At score 16 IDLE is still vetoed; at
+    score 17+ it can confirm — that path is exercised by a separate test.
+    """
     regime = _regime(MacroRegime.IDLE)
-    signal = _signal(trend=1, all_green=True, green_count=3, score=20.0)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=16.0)
     result = evaluate_setup(regime, signal)
     assert result.state == TradeState.FILTERED
+
+
+def test_idle_confirms_at_strict_threshold():
+    """IDLE confirms when score >= 17 AND all STs aligned (strict opt-in)."""
+    regime = _regime(MacroRegime.IDLE)
+    signal = _signal(trend=1, all_green=True, green_count=3, score=17.0)
+    result = evaluate_setup(regime, signal)
+    assert result.state == TradeState.CONFIRMED_SETUP_ACTIVE
+    assert result.direction == Direction.LONG
 
 
 def test_trending_regime_unchanged():

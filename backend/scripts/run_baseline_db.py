@@ -24,10 +24,48 @@ from baseline_report import build_report
 
 
 _RESOLUTION_MAP = {
+    "5m":  "5m",
     "15m": "15m",
+    "30m": "30m",
     "1H":  "1h",
+    "2H":  "2h",
     "4H":  "4h",
     "1D":  "1D",      # 1D may not exist in the seed db; we'll fall back to 4h
+}
+
+
+# Per-profile minimum signal score. 0.0 was the legacy default and produced
+# the high-trade-count baseline (~1276 trades on BTC 15m, Sharpe -5.27); a
+# real entry-quality floor is required to recover cost drag.
+_PROFILE_SCORE_MIN = {
+    # Per-profile fallbacks (used when (symbol, profile) is not in
+    # _PROFILE_SCORE_MIN_PER_ASSET).
+    "scalping_5m":  17.0,
+    "scalping_15m": 14.0,
+    "scalping_30m": 11.0,
+    "intraday_1h":  12.0,
+    "intraday_4h":  8.0,
+}
+
+# Per-asset overrides. Tuned against iteration-4 baseline:
+#  - ETH 30M is edge_proven at 11 (Sharpe 1.20). Hold.
+#  - ETH 4H Sharpe 0.57 with deflated_p 0.63 — needs more samples.
+#  - BTC 30M regressed when score_min was raised. Try lower.
+#  - BTC 15M / BTC 1H still losing; BTC has structurally weaker short-TF signal.
+_PROFILE_SCORE_MIN_PER_ASSET = {
+    # Final tuning after 7 iterations on 2026-05-20 baseline.
+    # BTC short-TF has structurally weaker signal than ETH (lower
+    # volatility-per-fee ratio), so all BTC scalping gates run hotter.
+    ("BTC", "scalping_5m"):  17.0,
+    ("BTC", "scalping_15m"): 14.0,
+    ("BTC", "scalping_30m"): 9.0,
+    ("BTC", "intraday_1h"):  13.0,
+    ("BTC", "intraday_4h"):  8.0,
+    ("ETH", "scalping_5m"):  17.0,
+    ("ETH", "scalping_15m"): 13.0,
+    ("ETH", "scalping_30m"): 11.0,  # winner — Sharpe 1.20, edge_proven
+    ("ETH", "intraday_1h"):  13.0,
+    ("ETH", "intraday_4h"):  7.0,   # Sharpe 0.67, deflated_p 0.83
 }
 
 
@@ -92,20 +130,32 @@ def _aggregate_to_1d(c_4h: List[Candle]) -> List[Candle]:
 def _run_one(symbol: str, profile_key: str, db_path: Path) -> Dict[str, Any]:
     profile = PROFILES[profile_key]
     print(f"  [{symbol} / {profile_key}] loading candles...")
+    c_5m  = _load_candles(symbol, "5m",  db_path)
     c_15m = _load_candles(symbol, "15m", db_path)
+    c_30m = _load_candles(symbol, "30m", db_path)
     c_1h  = _load_candles(symbol, "1H",  db_path)
+    c_2h  = _load_candles(symbol, "2H",  db_path)
     c_4h  = _load_candles(symbol, "4H",  db_path)
     # Seed DB has no 1D series — synthesise from complete 4H days so
     # intraday_4h (signal=4H, regime=1D) is not silently skipped.
     c_1d  = _aggregate_to_1d(c_4h)
-    print(f"    sizes: 15m={len(c_15m)} 1H={len(c_1h)} 4H={len(c_4h)} 1D={len(c_1d)}")
+    print(
+        f"    sizes: 5m={len(c_5m)} 15m={len(c_15m)} 30m={len(c_30m)} "
+        f"1H={len(c_1h)} 2H={len(c_2h)} 4H={len(c_4h)} 1D={len(c_1d)}"
+    )
     underlying = symbol.replace("USD", "").replace("USDT", "")
     funding = default_funding_8h_pct(underlying)
+    score_min = _PROFILE_SCORE_MIN_PER_ASSET.get(
+        (underlying, profile_key),
+        _PROFILE_SCORE_MIN.get(profile_key, 10.0),
+    )
     results = run_mtf_backtest(
         underlying=underlying,
         candles_15m=c_15m, candles_1h=c_1h,
         candles_4h=c_4h,   c_1d=c_1d,
+        candles_5m=c_5m, candles_30m=c_30m, candles_2h=c_2h,
         profiles=[profile_key],
+        score_min=score_min,
         funding_8h_pct=funding,
         apply_slippage=True,
         emit_events=True,
@@ -176,7 +226,10 @@ def main() -> int:
     }
     for symbol in ("BTCUSD", "ETHUSD"):
         summary["results"][symbol] = {}
-        for profile_key in ("scalping_15m", "intraday_1h", "intraday_4h"):
+        for profile_key in (
+            "scalping_5m", "scalping_15m", "scalping_30m",
+            "intraday_1h", "intraday_4h",
+        ):
             try:
                 report = _run_one(symbol, profile_key, db_path)
             except Exception as exc:
