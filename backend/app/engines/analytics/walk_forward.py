@@ -167,15 +167,14 @@ def run(candles: list, config: WalkForwardConfig) -> WalkForwardResult:
         oos_equity_curve=list(oos_ec),
     )
 
-
-# ── Real engine replay ──────────────────────────────────────────────────────
-
 def _engine_replay_trades(
     candles_1h: list,
     candles_4h: list,
     score_min:   float = 0.0,
     fee_rt_pct:  float = _FEE_RT_PCT,
     hold_bars:   int   = 8,
+    start_idx:   Optional[int] = None,
+    end_idx:     Optional[int] = None,
 ) -> list:
     """
     Bar-by-bar replay using the real regime/signal/setup engines.
@@ -190,6 +189,11 @@ def _engine_replay_trades(
     from app.schemas.directional import TradeState
     from app.engines.indicators.atr import compute_atr
 
+    if start_idx is None:
+        start_idx = _MIN_1H
+    if end_idx is None:
+        end_idx = len(candles_1h) - 1
+
     trades        = []
     in_trade      = False
     entry_bar = entry_direction = 0
@@ -197,7 +201,7 @@ def _engine_replay_trades(
     entry_regime  = "unknown"
 
     c4h_ts = [c.timestamp_ms for c in candles_4h]
-    for i in range(_MIN_1H, len(candles_1h) - 1):
+    for i in range(start_idx, end_idx):
         ts  = candles_1h[i].timestamp_ms
         idx_4h = bisect.bisect_right(c4h_ts, ts - _4H_MS)
         c4h = candles_4h[:idx_4h]
@@ -254,7 +258,7 @@ def _engine_replay_trades(
                 entry_atr = v if v > 0 else entry_close * 0.02
 
     if in_trade:
-        i   = len(candles_1h) - 1
+        i   = end_idx
         cur = candles_1h[i].close
         raw = entry_direction * (cur - entry_close) / entry_close if entry_close > 0 else 0.0
         trades.append({
@@ -285,6 +289,20 @@ def run_real(
     threshold is None — they do NOT contribute trades to the OOS aggregate.
     """
     from app.engines.analytics.performance import sharpe as _sharpe
+    from app.engines.directional.regime_engine import compute_regime
+    from app.engines.directional.signal_engine import compute_signal
+
+    # 1. Warm up caches to ensure O(1) time during window sweeps
+    c4h_ts = [c.timestamp_ms for c in candles_4h]
+    for i in range(_MIN_1H, len(candles_1h)):
+        ts = candles_1h[i].timestamp_ms
+        idx_4h = bisect.bisect_right(c4h_ts, ts - _4H_MS)
+        c4h = candles_4h[:idx_4h]
+        if len(c4h) < _MIN_4H:
+            continue
+        c1h = candles_1h[max(0, i - 200): i + 1]
+        _ = compute_regime(c4h)
+        _ = compute_signal(c1h)
 
     windows        = []
     oos_trades_all = []
@@ -297,22 +315,18 @@ def run_real(
         train_end = idx + config.train_bars
         test_end  = min(train_end + config.test_bars, total)
 
-        tr_1h = candles_1h[idx:train_end]
-        ts_1h = candles_1h[train_end:test_end]
-
-        c4h_ts = [c.timestamp_ms for c in candles_4h]
-        tr_cutoff = tr_1h[-1].timestamp_ms if tr_1h else 0
-        ts_cutoff = ts_1h[-1].timestamp_ms if ts_1h else 0
-        idx_tr = bisect.bisect_right(c4h_ts, tr_cutoff - _4H_MS)
-        tr_4h = candles_4h[:idx_tr]
-        idx_ts = bisect.bisect_right(c4h_ts, ts_cutoff - _4H_MS)
-        ts_4h = candles_4h[:idx_ts]
-
         best_thr        = config.score_thresholds_to_test[0]
         best_sharpe     = -999.0
         best_train_n    = 0
         for thr in config.score_thresholds_to_test:
-            tr_trades = _engine_replay_trades(tr_1h, tr_4h, score_min=thr, fee_rt_pct=fee_rt_pct)
+            tr_trades = _engine_replay_trades(
+                candles_1h=candles_1h,
+                candles_4h=candles_4h,
+                score_min=thr,
+                fee_rt_pct=fee_rt_pct,
+                start_idx=idx + _MIN_1H,
+                end_idx=train_end - 1
+            )
             if not tr_trades:
                 continue
             s = _sharpe(_equity_from_trades(tr_trades))
@@ -339,7 +353,12 @@ def run_real(
             test_trades = []
         else:
             test_trades = _engine_replay_trades(
-                ts_1h, ts_4h, score_min=best_thr, fee_rt_pct=fee_rt_pct,
+                candles_1h=candles_1h,
+                candles_4h=candles_4h,
+                score_min=best_thr,
+                fee_rt_pct=fee_rt_pct,
+                start_idx=train_end + _MIN_1H,
+                end_idx=test_end - 1
             )
         oos_trades_all.extend(test_trades)
 

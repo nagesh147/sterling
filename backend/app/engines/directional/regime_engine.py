@@ -20,6 +20,9 @@ _DEFAULT_IDLE_STRICTNESS: Literal["strict", "loose"] = (
 )
 
 
+_REGIME_CACHE: Dict[Tuple, RegimeResult] = {}
+
+
 def _atr_pct_at(atr_arr: np.ndarray, pos: int, lookback: int = 100) -> float:
     """ATR percentile for a specific position in the array."""
     start = max(0, pos - lookback + 1)
@@ -78,6 +81,26 @@ def compute_regime(
             macro_regime=MacroRegime.NEUTRAL,
             ema50=0.0, close_4h=0.0, score=0.0,
         )
+
+    if len(candles_4h) > 250:
+        candles_4h = candles_4h[-250:]
+
+    hmm_state = hmm_prediction.get("predicted_state") if hmm_prediction else None
+    hmm_conf = hmm_prediction.get("confidence") if hmm_prediction else None
+    hmm_reg = hmm_prediction.get("regime") if hmm_prediction else None
+    hmm_tuple = (hmm_state, hmm_conf, hmm_reg)
+    cache_key = (
+        candles_4h[-1].timestamp_ms,
+        candles_4h[-1].close,
+        candles_4h[0].close,
+        len(candles_4h),
+        ema_period,
+        macro_filter,
+        idle_strictness,
+        hmm_tuple,
+    )
+    if cache_key in _REGIME_CACHE:
+        return _REGIME_CACHE[cache_key]
 
     highs = np.array([c.high for c in candles_4h], dtype=np.float64)
     lows = np.array([c.low for c in candles_4h], dtype=np.float64)

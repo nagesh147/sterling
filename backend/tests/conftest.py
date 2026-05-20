@@ -51,6 +51,8 @@ def reset_global_stores():
     from app.services import alert_store, pnl_history, webhook_store
     from app.services import exchange_account_store as eas
     import app.api.v1.endpoints.config as config_ep
+    from app.engines.directional.regime_engine import _REGIME_CACHE
+    from app.engines.directional.signal_engine import _SIGNAL_CACHE
 
     paper_store._positions.clear()
     paper_store._loaded = True
@@ -66,6 +68,8 @@ def reset_global_stores():
     eas._configs.clear()
     eas._loaded = False
     config_ep._risk = _default_risk()
+    _REGIME_CACHE.clear()
+    _SIGNAL_CACHE.clear()
 
     yield
 
@@ -79,3 +83,5 @@ def reset_global_stores():
     eas._configs.clear()
     eas._loaded = False
     config_ep._risk = _default_risk()
+    _REGIME_CACHE.clear()
+    _SIGNAL_CACHE.clear()

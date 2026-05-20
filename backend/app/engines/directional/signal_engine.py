@@ -110,7 +110,14 @@ def compute_signal(
 
     # Caching check to optimize backtesting performance
     cfg_tuple = tuple(st_configs) if st_configs is not None else None
-    cache_key = (candles_1h[-1].timestamp_ms, len(candles_1h), st_threshold, cfg_tuple)
+    cache_key = (
+        candles_1h[-1].timestamp_ms,
+        candles_1h[-1].close,
+        candles_1h[0].close,
+        len(candles_1h),
+        st_threshold,
+        cfg_tuple,
+    )
     if cache_key in _SIGNAL_CACHE:
         return _SIGNAL_CACHE[cache_key]
 
@@ -136,10 +143,29 @@ def compute_signal(
     st2_line, st2_trend = compute_supertrend(h, l, c, p2, m2)
 
     # ST3: VWAP-adjusted candles — slower, trend-anchored perspective
-    vwap_candles = list(_to_vwap_candles(candles_1h))
-    vwap_h = np.array([v.high for v in vwap_candles], dtype=np.float64)
-    vwap_l = np.array([v.low for v in vwap_candles], dtype=np.float64)
-    vwap_c = np.array([v.close for v in vwap_candles], dtype=np.float64)
+    # Optimized to operate directly on arrays without Candle allocation
+    n_c = len(candles_1h)
+    vwap_h = np.zeros(n_c, dtype=np.float64)
+    vwap_l = np.zeros(n_c, dtype=np.float64)
+    vwap_c = np.zeros(n_c, dtype=np.float64)
+    sessions = {}
+    for idx in range(n_c):
+        cand = candles_1h[idx]
+        day_key = cand.timestamp_ms // 86_400_000
+        if day_key not in sessions:
+            sessions[day_key] = {"cum_pv": 0.0, "cum_vol": 0.0}
+        typical = (h[idx] + l[idx] + c[idx]) / 3.0
+        sessions[day_key]["cum_pv"] += typical * volume[idx]
+        sessions[day_key]["cum_vol"] += volume[idx]
+        vwap = (
+            sessions[day_key]["cum_pv"] / sessions[day_key]["cum_vol"]
+            if sessions[day_key]["cum_vol"] > 0
+            else c[idx]
+        )
+        offset = vwap - c[idx]
+        vwap_h[idx] = h[idx] + offset
+        vwap_l[idx] = l[idx] + offset
+        vwap_c[idx] = vwap
     st3_line, st3_trend = compute_supertrend(vwap_h, vwap_l, vwap_c, p3, m3)
 
     st_trends = [int(st1_trend[-1]), int(st2_trend[-1]), int(st3_trend[-1])]

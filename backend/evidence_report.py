@@ -3,7 +3,7 @@ Sterling Strategy — Full Evidence Report
 Engine: real replay (regime + signal + setup).
 Data:  synthetic 3000 1H / 750 4H bars (125 days), realistic BTC-scale noise.
 """
-import sys, os, math
+import sys, os, math, bisect
 os.environ.setdefault("STERLING_ENV", "test")
 sys.path.insert(0, ".")
 
@@ -143,13 +143,29 @@ def run():
     print("  Real replay: regime + signal + setup (no live exchange)")
     print(HDR)
 
-    c1h, c4h, rlabels = build_universe(seed=42, n_total=3000)
+    c1h, c4h, rlabels = build_universe(seed=42, n_total=26280)
     n1h, n4h = len(c1h), len(c4h)
     price_lo = min(c.close for c in c1h)
     price_hi = max(c.close for c in c1h)
     print(f"\n  Bars: {n1h} × 1H  |  {n4h} × 4H  (~{n1h//24} days)")
     print(f"  Price range:  ${price_lo:,.0f} – ${price_hi:,.0f}  (BTC-scale)")
     print(f"  Fee model:    {FEE_RT_PCT*100:.2f}% round-trip per trade")
+
+    c4h_ts = [c.timestamp_ms for c in c4h]
+
+    # Warm up caches for both default and scalp (off) modes
+    print("  Warming up regime/signal caches for all bars...")
+    MIN_1H = 30; MIN_4H = 55; _4H_MS = 4 * 3_600_000
+    for i in range(MIN_1H, n1h):
+        ts  = c1h[i].timestamp_ms
+        idx_c4 = bisect.bisect_right(c4h_ts, ts - _4H_MS)
+        c4  = c4h[:idx_c4]
+        if len(c4) < MIN_4H: continue
+        c1  = c1h[max(0, i - 200): i + 1]
+        _ = compute_regime(c4, macro_filter="adx_4h")
+        _ = compute_regime(c4, macro_filter="off")
+        _ = compute_signal(c1)
+    print("  Cache warm-up complete.")
 
     # ── State-frequency diagnostic ───────────────────────────────────────────
     print(f"\n{SEC}\n  PRE-CHECK: Setup state frequency (every bar, adx_4h mode)\n{SEC}")
@@ -158,7 +174,8 @@ def run():
     arrow_bars   = []
     for i in range(MIN_1H, n1h):
         ts  = c1h[i].timestamp_ms
-        c4  = [c for c in c4h if c.timestamp_ms + _4H_MS <= ts]
+        idx_c4 = bisect.bisect_right(c4h_ts, ts - _4H_MS)
+        c4  = c4h[:idx_c4]
         if len(c4) < MIN_4H: continue
         c1  = c1h[max(0, i - 200): i + 1]
         reg = compute_regime(c4)
@@ -225,12 +242,19 @@ def run():
     print("  Using macro_filter='off' (scalping) to obtain minimum OOS samples.\n")
 
     # Custom replay for scalping mode (macro_filter='off')
-    def _replay_scalp(c1h_in, c4h_in, score_min=0.0, fee=FEE_RT_PCT, hold=8):
+    def _replay_scalp(c1h_in, c4h_in, score_min=0.0, fee=FEE_RT_PCT, hold=8, start_idx=None, end_idx=None):
+        if start_idx is None:
+            start_idx = MIN_1H
+        if end_idx is None:
+            end_idx = len(c1h_in) - 1
+
         trades = []
         in_t = False; e_bar = e_dir = 0; e_close = e_atr = 0.0; e_reg = "unknown"
-        for i in range(MIN_1H, len(c1h_in) - 1):
+        c4h_in_ts = [c.timestamp_ms for c in c4h_in]
+        for i in range(start_idx, end_idx):
             ts = c1h_in[i].timestamp_ms
-            c4 = [c for c in c4h_in if c.timestamp_ms + _4H_MS <= ts]
+            idx_c4 = bisect.bisect_right(c4h_in_ts, ts - _4H_MS)
+            c4 = c4h_in[:idx_c4]
             if len(c4) < MIN_4H: continue
             c1 = c1h_in[max(0, i - 200): i + 1]
             reg = compute_regime(c4, macro_filter="off")
@@ -261,7 +285,7 @@ def run():
                     v  = float(av[-1]) if len(av) > 0 and not np.isnan(av[-1]) else 0.0
                     e_atr = v if v > 0 else e_close * 0.02
         if in_t:
-            j   = len(c1h_in) - 1
+            j   = end_idx
             cur = c1h_in[j].close
             raw = e_dir * (cur - e_close) / e_close if e_close > 0 else 0.0
             trades.append({"pnl_pct": raw - fee, "regime": e_reg,
@@ -279,20 +303,15 @@ def run():
     while idx + TRAIN + TEST <= n1h:
         tr_end  = idx + TRAIN
         ts_end  = min(tr_end + TEST, n1h)
-        tr1 = c1h[idx:tr_end]; ts1 = c1h[tr_end:ts_end]
-        tr_cut = tr1[-1].timestamp_ms if tr1 else 0
-        ts_cut = ts1[-1].timestamp_ms if ts1 else 0
-        tr4 = [c for c in c4h if c.timestamp_ms + _4H_MS <= tr_cut]
-        ts4 = [c for c in c4h if c.timestamp_ms + _4H_MS <= ts_cut]
         # threshold selection on train
         best_thr = 0; best_sh = -999
         for thr in [0, 3, 5, 8, 10, 12, 15]:
-            tt = _replay_scalp(tr1, tr4, score_min=thr)
+            tt = _replay_scalp(c1h, c4h, score_min=thr, start_idx=idx + MIN_1H, end_idx=tr_end - 1)
             if tt:
                 s = _sharpe(_equity_from_trades(tt))
                 if s > best_sh: best_sh = s; best_thr = thr
         thresholds_used.append(best_thr)
-        oos_t = _replay_scalp(ts1, ts4, score_min=best_thr)
+        oos_t = _replay_scalp(c1h, c4h, score_min=best_thr, start_idx=tr_end + MIN_1H, end_idx=ts_end - 1)
         oos_all.extend(oos_t)
         s_oos  = _stats(oos_t)
         wf_windows.append((win_i, idx, tr_end, ts_end, best_thr, s_oos))
