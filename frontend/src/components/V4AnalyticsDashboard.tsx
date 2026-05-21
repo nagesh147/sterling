@@ -1,6 +1,8 @@
 import React from 'react';
 import { useV4Analytics } from '../hooks/useV4Analytics';
 import { useSterlingStream } from '../hooks/useSterlingStream';
+import { useAppStream } from '../hooks/useAppStream';
+import type { LivePnlResponse } from '../hooks/useLivePnl';
 
 interface V4AnalyticsDashboardProps {
   activeSymbol: string;
@@ -13,14 +15,25 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
   // Fetch REST data
   const { data: restData, isLoading } = useV4Analytics(streamSymbol);
   
-  // Fetch live WebSocket data
+  // Fetch live WebSocket data (OFI, etc.)
   const { status, metrics } = useSterlingStream(streamSymbol);
+
+  // Fetch real PnL from shared SSE stream (same source as PortfolioSummary)
+  const { data: pnlData } = useAppStream<LivePnlResponse>('pnl');
+  const unrealizedPnl = React.useMemo(() => {
+    if (!pnlData?.positions) return 0;
+    const matching = pnlData.positions.filter(p =>
+      p.underlying.toUpperCase() === streamSymbol.toUpperCase()
+    );
+    if (matching.length === 0) return pnlData.total_estimated_pnl_usd;
+    return matching.reduce((sum, p) => sum + (p.estimated_pnl_usd ?? 0), 0);
+  }, [pnlData, streamSymbol]);
 
   // Merge REST data with Live data over the top
   const mergedData = {
     ...restData,
     ofi: metrics.ofi !== 0 ? metrics.ofi : (restData?.ofi || 0),
-    unrealized_pnl: metrics.unrealized_pnl !== 0 ? metrics.unrealized_pnl : (restData?.unrealized_pnl || 0),
+    unrealized_pnl: unrealizedPnl,
     drift_bps: metrics.drift_bps !== 0 ? metrics.drift_bps : (restData?.drift_bps || 0),
   };
 
