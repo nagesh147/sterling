@@ -200,12 +200,11 @@ def run_backtest(
 
                 # Slippage on exit
                 eff_exit = ex.exit_price
+                slippage_pct = 0.0
                 if apply_slippage:
                     bps = 5.0 + (pos.direction == -1) * 3.0   # short slightly higher slip
                     eff_exit = ex.exit_price * (1 - pos.direction * bps / 10_000)
-
-                # Costs
-                slippage_pct = 2.0 * bps / 10_000
+                    slippage_pct = 2.0 * bps / 10_000
                 fee_pct      = _FEE_RT
                 funding_pct  = funding_bias * ((i - pos.entry_bar) * profile.signal_bar_ms / 8_000_000.0)
                 total_cost   = slippage_pct + fee_pct + funding_pct

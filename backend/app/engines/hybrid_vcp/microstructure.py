@@ -187,24 +187,26 @@ def micro_confirmation_at(
     cvd_proxy:    NDArray[np.float64],
     closes:        NDArray[np.float64],
     direction:     int,
+    idx:           int,
     flow_thresh:   float = 0.35,
     cvd_window:    int = 5,
 ) -> MicroConfirmation:
     """
     Per-bar microstructure confirmation check for live/backtest use.
 
+    Args:
+        idx: current bar index to evaluate (not last bar of array).
     Returns MicroConfirmation with flow_score and divergence flag.
     """
     n = len(closes)
-    if n == 0:
+    if idx < 0 or idx >= n:
         return MicroConfirmation(0.0, False, 0.0, 0.0)
 
-    idx = n - 1
     fs = flow_score(obi_proxy, cvd_bar, cvd_window=cvd_window)
     fscore = float(fs[idx]) if idx < len(fs) else 0.0
 
-    obi_val  = float(obi_proxy[idx]) if idx < len(obi_proxy) else 0.0
-    cvd_val  = float(cvd_bar[idx])    if idx < len(cvd_bar)     else 0.0
+    obi_val = float(obi_proxy[idx]) if idx < len(obi_proxy) else 0.0
+    cvd_val = float(cvd_bar[idx])   if idx < len(cvd_bar)     else 0.0
 
     div = detect_divergence(closes, cvd_proxy, direction, window=cvd_window)
     has_div = bool(div[idx]) if idx < len(div) else False

@@ -141,7 +141,8 @@ def evaluate_gate(
     # ── 5. Microstructure ───────────────────────────────────────
     micro = micro_confirmation_at(
         obi_arr, cvd_bar_arr, cvd_cum,
-        closes, raw_dir, flow_thresh=cfg.flow_threshold,
+        closes, raw_dir, idx,
+        flow_thresh=cfg.flow_threshold,
     )
 
     if micro.has_divergence:
