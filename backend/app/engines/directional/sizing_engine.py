@@ -307,6 +307,22 @@ def size_trade(
             target_risk_pct *= theta_mult
             notes.append(f"theta_haircut_dte{dte}")
 
+    # Kelly ruin probability guard: never risk so much that ruin probability > 5%.
+    # Estimate avg_win from R:R ratio and max_loss; avg_loss = max_loss.
+    avg_loss_est = max_loss_per_contract
+    rr_for_ruin = structure.risk_reward if structure.risk_reward and structure.risk_reward > 0 else 1.0
+    avg_win_est = avg_loss_est * rr_for_ruin
+    from app.engines.directional.kelly_ruin import size_with_ruin_limit, RUIN_PROB_MAX
+    adjusted_risk = size_with_ruin_limit(
+        target_risk_pct=target_risk_pct,
+        win_rate=win_rate,
+        avg_win=avg_win_est,
+        avg_loss=avg_loss_est,
+    )
+    if adjusted_risk < target_risk_pct:
+        target_risk_pct = adjusted_risk
+        notes.append(f"ruin_adj({RUIN_PROB_MAX:.0%}_max)")
+
     max_risk_usd = capital * target_risk_pct
 
     leg_premium = structure.net_premium
