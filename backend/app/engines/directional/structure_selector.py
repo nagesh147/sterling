@@ -70,6 +70,21 @@ def _width(leg_a: CandidateContract, leg_b: CandidateContract) -> float:
     return abs(leg_a.strike - leg_b.strike)
 
 
+def _strike_density_ok(
+    long_leg: CandidateContract,
+    short_leg: CandidateContract,
+    net_premium: float,
+    min_ratio: float = 3.0,
+) -> bool:
+    """
+    Reject spreads whose wings are less than `min_ratio`× the net premium paid/received.
+    A 3:1 ratio means the spread width must be ≥3× the debit (or credit), ensuring
+    the legs aren't artificially tight (near-zero-width) constructs.
+    """
+    w = _width(long_leg, short_leg)
+    return w >= abs(net_premium) * min_ratio
+
+
 def build_futures_structure(
     direction: Direction,
     spot_price: float,
@@ -143,6 +158,8 @@ def build_structures(
                 max_gain = width - debit
                 if max_gain <= 0:
                     continue
+                if not _strike_density_ok(long_leg, short_leg, debit):
+                    continue
                 structures.append(TradeStructure(
                     structure_type="bull_call_spread", direction=direction,
                     legs=[long_leg, short_leg],
@@ -163,6 +180,8 @@ def build_structures(
                 width = _width(sell_leg, buy_leg)
                 max_loss = width - credit
                 if max_loss <= 0:
+                    continue
+                if not _strike_density_ok(buy_leg, sell_leg, credit):
                     continue
                 structures.append(TradeStructure(
                     structure_type="bull_put_spread", direction=direction,
@@ -199,6 +218,8 @@ def build_structures(
                 max_gain = width - debit
                 if max_gain <= 0:
                     continue
+                if not _strike_density_ok(long_leg, sell_leg, debit):
+                    continue
                 structures.append(TradeStructure(
                     structure_type="bear_put_spread", direction=direction,
                     legs=[long_leg, sell_leg],
@@ -219,6 +240,8 @@ def build_structures(
                 width = _width(sell_leg, buy_leg)
                 max_loss = width - credit
                 if max_loss <= 0:
+                    continue
+                if not _strike_density_ok(buy_leg, sell_leg, credit):
                     continue
                 structures.append(TradeStructure(
                     structure_type="bear_call_spread", direction=direction,
