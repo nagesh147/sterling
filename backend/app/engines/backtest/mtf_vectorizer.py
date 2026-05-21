@@ -337,6 +337,7 @@ def _staleness_lookback(
     trend: np.ndarray,
     st1_t: np.ndarray, st2_t: np.ndarray, st3_t: np.ndarray,
     st_threshold: int,
+    atr_percentile: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
     Mirrors signal_engine.compute_signal's bars-since-flip lookback.
@@ -345,6 +346,10 @@ def _staleness_lookback(
     bars whose ST trend count >= threshold in the same direction. Returns
     a flag value of 16 when ALL looked-back bars matched (the for-else
     branch of the legacy implementation).
+
+    When atr_percentile is provided, effective lookback is volatility-adaptive:
+        effective_lookback = 16 * max(0.5, min(2.0, 50 / atr_pct_i))
+    clamped to [8, 32].
     """
     n = len(trend)
     out = np.zeros(n, dtype=np.int64)
@@ -352,14 +357,23 @@ def _staleness_lookback(
         d = int(trend[i])
         if d == 0:
             continue
+
+        # Volatility-adaptive lookback.
+        if atr_percentile is not None and i < len(atr_percentile):
+            pct = float(atr_percentile[i])
+            if pct > 0:
+                factor = max(0.5, min(2.0, 50.0 / pct))
+                max_bars = int(round(16 * factor))
+                max_bars = max(8, min(32, max_bars))
+            else:
+                max_bars = 16
+        else:
+            max_bars = 16
+
         cnt = 0
         completed = True
-        # Walk back at most 15 bars (j = i-1 .. max(0, i-15)).
-        for j in range(i - 1, i - 16, -1):
+        for j in range(i - 1, i - 1 - max_bars, -1):
             if j < 0:
-                # Legacy stops the range at max(-1, n_arr - 17); the for-else
-                # still fires when the range exhausts naturally, so completing
-                # all available prior bars still triggers the flag.
                 break
             gc_prev = (
                 int(st1_t[j] == d) + int(st2_t[j] == d) + int(st3_t[j] == d)
@@ -414,6 +428,9 @@ def build_signals_full(
 
     atr14 = compute_atr(high, low, close, 14)
     atr22 = compute_atr(high, low, close, 22)
+
+    # Volatility-adaptive staleness: rolling ATR percentile for adaptive lookback.
+    atr_pct_arr = _rolling_atr_percentile(atr14, lookback=100)
 
     rsi_arr = compute_rsi(close, 14)
 
@@ -585,7 +602,7 @@ def build_signals_full(
     earned = sum(flag_arrays[k] * weight_arrays[k] for k in _SIG_WEIGHTS).astype(np.float64)
     total_weight_per_bar = sum(weight_arrays[k] for k in _SIG_WEIGHTS).astype(np.float64)
 
-    bars_active = _staleness_lookback(trend, st1_t, st2_t, st3_t, st_threshold)
+    bars_active = _staleness_lookback(trend, st1_t, st2_t, st3_t, st_threshold, atr_pct_arr)
     stale_penalty = np.minimum(3, bars_active // 5)
 
     # Tier C #14 — vectorised CVD proxy and divergence penalty.

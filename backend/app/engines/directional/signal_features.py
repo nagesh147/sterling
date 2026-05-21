@@ -320,6 +320,7 @@ def staleness_lookback_at(
     trend: int,
     st_threshold: int,
     thresholds: SignalThresholds,
+    atr_percentile: float = 50.0,
 ) -> int:
     """
     Count consecutive prior bars whose ST trend count >= threshold in the
@@ -328,17 +329,33 @@ def staleness_lookback_at(
 
     Used to apply a staleness penalty to old, "chase" entries that come long
     after the original flip — those have the worst forward R:R.
+
+    Volatility-adaptive: when atr_percentile is provided, the effective lookback
+    scales inversely with volatility. Low vol (slow moves) → shorter effective
+    lookback → same bar count = more staleness = higher penalty. High vol →
+    longer effective lookback → lower penalty. Formula:
+        effective_lookback = staleness_lookback * max(0.5, min(2.0, 50 / atr_pct))
+    clamped to [8, 32].
     """
     if trend == 0:
         return 0
     n_arr = len(st1_trend)
     if n_arr < 2:
         return 0
+
+    base_lookback = thresholds.staleness_lookback
+    if atr_percentile is not None and atr_percentile > 0:
+        factor = max(0.5, min(2.0, 50.0 / float(atr_percentile)))
+        effective_lookback = int(round(base_lookback * factor))
+        effective_lookback = max(8, min(32, effective_lookback))
+    else:
+        effective_lookback = base_lookback
+
     direction_count = 1 if trend == 1 else -1
     bars_active = 0
     completed = True
     upper = n_arr - 2
-    lower = max(-1, n_arr - 2 - thresholds.staleness_lookback)
+    lower = max(-1, n_arr - 2 - effective_lookback)
     for j in range(upper, lower, -1):
         gc_prev = (
             int(st1_trend[j] == direction_count)

@@ -42,6 +42,7 @@ from app.engines.directional.signal_features import (
     ha_state_at, volume_state_at, cvd_state_at,
     staleness_lookback_at, mtf_boost_at, assemble_signal_score,
 )
+from app.engines.indicators.atr import compute_atr
 
 
 # ── Back-compat shims (kept for existing tests / call sites) ─────────────
@@ -269,9 +270,14 @@ def compute_signal(
     # CVD-proxy divergence.
     cvd = cvd_state_at(o, h, l, c, volume, flip.trend, cfg)
 
-    # Staleness lookback.
+    # ATR percentile for volatility-adaptive staleness.
+    atr_arr = compute_atr(h, l, c, 14)
+    atr_pct = float(np.sum(atr_arr[-1] > atr_arr[-100:]) / min(100, len(atr_arr)) * 100.0) if len(atr_arr) >= 2 else 50.0
+
+    # Staleness lookback (volatility-adaptive).
     bars_active = staleness_lookback_at(
         st1_trend, st2_trend, st3_trend, flip.trend, st_threshold, cfg,
+        atr_percentile=atr_pct,
     )
 
     # Multi-TF boost: signal trend aligned with macro regime.
