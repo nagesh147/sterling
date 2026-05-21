@@ -22,6 +22,7 @@ from typing import Tuple
 import numpy as np
 
 from app.engines.directional.signal_weights import SignalThresholds
+from app.engines.directional.signal_coherence import compute_coherence, coherence_penalty
 
 
 # ── Constants for adaptive feature lookback windows ──────────────────────
@@ -459,7 +460,15 @@ def assemble_signal_score(
 
     stale_pen = min(thresholds.staleness_max, bars_active // thresholds.staleness_divisor)
     cvd_pen   = thresholds.cvd_divergence_penalty if cvd.cvd_divergent else 0.0
-    earned_adj = max(0.0, earned - stale_pen - cvd_pen)
+
+    # Signal coherence penalty: penalize mixed ST channel agreement.
+    # When flip.st_trends shows disagreement, deduct up to 2.0 from earned.
+    coh_pen = coherence_penalty(
+        compute_coherence(list(flip.st_trends)),
+        max_penalty=float(thresholds.staleness_max),
+    )
+
+    earned_adj = max(0.0, earned - stale_pen - cvd_pen - coh_pen)
 
     pct = earned_adj / total_weight if total_weight > 0 else 0.0
     if pct >= thresholds.strong_pct:

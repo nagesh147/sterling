@@ -77,7 +77,7 @@ from app.engines.directional.signal_weights import (
     V4_KC_PERIOD, V4_KC_ATR_PERIOD, V4_KC_MULT,
     V4_HA_REAL_DIV_PCT,
     V4_STRENGTH_STRONG_PCT, V4_STRENGTH_SIGNAL_PCT,
-    V4_STALENESS_LOOKBACK,
+    V4_STALENESS_LOOKBACK, V4_STALENESS_MAX,
     regime_aware_weights,
 )
 
@@ -629,7 +629,22 @@ def build_signals_full(
     )
     cvd_penalty = np.where(cvd_divergent, _CVD_DIVERGENCE_PENALTY, 0.0)
 
-    earned_adj = np.maximum(0.0, earned - stale_penalty - cvd_penalty)
+    # Signal coherence penalty — measure agreement between ST channels per bar.
+    # All 3 agree → no penalty. Mixed → up to 3.0 pt deduction.
+    # Vectorised: compute coherence for each bar from (st1_t, st2_t, st3_t).
+    st1_t_arr = st1_t.astype(np.float64)
+    st2_t_arr = st2_t.astype(np.float64)
+    st3_t_arr = st3_t.astype(np.float64)
+    st_mean = (st1_t_arr + st2_t_arr + st3_t_arr) / 3.0
+    st_var = ((st1_t_arr - st_mean) ** 2 + (st2_t_arr - st_mean) ** 2 + (st3_t_arr - st_mean) ** 2) / 3.0
+    max_var = 2.0
+    coh_arr = np.clip(1.0 - st_var / max_var, 0.0, 1.0)
+    coh_penalty = np.where(
+        coh_arr >= 0.80, 0.0,
+        np.where(coh_arr >= 0.50, (0.80 - coh_arr) / 0.30 * float(V4_STALENESS_MAX), float(V4_STALENESS_MAX)),
+    )
+
+    earned_adj = np.maximum(0.0, earned - stale_penalty - cvd_penalty - coh_penalty)
     # Per-bar total because regime-aware weights make the sum vary across bars.
     # Falls back to the static total when no regime_labels supplied (the
     # division divides by an array of all V4_TOTAL_WEIGHT, which is identical).
