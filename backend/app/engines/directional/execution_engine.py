@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from typing import List
 from app.schemas.market import Candle
 from app.schemas.directional import ExecTimingResult, ExecMode, SignalResult
@@ -8,6 +9,13 @@ from app.engines.directional.microstructure import (
     detect_liquidity_sweep, detect_displacement,
 )
 from app.engines.indicators.smc import compute_smc
+
+
+def _vol_adapt_mult(atr_pct: float) -> float:
+    """Map ATR percentile (0-100) to a dynamic multiplier for stop/PB thresholds.
+    Low vol → tighter (0.8×), high vol → wider (1.8×), median → 1.2×."""
+    pct = max(0.0, min(100.0, atr_pct))
+    return round(0.8 + pct * 0.010, 2)
 
 
 def assess_timing(
@@ -38,7 +46,8 @@ def assess_timing(
     st_73_level = signal.st_values[0] if signal.st_values and signal.st_values[0] > 0 else 0.0
     prev_5_high = float(np.max(h[-6:-1])) if len(h) >= 6 else float(h[-1])
     prev_5_low = float(np.min(l[-6:-1])) if len(l) >= 6 else float(l[-1])
-    atr_extension = atr_multiplier * current_atr
+    vol_dyn = _vol_adapt_mult(atr_pct)
+    atr_extension = atr_multiplier * current_atr * vol_dyn
 
     vol_median = float(np.median(volume[-20:])) if len(volume) >= 20 else float(np.median(volume))
 
@@ -108,10 +117,11 @@ def assess_timing(
         if st_73_level > 0:
             distance_above_st = current_close - st_73_level
             ema20_ok = current_close > current_ema20
-            if 0 <= distance_above_st < current_atr * 1.5 and ema20_ok:
+            pb_thr = current_atr * 1.5 * vol_dyn
+            if 0 <= distance_above_st < pb_thr and ema20_ok:
                 wick_bonus = 0.05 if _lower_wick_ratio() > 1.2 else 0.0
                 conf = min(1.0, round(
-                    max(0.0, 1.0 - distance_above_st / (current_atr * 1.5)) + wick_bonus, 2,
+                    max(0.0, 1.0 - distance_above_st / pb_thr) + wick_bonus, 2,
                 ))
                 reason = f"Pullback to ST(7,3) support {st_73_level:.0f}; EMA20 aligned"
                 if micro_reason_parts:
@@ -119,19 +129,20 @@ def assess_timing(
                 return ExecTimingResult(
                     mode=ExecMode.PULLBACK, confidence=conf,
                     reason=reason,
-                    exec_score=round(14.0 + micro_bonus, 2),
+                    exec_score=round((14.0 + micro_bonus) * conf, 2),
                 )
         else:
             dist_from_low = current_close - float(np.min(l[-5:]))
-            if dist_from_low < current_atr * 1.2 and current_close > current_ema20:
-                conf = round(min(1.0, 1.0 - dist_from_low / (current_atr * 2)), 2)
+            pb_thr = current_atr * 1.2 * vol_dyn
+            if dist_from_low < pb_thr and current_close > current_ema20:
+                conf = round(min(1.0, 1.0 - dist_from_low / pb_thr), 2)
                 reason = "Price near 15m low; pullback toward ST support"
                 if micro_reason_parts:
                     reason += " | " + " + ".join(micro_reason_parts)
                 return ExecTimingResult(
                     mode=ExecMode.PULLBACK, confidence=conf,
                     reason=reason,
-                    exec_score=round(14.0 + micro_bonus, 2),
+                    exec_score=round((14.0 + micro_bonus) * conf, 2),
                 )
 
         # ── Mode B: CONTINUATION breakout + 2x volume ────────────────────
@@ -143,7 +154,7 @@ def assess_timing(
             return ExecTimingResult(
                 mode=ExecMode.CONTINUATION, confidence=conf,
                 reason=reason,
-                exec_score=round(10.0 + micro_bonus, 2),
+                exec_score=round((10.0 + micro_bonus) * conf, 2),
             )
 
     elif signal.trend == -1:
@@ -163,10 +174,11 @@ def assess_timing(
         if st_73_level > 0:
             distance_below_st = st_73_level - current_close
             ema20_ok = current_close < current_ema20
-            if 0 <= distance_below_st < current_atr * 1.5 and ema20_ok:
+            pb_thr = current_atr * 1.5 * vol_dyn
+            if 0 <= distance_below_st < pb_thr and ema20_ok:
                 wick_bonus = 0.05 if _upper_wick_ratio() > 1.2 else 0.0
                 conf = min(1.0, round(
-                    max(0.0, 1.0 - distance_below_st / (current_atr * 1.5)) + wick_bonus, 2,
+                    max(0.0, 1.0 - distance_below_st / pb_thr) + wick_bonus, 2,
                 ))
                 reason = f"Pullback to ST(7,3) resistance {st_73_level:.0f}; EMA20 aligned"
                 if micro_reason_parts:
@@ -174,19 +186,20 @@ def assess_timing(
                 return ExecTimingResult(
                     mode=ExecMode.PULLBACK, confidence=conf,
                     reason=reason,
-                    exec_score=round(14.0 + micro_bonus, 2),
+                    exec_score=round((14.0 + micro_bonus) * conf, 2),
                 )
         else:
             dist_from_high = float(np.max(h[-5:])) - current_close
-            if dist_from_high < current_atr * 1.2 and current_close < current_ema20:
-                conf = round(min(1.0, 1.0 - dist_from_high / (current_atr * 2)), 2)
+            pb_thr = current_atr * 1.2 * vol_dyn
+            if dist_from_high < pb_thr and current_close < current_ema20:
+                conf = round(min(1.0, 1.0 - dist_from_high / pb_thr), 2)
                 reason = "Price near 15m high; pullback toward ST resistance"
                 if micro_reason_parts:
                     reason += " | " + " + ".join(micro_reason_parts)
                 return ExecTimingResult(
                     mode=ExecMode.PULLBACK, confidence=conf,
                     reason=reason,
-                    exec_score=round(14.0 + micro_bonus, 2),
+                    exec_score=round((14.0 + micro_bonus) * conf, 2),
                 )
 
         # ── Mode B: CONTINUATION breakdown + 2x volume ───────────────────
@@ -198,7 +211,7 @@ def assess_timing(
             return ExecTimingResult(
                 mode=ExecMode.CONTINUATION, confidence=conf,
                 reason=reason,
-                exec_score=round(10.0 + micro_bonus, 2),
+                exec_score=round((10.0 + micro_bonus) * conf, 2),
             )
 
     return ExecTimingResult(

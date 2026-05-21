@@ -60,8 +60,8 @@ from app.engines.indicators.rsi import rsi as compute_rsi
 from app.engines.indicators.bollinger import bollinger_bands
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
 from app.engines.indicators.supertrend import compute_supertrend
-from app.engines.directional.signal_features import cvd_state_at
-from app.engines.directional.signal_weights import DEFAULT_THRESHOLDS
+from app.engines.directional.signal_features import cvd_state_at, rsi_extreme_at
+from app.engines.directional.signal_weights import DEFAULT_THRESHOLDS, SignalThresholds
 
 
 _BULL_REGIMES = {"BULL_TREND", "BULLISH", "BULL_TRENDING", "BULL_RANGING", "BULL_WEAK"}
@@ -77,6 +77,8 @@ class FadeExtremesConfig:
     """
     rsi_extreme_high:     float = 75.0
     rsi_extreme_low:      float = 25.0
+    rsi_extreme_pct:      float = 0.10   # top/bottom 10% percentile for adaptive gate
+    rsi_extreme_lookback: int   = 100    # trailing window for RSI percentile
     bb_period:            int   = 20
     bb_std:               float = 2.0
     vol_climax_window:    int   = 100
@@ -90,6 +92,7 @@ class FadeExtremesConfig:
     score_w_vol:          float = 3.0
     score_w_cvd:          float = 3.0
     min_warmup_bars:      int   = 30
+    max_consecutive_fade: int   = 5     # avoid re-entering same extreme bar-after-bar
 
 
 def _rsi_extremity_score(rsi: float, threshold: float, direction: int,
@@ -144,6 +147,7 @@ class FadeExtremesTrack(Track):
 
     def __init__(self, config: Optional[FadeExtremesConfig] = None):
         self.config = config or FadeExtremesConfig()
+        self._fade_count: int = 0  # consecutive bars with an active fade signal
 
     def compute(
         self,
@@ -157,6 +161,12 @@ class FadeExtremesTrack(Track):
         n = len(candles_signal)
         if n < cfg.min_warmup_bars or regime is None:
             return NEUTRAL_TRACK_SIGNAL
+
+        # Staleness guard: if the same fade direction has been active for
+        # max_consecutive_fade bars, return neutral until the signal resets.
+        maulim = cfg.max_consecutive_fade
+        if maulim > 0 and self._fade_count >= maulim:
+            return self._emit_neutral(candles_signal, f"stale_fade count={self._fade_count}/{maulim}")
 
         # Determine candidate direction from HTF regime — counter-trend.
         macro = regime.macro_regime.value if regime.macro_regime else ""
@@ -191,18 +201,31 @@ class FadeExtremesTrack(Track):
         vol_climax = pct_rank >= cfg.vol_climax_pct
 
         # CVD-window state.
-        cvd_s = cvd_state_at(o, h, l, c, v, entry_dir, DEFAULT_THRESHOLDS)
+        cvd_s = cvd_state_at(o, h, l, c, v, entry_dir,
+                              SignalThresholds(cvd_window=cfg.cvd_window))
         # Note: cvd_state_at returns divergent=True when CVD-sign is opposite
         # to trend. For a fade-extremes entry we WANT CVD to align with the
         # fade direction (i.e. absorbing the move). So we read the raw sum.
 
-        # ── RSI extreme gate ─────────────────────────────────────────────
-        if entry_dir == -1:  # short — need overbought
+        # ── RSI extreme gate (adaptive percentile + fixed floor) ─────────
+        # Primary: percentile-based (e.g. top 10% of last 100 bars).
+        # Fallback: fixed thresholds when the window is too small.
+        if entry_dir == -1:
             rsi_threshold = cfg.rsi_extreme_high
-            rsi_extreme = cur_rsi > rsi_threshold
-        else:                 # long — need oversold
+            adaptive, _ = rsi_extreme_at(
+                rsi_arr, cur_rsi, -1,
+                lookback=cfg.rsi_extreme_lookback,
+                percentile=cfg.rsi_extreme_pct,
+            )
+            rsi_extreme = adaptive or cur_rsi > rsi_threshold
+        else:
             rsi_threshold = cfg.rsi_extreme_low
-            rsi_extreme = cur_rsi < rsi_threshold
+            adaptive, _ = rsi_extreme_at(
+                rsi_arr, cur_rsi, 1,
+                lookback=cfg.rsi_extreme_lookback,
+                percentile=cfg.rsi_extreme_pct,
+            )
+            rsi_extreme = adaptive or cur_rsi < rsi_threshold
 
         if not rsi_extreme:
             return self._emit_neutral(candles_signal, f"rsi_not_extreme rsi={cur_rsi:.1f}")
@@ -274,6 +297,9 @@ class FadeExtremesTrack(Track):
             f"rsi={cur_rsi:.1f} bb_score={bb_score:.2f} vol_climax={vol_climax} "
             f"cvd_score={cvd_score:.2f} score={score:.1f} regime={macro}"
         )
+        # Increment staleness counter — reset when signal flips or goes neutral.
+        self._fade_count += 1
+
         return TrackSignal(
             track=self.name,
             trend_dir=entry_dir,
@@ -283,17 +309,20 @@ class FadeExtremesTrack(Track):
             signal=sig,
             features={
                 "rsi": cur_rsi,
+                "rsi_extreme": rsi_extreme,
                 "bb_score": bb_score,
                 "rsi_score": rsi_score,
                 "vol_climax_pct_rank": pct_rank,
                 "cvd_score": cvd_score,
                 "cvd_sum": cvd_s.cvd_sum,
                 "macro_regime": macro,
+                "fade_count": self._fade_count,
             },
         )
 
     def _emit_neutral(self, candles_signal: List[Candle], reason: str) -> TrackSignal:
         """Build a neutral TrackSignal that still carries the latest close for UI."""
+        self._fade_count = 0  # reset staleness counter on any neutral bar
         close = float(candles_signal[-1].close) if candles_signal else 0.0
         sig = SignalResult(
             trend=0, all_green=False, all_red=False,

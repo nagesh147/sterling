@@ -1,7 +1,7 @@
 import asyncio
 import json
 import time
-from collections import deque
+from collections import deque, OrderedDict
 from typing import Optional, AsyncGenerator, List
 
 import numpy as _np
@@ -44,18 +44,29 @@ from app.services import paper_store as _paper_store
 log = get_logger(__name__)
 router = APIRouter(prefix="/directional", tags=["directional"])
 
-_prev_states: dict[str, str] = {}
+
+def _bounded_dict(maxlen: int = 500) -> OrderedDict:
+    """OrderedDict that evicts the oldest entry when it exceeds maxlen."""
+    class _Bounded(OrderedDict):
+        def __setitem__(self, key, value):
+            super().__setitem__(key, value)
+            if len(self) > maxlen:
+                self.popitem(last=False)
+    return _Bounded()
+
+
+_prev_states: OrderedDict = _bounded_dict()
 # Poll-level edge detection: fire arrows once per trend transition, not once per 1H candle.
 # Without this, green_arrow stays True for the entire first 1H candle (~240 polls @ 15s).
-_prev_all_green: dict[str, bool] = {}
-_prev_all_red:   dict[str, bool] = {}
+_prev_all_green: OrderedDict = _bounded_dict()
+_prev_all_red:   OrderedDict = _bounded_dict()
 # Last-known good prices for SSE stream — used as fallback when exchange fetch fails
 # so the ticker never shows stale watchlist data due to transient network errors.
-_stream_last_prices: dict[str, float] = {}
+_stream_last_prices: OrderedDict = _bounded_dict()
 # Per-instrument SSE alert state — persists across reconnections so page reloads
 # don't re-fire the arrow popup for a trend that's already been signalled.
-_prev_alert_green_stream: dict[str, bool] = {}
-_prev_alert_red_stream:   dict[str, bool] = {}
+_prev_alert_green_stream: OrderedDict = _bounded_dict()
+_prev_alert_red_stream:   OrderedDict = _bounded_dict()
 _signal_alerts: deque = deque(maxlen=50)  # O(1) appendleft, bounded automatically
 _ALERT_STATES = frozenset({
     'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
@@ -71,9 +82,9 @@ _STATE_LABELS = {
 
 # ── Signal ID tracking ────────────────────────────────────────────────────────
 # key: "{sym}_{mode}_{direction}" → short signal ID (e.g. "BTC_swing_short" → "BTCFUT-SW-A3K7P")
-_active_signal_ids:  dict[str, str]   = {}
+_active_signal_ids:  OrderedDict = _bounded_dict()
 # key: "{sym}_{direction}" → last-alerted SL (for detecting improvements)
-_active_signal_sls:  dict[str, float] = {}
+_active_signal_sls:  OrderedDict = _bounded_dict()
 
 
 def _load_signal_tracker_state() -> None:

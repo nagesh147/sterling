@@ -18,11 +18,12 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 
-# ── Base weights (sum to 20 by convention; signal_score is pct * 20) ──────
+# ── Base weights (sum to 22; signal_score is pct * 20, pct = earned / total) ─
 #
-# Rebalanced from the two competing pre-v4 sets:
+# v4.5 added mtf_boost (2 pts) — a new convergence knob that rewards signal-TF
+# alignment with the macro regime direction. Total shift 20 → 22.
 #
-#   knob              vectorizer   signal_engine   v4 (this file)
+#   knob              vectorizer   signal_engine   v4.5 (this file)
 #   st_flip                 3            5              4
 #   rsi                     2            3              2
 #   rsi_momentum            1            3              2
@@ -30,13 +31,15 @@ from typing import Dict, Optional
 #   volume                  4            2              3
 #   ha_aligned              4            2              3
 #   ha_real_aligned         2            2              3
-#   TOTAL                  20           20             20
+#   mtf_boost               -            -              2
+#   TOTAL                  20           20             22
 #
 # Rationale: st_flip slightly favoured because clean reversal entries
 # dominate forward returns; ha_real_aligned weighted equal to ha_aligned
 # because the divergence signal is what catches HA-smoothing during chop;
 # rsi_momentum elevated so a 60+ RSI gets rewarded for being "in the
-# trend" rather than just "in the band".
+# trend" rather than just "in the band"; mtf_boost adds macro/signal
+# alignment as an independent feature signal.
 V4_BASE_WEIGHTS: Dict[str, int] = {
     "st_flip":         4,
     "rsi":             2,
@@ -45,9 +48,16 @@ V4_BASE_WEIGHTS: Dict[str, int] = {
     "volume":          3,
     "ha_aligned":      3,
     "ha_real_aligned": 3,
+    "mtf_boost":       2,
 }
 
-V4_TOTAL_WEIGHT: int = sum(V4_BASE_WEIGHTS.values())  # 20
+V4_TOTAL_WEIGHT: int = sum(V4_BASE_WEIGHTS.values())  # 22
+
+
+# ── Multi-TF boost weight ──────────────────────────────────────────────────
+# Added weight for when signal-TF trend direction matches macro regime
+# direction. A new knob added to the base weights below.
+V4_MTF_BOOST_WEIGHT: int = 2
 
 
 # ── RSI thresholds ────────────────────────────────────────────────────────
@@ -76,6 +86,11 @@ V4_RSI_SHORT_MOM_HI:   float = 45.0
 # noise; 2.0× is documented institutional flow. Trade count drops; quality
 # rises.
 V4_VOL_SPIKE_MULT:     float = 2.0
+
+# Volume z-score alternative: instead of vol > mult * median, flag when
+# vol exceeds mean by this many standard deviations within the window.
+# 2.0σ = top ~2.5% in a normal distribution (fewer, cleaner climax signals).
+V4_VOL_ZSCORE_THRESHOLD: float = 2.0
 
 
 # ── Squeeze (BB inside KC) ────────────────────────────────────────────────
@@ -112,33 +127,30 @@ V4_STRENGTH_SIGNAL_PCT: float = 0.35
 # Multiplicative adjustments on V4_BASE_WEIGHTS keyed by macro_regime.value.
 # Used by `regime_aware_weights()` below.
 #
-# Calibration note: initial v4 used larger multipliers (1.25/1.20) but
-# baseline showed they *inflated* IDLE-bar scores enough to double the IDLE
-# trade count on BTC 1h (33 → 69), with the new entries averaging −0.12%.
-# Smaller multipliers (≤ 1.10) preserve the regime intent without blowing
-# past the IDLE-bypass score_min in setup_engine. Empty profiles fall back
-# to V4_BASE_WEIGHTS — used for regimes where the gate is enforced
-# elsewhere (IDLE / CHOPPY get a hard score_min in setup_engine).
-# v4 — initial experiment with multiplicative regime profiles (1.10-1.30
-# multipliers on flags matched to the regime intent) showed regression on
-# BTC intraday_1h: BEAR_TREND trade count grew 33 → 45 with avg PnL dropping
-# from +0.22% to +0.10% — the boost was admitting marginal signals into the
-# winning regime. Disabling regime profiles entirely and relying on the
-# cost-aware + MTF-disagreement uplift in the entry condition produced
-# cleaner results in baselines. Kept as an empty dict so the wiring stays
-# in place; future calibration can re-enable specific regime tweaks.
+# Calibration notes:
+# BULL_TREND: trend-following regime — boost st_flip + HA (trend features),
+#             hold RSI/momentum/volume neutral. mtf_boost gets ×1.5 since
+#             alignment with macro is the entire thesis.
+# BEAR_TREND: symmetric boost but CVD ×1.2 (short-side CVD divergence is
+#             more reliable for detecting fake breakdowns).
+# VOLATILE:   squeeze ×1.5, volume ×1.5 — breakout features dominate.
+#             mtf_boost gets ×0.5 because VOLATILE signals are short-lived
+#             and macro alignment adds less edge.
+# RANGING:    RSI ×1.3, mtf_boost ×0.5 (mean-reversion, MTF not meaningful).
+# IDLE/CHOPPY: all ×0.5 — suppress everything. The hard score_min in
+#             setup_engine is the primary gate; profiles are the secondary.
 V4_REGIME_PROFILES: Dict[str, Dict[str, float]] = {
-    "BULL_TREND":    {},
-    "BULLISH":       {},
-    "BULL_TRENDING": {},
-    "BEAR_TREND":    {},
-    "BEARISH":       {},
-    "BEAR_TRENDING": {},
-    "VOLATILE":      {},
-    "RANGING":       {},
-    "NEUTRAL":       {},
-    "IDLE":          {},  # hard score_min in setup_engine
-    "CHOPPY":        {},  # hard score_min in setup_engine
+    "BULL_TREND":    {"st_flip": 1.2, "ha_aligned": 1.2, "mtf_boost": 1.5},
+    "BULLISH":       {"st_flip": 1.1, "ha_aligned": 1.1, "mtf_boost": 1.3},
+    "BULL_TRENDING": {"st_flip": 1.2, "ha_aligned": 1.2, "mtf_boost": 1.5},
+    "BEAR_TREND":    {"st_flip": 1.2, "cvd": 1.2, "mtf_boost": 1.5},
+    "BEARISH":       {"st_flip": 1.1, "cvd": 1.1, "mtf_boost": 1.3},
+    "BEAR_TRENDING": {"st_flip": 1.2, "cvd": 1.2, "mtf_boost": 1.5},
+    "VOLATILE":      {"squeeze": 1.5, "volume": 1.5, "mtf_boost": 0.5},
+    "RANGING":       {"rsi": 1.3, "volume": 1.3, "mtf_boost": 0.5},
+    "NEUTRAL":       {"rsi": 1.2, "volume": 1.2, "mtf_boost": 0.5},
+    "IDLE":          {"st_flip": 0.5, "rsi": 0.5, "rsi_momentum": 0.5, "squeeze": 0.5, "volume": 0.5, "ha_aligned": 0.5, "ha_real_aligned": 0.5, "mtf_boost": 0.5},
+    "CHOPPY":        {"st_flip": 0.5, "rsi": 0.5, "rsi_momentum": 0.5, "squeeze": 0.5, "volume": 0.5, "ha_aligned": 0.5, "ha_real_aligned": 0.5, "mtf_boost": 0.5},
 }
 
 
@@ -185,6 +197,8 @@ class SignalThresholds:
     rsi_short_mom_lo:       float = V4_RSI_SHORT_MOM_LO
     rsi_short_mom_hi:       float = V4_RSI_SHORT_MOM_HI
     vol_spike_mult:         float = V4_VOL_SPIKE_MULT
+    vol_zscore_threshold:   float = V4_VOL_ZSCORE_THRESHOLD
+    mtf_boost_weight:       int   = V4_MTF_BOOST_WEIGHT
     bb_period:              int   = V4_BB_PERIOD
     bb_std:                 float = V4_BB_STD
     kc_period:              int   = V4_KC_PERIOD

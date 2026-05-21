@@ -21,6 +21,7 @@ what a given signal_score means.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 from typing import Generator, List, Optional, Tuple
 
 import numpy as np
@@ -39,7 +40,7 @@ from app.engines.directional.signal_weights import (
 from app.engines.directional.signal_features import (
     flip_state_at, rsi_state_at, squeeze_state_at,
     ha_state_at, volume_state_at, cvd_state_at,
-    staleness_lookback_at, assemble_signal_score,
+    staleness_lookback_at, mtf_boost_at, assemble_signal_score,
 )
 
 
@@ -122,7 +123,7 @@ def _vwap_arrays(
 
 # ── Result cache ─────────────────────────────────────────────────────────
 
-_SIGNAL_CACHE: dict = {}
+_SIGNAL_CACHE: OrderedDict = OrderedDict()
 _CACHE_LIMIT  = 50_000
 
 
@@ -170,6 +171,10 @@ def compute_signal(
 
     cfg = thresholds or DEFAULT_THRESHOLDS
     cfg_tuple = tuple(st_configs) if st_configs is not None else None
+    # Use weights tuple (not id(cfg)) to avoid memory-address collision across
+    # object lifetimes. The other threshold fields almost never change between
+    # calls so weights is the distinguishing factor.
+    cfg_key = tuple(sorted(cfg.weights.items()))
     cache_key = (
         candles_1h[-1].timestamp_ms,
         candles_1h[-1].close,
@@ -178,11 +183,11 @@ def compute_signal(
         st_threshold,
         cfg_tuple,
         regime_label,
-        id(cfg),
+        cfg_key,
     )
-    cached = _SIGNAL_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    if cache_key in _SIGNAL_CACHE:
+        _SIGNAL_CACHE.move_to_end(cache_key)
+        return _SIGNAL_CACHE[cache_key]
 
     # ── OHLCV arrays ─────────────────────────────────────────────────────
     o = np.array([cd.open  for cd in candles_1h], dtype=np.float64)
@@ -269,9 +274,12 @@ def compute_signal(
         st1_trend, st2_trend, st3_trend, flip.trend, st_threshold, cfg,
     )
 
+    # Multi-TF boost: signal trend aligned with macro regime.
+    mtf = mtf_boost_at(flip.trend, regime_label)
+
     # ── Score assembly ───────────────────────────────────────────────────
     signal_score, signal_strength, _earned, _tot = assemble_signal_score(
-        flip=flip, rsi=rsi_s, sq=sq, vol=vol, ha=ha, cvd=cvd,
+        flip=flip, rsi=rsi_s, sq=sq, vol=vol, ha=ha, cvd=cvd, mtf=mtf,
         bars_active=bars_active, thresholds=cfg, regime_label=regime_label,
     )
 
@@ -296,7 +304,7 @@ def compute_signal(
         cvd_proxy=round(cvd.cvd_sum, 4),
     )
 
-    if len(_SIGNAL_CACHE) > _CACHE_LIMIT:
-        _SIGNAL_CACHE.clear()
+    if len(_SIGNAL_CACHE) >= _CACHE_LIMIT:
+        _SIGNAL_CACHE.popitem(last=False)
     _SIGNAL_CACHE[cache_key] = res
     return res

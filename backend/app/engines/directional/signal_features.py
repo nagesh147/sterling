@@ -24,6 +24,11 @@ import numpy as np
 from app.engines.directional.signal_weights import SignalThresholds
 
 
+# ── Constants for adaptive feature lookback windows ──────────────────────
+_RSI_EXTREME_LOOKBACK: int = 100
+_VOL_ZSCORE_LOOKBACK:  int = 40
+
+
 # ── Per-bar feature dataclasses ──────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -77,6 +82,12 @@ class CvdState:
     cvd_sum: float
     cvd_abs_sum: float
     cvd_divergent: bool
+
+
+@dataclass(frozen=True)
+class MtfBoostState:
+    """Multi-timeframe alignment between signal-TF trend and macro regime."""
+    aligned: bool
 
 
 # ── Per-bar building blocks ──────────────────────────────────────────────
@@ -215,16 +226,24 @@ def volume_state_at(
     thresholds:    SignalThresholds,
 ) -> VolumeState:
     """
-    Evaluate volume-spike using the median of the most-recent 20 bars.
+    Evaluate volume-spike using z-score against the trailing window.
+    Falls back to the legacy median-multiplier method when the window is
+    too small for a meaningful z-score (< 8 bars or zero std).
 
-    Median (vs mean) is spike-resistant: a single 10× bar three days ago
-    won't poison today's gate. `vol_spike` fires when today's volume exceeds
-    `vol_spike_mult * median`.
+    Z-score detects volume climax more consistently across different
+    volatility regimes than fixed-mult × median does.
     """
     if volume_window.size == 0:
         return VolumeState(vol_spike=False, vol_median=0.0)
     med = float(np.median(volume_window))
-    spike = bool(volume_now > thresholds.vol_spike_mult * med) if med > 0 else False
+    z_spike = False
+    if volume_window.size >= 8:
+        mean = float(np.mean(volume_window))
+        std = float(np.std(volume_window, ddof=1))
+        if std > 0 and mean > 0:
+            z = (volume_now - mean) / std
+            z_spike = z > thresholds.vol_zscore_threshold
+    spike = z_spike or (bool(volume_now > thresholds.vol_spike_mult * med) if med > 0 else False)
     return VolumeState(vol_spike=spike, vol_median=med)
 
 
@@ -270,6 +289,30 @@ def cvd_state_at(
     return CvdState(cvd_sum=cvd_sum, cvd_abs_sum=cvd_abs_sum, cvd_divergent=divergent)
 
 
+def mtf_boost_at(
+    signal_trend: int,
+    macro_regime_label: str,
+) -> MtfBoostState:
+    """
+    Multi-timeframe boost: True when the signal-TF trend direction aligns
+    with the macro regime direction.
+
+    BULL_TREND/BULLISH/BULL_TRENDING → direction = 1
+    BEAR_TREND/BEARISH/BEAR_TRENDING → direction = -1
+    Everything else (RANGING, IDLE, VOLATILE, NEUTRAL, CHOPPY) → 0
+    """
+    if signal_trend == 0 or not macro_regime_label:
+        return MtfBoostState(aligned=False)
+    upper = macro_regime_label.upper()
+    if "BULL" in upper:
+        macro_dir = 1
+    elif "BEAR" in upper:
+        macro_dir = -1
+    else:
+        macro_dir = 0
+    return MtfBoostState(aligned=macro_dir != 0 and signal_trend == macro_dir)
+
+
 def staleness_lookback_at(
     st1_trend: np.ndarray,
     st2_trend: np.ndarray,
@@ -310,6 +353,43 @@ def staleness_lookback_at(
     return thresholds.staleness_lookback if completed else bars_active
 
 
+def rsi_extreme_at(
+    rsi_values: np.ndarray,
+    current_rsi: float,
+    direction: int,
+    lookback: int = _RSI_EXTREME_LOOKBACK,
+    percentile: float = 0.10,
+) -> tuple[bool, float]:
+    """
+    Adaptive RSI extreme gate using percentile rank instead of fixed thresholds.
+
+    For short entries (direction=-1): extreme when current_rsi is above the
+    (1 - percentile) threshold of the trailing `lookback` window.
+    For long entries (direction=1): extreme when current_rsi is below the
+    `percentile` threshold.
+
+    Returns (is_extreme: bool, extremity_score: 0..1) where the score is
+    linear in the gap between current value and the percentile threshold,
+    saturating at 2× the threshold gap.
+
+    Falls back to (False, 0.0) when the window is too small for a meaningful
+    percentile estimate.
+    """
+    if rsi_values.size < 20 or current_rsi <= 0:
+        return False, 0.0
+    window = rsi_values[-lookback:]
+    if direction == -1:
+        thresh = float(np.percentile(window, (1.0 - percentile) * 100.0))
+        extreme = current_rsi > thresh
+        gap = max(0.0, current_rsi - thresh)
+    else:
+        thresh = float(np.percentile(window, percentile * 100.0))
+        extreme = current_rsi < thresh
+        gap = max(0.0, thresh - current_rsi)
+    score = min(1.0, gap / max(1.0, abs(thresh) * 0.1)) if extreme else 0.0
+    return extreme, score
+
+
 # ── Score assembly ───────────────────────────────────────────────────────
 
 def assemble_signal_score(
@@ -320,6 +400,7 @@ def assemble_signal_score(
     vol:      VolumeState,
     ha:       HaState,
     cvd:      CvdState,
+    mtf:      MtfBoostState,
     bars_active: int,
     thresholds: SignalThresholds,
     regime_label: str = "",
@@ -357,6 +438,7 @@ def assemble_signal_score(
     if vol.vol_spike:  earned += w["volume"]
     if ha.ha_aligned:  earned += w["ha_aligned"]
     if ha.ha_real_aligned: earned += w["ha_real_aligned"]
+    if mtf.aligned:    earned += w.get("mtf_boost", 0)
 
     stale_pen = min(thresholds.staleness_max, bars_active // thresholds.staleness_divisor)
     cvd_pen   = thresholds.cvd_divergence_penalty if cvd.cvd_divergent else 0.0

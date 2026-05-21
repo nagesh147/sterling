@@ -14,6 +14,9 @@ from app.engines.directional.signal_engine import compute_signal  # noqa: F401 �
 from app.engines.directional.setup_engine import evaluate_setup
 from app.schemas.directional import TradeState, SetupResult
 from app.engines.indicators.atr import compute_atr
+from app.core.logging import get_logger
+log = get_logger(__name__)
+
 from app.engines.analytics.performance import full_report
 from app.engines.backtest.costs import compute_trade_costs, next_bar_open_fill, make_cost_model
 from app.engines.backtest.mtf_vectorizer import vectorize_replay
@@ -855,7 +858,7 @@ def _replay_profile(
             # call-time override (used by the search driver). When BOTH are
             # set, the call-time kwarg wins (last-write semantics matches the
             # rest of the override surface).
-            effective_dir = direction_filter or profile.only_direction
+            effective_dir = direction_filter if direction_filter is not None else profile.only_direction
             dir_ok = (
                 effective_dir is None
                 or effective_dir == "both"
@@ -1197,6 +1200,10 @@ def run_mtf_backtest(
             from dataclasses import replace as _dc_replace
             profile = _dc_replace(profile, **overrides)
         sig_candles, reg_candles = _candle_map.get(key, ([], []))
+        if not sig_candles:
+            log.warning("Profile %s: empty signal candles for %s — skipping", key, underlying)
+        if not reg_candles:
+            log.warning("Profile %s: empty regime candles for %s — skipping", key, underlying)
         # v4 Phase 1 — resolve track routing here so a single source of truth
         # picks the active tracks. The router handles asset/profile lookup +
         # YAML config + programmatic overrides.

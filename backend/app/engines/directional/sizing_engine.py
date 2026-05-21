@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Tuple
 from app.schemas.execution import TradeStructure, SizedTrade
 from app.schemas.risk import RiskParams
 from app.schemas.directional import MacroRegime
+from app.engines.risk.regime_adaptive_sizer import adapt as regime_adapt, AdaptiveSizingConfig
 
 _LEV_SCALE = {50: 0.15, 25: 0.30, 10: 0.50, 5: 0.75, 3: 0.85, 1: 1.0}
 
@@ -11,6 +12,22 @@ _LEV_SCALE = {50: 0.15, 25: 0.30, 10: 0.50, 5: 0.75, 3: 0.85, 1: 1.0}
 _COLD_START_SIZE_MULT = 0.25
 # Issue 5 — early-entry haircut multiplier.
 _EARLY_ENTRY_SIZE_MULT = 0.5
+
+# Conviction-fractional size multiplier from signal_score (0-20 scale).
+# Maps signal strength to a continuous position-sizing fraction so higher-
+# conviction signals get proportionally more capital. This replaces the old
+# binary STRONG/SIGNAL/NONE -> same-size approach.
+def _conviction_mult(signal_score: float) -> float:
+    if signal_score >= 18.0:
+        return 1.0
+    elif signal_score >= 15.0:
+        return 0.85
+    elif signal_score >= 12.0:
+        return 0.65
+    elif signal_score >= 8.0:
+        return 0.40
+    return 0.0  # setup_engine should filter these before sizing
+
 
 # Per-regime size multipliers. Calibrated against the 2026-05-18 baseline,
 # which showed RANGING was the strategy's most profitable regime (74% WR,
@@ -117,7 +134,11 @@ def size_trade(
     risk_params: RiskParams,
     leverage: int = 1,
     *,
+    signal_score: float = -1.0,
     early_entry: bool = False,
+    min_rr: float = 0.0,  # 0 = no gate; >0 rejects trades below this RR
+    atr_percentile: float = 50.0,  # for regime-adaptive sizing
+    consecutive_losses: int = 0,  # 0 = no haircut; >0 shrinks size exponentially
     macro_regime: Optional[MacroRegime] = None,
     underlying: Optional[str] = None,
     open_position_assets: Optional[List[str]] = None,
@@ -163,7 +184,15 @@ def size_trade(
                 blocked_reason="cold_start_win_rate_unknown",
             )
 
+    # Min RR gate: reject trades with unfavourable risk-reward ratio.
     rr = structure.risk_reward if structure.risk_reward and structure.risk_reward > 0 else 1.0
+    if min_rr > 0.0 and rr < min_rr:
+        return SizedTrade(
+            structure=structure, contracts=0,
+            position_value=0.0, max_risk_usd=0.0, capital_at_risk_pct=0.0,
+            blocked_reason=f"rr_{rr:.2f}_below_min_{min_rr:.2f}",
+        )
+
     frac_kelly = _fractional_kelly(win_rate, rr)
 
     # TTACE Phase 3: weak/negative calibrated edge → refuse to size.
@@ -203,11 +232,35 @@ def size_trade(
     if early_entry:
         target_risk_pct *= _EARLY_ENTRY_SIZE_MULT
 
+    # Conviction-fractional sizing: higher signal_score → larger position.
+    # Only applies when signal_score is explicitly provided (> 0).
+    conv = 1.0
+    conv_active = False
+    if signal_score > 0.0:
+        conv = _conviction_mult(signal_score)
+        conv_active = conv < 1.0
+        if conv < 1.0:
+            target_risk_pct *= conv
+
+    # Regime-adaptive ATR-percentile multiplier (compression 0.5× / normal 1.0×
+    # / expansion 1.25× / hyper 0.75×). Composable with all other multipliers.
+    atr_mult = regime_adapt(atr_percentile)
+    if atr_mult < 1.0:
+        target_risk_pct *= atr_mult
+
     # Per-regime size multiplier (replaces the legacy non-trending haircut).
     regime_mult = _regime_size_mult(macro_regime)
     regime_haircut = regime_mult < 1.0
     if regime_mult != 1.0:
         target_risk_pct *= regime_mult
+
+    # Consecutive-loss haircut: 1 loss → 0.7×, 2 → 0.49×, 3 → 0.34×.
+    # Compounds with all other multipliers; caller resets this counter on win.
+    loss_haircut_active = False
+    if consecutive_losses > 0:
+        loss_mult = round(0.7 ** consecutive_losses, 4)
+        target_risk_pct *= loss_mult
+        loss_haircut_active = True
 
     # Tier C #15 — multi-asset correlation drawdown limiter.
     max_open_corr = _max_correlation_with_open_positions(
@@ -252,6 +305,12 @@ def size_trade(
         notes.append("cold_start_bootstrap_paper")
     if early_entry:
         notes.append("early_entry_haircut")
+    if conv_active:
+        notes.append(f"conviction_mult={conv:.2f}")
+    if atr_mult < 1.0:
+        notes.append(f"atr_adapt_mult={atr_mult:.2f}")
+    if loss_haircut_active:
+        notes.append(f"loss_haircut_{consecutive_losses}loss")
     if regime_haircut:
         notes.append(f"regime_size_mult={regime_mult:.2f}")
     if correlation_haircut:

@@ -1,4 +1,5 @@
 import os
+from collections import OrderedDict
 import numpy as np
 from typing import List, Literal, Optional, Dict, Any
 from app.schemas.market import Candle
@@ -20,7 +21,7 @@ _DEFAULT_IDLE_STRICTNESS: Literal["strict", "loose"] = (
 )
 
 
-_REGIME_CACHE: Dict[Tuple, RegimeResult] = {}
+_REGIME_CACHE: OrderedDict = OrderedDict()
 
 
 def _atr_pct_at(atr_arr: np.ndarray, pos: int, lookback: int = 100) -> float:
@@ -100,6 +101,7 @@ def compute_regime(
         hmm_tuple,
     )
     if cache_key in _REGIME_CACHE:
+        _REGIME_CACHE.move_to_end(cache_key)
         return _REGIME_CACHE[cache_key]
 
     highs = np.array([c.high for c in candles_4h], dtype=np.float64)
@@ -119,37 +121,20 @@ def compute_regime(
     cur_atr_slope = _atr_slope(atr_arr, closes, n - 1)
     cur_momentum_z = _momentum_z(closes, n - 1)
 
-    # IDLE detection — strict (legacy) vs loose (Issue 3) thresholds.
-    # strict:  pct<30 on 2 consecutive bars OR (slope<0 AND pct<35)
-    # loose:   pct<25 on 2 consecutive bars OR (slope<0 AND pct<30)
-    strictness = idle_strictness
-    if strictness == "auto":
-        strictness = _DEFAULT_IDLE_STRICTNESS
-    if strictness == "loose":
-        pct_thr_low = 25
-        slope_pct_thr = 30
-    else:
-        pct_thr_low = 30
-        slope_pct_thr = 35
-    pct_low_now  = _atr_pct_at(atr_arr, n - 1, 100) < pct_thr_low
-    pct_low_prev = n >= 2 and _atr_pct_at(atr_arr, n - 2, 100) < pct_thr_low
-    slope_contraction = cur_atr_slope < 0 and cur_atr_pct < slope_pct_thr
-    cooldown_active = (pct_low_now and pct_low_prev) or slope_contraction
-
-    # Parse HMM prediction if provided by the orchestrator
-    hmm_regime = hmm_prediction.get("regime") if hmm_prediction else None
+    # Unpack HMM prediction fields for common metrics dict
+    hmm_reg = hmm_prediction.get("regime") if hmm_prediction else None
     hmm_conf = hmm_prediction.get("confidence") if hmm_prediction else None
 
-    _common = dict(
-        atr_percentile=round(cur_atr_pct, 2),
-        adx=round(cur_adx, 4),
-        ema21=round(cur_ema21, 4),
-        ema55=round(cur_ema55, 4),
-        atr_slope=round(cur_atr_slope, 6),
-        momentum_z=(round(cur_momentum_z, 4) if cur_momentum_z is not None else None),
-        hmm_primary_regime=hmm_regime,
-        hmm_confidence=hmm_conf,
-    )
+    _common = {
+        "ema21": cur_ema21,
+        "ema55": cur_ema55,
+        "adx": cur_adx,
+        "atr_pct": cur_atr_pct,
+        "atr_slope": cur_atr_slope,
+        "momentum_z": cur_momentum_z,
+        "hmm_primary_regime": hmm_reg,
+        "hmm_confidence": hmm_conf,
+    }
 
     if cur_ema21 == 0.0 or cur_ema55 == 0.0:
         return RegimeResult(
@@ -169,15 +154,11 @@ def compute_regime(
             ema50=cur_ema21, close_4h=cur_close, score=score,
             **_common,
         )
-        if len(_REGIME_CACHE) > 50000:
-            _REGIME_CACHE.clear()
+        if len(_REGIME_CACHE) >= 50000:
+            _REGIME_CACHE.popitem(last=False)
         _REGIME_CACHE[cache_key] = res
         return res
 
-    # ADX thresholds: crypto markets trend at lower ADX than FX/equities.
-    # Strong trend: ADX >= 20 (was 25 — too strict, blocked most crypto signals)
-    # Moderate trend: ADX >= 15 → RANGING (allow partial signals via setup_engine)
-    ADX_TREND = 20
     strict = _DEFAULT_IDLE_STRICTNESS
     if idle_strictness != "auto":
         strict = idle_strictness
@@ -193,18 +174,6 @@ def compute_regime(
             consec = (cur_atr_pct < 25.0 and prev_atr_pct < 25.0)
             slope_rule = (cur_atr_slope < 0.0 and cur_atr_pct < 30.0)
             is_idle = consec or slope_rule
-
-    # Base common metrics
-    _common = {
-        "ema21": cur_ema21,
-        "ema55": cur_ema55,
-        "adx": cur_adx,
-        "atr_pct": cur_atr_pct,
-        "atr_slope": cur_atr_slope,
-        "momentum_z": cur_momentum_z,
-        "hmm_primary_regime": hmm_prediction.get("regime") if hmm_prediction else None,
-        "hmm_confidence": hmm_prediction.get("confidence") if hmm_prediction else None,
-    }
 
     # HMM override integration if supplied and enabled via env
     if hmm_prediction and os.environ.get("STERLING_HMM_ENABLED", "true").lower() == "true":
@@ -269,7 +238,7 @@ def compute_regime(
         **{k: (round(v, 4) if isinstance(v, float) else v) for k, v in _common.items() if v is not None and k != "atr_pct"}
     )
 
-    if len(_REGIME_CACHE) > 50000:
-        _REGIME_CACHE.clear()
+    if len(_REGIME_CACHE) >= 50000:
+        _REGIME_CACHE.popitem(last=False)
     _REGIME_CACHE[cache_key] = res
     return res

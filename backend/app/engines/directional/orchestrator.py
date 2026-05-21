@@ -13,6 +13,11 @@ from app.services.exchanges.base import BaseExchangeAdapter
 from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
+from app.engines.directional.track_selector import select_tracks
+from app.engines.directional.tracks import (
+    TrendFollowingTrack, FadeExtremesTrack, FadeExtremesConfig,
+    TrackSignal,
+)
 from app.engines.directional.policy_engine import apply_policy
 from app.engines.directional.execution_engine import assess_timing
 from app.engines.directional.option_translation_engine import translate_options
@@ -115,13 +120,31 @@ async def run_once(
         )
 
     regime = compute_regime(candles_4h, macro_filter=macro_filter)
-    # v4 — pass regime label to compute_signal so confluence weights are
-    # rescaled per regime (trending bars favour st_flip+ha; volatile bars
-    # favour squeeze+volume). Backtest does the same via the vectoriser.
-    signal = compute_signal(
-        candles_1h,
-        regime_label=regime.macro_regime.value if regime else "",
-    )
+
+    # v4 Track dispatch: resolve which strategy tracks to run for this
+    # (asset, profile) combo, evaluate each, keep the highest-scoring signal.
+    track_names = select_tracks(instrument.underlying, mode)
+    _track_registry = {
+        "trend_following": TrendFollowingTrack(),
+        "mean_reversion": FadeExtremesTrack(),
+    }
+    best_track: Optional[TrackSignal] = None
+    for name in track_names:
+        track = _track_registry.get(name)
+        if track is None:
+            continue
+        ts = track.compute(candles_1h, regime, st_threshold=3)
+        if best_track is None or ts.score > best_track.score:
+            best_track = ts
+
+    if best_track is not None and best_track.trend_dir != 0:
+        signal = best_track.signal
+    else:
+        # Fallback: legacy compute_signal path (unchanged).
+        signal = compute_signal(
+            candles_1h,
+            regime_label=regime.macro_regime.value if regime else "",
+        )
     setup = evaluate_setup(regime, signal, profile_label=mode)
 
     if setup.state in (TradeState.IDLE, TradeState.FILTERED):
@@ -205,7 +228,14 @@ async def run_once(
     no_trade_scr = score_no_trade(regime, signal, policy)
     # Issue 5 — propagate setup.early_entry into sizing so the haircut applies.
     early = bool(getattr(setup, "early_entry", False))
-    sized_trades = [size_trade(s, risk, early_entry=early) for s in ranked[:5]]
+    sized_trades = [
+        size_trade(s, risk, early_entry=early,
+                   signal_score=signal.signal_score,
+                   macro_regime=regime.macro_regime if regime else None,
+                   underlying=instrument.underlying,
+                   atr_percentile=regime.atr_percentile)
+        for s in ranked[:5]
+    ]
 
     best = ranked[0] if ranked else None
     if best and best.score > no_trade_scr:

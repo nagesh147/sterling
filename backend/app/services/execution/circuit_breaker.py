@@ -55,7 +55,7 @@ class CircuitBreaker:
 
         from app.services import db as _db
         recent_raw = _db.get_recent_closed_trades(5)
-        consec_losses = sum(1 for t in recent_raw if t.get("realized_pnl_usd", 0) < 0)
+        consec_losses = sum(1 for t in recent_raw if (t.get("realized_pnl_usd") or 0) < 0)
         if consec_losses >= 5:
             self._size_mult = 0.5
             if self.telegram:

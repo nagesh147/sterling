@@ -538,6 +538,17 @@ def build_signals_full(
     # all bars use V4_BASE_WEIGHTS; when supplied, each bar's weights are
     # scaled by the regime profile so trending bars favour st_flip + ha and
     # volatile bars favour squeeze + volume.
+    # MTF boost: signal-trend aligns with macro regime direction.
+    # Vectorised version of `mtf_boost_at`; 1 when both trend same direction.
+    if regime_labels is not None and len(regime_labels) == n:
+        _labels_upper = np.char.upper(np.asarray(regime_labels, dtype=str))
+        _has_bull = np.char.find(_labels_upper, "BULL") >= 0
+        _has_bear = np.char.find(_labels_upper, "BEAR") >= 0
+        macro_dir = np.where(_has_bull, 1, np.where(_has_bear, -1, 0))
+        mtf_boost = ((macro_dir != 0) & (trend == macro_dir)).astype(bool)
+    else:
+        mtf_boost = np.zeros(n, dtype=bool)
+
     flag_arrays = {
         "st_flip":         st_flip.astype(np.float64),
         "rsi":             rsi_ok.astype(np.float64),
@@ -546,6 +557,7 @@ def build_signals_full(
         "volume":          vol_spike.astype(np.float64),
         "ha_aligned":      ha_aligned.astype(np.float64),
         "ha_real_aligned": ha_real_aligned.astype(np.float64),
+        "mtf_boost":       mtf_boost.astype(np.float64),
     }
     if regime_labels is None:
         # Static weights — fastest path.
