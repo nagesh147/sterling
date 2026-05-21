@@ -18,10 +18,10 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 
-# ── Base weights (sum to 22; signal_score is pct * 20, pct = earned / total) ─
+# ── Base weights (sum to 20; signal_score = pct * 20, pct = earned / total) ─
 #
 # v4.5 added mtf_boost (2 pts) — a new convergence knob that rewards signal-TF
-# alignment with the macro regime direction. Total shift 20 → 22.
+# alignment with the macro regime direction.
 #
 #   knob              vectorizer   signal_engine   v4.5 (this file)
 #   st_flip                 3            5              4
@@ -30,28 +30,23 @@ from typing import Dict, Optional
 #   squeeze                 4            3              3
 #   volume                  4            2              3
 #   ha_aligned              4            2              3
-#   ha_real_aligned         2            2              3
+#   ha_real_aligned         2            2              2  ← reduced from 3 to normalize to 20
 #   mtf_boost               -            -              2
-#   TOTAL                  20           20             22
+#   TOTAL                  20           20             20  ← was 22, now 20
 #
-# Rationale: st_flip slightly favoured because clean reversal entries
-# dominate forward returns; ha_real_aligned weighted equal to ha_aligned
-# because the divergence signal is what catches HA-smoothing during chop;
-# rsi_momentum elevated so a 60+ RSI gets rewarded for being "in the
-# trend" rather than just "in the band"; mtf_boost adds macro/signal
-# alignment as an independent feature signal.
+# Rationale: ha_real_aligned weighted at 2 (was 3) to normalize total to 20.
+# This keeps the 0-20 scoring scale clean: pct * 20 where pct = earned/20.
 V4_BASE_WEIGHTS: Dict[str, int] = {
     "st_flip":         4,
     "rsi":             2,
     "rsi_momentum":    2,
-    "squeeze":         3,
+"squeeze":         3,
     "volume":          3,
     "ha_aligned":      3,
-    "ha_real_aligned": 3,
+    "ha_real_aligned": 1,  # reduced from 2 to normalize total to 20
     "mtf_boost":       2,
 }
-
-V4_TOTAL_WEIGHT: int = sum(V4_BASE_WEIGHTS.values())  # 22
+V4_TOTAL_WEIGHT: int = sum(V4_BASE_WEIGHTS.values())  # 20
 
 
 # ── Multi-TF boost weight ──────────────────────────────────────────────────
