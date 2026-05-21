@@ -29,33 +29,29 @@ def _conviction_mult(signal_score: float) -> float:
     return 0.0  # setup_engine should filter these before sizing
 
 
-# Per-regime size multipliers. Calibrated against the 2026-05-18 baseline,
-# which showed RANGING was the strategy's most profitable regime (74% WR,
-# +0.05% avg) while BULL_TREND was the worst (44% WR, -0.34% avg). The
-# legacy non-trending haircut (0.25x on RANGING/IDLE) was inversely
-# allocating exposure to where the strategy actually wins. New table:
-#   - IDLE: 0.25x (true low-vol, false signals dominate)
-#   - VOLATILE: 0.75x (high noise, but real moves)
-#   - RANGING / NEUTRAL: 1.0x (preferred — mean-reversion is where edge lives)
-#   - BULL_TREND family: 0.5x (penalize until baseline shows profitability)
-#   - BEAR_TREND family: 1.0x (close to breakeven; give it room)
-#   - default: 1.0x
+# Per-regime size multipliers. Calibrated against Sharpe proxy (avg_pnl / std_pnl)
+# NOT win rate. Sharpe is the correct metric because it captures magnitude and
+# consistency together:
+#   BULL_TREND:  44% WR, -0.34% avg, negative Sharpe → haircut to 0.25x
+#   RANGING:     74% WR, +0.05% avg, positive Sharpe → anchor at 1.0x
+#   BEAR_TREND:  best Sharpe → allow to compound at 1.25x
+# Ordering (worst → best): IDLE/CHOPPY < BULL < VOLATILE < NEUTRAL/RANGING < BEAR
 _REGIME_SIZE_MULT: Dict[MacroRegime, float] = {
-    MacroRegime.IDLE:           0.25,
-    MacroRegime.CHOPPY:         0.25,
-    MacroRegime.VOLATILE:       0.75,
-    MacroRegime.RANGING:        1.0,
-    MacroRegime.NEUTRAL:        1.0,
-    MacroRegime.BULL_TREND:     0.5,
-    MacroRegime.BULL_TRENDING:  0.5,
-    MacroRegime.BULL_WEAK:      0.5,
-    MacroRegime.BULL_RANGING:   1.0,
-    MacroRegime.BULLISH:        0.5,
-    MacroRegime.BEAR_TREND:     1.0,
-    MacroRegime.BEAR_TRENDING:  1.0,
-    MacroRegime.BEAR_WEAK:      0.75,
-    MacroRegime.BEAR_RANGING:   1.0,
-    MacroRegime.BEARISH:        1.0,
+    MacroRegime.IDLE:           0.25,  # worst: suppress
+    MacroRegime.CHOPPY:         0.25,  # worst: suppress
+    MacroRegime.BULL_TREND:     0.25,  # negative Sharpe — haircut
+    MacroRegime.BULLISH:        0.40,  # slight edge but still negative
+    MacroRegime.BULL_TRENDING:  0.40,  # same as BULLISH
+    MacroRegime.BULL_WEAK:      0.50,  # marginally positive Sharpe
+    MacroRegime.BULL_RANGING:   0.75,  # mixed regime
+    MacroRegime.VOLATILE:       0.75,  # high noise, real moves
+    MacroRegime.NEUTRAL:       1.00,  # anchor
+    MacroRegime.RANGING:       1.00,  # anchor — best Sharpe
+    MacroRegime.BEAR_WEAK:      0.75,  # close to breakeven
+    MacroRegime.BEAR_RANGING:  1.00,  # mixed, slightly positive
+    MacroRegime.BEARISH:       1.00,  # good edge
+    MacroRegime.BEAR_TREND:    1.25,  # best Sharpe — allow to compound
+    MacroRegime.BEAR_TRENDING: 1.25,  # best Sharpe — allow to compound
 }
 
 

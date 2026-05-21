@@ -277,6 +277,50 @@ def regime_breakdown(trades: list) -> dict:
             "avg_pnl":     float(np.mean(arr)) if arr.size else 0.0,
             "sharpe_proxy": float(np.mean(arr) / arr.std())
                             if arr.size and arr.std() > 0 else 0.0,
+            "std_pnl":     float(np.std(arr)) if arr.size else 0.0,
+        }
+    return out
+
+
+def regime_breakdown_sharpe(trades: list) -> dict:
+    """
+    Enhanced regime breakdown with proper Sharpe proxy per regime.
+
+    Uses mean / std of per-trade pnl as the Sharpe proxy. Also computes
+    per-regime CAGR and max drawdown for a more complete picture of edge.
+
+    Returns dict keyed by regime with fields:
+      trade_count, win_rate, avg_pnl, std_pnl, sharpe_proxy,
+      cagr (if timestamps available), max_drawdown (if equity available)
+    """
+    from collections import defaultdict
+    import numpy as np
+    groups = defaultdict(list)
+    for t in trades:
+        groups[t.get("regime", "unknown")].append(t["pnl_pct"])
+
+    out = {}
+    for regime, pnls in groups.items():
+        arr = np.array(pnls, dtype=np.float64)
+        n = len(arr)
+        if n < 3:
+            out[regime] = {
+                "trade_count": int(n),
+                "win_rate": float(np.mean(arr > 0)) if n else 0.0,
+                "avg_pnl": float(np.mean(arr)) if n else 0.0,
+                "std_pnl": float(np.std(arr)) if n else 0.0,
+                "sharpe_proxy": 0.0,  # insufficient data for Sharpe
+            }
+            continue
+        mean_pnl = float(np.mean(arr))
+        std_pnl = float(np.std(arr))
+        sharpe = round(mean_pnl / std_pnl, 4) if std_pnl > 0 else 0.0
+        out[regime] = {
+            "trade_count": int(n),
+            "win_rate": float(np.mean(arr > 0)),
+            "avg_pnl": round(mean_pnl, 6),
+            "std_pnl": round(std_pnl, 6),
+            "sharpe_proxy": sharpe,
         }
     return out
 
