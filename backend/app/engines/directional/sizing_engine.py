@@ -62,16 +62,22 @@ def _regime_size_mult(macro_regime: Optional[MacroRegime]) -> float:
     return _REGIME_SIZE_MULT.get(macro_regime, 1.0)
 
 
-# Tier C #15 — correlation drawdown limiter. If the proposed trade's underlying
-# has |corr| > 0.8 against any open position's underlying, scale size by 0.5×.
-_CORRELATION_HIGH_THRESHOLD = 0.8
-_CORRELATION_HIGH_PENALTY = 0.5
+# Tier C #15 — multi-asset correlation drawdown limiter with smooth decay.
 
-# Round-trip slippage budget used when wiring slippage into the Kelly-derived
-# max_loss_per_contract. Each leg of the trade incurs slippage_bps; we count
-# entry + exit (~ 2x bps). Cost is added on top of the structure's max_loss
-# so target_risk_pct shrinks proportionally to leverage-tier slippage.
-_SLIPPAGE_LEGS = 2
+def _correlation_penalty(max_abs_corr: float) -> float:
+    """
+    Smooth correlation penalty: (1 - |corr|)^2
+
+    Replaces the old binary threshold at |corr| > 0.8 → 0.5x.
+    Now varies continuously:
+      |corr| = 0.0 → 1.0 (no penalty)
+      |corr| = 0.5 → 0.25 (moderate)
+      |corr| = 0.8 → 0.04 (strong)
+      |corr| = 1.0 → 0.0 (full penalty)
+    """
+    if max_abs_corr <= 0.0:
+        return 1.0
+    return (1.0 - min(1.0, max_abs_corr)) ** 2
 
 
 def _max_correlation_with_open_positions(
@@ -285,9 +291,11 @@ def size_trade(
     max_open_corr = _max_correlation_with_open_positions(
         underlying, open_position_assets, correlation_matrix,
     )
-    correlation_haircut = max_open_corr > _CORRELATION_HIGH_THRESHOLD
-    if correlation_haircut:
-        target_risk_pct *= _CORRELATION_HIGH_PENALTY
+    # Smooth correlation penalty — replaces binary threshold at |corr| > 0.8 → 0.5x.
+    corr_penalty = _correlation_penalty(max_open_corr)
+    if corr_penalty < 1.0:
+        target_risk_pct *= corr_penalty
+        notes.append(f"correlation_penalty={corr_penalty:.3f}")
 
     # Theta-aware sizing: reduce size for short-dated options (< 14 DTE).
     # Futures structures are unaffected (theta = 0).
