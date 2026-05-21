@@ -27,16 +27,27 @@ def _net_delta(sized_trade) -> float:
     """
     Net delta magnitude for P&L approximation.
 
-    All spread types in structure_selector.py place the higher-delta leg first:
+    Futures structures have an empty `legs` list (no option leg) and a 1:1
+    linear exposure to spot, so their net delta is the leverage multiplier.
+    Pre-v4 this function returned 0.0 for empty legs, which made
+    `_estimate_pnl` always return 0.0 for futures positions and the
+    "Open P/L" widget was permanently stuck at zero — fix is to detect the
+    futures structure_type and return leverage as the effective delta.
+
+    For option spreads, the higher-delta leg goes first by construction
+    (see `structure_selector.build_structures`), so net = |leg[0].δ| − |leg[1].δ|.
+
       bull_call_spread  → legs[0]=long lower call (Δ≈0.45), legs[1]=short higher call (Δ≈0.30)
       bear_put_spread   → legs[0]=long higher put (|Δ|≈0.45), legs[1]=short lower put (|Δ|≈0.25)
       bull_put_spread   → legs[0]=short higher put (|Δ|≈0.40), legs[1]=long lower put (|Δ|≈0.20)
       bear_call_spread  → legs[0]=short lower call (Δ≈0.40), legs[1]=long higher call (Δ≈0.20)
-
-    Net = abs(legs[0].delta) - abs(legs[1].delta) for all spreads.
     """
     legs = sized_trade.structure.legs
     if not legs:
+        # Futures (or any deltla-1 instrument). Use the leverage so the
+        # P&L approximation reflects the actual notional exposure.
+        if getattr(sized_trade.structure, "structure_type", "") == "futures":
+            return float(getattr(sized_trade.structure, "leverage", 1) or 1)
         return 0.0
     if len(legs) == 1:
         return abs(legs[0].delta)

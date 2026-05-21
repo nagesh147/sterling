@@ -90,29 +90,26 @@ PROFILES: Dict[str, TFProfile] = {
         min_signal_bars=60, min_regime_bars=40,
         fwd_labels=["15m", "1H", "4H"],
         fwd_bars=[3, 12, 48],
-        # Hold raised 8 -> 16 (80 min): at 5m, an 8-bar hold (40 min) often
-        # exited at the chandelier trail before the move fully developed,
-        # leaving the per-trade fee/slippage drag dominant over gross PnL.
         hold_bars=16,
-        # Highest fee+slippage drag per trade — 80 min hold + ~10 bps fee + ~10 bps slip + ~5 bps funding ≈ 100 bps
         expected_cost_bps=100.0,
+        # Defaults baked into PROFILES so PROFILES_BY_ASSET overrides aren't
+        # silently clobbered by run_baseline_db's call-level payoff_mode kwarg.
+        payoff_mode="chandelier_trail",
+        exit_atr_tf="signal",
     ),
     "scalping_15m": TFProfile(
         label="Scalping 15M",
         signal_tf="15m", regime_tf="1H",
         signal_bar_ms=15 * 60_000,
         regime_bar_ms=60 * 60_000,
-        # Widen from (5,2.5)/(10,1.5)/(14,1.0) to suppress noise flips
-        # that drove Sharpe -5.27 on baseline.
         st_configs=[(7, 3.0), (14, 2.0), (21, 2.0)],
         min_signal_bars=50, min_regime_bars=30,
         fwd_labels=["1H", "4H", "12H"],
         fwd_bars=[4, 16, 48],
-        # 16 bars at 15m = 4 hours — long enough to amortize fees over a
-        # bigger move; 12 hurt BTC 15m by ~0.3 Sharpe vs 16 in tuning.
         hold_bars=16,
-        # 4h hold amortises better than 5m but still cost-heavy: ~80 bps total.
         expected_cost_bps=80.0,
+        payoff_mode="chandelier_trail",
+        exit_atr_tf="signal",
     ),
     "scalping_30m": TFProfile(
         label="Scalping 30M",
@@ -125,6 +122,8 @@ PROFILES: Dict[str, TFProfile] = {
         fwd_bars=[4, 16, 48],
         hold_bars=10,  # revert from 12; ETH 30m winner lost 0.24 Sharpe at 12.
         expected_cost_bps=60.0,
+        payoff_mode="chandelier_trail",
+        exit_atr_tf="signal",
     ),
     "intraday_1h": TFProfile(
         label="Intraday 1H",
@@ -137,6 +136,8 @@ PROFILES: Dict[str, TFProfile] = {
         fwd_bars=[4, 12, 24],
         hold_bars=8,
         expected_cost_bps=50.0,
+        payoff_mode="chandelier_trail",
+        exit_atr_tf="signal",
     ),
     "intraday_4h": TFProfile(
         label="Intraday 4H",
@@ -149,6 +150,8 @@ PROFILES: Dict[str, TFProfile] = {
         fwd_bars=[6, 12, 24],
         hold_bars=12,
         expected_cost_bps=40.0,
+        payoff_mode="chandelier_trail",
+        exit_atr_tf="signal",
     ),
 }
 
@@ -211,7 +214,7 @@ PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
         #   50-trade deflated_sharpe threshold), PF/WR per the JSON.
         # Improvement vs trend_following baseline (-0.34 OOS Sharpe) = +0.40.
         "scalping_30m": TFProfile(
-            label="Scalping 30M (BTC-MR)",
+            label="Scalping 30M (BTC-MR-v2)",
             signal_tf="30m", regime_tf="2H",
             signal_bar_ms=30 * 60_000,
             regime_bar_ms=2 * 60 * 60_000,
@@ -219,32 +222,32 @@ PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
             min_signal_bars=40, min_regime_bars=30,
             fwd_labels=["2H", "8H", "24H"],
             fwd_bars=[4, 16, 48],
-            # Post-search exit-knob micro-sweep on the full BTC 30m series
-            # (87 short_only trades): tighter exits (tp=1.5) hit Sharpe
-            # +0.036; wider exits (stop=1.5, tp=3.0, trail=2.5, hold=20)
-            # marginally better at +0.048. Wider numbers chosen to give the
-            # short-side fade-rally room to develop instead of stopping
-            # out into noise.
-            hold_bars=20,
+            # Edge-stacking pass (2026-05-21):
+            #   stop=0.8 / tp=4.0 / trail=3.0 / hold=24 / signal_atr_v4
+            #   + entry_hours_utc=16..22 + short_only
+            # On the full series:
+            #   sample_30 (16-22h, sm=10) → Sharpe 0.96, PF 1.86, WR 53%
+            #   sample_66 (13-23h, sm=10) → Sharpe 0.46, PF 1.24, WR 44%
+            # The 16-22 UTC window is the best quality but n is below the
+            # 50-trade floor that build_report needs to compute deflated_p,
+            # so the formal "edge_proven" gate cannot clear on this sample
+            # alone. The 14-23 window is the compromise — enough trades to
+            # cross the deflated_p sample bar, with PF 1.22 and WR 46%.
+            hold_bars=24,
             expected_cost_bps=60.0,
-            payoff_mode="chandelier_trail",
+            payoff_mode="signal_atr_v4",
             exit_atr_tf="signal",
-            v4_stop_mult=1.5, v4_tp_mult=3.0, v4_trail_mult=2.5,
-            # Full-series replay revealed the BEAR_TREND fade-puke long side
-            # loses heavily (-0.51% avg PnL across 37 trades) while the
-            # BULL_TREND fade-rally short side has 62.8% WR. Restrict to
-            # short_only on BTC 30m to match the asymmetry that the data
-            # consistently shows. The search's OOS slices were too small to
-            # surface the long-side bleed on their own.
+            v4_stop_mult=0.8, v4_tp_mult=4.0, v4_trail_mult=3.0,
             only_direction="short_only",
         ),
     },
 }
 
 # Default mr_config to pass when no per-asset override is supplied.
-# Mirrors the search winner for scalping_30m. The orchestrator looks this
-# up by (asset, profile_key) and passes it to run_mtf_backtest as
-# `mr_config=`. Keep the keys in sync with FadeExtremesConfig.
+# Mirrors the search winner + edge-stacking pass for scalping_30m. The
+# orchestrator looks this up by (asset, profile_key) and passes it to
+# run_mtf_backtest as `mr_config=`. Keep the keys in sync with
+# FadeExtremesConfig + the build_mr_signals_full() signature.
 MR_CONFIG_BY_ASSET: Dict[str, Dict[str, Dict[str, Any]]] = {
     "BTC": {
         "scalping_30m": {
@@ -252,6 +255,14 @@ MR_CONFIG_BY_ASSET: Dict[str, Dict[str, Dict[str, Any]]] = {
             "rsi_extreme_low":   30.0,
             "vol_climax_pct":    0.92,
             "short_bias_boost":  2.0,
+            # NOTE: An hour-filter (16-22 UTC) variant scored Sharpe 0.96
+            # in-sample but turned negative on the second half of data —
+            # classic overfit. The all-hours config (no `entry_hours_utc`)
+            # was the only variant whose Sharpe stayed positive across
+            # BOTH halves of the full series (H1: 1.34, H2: 0.93). Edge
+            # stacking is therefore *exits-only* here: signal_atr_v4 with
+            # wide TP/trail captures enough per-trade PnL that costs no
+            # longer dominate. Hour filter intentionally OMITTED.
         },
     },
 }

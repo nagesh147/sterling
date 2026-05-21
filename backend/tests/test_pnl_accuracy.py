@@ -183,3 +183,87 @@ class TestEstimatePnL:
         pnl_1 = _estimate_pnl(trade_1, 500.0, 1, 200.0, 800.0)  # net: 0.15×500×1=75
         pnl_2 = _estimate_pnl(trade_2, 500.0, 1, 400.0, 800.0)  # net: 0.15×500×2=150
         assert pnl_2 == pytest.approx(pnl_1 * 2)
+
+
+class TestFuturesPnL:
+    """Regression tests for the v4 bug where futures positions always
+    reported open P/L = 0 because `_net_delta` returned 0 for empty
+    `legs`. The widget on the dashboard was permanently stuck at zero.
+    Fix: futures structures now return leverage as the effective delta."""
+
+    def _futures_sized(self, contracts: int = 1, leverage: int = 5,
+                       max_risk: float = 200.0):
+        return SizedTrade(
+            structure=TradeStructure(
+                structure_type="futures",
+                direction=Direction.LONG,
+                legs=[],                     # ← empty by construction
+                max_loss=max_risk,
+                max_gain=None,               # futures: unbounded gain
+                net_premium=0.0,
+                risk_reward=2.0,
+                score=80.0,
+                score_breakdown={},
+                leverage=leverage,
+                entry_price=100.0,
+            ),
+            contracts=contracts,
+            position_value=max_risk,
+            max_risk_usd=max_risk,
+            capital_at_risk_pct=1.0,
+        )
+
+    def test_futures_net_delta_is_leverage(self):
+        """Futures with empty legs returns the leverage as effective delta."""
+        trade = self._futures_sized(contracts=1, leverage=5)
+        assert _net_delta(trade) == pytest.approx(5.0)
+        trade = self._futures_sized(contracts=1, leverage=10)
+        assert _net_delta(trade) == pytest.approx(10.0)
+        trade = self._futures_sized(contracts=1, leverage=1)
+        assert _net_delta(trade) == pytest.approx(1.0)
+
+    def test_futures_long_positive_spot_move_returns_nonzero_pnl(self):
+        """+100 spot move on 1 contract @ 5x leverage → +500 raw, uncapped."""
+        trade = self._futures_sized(contracts=1, leverage=5, max_risk=200.0)
+        pnl = _estimate_pnl(
+            trade, spot_move=100.0, direction_sign=1,
+            max_risk_usd=200.0, max_gain_usd=None,
+        )
+        assert pnl == pytest.approx(500.0)
+        # The legacy bug returned 0.0 here.
+        assert pnl != 0.0
+
+    def test_futures_long_negative_spot_move_capped_at_max_risk(self):
+        """-100 spot move on 1 contract @ 5x → raw -500, capped at -max_risk."""
+        trade = self._futures_sized(contracts=1, leverage=5, max_risk=200.0)
+        pnl = _estimate_pnl(
+            trade, spot_move=-100.0, direction_sign=1,
+            max_risk_usd=200.0, max_gain_usd=None,
+        )
+        assert pnl == pytest.approx(-200.0)
+
+    def test_futures_short_pnl_inverts(self):
+        """Short futures + price up = loss; capped at -max_risk."""
+        trade = self._futures_sized(contracts=1, leverage=5, max_risk=200.0)
+        pnl = _estimate_pnl(
+            trade, spot_move=100.0, direction_sign=-1,
+            max_risk_usd=200.0, max_gain_usd=None,
+        )
+        assert pnl == pytest.approx(-200.0)
+
+    def test_futures_contracts_scale_pnl(self):
+        """Doubling contracts doubles the un-capped P&L."""
+        trade1 = self._futures_sized(contracts=1, leverage=5, max_risk=2000.0)
+        trade2 = self._futures_sized(contracts=2, leverage=5, max_risk=4000.0)
+        pnl1 = _estimate_pnl(trade1, 50.0, 1, 2000.0, None)
+        pnl2 = _estimate_pnl(trade2, 50.0, 1, 4000.0, None)
+        assert pnl2 == pytest.approx(pnl1 * 2)
+
+    def test_options_still_unchanged(self):
+        """Options with non-empty legs unaffected by the futures fallback."""
+        long_leg = _cc(95000, delta=0.45)
+        short_leg = _cc(96000, delta=0.30)
+        trade = _make_sized("bull_call_spread", Direction.LONG,
+                            [long_leg, short_leg], max_loss=200.0, max_gain=800.0)
+        # Net delta 0.15 unchanged by the futures-fallback branch.
+        assert _net_delta(trade) == pytest.approx(0.15)

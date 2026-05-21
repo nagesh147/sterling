@@ -153,6 +153,9 @@ def _run_one(symbol: str, profile_key: str, db_path: Path) -> Dict[str, Any]:
         (underlying, profile_key),
         _PROFILE_SCORE_MIN.get(profile_key, 10.0),
     )
+    # Note: exit_atr_tf and payoff_mode are now PROFILES defaults — we
+    # intentionally do NOT pass them at the call level so the BTC
+    # per-asset override (signal_atr_v4) doesn't get clobbered.
     results = run_mtf_backtest(
         underlying=underlying,
         candles_15m=c_15m, candles_1h=c_1h,
@@ -163,8 +166,6 @@ def _run_one(symbol: str, profile_key: str, db_path: Path) -> Dict[str, Any]:
         funding_8h_pct=funding,
         apply_slippage=True,
         emit_events=True,
-        exit_atr_tf="signal",
-        payoff_mode="chandelier_trail",
     )
     res = results.get(profile_key, {})
     # Extract trade-kind events for build_report.

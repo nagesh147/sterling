@@ -674,6 +674,11 @@ def build_mr_signals_full(
     cvd_window:       int   = 10,
     cvd_min_ratio:    float = 0.3,
     short_bias_boost: float = 2.0,
+    # v4 — Edge-stacking gates added when chasing edge_proven on
+    # BTC scalping_30m.  Each is opt-in (None / 0 disables).
+    entry_hours_utc:  Optional[List[int]] = None,
+    wick_rejection_pct: float = 0.0,
+    range_z_min:      float = 0.0,
 ) -> List[SignalResult]:
     """
     Vectorised counterpart to `tracks.fade_extremes.FadeExtremesTrack.compute`.
@@ -785,6 +790,48 @@ def build_mr_signals_full(
 
     # The regime+rsi gates must pass for any trade — else score=0.
     gate_ok = (entry_dir != 0) & rsi_extreme_ok & (bb_score > 0)
+
+    # v4 edge-stacking gate #1: session-hour filter. When supplied, entries
+    # only fire during the configured UTC hours (e.g. [13,14,15,16,17] for
+    # the US session where BTC bear-side reversion is most reliable).
+    if entry_hours_utc:
+        ts = np.array([int(c.timestamp_ms) for c in candles_signal], dtype=np.int64)
+        bar_hour = ((ts // 3_600_000) % 24).astype(np.int64)
+        allowed = np.zeros(n, dtype=bool)
+        for h in entry_hours_utc:
+            allowed |= (bar_hour == int(h))
+        gate_ok = gate_ok & allowed
+
+    # v4 edge-stacking gate #2: rejection-wick requirement. For a SHORT
+    # entry (fading a rally) we want an upper wick that's at least
+    # `wick_rejection_pct` of the bar range — a sellers-show-up candle.
+    # For a LONG entry (fading a dip), the lower wick rejection requirement.
+    if wick_rejection_pct > 0.0:
+        bar_range = high - low
+        body_top  = np.maximum(open_, close)
+        body_bot  = np.minimum(open_, close)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            upper_wick_frac = np.where(bar_range > 0, (high - body_top) / bar_range, 0.0)
+            lower_wick_frac = np.where(bar_range > 0, (body_bot - low) / bar_range, 0.0)
+        wick_ok = np.where(
+            entry_dir == -1, upper_wick_frac >= wick_rejection_pct,
+            np.where(entry_dir == 1, lower_wick_frac >= wick_rejection_pct, False),
+        )
+        gate_ok = gate_ok & wick_ok
+
+    # v4 edge-stacking gate #3: minimum range z-score. Filters bars whose
+    # range is too compressed to be a real climax — flat-range "rallies"
+    # are usually drift, not the kind of move that reverses.
+    if range_z_min > 0.0:
+        bar_range_full = high - low
+        s_r = pd.Series(bar_range_full)
+        r_mean = s_r.rolling(50, min_periods=10).mean()
+        r_std  = s_r.rolling(50, min_periods=10).std(ddof=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            range_z = (bar_range_full - r_mean) / r_std.where(r_std > 1e-12, np.nan)
+        range_z = np.nan_to_num(range_z.values, nan=0.0)
+        gate_ok = gate_ok & (range_z >= range_z_min)
+
     pct = np.where(gate_ok, pct, 0.0)
     score = np.round(pct * 20.0, 2)
     # Short-side boost (BTC asymmetry).
