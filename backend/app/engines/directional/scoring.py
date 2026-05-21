@@ -1,6 +1,7 @@
 import datetime as _dt
 import os as _os
 from typing import List, Optional, Tuple
+
 from app.schemas.execution import TradeStructure, CandidateContract
 from app.schemas.risk import ScoringWeights
 from app.schemas.directional import (
@@ -8,6 +9,7 @@ from app.schemas.directional import (
     PolicyResult, ExecMode, IVRBand,
 )
 from app.engines.directional.options_pricing import sabr_implied_vol
+from app.engines.risk.greeks_budget import bsm_greeks
 
 
 def _resolve_now_utc(
@@ -217,6 +219,17 @@ def _check_hard_vetoes(
     if funding_rate is not None and abs(funding_rate) > 0.025:
         return f"funding_rate {funding_rate:.4f} exceeds 0.025 threshold"
 
+    # Greeks budget veto: score 0 when delta is extreme (near-zero or near-full).
+    # Near-zero delta options have poor risk/reward; near-one delta options behave
+    # like futures and are better expressed as futures. Both erode scoring quality.
+    if structure.structure_type != "futures" and structure.legs:
+        leg = structure.legs[0]
+        abs_delta = abs(getattr(leg, "delta", 0.5))
+        if abs_delta < 0.08:
+            return f"delta {abs_delta:.2f} < 0.08 (near-zero, poor RR)"
+        if abs_delta > 0.95:
+            return f"delta {abs_delta:.2f} > 0.95 (near-futures, use futures structure)"
+
     return None
 
 
@@ -318,6 +331,7 @@ def score_structure(
             "contract_health": 0.0, "dte": 0.0, "rr": 0.0,
             "session_bonus": 0.0,
             "total": 0.0, "veto_reason": veto,
+            "greeks_veto": True,
         }
         return structure.model_copy(update={"score": 0.0, "score_breakdown": breakdown})
 
