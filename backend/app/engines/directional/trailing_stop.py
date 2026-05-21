@@ -29,6 +29,49 @@ def _adaptive_base_mult(atr_pct: float) -> float:
     return round(1.5 + pct * 0.020, 2)  # 0% → 1.5, 100% → 3.5
 
 
+def _adaptive_partial_pcts(
+    atr_pct: float,
+    base_25: float = 0.10,
+    base_50: float = 0.20,
+) -> tuple[float, float]:
+    """
+    Volatility-adaptive partial exit thresholds.
+
+    High vol  → wider thresholds (let winning trades run longer,
+                 avoid stopping out in expansion spikes).
+    Low vol   → tighter thresholds (lock in gains faster,
+                 avoid give-back in chop).
+
+    Mapping (atr_pct 0-100):
+      0%  → 0.5× base  (e.g. 5% / 10%)
+      50% → 1.0× base  (e.g. 10% / 20%)
+      100%→ 2.0× base  (e.g. 20% / 40%)
+    """
+    pct = max(0.0, min(100.0, atr_pct))
+    scale = 0.5 + pct * 0.015  # 0.5 at 0%, 2.0 at 100%
+    return round(base_25 * scale, 4), round(base_50 * scale, 4)
+
+
+def _theta_breakeven_adjustment(
+    entry: float,
+    dte: int,
+    direction: str,
+    base_pct: float = 0.02,
+) -> float:
+    """
+    Options theta-aware breakeven shift (stored as delta from entry price).
+    Low DTE → larger shift (breakeven moves faster against short gamma).
+    High DTE → smaller shift (time value decays slowly, breakeven is stable).
+    At ≤3 DTE the shift caps at ±3× base; at ≥21 DTE it is ±0.5× base.
+    """
+    if dte is None or dte <= 0:
+        return 0.0
+    # Normalise DTE to [0, 1] range: 3 DTE → 1.0 (max shift), 21+ DTE → 0.0 (no shift)
+    t_norm = max(0.0, min(1.0, (7 - dte) / 18))
+    shift = base_pct * entry * (0.5 + 2.5 * t_norm)
+    return shift if direction == "bullish" else -shift
+
+
 @dataclass
 class TrailState:
     mode: TrailMode
@@ -46,6 +89,8 @@ class TrailState:
     # Each milestone (50% partial, lock-in) adds 0.5; effective_mult is
     # max(1.0, adaptive_base - tightening_offset).
     tightening_offset: float = 0.0
+    # Options DTE: used to compute theta-aware breakeven adjustment.
+    structure_dte: Optional[int] = None
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -60,6 +105,7 @@ class TrailState:
         d.setdefault("partial_25_pct", 0.10)
         d.setdefault("partial_50_pct", 0.20)
         d.setdefault("tightening_offset", 0.0)
+        d.setdefault("structure_dte", None)
         return cls(**d)
 
 
@@ -117,6 +163,14 @@ class TrailingStopEngine:
         base_mult = _adaptive_base_mult(atr_pct)
         effective_mult = max(1.0, round(base_mult - state.tightening_offset, 2))
         state.trail_mult = effective_mult
+
+        # Volatility-adaptive partial thresholds: wider in high-vol environments
+        # so trades can breathe, tighter in low-vol to lock in gains before chop.
+        adaptive_25, adaptive_50 = _adaptive_partial_pcts(
+            atr_pct, state.partial_25_pct, state.partial_50_pct
+        )
+        state.partial_25_pct = adaptive_25
+        state.partial_50_pct = adaptive_50
 
         # Update high/low watermark
         if direction == "bullish":
@@ -179,15 +233,25 @@ class TrailingStopEngine:
         if gain >= state.partial_25_pct and not state.partial_25_done:
             state.partial_25_done = True
             state.breakeven_set   = True
-            # Move stop to breakeven
+            # Theta-aware breakeven: low-DTE options shift breakeven in direction of loss
+            # to account for accelerated time decay eroding intrinsic value.
+            be_adjust = _theta_breakeven_adjustment(
+                entry, state.structure_dte, direction
+            )
+            be_price = entry + be_adjust
             if direction == "bullish":
-                state.current_stop = max(state.current_stop, entry)
+                state.current_stop = max(state.current_stop, be_price)
             else:
-                state.current_stop = min(state.current_stop, entry)
+                state.current_stop = min(state.current_stop, be_price)
+            reason_suffix = (
+                f" (theta-adjusted: {be_adjust:+.4f})"
+                if abs(be_adjust) > 1e-6 else ""
+            )
             return PartialExitSignal(
                 close_pct=25,
                 new_trail_mult=None,
-                reason=f"{state.partial_25_pct*100:.0f}% gain — 25% closed, stop → breakeven",
+                reason=f"{state.partial_25_pct*100:.0f}% gain — 25% closed, "
+                       f"stop → breakeven{reason_suffix}",
                 partial_ratio=0.25,
             )
 
