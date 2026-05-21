@@ -125,6 +125,29 @@ def _fractional_kelly(win_rate: float, rr: float) -> float:
     return max(0.0, kelly * 0.25)
 
 
+def _theta_haircut(dte: int) -> float:
+    """
+    Theta decay haircut for options positions.
+
+    Short-dated options (< 14 DTE) lose value rapidly due to theta burn.
+    We reduce position size proportionally to reflect the time pressure:
+
+      DTE >= 30  → 1.0 (no haircut — theta manageable)
+      DTE >= 21  → 0.90 (light reduction)
+      DTE >= 14  → 0.80 (moderate reduction)
+      DTE <  14  → 0.60 (aggressive reduction — near expiry)
+
+    Futures structures are unaffected (theta = 0 for perpetual futures).
+    """
+    if dte >= 30:
+        return 1.0
+    if dte >= 21:
+        return 0.90
+    if dte >= 14:
+        return 0.80
+    return 0.60
+
+
 def size_trade(
     structure: TradeStructure,
     risk_params: RiskParams,
@@ -265,6 +288,16 @@ def size_trade(
     correlation_haircut = max_open_corr > _CORRELATION_HIGH_THRESHOLD
     if correlation_haircut:
         target_risk_pct *= _CORRELATION_HIGH_PENALTY
+
+    # Theta-aware sizing: reduce size for short-dated options (< 14 DTE).
+    # Futures structures are unaffected (theta = 0).
+    theta_mult = 1.0
+    if structure.structure_type != "futures" and structure.legs:
+        dte = structure.legs[0].dte if structure.legs else 30
+        theta_mult = _theta_haircut(dte)
+        if theta_mult < 1.0:
+            target_risk_pct *= theta_mult
+            notes.append(f"theta_haircut_dte{dte}")
 
     max_risk_usd = capital * target_risk_pct
 
