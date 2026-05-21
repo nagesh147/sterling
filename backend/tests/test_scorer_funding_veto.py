@@ -76,24 +76,36 @@ def _make_policy() -> PolicyResult:
 
 
 def test_funding_rate_veto_returns_score_zero():
-    """funding_rate=0.03 (> 0.025 threshold) → score=0 with veto_reason."""
+    """funding_rate=0.03 (> 0.025 threshold) → score=0 with veto_reason.
+
+    Pin bar_hour_utc to 12:00 so the dead-zone and funding-window vetoes
+    don't fire ahead of the funding-rate veto we're trying to exercise.
+    """
     structure = _make_structure()
     regime = _make_regime()
     signal = _make_signal()
     exec_t = _make_exec()
     policy = _make_policy()
 
-    result = score_structure(structure, regime, signal, exec_t, policy, funding_rate=0.03)
+    result = score_structure(
+        structure, regime, signal, exec_t, policy, funding_rate=0.03,
+        bar_hour_utc=12, bar_minute_utc=30,
+    )
     assert result.score == 0.0
     assert "funding" in result.score_breakdown.get("veto_reason", "").lower()
 
 
 def test_funding_rate_veto_includes_funding_in_reason():
-    """Veto reason for funding should mention 'funding'."""
+    """Veto reason for funding should mention 'funding'.
+
+    Pin bar_hour_utc to 12:00 to side-step dead-zone / funding-window
+    vetoes that would otherwise pre-empt the funding-rate veto.
+    """
     structure = _make_structure()
     result = score_structure(
         structure, _make_regime(), _make_signal(), _make_exec(), _make_policy(),
         funding_rate=0.03,
+        bar_hour_utc=12, bar_minute_utc=30,
     )
     assert result.score == 0.0
     veto = result.score_breakdown.get("veto_reason", "")

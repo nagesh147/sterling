@@ -1,0 +1,111 @@
+{
+  "run_at": "2026-05-20T21:55:39.157363Z",
+  "results": {
+    "BTCUSD": {
+      "scalping_5m": {
+        "trade_count": 62,
+        "sharpe": -0.712,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [],
+        "file": "baselines/BTCUSD_scalping_5m_20260520.json"
+      },
+      "scalping_15m": {
+        "trade_count": 69,
+        "sharpe": -1.3365,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [],
+        "file": "baselines/BTCUSD_scalping_15m_20260520.json"
+      },
+      "scalping_30m": {
+        "trade_count": 109,
+        "sharpe": -0.3414,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [],
+        "file": "baselines/BTCUSD_scalping_30m_20260520.json"
+      },
+      "intraday_1h": {
+        "trade_count": 126,
+        "sharpe": -1.0034,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [
+          "thin_regime:VOLATILE:n=4"
+        ],
+        "file": "baselines/BTCUSD_intraday_1h_20260520.json"
+      },
+      "intraday_4h": {
+        "trade_count": 43,
+        "sharpe": -0.7135,
+        "deflated_sharpe": null,
+        "edge_proven": false,
+        "edge_status": "insufficient_sample",
+        "warnings": [
+          "thin_regime:RANGING:n=7",
+          "thin_regime:BULL_TREND:n=8",
+          "thin_regime:VOLATILE:n=3"
+        ],
+        "file": "baselines/BTCUSD_intraday_4h_20260520.json"
+      }
+    },
+    "ETHUSD": {
+      "scalping_5m": {
+        "trade_count": 57,
+        "sharpe": -2.3637,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [],
+        "file": "baselines/ETHUSD_scalping_5m_20260520.json"
+      },
+      "scalping_15m": {
+        "trade_count": 107,
+        "sharpe": -1.1944,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [],
+        "file": "baselines/ETHUSD_scalping_15m_20260520.json"
+      },
+      "scalping_30m": {
+        "trade_count": 129,
+        "sharpe": 1.2649,
+        "deflated_sharpe": 1.0,
+        "edge_proven": true,
+        "edge_status": "edge_proven",
+        "warnings": [],
+        "file": "baselines/ETHUSD_scalping_30m_20260520.json"
+      },
+      "intraday_1h": {
+        "trade_count": 88,
+        "sharpe": -0.8121,
+        "deflated_sharpe": 0.0,
+        "edge_proven": false,
+        "edge_status": "no_edge",
+        "warnings": [
+          "thin_regime:IDLE:n=6",
+          "thin_regime:VOLATILE:n=2"
+        ],
+        "file": "baselines/ETHUSD_intraday_1h_20260520.json"
+      },
+      "intraday_4h": {
+        "trade_count": 40,
+        "sharpe": 0.6536,
+        "deflated_sharpe": null,
+        "edge_proven": false,
+        "edge_status": "insufficient_sample",
+        "warnings": [
+          "thin_regime:IDLE:n=2",
+          "thin_regime:RANGING:n=1"
+        ],
+        "file": "baselines/ETHUSD_intraday_4h_20260520.json"
+      }
+    }
+  }
+}

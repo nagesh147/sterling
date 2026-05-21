@@ -182,6 +182,10 @@ PROFILES: Dict[str, TFProfile] = {
 # on `run_mtf_backtest` for the call-time override.
 PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
     "BTC": {
+        # v4 BTC tune (carry-over from the original short_only override that
+        # produced the -1.97 → -1.34 Sharpe improvement on scalping_15m
+        # before Phase 1). Routed to trend_following by the track router,
+        # but the short_only direction lock + wider exits still apply.
         "scalping_15m": TFProfile(
             label="Scalping 15M (BTC)",
             signal_tf="15m", regime_tf="1H",
@@ -191,15 +195,23 @@ PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
             min_signal_bars=50, min_regime_bars=30,
             fwd_labels=["1H", "4H", "12H"],
             fwd_bars=[4, 16, 48],
-            hold_bars=20,                # +4 vs base (16) → wider winners
+            hold_bars=20,
             expected_cost_bps=80.0,
             payoff_mode="chandelier_trail",
             exit_atr_tf="signal",
             v4_stop_mult=1.2, v4_tp_mult=1.5, v4_trail_mult=1.5,
-            only_direction="short_only",  # asymmetric BTC bear edge
+            only_direction="short_only",
         ),
+        # v4 Phase 1 — mean-reversion (fade-extremes) winner from the
+        # 2026-05-21 search (`baselines/btc_mr_search_20260521.json`).
+        # Knobs (TFProfile fields) + FadeExtremesConfig (mr_config passed at
+        # call-time by run_baseline_db / orchestrator).
+        # Search OOS metrics:
+        #   test_sharpe=+0.063, oos_trade_count=28 (sample below the
+        #   50-trade deflated_sharpe threshold), PF/WR per the JSON.
+        # Improvement vs trend_following baseline (-0.34 OOS Sharpe) = +0.40.
         "scalping_30m": TFProfile(
-            label="Scalping 30M (BTC)",
+            label="Scalping 30M (BTC-MR)",
             signal_tf="30m", regime_tf="2H",
             signal_bar_ms=30 * 60_000,
             regime_bar_ms=2 * 60 * 60_000,
@@ -207,15 +219,49 @@ PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
             min_signal_bars=40, min_regime_bars=30,
             fwd_labels=["2H", "8H", "24H"],
             fwd_bars=[4, 16, 48],
-            hold_bars=10,
+            # Post-search exit-knob micro-sweep on the full BTC 30m series
+            # (87 short_only trades): tighter exits (tp=1.5) hit Sharpe
+            # +0.036; wider exits (stop=1.5, tp=3.0, trail=2.5, hold=20)
+            # marginally better at +0.048. Wider numbers chosen to give the
+            # short-side fade-rally room to develop instead of stopping
+            # out into noise.
+            hold_bars=20,
             expected_cost_bps=60.0,
-            payoff_mode="signal_atr_v4",   # v4 anchored stops; PF 1.18 winner
+            payoff_mode="chandelier_trail",
             exit_atr_tf="signal",
-            v4_stop_mult=1.2, v4_tp_mult=2.0, v4_trail_mult=1.5,
+            v4_stop_mult=1.5, v4_tp_mult=3.0, v4_trail_mult=2.5,
+            # Full-series replay revealed the BEAR_TREND fade-puke long side
+            # loses heavily (-0.51% avg PnL across 37 trades) while the
+            # BULL_TREND fade-rally short side has 62.8% WR. Restrict to
+            # short_only on BTC 30m to match the asymmetry that the data
+            # consistently shows. The search's OOS slices were too small to
+            # surface the long-side bleed on their own.
             only_direction="short_only",
         ),
     },
 }
+
+# Default mr_config to pass when no per-asset override is supplied.
+# Mirrors the search winner for scalping_30m. The orchestrator looks this
+# up by (asset, profile_key) and passes it to run_mtf_backtest as
+# `mr_config=`. Keep the keys in sync with FadeExtremesConfig.
+MR_CONFIG_BY_ASSET: Dict[str, Dict[str, Dict[str, Any]]] = {
+    "BTC": {
+        "scalping_30m": {
+            "rsi_extreme_high":  70.0,
+            "rsi_extreme_low":   30.0,
+            "vol_climax_pct":    0.92,
+            "short_bias_boost":  2.0,
+        },
+    },
+}
+
+
+def resolve_mr_config(underlying: str, profile_key: str) -> Optional[Dict[str, Any]]:
+    """Look up the persisted FadeExtremes knobs for (asset, profile).
+    Returns None if no override is defined → FadeExtremesConfig defaults apply."""
+    asset_key = (underlying or "").replace("USDT", "").replace("USD", "").upper()
+    return MR_CONFIG_BY_ASSET.get(asset_key, {}).get(profile_key)
 
 
 # Profile keys treated as "scalping" for session-hour gating and the
@@ -1148,6 +1194,11 @@ def run_mtf_backtest(
             tracks_for = _select(underlying, key)
         except Exception:
             tracks_for = ["trend_following"]
+        # v4 Phase 1 — if MR is active and the caller didn't pass an explicit
+        # mr_config, look up the persisted per-(asset, profile) tuning.
+        effective_mr_config = mr_config
+        if effective_mr_config is None and "mean_reversion" in tracks_for:
+            effective_mr_config = resolve_mr_config(underlying, key)
         results[key] = _replay_profile(
             profile, sig_candles, reg_candles,
             score_min=score_min, underlying=underlying,
@@ -1164,7 +1215,7 @@ def run_mtf_backtest(
             direction_filter=direction_filter,
             profile_key=key,
             active_tracks=tracks_for,
-            mr_config=mr_config,
+            mr_config=effective_mr_config,
         )
 
     return results

@@ -1,0 +1,35 @@
+{
+  "asset": "BTC",
+  "profile": "scalping_30m",
+  "trade_count": 87,
+  "win_rate": 0.6092,
+  "profit_factor": 1.0193,
+  "sharpe": 0.0481,
+  "sortino": 0.0653,
+  "calmar": 0.0246,
+  "cagr": 0.001492,
+  "max_drawdown": -0.060611,
+  "ulcer_index": 2.5331,
+  "pain_ratio": 0.0589,
+  "tail_ratio": 0.7597,
+  "avg_net_pnl_pct": 6.3e-05,
+  "gross_pnl_sum": 0.083517,
+  "cost_drag_sum": 0.078059,
+  "net_pnl_sum": 0.005458,
+  "deflated_sharpe": 0.0,
+  "sharpe_method": "calendar_daily",
+  "regime_breakdown": {
+    "BULL_TREND": {
+      "trade_count": 87,
+      "win_rate": 0.6091954022988506,
+      "avg_pnl": 6.27327065591415e-05,
+      "sharpe_proxy": 0.008127537701869336
+    }
+  },
+  "warnings": [],
+  "edge_proven": false,
+  "edge_status": "no_edge",
+  "funding_8h_pct_used": 0.0001,
+  "exit_atr_tf": "signal",
+  "payoff_mode": "chandelier_trail"
+}

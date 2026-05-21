@@ -58,7 +58,11 @@ _PROFILE_SCORE_MIN_PER_ASSET = {
     # volatility-per-fee ratio), so all BTC scalping gates run hotter.
     ("BTC", "scalping_5m"):  17.0,
     ("BTC", "scalping_15m"): 14.0,
-    ("BTC", "scalping_30m"): 9.0,
+    # v4 Phase 1 — mean-reversion winner (btc_mr_search_20260521.json).
+    # Lifted 9 → 10 to match the MR search Tier-3 winner. MR scores live on
+    # the same 0..20 scale as trend_following, so the gate is comparable
+    # but the cost-aware uplift (+1.2) makes the effective threshold ~11.2.
+    ("BTC", "scalping_30m"): 10.0,
     ("BTC", "intraday_1h"):  13.0,
     ("BTC", "intraday_4h"):  8.0,
     ("ETH", "scalping_5m"):  17.0,

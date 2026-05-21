@@ -1,0 +1,159 @@
+{
+  "run_at": "2026-05-20T22:58:09.488929Z",
+  "wall_clock_seconds": 1380.1,
+  "eth_safety_check": {
+    "before": {
+      "sharpe": 1.2649,
+      "trade_count": 129,
+      "deflated_sharpe": 1.0,
+      "net_pnl_sum": 0.246739
+    },
+    "after": {
+      "sharpe": 1.2649,
+      "trade_count": 129,
+      "deflated_sharpe": 1.0,
+      "net_pnl_sum": 0.246739
+    },
+    "ok": true
+  },
+  "winners": {
+    "scalping_30m": {
+      "config": {
+        "rsi_extreme_high": 70.0,
+        "rsi_extreme_low": 30.0,
+        "vol_climax_pct": 0.92,
+        "short_bias_boost": 2.0,
+        "payoff_mode": "chandelier_trail",
+        "v4_trail_mult": 1.5,
+        "v4_stop_mult": 1.0,
+        "v4_tp_mult": 1.5,
+        "hold_bars": 14,
+        "score_min": 10.0
+      },
+      "test_sharpe_per_split": [
+        -999.0,
+        -999.0,
+        -999.0
+      ],
+      "test_sharpe": 0.0634,
+      "test_profit_factor": 1.0374,
+      "test_win_rate": 0.6071,
+      "test_max_drawdown": -0.042712,
+      "oos_trade_count": 28,
+      "oos_trade_count_per_split": [
+        10,
+        7,
+        11
+      ],
+      "deflated_sharpe": null,
+      "bootstrap_sharpe_p05_p50_p95": [
+        -4.914540602262053,
+        0.032974767849399234,
+        5.949783237988361
+      ],
+      "permutation_p_value": 0.47476261869065467,
+      "all_gates_pass": false,
+      "regime_breakdown": {
+        "BULL_TREND": {
+          "trade_count": 28,
+          "win_rate": 0.6071428571428571,
+          "avg_pnl": 0.00011407894757831036,
+          "sharpe_proxy": 0.01554182992897224
+        }
+      },
+      "edge_status": null,
+      "n_trials_searched": 111,
+      "all_t3": [
+        {
+          "config": {
+            "rsi_extreme_high": 70.0,
+            "rsi_extreme_low": 30.0,
+            "vol_climax_pct": 0.92,
+            "short_bias_boost": 2.0,
+            "payoff_mode": "chandelier_trail",
+            "v4_trail_mult": 1.5,
+            "v4_stop_mult": 1.0,
+            "v4_tp_mult": 1.5,
+            "hold_bars": 14,
+            "score_min": 6.0
+          },
+          "test_sharpe_per_split": [
+            -999.0,
+            -999.0,
+            -21.983511025059954
+          ],
+          "test_sharpe": -1.4093,
+          "test_profit_factor": 0.4058,
+          "test_win_rate": 0.4167,
+          "test_max_drawdown": -0.112403,
+          "oos_trade_count": 36,
+          "oos_trade_count_per_split": [
+            12,
+            8,
+            16
+          ],
+          "deflated_sharpe": null,
+          "bootstrap_sharpe_p05_p50_p95": [
+            -11.12245186265324,
+            -6.143160685466889,
+            -1.9016633908375384
+          ],
+          "permutation_p_value": 0.9885057471264368,
+          "all_gates_pass": false,
+          "regime_breakdown": {
+            "BULL_TREND": {
+              "trade_count": 36,
+              "win_rate": 0.4166666666666667,
+              "avg_pnl": -0.003023859088776386,
+              "sharpe_proxy": -0.3920507081359703
+            }
+          },
+          "edge_status": null
+        },
+        {
+          "config": {
+            "rsi_extreme_high": 70.0,
+            "rsi_extreme_low": 30.0,
+            "vol_climax_pct": 0.92,
+            "short_bias_boost": 2.0,
+            "payoff_mode": "chandelier_trail",
+            "v4_trail_mult": 1.5,
+            "v4_stop_mult": 1.0,
+            "v4_tp_mult": 1.5,
+            "hold_bars": 14,
+            "score_min": 8.0
+          },
+          "test_sharpe_per_split": [
+            -999.0,
+            -999.0,
+            -16.104945836566536
+          ],
+          "test_sharpe": -0.6151,
+          "test_profit_factor": 0.7158,
+          "test_win_rate": 0.5,
+          "test_max_drawdown": -0.058143,
+          "oos_trade_count": 34,
+          "oos_trade_count_per_split": [
+            12,
+            7,
+            15
+          ],
+          "deflated_sharpe": null,
+          "bootstrap_sharpe_p05_p50_p95": [
+            -7.165392389722942,
+            -2.3729842493349222,
+            2.4011576713562572
+          ],
+          "permutation_p_value": 0.8065967016491754,
+          "all_gates_pass": false,
+          "regime_breakdown": {
+            "BULL_TREND": {
+              "trade_count": 34,
+              "win_rate": 0.5,
+              "avg_pnl": -0.0011601767510911228,
+              "sharpe_proxy": -0.14841869957854215
+            }
+          },
+          "edge_status": null
+        },
+        

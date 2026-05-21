@@ -1,0 +1,460 @@
+{
+  "run_at": "2026-05-21T04:45:33.046956Z",
+  "results": {
+    "scalping_5m_short": {
+      "asset": "BTC",
+      "profile_key": "scalping_5m",
+      "direction_hint": -1,
+      "oos_sharpe": 0.0,
+      "deflated_sharpe": null,
+      "fold_test_sharpes": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stable_features": [
+        "ret_20_std",
+        "atr_pct",
+        "ret_5_std",
+        "weekday",
+        "regime_adx",
+        "regime_atr_pct",
+        "regime_bear",
+        "supertrend_count",
+        "hour_utc",
+        "cvd_10",
+        "bb_width_pct",
+        "adx_14",
+        "ema_distance_pct_20",
+        "atr_pct_z_50",
+        "vol_climax_pct_rank_100",
+        "ema_21_55_cross",
+        "ema_distance_pct_55",
+        "ret_20"
+      ],
+      "top_features": [
+        [
+          "ret_20_std",
+          59.09400494893392
+        ],
+        [
+          "atr_pct",
+          49.14956919352213
+        ],
+        [
+          "ret_5_std",
+          30.55670992533366
+        ],
+        [
+          "weekday",
+          25.45752461751302
+        ],
+        [
+          "regime_adx",
+          20.952448844909668
+        ],
+        [
+          "regime_atr_pct",
+          20.87584114074707
+        ],
+        [
+          "regime_bear",
+          20.78667958577474
+        ],
+        [
+          "supertrend_count",
+          20.66767692565918
+        ],
+        [
+          "hour_utc",
+          20.495634078979492
+        ],
+        [
+          "cvd_10",
+          19.1146240234375
+        ]
+      ],
+      "model_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_5m_short.xgb",
+      "meta_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_5m_short.meta.json"
+    },
+    "scalping_5m_long": {
+      "asset": "BTC",
+      "profile_key": "scalping_5m",
+      "direction_hint": 1,
+      "oos_sharpe": 0.0,
+      "deflated_sharpe": 0.19688386508484873,
+      "fold_test_sharpes": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stable_features": [
+        "ret_5_std",
+        "atr_pct",
+        "ret_20_std",
+        "regime_atr_pct",
+        "cvd_10",
+        "weekday",
+        "adx_14",
+        "regime_adx",
+        "ema_distance_pct_55",
+        "vol_z_50",
+        "bb_width_pct",
+        "atr_pct_z_50",
+        "hour_utc",
+        "regime_bear",
+        "ema_21_55_cross",
+        "regime_bull",
+        "cvd_ratio"
+      ],
+      "top_features": [
+        [
+          "ret_5_std",
+          43.088046868642174
+        ],
+        [
+          "atr_pct",
+          38.746514638264976
+        ],
+        [
+          "ret_20_std",
+          35.143506368001304
+        ],
+        [
+          "regime_atr_pct",
+          20.15119171142578
+        ],
+        [
+          "cvd_10",
+          19.045523325602215
+        ],
+        [
+          "weekday",
+          17.892430941263836
+        ],
+        [
+          "adx_14",
+          17.839133580525715
+        ],
+        [
+          "regime_adx",
+          17.34630552927653
+        ],
+        [
+          "ema_distance_pct_55",
+          16.107739448547363
+        ],
+        [
+          "vol_z_50",
+          15.830496152242025
+        ]
+      ],
+      "model_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_5m_long.xgb",
+      "meta_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_5m_long.meta.json"
+    },
+    "scalping_15m_short": {
+      "asset": "BTC",
+      "profile_key": "scalping_15m",
+      "direction_hint": -1,
+      "oos_sharpe": 0.0,
+      "deflated_sharpe": null,
+      "fold_test_sharpes": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stable_features": [
+        "ret_20_std",
+        "atr_pct",
+        "hour_utc",
+        "ret_5_std",
+        "ema_distance_pct_55",
+        "regime_atr_pct",
+        "bb_width_pct",
+        "weekday",
+        "regime_adx",
+        "supertrend_count",
+        "ret_20",
+        "atr_pct_z_50",
+        "regime_bull",
+        "regime_bear",
+        "adx_14",
+        "ema_21_55_cross",
+        "regime_volatile",
+        "ema_distance_pct_20"
+      ],
+      "top_features": [
+        [
+          "ret_20_std",
+          34.99782117207845
+        ],
+        [
+          "atr_pct",
+          32.970924377441406
+        ],
+        [
+          "hour_utc",
+          32.40392176310221
+        ],
+        [
+          "ret_5_std",
+          30.657493273417156
+        ],
+        [
+          "ema_distance_pct_55",
+          27.48038132985433
+        ],
+        [
+          "regime_atr_pct",
+          26.681254704793293
+        ],
+        [
+          "bb_width_pct",
+          25.636817932128906
+        ],
+        [
+          "weekday",
+          25.0975440343221
+        ],
+        [
+          "regime_adx",
+          24.483850479125977
+        ],
+        [
+          "supertrend_count",
+          23.026142756144207
+        ]
+      ],
+      "model_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_15m_short.xgb",
+      "meta_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_15m_short.meta.json"
+    },
+    "scalping_15m_long": {
+      "asset": "BTC",
+      "profile_key": "scalping_15m",
+      "direction_hint": 1,
+      "oos_sharpe": 0.0,
+      "deflated_sharpe": null,
+      "fold_test_sharpes": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stable_features": [
+        "atr_pct",
+        "ret_20_std",
+        "regime_bear",
+        "hour_utc",
+        "ret_5_std",
+        "weekday",
+        "ema_21_55_cross",
+        "atr_pct_z_50",
+        "bb_width_pct",
+        "regime_adx",
+        "ema_distance_pct_55",
+        "regime_bull",
+        "adx_14",
+        "supertrend_count",
+        "regime_atr_pct",
+        "ema_distance_pct_20",
+        "vol_z_50",
+        "ret_20"
+      ],
+      "top_features": [
+        [
+          "atr_pct",
+          49.16979853312174
+        ],
+        [
+          "ret_20_std",
+          40.53925323486328
+        ],
+        [
+          "regime_bear",
+          27.237061500549316
+        ],
+        [
+          "hour_utc",
+          26.813971201578777
+        ],
+        [
+          "ret_5_std",
+          22.172741254170734
+        ],
+        [
+          "weekday",
+          22.139240264892578
+        ],
+        [
+          "ema_21_55_cross",
+          22.08309332529704
+        ],
+        [
+          "atr_pct_z_50",
+          21.131633758544922
+        ],
+        [
+          "bb_width_pct",
+          21.09864044189453
+        ],
+        [
+          "regime_adx",
+          19.661261240641277
+        ]
+      ],
+      "model_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_15m_long.xgb",
+      "meta_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_15m_long.meta.json"
+    },
+    "scalping_30m_short": {
+      "asset": "BTC",
+      "profile_key": "scalping_30m",
+      "direction_hint": -1,
+      "oos_sharpe": 0.0,
+      "deflated_sharpe": null,
+      "fold_test_sharpes": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "stable_features": [
+        "hour_utc",
+        "weekday",
+        "regime_bear",
+        "atr_pct",
+        "ret_20_std",
+        "adx_14",
+        "ret_5_std",
+        "regime_bull",
+        "supertrend_count",
+        "regime_atr_pct",
+        "regime_adx",
+        "rsi_14",
+        "bb_width_pct",
+        "atr_pct_z_50",
+        "bb_position",
+        "ema_distance_pct_55",
+        "regime_volatile",
+        "ret_20"
+      ],
+      "top_features": [
+        [
+          "hour_utc",
+          22.30861759185791
+        ],
+        [
+          "weekday",
+          22.189620971679688
+        ],
+        [
+          "regime_bear",
+          20.23597780863444
+        ],
+        [
+          "atr_pct",
+          19.80616569519043
+        ],
+        [
+          "ret_20_std",
+          18.181841214497883
+        ],
+        [
+          "adx_14",
+          17.0408878326416
+        ],
+        [
+          "ret_5_std",
+          16.56450621287028
+        ],
+        [
+          "regime_bull",
+          15.505722999572754
+        ],
+        [
+          "supertrend_count",
+          15.383111317952475
+        ],
+        [
+          "regime_atr_pct",
+          15.006340026855469
+        ]
+      ],
+      "model_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_30m_short.xgb",
+      "meta_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_30m_short.meta.json"
+    },
+    "scalping_30m_long": {
+      "asset": "BTC",
+      "profile_key": "scalping_30m",
+      "direction_hint": 1,
+      "oos_sharpe": 9.174598169495589,
+      "deflated_sharpe": 0.9999999999980935,
+      "fold_test_sharpes": [
+        8.75222150907562,
+        0.0,
+        0.0
+      ],
+      "stable_features": [
+        "atr_pct",
+        "ret_20_std",
+        "hour_utc",
+        "weekday",
+        "bb_width_pct",
+        "supertrend_count",
+        "regime_atr_pct",
+        "regime_adx",
+        "ret_20",
+        "regime_bear",
+        "ret_5_std",
+        "ema_distance_pct_55",
+        "rsi_14",
+        "vol_climax_pct_rank_100",
+        "regime_bull",
+        "adx_14",
+        "vol_z_50",
+        "ema_distance_pct_20"
+      ],
+      "top_features": [
+        [
+          "atr_pct",
+          32.595804850260414
+        ],
+        [
+          "ret_20_std",
+          25.800047556559246
+        ],
+        [
+          "hour_utc",
+          18.877214431762695
+        ],
+        [
+          "weekday",
+          17.006102244059246
+        ],
+        [
+          "bb_width_pct",
+          16.753005345662434
+        ],
+        [
+          "supertrend_count",
+          13.924582481384277
+        ],
+        [
+          "regime_atr_pct",
+          13.852151870727539
+        ],
+        [
+          "regime_adx",
+          12.952341079711914
+        ],
+        [
+          "ret_20",
+          12.903417269388834
+        ],
+        [
+          "regime_bear",
+          12.259974956512451
+        ]
+      ],
+      "model_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_30m_long.xgb",
+      "meta_path": "/home/nageshmadaram/Sterling/backend/models/BTC_scalping_30m_long.meta.json"
+    }
+  }
+}

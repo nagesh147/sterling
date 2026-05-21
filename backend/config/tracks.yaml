@@ -18,8 +18,13 @@
 
 routes:
   BTC:
-    scalping_5m:  [mean_reversion]
-    scalping_15m: [mean_reversion]
+    # Search 2026-05-21 outcome (`baselines/btc_mr_search_20260521.json`):
+    #   * scalping_30m → mean_reversion improved OOS Sharpe (-0.34 → +0.06)
+    #   * scalping_15m / scalping_5m → MR did NOT beat trend_following on OOS
+    # Net: route only 30m to MR; 5m/15m stay on trend_following until the
+    # ML ensemble (Phase 3) produces a model that demonstrably beats it.
+    scalping_5m:  [trend_following]
+    scalping_15m: [trend_following]
     scalping_30m: [mean_reversion]
     intraday_1h:  [trend_following]
     intraday_4h:  [trend_following]

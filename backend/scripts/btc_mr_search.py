@@ -320,9 +320,16 @@ def _search_profile(
     def _score(e):
         ts = e.get("test_sharpe")
         return ts if isinstance(ts, (int, float)) else -999.0
-    winner = max(t3_results, key=_score)
+    winner_idx = max(range(len(t3_results)), key=lambda i: _score(t3_results[i]))
+    # Copy out to avoid the self-reference when serialising all_t3.
+    winner = dict(t3_results[winner_idx])
     winner["n_trials_searched"] = n_trials_searched
-    winner["all_t3"] = t3_results
+    # all_t3 stores a serialisable summary of each score_min sweep result
+    # without the regime_breakdown (which is already deep + bulky).
+    winner["all_t3"] = [
+        {k: v for k, v in e.items() if k != "regime_breakdown"}
+        for e in t3_results
+    ]
 
     print(f"│ FINAL winner test_sharpe={winner['test_sharpe']} "
           f"deflated_p={winner['deflated_sharpe']} oos_n={winner['oos_trade_count']} "

@@ -1,0 +1,62 @@
+{
+  "asset": "BTC",
+  "profile": "intraday_1h",
+  "trade_count": 126,
+  "win_rate": 0.5238,
+  "profit_factor": 0.7048,
+  "sharpe": -1.0034,
+  "sortino": -1.3308,
+  "calmar": -0.5023,
+  "cagr": -0.077208,
+  "max_drawdown": -0.153717,
+  "ulcer_index": 9.294,
+  "pain_ratio": -0.8307,
+  "tail_ratio": 0.7855,
+  "avg_net_pnl_pct": -0.001219,
+  "gross_pnl_sum": -0.009135,
+  "cost_drag_sum": 0.144506,
+  "net_pnl_sum": -0.153641,
+  "deflated_sharpe": 0.0,
+  "sharpe_method": "calendar_daily",
+  "regime_breakdown": {
+    "RANGING": {
+      "trade_count": 29,
+      "win_rate": 0.6206896551724138,
+      "avg_pnl": -0.001069511758341546,
+      "sharpe_proxy": -0.12025218208547071
+    },
+    "IDLE": {
+      "trade_count": 12,
+      "win_rate": 0.4166666666666667,
+      "avg_pnl": -0.002671647894328682,
+      "sharpe_proxy": -0.5221348621287204
+    },
+    "BEAR_TREND": {
+      "trade_count": 45,
+      "win_rate": 0.6222222222222222,
+      "avg_pnl": 0.0009800981367328154,
+      "sharpe_proxy": 0.11950760374816335
+    },
+    "BULL_TREND": {
+      "trade_count": 36,
+      "win_rate": 0.3611111111111111,
+      "avg_pnl": -0.004029653130734736,
+      "sharpe_proxy": -0.5258604915934527
+    },
+    "VOLATILE": {
+      "trade_count": 4,
+      "win_rate": 0.5,
+      "avg_pnl": 0.0025994147058018505,
+      "sharpe_proxy": 0.21910392777562565,
+      "thin_sample": true
+    }
+  },
+  "warnings": [
+    "thin_regime:VOLATILE:n=4"
+  ],
+  "edge_proven": false,
+  "edge_status": "no_edge",
+  "funding_8h_pct_used": 0.0001,
+  "exit_atr_tf": "signal",
+  "payoff_mode": "chandelier_trail"
+}
