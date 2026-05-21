@@ -79,6 +79,16 @@ class AlgoRouterModeResponse(BaseModel):
     mode: str
 
 
+class VCPModeRequest(BaseModel):
+    enabled: bool
+
+
+class VCPModeResponse(BaseModel):
+    enabled: bool
+    feed_count: int
+    active_profiles: list[str]
+
+
 @router.get("/algo-mode", response_model=AlgoModeResponse)
 async def get_algo_mode(request: Request) -> AlgoModeResponse:
     return AlgoModeResponse(enabled=getattr(request.app.state, "algo_mode", False))
@@ -119,6 +129,66 @@ async def set_algo_router_mode(
     request.app.state.algo_router_mode = body.mode
     set_config("algo_router_mode", body.mode)
     return AlgoRouterModeResponse(mode=body.mode)
+
+
+@router.get("/vcp-mode", response_model=VCPModeResponse)
+async def get_vcp_mode(request: Request) -> VCPModeResponse:
+    """
+    Get current VCP live-feed state.
+    Returns enabled flag, number of active feeds, and profile keys.
+    """
+    feed_count = getattr(request.app.state, "vcp_feed_count", 0)
+    active = getattr(request.app.state, "vcp_active_profiles", [])
+    return VCPModeResponse(
+        enabled=getattr(request.app.state, "vcp_mode_enabled", False),
+        feed_count=feed_count,
+        active_profiles=active,
+    )
+
+
+@router.post("/vcp-mode", response_model=VCPModeResponse)
+async def set_vcp_mode(body: VCPModeRequest, request: Request) -> VCPModeResponse:
+    """
+    Start or stop the VCP live-feed independently of algo_mode.
+
+    Unlike algo_mode (which controls ALL auto-trading including directional
+    signal generation), vcp_mode targets only the Hybrid VCP live feed.
+    When vcp_mode=True, the _background_vcp_live_feed task will spawn
+    VCPLiveFeed instances for all active VCP profiles.
+    """
+    profiles_by_asset = {
+        "BTC": ["btc_scalping_15m", "btc_scalping_30m"],
+        "ETH": ["eth_scalping_15m", "eth_scalping_30m"],
+    }
+
+    request.app.state.vcp_mode_enabled = body.enabled
+
+    if body.enabled:
+        from app.engines.directional.track_selector import select_tracks
+        active_profiles: list[str] = []
+        for asset, profile_keys in profiles_by_asset.items():
+            for pk in profile_keys:
+                tracks = select_tracks(asset, pk)
+                if "vcp" in tracks:
+                    active_profiles.append(pk)
+
+        request.app.state.vcp_active_profiles = active_profiles
+        request.app.state.vcp_feed_count = len(active_profiles)
+        log = get_logger("vcp-mode")
+        log.info("VCP mode enabled: %d profiles active (%s)",
+                 len(active_profiles), active_profiles)
+    else:
+        request.app.state.vcp_active_profiles = []
+        request.app.state.vcp_feed_count = 0
+
+    from app.services.db import set_config
+    set_config("vcp_mode", "true" if body.enabled else "false")
+
+    return VCPModeResponse(
+        enabled=body.enabled,
+        feed_count=getattr(request.app.state, "vcp_feed_count", 0),
+        active_profiles=getattr(request.app.state, "vcp_active_profiles", []),
+    )
 
 
 @router.post("/place-order", response_model=LiveOrderResponse)

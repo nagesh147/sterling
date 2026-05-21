@@ -158,3 +158,41 @@ class MTFBacktestResult(BaseModel):
     profiles:     Dict[str, Any]
     timestamp_ms: int
     recommended:  Optional[str] = None
+
+
+# ── Hybrid VCP-Momentum Scalper ───────────────────────────────────────────────
+
+class HybridVCPProfileResult(BaseModel):
+    label:        str
+    signal_tf:    str
+    regime_tf:    str
+    trade_count:  int
+    win_rate:     Optional[float] = None
+    sharpe:       Optional[float] = None
+    sortino:      Optional[float] = None
+    profit_factor: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    cagr:         Optional[float] = None
+    equity_curve: List[float] = []
+    trades:       List[Dict[str, Any]] = []
+
+
+class HybridVCPBacktestRequest(BaseModel):
+    underlying:    str
+    lookback_days: int = Field(default=30, ge=7, le=90)
+    profiles: List[str] = Field(
+        default=["btc_scalping_15m", "btc_scalping_30m", "eth_scalping_15m", "eth_scalping_30m"],
+        description="Which VCP profiles to run. Options: btc_scalping_15m, btc_scalping_30m, eth_scalping_15m, eth_scalping_30m",
+    )
+    funding_8h_pct: Optional[float] = Field(
+        default=None,
+        description="Override perpetual funding rate per 8h period.",
+    )
+    apply_slippage: bool = Field(default=True, description="Apply tiered slippage to exits.")
+
+
+class HybridVCPBacktestResult(BaseModel):
+    underlying:   str
+    profiles:     Dict[str, HybridVCPProfileResult]
+    timestamp_ms: int
+    recommended:  Optional[str] = None

@@ -167,3 +167,178 @@ class TestBacktestAPI:
             "underlying": "BTC", "sample_every_n_bars": 0  # below min=1
         })
         assert resp.status_code == 422
+
+
+class TestVCPScalper:
+    """Tests for Hybrid VCP-Momentum Scalper engine and /backtest/vcp endpoint."""
+
+    def test_vcp_backtest_runs_all_profiles(self, client):
+        """POST /backtest/vcp returns results for all requested profiles."""
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "BTC",
+            "lookback_days": 30,
+            "profiles": ["btc_scalping_15m", "btc_scalping_30m"],
+        })
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["underlying"] == "BTC"
+        assert "profiles" in data
+        assert "timestamp_ms" in data
+        # Both profiles should be present
+        for pk in ("btc_scalping_15m", "btc_scalping_30m"):
+            assert pk in data["profiles"], f"Missing profile: {pk}"
+            p = data["profiles"][pk]
+            assert "trade_count" in p
+            assert "win_rate" in p
+            assert "equity_curve" in p
+            assert isinstance(p["equity_curve"], list)
+
+    def test_vcp_backtest_defaults_to_all_profiles(self, client):
+        """No profiles field → runs all available profiles."""
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "ETH",
+            "lookback_days": 14,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        expected = {"btc_scalping_15m", "btc_scalping_30m", "eth_scalping_15m", "eth_scalping_30m"}
+        assert set(data["profiles"].keys()) == expected
+
+    def test_vcp_backtest_unknown_underlying_404(self, client):
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "FAKE",
+            "profiles": ["btc_scalping_15m"],
+        })
+        assert resp.status_code == 404
+
+    def test_vcp_backtest_invalid_profile_400(self, client):
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "BTC",
+            "profiles": ["btc_scalping_15m", "nonexistent_profile"],
+        })
+        assert resp.status_code == 400
+        assert "nonexistent_profile" in resp.text
+
+    def test_vcp_backtest_lookback_days_validation(self, client):
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "BTC",
+            "lookback_days": 2,   # below minimum of 7
+        })
+        assert resp.status_code == 422
+
+    def test_vcp_backtest_equity_curve_starts_at_one(self, client):
+        """Equity curve must start at 1.0 (zero initial cost)."""
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "BTC",
+            "lookback_days": 30,
+            "profiles": ["btc_scalping_15m"],
+        })
+        assert resp.status_code == 200
+        curves = resp.json()["profiles"]["btc_scalping_15m"]["equity_curve"]
+        assert len(curves) > 0
+        assert abs(curves[0] - 1.0) < 1e-6
+
+    def test_vcp_backtest_trade_fields(self, client):
+        """Trade records must have all required fields and valid ranges."""
+        resp = client.post("/api/v1/backtest/vcp", json={
+            "underlying": "BTC",
+            "lookback_days": 30,
+            "profiles": ["btc_scalping_15m"],
+        })
+        assert resp.status_code == 200
+        trades = resp.json()["profiles"]["btc_scalping_15m"]["trades"]
+        for t in trades:
+            assert t["direction"] in (-1, 1)
+            assert t["entry_bar"] <= t["exit_bar"]
+            assert -5.0 < t["net_pnl"] < 5.0
+            assert t["exit_reason"] in (
+                "stop_out", "tp_partial", "trail_stop", "time_stop",
+                "trend_flip", "end_of_data",
+            )
+
+    def test_vcp_engine_direct_import(self):
+        """run_backtest works as a standalone import."""
+        from app.engines.hybrid_vcp import run_backtest, PROFILES
+        import numpy as np
+        ts = int(1_718_000_000_000)
+        candles = [
+            Candle(
+                timestamp_ms=ts + i * 15 * 60_000,
+                open=65000.0 + i * 2,
+                high=65100.0 + i * 2,
+                low=64900.0 + i * 2,
+                close=65050.0 + i * 2,
+                volume=1000.0,
+            )
+            for i in range(200)
+        ]
+        result = run_backtest(candles, PROFILES["btc_scalping_15m"])
+        assert result.trade_count >= 0
+        assert abs(result.equity_curve[0] - 1.0) < 1e-6
+        assert all(e > 0 for e in result.equity_curve)
+
+    def test_vcp_profiles_all_have_required_fields(self):
+        """Every profile in PROFILES has all required scalars for backtest + executor."""
+        from app.engines.hybrid_vcp import PROFILES
+        required = (
+            "signal_bar_ms", "regime_bar_ms", "hold_bars",
+            "vol_filter_pct", "flow_threshold",
+            "max_ibs_long", "min_ibs_short",
+            "max_rsi_long", "min_rsi_short",
+            "stop_mult", "tp1_mult", "trail_mult",
+            "risk_pct", "max_positions",
+        )
+        for key, p in PROFILES.items():
+            for field in required:
+                assert hasattr(p, field), f"{key} missing {field}"
+            assert p.signal_bar_ms > 0
+            assert p.regime_bar_ms > 0
+            assert p.hold_bars > 0
+
+    def test_vcp_track_selector_routing(self):
+        """VCP is routed for BTC/ETH scalping profiles, not for intraday."""
+        from app.engines.directional.track_selector import select_tracks, reset_routes
+        reset_routes()
+        assert select_tracks("BTC", "scalping_15m") == ["vcp"]
+        assert select_tracks("BTC", "scalping_30m") == ["vcp"]
+        assert select_tracks("ETH", "scalping_15m") == ["vcp"]
+        assert select_tracks("BTC", "intraday_1h") == ["trend_following"]
+        assert select_tracks("BTC", "intraday_4h") == ["trend_following"]
+
+    def test_vcp_track_compute_returns_track_signal(self):
+        """VCPTrack.compute returns a TrackSignal with valid trend_dir."""
+        from app.engines.directional.tracks.vcp_track import VCPTrack, VCPTrackConfig
+        from app.schemas.directional import RegimeResult
+
+        track = VCPTrack(VCPTrackConfig(profile_key="btc_scalping_15m"))
+        assert track.name == "vcp"
+
+        # Warmup-length candles for valid indicators
+        ts = int(1_718_000_000_000)
+        candles = [
+            Candle(
+                timestamp_ms=ts + i * 15 * 60_000,
+                open=65000.0 + i * 2,
+                high=65100.0 + i * 2,
+                low=64900.0 + i * 2,
+                close=65050.0 + i * 2,
+                volume=1000.0,
+            )
+            for i in range(60)
+        ]
+        fake_regime = RegimeResult(
+            macro_regime="BULL_TREND",
+            regime_score=60.0,
+            atr_percentile=50.0,
+            adx=25.0,
+            trend_label="bullish",
+            ema8=64000.0,
+            ema21=63000.0,
+            ema50=62000.0,
+            close_4h=65000.0,
+        )
+        sig = track.compute(candles, fake_regime)
+        assert sig.trend_dir in (-1, 0, 1)
+        assert sig.score >= 0.0
+        assert sig.track == "vcp"
+        assert sig.strength in ("STRONG", "SIGNAL", "NONE")

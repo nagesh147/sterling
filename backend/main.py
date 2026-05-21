@@ -754,6 +754,152 @@ async def _broadcast_ofi(app: FastAPI) -> None:
             log.warning("OFI broadcaster error: %s", exc)
 
 
+async def _background_vcp_live_feed(app: FastAPI) -> None:
+    """
+    VCP live execution feed — runs when algo_mode is on.
+
+    Spawns one VCPLiveFeed per active VCP profile (BTC/ETH × 15m/30m).
+    Each feed consumes the exchange WebSocket and drives VCPExecutor.on_bar()
+    which submits orders through OrderRouter.
+
+    The feed is resilient: on WebSocket disconnection it exponential-backoff
+    reconnects up to 5× before giving up and signalling the executor to halt.
+    """
+    import asyncio
+    from app.engines.hybrid_vcp import VCPLiveFeed, VCPFeedConfig, PROFILES
+    from app.services import exchange_account_store
+    from app.services.execution.order_router import OrderRouter, RouterMode, RouterDeps
+    from app.services.exchanges import instrument_registry as registry
+    from app.services import paper_store
+
+    profiles_by_asset: dict[str, list[str]] = {
+        "BTC": ["btc_scalping_15m", "btc_scalping_30m"],
+        "ETH": ["eth_scalping_15m", "eth_scalping_30m"],
+    }
+
+    feeds: dict[str, VCPLiveFeed] = {}
+    routers: dict[str, OrderRouter] = {}
+    active_feeds: list[asyncio.Task] = []
+
+    def _make_router(profile_key: str, mode_str: str) -> OrderRouter:
+        active = exchange_account_store.get_active() or type("A", (), {"api_key": "", "api_secret": "", "extra": {}})()
+        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+        api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+        adapter = DeltaIndiaAdapter(
+            api_key=active.api_key, api_secret=active.api_secret,
+            is_paper=(mode_str == "paper"),
+            base_url=api_base,
+        )
+
+        try:
+            router_mode = RouterMode(mode_str)
+        except Exception:
+            router_mode = RouterMode.LIVE
+
+        def _list_open_positions():
+            return [
+                p for p in paper_store.list_positions()
+                if getattr(p.status, "value", p.status) in ("open", "partially_closed")
+            ]
+
+        def _cooldown_blocked(sym_, mode_name, dir_, now_ms_):
+            from app.engines.risk import cooldown
+            try:
+                return cooldown.is_blocked(sym_, mode_name, dir_, now_ms_)
+            except Exception:
+                return False
+
+        deps = RouterDeps(
+            list_open_positions=_list_open_positions,
+            create_paper_position=lambda *a, **k: None,
+            cooldown_blocked=_cooldown_blocked,
+            correlation_penalty=lambda *a, **k: 1.0,
+            portfolio_cap_breach=lambda *a, **k: None,
+            microstructure_veto=lambda *a, **k: None,
+        )
+        return OrderRouter(
+            mode=router_mode, adapter=adapter, deps=deps,
+            instrument_resolver=registry.get_instrument,
+        )
+
+    while True:
+        # Re-evaluate every 30s so new feeds start if algo_mode toggles on mid-session
+        await asyncio.sleep(30)
+
+        try:
+            algo_mode = getattr(app.state, "algo_mode", False)
+            vcp_mode  = getattr(app.state, "vcp_mode_enabled", False)
+            router_mode_str = getattr(app.state, "algo_router_mode", "live") or "live"
+
+            # Both algo_mode AND vcp_mode must be on to start feeds
+            if not algo_mode or not vcp_mode:
+                # algo_mode off — stop all feeds gracefully
+                for f in feeds.values():
+                    await f.stop()
+                feeds.clear()
+                routers.clear()
+                log.debug("VCP live feed: algo_mode off, feeds stopped")
+                continue
+
+            # Determine which profiles are in the active track set
+            from app.engines.directional.track_selector import select_tracks
+            active_profiles: set[str] = set()
+            for asset, profile_keys in profiles_by_asset.items():
+                for pk in profile_keys:
+                    tracks = select_tracks(asset, pk)
+                    if "vcp" in tracks:
+                        active_profiles.add(pk)
+
+            # Start feed for any new profile not yet running
+            for profile_key in sorted(active_profiles):
+                if profile_key in feeds:
+                    continue
+                profile = PROFILES.get(profile_key)
+                if not profile:
+                    continue
+
+                # Get symbol mapping
+                asset = "BTC" if "btc" in profile_key else "ETH"
+                sym = f"{asset}USD"
+
+                router = _make_router(profile_key, router_mode_str)
+                routers[profile_key] = router
+
+                adapter = router.adapter  # share the adapter with the feed
+
+                tf_secs = profile.signal_bar_ms // 1000
+
+                feed_cfg = VCPFeedConfig(
+                    exchange="delta_india",
+                    symbols=[sym],
+                    signal_tf_secs=tf_secs,
+                )
+
+                from app.engines.hybrid_vcp import VCPExecutor, VCPExecutorConfig
+                exec_cfg = VCPExecutorConfig(
+                    vol_filter_pct=profile.vol_filter_pct,
+                    flow_threshold=profile.flow_threshold,
+                    max_ibs_long=profile.max_ibs_long,
+                    min_ibs_short=profile.min_ibs_short,
+                    max_rsi_long=profile.max_rsi_long,
+                    min_rsi_short=profile.min_rsi_short,
+                )
+                executor = VCPExecutor(
+                    profile=profile,
+                    router=router,
+                    adapter=adapter,
+                    config=exec_cfg,
+                )
+
+                feed = VCPLiveFeed(config=feed_cfg, executor=executor)
+                await feed.start()
+                feeds[profile_key] = feed
+                log.info(f"VCP live feed started: {profile_key} on {sym}")
+
+        except Exception as exc:
+            log.warning("VCP live feed background error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -790,6 +936,7 @@ async def lifespan(app: FastAPI):
         mode_name = DEFAULT_MODE
     app.state.trading_mode = MODES[mode_name]
     app.state.algo_mode = get_config("algo_mode", "false").lower() == "true"
+    app.state.vcp_mode_enabled = get_config("vcp_mode", "false").lower() == "true"
     # Phase F: paper / shadow / live router mode for the auto-trader.
     # Persisted via db.set_config("algo_router_mode", ...). Default "live"
     # preserves prior behaviour for users who already have algo configured.
@@ -885,11 +1032,24 @@ async def lifespan(app: FastAPI):
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
+    # ── VCP Live Feed ─────────────────────────────────────────────────────────
+    # Start the Hybrid VCP-Momentum live execution feed when algo_mode is on.
+    # The feed connects to the exchange WebSocket, reconstructs signal bars,
+    # and drives VCPExecutor.on_bar() → OrderRouter for each completed bar.
+    vcp_feed_task = asyncio.create_task(_background_vcp_live_feed(app))
+    log.info("VCP Live Feed task started")
+
     yield
 
     ofi_broadcast_task.cancel()
     try:
         await ofi_broadcast_task
+    except (Exception, BaseException):
+        pass
+
+    vcp_feed_task.cancel()
+    try:
+        await vcp_feed_task
     except (Exception, BaseException):
         pass
 

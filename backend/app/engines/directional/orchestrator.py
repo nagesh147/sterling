@@ -18,6 +18,7 @@ from app.engines.directional.tracks import (
     TrendFollowingTrack, FadeExtremesTrack, FadeExtremesConfig,
     TrackSignal,
 )
+from app.engines.directional.tracks.vcp_track import VCPTrack, VCPTrackConfig
 from app.engines.directional.policy_engine import apply_policy
 from app.engines.directional.execution_engine import assess_timing
 from app.engines.directional.option_translation_engine import translate_options
@@ -124,16 +125,45 @@ async def run_once(
     # v4 Track dispatch: resolve which strategy tracks to run for this
     # (asset, profile) combo, evaluate each, keep the highest-scoring signal.
     track_names = select_tracks(instrument.underlying, mode)
+
+    # Resolve per-mode VCP profile key from the mode config
+    _vcp_profile_key = f"{instrument.underlying.upper().replace('USDT','').replace('USD','').replace('-','')}_scalping_15m"
+
     _track_registry = {
         "trend_following": TrendFollowingTrack(),
         "mean_reversion": FadeExtremesTrack(),
+        "vcp": VCPTrack(VCPTrackConfig(profile_key=_vcp_profile_key)),
     }
+
+    # VCP needs its native signal candles (mode-specific TF) + regime candles.
+    # When VCP is in the track list, fetch them as a supplement to the base TFs.
+    vcp_signal_tf  = mode_cfg.signal_tf    if mode_cfg else "15m"
+    vcp_regime_tf  = "1H" if vcp_signal_tf == "15m" else "2H"
+
+    candles_vcp_signal: List[Candle] = []
+    candles_vcp_regime: List[Candle] = []
+    if "vcp" in track_names:
+        try:
+            candles_vcp_signal = await adapter.get_candles(instrument, vcp_signal_tf, limit=400)
+            candles_vcp_regime = await adapter.get_candles(instrument, vcp_regime_tf,  limit=500)
+        except Exception as exc:
+            log.warning("VCP candle fetch failed for %s: %s", instrument.underlying, exc)
+
     best_track: Optional[TrackSignal] = None
     for name in track_names:
         track = _track_registry.get(name)
         if track is None:
             continue
-        ts = track.compute(candles_1h, regime, st_threshold=3)
+        # VCP gets its native signal/regime candles; other tracks get 1H
+        if name == "vcp":
+            ts = track.compute(
+                candles_vcp_signal if candles_vcp_signal else candles_1h,
+                regime,
+                candles_regime=candles_vcp_regime if candles_vcp_regime else candles_4h,
+                st_threshold=3,
+            )
+        else:
+            ts = track.compute(candles_1h, regime, st_threshold=3)
         if best_track is None or ts.score > best_track.score:
             best_track = ts
 
