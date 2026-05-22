@@ -52,7 +52,6 @@ class SnapshotEntry:
     # signal_strength is "STRONG" when signal_score >= 15 (75%), "SIGNAL" >= 7, else "NONE"
     signal_score: float = 0.0
     signal_strength: str = "NONE"
-    # Winning track name: "vcp" | "trend_following" | "mean_reversion" | ""
     track: str = ""
 
 

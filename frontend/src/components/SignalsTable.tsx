@@ -1300,7 +1300,7 @@ type PanelState = ReturnType<typeof useSignalsPanelState>;
 
 type FeedFilter  = 'active' | 'armed' | 'expired' | 'all';
 type ModeFilter  = 'all' | 'scalping' | 'intraday' | 'swing' | 'positional';
-type TrackFilter = 'all' | 'vcp' | 'trend_following' | 'mean_reversion';
+type TrackFilter = 'all' | 'latest' | 'legacy';
 
 const ARMED_STATES = new Set([
   'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE',
@@ -1542,14 +1542,13 @@ export function SignalsTable() {
     { id: 'positional', label: 'POSITIONAL' },
   ];
 
-  const TRACK_PILLS: Array<{ id: 'all' | 'vcp' | 'trend_following' | 'mean_reversion'; label: string; color: string }> = [
-    { id: 'all',             label: 'ALL',          color: 'var(--text-dim)' },
-    { id: 'vcp',             label: 'VCP',          color: '#f59e0b' },
-    { id: 'trend_following', label: 'TREND',         color: '#22c55e' },
-    { id: 'mean_reversion',  label: 'REVERSION',    color: '#8b5cf6' },
+  const TRACK_PILLS: Array<{ id: 'all' | 'latest' | 'legacy'; label: string; color: string }> = [
+    { id: 'all',     label: 'ALL',     color: 'var(--text-dim)' },
+    { id: 'latest',  label: 'LATEST',  color: '#f59e0b' },
+    { id: 'legacy',  label: 'LEGACY',  color: '#8b5cf6' },
   ];
 
-  const [localTrack, setLocalTrack] = React.useState<'all' | 'vcp' | 'trend_following' | 'mean_reversion'>('all');
+  const [localTrack, setLocalTrack] = React.useState<TrackFilter>('all');
 
   const STATUS_PILLS: Array<{ id: FeedFilter; label: string }> = [
     { id: 'active',  label: 'ACTIVE' },
@@ -1666,9 +1665,7 @@ export function SignalsTable() {
         <div style={{ display: 'flex', gap: 2 }}>
           {TRACK_PILLS.map(t => {
             const cnt = (signals?.signals ?? []).filter((s: any) =>
-              s.fresh &&
-              (t.id === 'all' || s.track === t.id) &&
-              (localMode === 'all' || true) // mode already filtered separately in countByMode
+              s.fresh && (t.id === 'all' || s.strategy === t.id)
             ).length;
             const active = localTrack === t.id;
             return (

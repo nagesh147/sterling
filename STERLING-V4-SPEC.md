@@ -328,14 +328,17 @@ routes:
 | `trend_following` | `TrendFollowingTrack` | ST flip + RSI + squeeze + volume + HA alignment |
 | `mean_reversion` | `FadeExtremesTrack` | Fades extremes in ranging/trending regimes |
 
-### Signal Table Track Filter (Frontend)
+### Signal Table Strategy Filter (Frontend)
 
-The signal table (`SignalsTable.tsx`) shows a track pill row:
-`ALL | VCP (amber) | TREND (green) | REVERSION (purple)`.
+The signal table (`SignalsTable.tsx`) shows a strategy pill row:
+`ALL | LATEST (amber) | LEGACY (purple)`.
 
-Each pill shows the live count of fresh signals for that track. The backend exposes `track` field in `/api/v1/directional/signals` — the winning track name from `DirectionalOrchestrator.run_once()`.
+| Button | When |
+|--------|------|
+| LATEST | `best_track.trend_dir != 0` — a track (VCP/trend_following/mean_reversion) produced a direction |
+| LEGACY | No track won — fallback `compute_signal()` was used |
 
-Filter is independent of mode/status filters. Counts refresh every 5s via REST polling.
+The backend exposes `strategy` field (`"latest"` | `"legacy"`) and `track` (winning track name) in `/api/v1/directional/signals`. Filter is independent of mode/status filters. Counts refresh every 5s via REST polling.
 
 ### Track → SnapshotEntry
 

@@ -114,16 +114,18 @@ VCP runs first, sets direction; trend_following scores the move. Orchestrator pi
 
 ---
 
-## Signal Table — Track Filter
+## Signal Table — Strategy Filter
 
 The signal table (frontend) shows a pill-row of strategy filters:
 
 | Button | Color | Shows |
 |--------|-------|-------|
 | ALL | gray | All signals |
-| VCP | amber | Only `track == "vcp"` |
-| TREND | green | Only `track == "trend_following"` |
-| REVERSION | purple | Only `track == "mean_reversion"` |
+| LATEST | amber | `strategy == "latest"` — VCP/trend_following track produced a direction |
+| REVERSION | purple | `strategy == "legacy"` — no track won, fallback legacy compute_signal used |
+
+- **LATEST**: A track (VCP, trend_following, or mean_reversion) produced a non-zero direction. The `track` field shows which one won.
+- **LEGACY**: No track had a directional signal; the old Sterling `compute_signal` path was used as fallback.
 
 Counts update every 5s. Filter is independent of mode/status filters.
 
