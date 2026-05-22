@@ -39,45 +39,76 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 
 
 <claude-mem-context>
-# Memory Context
+# Memory Context — Sterling v4 Hybrid VCP-Momentum Scalper
 
-# [Sterling] recent context, 2026-04-27 5:29pm GMT+5:30
-
-Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
+Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
-Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 19 obs (7,269t read) | 76,818t work | 91% savings
+### Session Context (2026-05-22)
 
-### Apr 24, 2026
-S37 Caveman mode switched to ultra intensity (Apr 24, 11:33 PM)
-S26 Caveman mode switched to ultra intensity (Apr 24, 11:33 PM)
-45 11:36p 🟣 Sterling Project Directory Structure Created
-46 11:37p 🟣 Sterling Backend Core Config and Logging Implemented
-47 " 🟣 Sterling Pydantic Schemas: Instruments and Market
-48 " 🟣 Sterling Directional Engine Schemas: Full State Machine and Signal Types
-49 " 🟣 Sterling Execution and Risk Schemas Defined
-50 11:38p 🟣 Sterling Indicator Engine: ATR, EMA, Heikin-Ashi, SuperTrend Implemented
-51 " 🟣 Sterling Instrument Registry and Exchange Adapter Base Class
-52 11:39p 🟣 Sterling DeribitAdapter: Full Public-Data Exchange Client Implemented
-53 " 🟣 Sterling Directional Engines: Regime and Signal Computation Implemented
-54 " 🟣 Sterling Setup and Policy Engines Implemented
-55 11:40p 🟣 Sterling Contract Health and Option Translation Engines Implemented
-56 " 🟣 Sterling Structure Scoring and Sizing Engines Implemented
-57 11:41p 🟣 Sterling DirectionalOrchestrator: Full Trade Cycle Pipeline Assembled
-58 " 🟣 Sterling Health Endpoint Implemented
-59 11:42p 🟣 Sterling API Endpoints: Instruments and Directional Routes Implemented
-60 " 🟣 Sterling FastAPI App Entry Point and Test Fixtures Implemented
-### Apr 26, 2026
-S38 Caveman mode switched to ultra intensity (Apr 26, 3:27 PM)
-S39 User queried available slash commands/skills — checking what exists (Apr 26, 3:44 PM)
-S40 Caveman mode switched to ultra level (Apr 26, 3:44 PM)
-S50 Caveman mode switched to ultra level (Apr 26, 3:47 PM)
-S51 Caveman mode switched to ultra intensity (Apr 26, 4:24 PM)
-S52 Memory search for Sterling project — retrieving prior session observations (Apr 26, 10:29 PM)
-90 10:40p 🔵 Shell Claude+Graphify Integration in ~/.bashrc
-91 " 🔵 ~/.claude/settings.json Full Global Config Structure
-92 " 🔵 caveman-statusline.sh — Security-Hardened Status Badge Script
+Key work done today — all on the Sterling live trading engine:
 
-Access 77k tokens of past work via get_observations([IDs]) or mem-search skill.
+**PaperLiveToggle fix** 🔴
+- SHADOW button in LIVE mode was opening "go-live-confirm" modal (wrong action)
+- PAPER button onClick guarded by `!isLive` so clicking it in SHADOW did nothing
+- Fixed: LIVE→SHADOW now directly calls `update({is_paper:true})`, SHADOW/PAPER→PAPER works, PAPER button onClick properly fires regardless of current mode
+
+**Track filter in SignalsTable** 🟣
+- Backend: `DirectionalOrchestrator` picks winning track (highest score: vcp/trend_following/mean_reversion)
+- `track` field now exposed in `snapshot_cache.SnapshotEntry` + `/signals` response
+- Frontend: new pill-row in signal table — ALL / VCP (amber) / TREND (green) / REVERSION (purple)
+- Each pill shows live count of signals matching that track
+- Count queried from REST signals data, independent of mode filter
+
+**algo_router_mode persistence** ✅
+- Mode now survives restarts via `db.set_config("algo_router_mode", body.mode)`
+- On startup: `get_config("algo_router_mode") or "live"` → `app.state.algo_router_mode`
+
+**V4AnalyticsDashboard badge fix** ✅
+- Was hardcoded "SHADOW TRADING"
+- Now polls `http://localhost:8000/api/v1/trading/algo-router-mode` every 3s directly
+
+**Realized PnL in V4 Analytics** 🟣
+- `_build_pnl_event` emits `total_realized_pnl_usd` (aggregated from closed positions) + `realized_pnl_usd` per entry
+- Frontend `LivePnlEntry` updated with `realized_pnl_usd: number | null` + `total_realized_pnl_usd: number`
+- Shows realized below the Open P&L card
+
+**Shadow mode sync** ✅
+- `LiveControlPanel.changeMode()` writes to `algo_router_mode` via `POST /api/v1/trading/algo-router-mode`
+- `PaperLiveToggle` writes to `is_paper` via `PUT /api/v1/exchanges/{id}` (for paper/shadow switching)
+- Custom `sterling-router-mode-change` event broadcasts mode to V4AnalyticsDashboard
+
+**9 active VCP feeds** 🟣
+- BTC × 5m/15m/30m/1h/4h + ETH × 5m/15m/30m/1h
+- All routed via `config/tracks.yaml` to `[vcp, trend_following]`
+- VCP live feeds connect to Delta India WebSocket
+
+### Architecture Notes
+
+`algo_mode` (on/off) — master switch for ALL auto-trading (directional + VCP)  
+`algo_router_mode` (paper/shadow/live) — execution dispatcher  
+Both enabled → full auto-trading. `signal_strength == "STRONG"` gates every order.
+
+Auto-order path: `_auto_place_algo_order` (main.py) → `OrderRouter.submit()`
+VCP auto-trade path: `VCPExecutor.on_bar()` → `OrderRouter.submit()`
+
+### Servers
+
+- Backend: `http://localhost:8000` (uvicorn, port 8000)
+- Frontend: `http://localhost:5173` (Vite dev, port 5173)
+
+### Relevant Files
+
+- `backend/app/api/v1/endpoints/directional.py` — signals endpoint, track exposure
+- `backend/app/services/snapshot_cache.py` — SnapshotEntry with track field
+- `backend/app/engines/directional/orchestrator.py` — best_track.name propagated
+- `frontend/src/components/SignalsTable.tsx` — track filter pills + SignalsFeedBody
+- `frontend/src/components/PaperLiveToggle.tsx` — 3-way toggle, correct onClick logic
+- `frontend/src/hooks/useSignals.ts` — SignalItem with track field
+
+### Out of scope
+
+- Live order routing (paper-only, shadow audit available)
+- Multi-exchange routing (single Delta India account)
+- WebSocket fill streaming (REST polling sufficient)
 </claude-mem-context>

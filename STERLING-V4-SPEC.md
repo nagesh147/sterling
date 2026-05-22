@@ -257,20 +257,16 @@ realised PnL, fees, slippage estimate, and the ATR percentile / IVR / score at e
 
 ## UI/UX v4
 
-Two coordinated entry points share the same backend:
+| Component | File | Purpose |
+|-----------|------|---------|
+| `SignalsTable` | `components/SignalsTable.tsx` | Signal feed with track filter pills (ALL/VCP/TREND/REVERSION) |
+| `LiveControlPanel` | `components/LiveControlPanel.tsx` | Kill switch, algo-mode, algo-router-mode selector |
+| `PaperLiveToggle` | `components/PaperLiveToggle.tsx` | 3-way PAPER/SHADOW/LIVE toggle |
+| `V4AnalyticsDashboard` | `components/V4AnalyticsDashboard.tsx` | Live P&L + realized PnL + mode badge |
+| `ArrowAlert` | `components/ArrowAlert.tsx` | SSE overlay alert cards |
 
-| Mode    | File | Audience |
-|---------|------|----------|
-| **Pro Terminal** | `frontend/src/pages/Terminal.tsx`       | Quants, traders — live grid, multi-pane charts, tickets |
-| **Simple**       | `frontend/src/pages/SimpleTerminal.tsx` | Beginners — one-screen guided flow |
-
-New v4 components:
-
-- `LiveControlPanel` — kill switch, daily-loss meter, retry queue, mode selector
-  (paper / shadow / live), correlation heatmap. **Always visible** in both modes.
-- `RegimeStrip` — ATR percentile + IVR + vol-of-vol bar at top of every page.
-- `RiskBudgetMeter` — visualises capital-at-risk against the C3 bucket caps.
-- `ShadowDiff` — when in shadow mode, side-by-side compare paper vs live fill price.
+`LiveControlPanel` calls `POST /api/v1/trading/algo-router-mode` on mode change.  
+`PaperLiveToggle` operates on exchange `is_paper` flag. Both sync via `sterling-router-mode-change` custom event.
 
 ---
 
@@ -298,8 +294,91 @@ All tests are pure-Python with mocked exchanges; no live network calls. Run with
 
 - Multi-account routing across exchanges (single Delta India account v4).
 - Cross-exchange arbitrage signals.
-- ML-based feature crosses (a future v5 + dataset).
-- WebSocket fill streaming (REST polling is sufficient for current latencies).
+- WebSocket fill streaming (REST polling is sufficient).
+- Live order routing outside of paper/shadow modes.
+
+---
+
+## Track Routing System (v4 Shipped)
+
+### config/tracks.yaml
+
+Per `(instrument, profile)` → ordered list of track names. Orchestrator evaluates all tracks and picks the highest-scoring winner:
+
+```yaml
+routes:
+  BTC:
+    btc_scalping_5m:   [vcp, trend_following]
+    btc_scalping_15m: [vcp, trend_following]
+    btc_scalping_30m: [vcp, mean_reversion]
+    btc_intraday_1h:   [vcp, trend_following]
+    btc_intraday_4h:  [vcp, trend_following]
+  ETH:
+    eth_scalping_5m:   [vcp, trend_following]
+    eth_scalping_15m:  [vcp, trend_following]
+    eth_scalping_30m:  [vcp, trend_following]
+    eth_intraday_1h:   [vcp, trend_following]
+```
+
+### Tracks
+
+| Track | Engine | Logic |
+|-------|--------|-------|
+| `vcp` | `VCPTrack` | Volume concentration profiles, structure breaks, range-break confirmations |
+| `trend_following` | `TrendFollowingTrack` | ST flip + RSI + squeeze + volume + HA alignment |
+| `mean_reversion` | `FadeExtremesTrack` | Fades extremes in ranging/trending regimes |
+
+### Signal Table Track Filter (Frontend)
+
+The signal table (`SignalsTable.tsx`) shows a track pill row:
+`ALL | VCP (amber) | TREND (green) | REVERSION (purple)`.
+
+Each pill shows the live count of fresh signals for that track. The backend exposes `track` field in `/api/v1/directional/signals` — the winning track name from `DirectionalOrchestrator.run_once()`.
+
+Filter is independent of mode/status filters. Counts refresh every 5s via REST polling.
+
+### Track → SnapshotEntry
+
+`best_track.name` is stored in `SnapshotEntry.track` and returned in both cached and live signal responses.
+
+---
+
+## Two-Axis Trading Control (v4 Shipped)
+
+### algo_mode — Master On/Off
+
+Boolean. Enables/disables ALL auto-trading (directional engine + VCP feeds).
+
+- `algo_mode = true` → `_auto_place_algo_order` fires on `signal_strength == "STRONG"`
+- `algo_mode = false` → no auto-trading, manual orders only
+
+### algo_router_mode — Execution Dispatcher
+
+```python
+# Backend: app.state.algo_router_mode  (persisted in SQLite via db.set_config)
+# Default on startup: get_config("algo_router_mode") or "live"
+```
+
+| Mode | Exchange call | Paper position | Use |
+|------|--------------|----------------|-----|
+| `paper` | NO | YES | Simulation |
+| `shadow` | YES | YES | Live audit |
+| `live` | YES | NO | Production |
+
+### UI Components
+
+- **LiveControlPanel**: 3-way mode selector. Calls `POST /api/v1/trading/algo-router-mode` on change. Dispatches `sterling-router-mode-change` custom event for same-tab sync.
+- **PaperLiveToggle**: 3-way PAPER/SHADOW/LIVE toggle. Operates on exchange `is_paper` flag + credentials. SHADOW = `is_paper=true` + keys stored.
+
+Both components must be in sync — `LiveControlPanel` is the authoritative source for the backend mode.
+
+---
+
+## VCP Live Feeds (v4 Shipped)
+
+9 active feeds: BTC × 5m/15m/30m/1h/4h + ETH × 5m/15m/30m/1h. All routed via `tracks.yaml` to `[vcp, trend_following]`.
+
+VCP feeds connect to Delta India WebSocket and auto-trade via `VCPExecutor.on_bar()` → `OrderRouter.submit()`. Require `vcp_mode = true` in addition to `algo_mode = true`.
 
 ---
 
@@ -308,4 +387,4 @@ All tests are pure-Python with mocked exchanges; no live network calls. Run with
 - v1: paper-only single asset.
 - v2: multi-instrument + alerts + webhooks.
 - v3: unified options/futures engine, hard score gates, IVR-driven routing.
-- **v4 (this doc)**: live OrderRouter, advanced risk modules, single canonical spec.
+- **v4 (this doc)**: live OrderRouter, track routing, VCP hybrid, paper/shadow/live dispatch.

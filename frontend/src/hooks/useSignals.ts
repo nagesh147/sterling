@@ -27,6 +27,7 @@ export interface SignalItem {
   score_short: number;
   signal_score?: number;
   signal_strength?: 'STRONG' | 'SIGNAL' | 'NONE';
+  track?: string;  // "vcp" | "trend_following" | "mean_reversion" | ""
   exec_mode: string | null;
   exec_confidence?: number;
   exec_score?: number;

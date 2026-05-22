@@ -1091,6 +1091,7 @@ async def _compute_signal_item(
             all_red=signal.all_red,
             signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
             signal_strength=getattr(signal, 'signal_strength', 'NONE'),
+            track=best_track.name if best_track else '',
         )
 
         # C1/C2: MTF breakdown + filter reason for the frontend.
@@ -1114,6 +1115,7 @@ async def _compute_signal_item(
             'score_short': round(signal.score_short, 1),
             'signal_score': round(getattr(signal, 'signal_score', 0.0), 2),
             'signal_strength': getattr(signal, 'signal_strength', 'NONE'),
+            'track': best_track.name if best_track else '',
             'exec_mode': exec_timing.mode.value,
             'exec_confidence': round(exec_timing.confidence, 2),
             'exec_score': round(exec_timing.exec_score, 2),
@@ -1208,6 +1210,8 @@ async def all_signals(request: Request) -> dict:
                 'exec_mode': snap.exec_mode,
                 'exec_confidence': snap.exec_confidence,
                 'signal_score': snap.signal_score,
+                'signal_strength': snap.signal_strength,
+                'track': snap.track,
                 'regime_score': round(snap.adx / 40.0 * 20.0, 1) if snap.adx else 0.0,
                 'stop_price': snap.stop_price,
                 'target_price': snap.target_price,

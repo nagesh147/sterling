@@ -1300,6 +1300,7 @@ type PanelState = ReturnType<typeof useSignalsPanelState>;
 
 type FeedFilter  = 'active' | 'armed' | 'expired' | 'all';
 type ModeFilter  = 'all' | 'scalping' | 'intraday' | 'swing' | 'positional';
+type TrackFilter = 'all' | 'vcp' | 'trend_following' | 'mean_reversion';
 
 const ARMED_STATES = new Set([
   'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE',
@@ -1308,12 +1309,13 @@ const ARMED_STATES = new Set([
 // ── feed body: empty-state + rows + footer (no outer wrapper, no header) ──────
 
 function SignalsFeedBody({
-  type, state, filter, localMode,
+  type, state, filter, localMode, localTrack,
 }: {
   type: 'futures' | 'options';
   state: PanelState;
   filter: FeedFilter;
   localMode: ModeFilter;
+  localTrack: TrackFilter;
 }) {
   const { feed, dismiss, signals, isLive, availFunds, openByUnderlying } = state;
   // localMode='all' means show every mode; otherwise filter to matching mode.
@@ -1324,10 +1326,19 @@ function SignalsFeedBody({
 
   // Dedup at render time: if feed transiently contains duplicates (race between
   // stream events), never show more than one card per (underlying, direction).
+  // Track filter applied via REST signals data (has `track` field) matching feed entries.
+  const trackSignalSet = (() => {
+    if (localTrack === 'all') return null;
+    const s = signals?.signals ?? [];
+    const allowed = new Set(s.filter((sig: any) => sig.track === localTrack).map((sig: any) => sig.underlying));
+    return allowed;
+  })();
   const visible = (() => {
     const seen = new Set<string>();
     return feed.filter(e => {
       if (e.type !== type) return false;
+      // Track filter
+      if (trackSignalSet && !trackSignalSet.has(e.underlying)) return false;
       // Local mode filter (overrides global)
       if (effectiveMode && resolveMode(e) !== effectiveMode) return false;
       // Status filter
@@ -1475,7 +1486,7 @@ function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
   const state = useSignalsPanelState();
   return (
     <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
-      <SignalsFeedBody type={type} state={state} filter="active" localMode="all" />
+      <SignalsFeedBody type={type} state={state} filter="active" localMode="all" localTrack="all" />
     </div>
   );
 }
@@ -1530,6 +1541,15 @@ export function SignalsTable() {
     { id: 'swing',      label: 'SWING' },
     { id: 'positional', label: 'POSITIONAL' },
   ];
+
+  const TRACK_PILLS: Array<{ id: 'all' | 'vcp' | 'trend_following' | 'mean_reversion'; label: string; color: string }> = [
+    { id: 'all',             label: 'ALL',          color: 'var(--text-dim)' },
+    { id: 'vcp',             label: 'VCP',          color: '#f59e0b' },
+    { id: 'trend_following', label: 'TREND',         color: '#22c55e' },
+    { id: 'mean_reversion',  label: 'REVERSION',    color: '#8b5cf6' },
+  ];
+
+  const [localTrack, setLocalTrack] = React.useState<'all' | 'vcp' | 'trend_following' | 'mean_reversion'>('all');
 
   const STATUS_PILLS: Array<{ id: FeedFilter; label: string }> = [
     { id: 'active',  label: 'ACTIVE' },
@@ -1642,6 +1662,34 @@ export function SignalsTable() {
         {/* Subtle vertical divider */}
         <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
 
+        {/* Track filter */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {TRACK_PILLS.map(t => {
+            const cnt = (signals?.signals ?? []).filter((s: any) =>
+              s.fresh &&
+              (t.id === 'all' || s.track === t.id) &&
+              (localMode === 'all' || true) // mode already filtered separately in countByMode
+            ).length;
+            const active = localTrack === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setLocalTrack(t.id)}
+                style={{
+                  ...pillBase(active),
+                  color: active ? t.color : 'var(--text-dim)',
+                  borderColor: active ? t.color + '40' : 'transparent',
+                }}
+              >
+                {t.label}
+                {cnt > 0 && (
+                  <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400 }}>{cnt}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
         {/* RIGHT — status filter */}
         <div style={{ display: 'flex', gap: 2 }}>
           {STATUS_PILLS.map(f => {
@@ -1659,7 +1707,7 @@ export function SignalsTable() {
 
       {/* ── Feed body — flex: 1 so it fills remaining terminal height ── */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <SignalsFeedBody type={tab} state={state} filter={filter} localMode={localMode} />
+        <SignalsFeedBody type={tab} state={state} filter={filter} localMode={localMode} localTrack={localTrack} />
       </div>
     </div>
   );
