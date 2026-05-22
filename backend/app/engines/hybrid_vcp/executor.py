@@ -114,7 +114,7 @@ class VCPExecutor:
             max_ibs_long=self.cfg.max_ibs_long,
             min_ibs_short=self.cfg.min_ibs_short,
             max_rsi_long=self.cfg.max_rsi_long,
-            min_rsi_short=self.cfg.min_rsi_long,
+            min_rsi_short=self.cfg.min_rsi_short,
         )
         self._exit_cfg  = exit_config_from_profile(profile)
         self._last_bar_ms: int = 0

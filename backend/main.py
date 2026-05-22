@@ -896,6 +896,10 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
                 feeds[profile_key] = feed
                 log.info(f"VCP live feed started: {profile_key} on {sym}")
 
+                # Keep app.state in sync so the /vcp-mode endpoint reflects reality
+                app.state.vcp_feed_count = len(feeds)
+                app.state.vcp_active_profiles = sorted(feeds.keys())
+
         except Exception as exc:
             log.warning("VCP live feed background error: %s", exc)
 

@@ -53,20 +53,22 @@ except Exception:
 # Altcoins fall through to trend_following until calibrated.
 _DEFAULT_ROUTES: Dict[str, Dict[str, List[str]]] = {
     "BTC": {
-        "scalping_5m":  ["mean_reversion"],
-        "scalping_15m": ["vcp"],      # VCP is the primary BTC short-TF signal
-        "scalping_30m": ["vcp"],
-        "intraday_1h":  ["trend_following"],
-        "intraday_4h":  ["trend_following"],
-        "_default_":    ["trend_following"],
+        "btc_scalping_15m": ["vcp"],
+        "btc_scalping_30m": ["vcp"],
+        "scalping_5m":      ["mean_reversion"],
+        "scalping_15m":     ["mean_reversion"],
+        "scalping_30m":     ["mean_reversion"],
+        "intraday_1h":      ["trend_following"],
+        "intraday_4h":      ["trend_following"],
+        "_default_":        ["trend_following"],
     },
     "ETH": {
-        "scalping_15m": ["vcp"],
-        "scalping_30m": ["vcp"],
-        "_default_":    ["trend_following"],
+        "eth_scalping_15m": ["vcp"],
+        "eth_scalping_30m": ["vcp"],
+        "_default_":        ["trend_following"],
     },
     "_default_": {
-        "_default_":    ["trend_following"],
+        "_default_":        ["trend_following"],
     },
 }
 
