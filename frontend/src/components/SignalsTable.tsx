@@ -1330,7 +1330,7 @@ function SignalsFeedBody({
   const trackSignalSet = (() => {
     if (localTrack === 'all') return null;
     const s = signals?.signals ?? [];
-    const allowed = new Set(s.filter((sig: any) => sig.track === localTrack).map((sig: any) => sig.underlying));
+    const allowed = new Set(s.filter((sig: any) => sig.strategy === localTrack).map((sig: any) => sig.underlying));
     return allowed;
   })();
   const visible = (() => {
