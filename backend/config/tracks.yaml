@@ -18,34 +18,19 @@
 
 routes:
   BTC:
-    # Search 2026-05-21 outcome (`baselines/btc_mr_search_20260521.json`):
-    #   * scalping_30m → mean_reversion improved OOS Sharpe (-0.34 → +0.06)
-    #   * scalping_15m / scalping_5m → MR did NOT beat trend_following on OOS
-    # Net: route only 30m to MR; 5m/15m stay on trend_following until the
-    # ML ensemble (Phase 3) produces a model that demonstrably beats it.
-    btc_scalping_5m:   [vcp, trend_following]
+    btc_scalping_5m:    [vcp, trend_following]
     btc_scalping_15m:  [vcp, trend_following]
     btc_scalping_30m:  [vcp, mean_reversion]
-    btc_intraday_1h:   [trend_following]
-    btc_intraday_4h:   [trend_following]
-    _default_:         [trend_following]
+    btc_intraday_1h:    [vcp, trend_following]
+    btc_intraday_4h:   [vcp, trend_following]
+    _default_:          [trend_following]
 
   ETH:
-    # ETH NEVER routes to mean_reversion — the trend-following winner at 30m
-    # (Sharpe 1.27, edge_proven) must remain byte-identical.
-    _default_:         [trend_following]
-
-  # Altcoin examples — opt-in here when the calibration search confirms the
-  # short-side asymmetry exists on the asset. Leaving these commented out
-  # falls through to the global `_default_` which is trend_following only.
-  #
-  # SOL:
-  #   scalping_15m: [mean_reversion]
-  #   scalping_30m: [mean_reversion]
-  #   _default_:    [trend_following]
-  #
-  # AVAX:
-  #   _default_:    [trend_following]
+    eth_scalping_5m:    [vcp, trend_following]
+    eth_scalping_15m:   [vcp, trend_following]
+    eth_scalping_30m:   [vcp, trend_following]
+    eth_intraday_1h:    [vcp, trend_following]
+    _default_:          [trend_following]
 
   _default_:
     _default_:    [trend_following]

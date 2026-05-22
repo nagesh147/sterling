@@ -157,8 +157,14 @@ async def set_vcp_mode(body: VCPModeRequest, request: Request) -> VCPModeRespons
     VCPLiveFeed instances for all active VCP profiles.
     """
     profiles_by_asset = {
-        "BTC": ["btc_scalping_15m", "btc_scalping_30m"],
-        "ETH": ["eth_scalping_15m", "eth_scalping_30m"],
+        "BTC": [
+            "btc_scalping_5m", "btc_scalping_15m", "btc_scalping_30m",
+            "btc_intraday_1h", "btc_intraday_4h",
+        ],
+        "ETH": [
+            "eth_scalping_5m", "eth_scalping_15m", "eth_scalping_30m",
+            "eth_intraday_1h",
+        ],
     }
 
     request.app.state.vcp_mode_enabled = body.enabled

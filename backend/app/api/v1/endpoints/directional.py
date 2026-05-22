@@ -1207,6 +1207,8 @@ async def all_signals(request: Request) -> dict:
                 'score_short': snap.score_short,
                 'exec_mode': snap.exec_mode,
                 'exec_confidence': snap.exec_confidence,
+                'signal_score': snap.signal_score,
+                'regime_score': round(snap.adx / 40.0 * 20.0, 1) if snap.adx else 0.0,
                 'stop_price': snap.stop_price,
                 'target_price': snap.target_price,
                 'atr': snap.atr,
@@ -1608,8 +1610,11 @@ def _build_pnl_event(now_ms: int) -> str:
     """Build live PnL from paper_store + stream_last_prices — zero exchange calls."""
     from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
     active = [p for p in _paper_store.list_positions() if p.status.value in ("open", "partially_closed")]
+    closed = [p for p in _paper_store.list_positions() if p.status.value == "closed"]
     results = []
     total_pnl = 0.0
+    total_realized = 0.0
+
     for pos in active:
         spot = _stream_last_prices.get(pos.underlying)
         leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
@@ -1633,11 +1638,21 @@ def _build_pnl_event(now_ms: int) -> str:
             "current_spot": spot,
             "entry_spot": pos.entry_spot_price,
             "estimated_pnl_usd": pnl,
+            "realized_pnl_usd": None,
             "current_dte": current_dte,
             "max_risk_usd": pos.sized_trade.max_risk_usd,
             "capital_at_risk_pct": pos.sized_trade.capital_at_risk_pct,
         })
-    return json.dumps({"positions": results, "total_estimated_pnl_usd": round(total_pnl, 2), "timestamp_ms": now_ms})
+
+    for pos in closed:
+        total_realized += getattr(pos, 'realized_pnl_usd', 0.0) or 0.0
+
+    return json.dumps({
+        "positions": results,
+        "total_estimated_pnl_usd": round(total_pnl, 2),
+        "total_realized_pnl_usd": round(total_realized, 2),
+        "timestamp_ms": now_ms
+    })
 
 
 def _build_portfolio_event(now_ms: int) -> str:
@@ -1805,6 +1820,8 @@ async def _sse_all_generator(
                     'score_short': snap.score_short,
                     'exec_mode': snap.exec_mode,
                     'exec_confidence': snap.exec_confidence,
+                    'signal_score': snap.signal_score,
+                    'regime_score': round(snap.adx / 40.0 * 20.0, 1) if snap.adx else 0.0,
                     'stop_price': snap.stop_price,
                     'target_price': snap.target_price,
                     'atr': snap.atr,

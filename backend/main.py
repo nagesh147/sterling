@@ -773,8 +773,14 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
     from app.services import paper_store
 
     profiles_by_asset: dict[str, list[str]] = {
-        "BTC": ["btc_scalping_15m", "btc_scalping_30m"],
-        "ETH": ["eth_scalping_15m", "eth_scalping_30m"],
+        "BTC": [
+            "btc_scalping_5m", "btc_scalping_15m", "btc_scalping_30m",
+            "btc_intraday_1h", "btc_intraday_4h",
+        ],
+        "ETH": [
+            "eth_scalping_5m", "eth_scalping_15m", "eth_scalping_30m",
+            "eth_intraday_1h",
+        ],
     }
 
     feeds: dict[str, VCPLiveFeed] = {}

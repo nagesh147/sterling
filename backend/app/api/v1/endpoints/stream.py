@@ -1,4 +1,5 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
+from pydantic import BaseModel
 from typing import Dict, List, Any
 import json
 import asyncio
@@ -7,6 +8,69 @@ import logging
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+class AnalyticsResponse(BaseModel):
+    ofi: int
+    unrealized_pnl: float
+    drift_bps: float
+    timestamp_ms: int
+
+
+@router.get("/analytics/{symbol}", response_model=AnalyticsResponse)
+async def get_analytics(symbol: str, request: Request):
+    """REST endpoint for V4AnalyticsDashboard — returns current OFI, PnL, drift."""
+    now_ms = int(__import__('time').time() * 1000)
+
+    # OFI from l2_manager
+    try:
+        from app.services.delta_l2_socket import l2_manager
+        ofi = l2_manager.get_ofi(symbol.upper()) or 0
+    except Exception:
+        ofi = 0
+
+    # PnL from paper_store via _build_pnl_event logic
+    unrealized_pnl = 0.0
+    try:
+        from app.api.v1.endpoints.directional import _paper_store, _stream_last_prices
+        active = [p for p in _paper_store.list_positions()
+                  if p.status.value in ("open", "partially_closed")]
+        from app.api.v1.endpoints.positions import _estimate_pnl
+        for pos in active:
+            if pos.underlying != symbol.upper():
+                continue
+            spot = _stream_last_prices.get(pos.underlying)
+            if spot is not None:
+                spot_move = spot - pos.entry_spot_price
+                direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
+                pnl = _estimate_pnl(pos.sized_trade, spot_move, direction_sign,
+                                      pos.sized_trade.max_risk_usd, pos.sized_trade.structure.max_gain)
+                unrealized_pnl += pnl or 0.0
+    except Exception:
+        pass
+
+    # Drift: compare entry_spot vs current spot for active positions
+    drift_bps = 0.0
+    try:
+        from app.api.v1.endpoints.directional import _paper_store, _stream_last_prices
+        active = [p for p in _paper_store.list_positions()
+                  if p.status.value in ("open", "partially_closed") and p.underlying == symbol.upper()]
+        if active:
+            total_drift = 0.0
+            for pos in active:
+                spot = _stream_last_prices.get(pos.underlying)
+                if spot and pos.entry_spot_price:
+                    drift_pct = ((spot - pos.entry_spot_price) / pos.entry_spot_price) * 10_000
+                    total_drift += drift_pct
+            drift_bps = round(total_drift / len(active), 2) if active else 0.0
+    except Exception:
+        pass
+
+    return AnalyticsResponse(
+        ofi=ofi,
+        unrealized_pnl=round(unrealized_pnl, 2),
+        drift_bps=drift_bps,
+        timestamp_ms=now_ms,
+    )
 
 class StreamManager:
     def __init__(self):

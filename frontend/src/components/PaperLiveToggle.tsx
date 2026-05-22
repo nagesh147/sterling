@@ -20,6 +20,7 @@ export function PaperLiveToggle() {
 
   const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive  = !!(delta?.has_credentials && !delta.is_paper);
+  const isShadow = !!(delta?.has_credentials && delta.is_paper);  // is_paper=true + keys = shadow
   const hasKeys = !!delta?.has_credentials;
   const keyHint = delta?.api_key_hint ?? '';
   const saving  = status.type === 'saving';
@@ -75,10 +76,20 @@ export function PaperLiveToggle() {
   };
 
   const switchToPaper = () => {
-    if (!delta || !isLive) return;
+    if (!delta) return;
     setStatus({ type: 'saving', msg: '' });
     update.mutate({ id: delta.id, is_paper: true }, {
       onSuccess: () => { invalidateAll(); setStatus({ type: 'idle', msg: '' }); },
+      onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
+    });
+  };
+
+  const switchToShadow = () => {
+    if (!delta || !hasKeys) return;
+    if (isShadow) return;
+    setStatus({ type: 'saving', msg: '' });
+    update.mutate({ id: delta.id, is_paper: true }, {
+      onSuccess: () => { invalidateAll(); setStatus({ type: 'success', msg: '● Now in SHADOW mode' }); setTimeout(() => setStatus({ type: 'idle', msg: '' }), 1200); },
       onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
     });
   };
@@ -113,12 +124,12 @@ export function PaperLiveToggle() {
 
   return (
     <>
-      {/* Toggle pill */}
+      {/* Toggle pill — PAPER / SHADOW / LIVE */}
       <div style={{
         display: 'inline-flex',
         alignItems: 'center',
         background: 'var(--t-bg3, var(--bg-surface))',
-        border: `1px solid ${isLive ? 'var(--t-green, var(--accent))50' : 'var(--t-border, var(--border))'}`,
+        border: `1px solid ${isLive ? 'var(--t-green, var(--accent))50' : isShadow ? 'var(--t-blue, #3b82f6)50' : 'var(--t-border, var(--border))'}`,
         borderRadius: 5,
         overflow: 'hidden',
         cursor: saving ? 'wait' : 'pointer',
@@ -127,18 +138,18 @@ export function PaperLiveToggle() {
         gap: 2,
       }}>
         <button
-          onClick={isLive ? switchToPaper : undefined}
-          disabled={saving || !isLive}
+          onClick={isLive || isShadow ? switchToPaper : undefined}
+          disabled={saving || (!isLive && !isShadow)}
           style={{
             padding: '3px 10px',
             border: 'none',
             borderRadius: 4,
-            cursor: isLive ? 'pointer' : 'default',
-            background: !isLive ? 'var(--t-bg2, var(--bg-card))' : 'transparent',
-            color: !isLive ? 'var(--t-blue, var(--blue))' : 'var(--t-dim, var(--text-dim))',
+            cursor: isLive || isShadow ? 'pointer' : 'default',
+            background: !isLive && !isShadow ? 'var(--t-bg2, var(--bg-card))' : 'transparent',
+            color: !isLive && !isShadow ? 'var(--t-blue, var(--blue))' : 'var(--t-dim, var(--text-dim))',
             fontFamily: 'inherit',
             fontSize: 10,
-            fontWeight: 600,
+            fontWeight: !isLive && !isShadow ? 600 : 400,
             letterSpacing: '0.08em',
             transition: 'background 0.15s, color 0.15s',
             lineHeight: 1,
@@ -147,18 +158,56 @@ export function PaperLiveToggle() {
           PAPER
         </button>
         <button
-          onClick={isLive ? switchToPaper : handleLiveClick}
+          onClick={() => {
+            if (!delta || !hasKeys) return;
+            if (isLive) {
+              setModal('none');
+              setStatus({ type: 'saving', msg: '' });
+              update.mutate({ id: delta.id, is_paper: true }, {
+                onSuccess: () => {
+                  invalidateAll();
+                  setStatus({ type: 'success', msg: '● Now in SHADOW mode' });
+                  setTimeout(() => setStatus({ type: 'idle', msg: '' }), 1200);
+                },
+                onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
+              });
+            } else if (isShadow) {
+              switchToPaper();
+            } else {
+              switchToShadow();
+            }
+          }}
+          disabled={saving || !hasKeys}
+          style={{
+            padding: '3px 10px',
+            border: 'none',
+            borderRadius: 4,
+            cursor: hasKeys && !isLive ? 'pointer' : 'default',
+            background: isShadow && !isLive ? 'rgba(59,130,246,0.18)' : 'transparent',
+            color: isShadow && !isLive ? '#3b82f6' : 'var(--t-dim, var(--text-dim))',
+            fontFamily: 'inherit',
+            fontSize: 10,
+            fontWeight: isShadow && !isLive ? 700 : 400,
+            letterSpacing: '0.08em',
+            transition: 'background 0.15s, color 0.15s',
+            lineHeight: 1,
+          }}
+        >
+          SHADOW
+        </button>
+        <button
+          onClick={isLive ? undefined : handleLiveClick}
           disabled={saving}
           style={{
             padding: '3px 10px',
             border: 'none',
             borderRadius: 4,
-            cursor: 'pointer',
+            cursor: !isLive ? 'pointer' : 'default',
             background: isLive ? 'var(--t-green, var(--accent))18' : 'transparent',
             color: isLive ? 'var(--t-green, var(--accent))' : 'var(--t-dim, var(--text-dim))',
             fontFamily: 'inherit',
             fontSize: 10,
-            fontWeight: isLive ? 700 : 600,
+            fontWeight: isLive ? 700 : 400,
             letterSpacing: '0.08em',
             transition: 'background 0.15s, color 0.15s',
             lineHeight: 1,

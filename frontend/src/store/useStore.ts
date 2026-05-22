@@ -31,6 +31,8 @@ interface StoreState {
   setSelectedUnderlying: (u: string) => void;
   tradingMode: string;
   setTradingMode: (mode: string) => void;
+  routerMode: string;
+  setRouterMode: (mode: string) => void;
   theme: Theme;
   toggleTheme: () => void;
   appMode: 'basic' | 'pro';
@@ -45,6 +47,8 @@ export const useStore = create<StoreState>((set) => ({
   },
   tradingMode: 'swing',
   setTradingMode: (mode) => set({ tradingMode: mode }),
+  routerMode: 'live',
+  setRouterMode: (mode) => set({ routerMode: mode }),
   theme: loadTheme(),
   toggleTheme: () => set((s) => {
     const idx  = THEME_CYCLE.indexOf(s.theme);
@@ -71,6 +75,12 @@ export const useTradingModeStore = () =>
 
 export const useSetTradingModeStore = () =>
   useStore((s) => s.setTradingMode);
+
+export const useRouterModeStore = () =>
+  useStore((s) => s.routerMode);
+
+export const useSetRouterModeStore = () =>
+  useStore((s) => s.setRouterMode);
 
 export type { Theme };
 export const useTheme = () => useStore((s) => s.theme);

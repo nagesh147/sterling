@@ -2,6 +2,7 @@ import React from 'react';
 import { useV4Analytics } from '../hooks/useV4Analytics';
 import { useSterlingStream } from '../hooks/useSterlingStream';
 import { useAppStream } from '../hooks/useAppStream';
+import { useExchanges } from '../hooks/useExchanges';
 import type { LivePnlResponse } from '../hooks/useLivePnl';
 
 interface V4AnalyticsDashboardProps {
@@ -9,27 +10,100 @@ interface V4AnalyticsDashboardProps {
 }
 
 export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ activeSymbol }) => {
-  // Format the symbol to match the backend broadcasting format (e.g. BTCUSD)
   const streamSymbol = activeSymbol.includes('USD') ? activeSymbol : `${activeSymbol}USD`;
-  
-  // Fetch REST data
   const { data: restData, isLoading } = useV4Analytics(streamSymbol);
-  
-  // Fetch live WebSocket data (OFI, etc.)
   const { status, metrics } = useSterlingStream(streamSymbol);
 
-  // Fetch real PnL from shared SSE stream (same source as PortfolioSummary)
+  const [routerMode, setRouterMode] = React.useState<string>('live');
+
+  React.useEffect(() => {
+    const isLocalhost = window.location.hostname === 'localhost';
+    const BASE = isLocalhost ? 'http://localhost:8000' : '';
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const url = `${BASE}/api/v1/trading/algo-router-mode`;
+        const res = await fetch(url);
+        if (cancelled) return;
+        if (!res.ok) { console.error('[V4] HTTP', res.status); return; }
+        const json = await res.json();
+        if (cancelled) return;
+        const mode = json?.mode;
+        if (!mode) { console.error('[V4] no mode in', json); return; }
+        console.log('[V4Analytics] fetched mode:', mode, 'base:', BASE, 'ts:', Date.now());
+        setRouterMode(mode);
+      } catch (e) {
+        console.error('[V4Analytics] fetch failed:', e, 'base:', BASE);
+      }
+    };
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'sterling.routerMode' && e.newValue) {
+        console.log('[V4Analytics] storage event:', e.newValue);
+        setRouterMode(e.newValue);
+        tick();
+      }
+    };
+    const onModeChange = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail) {
+        console.log('[V4Analytics] custom event:', detail);
+        setRouterMode(detail);
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 3000);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('sterling-router-mode-change', onModeChange);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('sterling-router-mode-change', onModeChange);
+    };
+  }, []);
+
+  const tradingStatus = routerMode === 'live' ? 'LIVE TRADING'
+    : routerMode === 'shadow' ? 'SHADOW TRADING'
+    : 'PAPER TRADING';
+  const statusDotColor = routerMode === 'live' ? '#10b981'
+    : routerMode === 'shadow' ? '#3b82f6'
+    : '#f59e0b';
+
+  // PnL from SSE stream
   const { data: pnlData } = useAppStream<LivePnlResponse>('pnl');
+
+  // Unrealized PnL (open positions only, per symbol)
   const unrealizedPnl = React.useMemo(() => {
     if (!pnlData?.positions) return 0;
     const matching = pnlData.positions.filter(p =>
-      p.underlying.toUpperCase() === streamSymbol.toUpperCase()
+      p.underlying.toUpperCase() === streamSymbol.toUpperCase() &&
+      p.status !== 'closed'
     );
     if (matching.length === 0) return pnlData.total_estimated_pnl_usd;
     return matching.reduce((sum, p) => sum + (p.estimated_pnl_usd ?? 0), 0);
   }, [pnlData, streamSymbol]);
 
-  // Merge REST data with Live data over the top
+  // Realized PnL from closed positions (from stream or REST fallback)
+  const [totalRealized, setTotalRealized] = React.useState(0);
+  React.useEffect(() => {
+    if (pnlData?.total_realized_pnl_usd !== undefined) {
+      setTotalRealized(pnlData.total_realized_pnl_usd);
+      return;
+    }
+    // Fallback: fetch from positions REST endpoint
+    const base = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+    fetch(`${base}/api/v1/positions`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return;
+        const total = (d.positions || []).reduce((s: number, p: {realized_pnl_usd?: number}) => s + (p.realized_pnl_usd ?? 0), 0);
+        setTotalRealized(total);
+      })
+      .catch(() => {});
+  }, [pnlData]);
+
   const mergedData = {
     ...restData,
     ofi: metrics.ofi !== 0 ? metrics.ofi : (restData?.ofi || 0),
@@ -37,20 +111,20 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
     drift_bps: metrics.drift_bps !== 0 ? metrics.drift_bps : (restData?.drift_bps || 0),
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'connected': return '#10b981'; // emerald-500
-      case 'reconnecting': return '#f59e0b'; // amber-500
-      case 'disconnected': return '#ef4444'; // red-500
-      default: return '#6b7280'; // gray-500
+  const getStatusColor = (s: string) => {
+    switch (s) {
+      case 'connected': return '#10b981';
+      case 'reconnecting': return '#f59e0b';
+      case 'disconnected': return '#ef4444';
+      default: return '#6b7280';
     }
   };
 
   const isOFIThresholdBreached = mergedData.ofi < -5000 || mergedData.ofi > 5000;
-  
+
   const getOFIColor = (ofi: number) => {
-    if (ofi < -5000) return '#ef4444'; // red
-    if (ofi > 5000) return '#10b981';  // green
+    if (ofi < -5000) return '#ef4444';
+    if (ofi > 5000) return '#10b981';
     return 'var(--text-primary, #f3f4f6)';
   };
 
@@ -70,10 +144,10 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
       boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)'
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ 
-          fontSize: '14px', 
-          fontWeight: 700, 
-          margin: 0, 
+        <h2 style={{
+          fontSize: '14px',
+          fontWeight: 700,
+          margin: 0,
           letterSpacing: '0.05em',
           display: 'flex',
           alignItems: 'center',
@@ -99,8 +173,8 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
               width: '6px',
               height: '6px',
               borderRadius: '50%',
-              backgroundColor: getStatusColor(status),
-              boxShadow: `0 0 8px ${getStatusColor(status)}`
+              backgroundColor: statusDotColor,
+              boxShadow: `0 0 8px ${statusDotColor}`
             }} />
             <span style={{
               fontSize: '10px',
@@ -109,7 +183,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
               letterSpacing: '0.08em',
               color: 'var(--text-muted, #9ca3af)'
             }}>
-              SHADOW TRADING
+              {tradingStatus}
             </span>
           </div>
         </div>
@@ -128,7 +202,6 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px'
         }}>
-          {/* OFI Metric Card */}
           <div style={{
             position: 'relative',
             padding: '16px',
@@ -152,8 +225,6 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             }}>
               {mergedData.ofi > 0 ? '+' : ''}{mergedData.ofi.toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </div>
-            
-            {/* Veto Active Badge */}
             {isOFIThresholdBreached ? (
               <div style={{
                 position: 'absolute',
@@ -189,8 +260,6 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
                 TRADE ON
               </div>
             )}
-            
-            {/* Background Gradient Effect */}
             {isOFIThresholdBreached && (
               <div style={{
                 position: 'absolute',
@@ -201,7 +270,6 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             )}
           </div>
 
-          {/* Unrealized PnL Card */}
           <div style={{
             padding: '16px',
             background: 'rgba(0, 0, 0, 0.15)',
@@ -219,9 +287,13 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             }}>
               {mergedData.unrealized_pnl >= 0 ? '+' : ''}${mergedData.unrealized_pnl.toFixed(2)}
             </div>
+            {totalRealized !== 0 && (
+              <div style={{ fontSize: '10px', color: 'var(--text-faint)', marginTop: '2px' }}>
+                realized: {totalRealized >= 0 ? '+' : ''}${totalRealized.toFixed(2)}
+              </div>
+            )}
           </div>
 
-          {/* Drift Card */}
           <div style={{
             padding: '16px',
             background: 'rgba(0, 0, 0, 0.15)',

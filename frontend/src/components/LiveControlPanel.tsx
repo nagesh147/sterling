@@ -30,6 +30,7 @@ type RetryItem = {
 };
 type RetryQueue = { items: RetryItem[]; count: number };
 type AlgoMode = { enabled: boolean };
+type RouterModeResponse = { mode: string };
 
 type RouterMode = 'paper' | 'shadow' | 'live';
 
@@ -62,16 +63,21 @@ export default function LiveControlPanel() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [ks, dl, rq, am] = await Promise.all([
+      const [ks, dl, rq, am, rm] = await Promise.all([
         api.get<KillSwitch>('/api/v1/trading/kill-switch'),
         api.get<DailyLoss>('/api/v1/trading/daily-loss'),
         api.get<RetryQueue>('/api/v1/trading/retry-queue'),
         api.get<AlgoMode>('/api/v1/trading/algo-mode'),
+        api.get<RouterModeResponse>('/api/v1/trading/algo-router-mode'),
       ]);
       setKillSwitch(ks);
       setDailyLoss(dl);
       setRetryQ(rq);
       setAlgoMode(am);
+      setRouterMode(rm.mode as RouterMode);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('sterling.routerMode', rm.mode);
+      }
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -117,10 +123,12 @@ export default function LiveControlPanel() {
     setRouterMode(next);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('sterling.routerMode', next);
+      window.dispatchEvent(new CustomEvent('sterling-router-mode-change', { detail: next }));
+      // Force V4AnalyticsDashboard to re-read by updating a shared render-counter key
+      window.localStorage.setItem('sterling.renderVersion', String(Date.now()));
     }
-    // Mirror to server: live = algo_mode true, paper/shadow = false
     try {
-      await api.post('/api/v1/trading/algo-mode', { enabled: next === 'live' });
+      await api.post('/api/v1/trading/algo-router-mode', { mode: next });
       await fetchAll();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

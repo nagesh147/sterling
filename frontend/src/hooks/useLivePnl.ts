@@ -7,6 +7,7 @@ export interface LivePnlEntry {
   current_spot: number | null;
   entry_spot: number;
   estimated_pnl_usd: number | null;
+  realized_pnl_usd: number | null;
   current_dte: number;
   max_risk_usd: number;
   capital_at_risk_pct: number;
@@ -15,6 +16,7 @@ export interface LivePnlEntry {
 export interface LivePnlResponse {
   positions: LivePnlEntry[];
   total_estimated_pnl_usd: number;
+  total_realized_pnl_usd: number;
   timestamp_ms: number;
 }
 
