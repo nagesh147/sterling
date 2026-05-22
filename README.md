@@ -52,7 +52,7 @@ backend/
 ```
 frontend/src/
 ├── components/
-│   ├── SignalsTable.tsx              Signal feed with track filter (VCP/TREND/REVERSION)
+│   ├── SignalsTable.tsx              Signal feed with strategy filter (LATEST/LEGACY)
 │   ├── LiveControlPanel.tsx          Kill switch, algo-mode, algo-router-mode selector
 │   ├── PaperLiveToggle.tsx           3-way PAPER / SHADOW / LIVE toggle
 │   ├── V4AnalyticsDashboard.tsx       Live P&L + realized PnL + mode badge
@@ -121,11 +121,11 @@ The signal table (frontend) shows a pill-row of strategy filters:
 | Button | Color | Shows |
 |--------|-------|-------|
 | ALL | gray | All signals |
-| LATEST | amber | `strategy == "latest"` — VCP/trend_following track produced a direction |
-| REVERSION | purple | `strategy == "legacy"` — no track won, fallback legacy compute_signal used |
+| LATEST | amber | A track (VCP/trend_following/mean_reversion) produced a directional signal |
+| LEGACY | purple | No track won — old Sterling `compute_signal` fallback used |
 
-- **LATEST**: A track (VCP, trend_following, or mean_reversion) produced a non-zero direction. The `track` field shows which one won.
-- **LEGACY**: No track had a directional signal; the old Sterling `compute_signal` path was used as fallback.
+- **LATEST**: `strategy="latest"` — track system won. `track` field shows which track (VCP / trend_following / mean_reversion).
+- **LEGACY**: `strategy="legacy"` — no track had a directional signal; old Sterling `compute_signal` path used as fallback.
 
 Counts update every 5s. Filter is independent of mode/status filters.
 
@@ -188,7 +188,7 @@ Signal gate: `signal_strength == "STRONG"` required before any order places.
 
 - **PaperLiveToggle shadow switching**: SHADOW button in LIVE mode was opening a confirmation modal that did the wrong thing. Fixed — LIVE→SHADOW now directly sets `is_paper: true`.
 - **Mode persistence**: `algo_router_mode` now stored in SQLite via `set_config`, survives restarts.
-- **Signal track exposure**: Backend now exposes `track` field in `/signals` — shows which strategy won (vcp/trend_following/mean_reversion).
+- **Signal strategy exposure**: Backend now exposes `track` + `strategy` fields in `/signals` — shows which strategy won (VCP/trend_following/mean_reversion) and whether track system or legacy path was used.
 
 ---
 

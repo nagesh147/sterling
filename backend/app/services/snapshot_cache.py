@@ -52,6 +52,8 @@ class SnapshotEntry:
     # signal_strength is "STRONG" when signal_score >= 15 (75%), "SIGNAL" >= 7, else "NONE"
     signal_score: float = 0.0
     signal_strength: str = "NONE"
+    # strategy: "latest" = track produced direction; "legacy" = fallback compute_signal
+    strategy: str = "legacy"
     track: str = ""
 
 
@@ -83,6 +85,7 @@ def put(
     all_red: bool = False,
     signal_score: float = 0.0,
     signal_strength: str = "NONE",
+    strategy: str = "legacy",
     track: str = "",
 ) -> None:
     _cache[sym] = SnapshotEntry(

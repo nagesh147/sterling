@@ -981,6 +981,7 @@ async def _compute_signal_item(
             )
         regime      = compute_regime(c4h, macro_filter=macro_filter)
         signal      = compute_signal(c1h, st_threshold=st_threshold)
+        best_track  = None  # legacy path; orchestrator path computes a real track
         setup       = evaluate_setup(regime, signal, profile_label=mode.name if mode else None)
         ivr         = await compute_ivr(adapter, inst, c1h)
         exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
@@ -1089,7 +1090,7 @@ async def _compute_signal_item(
             exec_confidence=round(exec_timing.confidence, 2),
             all_green=signal.all_green,
             all_red=signal.all_red,
-            signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
+signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
             signal_strength=getattr(signal, 'signal_strength', 'NONE'),
             track=best_track.name if best_track else '',
             strategy='latest' if best_track and best_track.trend_dir != 0 else 'legacy',
@@ -1214,7 +1215,7 @@ async def all_signals(request: Request) -> dict:
                 'signal_score': snap.signal_score,
                 'signal_strength': snap.signal_strength,
                 'track': snap.track,
-                'strategy': 'latest' if snap.track != '' else 'legacy',
+                'strategy': snap.strategy,
                 'regime_score': round(snap.adx / 40.0 * 20.0, 1) if snap.adx else 0.0,
                 'stop_price': snap.stop_price,
                 'target_price': snap.target_price,
