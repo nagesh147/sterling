@@ -36,6 +36,8 @@ class VCPProfile:
     # Risk
     risk_pct:         float = 0.005   # 0.5% equity per trade
     max_positions:   int   = 2
+    # Regime risk adjustment (applied in HIGH_VOL)
+    high_vol_risk_red: float = 1.0   # 0.5 = halve risk, 1.0 = no change
 
 
 PROFILES = {
@@ -44,7 +46,7 @@ PROFILES = {
         signal_tf="15m", regime_tf="1h",
         signal_bar_ms=15 * 60_000,
         regime_bar_ms=60 * 60_000,
-        hold_bars=16,
+        hold_bars=12,
         direction="both",
         vol_filter_pct=35.0,
         flow_threshold=0.35,
@@ -52,11 +54,12 @@ PROFILES = {
         min_ibs_short=0.65,
         max_rsi_long=40.0,
         min_rsi_short=60.0,
-        stop_mult=0.9,
+        stop_mult=0.85,
         tp1_mult=1.5,
         trail_mult=0.5,
-        risk_pct=0.005,
+        risk_pct=0.0045,
         max_positions=2,
+        high_vol_risk_red=0.5,
     ),
     "btc_scalping_30m": VCPProfile(
         label="BTC Scalping 30m",
@@ -76,13 +79,14 @@ PROFILES = {
         trail_mult=0.5,
         risk_pct=0.005,
         max_positions=2,
+        high_vol_risk_red=0.75,
     ),
     "eth_scalping_15m": VCPProfile(
         label="ETH Scalping 15m",
         signal_tf="15m", regime_tf="1h",
         signal_bar_ms=15 * 60_000,
         regime_bar_ms=60 * 60_000,
-        hold_bars=16,
+        hold_bars=12,
         direction="both",
         vol_filter_pct=35.0,
         flow_threshold=0.35,
@@ -90,11 +94,12 @@ PROFILES = {
         min_ibs_short=0.65,
         max_rsi_long=40.0,
         min_rsi_short=60.0,
-        stop_mult=0.9,
+        stop_mult=0.85,
         tp1_mult=1.5,
         trail_mult=0.5,
-        risk_pct=0.005,
+        risk_pct=0.0045,
         max_positions=2,
+        high_vol_risk_red=0.5,
     ),
     "eth_scalping_30m": VCPProfile(
         label="ETH Scalping 30m",
@@ -114,6 +119,7 @@ PROFILES = {
         trail_mult=0.5,
         risk_pct=0.005,
         max_positions=2,
+        high_vol_risk_red=0.75,
     ),
 }
 

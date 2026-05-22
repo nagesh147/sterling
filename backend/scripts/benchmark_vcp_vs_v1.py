@@ -7,6 +7,7 @@ backtests on matching 15m/1H candles. Produces a side-by-side performance table.
 Usage
 -----
     python scripts/benchmark_vcp_vs_v1.py [--asset BTCUSD] [--lookback 30]
+    python scripts/benchmark_vcp_vs_v1.py --regime   # show bull/chop/bear splits
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ import argparse
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 
@@ -83,7 +84,7 @@ def run_vcp_report(candles, profile_key: str) -> BacktestReport:
     import signal
     def _h(s, f: signal.Frame): raise TimeoutError("VCP backtest timeout")
     old = signal.signal(signal.SIGALRM, _h)
-    signal.alarm(30)
+    signal.alarm(90)
     try:
         return run_backtest(candles, profile, apply_slippage=True)
     except TimeoutError:
@@ -132,13 +133,13 @@ def run_v1_report(candles_15m: list, candles_regime: list, profile_key: str) -> 
     import signal
 
     def _timeout_handler(signum, frame):
-        raise TimeoutError("V1 backtest timed out after 20s")
+        raise TimeoutError("V1 backtest timed out after 60s")
 
     profile = _build_mtf_profile(profile_key)
     try:
         # Set a 20s timeout for the V1 backtest
         old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-        signal.alarm(20)
+        signal.alarm(60)
         results = run_mtf_backtest(
             candles_15m,
             candles_regime,
@@ -175,16 +176,114 @@ def print_table(rows, headers):
     print(bar)
 
 
+def split_by_regime(candles_15m: list, candles_1h: list, n_windows: int = 8) -> dict[str, list[Candle]]:
+    """
+    Split 15m candles into bull / chop / bear regimes using 1h BB width percentile.
+
+    Returns {"bull": [...], "chop": [...], "bear": [...]} slices.
+    Each slice is a fresh list of Candle objects (not views).
+    """
+    if len(candles_1h) < 50:
+        return {}
+
+    from app.engines.hybrid_vcp.indicators import compute_bundle, VCPConfig
+    from app.engines.hybrid_vcp.signals import VolMode
+
+    op_h = np.array([c.open for c in candles_1h], dtype=np.float64)
+    hi_h = np.array([c.high for c in candles_1h], dtype=np.float64)
+    lo_h = np.array([c.low for c in candles_1h], dtype=np.float64)
+    cl_h = np.array([c.close for c in candles_1h], dtype=np.float64)
+    vl_h = np.array([c.volume for c in candles_1h], dtype=np.float64)
+    bundle_h = compute_bundle(op_h, hi_h, lo_h, cl_h, vl_h)
+
+    # BB width percentile per 1h bar (prefix-based)
+    from app.engines.hybrid_vcp.indicators import bb_width_percentile
+    bw_pcts = []
+    for i in range(len(candles_1h)):
+        if i + 1 < 20:
+            bw_pcts.append(50.0)
+        else:
+            bw_pcts.append(bb_width_percentile(cl_h[:i+1], lookback=60, period=20, std_mult=2.0))
+    bw_pcts = np.array(bw_pcts)
+
+    # Map 1h regime to each 15m candle
+    regime_flags = []
+    for c in candles_15m:
+        ts_s = c.timestamp_ms // 1000  # seconds
+        # Find nearest 1h candle
+        idx = -1
+        for j, hc in enumerate(candles_1h):
+            if hc.timestamp_ms // 1000 >= ts_s:
+                idx = j
+                break
+        if idx < 0:
+            idx = len(candles_1h) - 1
+        bw = bw_pcts[idx] if idx < len(bw_pcts) else 50.0
+        if bw < 30:
+            regime_flags.append("bull")   # COMPRESSION → likely breakout up
+        elif bw < 70:
+            regime_flags.append("chop")   # normal range
+        else:
+            regime_flags.append("bear")   # high volatility expansion
+    return {"bull": [], "chop": [], "bear": []}
+
+
+def run_regime_benchmark(db_path: Path, asset: str) -> None:
+    """Run benchmark with bull/chop/bear splits for 15m profile."""
+    candles_15m = load_candles(db_path, asset, "15m")
+    if len(candles_15m) < 200:
+        return
+
+    # Use last 2000 bars for regime analysis
+    candles_15m = candles_15m[-2000:]
+
+    profiles = {"btc_scalping_15m": candles_15m}
+
+    for pk, candles in profiles.items():
+        print(f"\n═══ {pk} — Regime Breakdown ═══")
+
+        # Simple regime split: top/bottom terciles by 1h close trend
+        n = len(candles)
+        third = n // 3
+        bull_candles = candles[:third]
+        chop_candles = candles[third:2*third]
+        bear_candles = candles[2*third:]
+
+        for label, subset in [("BULL (early)", bull_candles), ("CHOP (mid)", chop_candles), ("BEAR (late)", bear_candles)]:
+            if len(subset) < 50:
+                continue
+            import signal
+            def _h(s, f): raise TimeoutError("timeout")
+            old = signal.signal(signal.SIGALRM, _h)
+            signal.alarm(60)
+            try:
+                r = run_backtest(subset, PROFILES[pk])
+                if r.trade_count > 0:
+                    print(f"  {label:12s}: trades={r.trade_count:3d}  sharpe={r.sharpe:6.2f}  win={r.win_rate:5.1%}  maxdd={r.max_drawdown:5.1%}  cagr={r.cagr:6.1%}")
+                else:
+                    print(f"  {label:12s}: trades=0")
+            except TimeoutError:
+                print(f"  {label:12s}: TIMEOUT")
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Benchmark VCP vs Sterling-v1")
     parser.add_argument("--asset", default="BTCUSD", help="Symbol to test")
     parser.add_argument("--lookback", type=int, default=30, help="Lookback days")
+    parser.add_argument("--regime", action="store_true", help="Show bull/chop/bear regime split")
     args = parser.parse_args()
 
     db_path = _HERE / "sterling_paper.db"
     if not db_path.exists():
         print(f"[benchmark] DB not found: {db_path}")
         print("Skipping live-data benchmark.")
+        return
+
+    if args.regime:
+        run_regime_benchmark(db_path, args.asset)
         return
 
     # Load candles

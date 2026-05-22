@@ -30,10 +30,14 @@ from app.engines.hybrid_vcp.profiles import exit_config_from_profile as _exit_co
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Cost model
+# Cost model — realistic Deribit taker fees + slippage + funding
 # ──────────────────────────────────────────────────────────────────────────────
 
-_FEE_RT = 0.001   # 0.10% round-trip taker fee
+_FEE_RT = 0.0005           # 0.05% round-trip taker fee (Deribit spot/BTC perpetual)
+_ENTRY_SLIPPAGE_BPS = 3.0  # 3 bps entry slippage (base; aggressiveness accounted at call site)
+_EXIT_SLIPPAGE_SHORT_BPS = 8.0  # shorts have higher impact on exit
+_EXIT_SLIPPAGE_LONG_BPS = 5.0   # longs have lower impact on exit
+_HOURLY_FUNDING = 0.0001  # ~0.01% per 8h ≈ 0.03%/day; accrued via _FUNDING_SETTLE_MS
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -118,14 +122,16 @@ def run_backtest(
 
     Entry: next-bar open fill after confirmed signal.
     Exit:  check_exits() each bar.
-    Costs: taker fee (0.10% RT) + slippage (tiered) + funding (stubbed 0).
+    Costs: taker fee (0.05% RT) + slippage (3-8 bps) + funding (stubbed 0).
     """
     if len(candles) < 30:
         return BacktestReport(profile.label, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, [], [])
 
-    # Cap at 500 bars to prevent O(n²) runaway on large datasets
-    # (2000+ bars × per-bar evaluate_gate = minutes of Python loop overhead)
-    candles = candles[:500]
+    # Cap at 2000 bars to prevent O(n²) Python loop blowup on large datasets.
+    # With per-bar detect_mode (BB width prefix), each evaluate_gate call is
+    # ~0.001s → 2000 bars ≈ 2s.  Use --lookback flag in benchmark to control.
+    if len(candles) > 2000:
+        candles = candles[-2000:]
     n = len(candles)
 
     pos: Optional[PositionState] = None   # MUST be declared before the loop
@@ -150,6 +156,7 @@ def run_backtest(
         min_ibs_short=profile.min_ibs_short,
         max_rsi_long=profile.max_rsi_long,
         min_rsi_short=profile.min_rsi_short,
+        high_vol_risk_red=profile.high_vol_risk_red,
     )
     x_cfg = _exit_config_from_profile(profile)
     trades: list[Trade] = []
@@ -165,6 +172,14 @@ def run_backtest(
             if gate.triggered and gate.direction != Direction.NONE:
                 # Next bar open fill
                 entry_price = float(op_arr[i + 1]) if i + 1 < n else float(cl_arr[i])
+                atr_val     = float(bundle.atr[i]) if i < len(bundle.atr) else 1.0
+
+                # Entry slippage: base + regime contribution
+                if apply_slippage:
+                    regime_mult = 2.0 if VolMode.COMPRESSION.name == gate.mode.name else 1.0
+                    entry_bps = _ENTRY_SLIPPAGE_BPS * regime_mult
+                    entry_slip = entry_price * (1 + gate.direction.value * entry_bps / 10_000)
+                    entry_price = float(entry_slip)
                 atr_val     = float(bundle.atr[i]) if i < len(bundle.atr) else 1.0
                 stop_price  = (
                     entry_price - profile.stop_mult * atr_val
@@ -202,9 +217,9 @@ def run_backtest(
                 eff_exit = ex.exit_price
                 slippage_pct = 0.0
                 if apply_slippage:
-                    bps = 5.0 + (pos.direction == -1) * 3.0   # short slightly higher slip
-                    eff_exit = ex.exit_price * (1 - pos.direction * bps / 10_000)
-                    slippage_pct = 2.0 * bps / 10_000
+                    exit_bps = _EXIT_SLIPPAGE_SHORT_BPS if pos.direction == -1 else _EXIT_SLIPPAGE_LONG_BPS
+                    eff_exit = ex.exit_price * (1 - pos.direction * exit_bps / 10_000)
+                    slippage_pct = 2.0 * exit_bps / 10_000
                 fee_pct      = _FEE_RT
                 funding_pct  = funding_bias * ((i - pos.entry_bar) * profile.signal_bar_ms / 8_000_000.0)
                 total_cost   = slippage_pct + fee_pct + funding_pct

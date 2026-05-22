@@ -81,6 +81,73 @@ def detect_mode(
     return VolMode.EXPANSION
 
 
+class Regime(str, Enum):
+    BULL     = "bull"      # Uptrend, price above quantile(0.7)
+    CHOP     = "chop"      # Tight range + low volume
+    BEAR     = "bear"      # Downtrend, price below quantile(0.3)
+    NEUTRAL  = "neutral"   # Between BULL and BEAR
+    HIGH_VOL = "high_vol" # ATR elevated — reduce risk
+
+
+def detect_regime(
+    closes:    NDArray[np.float64],
+    highs:     NDArray[np.float64],
+    lows:      NDArray[np.float64],
+    atr:       NDArray[np.float64],
+    volume:    NDArray[np.float64],
+    idx:       int,
+    lookback:  int = 60,
+) -> Regime:
+    """
+    Multi-factor regime detector using price trend, ATR ratio, and volume.
+
+    Returns one of: BULL | CHOP | BEAR | NEUTRAL | HIGH_VOL
+
+    Regime logic (applied to prefix[:idx+1]):
+    - HIGH_VOL : atr_ratio > 1.8  (current ATR 1.8× its lookback mean)
+    - CHOP     : price_range < 0.018 AND vol_ratio < 0.7
+    - BULL     : price > SMA AND price > quantile(0.7)
+    - BEAR     : price < SMA AND price < quantile(0.3)
+    - NEUTRAL  : the rest
+    """
+    if idx < lookback or idx < 20:
+        return Regime.NEUTRAL
+
+    _cl = closes[:idx+1]
+    _hi = highs[:idx+1]
+    _lo = lows[:idx+1]
+    _at = atr[:idx+1]
+    _vl = volume[:idx+1]
+
+    window_cl = _cl[-lookback:]
+    window_at = _at[-lookback:]
+    window_vl = _vl[-lookback:]
+
+    # HIGH_VOL — skip or reduce size
+    atr_ratio = float(_at[idx] / (np.nanmean(window_at) + 1e-9))
+    if atr_ratio > 1.8:
+        return Regime.HIGH_VOL
+
+    price_range = float((np.nanmax(window_cl) - np.nanmin(window_cl)) / (_cl[0] + 1e-9))
+    vol_ratio   = float(_vl[idx] / (np.nanmean(window_vl) + 1e-9))
+
+    # CHOP — tight range + low volume
+    if price_range < 0.018 and vol_ratio < 0.7:
+        return Regime.CHOP
+
+    sma  = float(np.nanmean(window_cl))
+    q70  = float(np.nanpercentile(window_cl, 70))
+    q30  = float(np.nanpercentile(window_cl, 30))
+    price = float(_cl[idx])
+
+    if price > sma and price > q70:
+        return Regime.BULL
+    elif price < sma and price < q30:
+        return Regime.BEAR
+
+    return Regime.NEUTRAL
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Hybrid Signal
 # ──────────────────────────────────────────────────────────────────────────────
