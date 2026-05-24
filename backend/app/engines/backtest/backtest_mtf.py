@@ -249,8 +249,8 @@ PROFILES_BY_ASSET: Dict[str, Dict[str, TFProfile]] = {
 # Default mr_config to pass when no per-asset override is supplied.
 # Mirrors the search winner + edge-stacking pass for scalping_30m. The
 # orchestrator looks this up by (asset, profile_key) and passes it to
-# run_mtf_backtest as `mr_config=`. Keep the keys in sync with
-# FadeExtremesConfig + the build_mr_signals_full() signature.
+# run_mtf_backtest as `mr_config=`. (Mean-reversion signal generation was
+# removed in the strategy reset; vectorize_replay is currently a neutral stub.)
 MR_CONFIG_BY_ASSET: Dict[str, Dict[str, Dict[str, Any]]] = {
     "BTC": {
         "scalping_30m": {
@@ -1144,9 +1144,9 @@ def run_mtf_backtest(
     # None / "both" = trade both sides (back-compat); "long_only" / "short_only"
     # disables the other side. Applied uniformly across profiles in this call.
     direction_filter: Optional[Literal["long_only", "short_only", "both"]] = None,
-    # v4 Phase 1 — Mean-reversion track config. Passed to vectorize_replay
-    # (build_mr_signals_full) when the active track set includes "mean_reversion".
-    # Ignored for trend_following routes; defaults preserve all current call-sites.
+    # v4 Phase 1 — Mean-reversion track config. Passed through to
+    # vectorize_replay (currently a neutral stub after the strategy reset).
+    # Defaults preserve all current call-sites.
     mr_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
