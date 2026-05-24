@@ -90,8 +90,10 @@ export interface FeedEntry {
 }
 
 // ── persistence keys ──────────────────────────────────────────────────────────
-const FEED_KEY   = 'sterling_signal_feed_v2';
-const STATES_KEY = 'sterling_signal_states_v2';   // last-known state per key
+// v3: bumped during the strategy reset so clients drop any stale pre-reset feed
+// cached under the v2 keys (the legacy-purge loop below removes the old keys).
+const FEED_KEY   = 'sterling_signal_feed_v3';
+const STATES_KEY = 'sterling_signal_states_v3';   // last-known state per key
 
 const MAX_FEED  = 100;
 const EXPIRE_MS = 8 * 60 * 60 * 1000;   // 8 hours
