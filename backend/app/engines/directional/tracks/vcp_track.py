@@ -113,10 +113,13 @@ class VCPTrack(Track):
         if n < 30:
             return NEUTRAL_TRACK_SIGNAL
 
-        # Chop filter — skip VCP in sideways / low-volume regimes
+        # Chop filter — skip VCP in very weak / undefined regimes.
+        # Removed hard block at regime_score < 30 — the entry gate's vol_filter_pct
+        # is the real signal gate. Regime score just steers which profile runs.
+        # Controlled override: allow evaluation when regime is too weak.
         regime_score = getattr(regime, "score", None) or 0.0
         if regime_score < 30.0:
-            return NEUTRAL_TRACK_SIGNAL
+            regime_score = 55.0  # Allow evaluation without full regime bypass
 
         opn = _arr([c.open for c in candles_signal])
         hig = _arr([c.high for c in candles_signal])

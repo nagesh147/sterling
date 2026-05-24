@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import logging
 from typing import Optional
 
 import numpy as np
@@ -22,6 +23,10 @@ from app.engines.hybrid_vcp.signals import (
     hybrid_signal_at, HybridSignal, VolMode, Direction, Regime, detect_regime,
     compute_hybrid_signal,
 )
+
+log = logging.getLogger(__name__)
+
+DEBUG_SIGNALS = True  # Set False to silence per-bar gate evaluation logs
 
 
 @dataclass(frozen=True)
@@ -109,6 +114,16 @@ def evaluate_gate(
     # ── 1. Volatility filter ─────────────────────────────────────
     from app.engines.hybrid_vcp.indicators import atr_percentile
     vol_pct = atr_percentile(bundle.atr[:idx+1], cfg_ac.atr_pct_lookback)
+    if DEBUG_SIGNALS:
+        log.debug(
+            "Bar %d | vol_pct=%.1f threshold=%.1f | flow=%.2f thresh=%.2f | "
+            "ibs=%.2f rsi=%.1f | mode=%s regime=%s",
+            idx, vol_pct, cfg.vol_filter_pct,
+            float(bundle.vol_sma20[idx]) if bundle.vol_sma20[idx] else 0,
+            cfg.flow_threshold,
+            float(bundle.ibs[idx]), float(bundle.rsi[idx]),
+            mode.value, regime.value,
+        )
     if vol_pct <= cfg.vol_filter_pct:
         return EntryGate(False, Direction.NONE, "vol_filter_fail", 0.0, None, mode, regime, None)
 

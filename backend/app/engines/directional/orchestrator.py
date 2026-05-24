@@ -1,4 +1,5 @@
 import time
+import dataclasses
 from typing import Optional, List
 
 import numpy as np
@@ -14,8 +15,9 @@ from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.engines.directional.track_selector import select_tracks
+from app.engines.directional.track_scoring import compute_ensemble_signal, update_history
 from app.engines.directional.tracks import (
-    TrendFollowingTrack, FadeExtremesTrack, FadeExtremesConfig,
+    TrendFollowingTrack, FadeExtremesTrack,
     TrackSignal,
 )
 from app.engines.directional.tracks.vcp_track import VCPTrack, VCPTrackConfig
@@ -126,8 +128,10 @@ async def run_once(
     # (asset, profile) combo, evaluate each, keep the highest-scoring signal.
     track_names = select_tracks(instrument.underlying, mode)
 
-    # Resolve per-mode VCP profile key from the mode config
-    _vcp_profile_key = f"{instrument.underlying.upper().replace('USDT','').replace('USD','').replace('-','')}_scalping_15m"
+    # VCP profile key — controls which hybrid_vcp profile params the track uses.
+    # Swap "demo_profile" for any key in hybrid_vcp.profiles.PROFILES.
+    # demo_profile: vol_filter_pct=5, flow_threshold=0.10 (balanced loose settings)
+    _vcp_profile_key = "demo_profile"
 
     _track_registry = {
         "trend_following": TrendFollowingTrack(),
@@ -149,12 +153,12 @@ async def run_once(
         except Exception as exc:
             log.warning("VCP candle fetch failed for %s: %s", instrument.underlying, exc)
 
-    best_track: Optional[TrackSignal] = None
+    # Collect all candidate TrackSignals first
+    candidates: List[TrackSignal] = []
     for name in track_names:
         track = _track_registry.get(name)
         if track is None:
             continue
-        # VCP gets its native signal/regime candles; other tracks get 1H
         if name == "vcp":
             ts = track.compute(
                 candles_vcp_signal if candles_vcp_signal else candles_1h,
@@ -164,17 +168,46 @@ async def run_once(
             )
         else:
             ts = track.compute(candles_1h, regime, st_threshold=3)
-        if best_track is None or ts.score > best_track.score:
-            best_track = ts
+        candidates.append(ts)
 
-    if best_track is not None and best_track.trend_dir != 0:
-        signal = best_track.signal
+    # Use regime-aware ensemble scorer combining TF + VCP + MR
+    ensemble = compute_ensemble_signal(
+        candidates,
+        regime_label=regime.macro_regime.value if regime else "",
+    )
+
+    if ensemble.direction != 0 and ensemble.tracks:
+        # Pick the TrackSignal from the track with the highest weight
+        winning_name = max(
+            ensemble.tracks,
+            key=lambda st: st.weight if st.trend_dir != 0 else -1,
+        ).track_name
+        best_track = next(
+            (ts for ts in candidates if ts.track == winning_name),
+            candidates[0] if candidates else None,
+        )
+        # Build a composite SignalResult from the ensemble
+        # Use the winning track's signal as base, override direction + score
+        base_signal = best_track.signal if best_track else candidates[0].signal if candidates else None
+        if base_signal is not None:
+            # Blend scores: ensemble score vs base signal score
+            blended_score = (ensemble.composite_score + base_signal.signal_score) / 2.0
+            signal = dataclasses.replace(base_signal,
+                                         trend=ensemble.direction,
+                                         signal_score=blended_score,
+                                         signal_strength=ensemble.strength)
+        else:
+            signal = compute_signal(candles_1h, regime_label=regime.macro_regime.value if regime else "")
     else:
-        # Fallback: legacy compute_signal path (unchanged).
+        best_track = None
         signal = compute_signal(
             candles_1h,
             regime_label=regime.macro_regime.value if regime else "",
         )
+
+    # Update score history for normalisation
+    for ts in candidates:
+        update_history(ts.track, ts.score)
     setup = evaluate_setup(regime, signal, profile_label=mode)
 
     if setup.state in (TradeState.IDLE, TradeState.FILTERED):

@@ -41,6 +41,29 @@ class VCPProfile:
 
 
 PROFILES = {
+    # Hackathon demo — loose filters so signals fire immediately
+    "demo_profile": VCPProfile(
+        label="Demo Profile",
+        signal_tf="15m",
+        regime_tf="1h",
+        signal_bar_ms=15 * 60_000,
+        regime_bar_ms=60 * 60_000,
+        hold_bars=8,
+        direction="both",
+        vol_filter_pct=5.0,
+        flow_threshold=0.10,
+        max_ibs_long=0.48,
+        min_ibs_short=0.52,
+        max_rsi_long=50.0,
+        min_rsi_short=50.0,
+        stop_mult=1.0,
+        tp1_mult=1.8,
+        tp2_mult=3.0,
+        trail_mult=0.6,
+        risk_pct=0.010,
+        max_positions=2,
+        high_vol_risk_red=1.0,
+    ),
     # BTC profiles
     "btc_scalping_5m": VCPProfile(
         label="BTC Scalping 5m",

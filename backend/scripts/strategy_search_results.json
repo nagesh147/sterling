@@ -1,0 +1,2340 @@
+{
+  "best": {
+    "config": {
+      "scheme": "equal",
+      "vote": "by_edge",
+      "score": "max",
+      "boost": "linear_agree",
+      "threshold": 7.0
+    },
+    "exp_sharpe": 0.3386,
+    "exp_wr": 0.7313,
+    "edge_per_trade": 0.6938,
+    "avg_score": 14.642,
+    "dir_conf": 0.333,
+    "agree_count": 2,
+    "valid_trades": 9767
+  },
+  "baseline": {
+    "config": {
+      "scheme": "walk_forward",
+      "vote": "unweighted",
+      "score": "mean",
+      "boost": "none",
+      "threshold": 7.0
+    },
+    "exp_sharpe": 0.1414,
+    "exp_wr": 0.6716,
+    "edge_per_trade": 0.5147,
+    "avg_score": 9.784,
+    "dir_conf": 0.281,
+    "agree_count": 2,
+    "valid_trades": 5593
+  },
+  "all": [
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3386,
+      "exp_wr": 0.7313,
+      "edge_per_trade": 0.6938,
+      "avg_score": 14.642,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9767
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3386,
+      "exp_wr": 0.7314,
+      "edge_per_trade": 0.6942,
+      "avg_score": 14.635,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9772
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3385,
+      "exp_wr": 0.7322,
+      "edge_per_trade": 0.6966,
+      "avg_score": 14.578,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9829
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3383,
+      "exp_wr": 0.7318,
+      "edge_per_trade": 0.6955,
+      "avg_score": 14.594,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9773
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.338,
+      "exp_wr": 0.7316,
+      "edge_per_trade": 0.6948,
+      "avg_score": 14.592,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9836
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3378,
+      "exp_wr": 0.7315,
+      "edge_per_trade": 0.6944,
+      "avg_score": 14.593,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9745
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3357,
+      "exp_wr": 0.7311,
+      "edge_per_trade": 0.6932,
+      "avg_score": 14.526,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9852
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3355,
+      "exp_wr": 0.732,
+      "edge_per_trade": 0.696,
+      "avg_score": 14.464,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9850
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3134,
+      "exp_wr": 0.7321,
+      "edge_per_trade": 0.6964,
+      "avg_score": 13.499,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9717
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3126,
+      "exp_wr": 0.732,
+      "edge_per_trade": 0.696,
+      "avg_score": 13.473,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9749
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3124,
+      "exp_wr": 0.7326,
+      "edge_per_trade": 0.6977,
+      "avg_score": 13.432,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9842
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3119,
+      "exp_wr": 0.7317,
+      "edge_per_trade": 0.6952,
+      "avg_score": 13.458,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9747
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.3118,
+      "exp_wr": 0.732,
+      "edge_per_trade": 0.696,
+      "avg_score": 13.439,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9746
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3103,
+      "exp_wr": 0.7319,
+      "edge_per_trade": 0.6957,
+      "avg_score": 13.381,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9830
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3091,
+      "exp_wr": 0.7315,
+      "edge_per_trade": 0.6945,
+      "avg_score": 13.353,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9854
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.3078,
+      "exp_wr": 0.7304,
+      "edge_per_trade": 0.6911,
+      "avg_score": 13.359,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9820
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2628,
+      "exp_wr": 0.7326,
+      "edge_per_trade": 0.6978,
+      "avg_score": 11.297,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8266
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2619,
+      "exp_wr": 0.7318,
+      "edge_per_trade": 0.6955,
+      "avg_score": 11.297,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8303
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2619,
+      "exp_wr": 0.7313,
+      "edge_per_trade": 0.6939,
+      "avg_score": 11.32,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8272
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2604,
+      "exp_wr": 0.7313,
+      "edge_per_trade": 0.6938,
+      "avg_score": 11.26,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8316
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.254,
+      "exp_wr": 0.7365,
+      "edge_per_trade": 0.7095,
+      "avg_score": 10.739,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 6069
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2532,
+      "exp_wr": 0.7353,
+      "edge_per_trade": 0.7058,
+      "avg_score": 10.764,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 6042
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2524,
+      "exp_wr": 0.7337,
+      "edge_per_trade": 0.701,
+      "avg_score": 10.804,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 6052
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.251,
+      "exp_wr": 0.7343,
+      "edge_per_trade": 0.7028,
+      "avg_score": 10.715,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 6131
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2478,
+      "exp_wr": 0.7316,
+      "edge_per_trade": 0.6948,
+      "avg_score": 10.701,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9501
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2466,
+      "exp_wr": 0.7309,
+      "edge_per_trade": 0.6928,
+      "avg_score": 10.679,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9444
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2464,
+      "exp_wr": 0.7322,
+      "edge_per_trade": 0.6966,
+      "avg_score": 10.612,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 7946
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.246,
+      "exp_wr": 0.7314,
+      "edge_per_trade": 0.6941,
+      "avg_score": 10.635,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9499
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2456,
+      "exp_wr": 0.7322,
+      "edge_per_trade": 0.6967,
+      "avg_score": 10.577,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 7928
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2456,
+      "exp_wr": 0.7312,
+      "edge_per_trade": 0.6937,
+      "avg_score": 10.623,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9433
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2447,
+      "exp_wr": 0.7323,
+      "edge_per_trade": 0.6968,
+      "avg_score": 10.536,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 7880
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.244,
+      "exp_wr": 0.7311,
+      "edge_per_trade": 0.6934,
+      "avg_score": 10.556,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8002
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2327,
+      "exp_wr": 0.738,
+      "edge_per_trade": 0.7141,
+      "avg_score": 9.777,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 5583
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2327,
+      "exp_wr": 0.7376,
+      "edge_per_trade": 0.7128,
+      "avg_score": 9.795,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 5699
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2323,
+      "exp_wr": 0.7371,
+      "edge_per_trade": 0.7112,
+      "avg_score": 9.797,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 5623
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.2312,
+      "exp_wr": 0.7361,
+      "edge_per_trade": 0.7084,
+      "avg_score": 9.79,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 5646
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.229,
+      "exp_wr": 0.7336,
+      "edge_per_trade": 0.7008,
+      "avg_score": 9.802,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9439
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2287,
+      "exp_wr": 0.7323,
+      "edge_per_trade": 0.697,
+      "avg_score": 9.845,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9418
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2284,
+      "exp_wr": 0.7316,
+      "edge_per_trade": 0.6949,
+      "avg_score": 9.859,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9418
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2278,
+      "exp_wr": 0.7314,
+      "edge_per_trade": 0.6941,
+      "avg_score": 9.847,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 9450
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2182,
+      "exp_wr": 0.7352,
+      "edge_per_trade": 0.7055,
+      "avg_score": 9.28,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8621
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2182,
+      "exp_wr": 0.735,
+      "edge_per_trade": 0.705,
+      "avg_score": 9.285,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8619
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.217,
+      "exp_wr": 0.7343,
+      "edge_per_trade": 0.7028,
+      "avg_score": 9.263,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8617
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.2159,
+      "exp_wr": 0.7355,
+      "edge_per_trade": 0.7064,
+      "avg_score": 9.169,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8622
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1973,
+      "exp_wr": 0.7352,
+      "edge_per_trade": 0.7057,
+      "avg_score": 8.388,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8530
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1969,
+      "exp_wr": 0.7348,
+      "edge_per_trade": 0.7043,
+      "avg_score": 8.385,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8501
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1964,
+      "exp_wr": 0.7355,
+      "edge_per_trade": 0.7064,
+      "avg_score": 8.341,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8438
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "by_edge",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.196,
+      "exp_wr": 0.7352,
+      "edge_per_trade": 0.7055,
+      "avg_score": 8.333,
+      "dir_conf": 0.333,
+      "agree_count": 2,
+      "valid_trades": 8497
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1868,
+      "exp_wr": 0.6609,
+      "edge_per_trade": 0.4826,
+      "avg_score": 14.7,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9754
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1864,
+      "exp_wr": 0.6619,
+      "edge_per_trade": 0.4857,
+      "avg_score": 14.586,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9761
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1858,
+      "exp_wr": 0.6612,
+      "edge_per_trade": 0.4835,
+      "avg_score": 14.6,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9795
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1857,
+      "exp_wr": 0.6619,
+      "edge_per_trade": 0.4856,
+      "avg_score": 14.525,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9835
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1853,
+      "exp_wr": 0.6607,
+      "edge_per_trade": 0.4821,
+      "avg_score": 14.621,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9785
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1848,
+      "exp_wr": 0.6609,
+      "edge_per_trade": 0.4826,
+      "avg_score": 14.597,
+      "dir_conf": 0.262,
+      "agree_count": 2,
+      "valid_trades": 9852
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1847,
+      "exp_wr": 0.6618,
+      "edge_per_trade": 0.4854,
+      "avg_score": 14.505,
+      "dir_conf": 0.262,
+      "agree_count": 2,
+      "valid_trades": 9836
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1812,
+      "exp_wr": 0.6594,
+      "edge_per_trade": 0.4782,
+      "avg_score": 14.538,
+      "dir_conf": 0.261,
+      "agree_count": 2,
+      "valid_trades": 9825
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1729,
+      "exp_wr": 0.6622,
+      "edge_per_trade": 0.4867,
+      "avg_score": 13.509,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9739
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1726,
+      "exp_wr": 0.6623,
+      "edge_per_trade": 0.487,
+      "avg_score": 13.426,
+      "dir_conf": 0.264,
+      "agree_count": 2,
+      "valid_trades": 9730
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1724,
+      "exp_wr": 0.6616,
+      "edge_per_trade": 0.4847,
+      "avg_score": 13.467,
+      "dir_conf": 0.264,
+      "agree_count": 2,
+      "valid_trades": 9754
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1718,
+      "exp_wr": 0.6611,
+      "edge_per_trade": 0.4833,
+      "avg_score": 13.519,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9720
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.17,
+      "exp_wr": 0.6609,
+      "edge_per_trade": 0.4828,
+      "avg_score": 13.378,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9855
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1694,
+      "exp_wr": 0.6606,
+      "edge_per_trade": 0.4819,
+      "avg_score": 13.408,
+      "dir_conf": 0.262,
+      "agree_count": 2,
+      "valid_trades": 9845
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1685,
+      "exp_wr": 0.6608,
+      "edge_per_trade": 0.4825,
+      "avg_score": 13.362,
+      "dir_conf": 0.261,
+      "agree_count": 2,
+      "valid_trades": 9851
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1648,
+      "exp_wr": 0.659,
+      "edge_per_trade": 0.4769,
+      "avg_score": 13.344,
+      "dir_conf": 0.259,
+      "agree_count": 2,
+      "valid_trades": 9851
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1625,
+      "exp_wr": 0.6746,
+      "edge_per_trade": 0.5237,
+      "avg_score": 10.825,
+      "dir_conf": 0.287,
+      "agree_count": 2,
+      "valid_trades": 5954
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1602,
+      "exp_wr": 0.6746,
+      "edge_per_trade": 0.5239,
+      "avg_score": 10.746,
+      "dir_conf": 0.285,
+      "agree_count": 2,
+      "valid_trades": 6100
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1595,
+      "exp_wr": 0.6745,
+      "edge_per_trade": 0.5234,
+      "avg_score": 10.706,
+      "dir_conf": 0.285,
+      "agree_count": 2,
+      "valid_trades": 6104
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1586,
+      "exp_wr": 0.6735,
+      "edge_per_trade": 0.5204,
+      "avg_score": 10.751,
+      "dir_conf": 0.283,
+      "agree_count": 2,
+      "valid_trades": 6096
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1584,
+      "exp_wr": 0.6737,
+      "edge_per_trade": 0.521,
+      "avg_score": 10.745,
+      "dir_conf": 0.283,
+      "agree_count": 2,
+      "valid_trades": 6106
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1576,
+      "exp_wr": 0.6737,
+      "edge_per_trade": 0.5211,
+      "avg_score": 10.678,
+      "dir_conf": 0.283,
+      "agree_count": 2,
+      "valid_trades": 6103
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1574,
+      "exp_wr": 0.6734,
+      "edge_per_trade": 0.5202,
+      "avg_score": 10.677,
+      "dir_conf": 0.283,
+      "agree_count": 2,
+      "valid_trades": 6092
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1557,
+      "exp_wr": 0.6717,
+      "edge_per_trade": 0.515,
+      "avg_score": 10.71,
+      "dir_conf": 0.282,
+      "agree_count": 2,
+      "valid_trades": 6093
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1466,
+      "exp_wr": 0.6629,
+      "edge_per_trade": 0.4888,
+      "avg_score": 11.299,
+      "dir_conf": 0.265,
+      "agree_count": 2,
+      "valid_trades": 8323
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1461,
+      "exp_wr": 0.6626,
+      "edge_per_trade": 0.4878,
+      "avg_score": 11.305,
+      "dir_conf": 0.265,
+      "agree_count": 2,
+      "valid_trades": 8389
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1446,
+      "exp_wr": 0.6622,
+      "edge_per_trade": 0.4866,
+      "avg_score": 11.246,
+      "dir_conf": 0.264,
+      "agree_count": 2,
+      "valid_trades": 8330
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1436,
+      "exp_wr": 0.6612,
+      "edge_per_trade": 0.4837,
+      "avg_score": 11.297,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 8336
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1431,
+      "exp_wr": 0.6729,
+      "edge_per_trade": 0.5188,
+      "avg_score": 9.804,
+      "dir_conf": 0.281,
+      "agree_count": 2,
+      "valid_trades": 5609
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1422,
+      "exp_wr": 0.6725,
+      "edge_per_trade": 0.5175,
+      "avg_score": 9.782,
+      "dir_conf": 0.281,
+      "agree_count": 2,
+      "valid_trades": 5586
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1419,
+      "exp_wr": 0.6717,
+      "edge_per_trade": 0.515,
+      "avg_score": 9.817,
+      "dir_conf": 0.281,
+      "agree_count": 2,
+      "valid_trades": 5616
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1414,
+      "exp_wr": 0.6716,
+      "edge_per_trade": 0.5147,
+      "avg_score": 9.784,
+      "dir_conf": 0.281,
+      "agree_count": 2,
+      "valid_trades": 5593
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.141,
+      "exp_wr": 0.6722,
+      "edge_per_trade": 0.5166,
+      "avg_score": 9.762,
+      "dir_conf": 0.28,
+      "agree_count": 2,
+      "valid_trades": 5631
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1409,
+      "exp_wr": 0.6715,
+      "edge_per_trade": 0.5145,
+      "avg_score": 9.782,
+      "dir_conf": 0.28,
+      "agree_count": 2,
+      "valid_trades": 5610
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1402,
+      "exp_wr": 0.6711,
+      "edge_per_trade": 0.5132,
+      "avg_score": 9.765,
+      "dir_conf": 0.28,
+      "agree_count": 2,
+      "valid_trades": 5561
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1393,
+      "exp_wr": 0.6708,
+      "edge_per_trade": 0.5125,
+      "avg_score": 9.752,
+      "dir_conf": 0.279,
+      "agree_count": 2,
+      "valid_trades": 5610
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1388,
+      "exp_wr": 0.663,
+      "edge_per_trade": 0.4889,
+      "avg_score": 10.687,
+      "dir_conf": 0.266,
+      "agree_count": 2,
+      "valid_trades": 9477
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1368,
+      "exp_wr": 0.6621,
+      "edge_per_trade": 0.4863,
+      "avg_score": 10.69,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9480
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1356,
+      "exp_wr": 0.6613,
+      "edge_per_trade": 0.4838,
+      "avg_score": 10.677,
+      "dir_conf": 0.262,
+      "agree_count": 2,
+      "valid_trades": 9432
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1349,
+      "exp_wr": 0.6614,
+      "edge_per_trade": 0.4841,
+      "avg_score": 10.562,
+      "dir_conf": 0.264,
+      "agree_count": 2,
+      "valid_trades": 7923
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1338,
+      "exp_wr": 0.6602,
+      "edge_per_trade": 0.4807,
+      "avg_score": 10.643,
+      "dir_conf": 0.262,
+      "agree_count": 2,
+      "valid_trades": 9458
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1323,
+      "exp_wr": 0.66,
+      "edge_per_trade": 0.4799,
+      "avg_score": 10.531,
+      "dir_conf": 0.262,
+      "agree_count": 2,
+      "valid_trades": 8016
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1322,
+      "exp_wr": 0.6601,
+      "edge_per_trade": 0.4803,
+      "avg_score": 10.543,
+      "dir_conf": 0.261,
+      "agree_count": 2,
+      "valid_trades": 7921
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1313,
+      "exp_wr": 0.6587,
+      "edge_per_trade": 0.4761,
+      "avg_score": 10.571,
+      "dir_conf": 0.261,
+      "agree_count": 2,
+      "valid_trades": 8008
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1271,
+      "exp_wr": 0.6337,
+      "edge_per_trade": 0.401,
+      "avg_score": 14.577,
+      "dir_conf": 0.218,
+      "agree_count": 2,
+      "valid_trades": 9739
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1263,
+      "exp_wr": 0.6627,
+      "edge_per_trade": 0.488,
+      "avg_score": 9.846,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9395
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1258,
+      "exp_wr": 0.6327,
+      "edge_per_trade": 0.398,
+      "avg_score": 14.603,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9771
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.125,
+      "exp_wr": 0.6335,
+      "edge_per_trade": 0.4004,
+      "avg_score": 14.443,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9832
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1245,
+      "exp_wr": 0.6607,
+      "edge_per_trade": 0.4821,
+      "avg_score": 9.837,
+      "dir_conf": 0.263,
+      "agree_count": 2,
+      "valid_trades": 9433
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1244,
+      "exp_wr": 0.6323,
+      "edge_per_trade": 0.397,
+      "avg_score": 14.522,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9837
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1231,
+      "exp_wr": 0.6601,
+      "edge_per_trade": 0.4803,
+      "avg_score": 9.815,
+      "dir_conf": 0.261,
+      "agree_count": 2,
+      "valid_trades": 9411
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1227,
+      "exp_wr": 0.6315,
+      "edge_per_trade": 0.3946,
+      "avg_score": 14.57,
+      "dir_conf": 0.213,
+      "agree_count": 2,
+      "valid_trades": 9800
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1225,
+      "exp_wr": 0.6309,
+      "edge_per_trade": 0.3928,
+      "avg_score": 14.575,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9857
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1225,
+      "exp_wr": 0.6314,
+      "edge_per_trade": 0.3941,
+      "avg_score": 14.485,
+      "dir_conf": 0.215,
+      "agree_count": 2,
+      "valid_trades": 9850
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1217,
+      "exp_wr": 0.6596,
+      "edge_per_trade": 0.4788,
+      "avg_score": 9.816,
+      "dir_conf": 0.259,
+      "agree_count": 2,
+      "valid_trades": 9453
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.121,
+      "exp_wr": 0.6302,
+      "edge_per_trade": 0.3907,
+      "avg_score": 14.568,
+      "dir_conf": 0.213,
+      "agree_count": 2,
+      "valid_trades": 9764
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1163,
+      "exp_wr": 0.661,
+      "edge_per_trade": 0.4829,
+      "avg_score": 9.219,
+      "dir_conf": 0.261,
+      "agree_count": 2,
+      "valid_trades": 8573
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1159,
+      "exp_wr": 0.6326,
+      "edge_per_trade": 0.3977,
+      "avg_score": 13.475,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9733
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1142,
+      "exp_wr": 0.6317,
+      "edge_per_trade": 0.3952,
+      "avg_score": 13.494,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9705
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1139,
+      "exp_wr": 0.6592,
+      "edge_per_trade": 0.4776,
+      "avg_score": 9.209,
+      "dir_conf": 0.259,
+      "agree_count": 2,
+      "valid_trades": 8659
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1137,
+      "exp_wr": 0.6315,
+      "edge_per_trade": 0.3944,
+      "avg_score": 13.458,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9729
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1136,
+      "exp_wr": 0.6315,
+      "edge_per_trade": 0.3945,
+      "avg_score": 13.494,
+      "dir_conf": 0.213,
+      "agree_count": 2,
+      "valid_trades": 9728
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1134,
+      "exp_wr": 0.6316,
+      "edge_per_trade": 0.3948,
+      "avg_score": 13.349,
+      "dir_conf": 0.215,
+      "agree_count": 2,
+      "valid_trades": 9824
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1128,
+      "exp_wr": 0.658,
+      "edge_per_trade": 0.4741,
+      "avg_score": 9.232,
+      "dir_conf": 0.258,
+      "agree_count": 2,
+      "valid_trades": 8617
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1127,
+      "exp_wr": 0.6588,
+      "edge_per_trade": 0.4765,
+      "avg_score": 9.179,
+      "dir_conf": 0.258,
+      "agree_count": 2,
+      "valid_trades": 8591
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1126,
+      "exp_wr": 0.6307,
+      "edge_per_trade": 0.3922,
+      "avg_score": 13.428,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9826
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1122,
+      "exp_wr": 0.6313,
+      "edge_per_trade": 0.3938,
+      "avg_score": 13.343,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9866
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "max",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1121,
+      "exp_wr": 0.6308,
+      "edge_per_trade": 0.3924,
+      "avg_score": 13.425,
+      "dir_conf": 0.213,
+      "agree_count": 2,
+      "valid_trades": 9826
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1033,
+      "exp_wr": 0.637,
+      "edge_per_trade": 0.411,
+      "avg_score": 11.26,
+      "dir_conf": 0.223,
+      "agree_count": 2,
+      "valid_trades": 8352
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1029,
+      "exp_wr": 0.6589,
+      "edge_per_trade": 0.4766,
+      "avg_score": 8.387,
+      "dir_conf": 0.258,
+      "agree_count": 2,
+      "valid_trades": 8517
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1019,
+      "exp_wr": 0.6579,
+      "edge_per_trade": 0.4736,
+      "avg_score": 8.346,
+      "dir_conf": 0.258,
+      "agree_count": 2,
+      "valid_trades": 8541
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1014,
+      "exp_wr": 0.6354,
+      "edge_per_trade": 0.4063,
+      "avg_score": 11.292,
+      "dir_conf": 0.221,
+      "agree_count": 2,
+      "valid_trades": 8254
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1014,
+      "exp_wr": 0.6578,
+      "edge_per_trade": 0.4735,
+      "avg_score": 8.345,
+      "dir_conf": 0.257,
+      "agree_count": 2,
+      "valid_trades": 8428
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "unweighted",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1013,
+      "exp_wr": 0.6575,
+      "edge_per_trade": 0.4725,
+      "avg_score": 8.361,
+      "dir_conf": 0.256,
+      "agree_count": 2,
+      "valid_trades": 8504
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1013,
+      "exp_wr": 0.6353,
+      "edge_per_trade": 0.406,
+      "avg_score": 11.314,
+      "dir_conf": 0.221,
+      "agree_count": 2,
+      "valid_trades": 8296
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.1008,
+      "exp_wr": 0.6491,
+      "edge_per_trade": 0.4472,
+      "avg_score": 9.269,
+      "dir_conf": 0.243,
+      "agree_count": 2,
+      "valid_trades": 8573
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.1004,
+      "exp_wr": 0.6352,
+      "edge_per_trade": 0.4056,
+      "avg_score": 11.253,
+      "dir_conf": 0.22,
+      "agree_count": 2,
+      "valid_trades": 8364
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0992,
+      "exp_wr": 0.6485,
+      "edge_per_trade": 0.4455,
+      "avg_score": 9.236,
+      "dir_conf": 0.241,
+      "agree_count": 2,
+      "valid_trades": 8549
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.099,
+      "exp_wr": 0.6487,
+      "edge_per_trade": 0.4462,
+      "avg_score": 9.192,
+      "dir_conf": 0.241,
+      "agree_count": 2,
+      "valid_trades": 8544
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.096,
+      "exp_wr": 0.6463,
+      "edge_per_trade": 0.439,
+      "avg_score": 9.183,
+      "dir_conf": 0.238,
+      "agree_count": 2,
+      "valid_trades": 8539
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.0934,
+      "exp_wr": 0.6349,
+      "edge_per_trade": 0.4048,
+      "avg_score": 10.553,
+      "dir_conf": 0.219,
+      "agree_count": 2,
+      "valid_trades": 7951
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.0919,
+      "exp_wr": 0.6332,
+      "edge_per_trade": 0.3996,
+      "avg_score": 10.55,
+      "dir_conf": 0.218,
+      "agree_count": 2,
+      "valid_trades": 7920
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.0914,
+      "exp_wr": 0.6329,
+      "edge_per_trade": 0.3986,
+      "avg_score": 10.511,
+      "dir_conf": 0.218,
+      "agree_count": 2,
+      "valid_trades": 7940
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0912,
+      "exp_wr": 0.6321,
+      "edge_per_trade": 0.3964,
+      "avg_score": 10.652,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9423
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0911,
+      "exp_wr": 0.6328,
+      "edge_per_trade": 0.3983,
+      "avg_score": 10.591,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9454
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 7.0
+      },
+      "exp_sharpe": 0.0906,
+      "exp_wr": 0.6324,
+      "edge_per_trade": 0.3972,
+      "avg_score": 10.521,
+      "dir_conf": 0.217,
+      "agree_count": 2,
+      "valid_trades": 7938
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0906,
+      "exp_wr": 0.6483,
+      "edge_per_trade": 0.4449,
+      "avg_score": 8.429,
+      "dir_conf": 0.242,
+      "agree_count": 2,
+      "valid_trades": 8521
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0898,
+      "exp_wr": 0.6317,
+      "edge_per_trade": 0.3951,
+      "avg_score": 10.622,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9462
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0895,
+      "exp_wr": 0.6484,
+      "edge_per_trade": 0.4453,
+      "avg_score": 8.329,
+      "dir_conf": 0.241,
+      "agree_count": 2,
+      "valid_trades": 8518
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0879,
+      "exp_wr": 0.6473,
+      "edge_per_trade": 0.4419,
+      "avg_score": 8.292,
+      "dir_conf": 0.24,
+      "agree_count": 2,
+      "valid_trades": 8498
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "linear_agree",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0876,
+      "exp_wr": 0.6299,
+      "edge_per_trade": 0.3896,
+      "avg_score": 10.581,
+      "dir_conf": 0.212,
+      "agree_count": 2,
+      "valid_trades": 9499
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "mean",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0864,
+      "exp_wr": 0.645,
+      "edge_per_trade": 0.4351,
+      "avg_score": 8.369,
+      "dir_conf": 0.237,
+      "agree_count": 2,
+      "valid_trades": 8529
+    },
+    {
+      "config": {
+        "scheme": "equal",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0853,
+      "exp_wr": 0.6338,
+      "edge_per_trade": 0.4014,
+      "avg_score": 9.789,
+      "dir_conf": 0.217,
+      "agree_count": 2,
+      "valid_trades": 9431
+    },
+    {
+      "config": {
+        "scheme": "vcp_heavy",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.085,
+      "exp_wr": 0.6335,
+      "edge_per_trade": 0.4006,
+      "avg_score": 9.838,
+      "dir_conf": 0.216,
+      "agree_count": 2,
+      "valid_trades": 9444
+    },
+    {
+      "config": {
+        "scheme": "adaptive",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0836,
+      "exp_wr": 0.6319,
+      "edge_per_trade": 0.3957,
+      "avg_score": 9.829,
+      "dir_conf": 0.215,
+      "agree_count": 2,
+      "valid_trades": 9432
+    },
+    {
+      "config": {
+        "scheme": "walk_forward",
+        "vote": "majority_2of3",
+        "score": "geometric",
+        "boost": "none",
+        "threshold": 4.0
+      },
+      "exp_sharpe": 0.0831,
+      "exp_wr": 0.6317,
+      "edge_per_trade": 0.395,
+      "avg_score": 9.833,
+      "dir_conf": 0.214,
+      "agree_count": 2,
+      "valid_trades": 9388
+    }
+  ]
+}

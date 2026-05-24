@@ -283,6 +283,11 @@ def compute_hybrid_signal(
     return mode, comp, brk
 
 
+# Debug print — enable by setting DEBUG_SIGNALS=True in entries.py
+import logging as _log
+_debug_log = _log.getLogger("hybrid_vcp.signals")
+DEBUG_SIGNALS_INNER = False
+
 def hybrid_signal_at(
     idx:         int,
     mode:        VolMode,
