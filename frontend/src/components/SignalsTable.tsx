@@ -1514,7 +1514,10 @@ export function SignalsTable() {
   ];
 
   const hasOptAlert = tab === 'futures' && optArmed > 0;
-  const freshCount  = (signals?.signals ?? []).filter((s: any) => s.fresh).length;
+  // Actionable signals only (fresh AND non-neutral) — the "N live" badge should
+  // reflect live *signals*, not just instruments with live data. Reads 0 while
+  // no strategy is loaded.
+  const freshCount  = (signals?.signals ?? []).filter((s: any) => s.fresh && s.direction !== 'neutral').length;
 
   const MODE_PILLS: Array<{ id: ModeFilter; label: string }> = [
     { id: 'all',        label: 'ALL' },
@@ -1646,8 +1649,12 @@ export function SignalsTable() {
         {/* Track filter */}
         <div style={{ display: 'flex', gap: 2 }}>
           {TRACK_PILLS.map(t => {
+            // Count actionable signals only (fresh AND non-neutral), matching
+            // the feed's own rule. `fresh` alone just means "live data exists",
+            // so neutral/IDLE instruments must be excluded — with no strategy
+            // loaded every signal is neutral, so these tabs read 0.
             const cnt = (signals?.signals ?? []).filter((s: any) =>
-              s.fresh && (t.id === 'all' || s.strategy === t.id)
+              s.fresh && s.direction !== 'neutral' && (t.id === 'all' || s.strategy === t.id)
             ).length;
             const active = localTrack === t.id;
             return (
