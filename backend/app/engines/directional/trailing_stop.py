@@ -1,75 +1,22 @@
+"""STRATEGY STUB — trailing-stop logic removed in the strategy reset.
+
+The data containers (`TrailState`, `PartialExitSignal`, `TrailUpdate`) are kept
+intact because `paper_store` serialises `TrailState` to/from JSON and positions
+depend on that shape. Only the decision logic in `TrailingStopEngine.update`
+was stripped (preserved in git history on the `strategy-v2` branch): it now
+returns a no-op update that never moves the stop, never exits, and never takes
+partials.
+
+Implement the new trailing logic in `TrailingStopEngine.update`.
+"""
+from __future__ import annotations
+
 import json
-from dataclasses import dataclass, field, asdict
-from typing import Optional, List
-from app.schemas.market import Candle
+from dataclasses import dataclass, asdict
+from typing import List, Optional
+
 from app.core.trading_mode import TrailMode, TradingModeConfig
-from app.engines.indicators.atr import compute_atr
-import numpy as np
-
-
-def _atr_percentile(atr_arr: np.ndarray, lookback: int = 100) -> float:
-    """Percentile rank of latest ATR within trailing window. Returns 50.0 on empty."""
-    if atr_arr is None or len(atr_arr) == 0:
-        return 50.0
-    valid = atr_arr[~np.isnan(atr_arr)]
-    if len(valid) < 5:
-        return 50.0
-    recent = valid[-lookback:] if len(valid) > lookback else valid
-    cur = float(valid[-1])
-    return float(np.sum(cur > recent) / len(recent) * 100.0)
-
-
-def _adaptive_base_mult(atr_pct: float) -> float:
-    """
-    Map ATR percentile (0-100) to base trail multiplier (1.5-3.5).
-    Low vol → tighter trail (don't give back gains in chop).
-    High vol → wider trail (avoid premature stop-outs in expansion).
-    """
-    pct = max(0.0, min(100.0, atr_pct))
-    return round(1.5 + pct * 0.020, 2)  # 0% → 1.5, 100% → 3.5
-
-
-def _adaptive_partial_pcts(
-    atr_pct: float,
-    base_25: float = 0.10,
-    base_50: float = 0.20,
-) -> tuple[float, float]:
-    """
-    Volatility-adaptive partial exit thresholds.
-
-    High vol  → wider thresholds (let winning trades run longer,
-                 avoid stopping out in expansion spikes).
-    Low vol   → tighter thresholds (lock in gains faster,
-                 avoid give-back in chop).
-
-    Mapping (atr_pct 0-100):
-      0%  → 0.5× base  (e.g. 5% / 10%)
-      50% → 1.0× base  (e.g. 10% / 20%)
-      100%→ 2.0× base  (e.g. 20% / 40%)
-    """
-    pct = max(0.0, min(100.0, atr_pct))
-    scale = 0.5 + pct * 0.015  # 0.5 at 0%, 2.0 at 100%
-    return round(base_25 * scale, 4), round(base_50 * scale, 4)
-
-
-def _theta_breakeven_adjustment(
-    entry: float,
-    dte: int,
-    direction: str,
-    base_pct: float = 0.02,
-) -> float:
-    """
-    Options theta-aware breakeven shift (stored as delta from entry price).
-    Low DTE → larger shift (breakeven moves faster against short gamma).
-    High DTE → smaller shift (time value decays slowly, breakeven is stable).
-    At ≤3 DTE the shift caps at ±3× base; at ≥21 DTE it is ±0.5× base.
-    """
-    if dte is None or dte <= 0:
-        return 0.0
-    # Normalise DTE to [0, 1] range: 3 DTE → 1.0 (max shift), 21+ DTE → 0.0 (no shift)
-    t_norm = max(0.0, min(1.0, (7 - dte) / 18))
-    shift = base_pct * entry * (0.5 + 2.5 * t_norm)
-    return shift if direction == "bullish" else -shift
+from app.schemas.market import Candle
 
 
 @dataclass
@@ -82,14 +29,9 @@ class TrailState:
     partial_50_done: bool = False
     breakeven_set: bool = False
     trail_mult: float = 2.0
-    # Mode-specific partial thresholds (fraction, e.g. 0.10 = 10%)
     partial_25_pct: float = 0.10
     partial_50_pct: float = 0.20
-    # A2: cumulative manual tightening applied on top of the adaptive base.
-    # Each milestone (50% partial, lock-in) adds 0.5; effective_mult is
-    # max(1.0, adaptive_base - tightening_offset).
     tightening_offset: float = 0.0
-    # Options DTE: used to compute theta-aware breakeven adjustment.
     structure_dte: Optional[int] = None
 
     def to_json(self) -> str:
@@ -101,7 +43,7 @@ class TrailState:
     def from_json(cls, s: str) -> "TrailState":
         d = json.loads(s)
         d["mode"] = TrailMode(d["mode"])
-        # Back-compat: older snapshots may lack the new fields
+        # Back-compat: older snapshots may lack newer fields
         d.setdefault("partial_25_pct", 0.10)
         d.setdefault("partial_50_pct", 0.20)
         d.setdefault("tightening_offset", 0.0)
@@ -123,10 +65,11 @@ class TrailUpdate:
     partial: Optional[PartialExitSignal]
     stopped_out: bool
     stop_moved: bool
-    current_tp: Optional[float] = None   # echoed back unchanged; engine doesn't move TP
+    current_tp: Optional[float] = None  # echoed back unchanged
 
 
 class TrailingStopEngine:
+    """STUB — trailing logic removed. `update` never moves the stop or exits."""
 
     def update(
         self,
@@ -138,148 +81,10 @@ class TrailingStopEngine:
         mode: TradingModeConfig,
         initial_tp: Optional[float] = None,
     ) -> TrailUpdate:
-        if not candles:
-            return TrailUpdate(
-                new_stop=state.current_stop, partial=None,
-                stopped_out=False, stop_moved=False,
-                current_tp=initial_tp,
-            )
-
-        current    = candles[-1].close
-        prev_stop  = state.current_stop
-
-        h     = np.array([c.high  for c in candles], dtype=np.float64)
-        l     = np.array([c.low   for c in candles], dtype=np.float64)
-        c_arr = np.array([c.close for c in candles], dtype=np.float64)
-        atr_arr = compute_atr(h, l, c_arr, 14)
-        atr = float(atr_arr[-1]) if len(atr_arr) > 0 and atr_arr[-1] > 0 else abs(current * 0.01)
-
-        # A2: adaptive base trail multiplier scaled by ATR percentile.
-        # The effective mult applied this tick =
-        #   max(1.0, adaptive_base - state.tightening_offset)
-        # state.trail_mult is updated to reflect the effective value so
-        # observers (UI, JSON snapshots) see what is actually being used.
-        atr_pct = _atr_percentile(atr_arr)
-        base_mult = _adaptive_base_mult(atr_pct)
-        effective_mult = max(1.0, round(base_mult - state.tightening_offset, 2))
-        state.trail_mult = effective_mult
-
-        # Volatility-adaptive partial thresholds: wider in high-vol environments
-        # so trades can breathe, tighter in low-vol to lock in gains before chop.
-        adaptive_25, adaptive_50 = _adaptive_partial_pcts(
-            atr_pct, state.partial_25_pct, state.partial_50_pct
-        )
-        state.partial_25_pct = adaptive_25
-        state.partial_50_pct = adaptive_50
-
-        # Update high/low watermark
-        if direction == "bullish":
-            state.highest_seen = max(state.highest_seen, current)
-        else:
-            state.lowest_seen = min(state.lowest_seen, current)
-
-        # Advance the stop
-        if state.mode == TrailMode.ATR:
-            if direction == "bullish":
-                candidate = state.highest_seen - atr * effective_mult
-                state.current_stop = max(state.current_stop, candidate)
-            else:
-                candidate = state.lowest_seen + atr * effective_mult
-                state.current_stop = min(state.current_stop, candidate)
-
-        elif state.mode == TrailMode.SUPERTREND:
-            if direction == "bullish":
-                state.current_stop = max(state.current_stop, st_value)
-            else:
-                state.current_stop = min(state.current_stop, st_value)
-
-        elif state.mode == TrailMode.PERCENTAGE:
-            pct = mode.trail_pct / 100.0
-            if direction == "bullish":
-                candidate = state.highest_seen * (1.0 - pct)
-                state.current_stop = max(state.current_stop, candidate)
-            else:
-                candidate = state.lowest_seen * (1.0 + pct)
-                state.current_stop = min(state.current_stop, candidate)
-
-        partial = self._check_partial(state, entry_price, current, direction)
-
-        if direction == "bullish":
-            stopped = candles[-1].low <= state.current_stop
-        else:
-            stopped = candles[-1].high >= state.current_stop
-
         return TrailUpdate(
-            new_stop=round(state.current_stop, 4),
-            partial=partial,
-            stopped_out=stopped,
-            stop_moved=(round(state.current_stop, 4) != round(prev_stop, 4)),
+            new_stop=state.current_stop,
+            partial=None,
+            stopped_out=False,
+            stop_moved=False,
             current_tp=initial_tp,
         )
-
-    def _check_partial(
-        self,
-        state: TrailState,
-        entry: float,
-        current: float,
-        direction: str,
-    ) -> Optional[PartialExitSignal]:
-        if entry <= 0:
-            return None
-
-        gain = (current - entry) / entry if direction == "bullish" else (entry - current) / entry
-
-        # First partial: mode-defined threshold (e.g. 5% scalp, 10% swing, 15% positional)
-        if gain >= state.partial_25_pct and not state.partial_25_done:
-            state.partial_25_done = True
-            state.breakeven_set   = True
-            # Theta-aware breakeven: low-DTE options shift breakeven in direction of loss
-            # to account for accelerated time decay eroding intrinsic value.
-            be_adjust = _theta_breakeven_adjustment(
-                entry, state.structure_dte, direction
-            )
-            be_price = entry + be_adjust
-            if direction == "bullish":
-                state.current_stop = max(state.current_stop, be_price)
-            else:
-                state.current_stop = min(state.current_stop, be_price)
-            reason_suffix = (
-                f" (theta-adjusted: {be_adjust:+.4f})"
-                if abs(be_adjust) > 1e-6 else ""
-            )
-            return PartialExitSignal(
-                close_pct=25,
-                new_trail_mult=None,
-                reason=f"{state.partial_25_pct*100:.0f}% gain — 25% closed, "
-                       f"stop → breakeven{reason_suffix}",
-                partial_ratio=0.25,
-            )
-
-        # Second partial: tighten trail multiplier (apply to adaptive base)
-        if gain >= state.partial_50_pct and not state.partial_50_done:
-            state.partial_50_done = True
-            state.tightening_offset = round(state.tightening_offset + 0.5, 2)
-            return PartialExitSignal(
-                close_pct=25,
-                new_trail_mult=state.trail_mult,
-                reason=f"{state.partial_50_pct*100:.0f}% gain — 25% more closed, "
-                       f"trail tightening +0.5 (effective {state.trail_mult:.2f}×)",
-                partial_ratio=0.25,
-            )
-
-        # Ride stop: lock in +10% above entry once 30%+ gain reached
-        lock_pct = state.partial_50_pct * 1.5
-        if gain >= lock_pct and state.partial_50_done:
-            lock_price = entry * 1.10 if direction == "bullish" else entry * 0.90
-            if direction == "bullish":
-                state.current_stop = max(state.current_stop, lock_price)
-            else:
-                state.current_stop = min(state.current_stop, lock_price)
-            return PartialExitSignal(
-                close_pct=0,
-                new_trail_mult=None,
-                reason=f"{lock_pct*100:.0f}% gain — stop locked at +10% from entry, riding",
-                partial_ratio=0.0,
-            )
-
-        return None

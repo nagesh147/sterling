@@ -1,42 +1,114 @@
+"""STRATEGY STUB — Hybrid VCP-Momentum strategy removed in the strategy reset.
+
+All decision logic (indicators, signals, entries, exits, microstructure,
+executor, live feed, profiles) was stripped so a new strategy can be built on a
+clean seam. The originals are preserved in git history on the `strategy-v2`
+branch.
+
+What remains here are thin stubs that keep the live-feed loop in `main.py` and
+the VCP backtest endpoint importing cleanly and degrading to empty states:
+  * `PROFILES` is empty  → no VCP live feeds start; the backtest endpoint
+    returns "no valid profiles".
+  * `VCPLiveFeed` / `VCPExecutor` are inert no-ops (never constructed at runtime
+    because no profile is active).
+
+Implement the new VCP strategy here.
 """
-Hybrid VCP-Momentum Scalper — Strategy V2
-Engine modules: indicators, signals, microstructure, entries, exits,
-backtest, profiles, live_filters.
-"""
-from app.engines.hybrid_vcp.indicators   import compute_bundle, IndicatorBundle
-from app.engines.hybrid_vcp.signals     import Direction, detect_mode, signal_compression, signal_breakout
-from app.engines.hybrid_vcp.entries     import EntryConfig, EntryGate, evaluate_gate
-from app.engines.hybrid_vcp.exits      import ExitConfig, ExitResult, ExitReason, PositionState, check_exits
-from app.engines.hybrid_vcp.microstructure import obi_proxy, cvd_proxy, cvd_proxy_bar, flow_score, detect_divergence
-from app.engines.hybrid_vcp.profiles   import VCPProfile, PROFILES, exit_config_from_profile
-from app.engines.hybrid_vcp.backtest   import run_backtest, run_all_profiles, BacktestReport, Trade
-from app.engines.hybrid_vcp.live_filters import (
-    LiveMicroState, LiveFilterConfig, LiveFilterDecision,
-    evaluate_live_filters, obi_from_orderbook, cvd_from_trades,
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from app.engines.hybrid_vcp.backtest import (
+    run_all_profiles,
+    run_backtest,
+    BacktestReport,
+    Trade,
 )
-from app.engines.hybrid_vcp.executor import VCPExecutor, VCPExecutorConfig, VCPExecutorState
-from app.engines.hybrid_vcp.live_feed import VCPLiveFeed, VCPFeedConfig, start_vcp_live_feed
+
+# No profiles → no feeds activate and the VCP backtest endpoint short-circuits.
+PROFILES: Dict[str, "VCPProfile"] = {}
+
+
+@dataclass
+class VCPProfile:
+    label: str = "stub"
+    signal_tf: str = ""
+    regime_tf: str = ""
+    signal_bar_ms: int = 0
+    vol_filter_pct: float = 0.0
+    flow_threshold: float = 0.0
+    max_ibs_long: float = 1.0
+    min_ibs_short: float = 0.0
+    max_rsi_long: float = 100.0
+    min_rsi_short: float = 0.0
+
+
+@dataclass
+class VCPFeedConfig:
+    exchange: str = ""
+    symbols: List[str] = field(default_factory=list)
+    signal_tf_secs: int = 60
+
+
+@dataclass
+class VCPExecutorConfig:
+    vol_filter_pct: float = 0.0
+    flow_threshold: float = 0.0
+    max_ibs_long: float = 1.0
+    min_ibs_short: float = 0.0
+    max_rsi_long: float = 100.0
+    min_rsi_short: float = 0.0
+
+
+@dataclass
+class VCPExecutorState:
+    pass
+
+
+class VCPExecutor:
+    """Inert executor stub (no strategy loaded)."""
+
+    def __init__(self, profile=None, router=None, adapter=None, config=None):
+        self.profile = profile
+        self.router = router
+        self.adapter = adapter
+        self.config = config
+        self.state = VCPExecutorState()
+
+    async def on_bar(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+class VCPLiveFeed:
+    """Inert live-feed stub (no strategy loaded)."""
+
+    def __init__(self, config=None, executor=None):
+        self.config = config
+        self.executor = executor
+
+    async def start(self) -> None:
+        return None
+
+    async def stop(self) -> None:
+        return None
+
+
+async def start_vcp_live_feed(*args: Any, **kwargs: Any) -> None:
+    return None
+
 
 __all__ = [
-    # Indicators
-    "compute_bundle", "IndicatorBundle",
-    # Signals
-    "Direction", "detect_mode", "signal_compression", "signal_breakout",
-    # Entries
-    "EntryConfig", "evaluate_gate", "GateDecision",
-    # Exits
-    "ExitConfig", "ExitResult", "ExitReason", "PositionState", "check_exits",
-    # Microstructure
-    "obi_proxy", "cvd_proxy", "cvd_proxy_bar", "flow_score", "detect_divergence",
-    # Profiles
-    "VCPProfile", "PROFILES", "exit_config_from_profile",
-    # Backtest
-    "run_backtest", "run_all_profiles", "BacktestReport", "Trade",
-    # Live filters
-    "LiveMicroState", "LiveFilterConfig", "LiveFilterDecision",
-    "evaluate_live_filters", "obi_from_orderbook", "cvd_from_trades",
-    # Executor
-    "VCPExecutor", "VCPExecutorConfig", "VCPExecutorState",
-    # Live feed
-    "VCPLiveFeed", "VCPFeedConfig", "start_vcp_live_feed",
+    "PROFILES",
+    "VCPProfile",
+    "VCPFeedConfig",
+    "VCPExecutorConfig",
+    "VCPExecutorState",
+    "VCPExecutor",
+    "VCPLiveFeed",
+    "start_vcp_live_feed",
+    "run_all_profiles",
+    "run_backtest",
+    "BacktestReport",
+    "Trade",
 ]

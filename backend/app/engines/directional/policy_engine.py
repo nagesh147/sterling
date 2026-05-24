@@ -1,71 +1,30 @@
-from typing import Optional, List
-from app.schemas.directional import PolicyResult, IVRBand, Direction
-from app.schemas.instruments import InstrumentMeta
+"""STRATEGY STUB — options structure policy removed in the strategy reset.
 
+Preserved in git history on the `strategy-v2` branch. `apply_policy` returns a
+neutral policy with no allowed structures so the app keeps running empty.
 
-def _ivr_band(ivr: Optional[float], underlying: Optional[str] = None) -> IVRBand:
-    if ivr is None:
-        return IVRBand.ELEVATED
+Implement the new policy logic here.
+"""
+from __future__ import annotations
 
-    # Try IV percentile first when underlying is known
-    if underlying:
-        try:
-            from app.services.eval_history import get_ivr_percentile
-            pct = get_ivr_percentile(underlying, ivr)
-            rank = pct if pct is not None else ivr
-        except Exception:
-            rank = ivr
-    else:
-        rank = ivr
+from typing import Optional
 
-    # v3 thresholds: naked long allowed up to IVR 40 (was 30); naked short requires IVR >70
-    if rank < 40:
-        return IVRBand.LOW      # naked long allowed
-    if rank < 60:
-        return IVRBand.NORMAL   # all structures allowed
-    if rank < 70:
-        return IVRBand.ELEVATED # debit preferred
-    return IVRBand.HIGH         # naked short zone (IVR > 70)
-
-
-def _allowed_structures(
-    direction: Direction,
-    ivr: Optional[float],
-    ivr_band: IVRBand,
-) -> List[str]:
-    if direction == Direction.LONG:
-        if ivr_band == IVRBand.HIGH:
-            # >80 IVR: avoid long premium — credit spread only
-            return ["bull_put_spread"]
-        return ["naked_call", "bull_call_spread", "bull_put_spread"]
-    elif direction == Direction.SHORT:
-        if ivr_band == IVRBand.HIGH:
-            # >80 IVR: avoid long premium — credit spread only
-            return ["bear_call_spread"]
-        return ["naked_put", "bear_put_spread", "bear_call_spread"]
-    else:
-        return ["no_trade"]
+from app.schemas.directional import Direction, PolicyResult, IVRBand
 
 
 def apply_policy(
     direction: Direction,
-    instrument: InstrumentMeta,
+    instrument,
     ivr: Optional[float],
 ) -> PolicyResult:
-    band = _ivr_band(ivr, underlying=instrument.underlying if instrument else None)
-    naked_allowed = band in (IVRBand.LOW, IVRBand.NORMAL)
-    debit_preferred = band == IVRBand.ELEVATED
-    avoid_long_premium = band == IVRBand.HIGH
-
-    structures = _allowed_structures(direction, ivr, band)
-
+    """Neutral policy: nothing allowed (no strategy loaded)."""
     return PolicyResult(
-        allowed_structures=structures,
+        allowed_structures=[],
         ivr=ivr,
-        ivr_band=band,
-        preferred_dte_min=instrument.preferred_dte_min,
-        preferred_dte_max=instrument.preferred_dte_max,
-        naked_allowed=naked_allowed,
-        debit_preferred=debit_preferred,
-        avoid_long_premium=avoid_long_premium,
+        ivr_band=IVRBand.NORMAL,
+        preferred_dte_min=0,
+        preferred_dte_max=0,
+        naked_allowed=False,
+        debit_preferred=False,
+        avoid_long_premium=False,
     )

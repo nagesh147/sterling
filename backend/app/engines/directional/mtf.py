@@ -1,56 +1,20 @@
-"""
-B5: Multi-timeframe score decomposition.
+"""STRATEGY STUB — multi-timeframe score breakdown removed in the strategy reset.
 
-Pure helper that condenses the regime/signal/exec results into a single
-dict consumable by the frontend. The numeric components mirror the same
-0-20 / 0-15 caps used in the structure scoring so the UI can render
-identical magnitudes.
+Preserved in git history on the `strategy-v2` branch. `compute_mtf_breakdown`
+returns a zeroed breakdown so the UI MTF panel renders an empty/neutral state.
+
+Implement the new MTF decomposition here.
 """
 from __future__ import annotations
-from typing import Dict, Any
-from app.schemas.directional import (
-    RegimeResult, SignalResult, ExecTimingResult, ExecMode,
-)
+
+from typing import Any, Dict
 
 
-def compute_mtf_breakdown(
-    regime: RegimeResult,
-    signal: SignalResult,
-    exec_timing: ExecTimingResult,
-) -> Dict[str, Any]:
-    macro = float(min(20.0, max(0.0, regime.score)))
-    sig   = float(min(20.0, max(0.0, signal.signal_score)))
-    exec_ = float(min(15.0, max(0.0, exec_timing.exec_score)))
-
-    # Alignment categorization for UI chips
-    macro_ok  = macro >= 12.0
-    signal_ok = sig >= 14.0    # 70% of the 20-pt scale → strong signal
-    exec_ok   = exec_timing.mode != ExecMode.WAIT and exec_ >= 10.0
-
-    if macro_ok and signal_ok and exec_ok:
-        alignment = "all_aligned"
-        alignment_label = "All timeframes aligned"
-    elif macro_ok and signal_ok and not exec_ok:
-        alignment = "exec_pending"
-        alignment_label = "Macro + signal aligned; waiting for execution trigger"
-    elif macro_ok and not signal_ok:
-        alignment = "signal_weak"
-        alignment_label = "Macro trend present but 1H confluence weak"
-    elif not macro_ok and signal_ok:
-        alignment = "macro_unaligned"
-        alignment_label = "Strong 1H signal but macro regime undecided"
-    else:
-        alignment = "no_alignment"
-        alignment_label = "Insufficient confluence"
-
+def compute_mtf_breakdown(regime, signal, exec_timing) -> Dict[str, Any]:
+    """Neutral breakdown: all component scores zero, no alignment."""
     return {
-        "macro_4h": round(macro, 2),
-        "signal_1h": round(sig, 2),
-        "execution_15m": round(exec_, 2),
-        "macro_ok": macro_ok,
-        "signal_ok": signal_ok,
-        "exec_ok": exec_ok,
-        "alignment": alignment,
-        "alignment_label": alignment_label,
-        "exec_mode": exec_timing.mode.value,
+        "macro_4h": 0.0,
+        "signal_1h": 0.0,
+        "execution_15m": 0.0,
+        "alignment": "none",
     }

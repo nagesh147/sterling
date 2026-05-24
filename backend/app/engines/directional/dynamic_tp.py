@@ -1,21 +1,15 @@
-"""
-A6: Dynamic take-profit selection.
+"""STRATEGY STUB — dynamic take-profit logic removed in the strategy reset.
 
-Replaces a static R-multiple TP with the FURTHER of two anchors:
-  • r_target  = entry ± (stop_dist × rr)
-  • swing     = recent swing high/low ± 1.5 ATR
+Preserved in git history on the `strategy-v2` branch. These helpers retain their
+signatures so callers keep working. `dynamic_tp` falls back to a plain
+risk-reward target (entry ± rr × stop_dist); `recompute_tp` never moves the TP.
 
-Previously this picked the closer of the two anchors ("more achievable")
-which capped winners below the R-target and was the structural cause of
-PF=0.65 with WR=55% on baseline runs. The swing should EXTEND the target
-when structure says there's more room; it should never CAP the target
-shorter than R.
-
-Pure function: takes precomputed series; no dependencies on adapters or
-schemas, so it's trivial to unit-test on synthetic candles.
+Implement the new dynamic-TP logic here.
 """
 from __future__ import annotations
+
 from typing import Tuple
+
 import numpy as np
 
 
@@ -30,45 +24,10 @@ def dynamic_tp(
     swing_lookback: int = 20,
     atr_mult: float = 1.5,
 ) -> Tuple[float, str]:
-    """
-    Returns (tp_price, source) where source ∈ {"r_target", "swing", "fallback"}.
-
-    direction: "long" | "short" (case-insensitive); anything else → r_target only.
-    swing_lookback: bars (typically 20× 4H = ~3 days) used to find recent extreme.
-    atr_mult: how far past the swing to extend the projection.
-
-    Selection rule: take max(r_target, swing) for longs / min(...) for shorts —
-    the FURTHER target. The R-target is the floor (we never accept less than R);
-    the swing extends it when structure has more room.
-    """
-    if entry <= 0 or stop_dist <= 0 or rr <= 0:
-        # Defensive: caller should guard, but never crash a live signal.
-        return (round(entry, 2), "fallback")
-
-    d = direction.lower()
-    r_target = entry + stop_dist * rr if d == "long" else entry - stop_dist * rr
-
-    if highs is None or lows is None or len(highs) == 0 or len(lows) == 0 or atr <= 0:
-        return (round(r_target, 2), "r_target")
-
-    n = min(swing_lookback, len(highs), len(lows))
-    if d == "long":
-        swing_high = float(np.max(highs[-n:]))
-        swing_target = swing_high + atr_mult * atr
-        # Use the FURTHER target. R is the floor; swing extends it.
-        if swing_target > r_target:
-            return (round(swing_target, 2), "swing")
-        return (round(r_target, 2), "r_target")
-
-    if d == "short":
-        swing_low = float(np.min(lows[-n:]))
-        swing_target = swing_low - atr_mult * atr
-        # Use the FURTHER target for shorts (lower price).
-        if swing_target < r_target:
-            return (round(swing_target, 2), "swing")
-        return (round(r_target, 2), "r_target")
-
-    return (round(r_target, 2), "r_target")
+    """Fallback: plain RR target, no swing/ATR structure logic."""
+    is_long = str(direction).lower() in ("long", "bullish", "buy")
+    tp = entry + rr * stop_dist if is_long else entry - rr * stop_dist
+    return float(tp), "stub_rr_target"
 
 
 def recompute_tp(
@@ -84,41 +43,5 @@ def recompute_tp(
     min_change_pct: float = 1.0,
     swing_lookback: int = 30,
 ) -> Tuple[float, bool, str]:
-    """
-    B3: Re-evaluate TP on each monitor tick. Returns (new_tp, changed, source).
-
-    Guards:
-      • new_tp must remain a winning target relative to entry (no moving the
-        goalpost behind us).
-      • new_tp must remain on the correct side of current_spot, otherwise it
-        would trigger an immediate TP exit.
-      • Only adopt new_tp if it differs from current_tp by ≥ min_change_pct%
-        to avoid thrashing on micro-fluctuations.
-    """
-    if entry <= 0 or current_tp <= 0:
-        return (current_tp, False, "no_change")
-
-    cand_tp, src = dynamic_tp(
-        direction, entry, stop_dist, rr, highs, lows, atr,
-        swing_lookback=swing_lookback,
-    )
-    d = direction.lower()
-
-    # Guard: must keep TP on the favorable side of entry
-    if d == "long" and cand_tp <= entry:
-        return (current_tp, False, "guard_entry")
-    if d == "short" and cand_tp >= entry:
-        return (current_tp, False, "guard_entry")
-
-    # Guard: must keep TP on the not-yet-hit side of current spot
-    if current_spot > 0:
-        if d == "long" and cand_tp <= current_spot:
-            return (current_tp, False, "guard_spot")
-        if d == "short" and cand_tp >= current_spot:
-            return (current_tp, False, "guard_spot")
-
-    pct_change = abs(cand_tp - current_tp) / max(current_tp, 1e-6) * 100.0
-    if pct_change < min_change_pct:
-        return (current_tp, False, "below_threshold")
-
-    return (round(cand_tp, 2), True, src)
+    """Neutral: never move the TP (no strategy loaded)."""
+    return float(current_tp), False, "stub_no_change"
