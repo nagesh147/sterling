@@ -1361,34 +1361,21 @@ function SignalsFeedBody({
           {(() => {
             const fresh = (signals?.signals ?? []).filter((s: any) => s.fresh &&
               (type === 'options' ? s.has_options : true));
-            const modeLabel = effectiveMode
-              ? effectiveMode.charAt(0).toUpperCase() + effectiveMode.slice(1)
-              : '';
-            const allIdle        = fresh.length > 0 && fresh.every((s: any) => s.regime === 'IDLE');
-            const allFiltered    = fresh.length > 0 && fresh.every((s: any) => s.state === 'FILTERED' || s.state === 'IDLE');
-            const avgAtr         = fresh.length > 0
-              ? fresh.reduce((a: number, s: any) => a + (s.atr_percentile ?? 50), 0) / fresh.length
-              : 50;
-            const cooldownActive = allIdle || avgAtr < 30;
-
-            let headline = `No ${modeLabel} ${type} signals right now`;
-            let reason   = isFut
-              ? 'Watching for supertrend + regime alignment on futures.'
-              : 'Watching for CE/PE setups on option-enabled instruments.';
-            let badge    = { text: 'WAITING', color: 'var(--text-faint)' };
+            // ── STRATEGY RESET ──────────────────────────────────────────────
+            // No strategy is loaded yet, so the feed is always empty. Show an
+            // honest placeholder instead of guessing a reason (the old copy —
+            // "Low volatility — signals paused" / "No trend detected" — was
+            // inferred from regime/ATR and is misleading while there is no
+            // strategy). Restore the richer empty-state copy when a new
+            // strategy is implemented.
+            let headline = 'No strategy loaded';
+            let reason   = `Signals will appear here once a strategy is implemented. Live ${type} market data is still streaming.`;
+            let badge    = { text: 'NO STRATEGY', color: 'var(--text-faint)' };
 
             if (fresh.length === 0) {
               headline = 'Fetching live data…';
-              reason   = 'Signals compute every 30s.';
+              reason   = 'Live market data streams every 30s.';
               badge    = { text: 'LOADING', color: 'var(--text-faint)' };
-            } else if (cooldownActive) {
-              headline = 'Low volatility — signals paused';
-              reason   = 'ATR below 30th percentile. Stronger move needed.';
-              badge    = { text: 'COOLDOWN', color: '#f0c040' };
-            } else if (allFiltered) {
-              headline = `No ${type} trend detected`;
-              reason   = 'Regime/ADX filters not met. Fires when trend strengthens.';
-              badge    = { text: 'FILTERED', color: 'var(--text-faint)' };
             }
 
             return (
@@ -1410,15 +1397,10 @@ function SignalsFeedBody({
                       FILTERED: 'var(--text-faint)', IDLE: 'var(--border-light)',
                     };
                     const c = stateColor[s.state] ?? 'var(--text-faint)';
-                    // G1: explain *why* this row is filtered. Use the backend
-                    // veto_reason when present; otherwise fall back to a
-                    // regime/ADX/signal-score hint built from snap fields.
-                    const tip = (s.state === 'FILTERED' || s.state === 'IDLE')
-                      ? (s.veto_reason
-                        ?? (s.regime === 'IDLE'
-                          ? `IDLE regime — ATR ${s.atr_percentile?.toFixed?.(0) ?? '?'}% (cooldown)`
-                          : `No setup — ADX ${s.adx?.toFixed?.(0) ?? '?'} / signal score ${s.signal_score?.toFixed?.(0) ?? '?'}/20`))
-                      : `${s.state.replace(/_/g, ' ')} — score ${(s.score_long || s.score_short || 0).toFixed(0)}/100`;
+                    // STRATEGY RESET: no strategy is loaded, so every instrument
+                    // sits IDLE. Show an honest tooltip (live ATR only) instead
+                    // of the old regime/ADX/signal-score framing.
+                    const tip = `No strategy loaded — live ATR ${s.atr_percentile?.toFixed?.(0) ?? '?'}%`;
                     return (
                       <span
                         key={s.underlying}
