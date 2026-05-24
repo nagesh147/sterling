@@ -505,46 +505,16 @@ async def _fire_sl_update_alert(
 
 def _build_indicator_lines(candles):
     """
-    Compute supertrend and EMA50 line arrays for chart overlays.
-    Returns (st1_line, st2_line, st3_line, ema50_line) — each a list of {time, value}.
-    ST configs must exactly match signal_engine.py to keep the chart consistent with strategy logic.
+    Chart overlay lines (supertrend ST1/ST2/ST3 + EMA50).
+
+    STRATEGY RESET: blanked. These overlays encoded the old signal engine's
+    supertrend configs (7/3, 14/2, 21/2-on-VWAP) — a strategy choice — so the
+    chart now shows price candles only. Returns four empty series; the response
+    contract (st1_line, st2_line, st3_line, ema50_line) is unchanged.
+
+    Rebuild the overlays here when a new strategy defines its own indicators.
     """
-    import numpy as np
-    from app.engines.indicators.supertrend import compute_supertrend
-    from app.engines.indicators.heikin_ashi import compute_heikin_ashi
-    from app.engines.indicators.ema import compute_ema
-    from app.engines.directional.signal_engine import _to_vwap_candles
-
-    if not candles:
-        return [], [], [], []
-
-    o = np.array([c.open for c in candles], dtype=np.float64)
-    h = np.array([c.high for c in candles], dtype=np.float64)
-    l = np.array([c.low for c in candles], dtype=np.float64)
-    c = np.array([c.close for c in candles], dtype=np.float64)
-    times = [can.timestamp_ms // 1000 for can in candles]
-
-    ha_o, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
-    st1, _ = compute_supertrend(ha_h, ha_l, ha_c, 7, 3.0)
-    st2, _ = compute_supertrend(h, l, c, 14, 2.0)
-
-    # ST3 uses VWAP-adjusted candles (period=21, mult=2.0) — matches signal_engine.py exactly.
-    vwap_candles = list(_to_vwap_candles(candles))
-    vwap_h = np.array([v.high for v in vwap_candles], dtype=np.float64)
-    vwap_l = np.array([v.low  for v in vwap_candles], dtype=np.float64)
-    vwap_c = np.array([v.close for v in vwap_candles], dtype=np.float64)
-    st3, _ = compute_supertrend(vwap_h, vwap_l, vwap_c, 21, 2.0)
-
-    ema50 = compute_ema(c, 50)
-
-    def _to_line(values):
-        return [
-            {"time": t, "value": round(float(v), 4)}
-            for t, v in zip(times, values)
-            if v != 0.0
-        ]
-
-    return _to_line(st1), _to_line(st2), _to_line(st3), _to_line(ema50)
+    return [], [], [], []
 
 
 def _adapter(request: Request):
