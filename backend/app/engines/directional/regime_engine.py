@@ -14,6 +14,10 @@ from typing import Any, Dict, List, Literal, Optional
 from app.schemas.market import Candle
 from app.schemas.directional import RegimeResult, MacroRegime
 
+# Per-process memoisation cache for the (future) regime engine. Kept so test
+# fixtures and any warm-cache callers can clear it; unused by the stub.
+_REGIME_CACHE: dict = {}
+
 
 def compute_regime(
     candles_4h: List[Candle],

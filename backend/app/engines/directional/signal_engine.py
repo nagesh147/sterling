@@ -17,6 +17,10 @@ from app.schemas.market import Candle
 from app.schemas.directional import SignalResult
 from app.engines.directional.signal_weights import SignalThresholds
 
+# Per-process memoisation cache for the (future) signal engine. Kept so test
+# fixtures and any warm-cache callers can clear it; unused by the stub.
+_SIGNAL_CACHE: dict = {}
+
 
 def compute_signal(
     candles_1h: List[Candle],
