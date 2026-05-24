@@ -102,6 +102,45 @@ async def set_algo_mode(body: AlgoModeRequest, request: Request) -> AlgoModeResp
     return AlgoModeResponse(enabled=body.enabled)
 
 
+class ScoringStrategyRequest(BaseModel):
+    strategy: str  # "by_edge_max_linear_agree" | "unweighted_mean"
+
+
+class ScoringStrategyResponse(BaseModel):
+    strategy: str
+
+
+@router.get("/scoring-strategy", response_model=ScoringStrategyResponse)
+async def get_scoring_strategy(request: Request) -> ScoringStrategyResponse:
+    """
+    Get the current ensemble scoring strategy used by the directional engine.
+
+    Available strategies:
+      - by_edge_max_linear_agree  (default, best from exhaustive search)
+      - unweighted_mean           (legacy, pre-search)
+    """
+    from app.engines.directional.track_scoring import get_active_strategy
+    return ScoringStrategyResponse(strategy=get_active_strategy())
+
+
+@router.post("/scoring-strategy", response_model=ScoringStrategyResponse)
+async def set_scoring_strategy(
+    body: ScoringStrategyRequest, request: Request,
+) -> ScoringStrategyResponse:
+    from app.engines.directional.track_scoring import set_strategy, AVAILABLE_STRATEGIES
+    if body.strategy not in AVAILABLE_STRATEGIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid strategy {body.strategy!r}. "
+                   f"Must be one of: {list(AVAILABLE_STRATEGIES)}",
+        )
+    set_strategy(body.strategy)
+    from app.services.db import set_config
+    set_config("scoring_strategy", body.strategy)
+    log.info("Scoring strategy set to %s", body.strategy)
+    return ScoringStrategyResponse(strategy=body.strategy)
+
+
 @router.get("/algo-router-mode", response_model=AlgoRouterModeResponse)
 async def get_algo_router_mode(request: Request) -> AlgoRouterModeResponse:
     """

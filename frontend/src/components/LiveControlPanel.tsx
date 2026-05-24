@@ -31,8 +31,10 @@ type RetryItem = {
 type RetryQueue = { items: RetryItem[]; count: number };
 type AlgoMode = { enabled: boolean };
 type RouterModeResponse = { mode: string };
+type ScoringStrategyResponse = { strategy: string };
 
 type RouterMode = 'paper' | 'shadow' | 'live';
+type ScoringStrategy = 'by_edge_max_linear_agree' | 'unweighted_mean';
 
 const POLL_MS = 5_000;
 
@@ -58,23 +60,26 @@ export default function LiveControlPanel() {
       ? (window.localStorage.getItem('sterling.routerMode') as RouterMode)
       : null) || 'paper',
   );
+  const [scoringStrategy, setScoringStrategy] = useState<ScoringStrategy>('by_edge_max_linear_agree');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [ks, dl, rq, am, rm] = await Promise.all([
+      const [ks, dl, rq, am, rm, ss] = await Promise.all([
         api.get<KillSwitch>('/api/v1/trading/kill-switch'),
         api.get<DailyLoss>('/api/v1/trading/daily-loss'),
         api.get<RetryQueue>('/api/v1/trading/retry-queue'),
         api.get<AlgoMode>('/api/v1/trading/algo-mode'),
         api.get<RouterModeResponse>('/api/v1/trading/algo-router-mode'),
+        api.get<ScoringStrategyResponse>('/api/v1/trading/scoring-strategy'),
       ]);
       setKillSwitch(ks);
       setDailyLoss(dl);
       setRetryQ(rq);
       setAlgoMode(am);
       setRouterMode(rm.mode as RouterMode);
+      setScoringStrategy(ss.strategy as ScoringStrategy);
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('sterling.routerMode', rm.mode);
       }
@@ -119,12 +124,11 @@ export default function LiveControlPanel() {
     }
   };
 
-  const changeMode = async (next: RouterMode) => {
+const changeMode = async (next: RouterMode) => {
     setRouterMode(next);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('sterling.routerMode', next);
       window.dispatchEvent(new CustomEvent('sterling-router-mode-change', { detail: next }));
-      // Force V4AnalyticsDashboard to re-read by updating a shared render-counter key
       window.localStorage.setItem('sterling.renderVersion', String(Date.now()));
     }
     try {
@@ -133,6 +137,22 @@ export default function LiveControlPanel() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const changeStrategy = async (next: ScoringStrategy) => {
+    setScoringStrategy(next);
+    try {
+      await api.post('/api/v1/trading/scoring-strategy', { strategy: next });
+      await fetchAll();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const strategyLabel = (s: ScoringStrategy): string => {
+    if (s === 'by_edge_max_linear_agree') return 'EDGE.MAX';
+    if (s === 'unweighted_mean') return 'UNWTD.MEAN';
+    return s;
   };
 
   return (
@@ -241,6 +261,43 @@ export default function LiveControlPanel() {
           algo_mode: {algoMode.enabled ? 'on' : 'off'}
         </div>
       )}
+
+      {/* ── Strategy selector ─────────────────────────────────────── */}
+      <div style={row}>
+        <span style={label}>Strategy</span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['by_edge_max_linear_agree', 'unweighted_mean'] as ScoringStrategy[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => changeStrategy(s)}
+              disabled={busy}
+              style={{
+                background: scoringStrategy === s ? '#7c3aed' : '#1f2937',
+                color: 'white',
+                border: 'none',
+                padding: '4px 8px',
+                borderRadius: 4,
+                cursor: busy ? 'wait' : 'pointer',
+                fontWeight: scoringStrategy === s ? 600 : 400,
+                textTransform: 'uppercase',
+                fontSize: 10,
+              }}
+              title={
+                s === 'by_edge_max_linear_agree'
+                  ? 'Edge-weighted vote + max score + linear agree boost. Best from search.'
+                  : 'Unweighted mean of active tracks. Legacy pre-search scoring.'
+              }
+            >
+              {strategyLabel(s)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={subRow}>
+        {scoringStrategy === 'by_edge_max_linear_agree'
+          ? 'by_edge · max · linear_agree'
+          : 'unweighted · mean · none'}
+      </div>
 
       {/* ── Retry queue ─────────────────────────────────────────── */}
       <div style={row}>

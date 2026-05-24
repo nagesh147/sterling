@@ -947,6 +947,11 @@ async def lifespan(app: FastAPI):
     app.state.trading_mode = MODES[mode_name]
     app.state.algo_mode = get_config("algo_mode", "false").lower() == "true"
     app.state.vcp_mode_enabled = get_config("vcp_mode", "false").lower() == "true"
+    # Scoring strategy — controls how TF+VCP+MR are combined into a direction/score.
+    # Persisted via db.set_config("scoring_strategy", ...). Default "by_edge_max_linear_agree".
+    from app.engines.directional.track_scoring import set_strategy as _set_scoring_strategy
+    _saved_strategy = get_config("scoring_strategy") or "by_edge_max_linear_agree"
+    _set_scoring_strategy(_saved_strategy)
     # Phase F: paper / shadow / live router mode for the auto-trader.
     # Persisted via db.set_config("algo_router_mode", ...). Default "live"
     # preserves prior behaviour for users who already have algo configured.
