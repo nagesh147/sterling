@@ -334,6 +334,9 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
             {executing ? '…' : 'EXECUTE'}
           </button>
         </div>
+        {!s.executable && s.entry != null && (
+          <div style={{ fontSize: 9.5, color: 'var(--t-dim)' }}>{s.reason}</div>
+        )}
         {result && <div style={{ fontSize: 10, color: result.startsWith('✓') ? 'var(--t-green)' : 'var(--t-amber)' }}>{result}</div>}
       </div>
     </div>
@@ -428,7 +431,8 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
         <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.5 }}>
           EXECUTE routes through your current Paper/Live mode (top-right toggle). A symbol is <b>ARMED</b> when price is
           in an uptrend (above SMA200) and RSI(2) is oversold. Positions exit on the RSI snap-back (wide ATR stop as a
-          safety net). Selective by design — most symbols sit FLAT waiting for a dip.
+          safety net). Selective by design — most symbols sit FLAT waiting for a dip. The full stored-crypto universe is
+          scanned; coins not listed on your live exchange show as <b>signal-only</b> (no EXECUTE).
         </div>
       )}
     </div>

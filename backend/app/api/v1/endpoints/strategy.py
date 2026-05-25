@@ -97,32 +97,63 @@ def _to_summary(ev: StrategyEvaluation) -> SignalSummary:
     )
 
 
+def _store_symbols(min_1h_bars: int) -> List[str]:
+    """Every crypto underlying with enough stored 1H history (keys are <SYM>USD)."""
+    from app.services import ohlcv_store
+    syms = set()
+    for r in ohlcv_store.get_status():
+        if r.get("resolution") == "1h" and r.get("count", 0) >= min_1h_bars:
+            s = r["symbol"]
+            syms.add(s[:-3] if s.endswith("USD") else s)
+    return sorted(syms)
+
+
+def _scan_universe(cfg: TripleSTConfig, src: str, now_ms: int) -> List[SignalSummary]:
+    """Evaluate the whole stored-crypto universe off the local OHLCV store.
+
+    The store is fresh (updated hourly) and is the same universe the strategy
+    was validated on, so it gives full coverage without depending on the live
+    adapter's small registered-instrument list. Symbols that are NOT registered
+    tradeable instruments on the active data source are returned as signal-only
+    (executable=False) — they can't be routed to a live/paper order.
+
+    Sync (sqlite + numpy); call via asyncio.to_thread so the event loop is free.
+    """
+    days = max(cfg.trend_sma_period, cfg.warmup_bars) + 60
+    out: List[SignalSummary] = []
+    for sym in _store_symbols(min_1h_bars=cfg.warmup_bars * 24):
+        try:
+            candles = _store_candles(sym, "1h", days)
+            ev = bt.evaluate_live(sym, candles, cfg)
+            summ = _to_summary(ev)
+        except Exception as exc:
+            out.append(SignalSummary(
+                underlying=sym, close=0.0, direction="none", entry_ok=False,
+                reason="evaluation failed", error=str(exc)[:80], timestamp_ms=now_ms,
+            ))
+            continue
+        inst = registry.get_instrument(sym)
+        tradeable = bool(inst and _adapter_can_serve(inst, src))
+        if not tradeable:
+            summ.executable = False
+            if summ.entry_ok:
+                summ.reason = f"{summ.reason} · signal-only (not on {src})"
+        out.append(summ)
+    return out
+
+
 @router.get("/signals", response_model=SignalScanResponse)
 async def signals(request: Request, armed_only: bool = False) -> SignalScanResponse:
-    """Scan EVERY servable instrument and return a compact signal per symbol."""
+    """Scan the full stored-crypto universe and return a compact signal per symbol.
+
+    Registered instruments on the active data source are executable; the rest are
+    signal-only (data from the local store).
+    """
     cfg = _get_config(request)
     src = _adm.get_data_source()
-    adapter = _adm.get_adapter() or request.app.state.adapter
     now_ms = int(time.time() * 1000)
-    limit = _daily_limit(cfg)
 
-    instruments = [i for i in registry.list_instruments() if _adapter_can_serve(i, src)]
-    sem = asyncio.Semaphore(6)
-
-    async def _one(inst) -> SignalSummary:
-        sym = inst.underlying
-        async with sem:
-            try:
-                candles = await adapter.get_candles(inst, "1D", limit=limit)
-            except Exception as exc:
-                return SignalSummary(
-                    underlying=sym, close=0.0, direction="none", entry_ok=False,
-                    reason="candle fetch failed", error=str(exc)[:80], timestamp_ms=now_ms,
-                )
-        ev = bt.evaluate_live(sym, candles, cfg)
-        return _to_summary(ev)
-
-    results: List[SignalSummary] = await asyncio.gather(*[_one(i) for i in instruments])
+    results: List[SignalSummary] = await asyncio.to_thread(_scan_universe, cfg, src, now_ms)
 
     # Armed first, then by symbol for a stable order.
     results.sort(key=lambda s: (s.entry_ok, s.underlying), reverse=True)
