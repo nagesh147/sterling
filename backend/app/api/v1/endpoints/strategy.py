@@ -28,7 +28,7 @@ from app.engines.triple_st import backtest as bt
 from app.engines.triple_st.schemas import (
     StrategyEvaluation, ConfigResponse, UniverseResponse,
     BacktestRequest, TripleSTBacktestResult, ExecuteRequest, ExecuteResponse,
-    SignalSummary, SignalScanResponse,
+    SignalSummary, SignalScanResponse, HistoryTrade, HistoryResponse,
 )
 
 router = APIRouter(prefix="/strategy", tags=["strategy"])
@@ -205,6 +205,67 @@ async def evaluate(underlying: str, request: Request) -> StrategyEvaluation:
     cfg = _get_config(request)
     _inst, candles = await _fetch_daily(request, sym, cfg)
     return bt.evaluate_live(sym, candles, cfg)
+
+
+# ─── recent signal history (completed trades across the universe) ────────────
+
+_HISTORY_TTL = 600.0
+_history_cache: dict = {"key": None, "ts": 0.0, "data": []}
+_history_lock = asyncio.Lock()
+
+
+def _scan_history(cfg: TripleSTConfig, lookback_days: int, limit: int) -> List[HistoryTrade]:
+    """Replay every scanned coin and collect the most recent completed trades."""
+    if cfg.symbols:
+        universe = [s.upper() for s in cfg.symbols]
+    else:
+        universe = _store_symbols(min_1h_bars=cfg.warmup_bars * 24)
+    fetch_days = cfg.trend_sma_period + lookback_days + 30
+    rows: List[HistoryTrade] = []
+    for sym in universe:
+        try:
+            candles = _store_candles(sym, "1h", fetch_days)
+            res = bt.run_backtest(sym, candles, cfg, lookback_days)
+        except Exception:
+            continue
+        for t in res.trades:
+            rows.append(HistoryTrade(
+                underlying=sym, direction=t.direction, entry_ts=t.entry_ts,
+                exit_ts=t.exit_ts, entry_price=t.entry_price, exit_price=t.exit_price,
+                bars_held=t.bars_held, pnl_r=t.pnl_r, exit_reason=t.exit_reason,
+            ))
+    rows.sort(key=lambda t: t.entry_ts, reverse=True)
+    return rows[:limit]
+
+
+@router.get("/history", response_model=HistoryResponse)
+async def history(request: Request, lookback_days: int = 365, limit: int = 80) -> HistoryResponse:
+    """Most recent completed trades across the scanned universe (cached ~10 min).
+
+    Heavy (replays every coin), so it's loaded on demand by the UI panel.
+    """
+    import time as _t
+    lookback_days = max(30, min(lookback_days, 1095))
+    limit = max(1, min(limit, 200))
+    cfg = _get_config(request)
+    key = (cfg.model_dump_json(), lookback_days, limit)
+
+    def _fresh() -> bool:
+        return _history_cache["key"] == key and (_t.monotonic() - _history_cache["ts"]) < _HISTORY_TTL
+
+    if not _fresh():
+        async with _history_lock:
+            if not _fresh():
+                data = await asyncio.to_thread(_scan_history, cfg, lookback_days, limit)
+                _history_cache.update(key=key, ts=_t.monotonic(), data=data)
+
+    trades: List[HistoryTrade] = _history_cache["data"]
+    wins = sum(1 for t in trades if t.pnl_r > 0)
+    return HistoryResponse(
+        trades=trades, count=len(trades), wins=wins,
+        win_rate=round(wins / len(trades), 3) if trades else 0.0,
+        timestamp_ms=int(time.time() * 1000),
+    )
 
 
 # ─── backtest ────────────────────────────────────────────────────────────────

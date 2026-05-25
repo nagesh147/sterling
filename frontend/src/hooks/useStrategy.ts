@@ -80,6 +80,14 @@ export interface SignalScanResponse {
   signals: SignalSummary[]; count: number; armed_count: number; timestamp_ms: number;
 }
 
+export interface HistoryTrade {
+  underlying: string; direction: string; entry_ts: number; exit_ts: number;
+  entry_price: number; exit_price: number; bars_held: number; pnl_r: number; exit_reason: string;
+}
+export interface HistoryResponse {
+  trades: HistoryTrade[]; count: number; wins: number; win_rate: number; timestamp_ms: number;
+}
+
 export interface ExecuteResponse {
   accepted: boolean; mode: string; underlying: string; direction: string;
   size_units: number; notional_usd: number; entry_price: number | null;
@@ -132,6 +140,16 @@ export function useStrategyEvaluate(underlying: string, enabled = true) {
     queryFn: () => api.get<StrategyEvaluation>(`/api/v1/strategy/evaluate/${underlying}`),
     enabled: enabled && !!underlying,
     refetchInterval: 15_000,
+    retry: 1,
+  });
+}
+
+export function useStrategyHistory(enabled = false) {
+  return useQuery<HistoryResponse>({
+    queryKey: ['strategy', 'history'],
+    queryFn: () => api.get<HistoryResponse>('/api/v1/strategy/history'),
+    enabled,
+    staleTime: 300_000,
     retry: 1,
   });
 }

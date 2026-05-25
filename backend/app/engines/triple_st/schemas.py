@@ -169,6 +169,29 @@ class UniverseResponse(BaseModel):
     symbols: List[str]          # all selectable underlyings (have enough history)
 
 
+# ─── Recent signal history ───────────────────────────────────────────────────
+
+
+class HistoryTrade(BaseModel):
+    underlying: str
+    direction: str
+    entry_ts: int
+    exit_ts: int
+    entry_price: float
+    exit_price: float
+    bars_held: int
+    pnl_r: float
+    exit_reason: str
+
+
+class HistoryResponse(BaseModel):
+    trades: List[HistoryTrade]  # most recent first
+    count: int
+    wins: int
+    win_rate: float
+    timestamp_ms: int
+
+
 # ─── Execution ───────────────────────────────────────────────────────────────
 
 

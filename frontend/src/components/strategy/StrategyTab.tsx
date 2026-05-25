@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import {
-  useStrategyConfig, useSetStrategyConfig, useStrategyUniverse,
+  useStrategyConfig, useSetStrategyConfig, useStrategyUniverse, useStrategyHistory,
   useStrategyBacktest, useStrategyExecute, useStrategySignals,
   type TripleSTConfig, type BacktestResult, type SignalSummary,
 } from '../../hooks/useStrategy';
@@ -60,6 +60,7 @@ function Pill({ text, color }: { text: string; color: string }) {
 
 const fmt = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : v.toFixed(d));
 const fmtUsd = (v: number | null | undefined) => (v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
+const fmtDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 /* ── config panel (slim — just the new strategy's knobs) ──────────────────── */
 
@@ -402,6 +403,58 @@ function SummaryTile({ label, value, color }: { label: string; value: string; co
   );
 }
 
+function RecentSignals() {
+  const [open, setOpen] = useState(false);
+  const q = useStrategyHistory(open);   // lazy: only fetches once expanded
+  const d = q.data;
+  return (
+    <div style={card}>
+      <button onClick={() => setOpen((o) => !o)} style={{
+        ...cardHead, width: '100%', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        <span>{open ? '▾' : '▸'} RECENT SIGNALS</span>
+        <span style={{ marginLeft: 8, color: 'var(--t-dim)', fontWeight: 400 }}>
+          {d ? `${d.count} trades · ${Math.round(d.win_rate * 100)}% win · last 12m` : 'last 12 months'}
+        </span>
+      </button>
+      {open && (
+        <div style={cardBody}>
+          {q.isLoading && <div style={dim}>computing history across the universe… (~10s, then cached)</div>}
+          {q.isError && <div style={{ color: 'var(--t-red)', fontSize: 10 }}>{(q.error as Error).message}</div>}
+          {d && d.trades.length === 0 && <div style={dim}>No completed trades in the window.</div>}
+          {d && d.trades.length > 0 && (
+            <div style={{ maxHeight: 280, overflow: 'auto', border: '1px solid var(--t-border)', borderRadius: 6 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+                <thead>
+                  <tr style={{ color: 'var(--t-dim)', textAlign: 'left' }}>
+                    {['Entry', 'Symbol', 'Dir', 'Entry $', 'Exit $', 'Held', 'R', 'Exit'].map((h) => (
+                      <th key={h} style={{ padding: '4px 8px', position: 'sticky', top: 0, background: 'var(--t-bg2)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.trades.map((t, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--t-border)' }}>
+                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{fmtDate(t.entry_ts)}</td>
+                      <td style={{ padding: '3px 8px', fontWeight: 700, color: 'var(--t-bright)' }}>{t.underlying}</td>
+                      <td style={{ padding: '3px 8px', color: t.direction === 'long' ? 'var(--t-green)' : 'var(--t-red)' }}>{t.direction === 'long' ? 'L' : 'S'}</td>
+                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{fmtUsd(t.entry_price)}</td>
+                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{fmtUsd(t.exit_price)}</td>
+                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{t.bars_held}d</td>
+                      <td style={{ padding: '3px 8px', fontWeight: 700, color: t.pnl_r >= 0 ? 'var(--t-green)' : 'var(--t-red)' }}>{t.pnl_r >= 0 ? '+' : ''}{fmt(t.pnl_r, 2)}</td>
+                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{t.exit_reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SignalsScanner({ selected, onSelect, onOpenSettings }: {
   selected: string; onSelect: (s: string) => void; onOpenSettings: () => void;
 }) {
@@ -477,6 +530,9 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
           />
         ))}
       </div>
+
+      {/* recent signal history (lazy, collapsible) */}
+      <RecentSignals />
 
       {data && data.signals.length > 0 && (
         <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.5 }}>
