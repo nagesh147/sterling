@@ -21,6 +21,8 @@ the primary exit is the RSI snap-back. Defaults match the validated config.
 """
 from __future__ import annotations
 
+from typing import List
+
 from pydantic import BaseModel, Field
 
 
@@ -31,6 +33,10 @@ class TripleSTConfig(BaseModel):
 
     # Primary timeframe — the rule is defined on daily candles.
     timeframe: str = "1d"
+
+    # Scanner scope: explicit symbol allowlist. Empty = scan the whole stored
+    # universe. Otherwise only these underlyings are scanned (case-insensitive).
+    symbols: List[str] = Field(default_factory=list)
 
     # ── Trend regime filter ──
     trend_sma_period: int = Field(default=200, ge=20, le=400)

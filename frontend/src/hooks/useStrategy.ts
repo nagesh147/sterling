@@ -6,6 +6,7 @@ import { api } from '../utils/api';
 
 export interface TripleSTConfig {
   timeframe: string;
+  symbols: string[];          // scanner allowlist; [] = scan all
   trend_sma_period: number;
   rsi_period: number;
   rsi_oversold: number;
@@ -23,6 +24,10 @@ export interface TripleSTConfig {
 
 export interface ConfigResponse {
   config: TripleSTConfig;
+}
+
+export interface UniverseResponse {
+  symbols: string[];
 }
 
 // ── Evaluation ───────────────────────────────────────────────────────────────
@@ -89,6 +94,14 @@ export function useStrategyConfig() {
     queryKey: ['strategy', 'config'],
     queryFn: () => api.get<ConfigResponse>('/api/v1/strategy/config'),
     staleTime: 60_000,
+  });
+}
+
+export function useStrategyUniverse() {
+  return useQuery<UniverseResponse>({
+    queryKey: ['strategy', 'universe'],
+    queryFn: () => api.get<UniverseResponse>('/api/v1/strategy/universe'),
+    staleTime: 300_000,
   });
 }
 

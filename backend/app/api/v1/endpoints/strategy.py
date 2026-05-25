@@ -26,7 +26,7 @@ from app.api.v1.endpoints.directional import _adapter_can_serve
 from app.engines.triple_st.config import TripleSTConfig, default_config
 from app.engines.triple_st import backtest as bt
 from app.engines.triple_st.schemas import (
-    StrategyEvaluation, ConfigResponse,
+    StrategyEvaluation, ConfigResponse, UniverseResponse,
     BacktestRequest, TripleSTBacktestResult, ExecuteRequest, ExecuteResponse,
     SignalSummary, SignalScanResponse,
 )
@@ -54,6 +54,14 @@ async def get_config(request: Request) -> ConfigResponse:
 async def set_config(body: TripleSTConfig, request: Request) -> ConfigResponse:
     request.app.state.triple_st_config = body
     return ConfigResponse(config=body)
+
+
+@router.get("/universe", response_model=UniverseResponse)
+async def universe(request: Request) -> UniverseResponse:
+    """Selectable underlyings — every stored coin with enough daily history."""
+    cfg = _get_config(request)
+    syms = await asyncio.to_thread(_store_symbols, cfg.trend_sma_period * 24)
+    return UniverseResponse(symbols=syms)
 
 
 # ─── candle fetch (daily) ────────────────────────────────────────────────────
@@ -120,8 +128,13 @@ def _scan_universe(cfg: TripleSTConfig, src: str, now_ms: int) -> List[SignalSum
     Sync (sqlite + numpy); call via asyncio.to_thread so the event loop is free.
     """
     days = max(cfg.trend_sma_period, cfg.warmup_bars) + 60
+    if cfg.symbols:
+        # Explicit allowlist — scan exactly these (thin ones surface as warming).
+        universe = [s.upper() for s in cfg.symbols]
+    else:
+        universe = _store_symbols(min_1h_bars=cfg.warmup_bars * 24)
     out: List[SignalSummary] = []
-    for sym in _store_symbols(min_1h_bars=cfg.warmup_bars * 24):
+    for sym in universe:
         try:
             candles = _store_candles(sym, "1h", days)
             ev = bt.evaluate_live(sym, candles, cfg)

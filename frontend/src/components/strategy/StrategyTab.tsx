@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import {
-  useStrategyConfig, useSetStrategyConfig,
+  useStrategyConfig, useSetStrategyConfig, useStrategyUniverse,
   useStrategyBacktest, useStrategyExecute, useStrategySignals,
   type TripleSTConfig, type BacktestResult, type SignalSummary,
 } from '../../hooks/useStrategy';
@@ -83,6 +83,16 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
   const set = <K extends keyof TripleSTConfig>(k: K, v: TripleSTConfig[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const dirty = JSON.stringify(draft) !== JSON.stringify(cfg);
 
+  const universeQ = useStrategyUniverse();
+  const universe = universeQ.data?.symbols ?? [];
+  const allMode = draft.symbols.length === 0;          // [] = scan everything
+  const selSet = new Set(draft.symbols);
+  const toggleSym = (s: string) => setDraft((d) => {
+    const cur = new Set(d.symbols);
+    if (cur.has(s)) cur.delete(s); else cur.add(s);
+    return { ...d, symbols: [...cur] };
+  });
+
   return (
     <SectionCard title="STRATEGY SETTINGS" right={
       <button disabled={!dirty || saving} onClick={() => onSave(draft)} style={{
@@ -127,6 +137,39 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
           <NumField label="Max position %" value={draft.max_position_pct} step={1} min={1} max={100} onChange={(v) => set('max_position_pct', v)} />
           <NumField label="Max slippage %" value={draft.max_slippage} step={0.1} min={0} max={5} onChange={(v) => set('max_slippage', v)} />
           <NumField label="Account equity $" value={draft.account_equity} step={1000} min={100} onChange={(v) => set('account_equity', v)} />
+        </div>
+      </div>
+
+      {/* Symbols — scanner allowlist ([] = all) */}
+      <div style={{ ...grpBox, marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={grpTitle}>SYMBOLS</span>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
+            {allMode ? `scanning all ${universe.length}` : `${draft.symbols.length} selected`}
+          </span>
+          <button onClick={() => set('symbols', [] as string[])} style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 9px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${allMode ? 'var(--t-blue)' : 'var(--t-border)'}`,
+            background: allMode ? 'var(--t-bg3)' : 'transparent',
+            color: allMode ? 'var(--t-blue)' : 'var(--t-dim)',
+          }}>ALL</button>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)', marginLeft: 'auto' }}>
+            {allMode ? 'click coins to scan only those' : 'ALL clears the filter'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 150, overflow: 'auto' }}>
+          {universe.map((s) => {
+            const on = !allMode && selSet.has(s);
+            return (
+              <button key={s} onClick={() => toggleSym(s)} style={{
+                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+                border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
+                background: on ? 'var(--t-green)1c' : 'transparent',
+                color: on ? 'var(--t-green)' : 'var(--t-dim)',
+              }}>{s}</button>
+            );
+          })}
+          {universe.length === 0 && <span style={dim}>{universeQ.isLoading ? 'loading universe…' : 'no symbols available'}</span>}
         </div>
       </div>
     </SectionCard>

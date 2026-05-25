@@ -165,6 +165,10 @@ class ConfigResponse(BaseModel):
     config: TripleSTConfig
 
 
+class UniverseResponse(BaseModel):
+    symbols: List[str]          # all selectable underlyings (have enough history)
+
+
 # ─── Execution ───────────────────────────────────────────────────────────────
 
 
