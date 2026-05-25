@@ -142,21 +142,41 @@ def _scan_universe(cfg: TripleSTConfig, src: str, now_ms: int) -> List[SignalSum
     return out
 
 
+# Scan cache: the universe scan resamples ~55 coins of 1H history (GIL-heavy,
+# ~6s). Signals derive from the last *closed* daily bar, so they only change
+# once per day — a short TTL is plenty fresh and keeps the event loop free even
+# while the UI polls every 30s. A single-flight lock prevents overlapping scans.
+_SCAN_TTL = 120.0
+_scan_cache: dict = {"key": None, "ts": 0.0, "data": []}
+_scan_lock = asyncio.Lock()
+
+
 @router.get("/signals", response_model=SignalScanResponse)
 async def signals(request: Request, armed_only: bool = False) -> SignalScanResponse:
     """Scan the full stored-crypto universe and return a compact signal per symbol.
 
     Registered instruments on the active data source are executable; the rest are
-    signal-only (data from the local store).
+    signal-only (data from the local store). Results are cached for `_SCAN_TTL`s.
     """
+    import time as _t
     cfg = _get_config(request)
     src = _adm.get_data_source()
     now_ms = int(time.time() * 1000)
+    key = (cfg.model_dump_json(), src)
 
-    results: List[SignalSummary] = await asyncio.to_thread(_scan_universe, cfg, src, now_ms)
+    def _fresh() -> bool:
+        return _scan_cache["key"] == key and (_t.monotonic() - _scan_cache["ts"]) < _SCAN_TTL
 
-    # Armed first, then by symbol for a stable order.
-    results.sort(key=lambda s: (s.entry_ok, s.underlying), reverse=True)
+    if not _fresh():
+        async with _scan_lock:
+            if not _fresh():                       # re-check after waiting for the lock
+                data = await asyncio.to_thread(_scan_universe, cfg, src, now_ms)
+                # Most actionable first: armed → in-uptrend coins closest to the
+                # oversold trigger → everything else.
+                data.sort(key=lambda s: (0 if s.entry_ok else 1, 0 if s.in_uptrend else 1, s.rsi))
+                _scan_cache.update(key=key, ts=_t.monotonic(), data=data)
+
+    results: List[SignalSummary] = _scan_cache["data"]
     if armed_only:
         results = [s for s in results if s.entry_ok]
 

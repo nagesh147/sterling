@@ -257,7 +257,9 @@ function Cond({ label, value, against, gt, usd }: { label: string; value: number
 }
 
 function RsiChip({ rsi, oversold, exit, triggered }: { rsi: number; oversold: number; exit: number; triggered: boolean }) {
-  const color = triggered ? 'var(--t-green)' : rsi > exit ? 'var(--t-red)' : 'var(--t-dim)';
+  // Color by proximity to the oversold (buy) trigger so near-signals stand out.
+  const near = rsi <= oversold * 2;   // within 2× of the trigger → warming up
+  const color = triggered ? 'var(--t-green)' : rsi > exit ? 'var(--t-red)' : near ? 'var(--t-amber)' : 'var(--t-dim)';
   return (
     <div title={`RSI ${fmt(rsi, 1)} — buy < ${oversold}, exit > ${exit}`}>
       <div style={{ fontSize: 8.5, letterSpacing: '0.04em', color: 'var(--t-dim)' }}>RSI · buy&lt;{fmt(oversold, 0)}</div>
@@ -281,24 +283,29 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
 }) {
   const long = s.direction === 'long';
   const short = s.direction === 'short';
+  // Eligible-but-flat: in an uptrend, just waiting for RSI to dip oversold.
+  const watching = !long && !short && s.in_uptrend;
   const dirColor = long ? 'var(--t-green)' : short ? 'var(--t-red)' : 'var(--t-dim)';
+  // Accent reflects regime so a flat board still reads at a glance.
+  const accent = long ? 'var(--t-green)' : short ? 'var(--t-red)' : watching ? 'var(--t-blue)' : 'var(--t-dim)';
   return (
     <div onClick={onSelect} style={{
       display: 'flex', borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
-      border: `1px solid ${selected ? dirColor + '66' : 'var(--t-border)'}`,
-      background: s.entry_ok ? dirColor + '0e' : 'var(--t-bg2)',
+      border: `1px solid ${selected ? accent + '66' : 'var(--t-border)'}`,
+      background: s.entry_ok ? accent + '0e' : watching ? 'var(--t-blue)08' : 'var(--t-bg2)',
       transition: 'border-color .1s',
     }}>
-      <div style={{ width: 4, background: dirColor, flexShrink: 0 }} />
+      <div style={{ width: 4, background: accent, flexShrink: 0 }} />
       <div style={{ flex: 1, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 9, minWidth: 0 }}>
         {/* row 1 — identity + conditions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', minWidth: 42 }}>{s.underlying}</span>
           <span style={{ fontSize: 12, color: 'var(--t-dim)' }}>{fmtUsd(s.close)}</span>
-          <span style={{ fontSize: 11, fontWeight: 800, color: dirColor, letterSpacing: '0.04em' }}>
-            {long ? '▲ LONG' : short ? '▼ SHORT' : '— FLAT'}
+          <span style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: '0.04em' }}>
+            {long ? '▲ LONG' : short ? '▼ SHORT' : watching ? '○ WATCH' : '— FLAT'}
           </span>
           {s.entry_ok && <Pill text="ARMED" color={dirColor} />}
+          {watching && <Pill text="UPTREND" color="var(--t-blue)" />}
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
             <Cond label="CLOSE / SMA200" value={s.close} against={s.sma} gt={s.in_uptrend} usd />
             <RsiChip rsi={s.rsi} oversold={s.rsi_oversold} exit={s.rsi_exit} triggered={s.oversold} />
