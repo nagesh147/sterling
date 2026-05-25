@@ -1,13 +1,13 @@
-"""Exit management for the daily SMA/EMA + RSI/ADX strategy.
+"""Exit management for the daily RSI(2) mean-reversion strategy.
 
 Exit-priority ladder (per bar):
 
     1. ATR stop-loss  — intrabar (low ≤ stop for long, high ≥ stop for short)
-    2. Signal exit    — on close, when RSI/ADX flips against the position
-                        (long exits RSI < ADX, short exits RSI > ADX)
+    2. Signal exit    — on close, when RSI snaps back
+                        (long exits RSI > rsi_exit, short exits RSI < 100-rsi_exit)
 
-The signal flip is the strategy's primary exit; the ATR stop is a risk-defining
-safety net that also anchors position sizing.
+The RSI snap-back is the strategy's primary exit; the (wide) ATR stop is a
+risk-defining safety net that also anchors position sizing.
 """
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def step_position(
         return Fill(i, ts, round(pos.stop_loss, 4), "stop_loss", _pnl(pos, pos.stop_loss, fee_pct))
 
     # ── 2. Signal exit (on close) ──
-    if should_exit(feat, i, pos.direction):
+    if should_exit(feat, i, pos.direction, cfg):
         pos.closed = True
         return Fill(i, ts, round(c, 4), "signal_exit", _pnl(pos, c, fee_pct))
 

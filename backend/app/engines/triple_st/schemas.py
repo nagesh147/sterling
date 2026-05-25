@@ -41,19 +41,16 @@ class StrategyEvaluation(BaseModel):
     direction: str             # "long" | "short" | "none"
 
     # indicator values (at the last closed daily bar)
-    sma: float
-    ema: float
-    rsi: float
-    adx: float
+    sma: float                 # trend SMA (regime filter)
+    rsi: float                 # RSI(rsi_period)
+    rsi_oversold: float        # long entry threshold (RSI <)
+    rsi_exit: float            # long exit threshold (RSI >)
 
-    # raw conditions (long-framed booleans; the short side is the inverse)
-    above_sma: bool            # close > SMA
-    above_ema: bool            # close > EMA
-    rsi_gt_adx: bool           # RSI > ADX
-    long_ok: bool
-    short_ok: bool
+    # conditions
+    in_uptrend: bool           # close > SMA(trend)
+    oversold: bool             # RSI < rsi_oversold (long trigger)
 
-    entry_ok: bool             # a direction is armed (long_ok or short_ok)
+    entry_ok: bool             # a direction is armed
     executable: bool           # a plan exists AND trading is not halted
     can_trade: bool
     block_reason: str
@@ -78,13 +75,12 @@ class SignalSummary(BaseModel):
     executable: bool = False
 
     # indicators + conditions
-    sma: float = 0.0
-    ema: float = 0.0
+    sma: float = 0.0           # trend SMA
     rsi: float = 0.0
-    adx: float = 0.0
-    above_sma: bool = False
-    above_ema: bool = False
-    rsi_gt_adx: bool = False
+    rsi_oversold: float = 10.0
+    rsi_exit: float = 70.0
+    in_uptrend: bool = False
+    oversold: bool = False
 
     # trade plan (present when a direction is active)
     entry: Optional[float] = None

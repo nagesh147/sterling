@@ -60,8 +60,8 @@ async def set_config(body: TripleSTConfig, request: Request) -> ConfigResponse:
 
 
 def _daily_limit(cfg: TripleSTConfig) -> int:
-    """Daily bars to fetch: SMA period + warm-up + a comfortable buffer."""
-    return min(cfg.sma_period + cfg.warmup_bars + 80, 1000)
+    """Daily bars to fetch: trend-SMA period + warm-up + a comfortable buffer."""
+    return min(cfg.trend_sma_period + cfg.warmup_bars + 80, 1000)
 
 
 async def _fetch_daily(request: Request, sym: str, cfg: TripleSTConfig):
@@ -87,8 +87,8 @@ def _to_summary(ev: StrategyEvaluation) -> SignalSummary:
     return SignalSummary(
         underlying=ev.underlying, close=ev.close, direction=ev.direction,
         entry_ok=ev.entry_ok, executable=ev.executable,
-        sma=ev.sma, ema=ev.ema, rsi=ev.rsi, adx=ev.adx,
-        above_sma=ev.above_sma, above_ema=ev.above_ema, rsi_gt_adx=ev.rsi_gt_adx,
+        sma=ev.sma, rsi=ev.rsi, rsi_oversold=ev.rsi_oversold, rsi_exit=ev.rsi_exit,
+        in_uptrend=ev.in_uptrend, oversold=ev.oversold,
         entry=p.entry if p else None, stop_loss=p.stop_loss if p else None,
         r_distance=p.r_distance if p else None,
         risk_pct=p.risk_pct if p else None, leverage=p.leverage if p else None,
@@ -222,8 +222,8 @@ async def execute(body: ExecuteRequest, request: Request) -> ExecuteResponse:
         underlying=sym, direction=plan.direction, instrument_type="futures",
         size=float(contracts), leverage=plan.leverage, order_type="market",
         stop_loss=plan.stop_loss, take_profit=None,
-        notes=f"[SMA/EMA·RSI/ADX] {plan.direction} "
-              f"RSI={ev.rsi:.0f} ADX={ev.adx:.0f}",
+        notes=f"[RSI2-MEANREV] {plan.direction} RSI={ev.rsi:.0f} "
+              f"(buy<{ev.rsi_oversold:.0f}, exit>{ev.rsi_exit:.0f})",
     )
     resp = await place_live_order(order, request)
 

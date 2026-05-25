@@ -1,20 +1,23 @@
-"""Configuration for the daily SMA/EMA + RSI/ADX strategy.
+"""Configuration for the daily RSI(2) mean-reversion strategy.
 
-A deliberately small surface. The strategy has only a handful of knobs: the
-four indicator periods, the direction toggles, and the risk/sizing inputs used
-to turn a raw signal into an executable trade plan.
+A small surface. The strategy buys short-term oversold pullbacks *inside* an
+uptrend and exits on the snap-back — the classic Connors RSI(2) system, here
+validated across a 25-coin crypto basket (PF ≈ 3.0, ~71% win rate, stable
+out-of-sample; the earlier momentum rule had no edge).
 
 Strategy rule (1D timeframe)
 ----------------------------
-    Long  entry : close > SMA(sma_period) and close > EMA(ema_period)
-                  and RSI(rsi_period) > ADX(adx_period)
-    Long  exit  : RSI(rsi_period) < ADX(adx_period)
+    Regime      : long only while close > SMA(trend_sma_period)
+    Long entry  : RSI(rsi_period) < rsi_oversold
+    Long exit   : RSI(rsi_period) > rsi_exit
 
-    Short entry : close < SMA and close < EMA and RSI < ADX   (mirror)
-    Short exit  : RSI > ADX                                    (mirror)
+    Short (mirror, opt-in, UNVALIDATED):
+    Regime      : close < SMA(trend_sma_period)
+    Short entry : RSI > (100 - rsi_oversold)
+    Short exit  : RSI < (100 - rsi_exit)
 
-The SMA(50)/EMA(7)/RSI(2)/ADX(2) defaults match the spec; everything is
-centralised here so a single edit re-tunes the whole pipeline.
+A wide ATR stop is a risk-defining safety net and the position-sizing anchor;
+the primary exit is the RSI snap-back. Defaults match the validated config.
 """
 from __future__ import annotations
 
@@ -29,29 +32,31 @@ class TripleSTConfig(BaseModel):
     # Primary timeframe — the rule is defined on daily candles.
     timeframe: str = "1d"
 
-    # ── Indicator periods (defaults match the spec) ──
-    sma_period: int = Field(default=50, ge=2, le=400)
-    ema_period: int = Field(default=7, ge=2, le=200)
+    # ── Trend regime filter ──
+    trend_sma_period: int = Field(default=200, ge=20, le=400)
+
+    # ── RSI oscillator (entry/exit) ──
     rsi_period: int = Field(default=2, ge=1, le=50)
-    adx_period: int = Field(default=2, ge=1, le=50)
+    rsi_oversold: float = Field(default=10.0, ge=1.0, le=49.0)   # long entry: RSI < this
+    rsi_exit: float = Field(default=70.0, ge=50.0, le=99.0)      # long exit:  RSI > this
 
     # ── Direction toggles ──
-    # The spec is long-only; the short side is a symmetric mirror, opt-out here.
+    # The validated edge is long-only; the short side is an unvalidated mirror.
     allow_long: bool = True
-    allow_short: bool = True
+    allow_short: bool = False
 
     # ── Stop-loss / sizing ──
-    # The strategy's primary exit is the RSI/ADX flip. The ATR stop is a
-    # risk-defining safety net and the basis for risk-based position sizing.
+    # The primary exit is the RSI snap-back. The (wide) ATR stop is a safety net
+    # and the basis for risk-based position sizing.
     atr_period: int = Field(default=14, ge=2, le=100)
-    sl_atr_mult: float = Field(default=2.5, ge=0.5, le=10.0)
+    sl_atr_mult: float = Field(default=4.0, ge=0.5, le=12.0)
 
     risk_percent: float = Field(default=0.75, ge=0.05, le=5.0)
     max_position_pct: float = Field(default=20.0, ge=1.0, le=100.0)
     max_slippage: float = Field(default=0.5, ge=0.0, le=5.0)
 
     # Daily bars required before the first signal (SMA period + a small buffer).
-    warmup_bars: int = Field(default=60, ge=10, le=400)
+    warmup_bars: int = Field(default=210, ge=20, le=420)
 
     # Account / sizing context (USD). Used for position-value caps and risk math.
     account_equity: float = Field(default=100_000.0, gt=0)

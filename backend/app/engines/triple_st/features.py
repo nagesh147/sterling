@@ -1,13 +1,13 @@
-"""Indicator computation for the daily SMA/EMA + RSI/ADX strategy.
+"""Indicator computation for the daily RSI(2) mean-reversion strategy.
 
 Everything the per-bar engine reads is precomputed here into aligned numpy
 arrays so evaluation is O(1) per bar and the backtest can replay hundreds of
 daily bars cheaply. Built on the kept `engines.indicators` library; the simple
 moving average (not in that library) is computed locally.
 
-Anti-repaint note: SMA / EMA / RSI / ADX are all causal (value at bar *i* uses
-only bars ≤ *i*), and the engine reads the *closed* daily bar, so a forming bar
-can never repaint a signal.
+Anti-repaint note: SMA / RSI / ATR are all causal (value at bar *i* uses only
+bars ≤ *i*), and the engine reads the *closed* daily bar, so a forming bar can
+never repaint a signal.
 """
 from __future__ import annotations
 
@@ -19,8 +19,6 @@ from numpy.typing import NDArray
 
 from app.schemas.market import Candle
 from app.engines.indicators.atr import compute_atr
-from app.engines.indicators.adx import adx as _adx
-from app.engines.indicators.ema import compute_ema
 from app.engines.indicators.rsi import rsi as _rsi
 
 from app.engines.triple_st.config import TripleSTConfig
@@ -95,11 +93,9 @@ class Features:
     close: NDArray[np.float64]
     volume: NDArray[np.float64]
 
-    sma: NDArray[np.float64]        # SMA(sma_period)
-    ema: NDArray[np.float64]        # EMA(ema_period)
-    rsi: NDArray[np.float64]        # RSI(rsi_period)
-    adx: NDArray[np.float64]        # ADX(adx_period)
-    atr: NDArray[np.float64]        # ATR(atr_period) — for stops / sizing
+    sma: NDArray[np.float64]        # SMA(trend_sma_period) — regime filter
+    rsi: NDArray[np.float64]        # RSI(rsi_period) — entry/exit oscillator
+    atr: NDArray[np.float64]        # ATR(atr_period) — stop / sizing
 
     @property
     def n(self) -> int:
@@ -121,9 +117,7 @@ def compute_features(candles: List[Candle], cfg: TripleSTConfig) -> Features:
     ts, o, h, l, cl, v = _ohlcv(candles)
     return Features(
         ts=ts, open=o, high=h, low=l, close=cl, volume=v,
-        sma=rolling_sma(cl, cfg.sma_period),
-        ema=compute_ema(cl, cfg.ema_period),
+        sma=rolling_sma(cl, cfg.trend_sma_period),
         rsi=_rsi(cl, cfg.rsi_period),
-        adx=_adx(h, l, cl, cfg.adx_period),
         atr=compute_atr(h, l, cl, cfg.atr_period),
     )

@@ -226,10 +226,9 @@ def evaluate_live(
     return StrategyEvaluation(
         underlying=underlying, timestamp_ms=int(feat.ts[i]), close=sig.close,
         timeframe=cfg.timeframe, direction=dir_str,
-        sma=round(sig.sma, 4), ema=round(sig.ema, 4),
-        rsi=round(sig.rsi, 2), adx=round(sig.adx, 2),
-        above_sma=sig.above_sma, above_ema=sig.above_ema, rsi_gt_adx=sig.rsi_gt_adx,
-        long_ok=sig.long_ok, short_ok=sig.short_ok,
+        sma=round(sig.sma, 4), rsi=round(sig.rsi, 2),
+        rsi_oversold=cfg.rsi_oversold, rsi_exit=cfg.rsi_exit,
+        in_uptrend=sig.in_uptrend, oversold=sig.oversold,
         entry_ok=bool(direction != 0), executable=bool(trade_plan is not None),
         can_trade=True, block_reason="", reason=reason, trade_plan=trade_plan,
         equity=round(cfg.account_equity, 2), config=cfg, warming_up=not ready,
@@ -241,8 +240,9 @@ def _warming_eval(underlying, cfg, daily) -> StrategyEvaluation:
     ts = int(daily[-1].timestamp_ms) if daily else int(time.time() * 1000)
     return StrategyEvaluation(
         underlying=underlying, timestamp_ms=ts, close=close, timeframe=cfg.timeframe,
-        direction="none", sma=0.0, ema=0.0, rsi=0.0, adx=0.0,
-        above_sma=False, above_ema=False, rsi_gt_adx=False, long_ok=False, short_ok=False,
+        direction="none", sma=0.0, rsi=0.0,
+        rsi_oversold=cfg.rsi_oversold, rsi_exit=cfg.rsi_exit,
+        in_uptrend=False, oversold=False,
         entry_ok=False, executable=False, can_trade=False, block_reason="warming up",
         reason=f"need ≥{cfg.warmup_bars + 2} daily bars", trade_plan=None,
         equity=round(cfg.account_equity, 2), config=cfg, warming_up=True,

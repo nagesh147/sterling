@@ -1,4 +1,4 @@
-"""Per-bar decision engine for the daily SMA/EMA + RSI/ADX strategy.
+"""Per-bar decision engine for the daily RSI(2) mean-reversion strategy.
 
 Pure, side-effect-free functions over a precomputed `Features` bundle. The same
 primitives power both the live `/evaluate` endpoint and the historical
@@ -6,15 +6,14 @@ primitives power both the live `/evaluate` endpoint and the historical
 
 Rule (1D timeframe)
 -------------------
-    Long  entry : close > SMA and close > EMA and RSI > ADX
-    Long  exit  : RSI < ADX
-    Short entry : close < SMA and close < EMA and RSI < ADX   (mirror)
-    Short exit  : RSI > ADX                                   (mirror)
+    Long  entry : close > SMA(trend) and RSI < rsi_oversold
+    Long  exit  : RSI > rsi_exit
+    Short entry : close < SMA(trend) and RSI > (100 - rsi_oversold)   (mirror, opt-in)
+    Short exit  : RSI < (100 - rsi_exit)
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from app.engines.triple_st.config import TripleSTConfig
 from app.engines.triple_st.features import Features
@@ -34,15 +33,11 @@ class BarSignal:
     timestamp_ms: int
     direction: int            # +1 long / -1 short / 0 flat — the armed signal
     close: float
-    sma: float
-    ema: float
+    sma: float                # trend SMA
     rsi: float
-    adx: float
-    above_sma: bool           # close > SMA
-    above_ema: bool           # close > EMA
-    rsi_gt_adx: bool          # RSI > ADX
-    long_ok: bool             # all three long conditions met (+ long enabled)
-    short_ok: bool            # all three short conditions met (+ short enabled)
+    in_uptrend: bool          # close > SMA(trend)
+    oversold: bool            # RSI < rsi_oversold (long trigger)
+    overbought: bool          # RSI > 100 - rsi_oversold (short trigger)
     reason: str
 
 
@@ -50,62 +45,44 @@ def evaluate_at(feat: Features, i: int, cfg: TripleSTConfig) -> BarSignal:
     """Evaluate entry readiness at the (closed) daily bar `i`."""
     close = float(feat.close[i])
     sma = float(feat.sma[i])
-    ema = float(feat.ema[i])
     rsi = float(feat.rsi[i])
-    adx = float(feat.adx[i])
 
-    above_sma = close > sma
-    above_ema = close > ema
-    rsi_gt_adx = rsi > adx
+    in_uptrend = close > sma
+    oversold = rsi < cfg.rsi_oversold
+    overbought = rsi > (100.0 - cfg.rsi_oversold)
 
-    long_ok = cfg.allow_long and above_sma and above_ema and rsi_gt_adx
-    short_ok = cfg.allow_short and (not above_sma) and (not above_ema) and (not rsi_gt_adx)
-
+    long_ok = cfg.allow_long and in_uptrend and oversold
+    short_ok = cfg.allow_short and (not in_uptrend) and overbought
     direction = 1 if long_ok else -1 if short_ok else 0
 
     if direction == 1:
-        reason = "long armed (C>SMA, C>EMA, RSI>ADX)"
+        reason = f"long armed — uptrend & RSI {rsi:.0f} < {cfg.rsi_oversold:.0f}"
     elif direction == -1:
-        reason = "short armed (C<SMA, C<EMA, RSI<ADX)"
+        reason = f"short armed — downtrend & RSI {rsi:.0f} > {100 - cfg.rsi_oversold:.0f}"
+    elif in_uptrend:
+        reason = (f"uptrend, waiting for dip (RSI {rsi:.0f} ≥ {cfg.rsi_oversold:.0f})"
+                  if cfg.allow_long else "uptrend (long disabled)")
     else:
-        misses = []
-        # Frame the misses against the side the price trend favours.
-        if above_sma or above_ema:
-            if not above_sma:
-                misses.append("close≤SMA")
-            if not above_ema:
-                misses.append("close≤EMA")
-            if not rsi_gt_adx:
-                misses.append("RSI≤ADX")
-            reason = "no long: " + (", ".join(misses) if misses else "blocked")
-        else:
-            if above_sma:
-                misses.append("close≥SMA")
-            if above_ema:
-                misses.append("close≥EMA")
-            if rsi_gt_adx:
-                misses.append("RSI≥ADX")
-            reason = "no short: " + (", ".join(misses) if misses else "blocked")
+        reason = "downtrend — no long (below SMA trend)"
 
     return BarSignal(
         i=i, timestamp_ms=int(feat.ts[i]), direction=direction,
-        close=close, sma=sma, ema=ema, rsi=rsi, adx=adx,
-        above_sma=above_sma, above_ema=above_ema, rsi_gt_adx=rsi_gt_adx,
-        long_ok=long_ok, short_ok=short_ok, reason=reason,
+        close=close, sma=sma, rsi=rsi,
+        in_uptrend=in_uptrend, oversold=oversold, overbought=overbought,
+        reason=reason,
     )
 
 
-def should_exit(feat: Features, i: int, direction: int) -> bool:
-    """Signal exit for an open position: the RSI/ADX momentum condition flips.
+def should_exit(feat: Features, i: int, direction: int, cfg: TripleSTConfig) -> bool:
+    """Signal exit for an open position: the RSI snaps back.
 
-    Long  exits on RSI < ADX; short exits on RSI > ADX.
+    Long exits on RSI > rsi_exit; short exits on RSI < (100 - rsi_exit).
     """
     rsi = float(feat.rsi[i])
-    adx = float(feat.adx[i])
     if direction == 1:
-        return rsi < adx
+        return rsi > cfg.rsi_exit
     if direction == -1:
-        return rsi > adx
+        return rsi < (100.0 - cfg.rsi_exit)
     return False
 
 
@@ -133,8 +110,8 @@ def build_trade_plan(feat: Features, i: int, direction: int, cfg: TripleSTConfig
     Notional follows from the stop distance; `max_position_pct` is the margin
     budget and the implied leverage is capped at `MAX_LEVERAGE`. When the cap
     binds we scale the position down and report the reduced actual risk so R
-    stays honest. The strategy's real exit is the RSI/ADX flip — this stop is a
-    safety net and the sizing anchor only.
+    stays honest. The strategy's real exit is the RSI snap-back — this (wide)
+    stop is a safety net and the sizing anchor only.
     """
     entry = float(feat.close[i])
     atr = max(float(feat.atr[i]), entry * 1e-4)      # guard zero-ATR warmup
@@ -173,6 +150,5 @@ def warmup_ok(feat: Features, i: int, cfg: TripleSTConfig) -> bool:
     return (
         i >= cfg.warmup_bars
         and float(feat.sma[i]) > 0
-        and float(feat.ema[i]) > 0
         and float(feat.atr[i]) > 0
     )

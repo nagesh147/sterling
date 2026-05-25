@@ -94,17 +94,18 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
       }}>{saving ? 'SAVING…' : dirty ? 'APPLY' : 'SAVED'}</button>
     }>
       <div style={{ ...dim, marginBottom: 10, lineHeight: 1.5 }}>
-        Daily rule — <b style={{ color: 'var(--t-bright)' }}>Long</b>: close&gt;SMA &amp; close&gt;EMA &amp; RSI&gt;ADX,
-        exit RSI&lt;ADX. <b style={{ color: 'var(--t-bright)' }}>Short</b>: the mirror.
+        Daily RSI(2) mean-reversion — <b style={{ color: 'var(--t-bright)' }}>Long</b>: close&gt;SMA(trend) &amp;
+        RSI&lt;{draft.rsi_oversold}, exit RSI&gt;{draft.rsi_exit}. <b style={{ color: 'var(--t-bright)' }}>Short</b>: the
+        mirror (unvalidated).
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10, alignItems: 'start' }}>
-        {/* Indicators */}
+        {/* Trend & RSI */}
         <div style={grpBox}>
-          <div style={grpTitle}>INDICATOR PERIODS</div>
-          <NumField label="SMA period" value={draft.sma_period} min={2} max={400} onChange={(v) => set('sma_period', v)} />
-          <NumField label="EMA period" value={draft.ema_period} min={2} max={200} onChange={(v) => set('ema_period', v)} />
+          <div style={grpTitle}>TREND &amp; RSI</div>
+          <NumField label="Trend SMA period" value={draft.trend_sma_period} min={20} max={400} onChange={(v) => set('trend_sma_period', v)} />
           <NumField label="RSI period" value={draft.rsi_period} min={1} max={50} onChange={(v) => set('rsi_period', v)} />
-          <NumField label="ADX period" value={draft.adx_period} min={1} max={50} onChange={(v) => set('adx_period', v)} />
+          <NumField label="RSI oversold (buy <)" value={draft.rsi_oversold} step={1} min={1} max={49} onChange={(v) => set('rsi_oversold', v)} />
+          <NumField label="RSI exit (sell >)" value={draft.rsi_exit} step={1} min={50} max={99} onChange={(v) => set('rsi_exit', v)} />
           <NumField label="ATR period (stop)" value={draft.atr_period} min={2} max={100} onChange={(v) => set('atr_period', v)} />
         </div>
 
@@ -115,7 +116,7 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
             <ChipToggle label="Long" on={draft.allow_long} onChange={(v) => set('allow_long', v)} />
             <ChipToggle label="Short (mirror)" on={draft.allow_short} onChange={(v) => set('allow_short', v)} />
           </div>
-          <NumField label="Warm-up (daily bars)" value={draft.warmup_bars} min={10} max={400} onChange={(v) => set('warmup_bars', v)} />
+          <NumField label="Warm-up (daily bars)" value={draft.warmup_bars} min={20} max={420} onChange={(v) => set('warmup_bars', v)} />
         </div>
 
         {/* Risk */}
@@ -255,6 +256,16 @@ function Cond({ label, value, against, gt, usd }: { label: string; value: number
   );
 }
 
+function RsiChip({ rsi, oversold, exit, triggered }: { rsi: number; oversold: number; exit: number; triggered: boolean }) {
+  const color = triggered ? 'var(--t-green)' : rsi > exit ? 'var(--t-red)' : 'var(--t-dim)';
+  return (
+    <div title={`RSI ${fmt(rsi, 1)} — buy < ${oversold}, exit > ${exit}`}>
+      <div style={{ fontSize: 8.5, letterSpacing: '0.04em', color: 'var(--t-dim)' }}>RSI · buy&lt;{fmt(oversold, 0)}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color }}>{triggered ? '▼ ' : ''}{fmt(rsi, 0)}</div>
+    </div>
+  );
+}
+
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
@@ -289,9 +300,8 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
           </span>
           {s.entry_ok && <Pill text="ARMED" color={dirColor} />}
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
-            <Cond label="CLOSE / SMA" value={s.close} against={s.sma} gt={s.above_sma} usd />
-            <Cond label="CLOSE / EMA" value={s.close} against={s.ema} gt={s.above_ema} usd />
-            <Cond label="RSI / ADX" value={s.rsi} against={s.adx} gt={s.rsi_gt_adx} />
+            <Cond label="CLOSE / SMA200" value={s.close} against={s.sma} gt={s.in_uptrend} usd />
+            <RsiChip rsi={s.rsi} oversold={s.rsi_oversold} exit={s.rsi_exit} triggered={s.oversold} />
           </span>
         </div>
         {/* row 2 — plan + execute */}
@@ -300,7 +310,7 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
             <div style={{ display: 'flex', gap: 20, flex: 1, flexWrap: 'wrap' }}>
               <Stat label="ENTRY" value={fmtUsd(s.entry)} />
               <Stat label="STOP" value={fmtUsd(s.stop_loss)} color="var(--t-red)" />
-              <Stat label="EXIT" value="RSI/ADX flip" color="var(--t-amber)" />
+              <Stat label="EXIT" value={`RSI>${fmt(s.rsi_exit, 0)}`} color="var(--t-amber)" />
               <Stat label="RISK" value={s.risk_pct != null ? `${fmt(s.risk_pct, 2)}%` : '—'} />
               <Stat label="LEV" value={s.leverage != null ? `${fmt(s.leverage, 1)}x` : '—'} />
             </div>
@@ -365,9 +375,9 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
       {/* hero header */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.08em', color: 'var(--t-bright)' }}>SMA · EMA · RSI / ADX</div>
+          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.08em', color: 'var(--t-bright)' }}>RSI(2) MEAN-REVERSION</div>
           <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 2 }}>
-            Daily signals across all crypto · long: C&gt;SMA &amp; C&gt;EMA &amp; RSI&gt;ADX · {scanQ.isFetching ? 'scanning…' : 'auto-refresh 30s'}
+            Daily · buy oversold dips in uptrends (RSI&lt;10 &amp; close&gt;SMA200), exit the bounce · {scanQ.isFetching ? 'scanning…' : 'auto-refresh 30s'}
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -416,8 +426,9 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
 
       {data && data.signals.length > 0 && (
         <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.5 }}>
-          EXECUTE routes through your current Paper/Live mode (top-right toggle). A symbol is <b>ARMED</b> when all
-          three daily conditions agree for one direction. Positions exit on the RSI/ADX flip (ATR stop as a safety net).
+          EXECUTE routes through your current Paper/Live mode (top-right toggle). A symbol is <b>ARMED</b> when price is
+          in an uptrend (above SMA200) and RSI(2) is oversold. Positions exit on the RSI snap-back (wide ATR stop as a
+          safety net). Selective by design — most symbols sit FLAT waiting for a dip.
         </div>
       )}
     </div>

@@ -2,14 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 
 // ── Config (mirrors backend TripleSTConfig) ──────────────────────────────────
-// Strategy (1D): long = close>SMA & close>EMA & RSI>ADX; exit RSI<ADX. Short = mirror.
+// RSI(2) mean-reversion (1D): long = close>SMA(trend) & RSI<oversold; exit RSI>rsi_exit.
 
 export interface TripleSTConfig {
   timeframe: string;
-  sma_period: number;
-  ema_period: number;
+  trend_sma_period: number;
   rsi_period: number;
-  adx_period: number;
+  rsi_oversold: number;
+  rsi_exit: number;
   allow_long: boolean;
   allow_short: boolean;
   atr_period: number;
@@ -34,9 +34,8 @@ export interface TradePlan {
 export interface StrategyEvaluation {
   underlying: string; timestamp_ms: number; close: number; timeframe: string;
   direction: 'long' | 'short' | 'none';
-  sma: number; ema: number; rsi: number; adx: number;
-  above_sma: boolean; above_ema: boolean; rsi_gt_adx: boolean;
-  long_ok: boolean; short_ok: boolean;
+  sma: number; rsi: number; rsi_oversold: number; rsi_exit: number;
+  in_uptrend: boolean; oversold: boolean;
   entry_ok: boolean; executable: boolean; can_trade: boolean; block_reason: string; reason: string;
   trade_plan: TradePlan | null;
   equity: number; config: TripleSTConfig; warming_up: boolean;
@@ -65,8 +64,8 @@ export interface BacktestResult {
 export interface SignalSummary {
   underlying: string; close: number; direction: 'long' | 'short' | 'none';
   entry_ok: boolean; executable: boolean;
-  sma: number; ema: number; rsi: number; adx: number;
-  above_sma: boolean; above_ema: boolean; rsi_gt_adx: boolean;
+  sma: number; rsi: number; rsi_oversold: number; rsi_exit: number;
+  in_uptrend: boolean; oversold: boolean;
   entry: number | null; stop_loss: number | null; r_distance: number | null;
   risk_pct: number | null; leverage: number | null;
   notional_usd: number | null; size_units: number | null;
