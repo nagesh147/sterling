@@ -3,8 +3,7 @@ import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/use
 import {
   useStrategyConfig, useSetStrategyConfig,
   useStrategyBacktest, useStrategyExecute, useStrategySignals,
-  type TripleSTConfig, type StrategyMode, type AssetClass, type HTFSource,
-  type BacktestResult, type SignalSummary,
+  type TripleSTConfig, type BacktestResult, type SignalSummary,
 } from '../../hooks/useStrategy';
 
 /* ── tiny style helpers (terminal token palette) ─────────────────────────── */
@@ -27,30 +26,6 @@ function SectionCard({ title, right, children }: { title: string; right?: React.
       <div style={cardHead}><span>{title}</span>{right && <span style={{ marginLeft: 'auto' }}>{right}</span>}</div>
       <div style={cardBody}>{children}</div>
     </div>
-  );
-}
-
-function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 7, width: '100%',
-        background: 'none', border: 'none', cursor: 'pointer', padding: '3px 0',
-        fontFamily: 'inherit', fontSize: 11, color: on ? 'var(--t-bright)' : 'var(--t-dim)',
-      }}
-    >
-      <span style={{
-        width: 26, height: 14, borderRadius: 8, flexShrink: 0, position: 'relative',
-        background: on ? 'var(--t-green)' : 'var(--t-border)', transition: 'background .15s',
-      }}>
-        <span style={{
-          position: 'absolute', top: 2, left: on ? 14 : 2, width: 10, height: 10,
-          borderRadius: '50%', background: '#fff', transition: 'left .15s',
-        }} />
-      </span>
-      {label}
-    </button>
   );
 }
 
@@ -86,26 +61,7 @@ function Pill({ text, color }: { text: string; color: string }) {
 const fmt = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : v.toFixed(d));
 const fmtUsd = (v: number | null | undefined) => (v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
 
-/* ── config panel ─────────────────────────────────────────────────────────── */
-
-const MODES: StrategyMode[] = ['Aggressive', 'Balanced', 'Conservative', 'Momentum'];
-const ASSETS: AssetClass[] = ['Auto-Detect', 'Large', 'Mid', 'Small'];
-const HTF: HTFSource[] = ['SuperTrend', 'EMA', 'Both'];
-
-function Selector<T extends string>({ options, value, onChange }: { options: T[]; value: T; onChange: (v: T) => void }) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-      {options.map((o) => (
-        <button key={o} onClick={() => onChange(o)} style={{
-          fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
-          border: `1px solid ${value === o ? 'var(--t-blue)' : 'var(--t-border)'}`,
-          background: value === o ? 'var(--t-bg3)' : 'transparent',
-          color: value === o ? 'var(--t-blue)' : 'var(--t-dim)',
-        }}>{o}</button>
-      ))}
-    </div>
-  );
-}
+/* ── config panel (slim — just the new strategy's knobs) ──────────────────── */
 
 function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -127,15 +83,6 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
   const set = <K extends keyof TripleSTConfig>(k: K, v: TripleSTConfig[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const dirty = JSON.stringify(draft) !== JSON.stringify(cfg);
 
-  const filters: [keyof TripleSTConfig, string][] = [
-    ['use_ha', 'Heiken-Ashi'], ['use_volume', 'Volume'], ['use_rsi', 'RSI'],
-    ['use_macd', 'MACD'], ['use_htf', 'HTF Bias'], ['use_btc_corr', 'BTC Corr'],
-    ['use_regime_filter', 'Regime'], ['use_spike_guard', 'Spike Guard'], ['use_gap_protection', 'Gap Protect'],
-  ];
-  const protections: [keyof TripleSTConfig, string][] = [
-    ['use_circuit_breaker', 'Circuit Breaker'], ['use_black_swan', 'Black Swan'], ['use_dynamic_mode', 'Dynamic Mode'],
-  ];
-
   return (
     <SectionCard title="STRATEGY SETTINGS" right={
       <button disabled={!dirty || saving} onClick={() => onSave(draft)} style={{
@@ -146,58 +93,39 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
         color: dirty ? 'var(--t-green)' : 'var(--t-dim)',
       }}>{saving ? 'SAVING…' : dirty ? 'APPLY' : 'SAVED'}</button>
     }>
-      {/* responsive grouped grid — fills horizontal space, no tall single column */}
+      <div style={{ ...dim, marginBottom: 10, lineHeight: 1.5 }}>
+        Daily rule — <b style={{ color: 'var(--t-bright)' }}>Long</b>: close&gt;SMA &amp; close&gt;EMA &amp; RSI&gt;ADX,
+        exit RSI&lt;ADX. <b style={{ color: 'var(--t-bright)' }}>Short</b>: the mirror.
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10, alignItems: 'start' }}>
-        {/* Strategy */}
+        {/* Indicators */}
         <div style={grpBox}>
-          <div style={grpTitle}>STRATEGY</div>
-          <div><div style={{ ...dim, marginBottom: 4 }}>Mode</div><Selector options={MODES} value={draft.mode} onChange={(v) => set('mode', v)} /></div>
-          <div><div style={{ ...dim, marginBottom: 4 }}>Asset class</div><Selector options={ASSETS} value={draft.asset_type} onChange={(v) => set('asset_type', v)} /></div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <ChipToggle label="Quality Score" on={draft.use_quality_score} onChange={(v) => set('use_quality_score', v)} />
-            {draft.use_quality_score && (
-              <input type="number" value={draft.quality_threshold} min={40} max={95}
-                onChange={(e) => set('quality_threshold', parseInt(e.target.value) || 68)}
-                title="Quality threshold (40–95)"
-                style={{ width: 52, background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 4, color: 'var(--t-bright)', fontFamily: 'inherit', fontSize: 11, padding: '3px 6px', textAlign: 'right' }} />
-            )}
-          </div>
+          <div style={grpTitle}>INDICATOR PERIODS</div>
+          <NumField label="SMA period" value={draft.sma_period} min={2} max={400} onChange={(v) => set('sma_period', v)} />
+          <NumField label="EMA period" value={draft.ema_period} min={2} max={200} onChange={(v) => set('ema_period', v)} />
+          <NumField label="RSI period" value={draft.rsi_period} min={1} max={50} onChange={(v) => set('rsi_period', v)} />
+          <NumField label="ADX period" value={draft.adx_period} min={1} max={50} onChange={(v) => set('adx_period', v)} />
+          <NumField label="ATR period (stop)" value={draft.atr_period} min={2} max={100} onChange={(v) => set('atr_period', v)} />
         </div>
 
-        {/* Filters */}
+        {/* Direction */}
         <div style={grpBox}>
-          <div style={grpTitle}>FILTERS</div>
+          <div style={grpTitle}>DIRECTION</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {filters.map(([k, lbl]) => (
-              <ChipToggle key={k} label={lbl} on={draft[k] as boolean} onChange={(v) => set(k, v as never)} />
-            ))}
+            <ChipToggle label="Long" on={draft.allow_long} onChange={(v) => set('allow_long', v)} />
+            <ChipToggle label="Short (mirror)" on={draft.allow_short} onChange={(v) => set('allow_short', v)} />
           </div>
-          {draft.use_htf && (
-            <div><div style={{ ...dim, marginBottom: 4 }}>HTF source</div><Selector options={HTF} value={draft.htf_source} onChange={(v) => set('htf_source', v)} /></div>
-          )}
+          <NumField label="Warm-up (daily bars)" value={draft.warmup_bars} min={10} max={400} onChange={(v) => set('warmup_bars', v)} />
         </div>
 
         {/* Risk */}
         <div style={grpBox}>
           <div style={grpTitle}>RISK &amp; SIZING</div>
           <NumField label="Risk % / trade" value={draft.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => set('risk_percent', v)} />
+          <NumField label="Stop ATR ×" value={draft.sl_atr_mult} step={0.1} min={0.5} max={10} onChange={(v) => set('sl_atr_mult', v)} />
           <NumField label="Max position %" value={draft.max_position_pct} step={1} min={1} max={100} onChange={(v) => set('max_position_pct', v)} />
-          <NumField label="Daily loss %" value={draft.daily_loss_limit} step={0.5} min={0.5} max={20} onChange={(v) => set('daily_loss_limit', v)} />
           <NumField label="Max slippage %" value={draft.max_slippage} step={0.1} min={0} max={5} onChange={(v) => set('max_slippage', v)} />
           <NumField label="Account equity $" value={draft.account_equity} step={1000} min={100} onChange={(v) => set('account_equity', v)} />
-        </div>
-
-        {/* Protection */}
-        <div style={grpBox}>
-          <div style={grpTitle}>CAPITAL PROTECTION</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-            {protections.map(([k, lbl]) => (
-              <ChipToggle key={k} label={lbl} on={draft[k] as boolean} onChange={(v) => set(k, v as never)} />
-            ))}
-          </div>
-          {draft.use_circuit_breaker && (
-            <NumField label="Consec. loss limit" value={draft.consecutive_loss_limit} min={2} max={10} onChange={(v) => set('consecutive_loss_limit', v)} />
-          )}
         </div>
       </div>
     </SectionCard>
@@ -240,7 +168,7 @@ function BacktestPanel({ underlying }: { underlying: string }) {
     ['Profit factor', fmt(s.profit_factor, 2), s.profit_factor >= 1 ? 'var(--t-green)' : 'var(--t-red)'],
     ['Max DD', `${fmt(s.max_drawdown_pct, 1)}%`, 'var(--t-amber)'],
     ['Sharpe', fmt(s.sharpe, 2), 'var(--t-bright)'],
-    ['Avg hold', `${fmt(s.avg_bars_held, 0)}h`, 'var(--t-bright)'],
+    ['Avg hold', `${fmt(s.avg_bars_held, 0)}d`, 'var(--t-bright)'],
   ]);
 
   return (
@@ -265,11 +193,11 @@ function BacktestPanel({ underlying }: { underlying: string }) {
       </span>
     }>
       {bt.isError && <div style={{ color: 'var(--t-red)', fontSize: 10 }}>{bt.error.message}</div>}
-      {!res && !bt.isPending && <div style={dim}>Run a backtest over {underlying} — up to 3 years of stored 1H candles (≈2y available).</div>}
+      {!res && !bt.isPending && <div style={dim}>Run a backtest over {underlying} — daily bars resampled from up to 3 years of stored history (≈2y available).</div>}
       {res && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Pill text={`${res.asset_class}`} color="var(--t-blue)" />
+            <Pill text="1D" color="var(--t-blue)" />
             <span style={dim}>{res.bars_evaluated} bars · {res.stats.long_trades}L / {res.stats.short_trades}S</span>
             <span style={{ marginLeft: 'auto' }}><EquitySpark curve={res.equity_curve} /></span>
           </div>
@@ -286,7 +214,7 @@ function BacktestPanel({ underlying }: { underlying: string }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
                 <thead>
                   <tr style={{ color: 'var(--t-dim)', textAlign: 'left' }}>
-                    {['Dir', 'Entry', 'Exit', 'Bars', 'R', 'Exit reason'].map((h) => (
+                    {['Dir', 'Entry', 'Exit', 'Days', 'R', 'Exit'].map((h) => (
                       <th key={h} style={{ padding: '4px 8px', position: 'sticky', top: 0, background: 'var(--t-bg2)' }}>{h}</th>
                     ))}
                   </tr>
@@ -299,7 +227,7 @@ function BacktestPanel({ underlying }: { underlying: string }) {
                       <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{fmtUsd(t.exit_price)}</td>
                       <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{t.bars_held}</td>
                       <td style={{ padding: '3px 8px', color: t.pnl_r >= 0 ? 'var(--t-green)' : 'var(--t-red)' }}>{fmt(t.pnl_r, 2)}</td>
-                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{t.exit_reasons[t.exit_reasons.length - 1]}</td>
+                      <td style={{ padding: '3px 8px', color: 'var(--t-dim)' }}>{t.exit_reason}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -314,27 +242,16 @@ function BacktestPanel({ underlying }: { underlying: string }) {
 
 /* ── signals scanner (primary view — all crypto) ──────────────────────────── */
 
-function ConsensusChip({ count }: { count: number }) {
-  const color = count >= 3 ? 'var(--t-green)' : count === 2 ? 'var(--t-amber)' : 'var(--t-dim)';
+function Cond({ label, value, against, gt, usd }: { label: string; value: number; against: number; gt: boolean; usd?: boolean }) {
+  const color = gt ? 'var(--t-green)' : 'var(--t-red)';
+  const f = (v: number) => (usd ? fmtUsd(v) : fmt(v, 0));
   return (
-    <span style={{ display: 'inline-flex', gap: 2 }}>
-      {[0, 1, 2].map((k) => (
-        <span key={k} style={{ width: 6, height: 12, borderRadius: 2, background: k < count ? color : 'var(--t-border)' }} />
-      ))}
-    </span>
-  );
-}
-
-function QualityMini({ total, pass }: { total: number; pass: boolean }) {
-  const pct = Math.max(0, Math.min(100, (total / 112) * 100));
-  const color = pass ? 'var(--t-green)' : total >= 50 ? 'var(--t-amber)' : 'var(--t-dim)';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ width: 44, height: 6, borderRadius: 3, background: 'var(--t-bg)', display: 'inline-block', overflow: 'hidden' }}>
-        <span style={{ display: 'block', height: '100%', width: `${pct}%`, background: color }} />
-      </span>
-      <span style={{ fontSize: 11, fontWeight: 700, color }}>{Math.round(total)}</span>
-    </span>
+    <div title={`${label}: ${f(value)} ${gt ? '>' : '<'} ${f(against)}`}>
+      <div style={{ fontSize: 8.5, letterSpacing: '0.04em', color: 'var(--t-dim)' }}>{label}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color }}>
+        {gt ? '▲' : '▼'} {f(value)} <span style={{ color: 'var(--t-dim)', fontWeight: 400 }}>{gt ? '>' : '<'}</span> {f(against)}
+      </div>
+    </div>
   );
 }
 
@@ -363,7 +280,7 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
     }}>
       <div style={{ width: 4, background: dirColor, flexShrink: 0 }} />
       <div style={{ flex: 1, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 9, minWidth: 0 }}>
-        {/* row 1 — identity + state */}
+        {/* row 1 — identity + conditions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', minWidth: 42 }}>{s.underlying}</span>
           <span style={{ fontSize: 12, color: 'var(--t-dim)' }}>{fmtUsd(s.close)}</span>
@@ -371,11 +288,10 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
             {long ? '▲ LONG' : short ? '▼ SHORT' : '— FLAT'}
           </span>
           {s.entry_ok && <Pill text="ARMED" color={dirColor} />}
-          {s.arrow && <Pill text="✦ FLIP" color="var(--t-amber)" />}
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={dim}>ST</span><ConsensusChip count={s.consensus_count} /></span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={dim}>Q</span><QualityMini total={s.quality_total} pass={s.quality_pass} /></span>
-            <Pill text={s.regime_label} color="#7da7ff" />
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>
+            <Cond label="CLOSE / SMA" value={s.close} against={s.sma} gt={s.above_sma} usd />
+            <Cond label="CLOSE / EMA" value={s.close} against={s.ema} gt={s.above_ema} usd />
+            <Cond label="RSI / ADX" value={s.rsi} against={s.adx} gt={s.rsi_gt_adx} />
           </span>
         </div>
         {/* row 2 — plan + execute */}
@@ -384,8 +300,8 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
             <div style={{ display: 'flex', gap: 20, flex: 1, flexWrap: 'wrap' }}>
               <Stat label="ENTRY" value={fmtUsd(s.entry)} />
               <Stat label="STOP" value={fmtUsd(s.stop_loss)} color="var(--t-red)" />
-              <Stat label="TARGET" value={fmtUsd(s.take_profit)} color="var(--t-green)" />
-              <Stat label="R:R" value={s.rr != null ? `${fmt(s.rr, 1)}` : '—'} />
+              <Stat label="EXIT" value="RSI/ADX flip" color="var(--t-amber)" />
+              <Stat label="RISK" value={s.risk_pct != null ? `${fmt(s.risk_pct, 2)}%` : '—'} />
               <Stat label="LEV" value={s.leverage != null ? `${fmt(s.leverage, 1)}x` : '—'} />
             </div>
           ) : (
@@ -394,16 +310,14 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
           <button
             disabled={!s.executable || executing}
             onClick={(e) => { e.stopPropagation(); onExecute(); }}
-            title={s.executable
-              ? (s.entry_ok ? 'Armed — execute via current Paper/Live mode' : `Manual (discretionary) execute — ${s.reason}`)
-              : s.reason}
+            title={s.executable ? 'Armed — execute via current Paper/Live mode' : s.reason}
             style={{
               fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', padding: '7px 18px', borderRadius: 7,
               fontFamily: 'inherit', flexShrink: 0,
-              color: !s.executable ? 'var(--t-dim)' : s.entry_ok ? '#fff' : dirColor,
+              color: !s.executable ? 'var(--t-dim)' : '#fff',
               cursor: s.executable && !executing ? 'pointer' : 'default',
-              border: s.executable && !s.entry_ok ? `1px solid ${dirColor}` : '1px solid transparent',
-              background: !s.executable ? 'var(--t-border)' : s.entry_ok ? dirColor : 'transparent',
+              border: '1px solid transparent',
+              background: !s.executable ? 'var(--t-border)' : dirColor,
               opacity: s.executable ? 1 : 0.5,
             }}
           >
@@ -411,9 +325,6 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
           </button>
         </div>
         {result && <div style={{ fontSize: 10, color: result.startsWith('✓') ? 'var(--t-green)' : 'var(--t-amber)' }}>{result}</div>}
-        {!s.entry_ok && s.entry != null && (
-          <div style={{ fontSize: 9.5, color: 'var(--t-dim)' }}>{s.reason}</div>
-        )}
       </div>
     </div>
   );
@@ -428,8 +339,8 @@ function SummaryTile({ label, value, color }: { label: string; value: string; co
   );
 }
 
-function SignalsScanner({ selected, onSelect, onOpenSettings, mode }: {
-  selected: string; onSelect: (s: string) => void; onOpenSettings: () => void; mode?: string;
+function SignalsScanner({ selected, onSelect, onOpenSettings }: {
+  selected: string; onSelect: (s: string) => void; onOpenSettings: () => void;
 }) {
   const [armedOnly, setArmedOnly] = useState(false);
   const scanQ = useStrategySignals(armedOnly);
@@ -454,9 +365,9 @@ function SignalsScanner({ selected, onSelect, onOpenSettings, mode }: {
       {/* hero header */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.08em', color: 'var(--t-bright)' }}>TRIPLE SUPERTREND</div>
+          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.08em', color: 'var(--t-bright)' }}>SMA · EMA · RSI / ADX</div>
           <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 2 }}>
-            Live signals across all crypto{mode ? ` · ${mode} mode` : ''} · {scanQ.isFetching ? 'scanning…' : 'auto-refresh 30s'}
+            Daily signals across all crypto · long: C&gt;SMA &amp; C&gt;EMA &amp; RSI&gt;ADX · {scanQ.isFetching ? 'scanning…' : 'auto-refresh 30s'}
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -485,7 +396,7 @@ function SignalsScanner({ selected, onSelect, onOpenSettings, mode }: {
       {scanQ.isLoading && <div style={dim}>scanning instruments…</div>}
       {data && data.signals.length === 0 && (
         <div style={{ ...dim, padding: '20px 0', textAlign: 'center' }}>
-          {armedOnly ? 'No armed signals right now — toggle off to see all leans.' : 'No instruments available on this data source.'}
+          {armedOnly ? 'No armed signals right now — toggle off to see all symbols.' : 'No instruments available on this data source.'}
         </div>
       )}
 
@@ -505,8 +416,8 @@ function SignalsScanner({ selected, onSelect, onOpenSettings, mode }: {
 
       {data && data.signals.length > 0 && (
         <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.5 }}>
-          EXECUTE routes through your current Paper/Live mode (top-right toggle). <b>Solid</b> = armed (auto-qualified);
-          <b> outlined</b> = manual/discretionary (consensus or a filter not fully met). Disabled only when capital protection halts trading.
+          EXECUTE routes through your current Paper/Live mode (top-right toggle). A symbol is <b>ARMED</b> when all
+          three daily conditions agree for one direction. Positions exit on the RSI/ADX flip (ATR stop as a safety net).
         </div>
       )}
     </div>
@@ -523,7 +434,7 @@ export function StrategyTab() {
   const [drawer, setDrawer] = useState(false);
   const cfg = cfgQ.data?.config;
 
-  // Lock body scroll while the drawer is open.
+  // Close the drawer on Escape.
   useEffect(() => {
     if (!drawer) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDrawer(false); };
@@ -533,7 +444,7 @@ export function StrategyTab() {
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
-      <SignalsScanner selected={selected} onSelect={setSelected} onOpenSettings={() => setDrawer(true)} mode={cfg?.mode} />
+      <SignalsScanner selected={selected} onSelect={setSelected} onOpenSettings={() => setDrawer(true)} />
 
       {/* Advanced settings — right-side slide-out drawer */}
       {drawer && (

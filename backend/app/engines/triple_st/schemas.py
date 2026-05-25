@@ -1,4 +1,4 @@
-"""Pydantic request/response shapes for the Triple SuperTrend API.
+"""Pydantic request/response shapes for the daily SMA/EMA + RSI/ADX strategy.
 
 These wrap the engine's internal dataclasses for JSON transport. `TripleSTConfig`
 itself lives in `config.py` and is reused here as both a request body and an
@@ -6,70 +6,26 @@ echoed field so the UI always renders against the exact parameters used.
 """
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.engines.triple_st.config import (
-    TripleSTConfig,
-    StrategyMode,
-    AssetClass,
-)
+from app.engines.triple_st.config import TripleSTConfig
 
 
 # ─── Shared view models ──────────────────────────────────────────────────────
-
-
-class STLineView(BaseModel):
-    period: int
-    multiplier: float
-    value: float
-    trend: int                 # +1 bull / -1 bear
-
-
-class QualityView(BaseModel):
-    consensus: float
-    volume: float
-    htf: float
-    regime: float
-    momentum: float
-    bonus: float
-    total: float
-    threshold: float
-    passed: bool
-
-
-class FilterView(BaseModel):
-    name: str
-    passed: bool
-    detail: str
-
-
-class RegimeView(BaseModel):
-    is_compressed: bool
-    is_high_vol: bool
-    is_trending: bool
-    is_choppy: bool
-    post_squeeze: bool
-    adx: float
-    chop: float
-    bb_ratio: float
-    label: str
 
 
 class TradePlanView(BaseModel):
     direction: str
     entry: float
     stop_loss: float
-    take_profit: float
     r_distance: float
-    partials: List[Tuple[float, float]]
     size_units: float
     notional_usd: float
     risk_usd: float
     risk_pct: float
     leverage: float
-    rr: float
 
 
 # ─── Live evaluation ─────────────────────────────────────────────────────────
@@ -79,36 +35,33 @@ class StrategyEvaluation(BaseModel):
     underlying: str
     timestamp_ms: int
     close: float
-    effective_mode: StrategyMode
-    asset_class: AssetClass
+    timeframe: str
 
     # signal
     direction: str             # "long" | "short" | "none"
-    raw_long: bool
-    raw_short: bool
-    arrow: bool
-    consensus_count: int
-    supertrends: List[STLineView]
 
-    quality: QualityView
-    filters: List[FilterView]
-    regime: RegimeView
+    # indicator values (at the last closed daily bar)
+    sma: float
+    ema: float
+    rsi: float
+    adx: float
 
-    entry_ok: bool             # strict auto-arm (min_confirm + quality + filters + can_trade)
-    executable: bool           # a directional plan exists AND not capital-halted (manual exec ok)
+    # raw conditions (long-framed booleans; the short side is the inverse)
+    above_sma: bool            # close > SMA
+    above_ema: bool            # close > EMA
+    rsi_gt_adx: bool           # RSI > ADX
+    long_ok: bool
+    short_ok: bool
+
+    entry_ok: bool             # a direction is armed (long_ok or short_ok)
+    executable: bool           # a plan exists AND trading is not halted
     can_trade: bool
-    block_reason: str          # capital-protection reason when can_trade is False
+    block_reason: str
     reason: str
 
     trade_plan: Optional[TradePlanView] = None
 
-    # capital-protection snapshot
     equity: float
-    drawdown_pct: float
-    consecutive_losses: int
-    size_multiplier: float
-    effective_quality_threshold: float
-
     config: TripleSTConfig
     warming_up: bool = False
 
@@ -122,19 +75,21 @@ class SignalSummary(BaseModel):
     close: float
     direction: str             # "long" | "short" | "none"
     entry_ok: bool
-    arrow: bool
-    consensus_count: int
-    quality_total: float
-    quality_pass: bool
-    regime_label: str
-    effective_mode: StrategyMode
-    asset_class: AssetClass
-    executable: bool = False   # plan exists AND not capital-halted → EXECUTE allowed
+    executable: bool = False
+
+    # indicators + conditions
+    sma: float = 0.0
+    ema: float = 0.0
+    rsi: float = 0.0
+    adx: float = 0.0
+    above_sma: bool = False
+    above_ema: bool = False
+    rsi_gt_adx: bool = False
+
     # trade plan (present when a direction is active)
     entry: Optional[float] = None
     stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
-    rr: Optional[float] = None
+    r_distance: Optional[float] = None
     risk_pct: Optional[float] = None
     leverage: Optional[float] = None
     notional_usd: Optional[float] = None
@@ -148,7 +103,6 @@ class SignalScanResponse(BaseModel):
     signals: List[SignalSummary]
     count: int
     armed_count: int
-    effective_mode: StrategyMode
     timestamp_ms: int
 
 
@@ -167,12 +121,11 @@ class BacktestTrade(BaseModel):
     entry_ts: int
     exit_ts: int
     entry_price: float
-    exit_price: float          # size-weighted average exit
+    exit_price: float
     bars_held: int
     pnl_usd: float
     pnl_r: float               # P&L in R-multiples
-    exit_reasons: List[str]
-    mode: str
+    exit_reason: str
 
 
 class EquityPoint(BaseModel):
@@ -203,7 +156,6 @@ class TripleSTBacktestResult(BaseModel):
     lookback_days: int
     bars_evaluated: int
     config: TripleSTConfig
-    asset_class: AssetClass
     stats: BacktestStats
     trades: List[BacktestTrade]
     equity_curve: List[EquityPoint]
@@ -213,28 +165,8 @@ class TripleSTBacktestResult(BaseModel):
 # ─── Config endpoint ─────────────────────────────────────────────────────────
 
 
-class ModePresetView(BaseModel):
-    mode: StrategyMode
-    min_confirm: int
-    risk_mult: float
-    be_trigger_r: float
-    trail_source: str
-    partials: List[Tuple[float, float]]
-
-
-class AssetPresetView(BaseModel):
-    asset_class: AssetClass
-    sl_mult: float
-    tp_mult: float
-    min_adx: float
-    squeeze_threshold: float
-    short_modifier: float
-
-
 class ConfigResponse(BaseModel):
     config: TripleSTConfig
-    mode_presets: List[ModePresetView]
-    asset_presets: List[AssetPresetView]
 
 
 # ─── Execution ───────────────────────────────────────────────────────────────
@@ -242,7 +174,6 @@ class ConfigResponse(BaseModel):
 
 class ExecuteRequest(BaseModel):
     underlying: str
-    # When omitted the server recomputes the live trade plan before routing.
     confirm: bool = True
 
 

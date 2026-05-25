@@ -1,15 +1,14 @@
-"""Historical replay + live evaluation for the Triple SuperTrend strategy.
+"""Historical replay + live evaluation for the daily SMA/EMA + RSI/ADX strategy.
 
-`run_backtest` replays bar-by-bar with realistic execution:
-  * entries arm on the signal bar and fill on the *next* bar's open,
+`run_backtest` replays bar-by-bar over daily candles with realistic execution:
+  * a signal arms on the (closed) daily bar and fills on the *next* bar's open,
   * a slippage gate rejects fills that gap beyond `max_slippage`,
   * unfilled pending entries expire after 2 bars,
-  * the full exit-priority ladder runs every bar,
-  * `ProtectionState` halts/scales trading (daily loss, circuit breaker,
-    black-swan, drawdown scaling, dynamic mode switching).
+  * each open bar runs the exit ladder (ATR stop → RSI/ADX signal flip),
+  * equity compounds off realised P&L so the curve reflects real growth.
 
-`evaluate_live` runs the same pipeline at the last closed bar and packages a
-rich snapshot for the UI dashboard.
+`evaluate_live` runs the same pipeline at the last *closed* daily bar and
+packages a snapshot for the UI dashboard.
 """
 from __future__ import annotations
 
@@ -19,48 +18,18 @@ from typing import List, Optional
 import numpy as np
 
 from app.schemas.market import Candle
-from app.engines.triple_st.config import (
-    TripleSTConfig,
-    AssetClass,
-    MODE_TABLE,
-    classify_asset,
-    ASSET_TABLE,
-)
-from app.engines.triple_st.features import compute_features, HTFContext, BTCContext, Features
+from app.engines.triple_st.config import TripleSTConfig
+from app.engines.triple_st.features import compute_features, resample_to_daily, Features
 from app.engines.triple_st import engine as eng
-from app.engines.triple_st.engine import ProtectionState, build_trade_plan
-from app.engines.triple_st.exits import Position, step_position, cooldown_bars, Fill
+from app.engines.triple_st.engine import build_trade_plan, evaluate_at, warmup_ok
+from app.engines.triple_st.exits import Position, step_position, Fill
 from app.engines.triple_st.schemas import (
-    StrategyEvaluation, STLineView, QualityView, FilterView, RegimeView, TradePlanView,
+    StrategyEvaluation, TradePlanView,
     TripleSTBacktestResult, BacktestStats, BacktestTrade, EquityPoint,
 )
-from app.engines.triple_st.config import ST_CONFIGS
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Shared setup
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _resolve_asset_class(cfg: TripleSTConfig, feat: Features) -> AssetClass:
-    if cfg.asset_type != AssetClass.AUTO:
-        return cfg.asset_type
-    # Use the median ATR% over the series for a stable per-symbol classification.
-    valid = feat.atr_percent[feat.atr_percent > 0]
-    atr_pct = float(np.median(valid)) if valid.size else 2.0
-    return classify_asset(atr_pct)
-
-
-def _regime_label(r: eng.RegimeArrays, i: int) -> str:
-    if r.is_choppy[i]:
-        return "choppy"
-    if r.is_compressed[i]:
-        return "compressed"
-    if r.is_high_vol[i]:
-        return "high_vol"
-    if r.is_trending[i]:
-        return "trending"
-    return "neutral"
+MAX_LEVERAGE = 25.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,75 +39,37 @@ def _regime_label(r: eng.RegimeArrays, i: int) -> str:
 
 def run_backtest(
     underlying: str,
-    candles_1h: List[Candle],
-    candles_4h: Optional[List[Candle]],
-    btc_candles_1h: Optional[List[Candle]],
+    candles: List[Candle],
     cfg: TripleSTConfig,
     lookback_days: int,
     fee_pct: float = 0.05,
 ) -> TripleSTBacktestResult:
-    asset_class = AssetClass.LARGE
+    """Replay the strategy over `candles` (resampled to daily)."""
+    daily = resample_to_daily(candles)
     trades: List[BacktestTrade] = []
     equity_curve: List[EquityPoint] = []
 
-    if not candles_1h or len(candles_1h) < cfg.warmup_bars + 10:
-        return _empty_result(underlying, lookback_days, cfg, asset_class, len(candles_1h or []))
+    if len(daily) < cfg.warmup_bars + 5:
+        return _empty_result(underlying, lookback_days, cfg, len(daily))
 
-    # First pass with a default volume-MA period just to classify the asset,
-    # then recompute features with the resolved (asset-dependent) period.
-    feat = compute_features(candles_1h, ASSET_TABLE[AssetClass.LARGE].vol_ma_period)
-    asset_class = _resolve_asset_class(cfg, feat)
-    asset = ASSET_TABLE[asset_class]
-    # Recompute with the resolved volume-MA period (asset-dependent).
-    feat = compute_features(candles_1h, asset.vol_ma_period)
+    feat = compute_features(daily, cfg)
+    n = feat.n
 
-    regime = eng.build_regime(feat, asset)
-    cons = eng.build_consensus(feat, min_confirm=2)   # loosest; per-mode gate later
-    htf = HTFContext.build(candles_4h) if candles_4h else None
-    btc = BTCContext.build(btc_candles_1h) if btc_candles_1h else None
-
-    prot = ProtectionState(cfg=cfg, equity=cfg.account_equity)
-    equity_curve.append(EquityPoint(ts=int(feat.ts[cfg.warmup_bars]), equity=round(prot.equity, 2)))
+    equity = cfg.account_equity
+    equity_curve.append(EquityPoint(ts=int(feat.ts[cfg.warmup_bars]), equity=round(equity, 2)))
 
     pos: Optional[Position] = None
     pending: Optional[dict] = None      # {"signal_bar", "dir"}
-    cooldown_until = 0
-    open_fills: List[Fill] = []
 
-    # Fresh-flip tracking: enter only near the bar where the (mode-gated)
-    # consensus first arms in a direction — trend-following entries belong at the
-    # *start* of a trend, not mid-run. Re-entering an established trend mid-way is
-    # what drove ~80% of trades straight into the stop.
-    FRESH_WINDOW = 3
-    prev_gated = 0
-    flip_bar = -999
-
-    n = feat.n
     for i in range(cfg.warmup_bars, n):
-        day_key = int(feat.ts[i]) // 86_400_000
-        btc_move = btc.daily_move_pct(int(feat.ts[i])) if btc else 0.0
-
-        # Track consensus arming flips at the active mode's confirmation count.
-        _mc = MODE_TABLE[prot.current_mode].min_confirm
-        gd = int(cons.direction[i]) if int(cons.agree_count[i]) >= _mc else 0
-        if gd != 0 and gd != prev_gated:
-            flip_bar = i
-        prev_gated = gd
-
         # ── manage an open position ──
         if pos is not None and not pos.closed:
-            mode = MODE_TABLE[prot.current_mode]
-            fills = step_position(pos, feat, regime, cons, i, mode, asset, cfg, fee_pct)
-            open_fills.extend(fills)
-            if pos.closed:
-                trades.append(_finalize_trade(pos, open_fills))
-                pnl_usd = sum(f.pnl_usd for f in open_fills)
-                pnl_r = pnl_usd / pos.risk_usd if pos.risk_usd > 0 else 0.0
-                prot.register_trade(pnl_usd, pnl_r, i)
-                equity_curve.append(EquityPoint(ts=int(feat.ts[i]), equity=round(prot.equity, 2)))
-                last_reason = open_fills[-1].reason if open_fills else "stop_loss"
-                cooldown_until = i + cooldown_bars(last_reason, asset)
-                pos, open_fills = None, []
+            fill = step_position(pos, feat, i, cfg, fee_pct)
+            if fill is not None:
+                trades.append(_finalize_trade(pos, fill))
+                equity += fill.pnl_usd
+                equity_curve.append(EquityPoint(ts=int(feat.ts[i]), equity=round(equity, 2)))
+                pos = None
             continue
 
         # ── execute a pending entry on this bar's open ──
@@ -151,68 +82,58 @@ def run_backtest(
                 open_px = float(feat.open[i])
                 slip = abs(open_px - ref_close) / ref_close * 100.0 if ref_close > 0 else 999
                 if slip <= cfg.max_slippage:
-                    pos = _open_position(feat, regime, i, pending["dir"], cfg, asset, prot)
+                    pos = _open_position(feat, i, pending["dir"], cfg, equity)
                     pending = None
-                    open_fills = []
                     continue
                 # else keep pending until expiry
 
-        # ── arm a new entry when flat, off cooldown, and allowed ──
-        if pos is None and pending is None and i >= cooldown_until:
-            ok, _why = prot.can_trade(i, day_key, btc_move)
-            if ok:
-                mode = MODE_TABLE[prot.current_mode]
-                sig = eng.evaluate_at(
-                    feat, regime, cons, i, cfg, asset, mode, htf, btc,
-                    quality_threshold=prot.effective_quality_threshold(),
-                )
-                fresh = (i - flip_bar) <= FRESH_WINDOW and gd == sig.direction
-                if sig.entry_ok and sig.direction != 0 and fresh:
-                    pending = {"signal_bar": i, "dir": sig.direction}
+        # ── arm a new entry when flat ──
+        if pos is None and pending is None and warmup_ok(feat, i, cfg):
+            sig = evaluate_at(feat, i, cfg)
+            if sig.direction != 0:
+                pending = {"signal_bar": i, "dir": sig.direction}
 
     stats = _compute_stats(trades, equity_curve, cfg.account_equity)
     return TripleSTBacktestResult(
         underlying=underlying, lookback_days=lookback_days,
-        bars_evaluated=n - cfg.warmup_bars, config=cfg, asset_class=asset_class,
+        bars_evaluated=n - cfg.warmup_bars, config=cfg,
         stats=stats, trades=trades, equity_curve=equity_curve,
         timestamp_ms=int(time.time() * 1000),
     )
 
 
-def _open_position(feat, regime, i, direction, cfg, asset, prot) -> Position:
-    mode = MODE_TABLE[prot.current_mode]
-    plan = build_trade_plan(feat, regime, i, direction, cfg, asset, mode,
-                            size_mult=prot.size_multiplier())
-    # Use the actual fill (this bar's open) as the entry reference.
+def _open_position(feat: Features, i: int, direction: int, cfg: TripleSTConfig, equity: float) -> Position:
+    """Size off the *running* equity (compounding), fill at this bar's open."""
     entry = float(feat.open[i])
+    atr = max(float(feat.atr[i]), entry * 1e-4)
+    stop_dist = cfg.sl_atr_mult * atr
     long = direction == 1
-    stop = entry - plan.r_distance if long else entry + plan.r_distance
-    tp = entry + (plan.take_profit - plan.entry) if long else entry - (plan.entry - plan.take_profit)
-    partials = []
-    for r_mult, frac in mode.partials:
-        p = entry + r_mult * plan.r_distance if long else entry - r_mult * plan.r_distance
-        partials.append((p, frac))
+    stop = entry - stop_dist if long else entry + stop_dist
+
+    risk_usd = equity * (cfg.risk_percent / 100.0)
+    size_units = risk_usd / stop_dist if stop_dist > 0 else 0.0
+    notional = size_units * entry
+    margin_budget = max(1.0, equity * (cfg.max_position_pct / 100.0))
+    leverage = notional / margin_budget
+    if leverage > MAX_LEVERAGE:
+        scale = MAX_LEVERAGE / leverage
+        size_units *= scale
+        risk_usd = size_units * stop_dist            # actual risk after the cap
+
     return Position(
         direction=direction, entry=entry, entry_bar=i, entry_ts=int(feat.ts[i]),
-        size_units=plan.size_units, initial_sl=stop, current_sl=stop, take_profit=tp,
-        r_distance=plan.r_distance, risk_usd=plan.risk_usd, partials=partials,
-        mode_name=prot.current_mode.value,
+        size_units=size_units, stop_loss=stop, r_distance=stop_dist, risk_usd=risk_usd,
     )
 
 
-def _finalize_trade(pos: Position, fills: List[Fill]) -> BacktestTrade:
-    pnl_usd = sum(f.pnl_usd for f in fills)
-    wsum = sum(f.price * f.frac for f in fills)
-    fsum = sum(f.frac for f in fills) or 1.0
-    avg_exit = wsum / fsum
+def _finalize_trade(pos: Position, fill: Fill) -> BacktestTrade:
     return BacktestTrade(
         direction="long" if pos.direction == 1 else "short",
-        entry_ts=pos.entry_ts,
-        exit_ts=fills[-1].timestamp_ms,
-        entry_price=round(pos.entry, 4), exit_price=round(avg_exit, 4),
-        bars_held=pos.bars_held, pnl_usd=round(pnl_usd, 2),
-        pnl_r=round(pnl_usd / pos.risk_usd, 3) if pos.risk_usd > 0 else 0.0,
-        exit_reasons=[f.reason for f in fills], mode=pos.mode_name,
+        entry_ts=pos.entry_ts, exit_ts=fill.timestamp_ms,
+        entry_price=round(pos.entry, 4), exit_price=round(fill.price, 4),
+        bars_held=pos.bars_held, pnl_usd=round(fill.pnl_usd, 2),
+        pnl_r=round(fill.pnl_usd / pos.risk_usd, 3) if pos.risk_usd > 0 else 0.0,
+        exit_reason=fill.reason,
     )
 
 
@@ -255,12 +176,11 @@ def _compute_stats(trades, equity_curve, start_equity) -> BacktestStats:
     )
 
 
-def _empty_result(underlying, lookback_days, cfg, asset_class, n) -> TripleSTBacktestResult:
+def _empty_result(underlying, lookback_days, cfg, n) -> TripleSTBacktestResult:
     return TripleSTBacktestResult(
         underlying=underlying, lookback_days=lookback_days, bars_evaluated=0,
-        config=cfg, asset_class=asset_class,
-        stats=_compute_stats([], [], cfg.account_equity), trades=[], equity_curve=[],
-        timestamp_ms=int(time.time() * 1000),
+        config=cfg, stats=_compute_stats([], [], cfg.account_equity),
+        trades=[], equity_curve=[], timestamp_ms=int(time.time() * 1000),
     )
 
 
@@ -269,129 +189,61 @@ def _empty_result(underlying, lookback_days, cfg, asset_class, n) -> TripleSTBac
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _last_closed_bar(feat: Features) -> int:
+    """Index of the last fully-closed daily bar (drops a forming current day)."""
+    i = feat.n - 1
+    today = int(time.time() * 1000) // 86_400_000
+    if feat.n >= 2 and int(feat.ts[i]) // 86_400_000 >= today:
+        i -= 1
+    return i
+
+
 def evaluate_live(
     underlying: str,
-    candles_1h: List[Candle],
-    candles_4h: Optional[List[Candle]],
-    btc_candles_1h: Optional[List[Candle]],
+    candles: List[Candle],
     cfg: TripleSTConfig,
-    prot: Optional[ProtectionState] = None,
 ) -> StrategyEvaluation:
-    """Evaluate the strategy at the last closed bar and build a UI snapshot."""
-    if not candles_1h or len(candles_1h) < cfg.warmup_bars + 2:
-        return _warming_eval(underlying, cfg, candles_1h)
+    """Evaluate the strategy at the last closed daily bar and build a UI snapshot."""
+    daily = resample_to_daily(candles)
+    if len(daily) < cfg.warmup_bars + 2:
+        return _warming_eval(underlying, cfg, daily)
 
-    feat = compute_features(candles_1h, ASSET_TABLE[AssetClass.LARGE].vol_ma_period)
-    asset_class = _resolve_asset_class(cfg, feat)
-    asset = ASSET_TABLE[asset_class]
-    feat = compute_features(candles_1h, asset.vol_ma_period)
+    feat = compute_features(daily, cfg)
+    i = _last_closed_bar(feat)
+    sig = evaluate_at(feat, i, cfg)
+    ready = warmup_ok(feat, i, cfg)
 
-    regime = eng.build_regime(feat, asset)
-    cons = eng.build_consensus(feat, min_confirm=2)
-    htf = HTFContext.build(candles_4h) if candles_4h else None
-    btc = BTCContext.build(btc_candles_1h) if btc_candles_1h else None
+    direction = sig.direction if ready else 0
+    dir_str = "long" if direction == 1 else "short" if direction == -1 else "none"
 
-    if prot is None:
-        prot = ProtectionState(cfg=cfg, equity=cfg.account_equity)
-    mode = MODE_TABLE[prot.current_mode]
-
-    i = feat.n - 1
-    eff_thr = prot.effective_quality_threshold()
-    # Strict auto-arm signal (gated by the mode's min_confirm + all filters).
-    sig = eng.evaluate_at(feat, regime, cons, i, cfg, asset, mode, htf, btc, quality_threshold=eff_thr)
-
-    day_key = int(feat.ts[i]) // 86_400_000
-    btc_move = btc.daily_move_pct(int(feat.ts[i])) if btc else 0.0
-    can_trade, block_reason = prot.can_trade(i, day_key, btc_move)
-
-    st_views = [
-        STLineView(period=ST_CONFIGS[k][0], multiplier=ST_CONFIGS[k][1],
-                   value=round(float(feat.st_lines[k][i]), 4), trend=int(feat.st_trends[k][i]))
-        for k in range(len(ST_CONFIGS))
-    ]
-
-    # Display + manual-execution use the consensus *lean* (2/3 majority), so a
-    # directional setup with a good quality score can be acted on by the operator
-    # even when it hasn't strictly armed (e.g. only 2/3 STs agree, or one filter
-    # is off-side). The strict `entry_ok` flag still drives the "ARMED" badge.
-    lean = int(cons.direction[i])
-    if lean != 0:
-        qb = eng.lean_quality_score(feat, regime, cons, i, lean, htf)
-        flt = eng.evaluate_filters(feat, regime, i, lean, cfg, asset, htf, btc)
-        plan = build_trade_plan(feat, regime, i, lean, cfg, asset, mode, size_mult=prot.size_multiplier())
+    trade_plan: Optional[TradePlanView] = None
+    if direction != 0:
+        plan = build_trade_plan(feat, i, direction, cfg)
         trade_plan = TradePlanView(**plan.__dict__)
-        q_pass = (not cfg.use_quality_score) or (qb.total >= eff_thr)
-    else:
-        qb = sig.quality
-        flt = []
-        trade_plan = None
-        q_pass = False
 
-    executable = bool(trade_plan is not None and can_trade)
-    dd_pct = (prot.peak_equity - prot.equity) / max(1.0, prot.peak_equity) * 100.0
-    dir_str = "long" if lean == 1 else "short" if lean == -1 else "none"
-
-    # Reason: prefer the strict signal's wording when armed; otherwise explain
-    # what's missing so the operator knows it's a discretionary (manual) trade.
-    if not can_trade:
-        reason = block_reason
-    elif sig.entry_ok:
-        reason = sig.reason
-    elif lean != 0:
-        off = [f.name for f in flt if not f.passed]
-        bits = []
-        if int(cons.agree_count[i]) < mode.min_confirm:
-            bits.append(f"{int(cons.agree_count[i])}/3 ST (need {mode.min_confirm})")
-        if not q_pass:
-            bits.append(f"Q {qb.total:.0f}<{eff_thr:.0f}")
-        if off:
-            bits.append("filters: " + ", ".join(off))
-        reason = "manual only — " + ("; ".join(bits) if bits else "armed") if not sig.entry_ok else sig.reason
-    else:
-        reason = sig.reason
+    reason = sig.reason if ready else f"warming up — need ≥{cfg.warmup_bars} daily bars"
 
     return StrategyEvaluation(
-        underlying=underlying, timestamp_ms=int(feat.ts[i]), close=float(feat.close[i]),
-        effective_mode=prot.current_mode, asset_class=asset_class,
-        direction=dir_str, raw_long=lean == 1, raw_short=lean == -1, arrow=sig.arrow,
-        consensus_count=int(cons.agree_count[i]), supertrends=st_views,
-        quality=QualityView(
-            consensus=qb.consensus, volume=qb.volume, htf=qb.htf,
-            regime=qb.regime, momentum=qb.momentum, bonus=qb.bonus,
-            total=round(qb.total, 1), threshold=eff_thr, passed=q_pass,
-        ),
-        filters=[FilterView(name=f.name, passed=f.passed, detail=f.detail) for f in flt],
-        regime=RegimeView(
-            is_compressed=bool(regime.is_compressed[i]), is_high_vol=bool(regime.is_high_vol[i]),
-            is_trending=bool(regime.is_trending[i]), is_choppy=bool(regime.is_choppy[i]),
-            post_squeeze=bool(regime.post_squeeze[i]), adx=round(float(feat.adx[i]), 1),
-            chop=round(float(feat.chop[i]), 1), bb_ratio=round(float(regime.bb_ratio[i]), 3),
-            label=_regime_label(regime, i),
-        ),
-        entry_ok=bool(sig.entry_ok and can_trade), executable=executable,
-        can_trade=can_trade, block_reason=block_reason, reason=reason, trade_plan=trade_plan,
-        equity=round(prot.equity, 2), drawdown_pct=round(dd_pct, 2),
-        consecutive_losses=prot.consecutive_losses, size_multiplier=round(prot.size_multiplier(), 3),
-        effective_quality_threshold=eff_thr, config=cfg, warming_up=False,
+        underlying=underlying, timestamp_ms=int(feat.ts[i]), close=sig.close,
+        timeframe=cfg.timeframe, direction=dir_str,
+        sma=round(sig.sma, 4), ema=round(sig.ema, 4),
+        rsi=round(sig.rsi, 2), adx=round(sig.adx, 2),
+        above_sma=sig.above_sma, above_ema=sig.above_ema, rsi_gt_adx=sig.rsi_gt_adx,
+        long_ok=sig.long_ok, short_ok=sig.short_ok,
+        entry_ok=bool(direction != 0), executable=bool(trade_plan is not None),
+        can_trade=True, block_reason="", reason=reason, trade_plan=trade_plan,
+        equity=round(cfg.account_equity, 2), config=cfg, warming_up=not ready,
     )
 
 
-def _warming_eval(underlying, cfg, candles_1h) -> StrategyEvaluation:
-    close = float(candles_1h[-1].close) if candles_1h else 0.0
-    ts = int(candles_1h[-1].timestamp_ms) if candles_1h else int(time.time() * 1000)
+def _warming_eval(underlying, cfg, daily) -> StrategyEvaluation:
+    close = float(daily[-1].close) if daily else 0.0
+    ts = int(daily[-1].timestamp_ms) if daily else int(time.time() * 1000)
     return StrategyEvaluation(
-        underlying=underlying, timestamp_ms=ts, close=close,
-        effective_mode=cfg.mode, asset_class=AssetClass.LARGE,
-        direction="none", raw_long=False, raw_short=False, arrow=False,
-        consensus_count=0, supertrends=[],
-        quality=QualityView(consensus=0, volume=0, htf=0, regime=0, momentum=0, bonus=0,
-                            total=0, threshold=float(cfg.quality_threshold), passed=False),
-        filters=[], regime=RegimeView(is_compressed=False, is_high_vol=False, is_trending=False,
-                                      is_choppy=False, post_squeeze=False, adx=0, chop=50,
-                                      bb_ratio=1.0, label="warmup"),
+        underlying=underlying, timestamp_ms=ts, close=close, timeframe=cfg.timeframe,
+        direction="none", sma=0.0, ema=0.0, rsi=0.0, adx=0.0,
+        above_sma=False, above_ema=False, rsi_gt_adx=False, long_ok=False, short_ok=False,
         entry_ok=False, executable=False, can_trade=False, block_reason="warming up",
-        reason=f"need ≥{cfg.warmup_bars + 2} bars", trade_plan=None,
-        equity=cfg.account_equity, drawdown_pct=0.0, consecutive_losses=0,
-        size_multiplier=1.0, effective_quality_threshold=float(cfg.quality_threshold),
-        config=cfg, warming_up=True,
+        reason=f"need ≥{cfg.warmup_bars + 2} daily bars", trade_plan=None,
+        equity=round(cfg.account_equity, 2), config=cfg, warming_up=True,
     )

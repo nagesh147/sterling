@@ -1,8 +1,9 @@
-"""Triple SuperTrend strategy API.
+"""Daily SMA/EMA + RSI/ADX strategy API.
 
-Self-contained surface for the new strategy module:
-  GET  /strategy/config           — current config + mode/asset presets
+Self-contained surface for the strategy module:
+  GET  /strategy/config           — current config
   POST /strategy/config           — update the live config (held in app.state)
+  GET  /strategy/signals          — scan every servable instrument
   GET  /strategy/evaluate/{sym}   — live evaluation snapshot for the dashboard
   POST /strategy/backtest         — historical replay over `lookback_days`
   POST /strategy/execute          — route the live trade plan to paper/live
@@ -22,12 +23,10 @@ from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
 from app.api.v1.endpoints.directional import _adapter_can_serve
 
-from app.engines.triple_st.config import (
-    TripleSTConfig, MODE_TABLE, ASSET_TABLE, StrategyMode, AssetClass, default_config,
-)
+from app.engines.triple_st.config import TripleSTConfig, default_config
 from app.engines.triple_st import backtest as bt
 from app.engines.triple_st.schemas import (
-    StrategyEvaluation, ConfigResponse, ModePresetView, AssetPresetView,
+    StrategyEvaluation, ConfigResponse,
     BacktestRequest, TripleSTBacktestResult, ExecuteRequest, ExecuteResponse,
     SignalSummary, SignalScanResponse,
 )
@@ -46,43 +45,26 @@ def _get_config(request: Request) -> TripleSTConfig:
     return cfg
 
 
-def _presets() -> ConfigResponse:
-    modes = [
-        ModePresetView(
-            mode=m, min_confirm=p.min_confirm, risk_mult=p.risk_mult,
-            be_trigger_r=p.be_trigger_r, trail_source=p.trail_source,
-            partials=list(p.partials),
-        )
-        for m, p in MODE_TABLE.items()
-    ]
-    assets = [
-        AssetPresetView(
-            asset_class=a, sl_mult=p.sl_mult, tp_mult=p.tp_mult, min_adx=p.min_adx,
-            squeeze_threshold=p.squeeze_threshold, short_modifier=p.short_modifier,
-        )
-        for a, p in ASSET_TABLE.items()
-    ]
-    return modes, assets
-
-
 @router.get("/config", response_model=ConfigResponse)
 async def get_config(request: Request) -> ConfigResponse:
-    cfg = _get_config(request)
-    modes, assets = _presets()
-    return ConfigResponse(config=cfg, mode_presets=modes, asset_presets=assets)
+    return ConfigResponse(config=_get_config(request))
 
 
 @router.post("/config", response_model=ConfigResponse)
 async def set_config(body: TripleSTConfig, request: Request) -> ConfigResponse:
     request.app.state.triple_st_config = body
-    modes, assets = _presets()
-    return ConfigResponse(config=body, mode_presets=modes, asset_presets=assets)
+    return ConfigResponse(config=body)
 
 
-# ─── candle fetch helper (mirrors the directional endpoint conventions) ──────
+# ─── candle fetch (daily) ────────────────────────────────────────────────────
 
 
-async def _fetch_candles(request: Request, sym: str, lookback_days: int):
+def _daily_limit(cfg: TripleSTConfig) -> int:
+    """Daily bars to fetch: SMA period + warm-up + a comfortable buffer."""
+    return min(cfg.sma_period + cfg.warmup_bars + 80, 1000)
+
+
+async def _fetch_daily(request: Request, sym: str, cfg: TripleSTConfig):
     inst = registry.get_instrument(sym)
     if not inst:
         raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
@@ -90,42 +72,25 @@ async def _fetch_candles(request: Request, sym: str, lookback_days: int):
     if not _adapter_can_serve(inst, src):
         raise HTTPException(status_code=400, detail=f"{sym} not available on {src} data source")
     adapter = _adm.get_adapter() or request.app.state.adapter
-
-    limit_1h = min(lookback_days * 24 + 150, 5000)
-    limit_4h = min(lookback_days * 6 + 60, 1000)
     try:
-        c1h = await adapter.get_candles(inst, "1H", limit=limit_1h)
-        c4h = await adapter.get_candles(inst, "4H", limit=limit_4h)
+        candles = await adapter.get_candles(inst, "1D", limit=_daily_limit(cfg))
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
-
-    # BTC reference (for the correlation / black-swan filters). Skip if sym is BTC.
-    btc = None
-    if sym != "BTC":
-        binst = registry.get_instrument("BTC")
-        if binst and _adapter_can_serve(binst, src):
-            try:
-                btc = await adapter.get_candles(binst, "1H", limit=limit_1h)
-            except Exception:
-                btc = None
-    else:
-        btc = c1h
-    return inst, c1h, c4h, btc
+    return inst, candles
 
 
-# ─── evaluate ────────────────────────────────────────────────────────────────
+# ─── evaluate / scan ─────────────────────────────────────────────────────────
 
 
 def _to_summary(ev: StrategyEvaluation) -> SignalSummary:
     p = ev.trade_plan
     return SignalSummary(
         underlying=ev.underlying, close=ev.close, direction=ev.direction,
-        entry_ok=ev.entry_ok, arrow=ev.arrow, consensus_count=ev.consensus_count,
-        quality_total=ev.quality.total, quality_pass=ev.quality.passed,
-        regime_label=ev.regime.label, effective_mode=ev.effective_mode,
-        asset_class=ev.asset_class, executable=ev.executable,
+        entry_ok=ev.entry_ok, executable=ev.executable,
+        sma=ev.sma, ema=ev.ema, rsi=ev.rsi, adx=ev.adx,
+        above_sma=ev.above_sma, above_ema=ev.above_ema, rsi_gt_adx=ev.rsi_gt_adx,
         entry=p.entry if p else None, stop_loss=p.stop_loss if p else None,
-        take_profit=p.take_profit if p else None, rr=p.rr if p else None,
+        r_distance=p.r_distance if p else None,
         risk_pct=p.risk_pct if p else None, leverage=p.leverage if p else None,
         notional_usd=p.notional_usd if p else None, size_units=p.size_units if p else None,
         reason=ev.reason, timestamp_ms=ev.timestamp_ms,
@@ -134,57 +99,39 @@ def _to_summary(ev: StrategyEvaluation) -> SignalSummary:
 
 @router.get("/signals", response_model=SignalScanResponse)
 async def signals(request: Request, armed_only: bool = False) -> SignalScanResponse:
-    """Scan EVERY servable instrument and return a compact signal per symbol.
-
-    Candle fetches run concurrently (bounded) and the BTC reference series is
-    fetched once and shared across all symbols' correlation/black-swan filters.
-    """
+    """Scan EVERY servable instrument and return a compact signal per symbol."""
     cfg = _get_config(request)
     src = _adm.get_data_source()
     adapter = _adm.get_adapter() or request.app.state.adapter
     now_ms = int(time.time() * 1000)
+    limit = _daily_limit(cfg)
 
     instruments = [i for i in registry.list_instruments() if _adapter_can_serve(i, src)]
-
-    # Shared BTC reference (fetched once).
-    btc = None
-    binst = registry.get_instrument("BTC")
-    if binst and _adapter_can_serve(binst, src):
-        try:
-            btc = await adapter.get_candles(binst, "1H", limit=900)
-        except Exception:
-            btc = None
-
     sem = asyncio.Semaphore(6)
 
     async def _one(inst) -> SignalSummary:
         sym = inst.underlying
         async with sem:
             try:
-                c1h = await adapter.get_candles(inst, "1H", limit=900)
-                c4h = await adapter.get_candles(inst, "4H", limit=220)
+                candles = await adapter.get_candles(inst, "1D", limit=limit)
             except Exception as exc:
                 return SignalSummary(
                     underlying=sym, close=0.0, direction="none", entry_ok=False,
-                    arrow=False, consensus_count=0, quality_total=0.0, quality_pass=False,
-                    regime_label="error", effective_mode=cfg.mode, asset_class=AssetClass.LARGE,
                     reason="candle fetch failed", error=str(exc)[:80], timestamp_ms=now_ms,
                 )
-        ref_btc = c1h if sym == "BTC" else btc
-        ev = bt.evaluate_live(sym, c1h, c4h, ref_btc, cfg)
+        ev = bt.evaluate_live(sym, candles, cfg)
         return _to_summary(ev)
 
     results: List[SignalSummary] = await asyncio.gather(*[_one(i) for i in instruments])
 
-    # Armed first, then highest quality, then by |consensus|.
-    results.sort(key=lambda s: (s.entry_ok, s.quality_total, s.consensus_count), reverse=True)
+    # Armed first, then by symbol for a stable order.
+    results.sort(key=lambda s: (s.entry_ok, s.underlying), reverse=True)
     if armed_only:
         results = [s for s in results if s.entry_ok]
 
     return SignalScanResponse(
         signals=results, count=len(results),
-        armed_count=sum(1 for s in results if s.entry_ok),
-        effective_mode=cfg.mode, timestamp_ms=now_ms,
+        armed_count=sum(1 for s in results if s.entry_ok), timestamp_ms=now_ms,
     )
 
 
@@ -192,8 +139,8 @@ async def signals(request: Request, armed_only: bool = False) -> SignalScanRespo
 async def evaluate(underlying: str, request: Request) -> StrategyEvaluation:
     sym = underlying.upper()
     cfg = _get_config(request)
-    _inst, c1h, c4h, btc = await _fetch_candles(request, sym, lookback_days=30)
-    return bt.evaluate_live(sym, c1h, c4h, btc, cfg)
+    _inst, candles = await _fetch_daily(request, sym, cfg)
+    return bt.evaluate_live(sym, candles, cfg)
 
 
 # ─── backtest ────────────────────────────────────────────────────────────────
@@ -202,9 +149,8 @@ async def evaluate(underlying: str, request: Request) -> StrategyEvaluation:
 def _store_candles(sym: str, resolution: str, lookback_days: int):
     """Load candles from the local OHLCV store (years of history) as `Candle`s.
 
-    The live adapter caps at ~5000 bars/request (~208 days of 1H); the store
-    holds ~2 years, so long backtests read from here. Store keys are `<SYM>USD`
-    with lowercase resolutions and `time` in seconds.
+    The store holds intraday history (~2y of 1H); `run_backtest` resamples to
+    daily. Store keys are `<SYM>USD` with lowercase resolutions, `time` in s.
     """
     from app.services import ohlcv_store
     from app.schemas.market import Candle
@@ -228,16 +174,16 @@ async def backtest(body: BacktestRequest, request: Request) -> TripleSTBacktestR
     sym = body.underlying.upper()
     cfg = body.config or _get_config(request)
 
-    # Prefer the local store (deep history). Fall back to the live adapter when
-    # the store has too little for this symbol.
-    c1h = _store_candles(sym, "1h", body.lookback_days)
-    c4h = _store_candles(sym, "4h", body.lookback_days)
-    btc = c1h if sym == "BTC" else _store_candles("BTC", "1h", body.lookback_days)
+    # Prefer the local store (deep 1H history → resampled to daily). Fall back to
+    # the adapter's native daily candles when the store has too little.
+    candles = _store_candles(sym, "1h", body.lookback_days)
+    if len(candles) < (cfg.warmup_bars + 5) * 24:
+        try:
+            _inst, candles = await _fetch_daily(request, sym, cfg)
+        except HTTPException:
+            pass
 
-    if len(c1h) < cfg.warmup_bars + 50:
-        _inst, c1h, c4h, btc = await _fetch_candles(request, sym, body.lookback_days)
-
-    return bt.run_backtest(sym, c1h, c4h, btc, cfg, body.lookback_days)
+    return bt.run_backtest(sym, candles, cfg, body.lookback_days)
 
 
 # ─── execute (route live trade plan through the existing order path) ─────────
@@ -247,28 +193,18 @@ async def backtest(body: BacktestRequest, request: Request) -> TripleSTBacktestR
 async def execute(body: ExecuteRequest, request: Request) -> ExecuteResponse:
     sym = body.underlying.upper()
     cfg = _get_config(request)
-    _inst, c1h, c4h, btc = await _fetch_candles(request, sym, lookback_days=30)
-    ev = bt.evaluate_live(sym, c1h, c4h, btc, cfg)
+    _inst, candles = await _fetch_daily(request, sym, cfg)
+    ev = bt.evaluate_live(sym, candles, cfg)
 
     now_ms = int(time.time() * 1000)
-    # Execution is always an explicit operator action, so we don't require the
-    # strict auto-arm (entry_ok). We need a directional plan and no hard
-    # capital-protection halt (daily-loss / circuit-breaker / black-swan).
     if ev.trade_plan is None:
         return ExecuteResponse(
             accepted=False, mode="paper", underlying=sym, direction=ev.direction,
             size_units=0.0, notional_usd=0.0, status="no_direction",
             reason=f"no directional setup: {ev.reason}", timestamp_ms=now_ms,
         )
-    if not ev.can_trade:
-        return ExecuteResponse(
-            accepted=False, mode="paper", underlying=sym, direction=ev.direction,
-            size_units=0.0, notional_usd=0.0, status="halted",
-            reason=f"capital protection: {ev.block_reason}", timestamp_ms=now_ms,
-        )
 
     plan = ev.trade_plan
-    manual = not ev.entry_ok
     # Size in integer contracts; reject sub-1-contract plans.
     contracts = max(0, int(round(plan.size_units)))
     if contracts < 1:
@@ -279,14 +215,15 @@ async def execute(body: ExecuteRequest, request: Request) -> ExecuteResponse:
         )
 
     # Delegate to the existing live/paper order path (reuses safety + brackets).
+    # No fixed take-profit: the strategy exits on the RSI/ADX signal flip.
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
 
     order = LiveOrderRequest(
         underlying=sym, direction=plan.direction, instrument_type="futures",
         size=float(contracts), leverage=plan.leverage, order_type="market",
-        stop_loss=plan.stop_loss, take_profit=plan.take_profit,
-        notes=f"[TRIPLE-ST{'/MANUAL' if manual else ''}] {ev.effective_mode.value} "
-              f"Q={ev.quality.total:.0f} {ev.consensus_count}/3ST",
+        stop_loss=plan.stop_loss, take_profit=None,
+        notes=f"[SMA/EMA·RSI/ADX] {plan.direction} "
+              f"RSI={ev.rsi:.0f} ADX={ev.adx:.0f}",
     )
     resp = await place_live_order(order, request)
 

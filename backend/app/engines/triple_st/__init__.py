@@ -1,34 +1,23 @@
-"""Triple SuperTrend strategy — self-contained trend-following system.
+"""Daily SMA/EMA + RSI/ADX strategy — self-contained, long+short.
 
-A clean-seam strategy module built on the kept indicator/backtest/risk infra.
-It is deliberately decoupled from the reset `directional/` stubs and the old
-options-oriented schemas: everything it needs lives under this package.
+A clean, minimal strategy module built on the kept indicator/backtest infra.
+
+Rule (1D timeframe)
+-------------------
+    Long  entry : close > SMA(50) and close > EMA(7) and RSI(2) > ADX(2)
+    Long  exit  : RSI(2) < ADX(2)
+    Short entry : close < SMA(50) and close < EMA(7) and RSI(2) < ADX(2)
+    Short exit  : RSI(2) > ADX(2)
 
 Public surface
 --------------
-- `config`   : modes, asset-class tables, tunable `TripleSTConfig`
-- `features` : one-shot indicator computation over a candle series
-- `engine`   : per-bar evaluation (regime → consensus → quality → filters →
-               sizing → exits) plus the live capital-protection state machine
-- `backtest` : bar-by-bar historical replay (next-bar-open fills, slippage,
-               exit-priority ladder, equity curve + stats)
+- `config`   : tunable `TripleSTConfig` (periods, direction toggles, risk)
+- `features` : daily-candle indicator computation + 1H→1D resampling
+- `engine`   : per-bar signal evaluation + risk-based trade plan
+- `backtest` : bar-by-bar historical replay + live evaluation snapshot
 
 The FastAPI surface lives in `app/api/v1/endpoints/strategy.py`.
 """
-from app.engines.triple_st.config import (
-    StrategyMode,
-    AssetClass,
-    MODE_TABLE,
-    ASSET_TABLE,
-    classify_asset,
-    default_config,
-)
+from app.engines.triple_st.config import TripleSTConfig, default_config
 
-__all__ = [
-    "StrategyMode",
-    "AssetClass",
-    "MODE_TABLE",
-    "ASSET_TABLE",
-    "classify_asset",
-    "default_config",
-]
+__all__ = ["TripleSTConfig", "default_config"]
