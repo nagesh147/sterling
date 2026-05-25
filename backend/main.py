@@ -1145,7 +1145,11 @@ def create_app() -> FastAPI:
     app.include_router(analytics_baseline_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
     app.include_router(trading_router, prefix="/api/v1")
-    
+
+    # Triple SuperTrend strategy (self-contained module)
+    from app.api.v1.endpoints.strategy import router as strategy_router
+    app.include_router(strategy_router, prefix="/api/v1")
+
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream
     app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])

@@ -15,6 +15,7 @@ import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
+import { StrategyTab } from '../components/strategy/StrategyTab';
 import '../styles/terminal.css';
 
 function CbChip() {
@@ -128,7 +129,7 @@ export function SimpleTerminal() {
   const underlying = useSelectedUnderlying();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
-  const [activeSection, setActiveSection] = useState<'signals' | 'positions' | 'backtest' | 'calibration'>('signals');
+  const [activeSection, setActiveSection] = useState<'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration'>('strategy');
 
   return (
     <div className="term-root">
@@ -235,11 +236,12 @@ export function SimpleTerminal() {
       }}>
         {/* Section tabs */}
         {([
+          ['strategy',    'TRIPLE ST'],
           ['signals',     'SIGNALS'],
           ['positions',   'POSITIONS'],
           ['backtest',    'BACKTEST'],
           ['calibration', 'CALIBRATION'],
-        ] as ['signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
+        ] as ['strategy' | 'signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setActiveSection(id)}
@@ -287,9 +289,15 @@ export function SimpleTerminal() {
 
       {/* Main content */}
       <div style={{ flex: 1, overflow: 'auto', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--t-border)' }}>
-          <V4AnalyticsDashboard activeSymbol={underlying} />
-        </div>
+        {/* V4 Analytics shown on every section except the Triple ST tab (keeps it focused on signals) */}
+        {activeSection !== 'strategy' && (
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--t-border)' }}>
+            <V4AnalyticsDashboard activeSymbol={underlying} />
+          </div>
+        )}
+        {activeSection === 'strategy' && (
+          <StrategyTab />
+        )}
         {activeSection === 'signals' && (
           <div className="term-signals-wrap" style={{ flex: 1, minHeight: 0 }}>
             <SignalsTable />
