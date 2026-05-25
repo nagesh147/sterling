@@ -420,8 +420,9 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
   };
 
   const data = scanQ.data;
-  const longs = data?.signals.filter((s) => s.direction === 'long').length ?? 0;
   const shorts = data?.signals.filter((s) => s.direction === 'short').length ?? 0;
+  // Eligible coins in an uptrend, waiting for RSI to dip oversold (the live watchlist).
+  const watching = data?.signals.filter((s) => s.in_uptrend && !s.entry_ok).length ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -450,9 +451,9 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
       {/* summary tiles */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <SummaryTile label="ARMED" value={String(data?.armed_count ?? '–')} color={(data?.armed_count ?? 0) > 0 ? 'var(--t-green)' : 'var(--t-bright)'} />
+        <SummaryTile label="WATCHING" value={String(watching)} color={watching > 0 ? 'var(--t-blue)' : 'var(--t-bright)'} />
         <SummaryTile label="SCANNED" value={String(data?.count ?? '–')} />
-        <SummaryTile label="LONG" value={String(longs)} color="var(--t-green)" />
-        <SummaryTile label="SHORT" value={String(shorts)} color="var(--t-red)" />
+        {shorts > 0 && <SummaryTile label="SHORT" value={String(shorts)} color="var(--t-red)" />}
       </div>
 
       {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
