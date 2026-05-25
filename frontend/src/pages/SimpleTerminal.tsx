@@ -236,7 +236,7 @@ export function SimpleTerminal() {
       }}>
         {/* Section tabs */}
         {([
-          ['strategy',    'TRIPLE ST'],
+          ['strategy',    'RSI MEAN-REV'],
           ['signals',     'SIGNALS'],
           ['positions',   'POSITIONS'],
           ['backtest',    'BACKTEST'],
@@ -289,7 +289,7 @@ export function SimpleTerminal() {
 
       {/* Main content */}
       <div style={{ flex: 1, overflow: 'auto', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
-        {/* V4 Analytics shown on every section except the Triple ST tab (keeps it focused on signals) */}
+        {/* V4 Analytics shown on every section except the strategy tab (keeps it focused on signals) */}
         {activeSection !== 'strategy' && (
           <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--t-border)' }}>
             <V4AnalyticsDashboard activeSymbol={underlying} />
