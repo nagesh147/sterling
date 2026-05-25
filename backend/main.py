@@ -960,6 +960,18 @@ async def lifespan(app: FastAPI):
         _router_mode = "live"
     app.state.algo_router_mode = _router_mode
 
+    # Restore persisted scalping config (survives server restarts)
+    from app.engines.scalping.config import ScalpingConfig as _SC, default_config as _default_sc
+    _saved_sc = get_config("scalping_config")
+    if _saved_sc:
+        try:
+            app.state.scalping_config = _SC.model_validate_json(_saved_sc)
+            log.info("Restored scalping config from DB")
+        except Exception:
+            app.state.scalping_config = _default_sc()
+    else:
+        app.state.scalping_config = _default_sc()
+
     # Restore persisted Telegram config (survives server restarts)
     from app.services.notifications import telegram as _telegram_svc
     saved_tg_token = get_config("telegram_bot_token")
@@ -1149,6 +1161,10 @@ def create_app() -> FastAPI:
     # Triple SuperTrend strategy (self-contained module)
     from app.api.v1.endpoints.strategy import router as strategy_router
     app.include_router(strategy_router, prefix="/api/v1")
+
+    # Scalping strategies (Price Action / SMC / MA Crossover)
+    from app.api.v1.endpoints.scalping import router as scalping_router
+    app.include_router(scalping_router, prefix="/api/v1")
 
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream

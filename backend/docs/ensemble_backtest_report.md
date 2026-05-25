@@ -1,5 +1,7 @@
 # Sterling v4 — Ensemble Scoring Strategy Backtest Report
 
+> **⚠️ CORRECTION (2026-05-25):** The PF < 1.0 results across this report are caused by **exit logic overfitting, not signal failure**. The raw Triple ST signal on 4H achieves PF = 1.064–1.282 with simple ST3 trailing exits — but the full system's exit stack (fixed TP, partials, breakeven) cuts winners short, destroying the edge. See [Overfitting Diagnosis](OVERFITTING_DIAGNOSIS_20260525.md) for root cause analysis and confirmed fixes. The ensemble aggregation is not the primary problem; exits are.
+
 **Generated:** 2026-05-24
 **Data:** Real OHLCV from `sterling_paper.db` — 734 days (May 2024 → May 2026)
 **Assets:** BTCUSD, ETHUSD
@@ -315,6 +317,8 @@ Both strategies produce Sharpe −1.5 to −2.5 on 1h BTC and ETH. This is a **r
 
 ## Recommendation
 
+> **UPDATED (2026-05-25):** The overfitting diagnosis reveals these strategy-level recommendations are secondary. **Exit logic fixes** (disable BE, remove partials, widen stops) should be applied first — before changing aggregation strategy. The raw signal has edge (PF = 1.064–1.282 on 4H); the exit stack is what's killing it. See [Overfitting Diagnosis](OVERFITTING_DIAGNOSIS_20260525.md).
+
 | Timeframe | Recommended Strategy | Confidence |
 |-----------|---------------------|------------|
 | 5m | `by_edge_max_linear_agree` (ETH) / `unweighted_mean` (BTC) | Medium — BTC 5m prefers unweighted |
@@ -323,8 +327,9 @@ Both strategies produce Sharpe −1.5 to −2.5 on 1h BTC and ETH. This is a **r
 | 1h | Neither — disable | High — both lose badly |
 | 4h | Neither — disable | Medium — insufficient edge |
 
-**Next steps:**
-1. Investigate 1h regime transitions — the track signal churn is destroying performance
-2. Run `by_edge_max_linear_agree` on ETHUSD/5m with live paper trading
-3. Increase lookback from 80 to 120 bars on 30m+ timeframes to improve regime stability
-4. Add a minimum agreement requirement (≥2 tracks must agree) for `unweighted_mean` as a hybrid improvement
+**Next steps (revised):**
+1. **Immediate:** Apply exit logic fixes (disable BE, remove partials, widen stops to 2.5× ATR, relax to 2/3 consensus)
+2. Re-run walk-forward backtest with fixed exits to measure true PF improvement
+3. Only after exit fixes are validated, test aggregation strategy changes (`unweighted_mean` vs `by_edge_max_linear_agree`)
+4. Disable 1H timeframe entirely (raw diagnostic confirms no edge: PF = 0.788–0.916)
+5. Focus 4H as primary signal timeframe (raw PF = 1.064–1.282 with simple ST3 trailing)

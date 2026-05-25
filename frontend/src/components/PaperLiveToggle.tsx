@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
 import { api } from '../utils/api';
 
-type ModalView = 'none' | 'go-live-confirm' | 'add-keys';
+type ModalView = 'none' | 'go-live-confirm';
 type Status = { type: 'idle'|'saving'|'success'|'error'; msg: string };
 
 export function PaperLiveToggle() {
@@ -12,15 +12,13 @@ export function PaperLiveToggle() {
   const update  = useUpdateExchange();
 
   const [modal, setModal]         = useState<ModalView>('none');
-  const [apiKey, setApiKey]       = useState('');
-  const [apiSecret, setApiSecret] = useState('');
   const [status, setStatus]       = useState<Status>({ type: 'idle', msg: '' });
   const [testStatus, setTestStatus] = useState<{ ok: boolean; msg: string; hint?: string } | null>(null);
   const [testing, setTesting]     = useState(false);
 
   const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive  = !!(delta?.has_credentials && !delta.is_paper);
-  const isShadow = !!(delta?.has_credentials && delta.is_paper);  // is_paper=true + keys = shadow
+  const isPaper = delta ? delta.is_paper : true;
   const hasKeys = !!delta?.has_credentials;
   const keyHint = delta?.api_key_hint ?? '';
   const saving  = status.type === 'saving';
@@ -28,6 +26,7 @@ export function PaperLiveToggle() {
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ['exchanges'] });
     qc.invalidateQueries({ queryKey: ['config-info'] });
+    qc.invalidateQueries({ queryKey: ['signals-all'] });
     qc.invalidateQueries({ queryKey: ['positions'] });
     qc.invalidateQueries({ queryKey: ['positions', 'live'] });
     qc.invalidateQueries({ queryKey: ['positions', 'paper'] });
@@ -52,10 +51,9 @@ export function PaperLiveToggle() {
   }, [hasKeys]);
 
   const handleLiveClick = () => {
-    if (isLive) return;
+    if (isLive || !hasKeys) return;
     setStatus({ type: 'idle', msg: '' });
     setTestStatus(null);
-    if (!hasKeys) { setModal('add-keys'); return; }
     setModal('go-live-confirm');
   };
 
@@ -65,53 +63,29 @@ export function PaperLiveToggle() {
       return;
     }
     setStatus({ type: 'saving', msg: 'Switching to Live…' });
-    update.mutate({ id: delta.id, is_paper: false }, {
-      onSuccess: () => {
-        setStatus({ type: 'success', msg: '● Now in Live mode' });
-        invalidateAll();
-        setTimeout(() => { setModal('none'); setStatus({ type: 'idle', msg: '' }); }, 1200);
-      },
-      onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
+    Promise.all([
+      api.post('/api/v1/trading/algo-router-mode', { mode: 'live' }),
+      update.mutateAsync({ id: delta.id, is_paper: false }),
+    ]).then(() => {
+      setStatus({ type: 'success', msg: '● Now in Live mode' });
+      invalidateAll();
+      setTimeout(() => { setModal('none'); setStatus({ type: 'idle', msg: '' }); }, 1200);
+    }).catch((e) => {
+      setStatus({ type: 'error', msg: (e as Error).message });
     });
   };
 
   const switchToPaper = () => {
     if (!delta) return;
     setStatus({ type: 'saving', msg: '' });
-    update.mutate({ id: delta.id, is_paper: true }, {
-      onSuccess: () => { invalidateAll(); setStatus({ type: 'idle', msg: '' }); },
-      onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
-    });
-  };
-
-  const switchToShadow = () => {
-    if (!delta || !hasKeys) return;
-    if (isShadow) return;
-    setStatus({ type: 'saving', msg: '' });
-    update.mutate({ id: delta.id, is_paper: true }, {
-      onSuccess: () => { invalidateAll(); setStatus({ type: 'success', msg: '● Now in SHADOW mode' }); setTimeout(() => setStatus({ type: 'idle', msg: '' }), 1200); },
-      onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
-    });
-  };
-
-  const saveCreds = () => {
-    if (!apiKey.trim() || !apiSecret.trim()) {
-      setStatus({ type: 'error', msg: 'Both API key and secret are required.' });
-      return;
-    }
-    if (!delta) {
-      setStatus({ type: 'error', msg: 'Exchange config not loaded — try refreshing.' });
-      return;
-    }
-    setStatus({ type: 'saving', msg: 'Connecting…' });
-    update.mutate({ id: delta.id, api_key: apiKey.trim(), api_secret: apiSecret.trim(), is_paper: false }, {
-      onSuccess: () => {
-        invalidateAll();
-        setStatus({ type: 'success', msg: '● Connected — now in Live mode' });
-        setApiKey(''); setApiSecret('');
-        setTimeout(() => { setModal('none'); setStatus({ type: 'idle', msg: '' }); }, 1500);
-      },
-      onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
+    Promise.all([
+      api.post('/api/v1/trading/algo-router-mode', { mode: 'paper' }),
+      update.mutateAsync({ id: delta.id, is_paper: true }),
+    ]).then(() => {
+      invalidateAll();
+      setStatus({ type: 'idle', msg: '' });
+    }).catch((e) => {
+      setStatus({ type: 'error', msg: (e as Error).message });
     });
   };
 
@@ -124,12 +98,12 @@ export function PaperLiveToggle() {
 
   return (
     <>
-      {/* Toggle pill — PAPER / SHADOW / LIVE */}
+      {/* Toggle pill — PAPER / LIVE (SHADOW = PAPER with keys, backend detail) */}
       <div style={{
         display: 'inline-flex',
         alignItems: 'center',
         background: 'var(--t-bg3, var(--bg-surface))',
-        border: `1px solid ${isLive ? 'var(--t-green, var(--accent))50' : isShadow ? 'var(--t-blue, #3b82f6)50' : 'var(--t-border, var(--border))'}`,
+        border: `1px solid ${isLive ? 'var(--t-green, var(--accent))50' : 'var(--t-border, var(--border))'}`,
         borderRadius: 5,
         overflow: 'hidden',
         cursor: saving ? 'wait' : 'pointer',
@@ -138,68 +112,30 @@ export function PaperLiveToggle() {
         gap: 2,
       }}>
         <button
-          onClick={isLive || isShadow ? switchToPaper : undefined}
-          disabled={saving || (!isLive && !isShadow)}
+          onClick={isLive ? switchToPaper : undefined}
+          disabled={saving || !isLive}
           style={{
-            padding: '3px 10px',
+            padding: '3px 12px',
             border: 'none',
             borderRadius: 4,
-            cursor: isLive || isShadow ? 'pointer' : 'default',
-            background: !isLive && !isShadow ? 'var(--t-bg2, var(--bg-card))' : 'transparent',
-            color: !isLive && !isShadow ? 'var(--t-blue, var(--blue))' : 'var(--t-dim, var(--text-dim))',
+            cursor: isLive ? 'pointer' : 'default',
+            background: !isLive ? 'var(--t-bg2, var(--bg-card))' : 'transparent',
+            color: !isLive ? 'var(--t-blue, var(--blue))' : 'var(--t-dim, var(--text-dim))',
             fontFamily: 'inherit',
             fontSize: 10,
-            fontWeight: !isLive && !isShadow ? 600 : 400,
+            fontWeight: !isLive ? 600 : 400,
             letterSpacing: '0.08em',
             transition: 'background 0.15s, color 0.15s',
             lineHeight: 1,
           }}
         >
-          PAPER
-        </button>
-        <button
-          onClick={() => {
-            if (!delta || !hasKeys) return;
-            if (isLive) {
-              setModal('none');
-              setStatus({ type: 'saving', msg: '' });
-              update.mutate({ id: delta.id, is_paper: true }, {
-                onSuccess: () => {
-                  invalidateAll();
-                  setStatus({ type: 'success', msg: '● Now in SHADOW mode' });
-                  setTimeout(() => setStatus({ type: 'idle', msg: '' }), 1200);
-                },
-                onError: (e) => setStatus({ type: 'error', msg: (e as Error).message }),
-              });
-            } else if (isShadow) {
-              switchToPaper();
-            } else {
-              switchToShadow();
-            }
-          }}
-          disabled={saving || !hasKeys}
-          style={{
-            padding: '3px 10px',
-            border: 'none',
-            borderRadius: 4,
-            cursor: hasKeys && !isLive ? 'pointer' : 'default',
-            background: isShadow && !isLive ? 'rgba(59,130,246,0.18)' : 'transparent',
-            color: isShadow && !isLive ? '#3b82f6' : 'var(--t-dim, var(--text-dim))',
-            fontFamily: 'inherit',
-            fontSize: 10,
-            fontWeight: isShadow && !isLive ? 700 : 400,
-            letterSpacing: '0.08em',
-            transition: 'background 0.15s, color 0.15s',
-            lineHeight: 1,
-          }}
-        >
-          SHADOW
+          {isPaper && hasKeys ? 'PAPER' : 'PAPER'}
         </button>
         <button
           onClick={isLive ? undefined : handleLiveClick}
           disabled={saving}
           style={{
-            padding: '3px 10px',
+            padding: '3px 12px',
             border: 'none',
             borderRadius: 4,
             cursor: !isLive ? 'pointer' : 'default',
@@ -280,53 +216,6 @@ export function PaperLiveToggle() {
             <button onClick={confirmGoLive} disabled={saving || status.type === 'success'}
               style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }}>
               {saving ? 'Switching…' : status.type === 'success' ? '✓ Done' : '▶ Go Live'}
-            </button>
-          </div>
-        </Backdrop>
-      )}
-
-      {/* ── Add credentials → go live ── */}
-      {modal === 'add-keys' && (
-        <Backdrop onClose={closeModal}>
-          <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--accent)', marginBottom: 4 }}>Connect Delta Exchange India</div>
-          <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 16, lineHeight: 1.6 }}>
-            Enter your API credentials from{' '}
-            <a href="https://www.delta.exchange/app/account/manageapikeys" target="_blank" rel="noopener noreferrer"
-              style={{ color: '#88aaff', textDecoration: 'none' }}>
-              delta.exchange → Settings → API Keys
-            </a>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16, padding: '10px 12px', background: '#0d1a0d', border: '1px solid var(--accent)22', borderRadius: 5 }}>
-            {[
-              { icon: '🔑', text: 'Read account balance & positions' },
-              { icon: '📤', text: 'Place and cancel orders' },
-              { icon: '🚫', text: 'Cannot withdraw funds' },
-            ].map(({ icon, text }) => (
-              <div key={text} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--text-faint)', alignItems: 'center' }}>
-                <span>{icon}</span><span>{text}</span>
-              </div>
-            ))}
-          </div>
-
-          {[['API KEY', apiKey, setApiKey], ['API SECRET', apiSecret, setApiSecret]].map(([label, val, set]) => (
-            <div key={label as string} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>{label as string}</div>
-              <input type="password" value={val as string}
-                onChange={e => (set as (v: string) => void)(e.target.value)}
-                placeholder="Paste your key here"
-                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', color: 'var(--text-primary)', border: '1px solid var(--border-light)', borderRadius: 3, padding: '7px 9px', fontFamily: 'monospace', fontSize: 12, outline: 'none' }}
-              />
-            </div>
-          ))}
-
-          <StatusBar status={status} />
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            <button onClick={closeModal} disabled={saving} style={btnSecondary}>Cancel</button>
-            <button onClick={saveCreds} disabled={saving || !apiKey.trim() || !apiSecret.trim() || status.type === 'success'}
-              style={{ ...btnPrimary, opacity: saving || !apiKey.trim() || !apiSecret.trim() ? 0.5 : 1 }}>
-              {saving ? 'Connecting…' : status.type === 'success' ? '✓ Connected' : '▶ Go Live'}
             </button>
           </div>
         </Backdrop>

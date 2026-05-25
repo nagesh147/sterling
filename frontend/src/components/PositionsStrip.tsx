@@ -255,7 +255,7 @@ export function PositionsStrip() {
                 onClick={() => setExpandedId(isExpanded ? null : pos.id)}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '160px 1fr 1fr 1fr 1fr auto',
+                  gridTemplateColumns: '100px 1fr 1fr 1fr 1fr auto',
                   alignItems: 'center',
                   gap: 12,
                   padding: '12px 16px',

@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useLivePrices } from '../hooks/useLivePrices';
+import { useScalpingConfig } from '../hooks/useScalping';
 
 // ── Module-level price history (survives re-renders) ─────────────────────────
 const _history: Map<string, number[]> = new Map();
@@ -93,20 +94,21 @@ function fmt(price: number): string {
 // ── Ticker card ───────────────────────────────────────────────────────────────
 function TickerCard({ item, price, prevPrice }: {
   item: { underlying: string; daily_change_pct?: number | null; signal_trend?: number; score_long?: number; score_short?: number };
-  price: number;
+  price: number | null;
   prevPrice: number | null;
 }) {
   const sym   = item.underlying;
+  const hasPrice = price != null && price > 0;
   const chg   = item.daily_change_pct ?? null;
-  const isUp  = chg != null ? chg >= 0 : (price > (prevPrice ?? price));
-  const color = isUp ? '#10B981' : '#EF4444';
+  const isUp  = chg != null ? chg >= 0 : (price != null && prevPrice != null ? price > prevPrice : true);
+  const color = !hasPrice ? 'var(--t-dim)' : isUp ? '#10B981' : '#EF4444';
   const chgStr = chg != null ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : null;
 
   // Compute hourly drift from local history as "LAST HOUR" proxy
   const hist = _history.get(sym) ?? [];
   const oldest = hist.length > 1 ? hist[0] : null;
-  const hourlyPct = oldest && oldest > 0 && price > 0
-    ? ((price - oldest) / oldest) * 100
+  const hourlyPct = oldest && oldest > 0 && hasPrice
+    ? ((price! - oldest) / oldest) * 100
     : null;
   const hourlyColor = hourlyPct == null ? 'var(--t-dim)' : hourlyPct >= 0 ? '#10B981' : '#EF4444';
   const hourlyStr   = hourlyPct != null ? `${hourlyPct >= 0 ? '+' : ''}${hourlyPct.toFixed(2)}%` : '—';
@@ -116,7 +118,7 @@ function TickerCard({ item, price, prevPrice }: {
   const prevRef  = useRef<number | null>(prevPrice);
   useEffect(() => {
     if (!flashRef.current) return;
-    if (prevRef.current != null && prevRef.current !== price) {
+    if (prevRef.current != null && price != null && prevRef.current !== price) {
       const cls = price > prevRef.current ? 'price-flash-up' : 'price-flash-down';
       flashRef.current.classList.remove('price-flash-up', 'price-flash-down');
       void flashRef.current.offsetWidth; // reflow
@@ -166,9 +168,9 @@ function TickerCard({ item, price, prevPrice }: {
               letterSpacing: '-0.01em',
             }}
           >
-            ${fmt(price)}
+            {hasPrice ? `$${fmt(price!)}` : 'no data'}
           </span>
-          {chgStr && (
+          {hasPrice && chgStr && (
             <span style={{ fontSize: 9, color, fontVariantNumeric: 'tabular-nums' }}>
               {chgStr}
             </span>
@@ -210,7 +212,12 @@ function TickerCard({ item, price, prevPrice }: {
 export function TickerStrip() {
   const { data }  = useWatchlist();
   const liveP     = useLivePrices();
+  const cfgQ      = useScalpingConfig();
   const prevPriceRef = useRef<Record<string, number>>({});
+  const outerRef  = useRef<HTMLDivElement>(null);
+  const copyRef   = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [shift, setShift] = useState(0);
 
   const items = data?.items ?? [];
 
@@ -218,10 +225,23 @@ export function TickerStrip() {
   const symSet = new Set(items.map(i => i.underlying));
   const liveOnlySyms = Object.keys(liveP).filter(s => !symSet.has(s));
 
-  const displayItems = [
+  let displayItems = [
     ...items,
     ...liveOnlySyms.map(s => ({ underlying: s })),
   ] as typeof items;
+
+  // Sync with the Scalping symbol selection: when specific symbols are chosen
+  // in settings, the top row shows exactly those (empty list = "ALL"). Every
+  // selected symbol is shown in selection order — even ones with no market
+  // data yet (rendered as a "no data" card) so the count always matches.
+  const selectedSyms = cfgQ.data?.config?.symbols ?? [];
+  const hasSelection = selectedSyms.length > 0;
+  if (hasSelection) {
+    const bySym = new Map(displayItems.map(i => [i.underlying.toUpperCase(), i]));
+    displayItems = selectedSyms.map(
+      s => bySym.get(s.toUpperCase()) ?? ({ underlying: s.toUpperCase() } as typeof items[number]),
+    );
+  }
 
   // Update price history on every price tick
   useEffect(() => {
@@ -229,6 +249,26 @@ export function TickerStrip() {
       if (price > 0) pushPrice(sym, price);
     }
   }, [liveP]);
+
+  // Marquee: scroll only when the row is wider than the bar. Re-measures on
+  // resize and whenever card count/width changes (ResizeObserver covers both).
+  useLayoutEffect(() => {
+    const outer = outerRef.current;
+    const copy = copyRef.current;
+    if (!outer || !copy) return;
+    const measure = () => {
+      const copyW = copy.scrollWidth;
+      const avail = outer.clientWidth - 40; // minus the 20px horizontal padding each side
+      const over = copyW > 0 && copyW > avail;
+      setOverflow(over);
+      setShift(over ? copyW + 8 : 0); // one copy width + inter-copy gap
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(outer);
+    ro.observe(copy);
+    return () => ro.disconnect();
+  }, [displayItems.length]);
 
   if (displayItems.length === 0) {
     return (
@@ -244,32 +284,47 @@ export function TickerStrip() {
     );
   }
 
+  const cards = displayItems.map(item => {
+    const raw = liveP[item.underlying] ?? item.spot_price ?? null;
+    const price = raw && raw > 0 ? raw : null;
+    // In ALL mode, hide symbols that have no price; when symbols are
+    // explicitly selected, always show them (placeholder card if no data).
+    if (price == null && !hasSelection) return null;
+    const prev = price != null ? (prevPriceRef.current[item.underlying] ?? null) : null;
+    if (price != null) prevPriceRef.current[item.underlying] = price;
+    return (
+      <TickerCard key={item.underlying} item={item} price={price} prevPrice={prev} />
+    );
+  }).filter(Boolean);
+
+  const GAP = 8;
+  const duration = Math.min(120, Math.max(12, shift / 45)); // ~45px/sec, like a news crawl
   return (
-    <div style={{
+    <div ref={outerRef} style={{
       background: 'var(--t-bg2)',
       borderBottom: '1px solid var(--t-border)',
       padding: '6px 20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
       flexShrink: 0,
-      overflowX: 'auto',
-      scrollbarWidth: 'none',
-    } as React.CSSProperties}>
-      {displayItems.map(item => {
-        const price = liveP[item.underlying] ?? item.spot_price ?? null;
-        if (!price || price <= 0) return null;
-        const prev = prevPriceRef.current[item.underlying] ?? null;
-        prevPriceRef.current[item.underlying] = price;
-        return (
-          <TickerCard
-            key={item.underlying}
-            item={item}
-            price={price}
-            prevPrice={prev}
-          />
-        );
-      })}
+      overflow: 'hidden',
+    }}>
+      <div
+        className={overflow ? 'ticker-marquee' : undefined}
+        style={{
+          display: 'flex', alignItems: 'center', gap: GAP, width: 'max-content',
+          ...(overflow
+            ? { ['--ticker-shift' as string]: `${shift}px`, animationDuration: `${duration}s` }
+            : {}),
+        } as React.CSSProperties}
+      >
+        <div ref={copyRef} style={{ display: 'flex', alignItems: 'center', gap: GAP }}>
+          {cards}
+        </div>
+        {overflow && (
+          <div aria-hidden style={{ display: 'flex', alignItems: 'center', gap: GAP }}>
+            {cards}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

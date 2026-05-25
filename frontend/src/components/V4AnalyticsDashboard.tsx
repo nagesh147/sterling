@@ -64,12 +64,8 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
     };
   }, []);
 
-  const tradingStatus = routerMode === 'live' ? 'LIVE TRADING'
-    : routerMode === 'shadow' ? 'SHADOW TRADING'
-    : 'PAPER TRADING';
-  const statusDotColor = routerMode === 'live' ? '#10b981'
-    : routerMode === 'shadow' ? '#3b82f6'
-    : '#f59e0b';
+  const tradingStatus = routerMode === 'live' ? 'LIVE TRADING' : 'PAPER TRADING';
+  const statusDotColor = routerMode === 'live' ? '#10b981' : '#f59e0b';
 
   // PnL from SSE stream
   const { data: pnlData } = useAppStream<LivePnlResponse>('pnl');

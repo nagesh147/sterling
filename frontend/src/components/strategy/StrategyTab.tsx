@@ -478,27 +478,19 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
   const watching = data?.signals.filter((s) => s.in_uptrend && !s.entry_ok).length ?? 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* hero header */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.08em', color: 'var(--t-bright)' }}>RSI(2) MEAN-REVERSION</div>
-          <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 2 }}>
-            Daily · buy oversold dips in uptrends (RSI&lt;10 &amp; close&gt;SMA200), exit the bounce · {scanQ.isFetching ? 'scanning…' : 'auto-refresh 30s'}
-          </div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setArmedOnly((v) => !v)} style={{
-            fontSize: 10, fontWeight: 700, padding: '6px 12px', borderRadius: 7, fontFamily: 'inherit', cursor: 'pointer',
-            border: `1px solid ${armedOnly ? 'var(--t-green)' : 'var(--t-border)'}`,
-            background: armedOnly ? 'var(--t-green)1c' : 'transparent',
-            color: armedOnly ? 'var(--t-green)' : 'var(--t-dim)',
-          }}>{armedOnly ? '● ARMED ONLY' : '○ ARMED ONLY'}</button>
-          <button onClick={onOpenSettings} title="Strategy settings & backtest" style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '6px 14px', borderRadius: 7, fontFamily: 'inherit',
-            cursor: 'pointer', border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
-          }}>⚙ SETTINGS</button>
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Controls row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={() => setArmedOnly((v) => !v)} style={{
+          fontSize: 10, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'inherit', cursor: 'pointer',
+          border: `1px solid ${armedOnly ? 'var(--t-green)' : 'var(--t-border)'}`,
+          background: armedOnly ? 'var(--t-green)1c' : 'transparent',
+          color: armedOnly ? 'var(--t-green)' : 'var(--t-dim)',
+        }}>{armedOnly ? '● ARMED ONLY' : '○ ARMED ONLY'}</button>
+        <button onClick={onOpenSettings} title="Strategy settings & backtest" style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '5px 12px', borderRadius: 6, fontFamily: 'inherit',
+          cursor: 'pointer', border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
+        }}>⚙ SETTINGS</button>
       </div>
 
       {/* summary tiles */}
@@ -510,10 +502,10 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
       </div>
 
       {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
-      {scanQ.isLoading && <div style={dim}>scanning instruments…</div>}
+      {scanQ.isLoading && <div style={dim}>scanning…</div>}
       {data && data.signals.length === 0 && (
         <div style={{ ...dim, padding: '20px 0', textAlign: 'center' }}>
-          {armedOnly ? 'No armed signals right now — toggle off to see all symbols.' : 'No instruments available on this data source.'}
+          {armedOnly ? 'No armed signals — toggle off to see all.' : 'No instruments on this data source.'}
         </div>
       )}
 
@@ -531,15 +523,12 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
         ))}
       </div>
 
-      {/* recent signal history (lazy, collapsible) */}
+      {/* recent signal history */}
       <RecentSignals />
 
       {data && data.signals.length > 0 && (
         <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.5 }}>
-          EXECUTE routes through your current Paper/Live mode (top-right toggle). A symbol is <b>ARMED</b> when price is
-          in an uptrend (above SMA200) and RSI(2) is oversold. Positions exit on the RSI snap-back (wide ATR stop as a
-          safety net). Selective by design — most symbols sit FLAT waiting for a dip. The full stored-crypto universe is
-          scanned; coins not listed on your live exchange show as <b>signal-only</b> (no EXECUTE).
+          EXECUTE routes through Paper/Live mode. A symbol is <b>ARMED</b> when price is in an uptrend and RSI(2) is oversold.
         </div>
       )}
     </div>
@@ -565,7 +554,7 @@ export function StrategyTab() {
   }, [drawer]);
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '14px 16px' }}>
+    <div style={{ flex: 1, overflow: 'visible', padding: 0 }}>
       <SignalsScanner selected={selected} onSelect={setSelected} onOpenSettings={() => setDrawer(true)} />
 
       {/* Advanced settings — right-side slide-out drawer */}

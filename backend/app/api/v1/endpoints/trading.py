@@ -302,7 +302,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
         and bool(active.api_key)
         and bool(active.api_secret)
         and not active.api_key.startswith("DUMMY")
-        and (not active.is_paper or algo_mode)
+        and not active.is_paper
     )
 
     if has_live_creds:
@@ -413,12 +413,15 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                 )
             except Exception:
                 pass
+            error_detail = {"error": f"Order failed: {exc}", "failed_position_id": failed_pos_id}
+            if "ip_not_whitelisted" in str(exc).lower() or "whitelist" in str(exc).lower():
+                from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DIA
+                server_ip = await _DIA._get_public_ip()
+                error_detail["server_ip"] = server_ip
+                error_detail["error"] = f"Order failed: ip_not_whitelisted — add server IP {server_ip} to your Delta API key whitelist"
             raise HTTPException(
                 status_code=502,
-                detail=json.dumps({
-                    "error": f"Order failed: {exc}",
-                    "failed_position_id": failed_pos_id,
-                }),
+                detail=json.dumps(error_detail),
             )
 
     else:
@@ -453,11 +456,13 @@ def _create_paper_tracking(
     try:
         from app.schemas.execution import Direction as ExecDir
         from app.schemas.execution import TradeStructure, SizedTrade, CandidateContract
-        from app.engines.directional.sizing_engine import size_trade
-        from app.schemas.risk import RiskParams
 
         is_live_order = bool(order_id)
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
+        contracts = max(1, int(body.size))
+        position_value = contracts * entry_price
+        max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
+        capital_at_risk = (max_risk / 100_000.0) * 100.0 if entry_price > 0 else 0.0
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
             underlying=sym,
@@ -476,9 +481,15 @@ def _create_paper_tracking(
             net_premium=entry_price, max_loss=entry_price * 0.03,
             max_gain=None, risk_reward=2.0,
             score=0.0, score_breakdown={},
+            leverage=int(body.leverage),
         )
-        risk = RiskParams()
-        sized = size_trade(structure, risk, leverage=int(body.leverage))
+        sized = SizedTrade(
+            structure=structure,
+            contracts=contracts,
+            position_value=round(position_value, 2),
+            max_risk_usd=round(max_risk, 2),
+            capital_at_risk_pct=round(capital_at_risk, 2),
+        )
         pos = paper_store.add_position(
             underlying=sym, sized_trade=sized,
             entry_spot_price=entry_price,
@@ -522,9 +533,7 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
     """
     try:
         from app.schemas.execution import Direction as ExecDir
-        from app.schemas.execution import TradeStructure, CandidateContract
-        from app.engines.directional.sizing_engine import size_trade
-        from app.schemas.risk import RiskParams
+        from app.schemas.execution import TradeStructure, SizedTrade, CandidateContract
 
         # Best-effort spot price: limit_price from request → stream cache → 0
         spot_price: float = 0.0
@@ -538,6 +547,10 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
                 pass
 
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
+        contracts = max(1, int(body.size))
+        position_value = contracts * spot_price if spot_price > 0 else 0.0
+        max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
+        capital_at_risk = (max_risk / 100_000.0) * 100.0 if spot_price > 0 else 0.0
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
             underlying=sym,
@@ -555,9 +568,15 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
             net_premium=spot_price, max_loss=0.0,
             max_gain=None, risk_reward=2.0,
             score=0.0, score_breakdown={},
+            leverage=int(body.leverage),
         )
-        risk = RiskParams()
-        sized = size_trade(structure, risk, leverage=int(body.leverage))
+        sized = SizedTrade(
+            structure=structure,
+            contracts=contracts,
+            position_value=round(position_value, 2),
+            max_risk_usd=round(max_risk, 2),
+            capital_at_risk_pct=round(capital_at_risk, 2),
+        )
         pos = paper_store.add_position(
             underlying=sym, sized_trade=sized,
             entry_spot_price=spot_price,

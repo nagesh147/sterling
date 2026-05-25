@@ -16,6 +16,8 @@ import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
 import { StrategyTab } from '../components/strategy/StrategyTab';
+import { ScalpingTab } from '../components/scalping/ScalpingTab';
+import { ThreeColumnLayout, LeftSection, RightSection, StatCard } from '../components/ThreeColumnLayout';
 import '../styles/terminal.css';
 
 function CbChip() {
@@ -52,7 +54,7 @@ function BacktestView() {
   });
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 14px' }}>
+    <div style={{ flex: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 10, padding: 0 }}>
 
       {/* ── Chart panel ── */}
       <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
@@ -129,7 +131,7 @@ export function SimpleTerminal() {
   const underlying = useSelectedUnderlying();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
-  const [activeSection, setActiveSection] = useState<'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration'>('strategy');
+  const [activeSection, setActiveSection] = useState<'scalping' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration'>('scalping');
 
   return (
     <div className="term-root">
@@ -138,83 +140,107 @@ export function SimpleTerminal() {
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div style={{
         flexShrink: 0,
-        padding: '8px 14px',
         background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
       }}>
+        {/* Top bar: wordmark left, icons right */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          height: 40,
-          background: 'rgba(10, 14, 22, 0.96)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 10,
-          padding: '0 18px',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+          height: 44,
+          padding: '0 20px',
         }}>
-          {/* Wordmark */}
           <span style={{
-            fontSize: 17,
-            fontWeight: 800,
-            letterSpacing: '0.18em',
-            color: 'rgba(220, 232, 245, 0.92)',
-            fontFamily: 'inherit',
-            userSelect: 'none',
+            fontSize: 17, fontWeight: 800, letterSpacing: '0.18em',
+            color: 'var(--t-bright)', fontFamily: 'inherit', userSelect: 'none',
           }}>
             STERLING
           </span>
-
-          {/* Right icons — bell · avatar · gear */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {/* Notification bell */}
+            <button onClick={() => setShowLive(true)} title="Live alerts & controls" style={{
+              background: 'none', border: '1px solid var(--t-border)', cursor: 'pointer',
+              width: 34, height: 34, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--t-dim)', fontSize: 14, transition: 'border-color .12s, color .12s',
+            }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-bright)44'; (e.currentTarget as HTMLElement).style.color = 'var(--t-bright)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--t-dim)'; }}
+            >🔔</button>
+            <div title="User profile" style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
+              border: '2px solid rgba(255,255,255,0.12)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 800, color: '#fff', letterSpacing: '0.02em', cursor: 'pointer',
+            }}>S</div>
+            <button onClick={() => setShowSettings(true)} title="Settings" style={{
+              background: 'none', border: '1px solid var(--t-border)', cursor: 'pointer',
+              width: 34, height: 34, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--t-dim)', fontSize: 14, transition: 'border-color .12s, color .12s',
+            }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-bright)44'; (e.currentTarget as HTMLElement).style.color = 'var(--t-bright)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--t-dim)'; }}
+            >⚙</button>
+          </div>
+        </div>
+
+        {/* Tab bar: tabs center, controls right */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 20px',
+          borderTop: '1px solid var(--t-border)',
+        }}>
+          {([
+            ['scalping',   'SCALPING'],
+            ['strategy',    'RSI MEAN-REV'],
+            ['signals',     'SIGNALS'],
+            ['positions',   'POSITIONS'],
+            ['backtest',    'BACKTEST'],
+            ['calibration', 'CALIBRATION'],
+          ] as ['scalping' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
             <button
-              onClick={() => setShowLive(true)}
-              title="Live alerts & controls"
+              key={id}
+              onClick={() => setActiveSection(id)}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                width: 34, height: 34, borderRadius: 9,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'rgba(150,170,200,0.7)', fontSize: 15,
-                transition: 'background 0.15s, color 0.15s',
+                background: 'none',
+                border: 'none',
+                borderBottom: `2px solid ${activeSection === id ? 'var(--t-blue)' : 'transparent'}`,
+                color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
+                padding: '8px 14px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 11,
+                fontWeight: activeSection === id ? 700 : 400,
+                letterSpacing: '0.08em',
+                marginBottom: -1,
+                transition: 'color .1s',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.color = 'rgba(220,232,245,0.9)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = 'rgba(150,170,200,0.7)'; }}
             >
-              🔔
+              {label}
             </button>
-
-            {/* Profile avatar placeholder */}
-            <div
-              title="User profile"
-              style={{
-                width: 30, height: 30, borderRadius: '50%',
-                background: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
-                border: '2px solid rgba(255,255,255,0.12)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 800, color: '#fff',
-                letterSpacing: '0.02em', cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              S
-            </div>
-
-            {/* Settings gear */}
+          ))}
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <PaperLiveToggle />
+            <AlgoToggle chipStyle={chip} />
+            <DataSourceSelector chipStyle={chip} />
+            <CbChip />
             <button
-              onClick={() => setShowSettings(true)}
-              title="Settings"
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                width: 34, height: 34, borderRadius: 9,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'rgba(150,170,200,0.7)', fontSize: 15,
-                transition: 'background 0.15s, color 0.15s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)'; (e.currentTarget as HTMLElement).style.color = 'rgba(220,232,245,0.9)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = 'rgba(150,170,200,0.7)'; }}
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}
+              style={chip}
             >
-              ⚙
+              {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
+            </button>
+            <button
+              onClick={() => setAppMode('pro')}
+              title="Switch to 3-pane Terminal"
+              style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}
+            >
+              TERMINAL
             </button>
           </div>
         </div>
@@ -223,98 +249,78 @@ export function SimpleTerminal() {
       {/* ── Ticker strip ─────────────────────────────────────────────── */}
       <TickerStrip />
 
-      {/* ── Section tabs + functional controls ───────────────────────── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        background: 'var(--t-bg2)',
-        borderBottom: '1px solid var(--t-border)',
-        flexShrink: 0,
-        paddingLeft: 12,
-        paddingRight: 10,
-        gap: 0,
-      }}>
-        {/* Section tabs */}
-        {([
-          ['strategy',    'RSI MEAN-REV'],
-          ['signals',     'SIGNALS'],
-          ['positions',   'POSITIONS'],
-          ['backtest',    'BACKTEST'],
-          ['calibration', 'CALIBRATION'],
-        ] as ['strategy' | 'signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setActiveSection(id)}
-            style={{
-              background: 'none',
-              border: 'none',
-              borderBottom: `2px solid ${activeSection === id ? 'var(--t-blue)' : 'transparent'}`,
-              color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              fontSize: 11,
-              fontWeight: activeSection === id ? 700 : 400,
-              letterSpacing: '0.08em',
-              marginBottom: -1,
-              transition: 'color 0.1s',
-            }}
-          >
-            {label}
-          </button>
-        ))}
-
-        {/* Right: compact functional controls */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, paddingRight: 2 }}>
-          <PaperLiveToggle />
-          <AlgoToggle chipStyle={chip} />
-          <DataSourceSelector chipStyle={chip} />
-          <CbChip />
-          <button
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}
-            style={chip}
-          >
-            {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
-          </button>
-          <button
-            onClick={() => setAppMode('pro')}
-            title="Switch to 3-pane Terminal"
-            style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}
-          >
-            TERMINAL
-          </button>
-        </div>
-      </div>
-
       {/* Main content */}
-      <div style={{ flex: 1, overflow: 'auto', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
-        {/* V4 Analytics shown on every section except the strategy tab (keeps it focused on signals) */}
-        {activeSection !== 'strategy' && (
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--t-border)' }}>
-            <V4AnalyticsDashboard activeSymbol={underlying} />
-          </div>
+      <div style={{ flex: 1, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
+        {/* V4 Analytics shown on signals, backtest, and calibration tabs — in the right sidebar of those tabs */}
+        {activeSection === 'scalping' && (
+          <ScalpingTab />
         )}
         {activeSection === 'strategy' && (
           <StrategyTab />
         )}
         {activeSection === 'signals' && (
-          <div className="term-signals-wrap" style={{ flex: 1, minHeight: 0 }}>
-            <SignalsTable />
-          </div>
+          <ThreeColumnLayout
+            leftNav={[{ id: 'all', label: 'All Signals', color: 'var(--t-bright)'}]}
+            activeNav="all"
+            onNavClick={() => {}}
+            centerHeader={<>
+              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Signals</div>
+              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Live signal feed</div>
+            </>}
+            centerContent={<div className="term-signals-wrap" style={{ flex: 1, minHeight: 0 }}><SignalsTable /></div>}
+            centerFullBleed
+            rightSidebar={<>
+              <RightSection label="Analytics">
+                <V4AnalyticsDashboard activeSymbol={underlying} />
+              </RightSection>
+            </>}
+          />
         )}
         {activeSection === 'positions' && (
-          <div style={{ flex: 1, padding: '10px 14px' }}>
-            <PositionsStrip />
-          </div>
+          <ThreeColumnLayout
+            leftNav={[{ id: 'open', label: 'Open Positions', color: 'var(--t-green)' }, { id: 'closed', label: 'Closed', color: 'var(--t-dim)' }]}
+            activeNav="open"
+            onNavClick={() => {}}
+            centerHeader={<>
+              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Positions</div>
+              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Order book & trade history</div>
+            </>}
+            centerContent={<PositionsStrip />}
+          />
         )}
         {activeSection === 'backtest' && (
-          <BacktestView />
+          <ThreeColumnLayout
+            leftNav={[{ id: 'backtest', label: 'Backtest', color: 'var(--t-blue)' }]}
+            activeNav="backtest"
+            onNavClick={() => {}}
+            centerHeader={<>
+              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Backtest</div>
+              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Historical candle data & signal simulation</div>
+            </>}
+            centerContent={<BacktestView />}
+            rightSidebar={<>
+              <RightSection label="Analytics">
+                <V4AnalyticsDashboard activeSymbol={underlying} />
+              </RightSection>
+            </>}
+          />
         )}
         {activeSection === 'calibration' && (
-          <div style={{ flex: 1, padding: '10px 14px', maxWidth: 700 }}>
-            <CalibrationPanel />
-          </div>
+          <ThreeColumnLayout
+            leftNav={[{ id: 'calibration', label: 'Calibration', color: 'var(--t-amber)' }]}
+            activeNav="calibration"
+            onNavClick={() => {}}
+            centerHeader={<>
+              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Calibration</div>
+              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Adaptive calibration metrics</div>
+            </>}
+            centerContent={<CalibrationPanel />}
+            rightSidebar={<>
+              <RightSection label="Analytics">
+                <V4AnalyticsDashboard activeSymbol={underlying} />
+              </RightSection>
+            </>}
+          />
         )}
       </div>
 

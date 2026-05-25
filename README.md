@@ -184,6 +184,34 @@ Signal gate: `signal_strength == "STRONG"` required before any order places.
 
 ---
 
+## Overfitting Diagnosis (2026-05-25)
+
+The ensemble backtest showing PF < 1.0 across all modes was confirmed as **exit logic overfitting, not signal failure**. [Full diagnosis →](backend/docs/OVERFITTING_DIAGNOSIS_20260525.md)
+
+**Root cause:** The exit stack (fixed TP, partials, breakeven triggers) systematically cuts winners short:
+- Raw Triple ST signal on 4H with ST3 trailing only: **PF = 1.064–1.282** (valid edge)
+- Same signal with fixed TP + BE + partials: **PF = 0.900** (edge destroyed)
+- Breakeven alone costs −12% PF (0.900 → 0.796)
+
+**Confirmed fixes (priority order):**
+
+| Fix | Change | Expected Impact |
+|-----|--------|-----------------|
+| 1. Remove fixed TP | `partials = ()`, trail-only exits | PF 0.900 → 1.064+ |
+| 2. Disable breakeven | `be_trigger_r = 999` or remove logic | PF 0.796 → 0.900 |
+| 3. Wider stops | `sl_mult = 2.5` (from 1.5) | Higher win rate (38% vs 34%) |
+| 4. Relax consensus | `min_confirm = 2` (from 3/3) | More signals, PF 1.064 → 1.124 |
+| 5. 1H has no edge | 1H raw PF = 0.788–0.916 — disable | Avoid losing regime |
+
+**Recommended production config:**
+```python
+min_confirm = 2      # 2/3 consensus (more signals, better PF)
+sl_mult = 2.5        # Wider stops
+be_trigger_r = 999   # DISABLED
+partials = ()        # NO partials (let winners run)
+trail_source = "ST3" # Keep ST3 trailing only
+```
+
 ## Known Issues Fixed
 
 - **PaperLiveToggle shadow switching**: SHADOW button in LIVE mode was opening a confirmation modal that did the wrong thing. Fixed — LIVE→SHADOW now directly sets `is_paper: true`.

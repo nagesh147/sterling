@@ -111,3 +111,19 @@ body {
 }
 .price-flash-up   { animation: price-flash-up   0.4s ease-out; }
 .price-flash-down { animation: price-flash-down 0.4s ease-out; }
+
+/* ─────────────────────────────────────────────────────────────────
+ * Ticker marquee — the symbols bar auto-scrolls when it overflows,
+ * like a business-news ticker. The track holds two copies of the row;
+ * translating by -50% lands exactly on the duplicate for a seamless loop.
+ * Hover pauses so a symbol can be read. Distance is driven by --ticker-shift.
+ * ───────────────────────────────────────────────────────────────── */
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-1 * var(--ticker-shift, 50%))); }
+}
+.ticker-marquee { animation: ticker-scroll linear infinite; will-change: transform; }
+.ticker-marquee:hover { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .ticker-marquee { animation: none; }
+}

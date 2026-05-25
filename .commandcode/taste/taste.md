@@ -12,3 +12,21 @@
 # strategy
 - Optimize strategies by priority: EXPECTANCY > PF > MAXDD > CONSISTENCY > TRADE COUNT > WIN RATE. Confidence: 0.70
 
+# ui-ux
+- Use side panels/drawers for advanced settings rather than inline configuration sections. Keep default view simple with signals only; hide advanced config behind a toggle. Confidence: 0.75
+- Add expand/collapse to all sidebar sections for better information density management. Confidence: 0.70
+
+# trading-platform
+- When auto/algo trading mode is enabled, automatically execute signals on both paper and live trading (when live is enabled). Confidence: 0.65
+
+# ui-design
+- Use side panels for advanced settings and configuration, not inline expandable sections in the main layout. Confidence: 0.70
+- Make all sidebar sections (Navigation, Filter, Key Levels, Summary, By Strategy) individually expandable/collapsible. Confidence: 0.75
+- Signal-centric UI: the primary view should show signals with entry, exit, and execution buttons; hide advanced configuration by default. Confidence: 0.70
+
+# trading-execution
+- Support three distinct trading modes: Paper, Shadow, and Live with clear visual differentiation between them. Confidence: 0.75
+
+# ui-ux
+- Avoid duplicate API key entry flows — credentials should only be entered in Exchange Settings, not re-entered in toggle components or modals. Confidence: 0.70
+
