@@ -26,6 +26,7 @@ from numpy.typing import NDArray
 
 from app.engines.scalping.config import ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level
+from app.engines.directional.dynamic_tp import dynamic_tp
 
 
 @dataclass
@@ -38,6 +39,7 @@ class PriceActionSignal:
     entry: Optional[float]
     stop_loss: Optional[float]
     take_profit: Optional[float]
+    tp_source: str = ""
     reason: str
     entry_ok: bool
     timestamp_ms: int
@@ -339,7 +341,18 @@ def evaluate_price_action(
             entry = round(current_price, 4)
             stop_loss = round(float(stop_below) * 0.998, 4)
             tp_level = nearest_level(current_price, levels, "resistance")
-            take_profit = round(tp_level.price * 0.998, 4) if tp_level else round(current_price + (entry - stop_loss) * 2, 4)
+            tp_level_price = float(tp_level.price * 0.998) if tp_level else None
+            take_profit, tp_source = dynamic_tp(
+                direction="long",
+                entry=entry,
+                stop_dist=entry - stop_loss,
+                rr=2.0,
+                highs=h15,
+                lows=l15,
+                atr=(entry - stop_loss), # Proxy
+                swing_lookback=10,
+                tp_level=tp_level_price
+            )
             entry_ok = True
             reason = f"{pattern} near 4H support {nearby.price:.0f}"
 
@@ -358,7 +371,18 @@ def evaluate_price_action(
             entry = round(current_price, 4)
             stop_loss = round(float(stop_above) * 1.002, 4)
             tp_level = nearest_level(current_price, levels, "support")
-            take_profit = round(tp_level.price * 1.002, 4) if tp_level else round(current_price - (stop_loss - entry) * 2, 4)
+            tp_level_price = float(tp_level.price * 1.002) if tp_level else None
+            take_profit, tp_source = dynamic_tp(
+                direction="short",
+                entry=entry,
+                stop_dist=stop_loss - entry,
+                rr=2.0,
+                highs=h15,
+                lows=l15,
+                atr=(stop_loss - entry),
+                swing_lookback=10,
+                tp_level=tp_level_price
+            )
             entry_ok = True
             reason = f"{pattern} near 4H resistance {nearby.price:.0f}"
 
@@ -368,6 +392,6 @@ def evaluate_price_action(
     return PriceActionSignal(
         underlying=underlying, direction=direction, pattern=pattern,
         near_level=round(nearby.price, 4), level_type=nearby.level_type,
-        entry=entry, stop_loss=stop_loss, take_profit=take_profit,
+        entry=entry, stop_loss=stop_loss, take_profit=take_profit, tp_source=tp_source if 'tp_source' in locals() else "",
         reason=reason, entry_ok=entry_ok, timestamp_ms=now_ms,
     )

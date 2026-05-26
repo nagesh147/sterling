@@ -52,6 +52,7 @@ export interface ScalpingSignal {
   entry: number | null;
   stop_loss: number | null;
   take_profit: number | null;
+  tp_source?: string;
   risk_pct: number | null;
   leverage: number | null;
   size_units: number | null;
@@ -110,6 +111,7 @@ export interface ScalpingExecuteResponse {
   entry_price: number | null;
   stop_loss: number | null;
   take_profit: number | null;
+  tp_source?: string;
   order_id: string | null;
   paper_position_id: string | null;
   status: string;

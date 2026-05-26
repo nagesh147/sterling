@@ -23,6 +23,7 @@ from numpy.typing import NDArray
 
 from app.engines.scalping.config import ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level
+from app.engines.directional.dynamic_tp import dynamic_tp
 
 
 def rolling_sma(values: NDArray[np.float64], period: int) -> NDArray[np.float64]:
@@ -73,6 +74,7 @@ class MACrossignal:
     entry: Optional[float]
     stop_loss: Optional[float]
     take_profit: Optional[float]
+    tp_source: str = ""
     reason: str
     entry_ok: bool
     timestamp_ms: int
@@ -171,12 +173,22 @@ def evaluate_ma_crossover(
             # Find the localized swing low of the last 10 candles on the 15m timeframe
             local_15m_low = float(np.min(lows_15m[-10:]))
             
-            # Apply a mild ATR buffer to prevent getting wicked out by noise
             atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
             stop_loss = round((local_15m_low - atr_buffer), 4)
             
             tp_level = nearest_level(current_price, levels, "resistance")
-            take_profit = round(float(tp_level.price), 4) if tp_level else round(entry + (entry - stop_loss) * 2, 4)
+            tp_level_price = float(tp_level.price) if tp_level else None
+            take_profit, _ = dynamic_tp(
+                direction="long",
+                entry=entry,
+                stop_dist=entry - stop_loss,
+                rr=2.0,
+                highs=highs_15m,
+                lows=lows_15m,
+                atr=atr_buffer * 2, # Re-derive rough ATR
+                swing_lookback=10,
+                tp_level=tp_level_price
+            )
             entry_ok = True
             reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f}"
         elif sma_above:
@@ -197,12 +209,22 @@ def evaluate_ma_crossover(
             # Find the localized swing high of the last 10 candles on the 15m timeframe
             local_15m_high = float(np.max(highs_15m[-10:]))
             
-            # Apply a mild ATR buffer to prevent getting wicked out by noise
             atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
             stop_loss = round((local_15m_high + atr_buffer), 4)
             
             tp_level = nearest_level(current_price, levels, "support")
-            take_profit = round(float(tp_level.price), 4) if tp_level else round(entry - (stop_loss - entry) * 2, 4)
+            tp_level_price = float(tp_level.price) if tp_level else None
+            take_profit, _ = dynamic_tp(
+                direction="short",
+                entry=entry,
+                stop_dist=stop_loss - entry,
+                rr=2.0,
+                highs=highs_15m,
+                lows=lows_15m,
+                atr=atr_buffer * 2,
+                swing_lookback=10,
+                tp_level=tp_level_price
+            )
             entry_ok = True
             reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f}"
         elif sma_below:
@@ -222,7 +244,7 @@ def evaluate_ma_crossover(
     return MACrossignal(
         underlying=underlying, direction=direction, pattern=pattern,
         near_level=round(level_price, 4), level_type=nearby.level_type,
-        entry=entry, stop_loss=stop_loss, take_profit=take_profit,
+        entry=entry, stop_loss=stop_loss, take_profit=take_profit, tp_source=tp_source if 'tp_source' in locals() else "",
         reason=reason, entry_ok=entry_ok, timestamp_ms=now_ms,
         sma_value=round(float(sma[i]), 4), ema_value=round(float(ema[i]), 4),
     )

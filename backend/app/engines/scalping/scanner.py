@@ -85,6 +85,7 @@ def scan_symbol(
             entry=sig.entry,
             stop_loss=sig.stop_loss,
             take_profit=sig.take_profit,
+            tp_source=getattr(sig, "tp_source", ""),
             risk_pct=round(cfg.risk_percent, 2) if has_plan and sig.entry_ok else None,
             leverage=None,
             size_units=None,

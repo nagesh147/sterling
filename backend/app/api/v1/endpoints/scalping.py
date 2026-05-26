@@ -401,6 +401,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         notional_usd=round(contracts * sig.entry, 2),
         entry_price=resp.entry_price, stop_loss=sig.stop_loss,
         take_profit=sig.take_profit,
+        tp_source=getattr(sig, 'tp_source', ''),
         order_id=resp.order_id, paper_position_id=resp.paper_position_id,
         status=resp.status, reason=resp.message,
         timestamp_ms=resp.timestamp_ms or int(time.time() * 1000),

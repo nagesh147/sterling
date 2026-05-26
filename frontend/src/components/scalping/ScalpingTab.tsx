@@ -472,7 +472,20 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
           {pnl?.currentSl != null && pnl.currentSl !== pnl?.initialSl && (
             <MetricItem label="Trail SL" value={fmtUsd(pnl.currentSl)} color="#fb923c" />
           )}
-          <MetricItem label="Target" value={fmtUsd(pnl?.initialTp ?? r.take_profit)} color="var(--t-amber)" />
+          <MetricItem label="Target" value={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {fmtUsd(pnl?.initialTp ?? r.take_profit)}
+              {r.tp_source && r.tp_source.includes('fallback') && (
+                <span title="Target determined by fallback Risk-Reward" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[RR]</span>
+              )}
+              {r.tp_source && r.tp_source.includes('swing') && (
+                <span title="Target determined by dynamic swing padding" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[SW]</span>
+              )}
+              {r.tp_source === 'structural_level' && (
+                <span title="Target determined by structural level" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[LVL]</span>
+              )}
+            </div>
+          } color="var(--t-amber)" />
           <MetricItem label="Notional" value={fmtUsd(r.notional_usd)} />
           <MetricItem
             label={pnl?.realized ? 'Realized P&L' : 'Open P&L'}
@@ -691,7 +704,20 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
             <PlanCell value={fmtUsd(displayEntry)} />
             <PlanCell value={currentValNode} color={currentColor} width={110} />
             <PlanCell value={fmtUsd(displaySl)} color="#f87171" />
-            <PlanCell value={fmtUsd(displayTp)} color="var(--t-amber)" />
+            <PlanCell value={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {fmtUsd(displayTp)}
+                {s.tp_source && s.tp_source.includes('fallback') && (
+                  <span title="Target determined by fallback Risk-Reward" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[RR]</span>
+                )}
+                {s.tp_source && s.tp_source.includes('swing') && (
+                  <span title="Target determined by dynamic swing padding" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[SW]</span>
+                )}
+                {s.tp_source === 'structural_level' && (
+                  <span title="Target determined by structural level" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[LVL]</span>
+                )}
+              </div>
+            } color="var(--t-amber)" />
             <PlanCell value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
           </div>
         ) : (

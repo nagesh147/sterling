@@ -35,6 +35,7 @@ class ScalpingSignal(BaseModel):
     entry: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    tp_source: str = ""
     risk_pct: Optional[float] = None
     leverage: Optional[float] = None
     size_units: Optional[float] = None
@@ -113,6 +114,7 @@ class ScalpingExecuteResponse(BaseModel):
     entry_price: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    tp_source: str = ""
     order_id: Optional[str] = None
     paper_position_id: Optional[str] = None
     status: str
