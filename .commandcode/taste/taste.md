@@ -29,4 +29,6 @@
 
 # ui-ux
 - Avoid duplicate API key entry flows — credentials should only be entered in Exchange Settings, not re-entered in toggle components or modals. Confidence: 0.70
+- Green color indicates ON/active/positive states, red indicates OFF/stop/danger in trading UI — consistent with Delta Exchange and Telegram conventions. Confidence: 0.70
+- Disable save/submit buttons in settings forms when field values are unchanged from their persisted state, matching the Delta Exchange credentials save pattern. Confidence: 0.60
 

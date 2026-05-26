@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { usePositions, useClosePosition } from '../hooks/usePositions';
+import React, { useMemo, useState } from 'react';
+import { usePositions, useClosePosition, useCloseAll, useClearAllPositions } from '../hooks/usePositions';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { useExchanges } from '../hooks/useExchanges';
 import { fmtUSD } from '../utils/fmt';
+import type { PaperPosition } from '../types';
+import { ThreeColumnLayout, LeftSection } from './ThreeColumnLayout';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,25 @@ function fmtDuration(openMs: number, closeMs?: number): string {
 const ACCENT  = 'var(--accent)';
 const DANGER  = 'var(--danger)';
 
+// ── Mode (paper / shadow / live) + strategy segregation ──────────────────────
+type PosMode = 'paper' | 'shadow' | 'live';
+const MODE_COLORS: Record<PosMode, string> = { paper: 'var(--blue)', shadow: '#a855f7', live: 'var(--accent)' };
+
+function posModeOf(p: PaperPosition): PosMode {
+  const m = (p.mode || (p.is_paper ? 'paper' : 'live')).toLowerCase();
+  return m === 'shadow' ? 'shadow' : m === 'live' ? 'live' : 'paper';
+}
+
+const STRAT_LABELS: Record<string, string> = {
+  price_action: 'Price Action', smc: 'SMC', ma_crossover: 'MA Cross', mean_reversion: 'Mean Reversion',
+};
+function posStrategyOf(p: PaperPosition): { key: string; label: string } {
+  const m = (p.notes || '').match(/\[SCALP-([A-Z_]+)\]/i);
+  if (!m) return { key: 'other', label: 'Other' };
+  const key = m[1].toLowerCase();
+  return { key, label: STRAT_LABELS[key] || m[1].replace(/_/g, ' ') };
+}
+
 function DirBadge({ dir }: { dir: string }) {
   const color = dir === 'long' ? ACCENT : dir === 'short' ? DANGER : 'var(--text-dim)';
   const label = dir === 'long' ? '↑ LONG' : dir === 'short' ? '↓ SHORT' : dir.toUpperCase();
@@ -95,24 +116,49 @@ function PriceCell({ label, value, color }: { label: string; value: string | nul
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function PositionsStrip() {
+export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
   const { data: exData } = useExchanges();
   const delta  = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive = !!(delta?.has_credentials && !delta.is_paper);
-  const mode   = isLive ? 'live' : 'paper';
 
-  const { data: posData }               = usePositions(mode);
+  const { data: posData }               = usePositions();   // all modes — segregated in-UI
   const { data: pnlData }               = useLivePnl();
   const { mutate: closePos, isPending } = useClosePosition();
+  const closeAll                        = useCloseAll();
+  const clearAll                        = useClearAllPositions();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter]         = useState<'all' | 'open' | 'closed'>('all');
+  const [modeFilter, setModeFilter] = useState<'all' | PosMode>('all');
+  const [stratFilter, setStratFilter] = useState<string>('all');
+  const [confirmClose, setConfirmClose] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
-  const all    = posData?.positions ?? [];
+  const everything = posData?.positions ?? [];
+
+  // Faceted matchers — each filter's displayed counts reflect the OTHER selected filters.
+  const statusMatch = (p: PaperPosition) =>
+    filter === 'all' || (filter === 'open' ? (p.status === 'open' || p.status === 'partially_closed') : p.status === 'closed');
+  const modeMatch = (p: PaperPosition) => modeFilter === 'all' || posModeOf(p) === modeFilter;
+  const stratMatch = (p: PaperPosition) => stratFilter === 'all' || posStrategyOf(p).key === stratFilter;
+
+  // Mode counts reflect the selected Status (+ Strategy), so they sum within the current view.
+  const modeScoped = everything.filter(p => statusMatch(p) && stratMatch(p));
+  const modeCounts: Record<PosMode, number> = { paper: 0, shadow: 0, live: 0 };
+  for (const p of modeScoped) modeCounts[posModeOf(p)] += 1;
+
+  const strategies = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of everything) { const s = posStrategyOf(p); m.set(s.key, s.label); }
+    return [...m.entries()].map(([key, label]) => ({ key, label }));
+  }, [everything]);
+
+  // Displayed set: mode + strategy + status. Status counts (below) reflect mode + strategy.
+  const all = everything.filter(p => modeMatch(p) && stratMatch(p));
   const open   = all.filter(p => p.status === 'open' || p.status === 'partially_closed');
   const closed = all.filter(p => p.status === 'closed');
 
-  const livePnl     = pnlData?.total_estimated_pnl_usd ?? 0;
+  const livePnl     = open.reduce((s, p) => s + (pnlData?.positions?.find(x => x.position_id === p.id)?.estimated_pnl_usd ?? 0), 0);
   const realizedPnl = closed.reduce((s, p) => s + (p.realized_pnl_usd ?? 0), 0);
 
   const displayed = filter === 'open'
@@ -123,8 +169,116 @@ export function PositionsStrip() {
 
   const modeColor = isLive ? ACCENT : 'var(--blue)';
 
-  if (all.length === 0) {
-    return (
+  // ── Sidebar filter controls (page mode) ──
+  const sideBtn = (active: boolean, color?: string): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%',
+    padding: '6px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 11, fontWeight: active ? 700 : 500, marginBottom: 3, letterSpacing: '0.04em',
+    border: `1px solid ${active ? (color ? color + '66' : 'var(--t-border)') : 'transparent'}`,
+    background: active ? (color ? color + '18' : 'var(--t-bg3)') : 'transparent',
+    color: active ? (color || 'var(--t-bright)') : 'var(--t-dim)', transition: 'all .1s',
+  });
+  const cnt = (n: number) => <span style={{ opacity: 0.6, fontWeight: 700 }}>{n}</span>;
+  const sidebarFilters = (
+    <>
+      <LeftSection label="Status" collapsible defaultOpen>
+        {(['all', 'open', 'closed'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={sideBtn(filter === f)}>
+            <span>{f.toUpperCase()}</span>{cnt(f === 'all' ? all.length : f === 'open' ? open.length : closed.length)}
+          </button>
+        ))}
+      </LeftSection>
+      <LeftSection label="Mode" collapsible defaultOpen>
+        <button onClick={() => setModeFilter('all')} style={sideBtn(modeFilter === 'all')}><span>ALL</span>{cnt(modeScoped.length)}</button>
+        {(['paper', 'shadow', 'live'] as PosMode[]).map(m => (
+          <button key={m} onClick={() => setModeFilter(m)} style={sideBtn(modeFilter === m, MODE_COLORS[m])}>
+            <span>{m.toUpperCase()}</span>{cnt(modeCounts[m])}
+          </button>
+        ))}
+      </LeftSection>
+      {strategies.length > 1 && (
+        <LeftSection label="Strategy" border={false} collapsible defaultOpen>
+          <button onClick={() => setStratFilter('all')} style={sideBtn(stratFilter === 'all')}><span>ALL</span></button>
+          {strategies.map(s => (
+            <button key={s.key} onClick={() => setStratFilter(s.key)} style={sideBtn(stratFilter === s.key)}>
+              <span>{s.label}</span>
+            </button>
+          ))}
+        </LeftSection>
+      )}
+    </>
+  );
+  // Close All — closes the open positions in the current view. Maps the mode filter
+  // to the backend's paper/live filter (shadow is paper-backed) so it never closes
+  // live by accident when you're looking at paper. Two-click inline confirm.
+  const closeMode: 'paper' | 'live' | undefined =
+    modeFilter === 'live' ? 'live' : (modeFilter === 'paper' || modeFilter === 'shadow') ? 'paper' : undefined;
+  const onCloseAll = () => {
+    if (closeAll.isPending) return;
+    if (!confirmClose) { setConfirmClose(true); setTimeout(() => setConfirmClose(false), 4000); return; }
+    closeAll.mutate(closeMode ? { mode: closeMode } : undefined);
+    setConfirmClose(false);
+  };
+  const closeAllBtn = open.length > 0 ? (
+    <button
+      onClick={onCloseAll}
+      disabled={closeAll.isPending}
+      title={`Close ${open.length} open ${closeMode ?? 'all-mode'} position${open.length === 1 ? '' : 's'}`}
+      style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 12px', borderRadius: 6,
+        cursor: closeAll.isPending ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+        border: `1px solid ${DANGER}55`, background: confirmClose ? DANGER : `${DANGER}14`,
+        color: confirmClose ? '#fff' : DANGER, transition: 'all .12s',
+      }}
+    >
+      {closeAll.isPending ? 'Closing…' : confirmClose ? `Confirm — close ${open.length}?` : `✕ Close All (${open.length})`}
+    </button>
+  ) : null;
+
+  // Clear — deletes CLOSED position records (history cleanup) in the current view.
+  // Open positions are kept; close them first if you want them gone. Strong confirm.
+  const onClearAll = () => {
+    if (clearAll.isPending) return;
+    if (!confirmClear) { setConfirmClear(true); setTimeout(() => setConfirmClear(false), 4000); return; }
+    clearAll.mutate(closeMode ? { mode: closeMode } : undefined);
+    setConfirmClear(false);
+  };
+  const clearAllBtn = closed.length > 0 ? (
+    <button
+      onClick={onClearAll}
+      disabled={clearAll.isPending}
+      title={`Delete ${closed.length} closed ${closeMode ?? 'all-mode'} record${closed.length === 1 ? '' : 's'} from history. Open positions are kept.`}
+      style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '5px 12px', borderRadius: 6,
+        cursor: clearAll.isPending ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+        border: '1px solid var(--text-dim)55', background: confirmClear ? 'var(--warning)' : 'transparent',
+        color: confirmClear ? '#000' : 'var(--text-dim)', transition: 'all .12s',
+      }}
+    >
+      {clearAll.isPending ? 'Clearing…' : confirmClear ? `Confirm — delete ${closed.length}?` : `🗑 Clear Closed (${closed.length})`}
+    </button>
+  ) : null;
+
+  const statsBar = (
+    <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, alignItems: 'center' }}>
+      <StatChip label="OPEN" value={String(open.length)} color={open.length > 0 ? 'var(--text-primary)' : 'var(--text-dim)'} />
+      {open.length > 0 && <StatChip label="LIVE P&L" value={fmtPnl(livePnl)} color={livePnl >= 0 ? ACCENT : DANGER} />}
+      {closed.length > 0 && <StatChip label="REALIZED" value={fmtPnl(realizedPnl)} color={realizedPnl >= 0 ? ACCENT : DANGER} />}
+      <StatChip label="CLOSED" value={String(closed.length)} color="var(--text-dim)" />
+      {closeAllBtn}
+      {clearAllBtn}
+    </div>
+  );
+  const pageHeader = (
+    <>
+      <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Positions</div>
+      <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Order book &amp; trade history</div>
+      {statsBar}
+    </>
+  );
+
+  if (everything.length === 0) {
+    const emptyCard = (
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 10, padding: '36px 24px', textAlign: 'center',
@@ -133,21 +287,27 @@ export function PositionsStrip() {
           No positions yet
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
-          Open a signal card to enter a trade. {isLive ? 'Live' : 'Paper'} positions appear here instantly.
+          Open a signal card to enter a trade. Positions appear here instantly.
         </div>
       </div>
     );
+    return asPage
+      ? <ThreeColumnLayout leftSidebar={sidebarFilters} centerHeader={pageHeader} centerContent={emptyCard} />
+      : emptyCard;
   }
 
-  return (
+  const card = (
     <div style={{
       background: 'var(--bg-card)',
       border: '1px solid var(--border)',
       borderRadius: 10,
       overflow: 'hidden',
+      // Page mode: fill the (bounded) center area so the rows scroll inside the card.
+      ...(asPage ? { height: '100%', display: 'flex' as const, flexDirection: 'column' as const } : {}),
     }}>
 
-      {/* ── Header bar ── */}
+      {/* ── Header bar (card mode only — page mode shows stats in the centerHeader) ── */}
+      {!asPage && (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '10px 16px',
@@ -185,10 +345,14 @@ export function PositionsStrip() {
             />
           )}
           <StatChip label="CLOSED" value={String(closed.length)} color="var(--text-dim)" />
+          {closeAllBtn}
+          {clearAllBtn}
         </div>
       </div>
+      )}
 
-      {/* ── Filter pills ── */}
+      {/* ── Filter pills (card mode only — page mode moves these to the left sidebar) ── */}
+      {!asPage && (
       <div style={{
         display: 'flex', gap: 4, padding: '8px 16px',
         borderBottom: '1px solid var(--border)',
@@ -214,9 +378,40 @@ export function PositionsStrip() {
           </button>
         ))}
       </div>
+      )}
 
-      {/* ── Position rows ── */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* ── Mode + strategy segregation (card mode only) ── */}
+      {!asPage && (
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 14px',
+        padding: '8px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg)',
+      }}>
+        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-faint)' }}>MODE</span>
+        <SegPill active={modeFilter === 'all'} onClick={() => setModeFilter('all')}>ALL</SegPill>
+        {(['paper', 'shadow', 'live'] as PosMode[]).map(m => (
+          <SegPill key={m} active={modeFilter === m} color={MODE_COLORS[m]} onClick={() => setModeFilter(m)}>
+            {m.toUpperCase()} <span style={{ opacity: 0.6, fontWeight: 400 }}>{modeCounts[m]}</span>
+          </SegPill>
+        ))}
+        {strategies.length > 1 && (
+          <>
+            <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--text-faint)', marginLeft: 6 }}>STRATEGY</span>
+            <SegPill active={stratFilter === 'all'} onClick={() => setStratFilter('all')}>ALL</SegPill>
+            {strategies.map(s => (
+              <SegPill key={s.key} active={stratFilter === s.key} onClick={() => setStratFilter(s.key)}>{s.label}</SegPill>
+            ))}
+          </>
+        )}
+      </div>
+      )}
+
+      {/* ── Position rows ── (scrolls inside the card in page mode) */}
+      <div style={{ display: 'flex', flexDirection: 'column', ...(asPage ? { flex: 1, minHeight: 0, overflowY: 'auto' as const } : {}) }}>
+        {displayed.length === 0 && (
+          <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 11, color: 'var(--text-faint)' }}>
+            No positions match this filter.
+          </div>
+        )}
         {displayed.map((pos, idx) => {
           const st       = pos.sized_trade;
           const dir      = st?.structure?.direction ?? '';
@@ -281,13 +476,17 @@ export function PositionsStrip() {
                       <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--warning)', background: 'var(--warning)14', borderRadius: 3, padding: '1px 5px' }} title="Entry price not recorded — order may not have filled">NO FILL</span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' as const }}>
                     <DirBadge dir={dir} />
                     <StatusBadge status={pos.status} />
+                    {(() => { const pm = posModeOf(pos); return (
+                      <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: MODE_COLORS[pm], background: MODE_COLORS[pm] + '18', borderRadius: 3, padding: '1px 5px' }}>
+                        {pm.toUpperCase()}
+                      </span>
+                    ); })()}
                   </div>
                   <div style={{ fontSize: 9, color: 'var(--text-faint)' }}>
-                    {contracts} ct · {pos.is_paper ? 'PAPER' : 'LIVE'}
-                    {pos.mode ? ` · ${pos.mode.toUpperCase()}` : ''}
+                    {contracts} ct · {posStrategyOf(pos).label}
                   </div>
                 </div>
 
@@ -500,9 +699,32 @@ export function PositionsStrip() {
       </div>
     </div>
   );
+
+  if (asPage) {
+    return <ThreeColumnLayout leftSidebar={sidebarFilters} centerHeader={pageHeader} centerContent={card} />;
+  }
+  return card;
 }
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
+
+function SegPill({ active, color, onClick, children }: { active: boolean; color?: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '3px 10px', borderRadius: 5, fontSize: 9, fontWeight: 700,
+        letterSpacing: '0.06em', cursor: 'pointer', fontFamily: 'inherit',
+        border: `1px solid ${active ? (color ? color + '88' : 'var(--border-light)') : 'transparent'}`,
+        background: active ? (color ? color + '1c' : 'var(--bg-card)') : 'transparent',
+        color: active ? (color || 'var(--text-primary)') : 'var(--text-dim)',
+        transition: 'all 0.1s', whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 function StatChip({ label, value, color }: { label: string; value: string; color: string }) {
   return (

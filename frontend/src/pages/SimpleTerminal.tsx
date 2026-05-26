@@ -250,7 +250,7 @@ export function SimpleTerminal() {
       <TickerStrip />
 
       {/* Main content */}
-      <div style={{ flex: 1, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
         {/* V4 Analytics shown on signals, backtest, and calibration tabs — in the right sidebar of those tabs */}
         {activeSection === 'scalping' && (
           <ScalpingTab />
@@ -276,18 +276,7 @@ export function SimpleTerminal() {
             </>}
           />
         )}
-        {activeSection === 'positions' && (
-          <ThreeColumnLayout
-            leftNav={[{ id: 'open', label: 'Open Positions', color: 'var(--t-green)' }, { id: 'closed', label: 'Closed', color: 'var(--t-dim)' }]}
-            activeNav="open"
-            onNavClick={() => {}}
-            centerHeader={<>
-              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Positions</div>
-              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Order book & trade history</div>
-            </>}
-            centerContent={<PositionsStrip />}
-          />
-        )}
+        {activeSection === 'positions' && <PositionsStrip asPage />}
         {activeSection === 'backtest' && (
           <ThreeColumnLayout
             leftNav={[{ id: 'backtest', label: 'Backtest', color: 'var(--t-blue)' }]}

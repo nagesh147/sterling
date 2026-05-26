@@ -65,10 +65,22 @@ export function useDeletePosition() {
   });
 }
 
+export function useClearAllPositions() {
+  const qc = useQueryClient();
+  return useMutation<{ removed_count: number }, Error, { mode?: 'paper' | 'live' } | void>({
+    mutationFn: (vars) => api.post(`/api/v1/positions/clear-all${vars && vars.mode ? `?mode=${vars.mode}` : ''}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['positions'] });
+      qc.invalidateQueries({ queryKey: ['portfolio-summary'] });
+      qc.invalidateQueries({ queryKey: ['live-pnl'] });
+    },
+  });
+}
+
 export function useCloseAll() {
   const qc = useQueryClient();
-  return useMutation<{ closed_count: number; total_realized_pnl_usd: number }, Error, void>({
-    mutationFn: () => api.post('/api/v1/positions/close-all'),
+  return useMutation<{ closed_count: number; total_realized_pnl_usd: number }, Error, { mode?: 'paper' | 'live' } | void>({
+    mutationFn: (vars) => api.post(`/api/v1/positions/close-all${vars && vars.mode ? `?mode=${vars.mode}` : ''}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['positions'] });
       qc.invalidateQueries({ queryKey: ['portfolio-summary'] });

@@ -86,9 +86,9 @@ export function ThreeColumnLayout({
   rightSidebar,
 }: ThreeColumnLayoutProps) {
   return (
-    <div style={{ flex: 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: '220px 1fr 260px', background: 'var(--t-bg)' }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: '220px 1fr 260px', gridTemplateRows: 'minmax(0, 1fr)', background: 'var(--t-bg)' }}>
       {/* ── LEFT SIDEBAR ── */}
-      <div style={{ background: SIDE_BG, borderRight: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+      <div style={{ background: SIDE_BG, borderRight: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column', overflow: 'auto', minHeight: 0 }}>
         {leftNav && leftNav.length > 0 && (
           <CollapsibleSection label="Navigation" collapsible defaultOpen side="left">
             {leftNav.map((item) => {
@@ -113,8 +113,8 @@ export function ThreeColumnLayout({
         {leftSidebar}
       </div>
 
-      {/* ── CENTER COLUMN ── */}
-      <div style={{ overflow: 'auto', display: 'flex', flexDirection: 'column', background: 'var(--t-bg)' }}>
+      {/* ── CENTER COLUMN ── (header fixed, only the content area scrolls) */}
+      <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--t-bg)', minHeight: 0, minWidth: 0 }}>
         {centerHeader && (
           <div style={{
             padding: '14px 20px', borderBottom: '1px solid var(--t-border)',
@@ -123,13 +123,13 @@ export function ThreeColumnLayout({
             {centerHeader}
           </div>
         )}
-        <div style={{ flex: 1, overflow: 'auto', padding: centerFullBleed ? 0 : '16px 20px', display: 'flex', flexDirection: 'column', gap: centerFullBleed ? 0 : 8 }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: centerFullBleed ? 0 : '16px 20px', display: 'flex', flexDirection: 'column', gap: centerFullBleed ? 0 : 8 }}>
           {centerContent}
         </div>
       </div>
 
       {/* ── RIGHT SIDEBAR ── */}
-      <div style={{ background: SIDE_BG, borderLeft: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+      <div style={{ background: SIDE_BG, borderLeft: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column', overflow: 'auto', minHeight: 0 }}>
         {rightSidebar}
       </div>
     </div>

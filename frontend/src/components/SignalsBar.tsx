@@ -184,7 +184,7 @@ export function SignalsBar() {
   const { data: exData }    = useExchanges();
   const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive  = !!(delta?.has_credentials && !delta.is_paper);
-  const { data: posData }   = usePositions(isLive ? 'live' : 'paper');
+  const { data: posData }   = usePositions();  // all modes — badge counts paper/shadow/live alike
   const selected = useSelectedUnderlying();
   const setUnderlying = useSetSelectedUnderlying();
 

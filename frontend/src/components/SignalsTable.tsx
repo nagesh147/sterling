@@ -1278,10 +1278,11 @@ function useSignalsPanelState() {
 
   const delta      = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive     = !!(delta?.has_credentials && !delta.is_paper);
-  const posMode    = isLive ? 'live' : 'paper';
   const availFunds = acctData?.portfolio?.margin_available ?? null;
 
-  const { data: posData } = usePositions(posMode);
+  // All modes — the open-position badge should reflect paper/shadow/live alike,
+  // otherwise switching the account to Live hides existing paper positions.
+  const { data: posData } = usePositions();
 
   const positions = posData?.positions;
   const openByUnderlying = useMemo(() => {

@@ -380,6 +380,13 @@ async def live_pnl(request: Request):
             )
             total_pnl += pnl
 
+        trail_state = None
+        if pos.trail_stop_json:
+            try:
+                import json as _json
+                trail_state = _json.loads(pos.trail_stop_json)
+            except Exception:
+                pass
         results.append({
             "position_id": pos.id,
             "underlying": pos.underlying,
@@ -390,6 +397,21 @@ async def live_pnl(request: Request):
             "current_dte": current_dte,
             "max_risk_usd": pos.sized_trade.max_risk_usd,
             "capital_at_risk_pct": pos.sized_trade.capital_at_risk_pct,
+            "direction": pos.sized_trade.structure.direction.value,
+            "contracts": pos.sized_trade.contracts,
+            "leverage": getattr(pos.sized_trade.structure, "leverage", 1) or 1,
+            "entry_timestamp_ms": pos.entry_timestamp_ms,
+            "entry_price_real": pos.entry_price_real,
+            "initial_sl": pos.initial_sl,
+            "initial_tp": pos.initial_tp,
+            "current_sl": pos.current_sl,
+            "current_tp": pos.current_tp,
+            "trail_mode": pos.trail_mode,
+            "trail_state": trail_state,
+            "order_id": pos.order_id,
+            "order_status": pos.order_status,
+            "mode": pos.mode,
+            "structure_type": getattr(pos.sized_trade.structure, "structure_type", ""),
         })
 
     return {
@@ -400,9 +422,11 @@ async def live_pnl(request: Request):
 
 
 @router.post("/close-all")
-async def close_all_positions(request: Request) -> dict:
+async def close_all_positions(request: Request, mode: str = Query(default="")) -> dict:
     """
     Close all open/partially_closed positions using current spot prices.
+    Optional `mode` filter — "paper" or "live" — closes only that side, so a
+    "Close all paper" action never touches live positions.
     Returns count of positions closed and total realized P&L.
     """
     from app.services import adapter_manager as _adm
@@ -411,6 +435,11 @@ async def close_all_positions(request: Request) -> dict:
         p for p in paper_store.list_positions()
         if p.status.value in ("open", "partially_closed")
     ]
+    m = mode.strip().lower()
+    if m == "paper":
+        active = [p for p in active if p.is_paper]
+    elif m == "live":
+        active = [p for p in active if not p.is_paper]
     if not active:
         return {"closed_count": 0, "total_realized_pnl_usd": 0.0, "timestamp_ms": now_ms}
 
@@ -443,6 +472,17 @@ async def close_all_positions(request: Request) -> dict:
         "total_realized_pnl_usd": round(total_pnl, 2),
         "timestamp_ms": now_ms,
     }
+
+
+@router.post("/clear-all")
+async def clear_all_positions(mode: str = Query(default="")) -> dict:
+    """
+    Delete CLOSED position records from the tracking store (history cleanup).
+    Open/partially-closed positions are kept. Optional `mode` filter
+    ("paper" | "live"). Close positions first, then clear their history.
+    """
+    removed = paper_store.clear_positions(mode)
+    return {"removed_count": removed, "timestamp_ms": int(time.time() * 1000)}
 
 
 @router.get("/export")

@@ -473,7 +473,10 @@ export function PositionsPanel({ underlying }: Props) {
   const { data: exData }  = useExchanges();
   const delta   = exData?.exchanges.find(e => e.name === 'delta_india' && e.is_active);
   const isLive  = !!(delta?.has_credentials && !delta.is_paper);
-  const { data, isLoading } = usePositions(isLive ? 'live' : 'paper');
+  // Show positions from ALL modes (paper / shadow / live). Filtering by the exchange
+  // toggle hid paper/shadow positions whenever the account was switched to Live —
+  // which made the dashboard read "0 open" while the order book showed them.
+  const { data, isLoading } = usePositions();
   const enter = useEnterPosition();
   const monitorAll = useMonitorAll();
   const closeAll = useCloseAll();

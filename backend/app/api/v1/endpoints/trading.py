@@ -295,9 +295,15 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
 
     # Check if Delta Exchange India is active with credentials
     algo_mode = getattr(request.app.state, "algo_mode", False)
+    # Router mode is the authoritative paper/shadow/live switch. Real orders are
+    # placed ONLY in "live" mode — "shadow" runs with keys present but simulates
+    # the fill as a paper position (so it never touches real funds), and "paper"
+    # is pure simulation. This gate is what stops shadow from placing live orders.
+    router_mode = (getattr(request.app.state, "algo_router_mode", "live") or "live").lower()
     active = exchange_account_store.get_active()
     has_live_creds = (
-        active is not None
+        router_mode == "live"
+        and active is not None
         and active.name in ("delta_india", "delta")
         and bool(active.api_key)
         and bool(active.api_secret)
@@ -424,8 +430,35 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                 detail=json.dumps(error_detail),
             )
 
+    elif router_mode == "live":
+        # ── LIVE REQUESTED BUT NO USABLE CREDENTIALS ──────────────────────
+        # Don't silently fall back to a paper trade — that mislabels the order
+        # and confuses "what mode am I in?". Reject with a clear next step so a
+        # live execution stays tied to live mode.
+        active_has_keys = bool(
+            active and active.api_key and active.api_secret
+            and not active.api_key.startswith("DUMMY")
+        )
+        reason = (
+            "Exchange is in Paper — flip the Paper/Live toggle to Live to place real orders."
+            if active_has_keys else
+            "No live credentials — add Delta Exchange API keys, then switch the Paper/Live toggle to Live."
+        )
+        return LiveOrderResponse(
+            mode="live",
+            symbol=inst.delta_perp_symbol or f"{sym}USD",
+            side=side, size=body.size,
+            status="rejected",
+            message=reason,
+            timestamp_ms=now_ms,
+        )
+
     else:
-        # ── PAPER ORDER ───────────────────────────────────────────────────
+        # ── PAPER / SHADOW ORDER ──────────────────────────────────────────
+        # Both create a simulated paper position; "shadow" just means keys are
+        # present and we're deliberately simulating instead of going live.
+        is_shadow = router_mode == "shadow"
+        resp_mode = "shadow" if is_shadow else "paper"
         adapter = _adm.get_adapter() or request.app.state.adapter
         try:
             entry_price = float(await adapter.get_index_price(inst))
@@ -433,17 +466,22 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             entry_price = 0.0
 
         pos_id = _create_paper_tracking(body, sym, entry_price)
-        _send_order_telegram(body, sym, side, entry_price, pos_id, "PAPER")
+        _send_order_telegram(body, sym, side, entry_price, pos_id, resp_mode.upper())
+
+        if is_shadow:
+            msg = f"Shadow {side.upper()} position created (simulated — keys present, no live order placed)"
+        else:
+            msg = f"Paper {side.upper()} position created (no live credentials configured)"
 
         return LiveOrderResponse(
-            mode="paper", paper_position_id=pos_id,
+            mode=resp_mode, paper_position_id=pos_id,
             symbol=inst.delta_perp_symbol or f"{sym}USD",
             side=side, size=body.size,
             entry_price=entry_price,
             stop_loss=body.stop_loss, take_profit=body.take_profit,
             leverage=body.leverage if body.instrument_type == "futures" else None,
             status="open",
-            message=f"Paper {side.upper()} position created (no live credentials configured)",
+            message=msg,
             timestamp_ms=now_ms,
         )
 
@@ -717,8 +755,10 @@ async def test_credentials(request: Request) -> dict:
     errors = {}
     for label, base_url in [("India (india.delta.exchange)", "https://api.india.delta.exchange"),
                              ("Global (delta.exchange)", "https://api.delta.exchange")]:
+        # Short per-call timeout so the overall test stays well under the client's
+        # 25s guard even when both India and Global have to be tried.
         adapter = DeltaIndiaAdapter(api_key=active.api_key, api_secret=active.api_secret,
-                                    is_paper=False, base_url=base_url)
+                                    is_paper=False, base_url=base_url, timeout=6.0)
         try:
             data = await adapter._auth_get("/v2/wallet/balances")
             balances = (data.get("result") or [])

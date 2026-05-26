@@ -910,6 +910,19 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
             log.warning("VCP live feed background error: %s", exc)
 
 
+async def _background_scalping_alerts(interval: int = 45) -> None:
+    """Periodically scan scalping signals and push Telegram alerts for new ready
+    setups. No-ops when Telegram isn't configured or alerts are toggled off."""
+    from app.services.notifications import telegram_bot as _bot
+    await asyncio.sleep(10)  # let startup settle before the first scan
+    while True:
+        try:
+            await _bot.push_signal_alerts()
+        except Exception as exc:
+            log.debug("scalping alert push error: %s", exc)
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -959,6 +972,25 @@ async def lifespan(app: FastAPI):
     if _router_mode not in ("paper", "shadow", "live"):
         _router_mode = "live"
     app.state.algo_router_mode = _router_mode
+
+    # Restore persisted Telegram credentials. They're saved to config by
+    # PUT /config/telegram but the module only read env vars at import — so after
+    # a restart Telegram silently went quiet (send() returns False with no token).
+    try:
+        import app.services.notifications.telegram as _tg_mod
+        _tg_token = get_config("telegram_bot_token")
+        _tg_chat  = get_config("telegram_chat_id")
+        if _tg_token:
+            _tg_mod.TELEGRAM_TOKEN = _tg_token
+        if _tg_chat:
+            _tg_mod.TELEGRAM_CHAT_ID = _tg_chat
+        if get_config("telegram_verified") == "1":
+            _tg_mod.TELEGRAM_REACHABLE = True
+        log.info("Telegram config restored: token=%s chat=%s",
+                 "set" if _tg_mod.TELEGRAM_TOKEN else "—",
+                 "set" if _tg_mod.TELEGRAM_CHAT_ID else "—")
+    except Exception as _e:
+        log.warning("Telegram config restore skipped: %s", _e)
 
     # Restore persisted scalping config (survives server restarts)
     from app.engines.scalping.config import ScalpingConfig as _SC, default_config as _default_sc
@@ -1066,7 +1098,20 @@ async def lifespan(app: FastAPI):
     vcp_feed_task = asyncio.create_task(_background_vcp_live_feed(app))
     log.info("VCP Live Feed task started")
 
+    # ── Telegram bot + signal-detection alerts ────────────────────────────────
+    from app.services.notifications import telegram_bot as _tg_bot
+    tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
+    tg_alert_task = asyncio.create_task(_background_scalping_alerts(interval=45))
+    log.info("Telegram bot + signal alerts started")
+
     yield
+
+    for _t in (tg_bot_task, tg_alert_task):
+        _t.cancel()
+        try:
+            await _t
+        except (Exception, BaseException):
+            pass
 
     ofi_broadcast_task.cancel()
     try:

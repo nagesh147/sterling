@@ -242,10 +242,40 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
 async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExecuteResponse:
     """Route a scalping signal through the Paper/Live order path."""
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
+    from app.services import paper_store
 
     cfg = _get_config(request)
     sym = body.underlying.upper()
     strategy = body.strategy
+
+    # ── Idempotency guard ──────────────────────────────────────────────
+    # Never stack a second open position on the same symbol+strategy. Without
+    # this, any client re-fire (tab remount, mode switch, 30s rescan) created a
+    # brand-new position — which is how hundreds of duplicate paper positions
+    # accumulated. If one is already open, return it instead of opening another.
+    strat_tag = f"[SCALP-{strategy.upper()}]"
+    existing = next(
+        (p for p in paper_store.list_positions()
+         if p.status.value in ("open", "partially_closed")
+         and p.underlying == sym
+         and strat_tag in (p.notes or "")),
+        None,
+    )
+    if existing is not None:
+        return ScalpingExecuteResponse(
+            accepted=True,
+            mode="paper" if existing.is_paper else "live",
+            underlying=sym, strategy=strategy,
+            direction=existing.sized_trade.structure.direction.value if existing.sized_trade else "none",
+            size_units=float(getattr(existing.sized_trade, "contracts", 0) or 0),
+            notional_usd=round(float(getattr(existing.sized_trade, "position_value", 0) or 0), 2),
+            entry_price=existing.entry_spot_price,
+            stop_loss=existing.initial_sl, take_profit=existing.initial_tp,
+            paper_position_id=existing.id, order_id=existing.order_id,
+            status="already_open",
+            reason="An open position for this setup already exists — not duplicated.",
+            timestamp_ms=int(time.time() * 1000),
+        )
 
     c4h = _store_candles(sym, "4h", 60)
     c15m = _store_candles(sym, "15m", 7)

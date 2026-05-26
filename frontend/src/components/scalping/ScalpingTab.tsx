@@ -4,19 +4,30 @@ import { useAlgoMode } from '../../hooks/useSignalAlerts';
 import {
   useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
   useScalpingBacktest, useScalpingExecute, useScalpingSignals,
-  type ScalpingConfig, type ScalpingSignal, type SupportResistanceLevel,
+  type ScalpingConfig, type ScalpingSignal,
   type ScalpingExecuteResponse,
 } from '../../hooks/useScalping';
 import { usePositions } from '../../hooks/usePositions';
 import { useLivePnl } from '../../hooks/useLivePnl';
-import { useExchanges } from '../../hooks/useExchanges';
+import { useRouterMode, RouterMode } from '../../hooks/useRouterMode';
+import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
 import { useStreamPrices } from '../../hooks/useAppStream';
-import { ThreeColumnLayout, LeftSection, RightSection, StatCard } from '../ThreeColumnLayout';
+import { ThreeColumnLayout, LeftSection, RightSection } from '../ThreeColumnLayout';
 
 /* ── executed-trade tracking ───────────────────────────────────────────────── */
 
 type ExecState = { resp?: ScalpingExecuteResponse; error?: string; auto?: boolean; mode?: string };
-type SignalPnl = { value: number | null; realized: boolean; status?: string };
+type SignalPnl = {
+    value: number | null; realized: boolean; status?: string;
+    currentSpot?: number | null;
+    direction?: string; contracts?: number; leverage?: number;
+    entryTimeMs?: number | null; entryPriceReal?: number | null;
+    initialSl?: number | null; initialTp?: number | null;
+    currentSl?: number | null; currentTp?: number | null;
+    trailMode?: string | null; trailState?: { current_stop: number; highest_seen: number; lowest_seen: number; breakeven_set: boolean } | null;
+    orderId?: string | null; orderStatus?: string | null; mode?: string | null;
+    structureType?: string;
+  };
 
 /* ── style tokens ──────────────────────────────────────────────────────────── */
 
@@ -215,7 +226,7 @@ const fmtTime = (ms?: number) =>
 
 // Backend status codes → plain-English explanations.
 const EXEC_STATUS_FRIENDLY: Record<string, string> = {
-  no_signal: 'No armed signal for this strategy at execution time.',
+  no_signal: 'No signal was ready to trade for this strategy at execution time.',
   no_plan: 'The signal had no complete trade plan (missing entry or stop).',
   size_too_small: 'Risk-based position size came out below 1 contract.',
   rejected: 'The order was rejected by the exchange.',
@@ -230,6 +241,98 @@ const MODE_META: Record<string, { color: string; glyph: string }> = {
 };
 const modeColorOf = (m: string) => MODE_META[m]?.color ?? 'var(--t-dim)';
 
+const MODE_HINT: Record<RouterMode, string> = {
+  paper: 'No exchange call — pure simulation.',
+  shadow: 'Keys present, but orders are simulated (no real fill).',
+  live: 'Real money — orders execute on the exchange.',
+};
+
+/** Inline paper / shadow / live selector wired to the authoritative router mode.
+ *  Switching to LIVE is routed through the parent so it can show a confirm modal. */
+function ModeSelector({ mode, onChange }: { mode: RouterMode; onChange: (m: RouterMode) => void }) {
+  const pick = (m: RouterMode) => {
+    if (m === mode) return;
+    onChange(m);
+  };
+  return (
+    <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 6, padding: 2 }}>
+      {(['paper', 'shadow', 'live'] as RouterMode[]).map((m) => {
+        const active = mode === m;
+        const c = modeColorOf(m.toUpperCase());
+        return (
+          <button
+            key={m}
+            onClick={() => pick(m)}
+            title={MODE_HINT[m]}
+            style={{
+              padding: '3px 10px', borderRadius: 4, cursor: active ? 'default' : 'pointer', fontFamily: 'inherit',
+              fontSize: 9, fontWeight: active ? 700 : 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+              border: `1px solid ${active ? c + '88' : 'transparent'}`,
+              background: active ? c + '20' : 'transparent',
+              color: active ? c : 'var(--t-dim)', transition: 'all .12s',
+            }}
+          >
+            {MODE_META[m.toUpperCase()]?.glyph} {m}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Confirmation modal shown before switching the router to LIVE (real money). */
+function GoLiveModal({ fromMode, hasCreds, onConfirm, onCancel }: { fromMode: RouterMode; hasCreds: boolean; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <div style={{
+        background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderTop: '2px solid var(--t-amber)',
+        borderRadius: 12, padding: '22px 24px', width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--t-amber)', marginBottom: 6 }}>⚡ Switch to LIVE trading</div>
+        <div style={{ fontSize: 11, color: 'var(--t-dim)', lineHeight: 1.6, marginBottom: 16 }}>
+          Signals will execute with <b style={{ color: 'var(--t-bright)' }}>real money</b> on the exchange instead of paper.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+          {[
+            ['💸', 'Orders place real funds on Delta Exchange'],
+            ['⚙️', 'This also switches the exchange account from Paper to Live'],
+            ['🛑', 'Kill switch & daily-loss limits still apply'],
+          ].map(([icon, text]) => (
+            <div key={text} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 11, color: 'var(--t-bright)' }}>
+              <span style={{ fontSize: 13, flexShrink: 0 }}>{icon}</span>
+              <span style={{ lineHeight: 1.5 }}>{text}</span>
+            </div>
+          ))}
+        </div>
+        {!hasCreds && (
+          <div style={{
+            display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px', marginBottom: 16,
+            borderRadius: 6, background: 'var(--t-red)14', border: '1px solid var(--t-red)44',
+            fontSize: 10.5, color: 'var(--t-red)', lineHeight: 1.5,
+          }}>
+            <span>⚠️</span>
+            <span>No live credentials configured. Add your Delta Exchange API keys first (Exchange settings) — live trading can't be enabled without them.</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onCancel} style={{
+            flex: 1, padding: '10px 0', background: 'transparent', color: 'var(--t-dim)',
+            border: '1px solid var(--t-border)', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+          }}>Stay {fromMode.charAt(0).toUpperCase() + fromMode.slice(1)}</button>
+          <button onClick={onConfirm} disabled={!hasCreds} style={{
+            flex: 2, padding: '10px 0', background: hasCreds ? 'var(--t-amber)' : 'var(--t-border)',
+            color: hasCreds ? '#000' : 'var(--t-dim)', border: 'none',
+            borderRadius: 7, cursor: hasCreds ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: '0.06em',
+          }}>▶ Go Live</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // The API surfaces some errors as a JSON blob in `detail` — pull out the human part.
 function friendlyError(raw?: string): string {
   if (!raw) return 'Execution failed.';
@@ -241,6 +344,20 @@ function friendlyError(raw?: string): string {
     } catch { /* not JSON — keep raw */ }
   }
   return msg;
+}
+
+// Why an execution didn't go through — always surface the specific reason the
+// backend/exchange returned (e.g. "Insufficient margin", "Exchange is in Paper"),
+// falling back to the friendly status label only when no reason is given.
+function failureReason(es: ExecState): string {
+  if (es.error) return friendlyError(es.error);
+  const r = es.resp;
+  if (!r) return 'Execution failed.';
+  const specific = (r.reason || '').trim();
+  if (r.status === 'rejected' || r.status === 'error') {
+    return specific ? friendlyError(specific) : (EXEC_STATUS_FRIENDLY[r.status] ?? r.status);
+  }
+  return EXEC_STATUS_FRIENDLY[r.status] ?? friendlyError(specific || r.status);
 }
 
 function extractServerIp(raw?: string): string | null {
@@ -263,7 +380,7 @@ function MetricItem({ label, value, color }: { label: string; value: string; col
   );
 }
 
-function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl & { currentSpot?: number | null } }) {
+function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl }) {
   const r = execState.resp;
   const err = execState.error;
   const accepted = !!r?.accepted;
@@ -314,20 +431,37 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
       {/* metrics — shown once an order actually went through */}
       {accepted && r && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', paddingTop: 1 }}>
-          <MetricItem label="Direction" value={r.direction ? r.direction.toUpperCase() : '—'} color={r.direction === 'long' ? 'var(--t-green)' : 'var(--t-red)'} />
           <MetricItem label="Qty" value={r.size_units ? fmt(r.size_units, 4) : '—'} />
-          <MetricItem label="Entry" value={fmtUsd(r.entry_price)} />
-          {pnl?.currentSpot != null && (
-            <MetricItem label="Mark" value={fmtUsd(pnl.currentSpot)} color={pnl.currentSpot > (r.entry_price ?? 0) ? 'var(--t-green)' : 'var(--t-red)'} />
+          <MetricItem label="Entry" value={fmtUsd(pnl?.entryPriceReal ?? r.entry_price)} />
+          {pnl?.currentSpot != null && (() => {
+            const entryPx = pnl?.entryPriceReal ?? r.entry_price ?? 0;
+            const diff = pnl.currentSpot - entryPx;
+            const fav = pnl.direction === 'short' ? diff < 0 : diff > 0;
+            const diffColor = diff === 0 ? 'var(--t-dim)' : fav ? 'var(--t-green)' : 'var(--t-red)';
+            return (
+              <>
+                <MetricItem label="Current" value={fmtUsd(pnl.currentSpot)} color={diffColor} />
+                <MetricItem label="Diff (pts)" value={`${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(2)}`} color={diffColor} />
+              </>
+            );
+          })()}
+          <MetricItem label="Initial SL" value={fmtUsd(pnl?.initialSl ?? r.stop_loss)} color="#f87171" />
+          {pnl?.currentSl != null && pnl.currentSl !== pnl?.initialSl && (
+            <MetricItem label="Trail SL" value={fmtUsd(pnl.currentSl)} color="#fb923c" />
           )}
-          <MetricItem label="Stop" value={fmtUsd(r.stop_loss)} color="#f87171" />
-          <MetricItem label="Target" value={fmtUsd(r.take_profit)} color="#fbbf24" />
+          <MetricItem label="Target" value={fmtUsd(pnl?.initialTp ?? r.take_profit)} color="var(--t-amber)" />
           <MetricItem label="Notional" value={fmtUsd(r.notional_usd)} />
           <MetricItem
             label={pnl?.realized ? 'Realized P&L' : 'Open P&L'}
             value={pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
             color={pnlColor}
           />
+          {pnl?.trailMode && pnl.trailMode !== 'off' && (
+            <MetricItem label="Trail" value={pnl.trailMode ?? '—'} color="var(--t-blue)" />
+          )}
+          {pnl?.orderStatus && (
+            <MetricItem label="Order" value={pnl.orderStatus} color={pnl.orderStatus === 'filled' ? 'var(--t-green)' : 'var(--t-amber)'} />
+          )}
           <MetricItem label="Status" value={posStatus} color={pnl?.realized ? 'var(--t-dim)' : 'var(--t-green)'} />
           <MetricItem label="Mode" value={mode} color="var(--t-blue)" />
         </div>
@@ -336,8 +470,57 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
   );
 }
 
-function ScalpSignalCard({ s, selected, onSelect, onExecute, executing, execState, pnl, algoOn, mode }: {
-  s: ScalpingSignal; selected: boolean; onSelect: () => void; onExecute: () => void;
+const fmtSigned = (v: number) => `${v >= 0 ? '+' : '−'}${fmtUsd(Math.abs(v))}`;
+
+/* ── consolidated P&L across every executed trade — one summary row ─────────── */
+function ConsolidatedRow({ count, totalPnl, openPnl, realizedPnl, notional, wins, losses }: {
+  count: number; totalPnl: number; openPnl: number; realizedPnl: number;
+  notional: number; wins: number; losses: number;
+}) {
+  const c = totalPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)';
+  const Stat = ({ label, value, color }: { label: string; value: string; color?: string }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+      <span style={{ fontSize: 12, fontWeight: 800, color: color || 'var(--t-bright)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ fontSize: 8, color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.07em' }}>{label}</span>
+    </div>
+  );
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 22, flexWrap: 'wrap',
+      padding: '10px 16px', borderRadius: 10,
+      border: `1px solid ${c}44`, background: `${c}0c`,
+    }}>
+      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: c }}>Σ</span>
+      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+        <span style={{ fontSize: 17, fontWeight: 900, color: c, fontVariantNumeric: 'tabular-nums' }}>{fmtSigned(totalPnl)}</span>
+        <span style={{ fontSize: 8, color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.07em' }}>TOTAL P&L · {count}</span>
+      </div>
+      <Stat label="OPEN" value={fmtSigned(openPnl)} color={openPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
+      <Stat label="REALIZED" value={fmtSigned(realizedPnl)} color={realizedPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
+      <Stat label="WIN / LOSS" value={`${wins} / ${losses}`} color={wins >= losses ? 'var(--t-green)' : 'var(--t-red)'} />
+    </div>
+  );
+}
+
+/** Thin labelled divider used to group the signal list into sections. */
+function ListGroupHeader({ label, count, color }: { label: string; count?: number; color?: string }) {
+  const c = color || 'var(--t-dim)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px', marginTop: 2 }}>
+      <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', color: c, textTransform: 'uppercase' }}>{label}</span>
+      {count != null && (
+        <span style={{
+          fontSize: 9, fontWeight: 700, color: c, background: c + '1c',
+          borderRadius: 9, padding: '0 6px', lineHeight: '15px',
+        }}>{count}</span>
+      )}
+      <div style={{ flex: 1, height: 1, background: 'var(--t-border)' }} />
+    </div>
+  );
+}
+
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode }: {
+  s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string;
 }) {
   const long = s.direction === 'long';
@@ -354,7 +537,7 @@ function ScalpSignalCard({ s, selected, onSelect, onExecute, executing, execStat
   const pillMode = execState?.mode || mode || 'PAPER';
   const modeColor = modeColorOf(pillMode);
 
-  const statusLabel = accepted ? 'EXECUTED' : s.executable ? 'ARMED' : isWatch ? 'WATCH' : 'PENDING';
+  const statusLabel = accepted ? 'EXECUTED' : s.executable ? 'READY' : isWatch ? 'WATCH' : 'PENDING';
   const statusColor = accepted ? 'var(--t-blue)' : s.executable ? dirColor : isWatch ? 'var(--t-blue)' : 'var(--t-dim)';
 
   // Signal's own setup reason — shown only until an execution attempt replaces it
@@ -364,16 +547,31 @@ function ScalpSignalCard({ s, selected, onSelect, onExecute, executing, execStat
   const pnlVal = pnl?.value ?? null;
   const pnlColor = pnlVal == null ? 'var(--t-dim)' : pnlVal >= 0 ? 'var(--t-green)' : 'var(--t-red)';
 
+  // Live current price next to Entry — live mark for executed trades, else the
+  // latest scan close. Colored by whether price has moved the position's way.
+  const currentPx = pnl?.currentSpot ?? (s.close || null);
+  const currentColor = currentPx == null || s.entry == null
+    ? 'var(--t-bright)'
+    : (long ? currentPx >= s.entry : currentPx <= s.entry) ? 'var(--t-green)' : 'var(--t-red)';
+
+  // Two highlight levels: a strong colored tint while the row is open (expanded),
+  // and a darker/recessed tone for the last-interacted row once collapsed.
+  // A translucent black darkens in BOTH themes (a theme bg var would flip lighter
+  // in the light theme), keeping the collapsed row visibly recessed vs the cards.
+  const isOpen = accepted && !!expanded;
+  const bg = isOpen ? statusColor + '16' : selected ? 'rgba(0,0,0,0.16)' : 'var(--t-bg2)';
+  const borderColor = isOpen ? statusColor + '66' : selected ? statusColor + '2e' : 'var(--t-border)';
+
   return (
     <div onClick={onSelect} style={{
       display: 'flex', flexDirection: 'column', gap: 7,
       padding: '12px 16px 12px 0', borderRadius: 10, cursor: 'pointer',
-      border: `1px solid ${selected ? statusColor + '55' : 'var(--t-border)'}`,
-      background: selected ? statusColor + '0a' : 'var(--t-bg2)',
+      border: `1px solid ${borderColor}`,
+      background: bg,
       transition: 'border-color .12s, background .12s',
     }}>
       {/* ── main row: fixed-width columns keep values aligned across cards ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color, flexShrink: 0 }} />
         <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', width: 56, flexShrink: 0 }}>{s.underlying}</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: 68, flexShrink: 0 }}>
@@ -386,25 +584,29 @@ function ScalpSignalCard({ s, selected, onSelect, onExecute, executing, execStat
           }}>{statusLabel}</span>
         </div>
         {s.entry != null ? (
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
             <PlanCell label="Entry" value={fmtUsd(s.entry)} />
+            <PlanCell label="Current" value={currentPx != null ? fmtUsd(currentPx) : '—'} color={currentColor} />
             <PlanCell label="Stop" value={fmtUsd(s.stop_loss)} color="#f87171" />
-            <PlanCell label="Target" value={fmtUsd(s.take_profit)} color="#fbbf24" />
+            <PlanCell label="Target" value={fmtUsd(s.take_profit)} color="var(--t-amber)" />
             <PlanCell label="Risk" value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
           </div>
         ) : (
           <span style={{ fontSize: 11, color: 'var(--t-dim)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.reason}</span>
         )}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, marginLeft: s.entry != null ? 0 : 'auto' }}>
-          <Pill text={meta.label} color={meta.color} />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, marginLeft: s.entry != null ? 0 : 'auto' }}>
+          {/* fixed-width pill column so the pattern text lines up across rows */}
+          <div style={{ width: 104, flexShrink: 0 }}>
+            <Pill text={meta.label} color={meta.color} />
+          </div>
           {s.pattern && (
-            <span style={{ fontSize: 9, fontWeight: 600, color: meta.color, whiteSpace: 'nowrap', maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ fontSize: 9, fontWeight: 600, color: meta.color, whiteSpace: 'nowrap', width: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {s.pattern.replace(/_/g, ' ')}
             </span>
           )}
         </div>
-        {/* ── action / executed state ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+        {/* ── action / executed glance — mode · P&L · expand chevron, all on this row ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
           {accepted ? (
             <>
               <span style={{
@@ -412,14 +614,17 @@ function ScalpSignalCard({ s, selected, onSelect, onExecute, executing, execStat
                 padding: '4px 9px', borderRadius: 6, background: modeColor + '18',
                 border: `1px solid ${modeColor}44`, whiteSpace: 'nowrap',
               }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}</span>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.1, minWidth: 56 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
-                  {pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
-                </span>
-                <span style={{ fontSize: 8, color: 'var(--t-dim)', letterSpacing: '0.06em' }}>
-                  {pnl?.realized ? 'REALIZED' : 'OPEN P&L'}
-                </span>
-              </div>
+              {!isOpen && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.05, minWidth: 64 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
+                    {pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
+                  </span>
+                  <span style={{ fontSize: 8, color: 'var(--t-dim)', letterSpacing: '0.06em', fontWeight: 700 }}>
+                    {pnl?.realized ? 'REALIZED' : 'OPEN P&L'}
+                  </span>
+                </div>
+              )}
+              <span style={{ fontSize: 9, color: 'var(--t-dim)', width: 10, textAlign: 'center', transition: 'transform .15s', transform: expanded ? 'rotate(180deg)' : 'none', display: 'inline-block' }}>▼</span>
             </>
           ) : s.executable && algoOn ? (
             // Algo handles execution — manual button is locked out. Pill shows the mode it runs in.
@@ -442,132 +647,24 @@ function ScalpSignalCard({ s, selected, onSelect, onExecute, executing, execStat
         </div>
       </div>
 
-      {/* ── detail row: failure note · auto-queued hint · setup reason ──
-           (full metrics for accepted trades live in the Executed Trades panel) */}
+      {/* ── second line — only for NON-executed states (executed glance is on the main row) ──
+           failure note · auto-queued hint · setup reason */}
       {execState && !accepted ? (
         <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-amber)', fontWeight: 600, wordBreak: 'break-word' }}>
-          {execState.error
-            ? `✕ ${friendlyError(execState.error)}`
-            : `✕ ${pillMode} — ${EXEC_STATUS_FRIENDLY[execState.resp!.status] ?? friendlyError(execState.resp!.reason || execState.resp!.status)}`}
+          ✕ {pillMode} — {failureReason(execState)}
         </div>
       ) : !execState && algoOn && s.executable ? (
         <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-green)', wordBreak: 'break-word' }}>
-          ⏳ Armed — queued for auto-execution…
+          ⚡ Auto-executing in {pillMode}…
         </div>
-      ) : metaReason ? (
+      ) : metaReason && !accepted ? (
         <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-dim)', wordBreak: 'break-word' }}>
           {metaReason}
         </div>
       ) : null}
-    </div>
-  );
-}
 
-/* ── executed trades panel — persistent log with full metrics + live P&L ───── */
-
-type ExecEntry = { key: string; sym: string; strategy: string; es: ExecState; pnl?: SignalPnl };
-
-const modeOfEntry = (e: ExecEntry) => (e.es.mode || e.es.resp?.mode || 'PAPER').toUpperCase();
-
-function ExecutedRow({ e }: { e: ExecEntry }) {
-  const m = STRATEGY_META[e.strategy] || { label: e.strategy.toUpperCase(), color: 'var(--t-dim)' };
-  const dir = e.es.resp?.direction;
-  return (
-    <div style={{ border: '1px solid var(--t-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--t-bg2)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px' }}>
-        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-bright)' }}>{e.sym}</span>
-        <Pill text={m.label} color={m.color} />
-        {dir && <span style={{ fontSize: 11, fontWeight: 800, color: dir === 'long' ? 'var(--t-green)' : 'var(--t-red)' }}>{dir === 'long' ? '▲ LONG' : '▼ SHORT'}</span>}
-      </div>
-      <ExecDetail execState={e.es} pnl={e.pnl} />
-    </div>
-  );
-}
-
-function ExecutedTradesPanel({ entries, currentMode }: { entries: ExecEntry[]; currentMode: string }) {
-  if (!entries.length) return null;
-
-  const filtered = entries.filter((e) => {
-    const m = (e.es.mode || e.es.resp?.mode || 'PAPER').toUpperCase();
-    return m === currentMode || !currentMode;
-  });
-  if (!filtered.length) return null;
-
-  const sortItems = (items: ExecEntry[]) => [...items].sort((a, b) => {
-    const av = a.es.resp?.accepted ? 0 : 1, bv = b.es.resp?.accepted ? 0 : 1;
-    if (av !== bv) return av - bv;
-    return (b.es.resp?.timestamp_ms ?? 0) - (a.es.resp?.timestamp_ms ?? 0);
-  });
-
-  const sorted = sortItems(filtered);
-
-  return (
-    <div style={card}>
-      <div style={cardHead}>
-        <span>EXECUTED TRADES</span>
-        <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--t-dim)' }}>{sorted.length}</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 12 }}>
-        {sorted.map((e) => <ExecutedRow key={e.key} e={e} />)}
-      </div>
-    </div>
-  );
-}
-
-/* ── 4H levels — grouped by symbol, per-symbol expand/collapse ─────────────── */
-
-function SymbolLevelGroup({ sym, levels }: { sym: string; levels: SupportResistanceLevel[] }) {
-  const [open, setOpen] = useState(false);
-  const supports = levels.filter((l) => l.level_type === 'support').length;
-  const resist = levels.length - supports;
-  return (
-    <div style={{ border: '1px solid var(--t-border)', borderRadius: 6, overflow: 'hidden', background: 'var(--t-bg)' }}>
-      <button onClick={() => setOpen((o) => !o)} style={{
-        display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '5px 8px',
-        background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-      }}>
-        <span style={{
-          fontSize: 8, color: 'var(--t-dim)', width: 8, lineHeight: 1,
-          transition: 'transform .12s', transform: open ? 'none' : 'rotate(-90deg)',
-        }}>▼</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--t-bright)' }}>{sym}</span>
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 5, fontSize: 9 }}>
-          {supports > 0 && <span style={{ color: 'var(--t-green)' }}>▲{supports}</span>}
-          {resist > 0 && <span style={{ color: 'var(--t-red)' }}>▼{resist}</span>}
-        </span>
-      </button>
-      {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '2px 8px 7px 22px' }}>
-          {levels.map((l, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
-              <span style={{ fontSize: 9, color: l.level_type === 'support' ? 'var(--t-green)' : 'var(--t-red)', fontWeight: 700 }}>
-                {l.level_type === 'support' ? '▲' : '▼'}
-              </span>
-              <span style={{ fontWeight: 700, color: 'var(--t-bright)', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(l.price)}</span>
-              <span style={{ color: 'var(--t-dim)', fontSize: 9 }}>×{l.touches}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GroupedLevels({ levels }: { levels: SupportResistanceLevel[] }) {
-  const groups = useMemo(() => {
-    const m = new Map<string, SupportResistanceLevel[]>();
-    for (const l of levels) {
-      const k = l.underlying || '—';
-      const arr = m.get(k);
-      if (arr) arr.push(l); else m.set(k, [l]);
-    }
-    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [levels]);
-
-  if (groups.length === 0) return <div style={{ ...dim, fontSize: 10 }}>No levels found</div>;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {groups.map(([sym, lvls]) => <SymbolLevelGroup key={sym} sym={sym} levels={lvls} />)}
+      {/* expand-on-click: full execution metrics for an executed trade */}
+      {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} />}
     </div>
   );
 }
@@ -660,21 +757,48 @@ export function ScalpingTab() {
   const [drawer, setDrawer] = useState(false);
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
   const [armedOnly, setArmedOnly] = useState(() => localStorage.getItem('scalp.armedOnly') === '1');
-  const [activeStat, setActiveStat] = useState<string>(() => (localStorage.getItem('scalp.armedOnly') === '1' ? 'armed' : 'scanned'));
   const scanQ = useScalpingSignals(armedOnly);
   const exec = useScalpingExecute();
   const [execKeys, setExecKeys] = useState<Set<string>>(new Set());  // in-flight (supports concurrent auto-exec)
-  const [execStates, setExecStates] = useState<Record<string, ExecState>>({});
+  // Executions persist across reloads and across mode switches; each entry carries
+  // the mode it actually ran in (es.mode), so the view can stay segregated per mode.
+  const [execStates, setExecStates] = useState<Record<string, ExecState>>(() => {
+    try { return JSON.parse(localStorage.getItem('scalp.execStates') || '{}'); } catch { return {}; }
+  });
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
+  const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
   const cfg = cfgQ.data?.config;
   const algoOn = useAlgoMode().data?.enabled ?? false;
   const autoExecRef = useRef<Set<string>>(new Set());   // auto-attempted this algo session
   const acceptedRef = useRef<Set<string>>(new Set());   // ever accepted — never re-execute
 
-  // Current configured trading mode (drives AUTO · PAPER / LIVE labels). Mirrors PaperLiveToggle:
-  //   is_paper → PAPER · !is_paper → LIVE.
+  // Authoritative trading mode (paper / shadow / live). Drives the AUTO · <MODE>
+  // labels and the order routing on the backend. Selectable inline in the header.
+  const { mode: routerMode, setMode: setRouterMode } = useRouterMode();
+  const tradeMode = routerMode.toUpperCase();
+  // The exchange account's is_paper flag is the OTHER half of "live" — real orders
+  // need router=live AND is_paper=false. The mode picker manages both so the two
+  // controls can't disagree (which caused "in live but exchange is paper").
   const exQ = useExchanges();
+  const updateExchange = useUpdateExchange();
   const delta = exQ.data?.exchanges.find((e) => e.name === 'delta_india' && e.is_active);
-  const tradeMode = delta?.is_paper ? 'PAPER' : 'LIVE';
+  const hasLiveCreds = !!delta?.has_credentials;
+
+  const onModeSelect = (m: RouterMode) => {
+    if (m === 'live') { setLiveConfirm(true); return; }   // gated behind confirm modal
+    setRouterMode(m);
+    // Leaving live → return the exchange to paper so the two controls stay in sync.
+    if (delta && !delta.is_paper) updateExchange.mutate({ id: delta.id, is_paper: true });
+  };
+
+  const confirmGoLive = async () => {
+    setLiveConfirm(false);
+    // Flip the exchange to live alongside the router so real orders are actually placed.
+    if (delta && hasLiveCreds && delta.is_paper) {
+      await updateExchange.mutateAsync({ id: delta.id, is_paper: false });
+    }
+    await setRouterMode('live');
+  };
 
   // Positions + live P&L feed the executed-trade rows (paper and live alike).
   const positions = usePositions().data?.positions ?? [];
@@ -682,7 +806,7 @@ export function ScalpingTab() {
   const streamPrices = useStreamPrices();
   const pnlByPos = useMemo(() => new Map(livePnl.map((p) => [p.position_id, p])), [livePnl]);
 
-  const pnlFor = (r: ScalpingExecuteResponse): SignalPnl & { currentSpot?: number | null } => {
+  const pnlFor = (r: ScalpingExecuteResponse): SignalPnl => {
     let pos = r.paper_position_id ? positions.find((p) => p.id === r.paper_position_id) : undefined;
     if (!pos && r.order_id) pos = positions.find((p) => p.order_id === r.order_id);
     if (!pos) return { value: null, realized: false };
@@ -691,7 +815,16 @@ export function ScalpingTab() {
     const value = realized
       ? (pos.realized_pnl_usd ?? live?.realized_pnl_usd ?? null)
       : (live?.estimated_pnl_usd ?? null);
-    return { value, realized, status: pos.status, currentSpot: live?.current_spot ?? null };
+    return {
+      value, realized, status: pos.status, currentSpot: live?.current_spot ?? null,
+      direction: live?.direction, contracts: live?.contracts, leverage: live?.leverage,
+      entryTimeMs: live?.entry_timestamp_ms, entryPriceReal: live?.entry_price_real,
+      initialSl: live?.initial_sl, initialTp: live?.initial_tp,
+      currentSl: live?.current_sl, currentTp: live?.current_tp,
+      trailMode: live?.trail_mode, trailState: live?.trail_state as SignalPnl['trailState'],
+      orderId: live?.order_id, orderStatus: live?.order_status,
+      mode: live?.mode, structureType: live?.structure_type,
+    };
   };
 
   // mutateAsync (not mutate) is essential here: the auto-exec loop fires several
@@ -702,7 +835,9 @@ export function ScalpingTab() {
     const key = `${sym}-${strategy}`;
     setExecKeys((s) => new Set(s).add(key));
     exec.mutateAsync({ underlying: sym, strategy })
-      .then((r) => { setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: tradeMode } })); if (r.accepted) acceptedRef.current.add(key); })
+      // Tie the record to the mode the backend ACTUALLY ran in (r.mode), not the
+      // mode picker — so a live order is stored as LIVE, shadow as SHADOW, etc.
+      .then((r) => { const ranMode = (r.mode || tradeMode).toUpperCase(); setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: ranMode } })); if (r.accepted) acceptedRef.current.add(key); })
       .catch((e: Error) => { setExecStates((m) => ({ ...m, [key]: { error: e.message, auto, mode: tradeMode } })); })
       .finally(() => { setExecKeys((s) => { const n = new Set(s); n.delete(key); return n; }); });
   };
@@ -713,7 +848,57 @@ export function ScalpingTab() {
     signals = signals.filter((s) => s.strategy === stratFilter);
   }
   const armed = signals.filter((s) => s.entry_ok).length;
-  const levels = data?.levels ?? [];
+
+  // Current-mode view of executions. execStates keeps ALL modes (persisted), but
+  // the list only shows trades that ran in the mode you're currently in — so
+  // paper / shadow / live each see only their own executions.
+  const modeExecStates = useMemo(
+    () => Object.fromEntries(Object.entries(execStates).filter(([, es]) => (es.mode || 'PAPER') === tradeMode)),
+    [execStates, tradeMode],
+  );
+
+  // Pin executed trades into the list so they stay visible (with the two-line
+  // executed-info layout) even after the setup leaves the 30s scan or the
+  // "Armed only" filter would hide it. Synthesize a signal from the recorded
+  // execution for any executed key that isn't in the current scan.
+  const synthFromExec = (key: string, es: ExecState): ScalpingSignal => {
+    const dash = key.indexOf('-');
+    const r = es.resp;
+    return {
+      underlying: key.slice(0, dash), strategy: key.slice(dash + 1),
+      close: r?.entry_price ?? 0, direction: r?.direction ?? 'none',
+      near_level: null, level_type: '', pattern: '', reason: r?.reason ?? '',
+      entry: r?.entry_price ?? null, stop_loss: r?.stop_loss ?? null,
+      take_profit: r?.take_profit ?? null, risk_pct: null, leverage: null,
+      size_units: r?.size_units ?? null, notional_usd: r?.notional_usd ?? null,
+      entry_ok: true, executable: false, timestamp_ms: r?.timestamp_ms ?? 0, error: null,
+    };
+  };
+  const inScan = new Set(signals.map((s) => `${s.underlying}-${s.strategy}`));
+  const pinned = Object.entries(modeExecStates)
+    .filter(([key]) => !inScan.has(key))
+    .filter(([key]) => stratFilter === 'all' || key.slice(key.indexOf('-') + 1) === stratFilter)
+    .map(([key, es]) => synthFromExec(key, es));
+  // Executed rows first (so the just-traded setup is right at the top), then the scan.
+  const isExecuted = (s: ScalpingSignal) => !!modeExecStates[`${s.underlying}-${s.strategy}`]?.resp?.accepted;
+  const sortedSignals = [...pinned, ...signals]
+    .sort((a, b) => Number(isExecuted(b)) - Number(isExecuted(a)));
+  const executedSignals = sortedSignals.filter(isExecuted);
+  const restSignals = sortedSignals.filter((s) => !isExecuted(s));
+  const displaySignals = sortedSignals;
+
+  // Consolidated totals across the current mode's executed trades.
+  const consolidated = executedSignals.reduce((acc, s) => {
+    const r = modeExecStates[`${s.underlying}-${s.strategy}`]?.resp;
+    if (!r) return acc;
+    const p = pnlFor(r);
+    const v = p.value ?? 0;
+    acc.totalPnl += v;
+    if (p.realized) acc.realizedPnl += v; else acc.openPnl += v;
+    acc.notional += r.notional_usd ?? 0;
+    if (v > 0) acc.wins += 1; else if (v < 0) acc.losses += 1;
+    return acc;
+  }, { totalPnl: 0, openPnl: 0, realizedPnl: 0, notional: 0, wins: 0, losses: 0 });
 
   useEffect(() => {
     if (!drawer) return;
@@ -725,12 +910,17 @@ export function ScalpingTab() {
   // Persist sidebar selections (Armed-only filter + active strategy nav) across reloads.
   useEffect(() => { localStorage.setItem('scalp.stratFilter', stratFilter); }, [stratFilter]);
   useEffect(() => { localStorage.setItem('scalp.armedOnly', armedOnly ? '1' : '0'); }, [armedOnly]);
+  // Persist executions (all modes) so the executed rows survive a reload.
+  useEffect(() => {
+    try { localStorage.setItem('scalp.execStates', JSON.stringify(execStates)); } catch { /* quota */ }
+  }, [execStates]);
 
-  // Algo auto-execution: while Algo is ON, every executable signal is fired
-  // automatically. The /scalping/execute endpoint routes through the active
-  // Paper/Live mode, so this trades paper or live depending on that toggle.
+  // Algo auto-execution: while Algo is ON, EVERY ready (executable) signal is
+  // fired immediately. The /scalping/execute endpoint routes through the active
+  // Paper/Shadow/Live mode. Runaway is prevented at the source — the backend
+  // refuses to open a second position on the same symbol+strategy — so no
+  // frontend position cap is needed; every distinct ready setup executes.
   // De-duped per symbol+strategy so the 30s rescan never re-fires the same setup.
-  // Re-fires on tradeMode change so signals re-execute after a mode switch.
   useEffect(() => {
     if (!algoOn) return;
     for (const s of data?.signals ?? []) {
@@ -747,24 +937,34 @@ export function ScalpingTab() {
   // Forget de-dupe keys once Algo is switched off, so re-enabling starts fresh.
   useEffect(() => { if (!algoOn) autoExecRef.current.clear(); }, [algoOn]);
 
-  // When trading mode changes, clear executions from the old mode so stale
-  // PAPER exec states don't persist as "EXECUTED" after switching to LIVE (or vice versa).
-  // Also clear autoExecRef so the algo loop re-fires signals in the new mode.
+  // On mode change (and on mount/reload), re-scope the de-dup refs to the current
+  // mode WITHOUT deleting executions — every mode keeps its own trades. Only trades
+  // accepted in THIS mode block re-execution; the auto-exec loop starts fresh.
   useEffect(() => {
-    setExecStates((prev) => {
-      const filtered = Object.fromEntries(
-        Object.entries(prev).filter(([, es]) => (es.mode || 'PAPER') === tradeMode),
-      );
-      return Object.keys(filtered).length === Object.keys(prev).length ? prev : filtered;
-    });
-    acceptedRef.current.clear();
+    acceptedRef.current = new Set(
+      Object.entries(execStates)
+        .filter(([, es]) => (es.mode || 'PAPER') === tradeMode && es.resp?.accepted)
+        .map(([k]) => k),
+    );
     autoExecRef.current.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeMode]);
 
+  // Once an executed position CLOSES, free its signal for re-entry WITHOUT deleting
+  // the record — clearing the dedup refs lets the algo re-enter (and the card shows
+  // a Re-enter button) while the closed trade's realized P&L stays counted in the
+  // consolidated total. (Deleting it here made the total drop realized P&L.)
+  useEffect(() => {
+    for (const [k, es] of Object.entries(execStates)) {
+      if (es.resp?.accepted && pnlFor(es.resp).realized) {
+        acceptedRef.current.delete(k);
+        autoExecRef.current.delete(k);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [positions]);
+
   const allSignals = data?.signals ?? [];
-  const longs = signals.filter((s) => s.direction === 'long');
-  const shorts = signals.filter((s) => s.direction === 'short');
-  const enabledStrategies = cfgQ.data?.config ? [cfgQ.data.config.enable_price_action, cfgQ.data.config.enable_smc, cfgQ.data.config.enable_ma_crossover].filter(Boolean).length : 0;
 
   const navItems = [
     { id: 'all', label: 'All Strategies', color: 'var(--t-bright)', count: allSignals.length },
@@ -775,18 +975,24 @@ export function ScalpingTab() {
 
   const btUnderlying = (selected?.split('-')[0]) || cfg?.symbols?.[0] || 'BTC';
 
-  // Every execution this session — rendered in the persistent Executed Trades
-  // panel so metrics + live P&L stay visible even after a setup leaves the scan.
-  const executedEntries: ExecEntry[] = Object.entries(execStates).map(([key, es]) => {
-    const dash = key.indexOf('-');
-    return {
-      key,
-      sym: key.slice(0, dash),
-      strategy: key.slice(dash + 1),
-      es,
-      pnl: es.resp?.accepted ? pnlFor(es.resp) : undefined,
-    };
-  });
+  const renderSignalCard = (s: ScalpingSignal) => {
+    const key = `${s.underlying}-${s.strategy}`;
+    const es = modeExecStates[key];  // only show this row's execution if it ran in the current mode
+    return (
+      <ScalpSignalCard
+        key={key} s={s}
+        selected={selected === key}
+        expanded={expandedKey === key}
+        onSelect={() => { setSelected(key); setExpandedKey((k) => (k === key ? null : key)); }}
+        onExecute={() => onExecute(s.underlying, s.strategy)}
+        executing={execKeys.has(key)}
+        execState={es}
+        pnl={es?.resp?.accepted ? pnlFor(es.resp) : undefined}
+        algoOn={algoOn}
+        mode={tradeMode}
+      />
+    );
+  };
 
   return (
     <>
@@ -795,69 +1001,51 @@ export function ScalpingTab() {
       activeNav={stratFilter}
       onNavClick={setStratFilter}
       leftSidebar={<>
-        <LeftSection label="Filter" collapsible defaultOpen>
-          <button onClick={() => { const v = !armedOnly; setArmedOnly(v); setActiveStat(v ? 'armed' : 'scanned'); }} style={{
-            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-            padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${armedOnly ? 'var(--t-green)44' : 'var(--t-border)'}`,
-            background: armedOnly ? 'var(--t-green)16' : 'transparent',
-            color: armedOnly ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s',
-          }}>
-            <span style={{ fontSize: 12 }}>{armedOnly ? '●' : '○'}</span>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>Armed only</span>
-          </button>
-        </LeftSection>
-        <LeftSection label="4H Key Levels" border={false} collapsible defaultOpen={false}>
-          <GroupedLevels levels={levels} />
-        </LeftSection>
+        <LeftSection label="Ready Only" collapsible defaultOpen />
       </>}
       centerHeader={<>
         <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</div>
         <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>
           4H structure · 15min entry · {scanQ.isFetching ? 'scanning…' : 'auto-refresh'}
         </div>
-        {algoOn && (
-          <span style={{
-            marginLeft: 'auto', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-            padding: '3px 9px', borderRadius: 5, whiteSpace: 'nowrap',
-            background: 'var(--t-green)1c', color: 'var(--t-green)', border: '1px solid var(--t-green)44',
-          }}>⚡ ALGO AUTO-EXEC</span>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {algoOn && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+              padding: '3px 9px', borderRadius: 5, whiteSpace: 'nowrap',
+              background: 'var(--t-green)1c', color: 'var(--t-green)', border: '1px solid var(--t-green)44',
+            }}>⚡ ALGO AUTO-EXEC</span>
+          )}
+          <ModeSelector mode={routerMode} onChange={onModeSelect} />
+        </div>
       </>}
       centerContent={<>
         {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
         {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
-        <ExecutedTradesPanel entries={executedEntries} currentMode={tradeMode} />
-        {data && signals.length === 0 && (
+        {data && displaySignals.length === 0 && (
           <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>
-            {armedOnly ? 'No armed signals — clear the filter to see all.' : 'No signals on this data source.'}
+            {armedOnly ? 'No ready signals — clear the filter to see all.' : 'No signals on this data source.'}
           </div>
         )}
-        {signals.map((s) => {
-          const key = `${s.underlying}-${s.strategy}`;
-          const es = execStates[key];
-          return (
-            <ScalpSignalCard
-              key={key} s={s}
-              selected={selected === key}
-              onSelect={() => setSelected(key)}
-              onExecute={() => onExecute(s.underlying, s.strategy)}
-              executing={execKeys.has(key)}
-              execState={es}
-              pnl={es?.resp?.accepted ? pnlFor(es.resp) : undefined}
-              algoOn={algoOn}
-              mode={tradeMode}
-            />
-          );
-        })}
-        {data && signals.length > 0 && (
+        {executedSignals.length > 0 && (
+          <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
+        )}
+        {executedSignals.map(renderSignalCard)}
+        {executedSignals.length > 0 && (
+          <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+        )}
+        {restSignals.length > 0 && (
+          <ListGroupHeader label={armedOnly ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
+        )}
+        {restSignals.map(renderSignalCard)}
+        {data && displaySignals.length > 0 && (
           <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4 }}>
             <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · EXECUTE routes through Paper/Live mode
           </div>
         )}
       </>}
       rightSidebar={<>
-        <RightSection label="Settings" collapsible defaultOpen={false}>
+        <RightSection label="Settings" collapsible defaultOpen={true}>
           <button onClick={() => setDrawer(true)} style={{
             display: 'flex', alignItems: 'center', gap: 8, width: '100%',
             padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
@@ -868,59 +1056,18 @@ export function ScalpingTab() {
             <span style={{ fontSize: 11, fontWeight: 600 }}>Settings & Backtest</span>
           </button>
         </RightSection>
-        <RightSection label="Summary" collapsible>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            <StatCard
-              label="ARMED" value={armed} color={armed > 0 ? 'var(--t-green)' : undefined}
-              active={activeStat === 'armed'}
-              onClick={() => { setActiveStat('armed'); setArmedOnly(true); }}
-            />
-            <StatCard
-              label="SCANNED" value={signals.length}
-              active={activeStat === 'scanned'}
-              onClick={() => { setActiveStat('scanned'); setArmedOnly(false); }}
-            />
-            <StatCard
-              label="LEVELS" value={levels.length}
-              active={activeStat === 'levels'}
-              onClick={() => setActiveStat('levels')}
-            />
-            <StatCard
-              label="STRATEGIES" value={enabledStrategies || '—'}
-              active={activeStat === 'strategies'}
-              onClick={() => { setActiveStat('strategies'); setDrawer(true); }}
-            />
-          </div>
-        </RightSection>
-        <RightSection label="By Strategy" collapsible>
-          {Object.entries(STRATEGY_META).map(([key, meta]) => {
-            const count = allSignals.filter((s) => s.strategy === key).length;
-            const armedHere = allSignals.filter((s) => s.strategy === key && s.entry_ok).length;
-            return (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid var(--t-border)' }}>
-                <div style={{ width: 6, height: 6, borderRadius: 3, background: meta.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t-bright)', flex: 1 }}>{meta.label}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-bright)' }}>{count}</span>
-                <span style={{ fontSize: 9, color: 'var(--t-green)' }}>{armedHere > 0 ? `${armedHere} armed` : ''}</span>
-              </div>
-            );
-          })}
-        </RightSection>
-        <RightSection label="Direction Breakdown" border={false} collapsible>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ background: 'var(--t-bg)', border: '1px solid var(--t-border)', borderRadius: 6, padding: '8px 10px', flex: 1 }}>
-              <div style={{ fontSize: 9, color: 'var(--t-green)', fontWeight: 600 }}>▲ LONG</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--t-green)' }}>{longs.length}</div>
-            </div>
-            <div style={{ background: 'var(--t-bg)', border: '1px solid var(--t-border)', borderRadius: 6, padding: '8px 10px', flex: 1 }}>
-              <div style={{ fontSize: 9, color: 'var(--t-red)', fontWeight: 600 }}>▼ SHORT</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--t-red)' }}>{shorts.length}</div>
-            </div>
-          </div>
-        </RightSection>
       </>}
     >
     </ThreeColumnLayout>
+
+    {liveConfirm && (
+      <GoLiveModal
+        fromMode={routerMode}
+        hasCreds={hasLiveCreds}
+        onConfirm={confirmGoLive}
+        onCancel={() => setLiveConfirm(false)}
+      />
+    )}
 
     {drawer && (
       <div onClick={() => setDrawer(false)} style={{

@@ -267,3 +267,68 @@ class TestFuturesPnL:
                             [long_leg, short_leg], max_loss=200.0, max_gain=800.0)
         # Net delta 0.15 unchanged by the futures-fallback branch.
         assert _net_delta(trade) == pytest.approx(0.15)
+
+
+class TestPaperStoreFuturesPnl:
+    """paper_store.close_position and partial_close_position must use leverage
+    as net_delta for futures (not 0.0)."""
+
+    @staticmethod
+    def _futures_pos(entry=100000.0, direction=Direction.SHORT, leverage=3,
+                     contracts=1, max_risk=600.0, max_gain=600.0):
+        from app.schemas.execution import CandidateContract, SizedTrade, TradeStructure
+        from app.services import paper_store as ps
+        leg = CandidateContract(
+            instrument_name="BTC-PERP", underlying="BTC", strike=0, expiry_date="",
+            dte=0, option_type="futures", bid=0, ask=0, mark_price=entry,
+            mid_price=entry, mark_iv=0, delta=1.0 if direction == Direction.LONG else -1.0,
+            open_interest=0, volume_24h=0, spread_pct=0, health_score=0, healthy=True,
+        )
+        struct = TradeStructure(
+            structure_type="futures", direction=direction, legs=[leg],
+            max_loss=max_risk / contracts / leverage, max_gain=max_gain / contracts / leverage,
+            net_premium=0, risk_reward=1.0, score=0, score_breakdown={},
+            leverage=leverage, entry_price=entry,
+        )
+        sized = SizedTrade(
+            structure=struct, contracts=contracts,
+            position_value=entry * contracts * leverage,
+            max_risk_usd=max_risk, capital_at_risk_pct=0.01,
+        )
+        pos = ps.add_position(
+            underlying="BTC", sized_trade=sized,
+            entry_spot_price=entry, notes="test",
+        )
+        return pos
+
+    def test_close_futures_short_pnl_positive_when_in_profit(self):
+        """Short + price drops → P&L must be positive (not stuck at 0)."""
+        pos = self._futures_pos(entry=100000.0, direction=Direction.SHORT, leverage=3)
+        from app.services import paper_store as ps
+        result = ps.close_position(pos.id, exit_spot_price=99000.0)
+        assert result is not None
+        assert result.realized_pnl_usd > 0, f"Expected positive P&L for short in profit, got {result.realized_pnl_usd}"
+
+    def test_close_futures_long_pnl_positive_when_in_profit(self):
+        """Long + price rises → P&L must be positive (not stuck at 0)."""
+        pos = self._futures_pos(entry=100000.0, direction=Direction.LONG, leverage=3)
+        from app.services import paper_store as ps
+        result = ps.close_position(pos.id, exit_spot_price=101000.0)
+        assert result is not None
+        assert result.realized_pnl_usd > 0, f"Expected positive P&L for long in profit, got {result.realized_pnl_usd}"
+
+    def test_close_futures_short_capped_at_max_risk(self):
+        """Short + price rises → P&L capped at -max_risk."""
+        pos = self._futures_pos(entry=100000.0, direction=Direction.SHORT, leverage=3, max_risk=600.0)
+        from app.services import paper_store as ps
+        result = ps.close_position(pos.id, exit_spot_price=110000.0)
+        assert result is not None
+        assert result.realized_pnl_usd >= -600.0
+
+    def test_partial_close_futures_short_pnl(self):
+        """partial_close_position for futures SHORT also uses leverage as net_delta."""
+        pos = self._futures_pos(entry=100000.0, direction=Direction.SHORT, leverage=3, max_risk=600.0)
+        from app.services import paper_store as ps
+        result = ps.partial_close_position(pos.id, exit_spot_price=99000.0, partial_ratio=0.5)
+        assert result is not None
+        assert result.realized_pnl_usd is not None and result.realized_pnl_usd > 0

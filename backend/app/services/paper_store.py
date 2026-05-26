@@ -135,10 +135,12 @@ def close_position(
     structure = pos.sized_trade.structure
     spot_move = exit_spot_price - pos.entry_spot_price
     direction_sign = 1 if structure.direction.value == "long" else -1
-    # All spread types: legs[0] has higher |delta| → net = legs[0]|Δ| - legs[1]|Δ|
     legs = structure.legs
-    if len(legs) == 0:
-        net_delta = 0.0
+    if not legs:
+        if getattr(structure, "structure_type", "") == "futures":
+            net_delta = float(getattr(structure, "leverage", 1) or 1)
+        else:
+            net_delta = 0.0
     elif len(legs) == 1:
         net_delta = abs(legs[0].delta)
     else:
@@ -194,9 +196,12 @@ def partial_close_position(
 
     structure      = pos.sized_trade.structure
     direction_sign = 1 if structure.direction.value == "long" else -1
-    legs           = structure.legs
+    legs = structure.legs
     if not legs:
-        net_delta = 0.0
+        if getattr(structure, "structure_type", "") == "futures":
+            net_delta = float(getattr(structure, "leverage", 1) or 1)
+        else:
+            net_delta = 0.0
     elif len(legs) == 1:
         net_delta = abs(legs[0].delta)
     else:
@@ -237,6 +242,22 @@ def delete_position(pos_id: str) -> bool:
     del _positions[pos_id]
     db.remove(pos_id)
     return True
+
+
+def clear_positions(mode: str = "") -> int:
+    """Delete CLOSED position records only (history cleanup). Open and
+    partially-closed positions are kept. `mode` optionally limits to 'paper'
+    or 'live'. Returns the number of records removed."""
+    m = (mode or "").strip().lower()
+    to_remove = [
+        pid for pid, p in _positions.items()
+        if p.status == PositionStatus.CLOSED
+        and (m == "" or (m == "paper" and p.is_paper) or (m == "live" and not p.is_paper))
+    ]
+    for pid in to_remove:
+        del _positions[pid]
+        db.remove(pid)
+    return len(to_remove)
 
 
 def open_count() -> int:

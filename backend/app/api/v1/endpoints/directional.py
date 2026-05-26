@@ -1609,6 +1609,13 @@ def _build_pnl_event(now_ms: int) -> str:
             pnl = _estimate_pnl(pos.sized_trade, spot_move, direction_sign,
                                   pos.sized_trade.max_risk_usd, pos.sized_trade.structure.max_gain)
             total_pnl += pnl
+        trail_state = None
+        if pos.trail_stop_json:
+            try:
+                import json as _json
+                trail_state = _json.loads(pos.trail_stop_json)
+            except Exception:
+                pass
         results.append({
             "position_id": pos.id,
             "underlying": pos.underlying,
@@ -1620,6 +1627,21 @@ def _build_pnl_event(now_ms: int) -> str:
             "current_dte": current_dte,
             "max_risk_usd": pos.sized_trade.max_risk_usd,
             "capital_at_risk_pct": pos.sized_trade.capital_at_risk_pct,
+            "direction": pos.sized_trade.structure.direction.value,
+            "contracts": pos.sized_trade.contracts,
+            "leverage": getattr(pos.sized_trade.structure, "leverage", 1) or 1,
+            "entry_timestamp_ms": pos.entry_timestamp_ms,
+            "entry_price_real": pos.entry_price_real,
+            "initial_sl": pos.initial_sl,
+            "initial_tp": pos.initial_tp,
+            "current_sl": pos.current_sl,
+            "current_tp": pos.current_tp,
+            "trail_mode": pos.trail_mode,
+            "trail_state": trail_state,
+            "order_id": pos.order_id,
+            "order_status": pos.order_status,
+            "mode": pos.mode,
+            "structure_type": getattr(pos.sized_trade.structure, "structure_type", ""),
         })
 
     for pos in closed:

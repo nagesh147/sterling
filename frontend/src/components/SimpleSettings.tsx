@@ -28,14 +28,23 @@ function StatusLight({ ok, label }: { ok: boolean | null; label: string }) {
 }
 
 // ── Section wrapper ───────────────────────────────────────────────────────────
-function Section({ title, status, children }: { title: string; status?: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, status, children, defaultOpen = true }: { title: string; status?: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, color: 'var(--text-faint)' }}>{title}</div>
-        {status}
+      <div
+        onClick={() => setOpen(!open)}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? 12 : 0, borderBottom: '1px solid var(--border)', paddingBottom: 6, cursor: 'pointer', userSelect: 'none' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.5, color: 'var(--text-muted)' }}>{title}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {status}
+          <span style={{ fontSize: 10, color: 'var(--text-faint)', transition: 'transform 0.2s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+        </div>
       </div>
-      {children}
+      {open && children}
     </div>
   );
 }
@@ -90,9 +99,17 @@ function ExchangeSection() {
   const testConnection = async () => {
     setTesting(true); setTestResult(null); setMsg('');
     try {
-      const res = await api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string; server_ip?: string }>(
-        '/api/v1/trading/test-credentials'
-      );
+      // Guard against a hung request (no internet / Delta unreachable) so the
+      // button never sticks on "Testing…" forever — fail with a clear message.
+      const res = await Promise.race([
+        api.get<{ ok: boolean; message?: string; reason?: string; hint?: string; account?: string; balance?: string; server_ip?: string }>(
+          '/api/v1/trading/test-credentials'
+        ),
+        new Promise<never>((_, reject) => setTimeout(
+          () => reject(new Error('Test timed out — no response from server/exchange. Check connectivity or the API-key IP whitelist.')),
+          25_000,
+        )),
+      ]);
       setConnOk(res.ok);
       setTestResult(res);
     } catch (e: unknown) {
@@ -136,7 +153,7 @@ function ExchangeSection() {
       {testResult && (
         <div style={{
           marginBottom: 14, padding: '10px 12px', borderRadius: 5,
-          background: testResult.ok ? '#071a14' : '#110a0a',
+          background: 'transparent',
           border: `1px solid ${testResult.ok ? 'var(--accent)33' : 'var(--danger)33'}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: testResult.ok ? 2 : 6 }}>
@@ -149,6 +166,20 @@ function ExchangeSection() {
             <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>
               Margin available: <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{testResult.balance}</span>
             </div>
+          )}
+          {testResult.ok && (
+            <a
+              href="https://www.delta.exchange/app/account/deposit"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block', marginTop: 6,
+                fontSize: 10, color: 'var(--accent)',
+                textDecoration: 'none', opacity: 0.8,
+              }}
+            >
+              + Add Funds ↗
+            </a>
           )}
           {!testResult.ok && testResult.reason && (
             <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 6, lineHeight: 1.5 }}>
@@ -246,10 +277,12 @@ function ExchangeSection() {
         onClick={save}
         disabled={update.isPending || (!apiKey.trim() && !apiSecret.trim())}
         style={{
-          width: '100%', padding: '9px 0',
-          background: '#0f2a1a', color: 'var(--accent)',
-          border: '1px solid var(--accent)66', borderRadius: 4,
-          cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+          width: '100%', padding: '9px 0', borderRadius: 5,
+          fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+          cursor: update.isPending || (!apiKey.trim() && !apiSecret.trim()) ? 'not-allowed' : 'pointer',
+          background: 'transparent',
+          color: 'var(--accent)',
+          border: '1px solid var(--accent)44',
           opacity: update.isPending || (!apiKey.trim() && !apiSecret.trim()) ? 0.4 : 1,
         }}
       >
@@ -272,14 +305,18 @@ function TelegramSection() {
   const [chatId, setChatId]     = useState('');
   const [msg, setMsg]           = useState('');
   const [msgOk, setMsgOk]       = useState(true);
-  const [sending, setSending]   = useState(false);
+  // Separate in-flight state per button so clicking one doesn't visually
+  // activate/disable the other.
+  const [sendingTest, setSendingTest]     = useState(false);
+  const [sendingSignal, setSendingSignal] = useState(false);
 
   useEffect(() => { if (data) setChatId(data.chat_id || ''); }, [data]);
 
   // 3-state light: null=no token, true=connected, false=configured-but-not-verified
   const lightOk: boolean | null = !data?.bot_token_set ? null : data.reachable ? true : false;
-  // Enable Send Test whenever token+chat_id are both set — reachability is what the button verifies
-  const canTest = !!(data?.enabled) && !sending;
+  // Base eligibility — both buttons need token+chat set; each button's own
+  // in-flight flag handles its loading/disabled state independently.
+  const canTest = !!(data?.enabled);
 
   const save = useMutation<TelegramConfig, Error, void>({
     mutationFn: () => api.put<TelegramConfig>('/api/v1/config/telegram', {
@@ -304,8 +341,11 @@ function TelegramSection() {
     onError: (e) => { setMsgOk(false); setMsg(`❌ ${e.message}`); },
   });
 
+  // Save disabled when nothing changed
+  const telegramChanged = botToken.trim() !== '' || (chatId !== (data?.chat_id ?? '') && chatId !== '');
+
   const sendTest = async () => {
-    setSending(true); setMsg('');
+    setSendingTest(true); setMsg('');
     try {
       const result = await api.post<TelegramConfig>('/api/v1/config/telegram/test', {});
       qc.setQueryData(['telegram-config'], result);
@@ -315,13 +355,13 @@ function TelegramSection() {
       setMsgOk(false);
       setMsg(`❌ ${err}${err.includes('chat') || err.includes('bot') ? '' : ' — send /start to your bot first'}`);
     } finally {
-      setSending(false);
+      setSendingTest(false);
       setTimeout(() => setMsg(''), 6000);
     }
   };
 
   const sendSignalTest = async () => {
-    setSending(true); setMsg('');
+    setSendingSignal(true); setMsg('');
     try {
       const result = await api.post<{ sent: boolean; reason: string }>('/api/v1/directional/test-alert', {});
       if (result.sent) {
@@ -332,7 +372,7 @@ function TelegramSection() {
     } catch (e: unknown) {
       setMsgOk(false); setMsg(`❌ ${(e as Error).message}`);
     } finally {
-      setSending(false);
+      setSendingSignal(false);
       setTimeout(() => setMsg(''), 8000);
     }
   };
@@ -356,32 +396,32 @@ function TelegramSection() {
           <StatusLight ok={lightOk} label={statusLabel} />
           <button
             onClick={sendTest}
-            disabled={!canTest}
+            disabled={!canTest || sendingTest}
             style={{
               fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)',
               color: canTest ? 'var(--text-primary)' : 'var(--text-dim)',
               border: `1px solid ${canTest ? 'var(--accent)44' : 'var(--border)'}`,
-              borderRadius: 3, cursor: canTest ? 'pointer' : 'default',
-              fontFamily: 'inherit', opacity: !canTest ? 0.5 : 1,
+              borderRadius: 3, cursor: canTest && !sendingTest ? 'pointer' : 'default',
+              fontFamily: 'inherit', opacity: !canTest || sendingTest ? 0.5 : 1,
               fontWeight: canTest ? 700 : 400,
             }}
           >
-            {sending ? 'Sending…' : 'Send Test'}
+            {sendingTest ? 'Sending…' : 'Send Test'}
           </button>
           <button
             onClick={sendSignalTest}
-            disabled={!canTest}
+            disabled={!canTest || sendingSignal}
             title="Send a sample signal alert in the exact format you'll receive for real signals"
             style={{
               fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)',
               color: canTest ? '#a78bfa' : 'var(--text-dim)',
               border: `1px solid ${canTest ? '#a78bfa44' : 'var(--border)'}`,
-              borderRadius: 3, cursor: canTest ? 'pointer' : 'default',
-              fontFamily: 'inherit', opacity: !canTest ? 0.5 : 1,
+              borderRadius: 3, cursor: canTest && !sendingSignal ? 'pointer' : 'default',
+              fontFamily: 'inherit', opacity: !canTest || sendingSignal ? 0.5 : 1,
               fontWeight: canTest ? 700 : 400,
             }}
           >
-            Test Signal
+            {sendingSignal ? 'Sending…' : 'Test Signal'}
           </button>
         </div>
       }
@@ -420,13 +460,15 @@ function TelegramSection() {
       )}
 
       <button
-        onClick={() => save.mutate()} disabled={save.isPending}
+        onClick={() => save.mutate()} disabled={save.isPending || !telegramChanged}
         style={{
-          width: '100%', padding: '9px 0',
-          background: '#1a1a2a', color: '#88aaff',
-          border: '1px solid #88aaff66', borderRadius: 4,
-          cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-          opacity: save.isPending ? 0.4 : 1,
+          width: '100%', padding: '9px 0', borderRadius: 5,
+          fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+          cursor: save.isPending || !telegramChanged ? 'not-allowed' : 'pointer',
+          background: 'transparent',
+          color: '#a78bfa',
+          border: '1px solid #a78bfa44',
+          opacity: save.isPending || !telegramChanged ? 0.4 : 1,
         }}
       >
         {save.isPending ? 'Saving…' : 'Save Telegram Config'}
@@ -540,12 +582,12 @@ function AlgoSection() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
             width: 7, height: 7, borderRadius: '50%',
-            background: enabled ? '#ff4757' : '#333',
-            boxShadow: enabled ? '0 0 8px #ff4757' : 'none',
+            background: enabled ? '#10b981' : '#333',
+            boxShadow: enabled ? '0 0 8px #10b981' : 'none',
             display: 'inline-block',
             animation: enabled ? 'none' : undefined,
           }} />
-          <span style={{ fontSize: 9, fontWeight: 700, color: enabled ? '#ff4757' : 'var(--text-faint)', letterSpacing: 1 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: enabled ? '#10b981' : 'var(--text-faint)', letterSpacing: 1 }}>
             {isLoading ? '…' : enabled ? 'ON' : 'OFF'}
           </span>
         </div>
@@ -553,10 +595,10 @@ function AlgoSection() {
     >
       <div style={{
         padding: '12px 14px', borderRadius: 6, marginBottom: 14,
-        background: enabled ? '#1a0505' : 'var(--bg)',
-        border: `1px solid ${enabled ? '#ff475733' : 'var(--border)'}`,
+        background: enabled ? 'transparent' : 'var(--bg)',
+        border: `1px solid ${enabled ? '#10b98144' : 'var(--border)'}`,
       }}>
-        <div style={{ fontSize: 11, color: enabled ? '#ff8a80' : 'var(--text-faint)', lineHeight: 1.6, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: enabled ? 'var(--accent)' : 'var(--text-faint)', lineHeight: 1.6, marginBottom: 12 }}>
           {enabled
             ? '⚡ Algo is ACTIVE — Sterling automatically places live orders on Delta Exchange when signals reach actionable states.'
             : 'When enabled, Sterling automatically places live market orders on Delta Exchange India for every actionable signal (ARMED / CONFIRMED), with a 2-hour cooldown per instrument.'}
@@ -576,9 +618,9 @@ function AlgoSection() {
             fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 1,
             cursor: pending ? 'wait' : 'pointer',
             opacity: pending ? 0.6 : 1,
-            background: enabled ? '#2a0808' : '#0f2a1a',
-            color: enabled ? '#ff4757' : 'var(--accent)',
-            border: `1px solid ${enabled ? '#ff475766' : 'var(--accent)'}`,
+            background: enabled ? 'transparent' : 'var(--bg)',
+            color: enabled ? '#10b981' : 'var(--text-faint)',
+            border: `1px solid ${enabled ? '#10b98166' : 'var(--border)'}`,
             transition: 'all 0.15s',
           }}
         >
@@ -605,12 +647,12 @@ function AlgoSection() {
           zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-card)', border: '1px solid #ff475733',
-            borderTop: '3px solid #ff4757', borderRadius: 8,
+            background: 'var(--bg-card)', border: '1px solid #10b98133',
+            borderTop: '3px solid #10b981', borderRadius: 8,
             padding: '22px 24px', width: 400,
             boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
           }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: '#10b981', marginBottom: 6 }}>
               ⚡ Enable Algo Trading?
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 14 }}>
