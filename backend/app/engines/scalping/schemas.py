@@ -117,3 +117,4 @@ class ScalpingExecuteResponse(BaseModel):
     status: str
     reason: str
     timestamp_ms: int
+    telegram_alert_sent: bool = False

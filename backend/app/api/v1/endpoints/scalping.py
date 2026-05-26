@@ -328,6 +328,15 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     )
     resp = await place_live_order(order, request)
 
+    # Check if Telegram alert was sent (all paper/shadow/live paths call _send_order_telegram)
+    telegram_sent = False
+    if resp.status not in ("rejected", "error"):
+        try:
+            from app.services.notifications import telegram as _tg
+            telegram_sent = _tg.TELEGRAM_REACHABLE
+        except Exception:
+            pass
+
     return ScalpingExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
         mode=resp.mode, underlying=sym, strategy=strategy,
@@ -338,4 +347,5 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         order_id=resp.order_id, paper_position_id=resp.paper_position_id,
         status=resp.status, reason=resp.message,
         timestamp_ms=resp.timestamp_ms or int(time.time() * 1000),
+        telegram_alert_sent=telegram_sent,
     )

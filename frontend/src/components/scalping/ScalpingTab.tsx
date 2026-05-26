@@ -604,6 +604,9 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
               {s.pattern.replace(/_/g, ' ')}
             </span>
           )}
+          <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', marginLeft: 8 }}>
+            {fmtTime(s.timestamp_ms)}
+          </span>
         </div>
         {/* ── action / executed glance — mode · P&L · expand chevron, all on this row ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
@@ -614,6 +617,14 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 padding: '4px 9px', borderRadius: 6, background: modeColor + '18',
                 border: `1px solid ${modeColor}44`, whiteSpace: 'nowrap',
               }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}</span>
+              {execState?.auto && execState?.resp?.telegram_alert_sent && (
+                <span title="Signal alert sent to Telegram" style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#a78bfa',
+                  boxShadow: '0 0 6px #a78bfa',
+                  flexShrink: 0,
+                }} />
+              )}
               {!isOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.05, minWidth: 64 }}>
                   <span style={{ fontSize: 14, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>

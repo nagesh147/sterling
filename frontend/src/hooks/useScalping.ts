@@ -115,6 +115,7 @@ export interface ScalpingExecuteResponse {
   status: string;
   reason: string;
   timestamp_ms: number;
+  telegram_alert_sent: boolean;
 }
 
 // ── Hooks ───────────────────────────────────────────────────────────────────
