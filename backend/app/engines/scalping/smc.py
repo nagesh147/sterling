@@ -16,12 +16,12 @@ Relaxed detection: we scan the last N bars for the pattern sequence
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 import numpy as np
 from numpy.typing import NDArray
 
-from app.engines.scalping.config import ScalpingConfig
+from app.engines.scalping.config import EngineConfig as ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level
 from app.engines.directional.dynamic_tp import dynamic_tp
 
@@ -36,10 +36,111 @@ class SMCESignal:
     entry: Optional[float]
     stop_loss: Optional[float]
     take_profit: Optional[float]
-    tp_source: str = ""
     reason: str
     entry_ok: bool
     timestamp_ms: int
+    tp_source: str = ""
+
+
+def evaluate_bullish_smc(
+    opens: NDArray,
+    highs: NDArray,
+    lows: NDArray,
+    closes: NDArray,
+    level_price: float,
+    cfg: ScalpingConfig
+) -> Optional[Dict[str, Any]]:
+    """
+    Validates immediate Inducement + Imbalance structure at a 4H Support Level.
+    """
+    n = len(closes) - 1 # Index of the most recently completed candle
+    
+    current_open = float(opens[n])
+    current_close = float(closes[n])
+    current_high = float(highs[n])
+    current_low = float(lows[n])
+    
+    # 1. Displacement/Imbalance Check: Current candle must be aggressively bullish
+    if current_close <= current_open:
+        return None
+        
+    current_body = current_close - current_open
+    prev_total_range = float(highs[n-1] - lows[n-1])
+    
+    # Bullish body must cleanly engulf the full high-to-low range of the preceding candle
+    if current_body < (prev_total_range * cfg.smc_imbalance_ratio):
+        return None
+        
+    # 2. Time-Constrained Sweep Check
+    # Scan only the immediate 1 to 3 bars prior to the imbalance candle
+    inducement_found = False
+    sweep_low = current_low
+    scan_start = max(0, n - cfg.smc_max_sweep_window)
+    
+    for j in range(scan_start, n):
+        # Inducement Condition: Price wicks beneath the 4H support zone but closes above it
+        if float(lows[j]) < level_price and float(closes[j]) > level_price:
+            inducement_found = True
+            sweep_low = min(sweep_low, float(lows[j]))
+            break
+            
+    if inducement_found:
+        return {
+            "pattern": "smc_inducement_imbalance",
+            "direction": "long",
+            "entry": round(current_close, 4),
+            "stop_loss": round(sweep_low * 0.999, 4), # Protected beneath the sweep wick low
+        }
+        
+    return None
+
+
+def evaluate_bearish_smc(
+    opens: NDArray,
+    highs: NDArray,
+    lows: NDArray,
+    closes: NDArray,
+    level_price: float,
+    cfg: ScalpingConfig
+) -> Optional[Dict[str, Any]]:
+    """
+    Validates immediate Inducement + Imbalance structure at a 4H Resistance Level.
+    """
+    n = len(closes) - 1
+    
+    current_open = float(opens[n])
+    current_close = float(closes[n])
+    current_high = float(highs[n])
+    current_low = float(lows[n])
+    
+    if current_close >= current_open:
+        return None
+        
+    current_body = current_open - current_close
+    prev_total_range = float(highs[n-1] - lows[n-1])
+    
+    if current_body < (prev_total_range * cfg.smc_imbalance_ratio):
+        return None
+        
+    inducement_found = False
+    sweep_high = current_high
+    scan_start = max(0, n - cfg.smc_max_sweep_window)
+    
+    for j in range(scan_start, n):
+        if float(highs[j]) > level_price and float(closes[j]) < level_price:
+            inducement_found = True
+            sweep_high = max(sweep_high, float(highs[j]))
+            break
+            
+    if inducement_found:
+        return {
+            "pattern": "smc_inducement_imbalance",
+            "direction": "short",
+            "entry": round(current_close, 4),
+            "stop_loss": round(sweep_high * 1.001, 4),
+        }
+        
+    return None
 
 
 def evaluate_smc(
@@ -78,13 +179,11 @@ def evaluate_smc(
             reason="no nearby 4H liquidity zone", entry_ok=False, timestamp_ms=now_ms,
         )
 
-    n = len(candles_15m)
     highs = np.array([c.high for c in candles_15m], dtype=np.float64)
     lows = np.array([c.low for c in candles_15m], dtype=np.float64)
     opens = np.array([c.open for c in candles_15m], dtype=np.float64)
     closes = np.array([c.close for c in candles_15m], dtype=np.float64)
     level_price = nearby.price
-    tol = cfg.level_tolerance_pct / 100.0
 
     direction = "none"
     pattern = ""
@@ -94,43 +193,13 @@ def evaluate_smc(
     reason = ""
     entry_ok = False
 
-    # Search the last `lookback` bars for the SMC pattern:
-    # 1. An inducement bar (wicks below/above the level)
-    # 2. Followed by an imbalance candle (body engulfs previous candle's full range)
-    lookback = min(20, n - 1)
-
     if nearby.level_type == "support" and cfg.allow_long:
-        # Bullish: look for a bar that wicked below support (inducement),
-        # then a bullish candle whose body engulfs the prior bar's range.
-        for i in range(n - lookback, n):
-            if closes[i] <= opens[i]:
-                continue  # skip bearish candles — we need a bullish imbalance
-            body = closes[i] - opens[i]
-            if i < 1:
-                continue
-            prev_range = highs[i - 1] - lows[i - 1]
-            if prev_range <= 0:
-                continue
-            # Imbalance: Body must be expansive and completely engulf the prior candle's high-to-low range
-            if body <= prev_range * cfg.smc_imbalance_ratio:
-                continue
-            # Step 2: Time-Constrained Inducement Sweep
-            # Look back ONLY 1 to 3 candles prior to the imbalance candle for the sweep
-            inducement_found = False
-            sweep_low = float(lows[i])
-            for j in range(max(0, i - 3), i):
-                if lows[j] < level_price and closes[j] > level_price:
-                    # Valid Sweep: Price dipped below 4H support but closed back above it
-                    inducement_found = True
-                    sweep_low = min(sweep_low, float(lows[j]))
-                    break
-            if not inducement_found:
-                continue
-            # This is a valid bullish SMC signal
-            direction = "long"
-            pattern = "smc_inducement_imbalance"
-            entry = round(float(closes[i]), 4)
-            stop_loss = round(sweep_low * 0.999, 4)
+        result = evaluate_bullish_smc(opens, highs, lows, closes, level_price, cfg)
+        if result is not None:
+            direction = result["direction"]
+            pattern = result["pattern"]
+            entry = result["entry"]
+            stop_loss = result["stop_loss"]
             tp_level = nearest_level(current_price, levels, "resistance")
             tp_level_price = float(tp_level.price) if tp_level else None
             take_profit, tp_source = dynamic_tp(
@@ -146,39 +215,14 @@ def evaluate_smc(
             )
             entry_ok = True
             reason = f"bullish imbalance after inducement below 4H support {level_price:.0f}"
-            break
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
-        # Bearish: look for a bar that wicked above resistance (inducement),
-        # then a bearish candle whose body engulfs the prior bar's range.
-        for i in range(n - lookback, n):
-            if closes[i] >= opens[i]:
-                continue  # skip bullish candles — we need a bearish imbalance
-            body = opens[i] - closes[i]
-            if i < 1:
-                continue
-            prev_range = highs[i - 1] - lows[i - 1]
-            if prev_range <= 0:
-                continue
-            # Imbalance: Body must be expansive and completely engulf the prior candle's high-to-low range
-            if body <= prev_range * cfg.smc_imbalance_ratio:
-                continue
-            # Step 2: Time-Constrained Inducement Sweep
-            # Look back ONLY 1 to 3 candles prior to the imbalance candle for the sweep
-            inducement_found = False
-            sweep_high = float(highs[i])
-            for j in range(max(0, i - 3), i):
-                if highs[j] > level_price and closes[j] < level_price:
-                    # Valid Sweep: Price wicked above 4H resistance but closed back below it
-                    inducement_found = True
-                    sweep_high = max(sweep_high, float(highs[j]))
-                    break
-            if not inducement_found:
-                continue
-            direction = "short"
-            pattern = "smc_inducement_imbalance"
-            entry = round(float(closes[i]), 4)
-            stop_loss = round(sweep_high * 1.001, 4)
+        result = evaluate_bearish_smc(opens, highs, lows, closes, level_price, cfg)
+        if result is not None:
+            direction = result["direction"]
+            pattern = result["pattern"]
+            entry = result["entry"]
+            stop_loss = result["stop_loss"]
             tp_level = nearest_level(current_price, levels, "support")
             tp_level_price = float(tp_level.price) if tp_level else None
             take_profit, tp_source = dynamic_tp(
@@ -188,13 +232,12 @@ def evaluate_smc(
                 rr=2.0,
                 highs=highs,
                 lows=lows,
-                atr=(stop_loss - entry),
+                atr=(stop_loss - entry), # Proxy ATR based on sweep
                 swing_lookback=10,
                 tp_level=tp_level_price
             )
             entry_ok = True
             reason = f"bearish imbalance after inducement above 4H resistance {level_price:.0f}"
-            break
 
     if not pattern:
         # Provide context even when no pattern is found

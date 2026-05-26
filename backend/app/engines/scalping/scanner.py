@@ -16,7 +16,7 @@ from typing import List
 
 import numpy as np
 
-from app.engines.scalping.config import ScalpingConfig
+from app.engines.scalping.config import EngineConfig as ScalpingConfig
 from app.engines.scalping.levels import detect_levels
 from app.engines.scalping.schemas import ScalpingSignal, ScalpingScanResponse, SupportResistanceLevel
 from app.engines.scalping.price_action import evaluate_price_action

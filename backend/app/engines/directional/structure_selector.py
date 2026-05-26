@@ -9,5 +9,20 @@ from __future__ import annotations
 
 
 def select_leverage(score: float, signal_strength: str) -> int:
-    """Neutral: always 1x (no strategy loaded)."""
+    """v3 leverage scale: maps 0-100 score to leverage."""
+    
+    if signal_strength != "STRONG" and score < 75:
+        return 1
+        
+    if score >= 95:
+        return 50
+    elif score >= 90:
+        return 25
+    elif score >= 85:
+        return 10
+    elif score >= 80:
+        return 5
+    elif score >= 75:
+        return 3
+        
     return 1

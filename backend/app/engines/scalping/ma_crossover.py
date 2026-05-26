@@ -21,7 +21,7 @@ from typing import List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from app.engines.scalping.config import ScalpingConfig
+from app.engines.scalping.config import EngineConfig as ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level
 from app.engines.directional.dynamic_tp import dynamic_tp
 
@@ -74,10 +74,10 @@ class MACrossignal:
     entry: Optional[float]
     stop_loss: Optional[float]
     take_profit: Optional[float]
-    tp_source: str = ""
     reason: str
     entry_ok: bool
     timestamp_ms: int
+    tp_source: str = ""
     sma_value: float = 0.0
     ema_value: float = 0.0
 
@@ -124,8 +124,8 @@ def evaluate_ma_crossover(
     lows_15m = np.array([c.low for c in candles_15m], dtype=np.float64)
     highs_15m = np.array([c.high for c in candles_15m], dtype=np.float64)
 
-    fast = cfg.ma_fast_period
-    slow = cfg.ma_slow_period
+    fast = cfg.ma_fast_sma
+    slow = cfg.ma_slow_ema
     sma = rolling_sma(closes, fast)
     ema = rolling_ema(closes, slow)
 
@@ -142,7 +142,7 @@ def evaluate_ma_crossover(
     # Check for recent crossover (within last 3 bars) — more practical than exact bar
     recent_cross_bull = False
     recent_cross_bear = False
-    cross_bars = min(3, i)
+    cross_bars = min(cfg.ma_cross_window, i)
 
     for j in range(i - cross_bars + 1, i + 1):
         if j < 1 or sma[j] == 0 or ema[j] == 0 or sma[j-1] == 0 or ema[j-1] == 0:
@@ -166,31 +166,29 @@ def evaluate_ma_crossover(
     if nearby.level_type == "support" and cfg.allow_long:
         if recent_cross_bull:
             # Fresh bullish crossover near support — ARMED, can execute
-            direction = "long"
-            pattern = "sma_cross_above_ema"
             entry = round(current_price, 4)
             
-            # Find the localized swing low of the last 10 candles on the 15m timeframe
-            local_15m_low = float(np.min(lows_15m[-10:]))
+            # Find the localized swing low of the last cfg.ma_risk_lookback candles on the 15m timeframe
+            local_15m_low = float(np.min(lows_15m[-cfg.ma_risk_lookback:]))
             
             atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
-            stop_loss = round((local_15m_low - atr_buffer), 4)
+            calculated_sl = round((local_15m_low - atr_buffer), 4)
             
-            tp_level = nearest_level(current_price, levels, "resistance")
-            tp_level_price = float(tp_level.price) if tp_level else None
-            take_profit, _ = dynamic_tp(
-                direction="long",
-                entry=entry,
-                stop_dist=entry - stop_loss,
-                rr=2.0,
-                highs=highs_15m,
-                lows=lows_15m,
-                atr=atr_buffer * 2, # Re-derive rough ATR
-                swing_lookback=10,
-                tp_level=tp_level_price
-            )
-            entry_ok = True
-            reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f}"
+            # Risk/Reward Guardrail: Avoid entry if the local structure demands an un-scalpable risk profile
+            max_allowable_risk_percentage = 0.025
+            if (entry - calculated_sl) / entry > max_allowable_risk_percentage:
+                reason = f"Bullish crossover near 4H support rejected: Risk ({(entry - calculated_sl) / entry * 100:.2f}%) exceeds 2.5% max limit"
+            else:
+                direction = "long"
+                pattern = "sma_cross_above_ema"
+                stop_loss = calculated_sl
+                
+                tp_level = nearest_level(current_price, levels, "resistance")
+                take_profit = round(float(tp_level.price), 4) if tp_level else round(entry * 1.05, 4)
+                tp_source = "Opposite Macro Zone"
+                
+                entry_ok = True
+                reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f}"
         elif sma_above:
             # MAs aligned but no fresh cross — watching, NOT executable
             direction = "long"
@@ -202,31 +200,29 @@ def evaluate_ma_crossover(
     elif nearby.level_type == "resistance" and cfg.allow_short:
         if recent_cross_bear:
             # Fresh bearish crossover near resistance — ARMED, can execute
-            direction = "short"
-            pattern = "sma_cross_below_ema"
             entry = round(current_price, 4)
             
-            # Find the localized swing high of the last 10 candles on the 15m timeframe
-            local_15m_high = float(np.max(highs_15m[-10:]))
+            # Find the localized swing high of the last cfg.ma_risk_lookback candles on the 15m timeframe
+            local_15m_high = float(np.max(highs_15m[-cfg.ma_risk_lookback:]))
             
             atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
-            stop_loss = round((local_15m_high + atr_buffer), 4)
+            calculated_sl = round((local_15m_high + atr_buffer), 4)
             
-            tp_level = nearest_level(current_price, levels, "support")
-            tp_level_price = float(tp_level.price) if tp_level else None
-            take_profit, _ = dynamic_tp(
-                direction="short",
-                entry=entry,
-                stop_dist=stop_loss - entry,
-                rr=2.0,
-                highs=highs_15m,
-                lows=lows_15m,
-                atr=atr_buffer * 2,
-                swing_lookback=10,
-                tp_level=tp_level_price
-            )
-            entry_ok = True
-            reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f}"
+            # Risk/Reward Guardrail: Avoid entry if the local structure demands an un-scalpable risk profile
+            max_allowable_risk_percentage = 0.025
+            if (calculated_sl - entry) / entry > max_allowable_risk_percentage:
+                reason = f"Bearish crossover near 4H resistance rejected: Risk ({(calculated_sl - entry) / entry * 100:.2f}%) exceeds 2.5% max limit"
+            else:
+                direction = "short"
+                pattern = "sma_cross_below_ema"
+                stop_loss = calculated_sl
+                
+                tp_level = nearest_level(current_price, levels, "support")
+                take_profit = round(float(tp_level.price), 4) if tp_level else round(entry * 0.95, 4)
+                tp_source = "Opposite Macro Zone"
+                
+                entry_ok = True
+                reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f}"
         elif sma_below:
             # MAs aligned but no fresh cross — watching, NOT executable
             direction = "short"

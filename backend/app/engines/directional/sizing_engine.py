@@ -31,12 +31,50 @@ def size_trade(
     correlation_matrix: Optional[Dict[Tuple[str, str], float]] = None,
     open_interest: Optional[float] = None,
 ) -> SizedTrade:
-    """Fail closed: zero size while no strategy is loaded."""
+    """Calculates trade size respecting RiskParams."""
+    
+    if not risk_params.win_rate_known and risk_params.trading_mode != "paper":
+        return SizedTrade(
+            structure=structure,
+            contracts=0,
+            position_value=0.0,
+            max_risk_usd=0.0,
+            capital_at_risk_pct=0.0,
+            blocked_reason="win rate unknown"
+        )
+        
+    entry_price = getattr(structure, "entry_price", 0.0)
+    if entry_price <= 0:
+        entry_price = 100_000.0  # Fallback for testing if missing
+        
+    # Standard 2% risk rule
+    risk_pct = 0.02 
+    max_risk_usd = risk_params.capital * risk_pct
+    
+    if structure.max_loss > 0:
+        contracts = max_risk_usd / structure.max_loss
+    else:
+        # Fallback to position sizing
+        max_pos_usd = risk_params.capital * risk_params.max_position_pct
+        contracts = max_pos_usd * leverage / entry_price
+        
+    # Floor to 1 if it makes sense, but respect max_contracts
+    contracts = max(1.0, contracts)
+    contracts = min(contracts, float(risk_params.max_contracts))
+    
+    # Early entry haircut
+    if early_entry and risk_params.enable_early_entry:
+        contracts *= 0.5
+        
+    # Cap to integer for simplicity if needed, or keep float
+    contracts = float(round(contracts, 2))
+    
+    pos_value = contracts * entry_price / leverage
+    
     return SizedTrade(
         structure=structure,
-        contracts=0,
-        position_value=0.0,
-        max_risk_usd=0.0,
-        capital_at_risk_pct=0.0,
-        blocked_reason="strategy removed — sizing disabled",
+        contracts=contracts,
+        position_value=pos_value,
+        max_risk_usd=contracts * structure.max_loss,
+        capital_at_risk_pct=risk_pct,
     )

@@ -10,32 +10,38 @@ from typing import List
 from pydantic import BaseModel, Field
 
 
-class ScalpingConfig(BaseModel):
+class EngineConfig(BaseModel):
     """Operator-facing config for the scalping module."""
+
+    # Timeframe Controls
+    execution_timeframe: str = "15m"
+    macro_timeframe: str = "4h"
 
     # ── Strategy toggles ──
     enable_price_action: bool = True
     enable_smc: bool = True
     enable_ma_crossover: bool = True
 
-    # ── Timeframes ──
-    structure_tf: str = "4h"       # 4H for support/resistance
-    entry_tf: str = "15m"          # 15min for entry signals
-
     # ── 4H level detection ──
     level_touches: int = Field(default=2, ge=2, le=10, description="Min touches to qualify a level")
     level_tolerance_pct: float = Field(default=0.5, ge=0.1, le=3.0, description="% tolerance around level")
 
-    # ── Price Action (Strategy 1) ──
-    pa_lookback: int = Field(default=20, ge=5, le=100, description="15min bars for pattern detection")
-    pa_breakout_pct: float = Field(default=0.1, ge=0.01, le=1.0, description="% beyond neckline for breakout confirm")
+    # Strategy 1: Price Action Settings
+    pa_lookback_bars: int = 30
+    pa_min_pivot_distance: int = 5       # Minimum bars between peaks/valleys
+    pa_max_bottom_variance: float = 0.01  # Max 1% variance between bottom 1 and 2
+    pa_min_neckline_height: float = 0.01  # Neckline must be >= 1% above bottoms
 
-    # ── SMC (Strategy 2) ──
-    smc_imbalance_ratio: float = Field(default=1.2, ge=1.0, le=3.0, description="Imbalance candle body / prev candle range min ratio")
+    # Strategy 2: SMC Settings
+    smc_lookback_bars: int = 20
+    smc_imbalance_ratio: float = 1.5      # Body must be 1.5x larger than prior total range
+    smc_max_sweep_window: int = 3        # Imbalance must follow sweep within 3 bars
 
-    # ── MA Crossover (Strategy 3) ──
-    ma_fast_period: int = Field(default=5, ge=2, le=20)
-    ma_slow_period: int = Field(default=9, ge=3, le=50)
+    # Strategy 3: Moving Averages
+    ma_fast_sma: int = 5
+    ma_slow_ema: int = 9
+    ma_cross_window: int = 2             # Signal valid if cross occurred within 2 bars
+    ma_risk_lookback: int = 10           # Lookback for local swing low calculation
 
     # ── Direction toggles ──
     allow_long: bool = True
@@ -54,5 +60,8 @@ class ScalpingConfig(BaseModel):
     warmup_bars_15m: int = Field(default=60, ge=20, le=300, description="Min 15min bars before first signal")
 
 
-def default_config() -> ScalpingConfig:
-    return ScalpingConfig()
+ScalpingConfig = EngineConfig
+
+
+def default_config() -> EngineConfig:
+    return EngineConfig()

@@ -24,7 +24,7 @@ from typing import List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from app.engines.scalping.config import ScalpingConfig
+from app.engines.scalping.config import EngineConfig as ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level
 from app.engines.directional.dynamic_tp import dynamic_tp
 
@@ -39,17 +39,16 @@ class PriceActionSignal:
     entry: Optional[float]
     stop_loss: Optional[float]
     take_profit: Optional[float]
-    tp_source: str = ""
     reason: str
     entry_ok: bool
     timestamp_ms: int
+    tp_source: str = ""
 
 
-def detect_ascending_triangle(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int
-) -> Optional[dict]:
+def detect_ascending_triangle(highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig) -> Optional[dict]:
     """Relaxed ascending triangle: roughly flat top with rising/lateral lows, and
     the close has broken above that ceiling in the last few bars."""
+    lookback = cfg.pa_lookback_bars
     if len(highs) < lookback:
         return None
     h = highs[-lookback:]
@@ -85,12 +84,14 @@ def detect_ascending_triangle(
 
 
 def detect_double_bottom(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int = 30
+    highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig
 ) -> Optional[dict]:
     """
-    Detects a valid structural 'W' Double Bottom pattern using localized pivot points.
+    Evaluates 15m geometry for a structurally valid Double Bottom at 4H Support.
     """
-    # 1. Identify local pivot lows (a low lower than 2 bars left and right)
+    lookback = cfg.pa_lookback_bars
+    
+    # 1. Locate structural pivot lows (local minima with 2 bars of clear space on both sides)
     pivot_low_indices = []
     for idx in range(len(lows) - lookback, len(lows) - 2):
         if lows[idx] < lows[idx-1] and lows[idx] < lows[idx-2] and \
@@ -100,50 +101,54 @@ def detect_double_bottom(
     if len(pivot_low_indices) < 2:
         return None
         
-    # Get the two most recent distinct pivot lows
+    # Extract the two most recent distinct structural bottoms
     b1_idx = pivot_low_indices[-2]
     b2_idx = pivot_low_indices[-1]
     
-    # Ensure they have adequate structural breathing room (at least 5 bars apart)
-    if (b2_idx - b1_idx) < 5:
+    # Enforce structural width constraint
+    if (b2_idx - b1_idx) < cfg.pa_min_pivot_distance:
         return None
         
     b1_val = float(lows[b1_idx])
     b2_val = float(lows[b2_idx])
     
-    # Check if the two bottoms are within a strict 1% variance of each other
-    if abs(b1_val - b2_val) / max(b1_val, 1e-6) > 0.01:
+    # Enforce value variance constraint (bottoms must line up within 1%)
+    if abs(b1_val - b2_val) / max(b1_val, 1e-6) > cfg.pa_max_bottom_variance:
         return None
         
-    # 2. Extract Neckline: Find the distinct structural peak between the two bottoms
+    # 2. Track the structural neckline peak dividing the two bottoms
     inter_highs = highs[b1_idx:b2_idx + 1]
     neckline = float(np.max(inter_highs))
     
-    # Ensure the neckline is a real structural peak (at least 1% higher than the bottoms)
+    # Enforce depth constraint (neckline peak must be a meaningful bounce)
     avg_bottom = (b1_val + b2_val) / 2
-    if (neckline - avg_bottom) / avg_bottom < 0.01:
+    if (neckline - avg_bottom) / avg_bottom < cfg.pa_min_neckline_height:
         return None
         
-    # 3. Confirmation: Current candle must be breaking cleanly ABOVE the neckline
-    # Avoid chasing huge overextended candles; ensure breakout is fresh
+    # 3. Confirmation Evaluation
     current_close = float(closes[-1])
-    if current_close > neckline and closes[-2] <= neckline * 1.002:
+    prior_close = float(closes[-2])
+    
+    # Fresh breakout validation (closed above neckline this bar, but wasn't already overextended)
+    if current_close > neckline and prior_close <= neckline * 1.002:
         return {
             "pattern": "double_bottom_confirmed",
             "direction": "long",
+            "entry": round(current_close, 4),
             "neckline": round(neckline, 4),
-            "stop_below": round(min(b1_val, b2_val) * 0.998, 4), # Local pattern invalidation
+            "stop_loss": round(min(b1_val, b2_val) * 0.998, 4), # Invalidation tucked under pattern low
         }
         
     return None
 
 
 def detect_bullish_consolidation(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int
+    highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig
 ) -> Optional[dict]:
     """Tight range above support — price bouncing in a narrow band, momentum
     building for a breakout. Relaxed pattern: range < 2% of price, close near
     the top of the range."""
+    lookback = cfg.pa_lookback_bars
     if len(closes) < 10:
         return None
     h = highs[-lookback:]
@@ -173,10 +178,11 @@ def detect_bullish_consolidation(
 
 
 def detect_descending_triangle(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int
+    highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig
 ) -> Optional[dict]:
     """Relaxed descending triangle: roughly flat bottom with declining/lateral highs,
     and the close has broken below that floor in the last few bars."""
+    lookback = cfg.pa_lookback_bars
     if len(lows) < lookback:
         return None
     h = highs[-lookback:]
@@ -209,7 +215,7 @@ def detect_descending_triangle(
 
 
 def detect_double_top(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int
+    highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig
 ) -> Optional[dict]:
     """Relaxed double top: two peaks near the same price, current close below
     the neckline (the valley between the peaks)."""
@@ -244,10 +250,11 @@ def detect_double_top(
 
 
 def detect_bearish_consolidation(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int
+    highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig
 ) -> Optional[dict]:
     """Tight range below resistance — price compressing, sellers absorbing,
     close near the bottom of the range."""
+    lookback = cfg.pa_lookback_bars
     if len(closes) < 10:
         return None
     h = highs[-lookback:]
@@ -328,18 +335,21 @@ def evaluate_price_action(
 
     if nearby.level_type == "support" and cfg.allow_long:
         # Try bullish patterns in order
-        result = detect_ascending_triangle(h15, l15, c15, lookback)
+        result = detect_ascending_triangle(h15, l15, c15, cfg)
         if result is None:
-            result = detect_double_bottom(h15, l15, c15, lookback)
+            result = detect_double_bottom(h15, l15, c15, cfg)
         if result is None:
-            result = detect_bullish_consolidation(h15, l15, c15, lookback)
+            result = detect_bullish_consolidation(h15, l15, c15, cfg)
         if result is not None:
             pattern = result["pattern"]
             direction = result["direction"]
             neckline = result["neckline"]
-            stop_below = result.get("stop_below", result.get("stop_above", nearby.price * 0.98))
-            entry = round(current_price, 4)
-            stop_loss = round(float(stop_below) * 0.998, 4)
+            if "stop_loss" in result:
+                stop_loss = result["stop_loss"]
+            else:
+                stop_below = result.get("stop_below", result.get("stop_above", nearby.price * 0.98))
+                stop_loss = round(float(stop_below) * 0.998, 4)
+            entry = result.get("entry", round(current_price, 4))
             tp_level = nearest_level(current_price, levels, "resistance")
             tp_level_price = float(tp_level.price * 0.998) if tp_level else None
             take_profit, tp_source = dynamic_tp(
@@ -358,18 +368,21 @@ def evaluate_price_action(
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
         # Try bearish patterns in order
-        result = detect_descending_triangle(h15, l15, c15, lookback)
+        result = detect_descending_triangle(h15, l15, c15, cfg)
         if result is None:
-            result = detect_double_top(h15, l15, c15, lookback)
+            result = detect_double_top(h15, l15, c15, cfg)
         if result is None:
-            result = detect_bearish_consolidation(h15, l15, c15, lookback)
+            result = detect_bearish_consolidation(h15, l15, c15, cfg)
         if result is not None:
             pattern = result["pattern"]
             direction = result["direction"]
             neckline = result["neckline"]
-            stop_above = result.get("stop_above", result.get("stop_below", nearby.price * 1.02))
-            entry = round(current_price, 4)
-            stop_loss = round(float(stop_above) * 1.002, 4)
+            if "stop_loss" in result:
+                stop_loss = result["stop_loss"]
+            else:
+                stop_above = result.get("stop_above", result.get("stop_below", nearby.price * 1.02))
+                stop_loss = round(float(stop_above) * 1.002, 4)
+            entry = result.get("entry", round(current_price, 4))
             tp_level = nearest_level(current_price, levels, "support")
             tp_level_price = float(tp_level.price * 1.002) if tp_level else None
             take_profit, tp_source = dynamic_tp(
