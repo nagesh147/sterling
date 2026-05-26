@@ -535,6 +535,8 @@ def _create_paper_tracking(
             is_paper=not is_live_order,
             order_id=order_id or None,
             order_status=order_status,
+            initial_sl=body.stop_loss,
+            initial_tp=body.take_profit,
         )
         return pos.id
     except Exception as exc:

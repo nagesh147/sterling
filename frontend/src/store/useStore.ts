@@ -26,6 +26,12 @@ function loadMode(): 'basic' | 'pro' {
   catch { return 'basic'; }
 }
 
+const ZOOM_KEY = 'sterling_zoom';
+function loadZoom(): number {
+  try { return parseFloat(localStorage.getItem(ZOOM_KEY) || '1') || 1; }
+  catch { return 1; }
+}
+
 interface StoreState {
   selectedUnderlying: string;
   setSelectedUnderlying: (u: string) => void;
@@ -35,8 +41,12 @@ interface StoreState {
   setRouterMode: (mode: string) => void;
   theme: Theme;
   toggleTheme: () => void;
+  setTheme: (t: Theme) => void;
   appMode: 'basic' | 'pro';
   setAppMode: (m: 'basic' | 'pro') => void;
+  zoomLevel: number;
+  setZoomLevel: (z: number) => void;
+  resetUI: () => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -50,6 +60,11 @@ export const useStore = create<StoreState>((set) => ({
   routerMode: 'live',
   setRouterMode: (mode) => set({ routerMode: mode }),
   theme: loadTheme(),
+  setTheme: (t: Theme) => {
+    try { localStorage.setItem(THEME_KEY, t); } catch { /* ignore */ }
+    document.documentElement.setAttribute('data-theme', t);
+    set({ theme: t });
+  },
   toggleTheme: () => set((s) => {
     const idx  = THEME_CYCLE.indexOf(s.theme);
     const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
@@ -61,6 +76,22 @@ export const useStore = create<StoreState>((set) => ({
   setAppMode: (m) => {
     try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
     set({ appMode: m });
+  },
+  zoomLevel: loadZoom(),
+  setZoomLevel: (z) => {
+    const clamped = Math.max(0.6, Math.min(2.0, z)); // Min 60%, Max 200%
+    try { localStorage.setItem(ZOOM_KEY, clamped.toString()); } catch { /* ignore */ }
+    document.documentElement.style.setProperty('--app-zoom', clamped.toString());
+    set({ zoomLevel: clamped });
+  },
+  resetUI: () => {
+    try {
+      localStorage.setItem(ZOOM_KEY, '1');
+      localStorage.setItem(THEME_KEY, 'dark');
+    } catch { /* ignore */ }
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.style.setProperty('--app-zoom', '1');
+    set({ zoomLevel: 1, theme: 'dark' });
   },
 }));
 
@@ -84,6 +115,11 @@ export const useSetRouterModeStore = () =>
 
 export type { Theme };
 export const useTheme = () => useStore((s) => s.theme);
+export const useSetTheme = () => useStore((s) => s.setTheme);
 export const useToggleTheme = () => useStore((s) => s.toggleTheme);
 export const useAppMode = () => useStore((s) => s.appMode);
 export const useSetAppMode = () => useStore((s) => s.setAppMode);
+
+export const useZoomLevel = () => useStore((s) => s.zoomLevel);
+export const useSetZoomLevel = () => useStore((s) => s.setZoomLevel);
+export const useResetUI = () => useStore((s) => s.resetUI);

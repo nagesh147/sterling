@@ -139,6 +139,7 @@ export interface TradeStructure {
   risk_reward?: number;
   score: number;
   score_breakdown: Record<string, number>;
+  leverage?: number;
 }
 
 export interface SizedTrade {

@@ -5,6 +5,7 @@ import { useSelectedUnderlying } from '../store/useStore';
 import { useSnapshot } from '../hooks/useSnapshot';
 import { useLivePrices } from '../hooks/useLivePrices';
 import { useDataSource } from '../hooks/useExchanges';
+import { useTheme, useSetTheme, useZoomLevel, useSetZoomLevel, useResetUI, type Theme } from '../store/useStore';
 
 export function StatusBar() {
   const underlying = useSelectedUnderlying();
@@ -24,6 +25,11 @@ export function StatusBar() {
   const isHalted = cbState !== 'clear';
 
   const now = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const theme = useTheme();
+  const setTheme = useSetTheme();
+  const zoomLevel = useZoomLevel();
+  const setZoomLevel = useSetZoomLevel();
+  const resetUI = useResetUI();
 
   return (
     <div style={{
@@ -80,9 +86,29 @@ export function StatusBar() {
       </span>
 
       {/* Timestamp */}
-      <span style={{ marginLeft: 'auto' }}>
-        Last: <span className="num">{now}</span>
+      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--t-bg)', padding: '2px 8px', border: '1px solid var(--t-border)' }}>
+          <button style={btnStyle} onClick={() => setZoomLevel(zoomLevel - 0.1)}>-</button>
+          <span style={{ fontSize: 9, minWidth: 32, textAlign: 'center' }}>{(zoomLevel * 100).toFixed(0)}%</span>
+          <button style={btnStyle} onClick={() => setZoomLevel(zoomLevel + 0.1)}>+</button>
+        </span>
+        
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--t-bg)', padding: '2px 4px', border: '1px solid var(--t-border)' }}>
+          <button style={{ ...btnStyle, background: theme === 'dark' ? 'var(--t-border)' : 'transparent' }} onClick={() => setTheme('dark')}>DK</button>
+          <button style={{ ...btnStyle, background: theme === 'grey' ? 'var(--t-border)' : 'transparent' }} onClick={() => setTheme('grey')}>GR</button>
+          <button style={{ ...btnStyle, background: theme === 'light' ? 'var(--t-border)' : 'transparent' }} onClick={() => setTheme('light')}>LT</button>
+        </span>
+
+        <button style={btnStyle} onClick={() => resetUI()}>RST</button>
+
+        <span>Last: <span className="num">{now}</span></span>
       </span>
     </div>
   );
 }
+
+const btnStyle = {
+  background: 'transparent', border: 'none', color: 'var(--t-dim)',
+  cursor: 'pointer', fontFamily: 'inherit', fontSize: 9, fontWeight: 700,
+  padding: '2px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+};

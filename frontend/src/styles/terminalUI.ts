@@ -128,4 +128,6 @@ export const modal: CSSProperties = {
   border: `1px solid ${c.border}`,
   borderRadius: 8,
   padding: '22px 24px',
+  maxHeight: '90vh',
+  overflowY: 'auto',
 };

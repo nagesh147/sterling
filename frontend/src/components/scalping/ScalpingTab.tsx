@@ -204,14 +204,37 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
 /* ── signal card ────────────────────────────────────────────────────────────── */
 
-function PlanCell({ label, value, color, width = 78 }: { label: string; value: React.ReactNode; color?: string; width?: number | string }) {
+function PlanCell({ value, color, width = 78 }: { value: React.ReactNode; color?: string; width?: number | string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, width, flexShrink: 0 }}>
-      <span style={{ fontSize: 8, letterSpacing: '0.08em', color: 'var(--t-dim)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', width, flexShrink: 0, justifyContent: 'center' }}>
       <span style={{
         fontSize: 13, fontWeight: 700, color: color || 'var(--t-bright)', lineHeight: 1.2,
         fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>{value}</span>
+    </div>
+  );
+}
+
+function SignalTableHeader() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 20,
+      padding: '4px 16px 6px 0',
+      marginBottom: 2,
+    }}>
+      <div style={{ width: 4, flexShrink: 0 }} />
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 56, flexShrink: 0, textTransform: 'uppercase' }}>Symbol</span>
+      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 68, flexShrink: 0, textTransform: 'uppercase' }}>Type</span>
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Entry</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 110, flexShrink: 0, textTransform: 'uppercase' }}>Current</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Stop</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Target</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 50, flexShrink: 0, textTransform: 'uppercase' }}>Risk</span>
+      </div>
+      <div style={{ width: 150, flexShrink: 0, marginLeft: 'auto' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Strategy / Mode</span>
+      </div>
     </div>
   );
 }
@@ -656,18 +679,20 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           <span style={{ fontSize: 12, fontWeight: 800, color: dirColor, letterSpacing: '0.04em', lineHeight: 1.1 }}>
             {long ? '▲ LONG' : '▼ SHORT'}
           </span>
-          <span style={{
-            fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, lineHeight: 1,
-            padding: '1px 5px', borderRadius: 3, background: statusColor + '18', alignSelf: 'flex-start',
-          }}>{statusLabel}</span>
+          {!accepted && (
+            <span style={{
+              fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, lineHeight: 1,
+              padding: '1px 5px', borderRadius: 3, background: statusColor + '18', alignSelf: 'flex-start',
+            }}>{statusLabel}</span>
+          )}
         </div>
         {hasPlan ? (
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-            <PlanCell label="Entry" value={fmtUsd(displayEntry)} />
-            <PlanCell label="Current" value={currentValNode} color={currentColor} width={110} />
-            <PlanCell label="Stop" value={fmtUsd(displaySl)} color="#f87171" />
-            <PlanCell label="Target" value={fmtUsd(displayTp)} color="var(--t-amber)" />
-            <PlanCell label="Risk" value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
+            <PlanCell value={fmtUsd(displayEntry)} />
+            <PlanCell value={currentValNode} color={currentColor} width={110} />
+            <PlanCell value={fmtUsd(displaySl)} color="#f87171" />
+            <PlanCell value={fmtUsd(displayTp)} color="var(--t-amber)" />
+            <PlanCell value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
           </div>
         ) : (
           <span style={{ fontSize: 11, color: 'var(--t-dim)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.reason}</span>
@@ -963,7 +988,10 @@ export function ScalpingTab() {
     strategy, direction: (pos.sized_trade?.structure?.direction as string) ?? 'none',
     near_level: null, level_type: '', pattern: '', reason: pos.notes || '',
     entry: pos.entry_spot_price ?? null, stop_loss: pos.initial_sl ?? null, take_profit: pos.initial_tp ?? null,
-    risk_pct: null, leverage: null, size_units: null, notional_usd: null,
+    risk_pct: pos.sized_trade?.capital_at_risk_pct ?? null,
+    leverage: pos.sized_trade?.structure?.leverage ?? null,
+    size_units: pos.sized_trade?.contracts ?? null,
+    notional_usd: pos.sized_trade?.position_value ?? null,
     entry_ok: true, executable: false, timestamp_ms: pos.entry_timestamp_ms ?? 0, error: null,
   });
   const execStateFromPos = (pos: PaperPosition, strategy: string): ExecState => {
@@ -980,7 +1008,8 @@ export function ScalpingTab() {
         accepted: true, mode: modeStr.toLowerCase(),
         underlying: pos.underlying, strategy,
         direction: (pos.sized_trade?.structure?.direction as string) ?? 'none',
-        size_units: 0, notional_usd: 0,
+        size_units: pos.sized_trade?.contracts ?? 0,
+        notional_usd: pos.sized_trade?.position_value ?? 0,
         entry_price: pos.entry_spot_price ?? null,
         stop_loss: pos.initial_sl ?? null, take_profit: pos.initial_tp ?? null,
         order_id: pos.order_id ?? null, paper_position_id: pos.id,
@@ -1213,9 +1242,7 @@ export function ScalpingTab() {
         </div>
       </>}
       centerContent={
-        <div style={{ display: 'flex', gap: 0, height: '100%', overflow: 'hidden' }}>
-          {/* ── Signals table (2/3 width) ── */}
-          <div style={{ flex: '2 1 0', overflowY: 'auto', minWidth: 0 }}>
+        <div style={{ height: '100%', overflowY: 'auto' }}>
             {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
             {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
             {data && displaySignals.length === 0 && (
@@ -1224,14 +1251,20 @@ export function ScalpingTab() {
               </div>
             )}
             {executedSignals.length > 0 && (
-              <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
+              <>
+                <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
+                <SignalTableHeader />
+              </>
             )}
             {executedSignals.map(renderSignalCard)}
             {executedSignals.length > 0 && (
               <ConsolidatedRow count={executedSignals.length} {...consolidated} />
             )}
             {restSignals.length > 0 && (
-              <ListGroupHeader label={armedOnly ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
+              <>
+                <ListGroupHeader label={armedOnly ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
+                <SignalTableHeader />
+              </>
             )}
             {restSignals.map(renderSignalCard)}
             {data && displaySignals.length > 0 && (
@@ -1240,25 +1273,6 @@ export function ScalpingTab() {
               </div>
             )}
           </div>
-          {/* ── Execution log (1/3 width) ── */}
-          <div style={{
-            flex: '1 1 0', minWidth: 0,
-            borderLeft: '1px solid var(--t-border)',
-            background: 'var(--t-bg2)',
-            display: 'flex', flexDirection: 'column',
-          }}>
-            <div style={{
-              padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
-              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
-              color: 'var(--t-dim)', textTransform: 'uppercase',
-            }}>
-              Execution Log · {tradeMode}
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              <ExecLog entries={execLog} mode={tradeMode} />
-            </div>
-          </div>
-        </div>
       }
       rightSidebar={<>
         <RightSection label="Settings" collapsible defaultOpen={true}>
@@ -1272,6 +1286,18 @@ export function ScalpingTab() {
             <span style={{ fontSize: 11, fontWeight: 600 }}>Settings & Backtest</span>
           </button>
         </RightSection>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{
+            padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+            color: 'var(--t-dim)', textTransform: 'uppercase',
+          }}>
+            Execution Log · {tradeMode}
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            <ExecLog entries={execLog} mode={tradeMode} />
+          </div>
+        </div>
       </>}
     >
     </ThreeColumnLayout>
