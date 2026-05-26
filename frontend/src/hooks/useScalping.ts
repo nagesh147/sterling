@@ -11,7 +11,7 @@ export interface ScalpingConfig {
   entry_tf: string;
   level_touches: number;
   level_tolerance_pct: number;
-  pa_lookback: number;
+  pa_lookback_bars: number;
   pa_breakout_pct: number;
   smc_imbalance_ratio: number;
   ma_fast_period: number;

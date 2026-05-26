@@ -219,6 +219,7 @@ def detect_double_top(
 ) -> Optional[dict]:
     """Relaxed double top: two peaks near the same price, current close below
     the neckline (the valley between the peaks)."""
+    lookback = cfg.pa_lookback_bars
     if len(highs) < lookback:
         return None
     hi = highs[-lookback:]
@@ -323,7 +324,7 @@ def evaluate_price_action(
     h15 = np.array([c.high for c in candles_15m], dtype=np.float64)
     l15 = np.array([c.low for c in candles_15m], dtype=np.float64)
     c15 = np.array([c.close for c in candles_15m], dtype=np.float64)
-    lookback = min(cfg.pa_lookback, len(c15) - 1)
+    lookback = min(cfg.pa_lookback_bars, len(c15) - 1)
 
     direction = "none"
     pattern = ""
