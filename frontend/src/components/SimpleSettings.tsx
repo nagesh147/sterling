@@ -14,7 +14,7 @@ interface TelegramConfig {
 
 // ── Status light ──────────────────────────────────────────────────────────────
 function StatusLight({ ok, label }: { ok: boolean | null; label: string }) {
-  const color = ok === null ? '#555' : ok ? 'var(--accent)' : 'var(--danger)';
+  const color = ok === null ? 'var(--t-dim)' : ok ? 'var(--t-blue)' : 'var(--t-red)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
       <span style={{
@@ -33,14 +33,13 @@ function Section({ title, status, children, defaultOpen = true }: { title: strin
     <div style={{ marginBottom: 28 }}>
       <div
         onClick={() => setOpen(!open)}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: open ? 12 : 0, borderBottom: '1px solid var(--border)', paddingBottom: 6, cursor: 'pointer', userSelect: 'none' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: open ? 14 : 0, cursor: 'pointer', userSelect: 'none' }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1.5, color: 'var(--text-muted)' }}>{title}</span>
-        </div>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.14em', color: 'var(--t-bright)', textTransform: 'uppercase' }}>{title}</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--t-border)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {status}
-          <span style={{ fontSize: 10, color: 'var(--text-faint)', transition: 'transform 0.2s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
+          <span style={{ fontSize: 10, color: 'var(--t-dim)', transition: 'transform 0.2s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
         </div>
       </div>
       {open && children}
@@ -52,18 +51,19 @@ function Section({ title, status, children, defaultOpen = true }: { title: strin
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>{label}</div>
       {children}
-      {hint && <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 3, lineHeight: 1.5 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 9, color: 'var(--t-dim)', marginTop: 4, lineHeight: 1.5 }}>{hint}</div>}
     </div>
   );
 }
 
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box',
-  background: 'var(--bg)', color: 'var(--text-primary)',
-  border: '1px solid var(--border-light)', borderRadius: 4,
+  background: 'var(--t-bg)', color: 'var(--t-bright)',
+  border: '1px solid var(--t-border)', borderRadius: 6,
   padding: '7px 10px', fontFamily: 'monospace', fontSize: 12, outline: 'none',
+  transition: 'border-color 0.15s, background 0.15s',
 };
 
 // ── Exchange credentials ──────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ function ExchangeSection() {
           <StatusLight ok={connOk} label={connOk === null ? 'NOT TESTED' : connOk ? 'CONNECTED' : 'ERROR'} />
           <button
             onClick={testConnection} disabled={testing || !hasKeys}
-            style={{ fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, cursor: testing || !hasKeys ? 'default' : 'pointer', fontFamily: 'inherit', opacity: !hasKeys ? 0.4 : 1 }}
+            style={{ fontSize: 9, padding: '2px 8px', background: 'var(--t-bg2)', color: 'var(--t-dim)', border: '1px solid var(--t-border)', borderRadius: 3, cursor: testing || !hasKeys ? 'default' : 'pointer', fontFamily: 'inherit', opacity: !hasKeys ? 0.4 : 1 }}
           >
             {testing ? 'Testing…' : 'Test'}
           </button>
@@ -151,19 +151,19 @@ function ExchangeSection() {
       {/* Test result — rich block */}
       {testResult && (
         <div style={{
-          marginBottom: 14, padding: '10px 12px', borderRadius: 5,
+          marginBottom: 14, padding: '10px 12px', borderRadius: 4,
           background: 'transparent',
-          border: `1px solid ${testResult.ok ? 'var(--accent)33' : 'var(--danger)33'}`,
+          border: `1px solid ${testResult.ok ? 'var(--t-blue)33' : 'var(--t-red)33'}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: testResult.ok ? 2 : 6 }}>
             <span style={{ fontSize: 14 }}>{testResult.ok ? '✅' : '❌'}</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: testResult.ok ? 'var(--accent)' : 'var(--danger)' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: testResult.ok ? 'var(--t-blue)' : 'var(--t-red)' }}>
               {testResult.ok ? testResult.message : 'Connection failed'}
             </span>
           </div>
           {testResult.ok && testResult.balance && (
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 2 }}>
-              Margin available: <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{testResult.balance}</span>
+            <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 2 }}>
+              Margin available: <span style={{ color: 'var(--t-bright)', fontVariantNumeric: 'tabular-nums' }}>{testResult.balance}</span>
             </div>
           )}
           {testResult.ok && (
@@ -173,7 +173,7 @@ function ExchangeSection() {
               rel="noopener noreferrer"
               style={{
                 display: 'inline-block', marginTop: 6,
-                fontSize: 10, color: 'var(--accent)',
+                fontSize: 10, color: 'var(--t-blue)',
                 textDecoration: 'none', opacity: 0.8,
               }}
             >
@@ -181,24 +181,24 @@ function ExchangeSection() {
             </a>
           )}
           {!testResult.ok && testResult.reason && (
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 6, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10, color: 'var(--t-dim)', marginBottom: 6, lineHeight: 1.5 }}>
               {testResult.reason}
             </div>
           )}
           {!testResult.ok && testResult.hint && (
-            <div style={{ fontSize: 10, color: '#f0c040', lineHeight: 1.6, marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: 'var(--t-amber)', lineHeight: 1.6, marginBottom: 8 }}>
               {testResult.hint}
             </div>
           )}
           {!testResult.ok && testResult.server_ip && (
             <div style={{
               marginBottom: 8, padding: '6px 10px',
-              background: '#1a1400', border: '1px solid #f0c04033', borderRadius: 4,
+              background: 'var(--t-bg2)', border: '1px solid var(--t-amber)33', borderRadius: 4,
             }}>
               <div style={{ fontSize: 9, color: '#888', marginBottom: 3 }}>WHITELIST THIS SERVER IP IN DELTA EXCHANGE:</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
-                  fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#f0c040',
+                  fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--t-amber)',
                   letterSpacing: 1,
                 }}>
                   {testResult.server_ip}
@@ -206,7 +206,7 @@ function ExchangeSection() {
                 <button
                   onClick={() => navigator.clipboard.writeText(testResult.server_ip!)}
                   style={{
-                    background: '#2a2000', color: '#f0c040', border: '1px solid #f0c04044',
+                    background: 'var(--t-bg2)', color: 'var(--t-amber)', border: '1px solid var(--t-amber)44',
                     padding: '2px 8px', borderRadius: 3, cursor: 'pointer',
                     fontFamily: 'inherit', fontSize: 9,
                   }}
@@ -227,8 +227,8 @@ function ExchangeSection() {
               style={{
                 display: 'inline-block', marginTop: 2,
                 fontSize: 10, fontWeight: 700,
-                color: 'var(--accent)', textDecoration: 'none',
-                background: '#0f2a1a', border: '1px solid var(--accent)44',
+                color: 'var(--t-blue)', textDecoration: 'none',
+                background: 'var(--t-bg2)', border: '1px solid var(--t-blue)44',
                 borderRadius: 4, padding: '5px 12px',
               }}
             >
@@ -239,9 +239,9 @@ function ExchangeSection() {
       )}
 
       {hasKeys && !testResult && (
-        <div style={{ marginBottom: 12, padding: '6px 10px', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', fontSize: 10, color: 'var(--text-faint)' }}>
-          Current key: <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>••••{hint}</span>
-          <span style={{ marginLeft: 8, color: 'var(--text-faint)' }}>— click Test to verify</span>
+        <div style={{ marginBottom: 12, padding: '6px 10px', background: 'var(--t-bg2)', borderRadius: 4, border: '1px solid var(--t-border)', fontSize: 10, color: 'var(--t-dim)' }}>
+          Current key: <span style={{ fontFamily: 'monospace', color: 'var(--t-bright)' }}>••••{hint}</span>
+          <span style={{ marginLeft: 8, color: 'var(--t-dim)' }}>— click Test to verify</span>
         </div>
       )}
 
@@ -251,7 +251,7 @@ function ExchangeSection() {
           value={apiKey} onChange={e => setApiKey(e.target.value)}
           style={{
             ...inputStyle,
-            border: testResult && !testResult.ok ? '1px solid var(--danger)66' : inputStyle.border,
+            border: testResult && !testResult.ok ? '1px solid var(--t-red)66' : inputStyle.border,
           }}
         />
       </Field>
@@ -261,13 +261,13 @@ function ExchangeSection() {
           value={apiSecret} onChange={e => setApiSecret(e.target.value)}
           style={{
             ...inputStyle,
-            border: testResult && !testResult.ok ? '1px solid var(--danger)66' : inputStyle.border,
+            border: testResult && !testResult.ok ? '1px solid var(--t-red)66' : inputStyle.border,
           }}
         />
       </Field>
 
       {msg && (
-        <div style={{ fontSize: 10, color: msgOk ? 'var(--accent)' : 'var(--danger)', marginBottom: 8, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 10, color: msgOk ? 'var(--t-blue)' : 'var(--t-red)', marginBottom: 8, lineHeight: 1.5 }}>
           {msg}
         </div>
       )}
@@ -276,12 +276,12 @@ function ExchangeSection() {
         onClick={save}
         disabled={update.isPending || (!apiKey.trim() && !apiSecret.trim())}
         style={{
-          width: '100%', padding: '9px 0', borderRadius: 5,
-          fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+          width: '100%', padding: '8px 0', borderRadius: 4,
+          fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
           cursor: update.isPending || (!apiKey.trim() && !apiSecret.trim()) ? 'not-allowed' : 'pointer',
-          background: 'transparent',
-          color: 'var(--accent)',
-          border: '1px solid var(--accent)44',
+          background: 'var(--t-bg2)',
+          color: 'var(--t-bright)',
+          border: '1px solid var(--t-border)',
           opacity: update.isPending || (!apiKey.trim() && !apiSecret.trim()) ? 0.4 : 1,
         }}
       >
@@ -397,9 +397,9 @@ function TelegramSection() {
             onClick={sendTest}
             disabled={!canTest || sendingTest}
             style={{
-              fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)',
-              color: canTest ? 'var(--text-primary)' : 'var(--text-dim)',
-              border: `1px solid ${canTest ? 'var(--accent)44' : 'var(--border)'}`,
+              fontSize: 9, padding: '2px 8px', background: 'var(--t-bg2)',
+              color: canTest ? 'var(--t-bright)' : 'var(--t-dim)',
+              border: `1px solid ${canTest ? 'var(--t-blue)44' : 'var(--t-border)'}`,
               borderRadius: 3, cursor: canTest && !sendingTest ? 'pointer' : 'default',
               fontFamily: 'inherit', opacity: !canTest || sendingTest ? 0.5 : 1,
               fontWeight: canTest ? 700 : 400,
@@ -412,9 +412,9 @@ function TelegramSection() {
             disabled={!canTest || sendingSignal}
             title="Send a sample signal alert in the exact format you'll receive for real signals"
             style={{
-              fontSize: 9, padding: '2px 8px', background: 'var(--bg-input)',
-              color: canTest ? '#a78bfa' : 'var(--text-dim)',
-              border: `1px solid ${canTest ? '#a78bfa44' : 'var(--border)'}`,
+              fontSize: 9, padding: '2px 8px', background: 'var(--t-bg2)',
+              color: canTest ? 'var(--t-purple)' : 'var(--t-dim)',
+              border: `1px solid ${canTest ? 'var(--t-purple)44' : 'var(--t-border)'}`,
               borderRadius: 3, cursor: canTest && !sendingSignal ? 'pointer' : 'default',
               fontFamily: 'inherit', opacity: !canTest || sendingSignal ? 0.5 : 1,
               fontWeight: canTest ? 700 : 400,
@@ -426,12 +426,12 @@ function TelegramSection() {
       }
     >
       {needsToken && (
-        <div style={{ marginBottom: 10, padding: '6px 10px', background: '#1a1200', border: '1px solid #f0c04033', borderRadius: 4, fontSize: 10, color: '#f0c040' }}>
+        <div style={{ marginBottom: 10, padding: '6px 10px', background: 'var(--t-bg2)', border: '1px solid var(--t-amber)33', borderRadius: 4, fontSize: 10, color: 'var(--t-amber)' }}>
           Enter bot token to enable Telegram alerts
         </div>
       )}
       {data?.enabled && !data?.reachable && !needsToken && (
-        <div style={{ marginBottom: 10, padding: '6px 10px', background: '#0d1520', border: '1px solid #88aaff33', borderRadius: 4, fontSize: 10, color: '#88aaff', lineHeight: 1.5 }}>
+        <div style={{ marginBottom: 10, padding: '6px 10px', background: 'var(--t-bg2)', border: '1px solid var(--t-blue)33', borderRadius: 4, fontSize: 10, color: 'var(--t-blue)', lineHeight: 1.5 }}>
           Token saved. Click <strong>Send Test</strong> to verify.
           If it fails, open Telegram and send <code style={{ background: '#1a2030', padding: '1px 4px', borderRadius: 2 }}>/start</code> to your bot first.
         </div>
@@ -453,7 +453,7 @@ function TelegramSection() {
       </Field>
 
       {msg && (
-        <div style={{ fontSize: 10, color: msgOk ? 'var(--accent)' : '#f0c040', marginBottom: 8, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 10, color: msgOk ? 'var(--t-blue)' : 'var(--t-amber)', marginBottom: 8, lineHeight: 1.5 }}>
           {msg}
         </div>
       )}
@@ -461,17 +461,61 @@ function TelegramSection() {
       <button
         onClick={() => save.mutate()} disabled={save.isPending || !telegramChanged}
         style={{
-          width: '100%', padding: '9px 0', borderRadius: 5,
-          fontFamily: 'inherit', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
+          width: '100%', padding: '8px 0', borderRadius: 4,
+          fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
           cursor: save.isPending || !telegramChanged ? 'not-allowed' : 'pointer',
-          background: 'transparent',
-          color: '#a78bfa',
-          border: '1px solid #a78bfa44',
+          background: 'var(--t-bg2)',
+          color: 'var(--t-bright)',
+          border: '1px solid var(--t-border)',
           opacity: save.isPending || !telegramChanged ? 0.4 : 1,
         }}
       >
         {save.isPending ? 'Saving…' : 'Save Telegram Config'}
       </button>
+    </Section>
+  );
+}
+
+// ── UI Preferences ─────────────────────────────────────────────────────────────
+function UiSection() {
+  const [zoom, setZoom] = useState(() => {
+    const root = document.querySelector('.term-root') as HTMLElement;
+    return parseFloat(root?.style.getPropertyValue('--app-zoom') || '1');
+  });
+
+  const updateZoom = (val: number) => {
+    const root = document.querySelector('.term-root') as HTMLElement;
+    if (root) {
+      root.style.setProperty('--app-zoom', val.toString());
+      setZoom(val);
+      localStorage.setItem('sterling-zoom', val.toString());
+    }
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem('sterling-zoom');
+    if (saved) {
+      const v = parseFloat(saved);
+      if (!isNaN(v)) updateZoom(v);
+    }
+  }, []);
+
+  return (
+    <Section title="DISPLAY" status={<span style={{ fontSize: 9, color: 'var(--t-dim)' }}>{(zoom * 100).toFixed(0)}%</span>}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => updateZoom(Math.max(0.6, zoom - 0.1))}
+          style={{ flex: 1, padding: '6px 0', background: 'var(--t-bg)', color: 'var(--t-bright)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14 }}>
+          -
+        </button>
+        <button onClick={() => updateZoom(1)}
+          style={{ flex: 2, padding: '6px 0', background: 'var(--t-bg)', color: 'var(--t-dim)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em' }}>
+          RESET
+        </button>
+        <button onClick={() => updateZoom(Math.min(1.5, zoom + 0.1))}
+          style={{ flex: 1, padding: '6px 0', background: 'var(--t-bg)', color: 'var(--t-bright)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14 }}>
+          +
+        </button>
+      </div>
     </Section>
   );
 }
@@ -490,13 +534,13 @@ export function SimpleStatusDots() {
   const tgOk    = !!(tgData?.enabled && tgData?.reachable);
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <span style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 0.5 }} title={hasKeys ? 'Delta Exchange credentials configured' : 'No Delta credentials'}>
-        <span style={{ color: hasKeys ? 'var(--accent)' : 'var(--danger)', marginRight: 3 }}>●</span>
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+      <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontWeight: 700 }} title={hasKeys ? 'Delta Exchange credentials configured' : 'No Delta credentials'}>
+        <span style={{ color: hasKeys ? 'var(--t-blue)' : 'var(--t-red)', marginRight: 4 }}>●</span>
         Δ
       </span>
-      <span style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 0.5 }} title={tgOk ? 'Telegram connected' : 'Telegram not configured'}>
-        <span style={{ color: tgOk ? 'var(--accent)' : '#555', marginRight: 3 }}>●</span>
+      <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontWeight: 700 }} title={tgOk ? 'Telegram connected' : 'Telegram not configured'}>
+        <span style={{ color: tgOk ? 'var(--t-blue)' : 'var(--t-dim)', marginRight: 4 }}>●</span>
         TG
       </span>
     </div>
@@ -581,10 +625,10 @@ function AlgoSection() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{
             width: 14, height: 14, borderRadius: '50%',
-            background: enabled ? '#10b981' : '#333',
+            background: enabled ? 'var(--t-green)' : 'var(--t-border)',
             transition: 'background 0.2s',
           }} />
-          <span style={{ fontSize: 9, fontWeight: 700, color: enabled ? '#10b981' : 'var(--text-faint)', letterSpacing: 1 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: enabled ? 'var(--t-green)' : 'var(--t-dim)', letterSpacing: 1 }}>
             {isLoading ? '…' : enabled ? 'ON' : 'OFF'}
           </span>
         </div>
@@ -592,10 +636,10 @@ function AlgoSection() {
     >
       <div style={{
         padding: '12px 14px', borderRadius: 6, marginBottom: 14,
-        background: enabled ? 'transparent' : 'var(--bg)',
-        border: `1px solid ${enabled ? '#10b98144' : 'var(--border)'}`,
+        background: enabled ? 'transparent' : 'var(--t-bg2)',
+        border: `1px solid ${enabled ? 'var(--t-green)44' : 'var(--t-border)'}`,
       }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: enabled ? 'var(--accent)' : 'var(--text-faint)', lineHeight: 1.6, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: enabled ? 'var(--t-blue)' : 'var(--t-dim)', lineHeight: 1.6, marginBottom: 12 }}>
           {enabled
             ? '⚡ Algo is ACTIVE — Sterling automatically places live orders on Delta Exchange when signals reach actionable states.'
             : 'When enabled, Sterling automatically places live market orders on Delta Exchange India for every actionable signal (ARMED / CONFIRMED), with a 2-hour cooldown per instrument.'}
@@ -603,7 +647,7 @@ function AlgoSection() {
 
         {enabled && (
           <div style={{ fontSize: 10, color: '#666', lineHeight: 1.6, marginBottom: 12 }}>
-            Failed orders appear in the Positions tab with a <strong style={{ color: '#cc4444' }}>✕ FAILED</strong> badge and a <strong style={{ color: '#4499cc' }}>RETRY</strong> button.
+            Failed orders appear in the Positions tab with a <strong style={{ color: 'var(--t-red)' }}>✕ FAILED</strong> badge and a <strong style={{ color: 'var(--t-blue)' }}>RETRY</strong> button.
           </div>
         )}
 
@@ -611,13 +655,13 @@ function AlgoSection() {
           onClick={handleToggle}
           disabled={pending || isLoading}
           style={{
-            width: '100%', padding: '9px 0', borderRadius: 5,
-            fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 1,
+            width: '100%', padding: '8px 0', borderRadius: 4,
+            fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
             cursor: pending ? 'wait' : 'pointer',
             opacity: pending ? 0.6 : 1,
-            background: enabled ? 'transparent' : 'var(--bg)',
-            color: enabled ? '#10b981' : 'var(--text-faint)',
-            border: `1px solid ${enabled ? '#10b98166' : 'var(--border)'}`,
+            background: enabled ? 'var(--t-bg2)' : 'var(--t-green)11',
+            color: enabled ? 'var(--t-dim)' : 'var(--t-green)',
+            border: `1px solid ${enabled ? 'var(--t-border)' : 'var(--t-green)44'}`,
             transition: 'all 0.15s',
           }}
         >
@@ -625,14 +669,14 @@ function AlgoSection() {
         </button>
 
         {setAlgoMode.isError && (
-          <div style={{ marginTop: 8, fontSize: 10, color: 'var(--danger)' }}>
+          <div style={{ marginTop: 8, fontSize: 10, color: 'var(--t-red)' }}>
             {(setAlgoMode.error as Error).message}
           </div>
         )}
       </div>
 
       {!enabled && (
-        <div style={{ fontSize: 9, color: 'var(--text-faint)', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.6 }}>
           Requires live Delta Exchange credentials. Failed orders are kept open for retry.
         </div>
       )}
@@ -644,64 +688,64 @@ function AlgoSection() {
           zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderTop: '3px solid #10b981', borderRadius: 8,
+            background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+            borderTop: '3px solid var(--t-green)', borderRadius: 6,
             padding: '22px 24px', width: 400,
           }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: '#10b981', marginBottom: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--t-green)', marginBottom: 6 }}>
               ⚡ Enable Algo Trading?
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 14 }}>
-              Sterling will automatically place <strong style={{ color: 'var(--text-muted)' }}>real live orders</strong> on Delta Exchange India whenever a signal becomes actionable.
+            <div style={{ fontSize: 11, color: 'var(--t-dim)', lineHeight: 1.7, marginBottom: 14 }}>
+              Sterling will automatically place <strong style={{ color: 'var(--t-bright)' }}>real live orders</strong> on Delta Exchange India whenever a signal becomes actionable.
             </div>
 
             {/* Preflight status block */}
             <div style={{
               border: `1px solid ${
-                preflight?.state === 'ok' ? '#44cc8866' :
-                preflight?.state === 'fail' ? '#ff475766' :
-                'var(--border)'
+                preflight?.state === 'ok' ? 'var(--t-green)66' :
+                preflight?.state === 'fail' ? 'var(--t-red)66' :
+                'var(--t-border)'
               }`,
-              background: preflight?.state === 'ok' ? '#0a2a14' :
-                          preflight?.state === 'fail' ? '#2a0808' :
-                          'var(--bg)',
-              borderRadius: 5, padding: '8px 10px', marginBottom: 14, fontSize: 10,
+              background: preflight?.state === 'ok' ? 'var(--t-bg2)' :
+                          preflight?.state === 'fail' ? 'var(--t-bg2)' :
+                          'var(--t-bg2)',
+              borderRadius: 4, padding: '8px 10px', marginBottom: 14, fontSize: 10,
             }}>
               {preflight === null && (
-                <span style={{ color: 'var(--text-faint)' }}>Preflight not run.</span>
+                <span style={{ color: 'var(--t-dim)' }}>Preflight not run.</span>
               )}
               {preflight?.state === 'pending' && (
-                <span style={{ color: 'var(--text-faint)' }}>
+                <span style={{ color: 'var(--t-dim)' }}>
                   ⏳ Verifying Delta Exchange credentials…
                 </span>
               )}
               {preflight?.state === 'ok' && (
-                <div style={{ color: '#44cc88', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ color: 'var(--t-green)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 12, fontWeight: 700 }}>✓</span>
                   <div>
                     <div style={{ fontWeight: 700 }}>{preflight.account}</div>
-                    <div style={{ color: '#88dda0', marginTop: 2 }}>{preflight.message}</div>
+                    <div style={{ color: 'var(--t-green)', marginTop: 2 }}>{preflight.message}</div>
                   </div>
                 </div>
               )}
               {preflight?.state === 'fail' && (
-                <div style={{ color: '#ff4757' }}>
+                <div style={{ color: 'var(--t-red)' }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>✕ {preflight.reason}</div>
                   {preflight.hint && (
-                    <div style={{ color: '#ffa0a8', fontSize: 9, lineHeight: 1.5, marginBottom: 4 }}>
+                    <div style={{ color: 'var(--t-red)', fontSize: 9, lineHeight: 1.5, marginBottom: 4 }}>
                       {preflight.hint}
                     </div>
                   )}
                   {preflight.serverIp && (
-                    <div style={{ color: '#ffa0a8', fontSize: 9, fontFamily: 'monospace' }}>
+                    <div style={{ color: 'var(--t-red)', fontSize: 9, fontFamily: 'monospace' }}>
                       Server IP: {preflight.serverIp}
                     </div>
                   )}
                   <button
                     onClick={runPreflight}
                     style={{
-                      marginTop: 6, background: 'transparent', color: '#ff4757',
-                      border: '1px solid #ff475766', borderRadius: 3,
+                      marginTop: 6, background: 'transparent', color: 'var(--t-red)',
+                      border: '1px solid var(--t-red)66', borderRadius: 3,
                       padding: '3px 10px', cursor: 'pointer', fontSize: 9,
                       fontFamily: 'inherit', letterSpacing: 1,
                     }}
@@ -719,7 +763,7 @@ function AlgoSection() {
                 ['🔁', 'Failed orders stay open in Positions tab for manual retry'],
                 ['🛑', 'Turn off at any time — open positions are not auto-closed'],
               ].map(([icon, text]) => (
-                <div key={text as string} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--text-faint)', alignItems: 'flex-start' }}>
+                <div key={text as string} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--t-dim)', alignItems: 'flex-start' }}>
                   <span style={{ fontSize: 12, flexShrink: 0 }}>{icon as string}</span>
                   <span style={{ lineHeight: 1.5 }}>{text as string}</span>
                 </div>
@@ -728,7 +772,7 @@ function AlgoSection() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={closeModal}
-                style={{ flex: 1, padding: '9px 0', background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+                style={{ flex: 1, padding: '9px 0', background: 'var(--t-bg2)', color: 'var(--t-dim)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
               >
                 Cancel
               </button>
@@ -738,10 +782,10 @@ function AlgoSection() {
                 title={canEnable ? 'Credentials verified — enable algo' : 'Preflight must succeed first'}
                 style={{
                   flex: 2, padding: '9px 0',
-                  background: canEnable ? '#86c9a820' : 'var(--bg)',
-                  color: canEnable ? '#86c9a8' : 'var(--text-dim)',
-                  border: `1px solid ${canEnable ? '#86c9a866' : 'var(--border)'}`,
-                  borderRadius: 5, cursor: canEnable ? 'pointer' : 'not-allowed',
+                  background: canEnable ? 'var(--t-green)20' : 'var(--t-bg2)',
+                  color: canEnable ? 'var(--t-green)' : 'var(--t-dim)',
+                  border: `1px solid ${canEnable ? 'var(--t-green)66' : 'var(--t-border)'}`,
+                  borderRadius: 4, cursor: canEnable ? 'pointer' : 'not-allowed',
                   fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
                   opacity: canEnable ? 1 : 0.6,
                 }}
@@ -830,11 +874,11 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
         title={enabled ? 'Algo ON — click to disable auto-trading' : 'Algo OFF — click to enable auto-trading on Delta Exchange'}
         style={{
           ...chipStyle,
-          background: enabled ? 'var(--accent, #10B981)18' : (chipStyle?.background ?? 'var(--bg-surface)'),
-          color: enabled ? 'var(--accent, #10B981)' : (chipStyle?.color ?? 'var(--text-dim)'),
+          background: enabled ? 'var(--t-green)11' : (chipStyle?.background ?? 'var(--t-bg2)'),
+          color: enabled ? 'var(--t-green)' : (chipStyle?.color ?? 'var(--t-dim)'),
           border: enabled
-            ? '1px solid var(--accent, #10B981)50'
-            : `1px solid ${(chipStyle as any)?.borderColor ?? 'var(--border)'}`,
+            ? '1px solid var(--t-green)44'
+            : `1px solid ${(chipStyle as any)?.borderColor ?? 'var(--t-border)'}`,
           cursor: pending ? 'wait' : 'pointer',
           opacity: pending ? 0.6 : 1,
           transition: 'all 0.15s',
@@ -849,64 +893,64 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
           zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderTop: '3px solid #ff4757', borderRadius: 8,
+            background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+            borderTop: '3px solid var(--t-red)', borderRadius: 6,
             padding: '22px 24px', width: 400,
           }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>⚡ Enable Algo Trading?</div>
-            <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 14 }}>
-              Sterling will automatically place <strong style={{ color: 'var(--text-muted)' }}>real live orders</strong> on Delta Exchange India for every actionable signal.
+            <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--t-red)', marginBottom: 6 }}>⚡ Enable Algo Trading?</div>
+            <div style={{ fontSize: 11, color: 'var(--t-dim)', lineHeight: 1.7, marginBottom: 14 }}>
+              Sterling will automatically place <strong style={{ color: 'var(--t-bright)' }}>real live orders</strong> on Delta Exchange India for every actionable signal.
             </div>
 
             {/* Preflight status block */}
             <div style={{
               border: `1px solid ${
-                preflight?.state === 'ok' ? '#44cc8866' :
-                preflight?.state === 'fail' ? '#ff475766' :
-                'var(--border)'
+                preflight?.state === 'ok' ? 'var(--t-green)66' :
+                preflight?.state === 'fail' ? 'var(--t-red)66' :
+                'var(--t-border)'
               }`,
-              background: preflight?.state === 'ok' ? '#0a2a14' :
-                          preflight?.state === 'fail' ? '#2a0808' :
-                          'var(--bg)',
-              borderRadius: 5, padding: '8px 10px', marginBottom: 14, fontSize: 10,
+              background: preflight?.state === 'ok' ? 'var(--t-bg2)' :
+                          preflight?.state === 'fail' ? 'var(--t-bg2)' :
+                          'var(--t-bg2)',
+              borderRadius: 4, padding: '8px 10px', marginBottom: 14, fontSize: 10,
             }}>
               {preflight === null && (
-                <span style={{ color: 'var(--text-faint)' }}>Preflight not run.</span>
+                <span style={{ color: 'var(--t-dim)' }}>Preflight not run.</span>
               )}
               {preflight?.state === 'pending' && (
-                <span style={{ color: 'var(--text-faint)' }}>
+                <span style={{ color: 'var(--t-dim)' }}>
                   ⏳ Verifying Delta Exchange credentials…
                 </span>
               )}
               {preflight?.state === 'ok' && (
-                <div style={{ color: '#44cc88', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ color: 'var(--t-green)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 12, fontWeight: 700 }}>✓</span>
                   <div>
                     <div style={{ fontWeight: 700 }}>{preflight.account}</div>
-                    <div style={{ color: '#88dda0', marginTop: 2, fontSize: 10 }}>
+                    <div style={{ color: 'var(--t-green)', marginTop: 2, fontSize: 10 }}>
                       {preflight.message}
                     </div>
                   </div>
                 </div>
               )}
               {preflight?.state === 'fail' && (
-                <div style={{ color: '#ff4757' }}>
+                <div style={{ color: 'var(--t-red)' }}>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>✕ {preflight.reason}</div>
                   {preflight.hint && (
-                    <div style={{ color: '#ffa0a8', fontSize: 9, lineHeight: 1.5, marginBottom: 4 }}>
+                    <div style={{ color: 'var(--t-red)', fontSize: 9, lineHeight: 1.5, marginBottom: 4 }}>
                       {preflight.hint}
                     </div>
                   )}
                   {preflight.serverIp && (
-                    <div style={{ color: '#ffa0a8', fontSize: 9, fontFamily: 'monospace' }}>
+                    <div style={{ color: 'var(--t-red)', fontSize: 9, fontFamily: 'monospace' }}>
                       Server IP: {preflight.serverIp}
                     </div>
                   )}
                   <button
                     onClick={runPreflight}
                     style={{
-                      marginTop: 6, background: 'transparent', color: '#ff4757',
-                      border: '1px solid #ff475766', borderRadius: 3,
+                      marginTop: 6, background: 'transparent', color: 'var(--t-red)',
+                      border: '1px solid var(--t-red)66', borderRadius: 3,
                       padding: '3px 10px', cursor: 'pointer', fontSize: 9,
                       fontFamily: 'inherit', letterSpacing: 1,
                     }}
@@ -924,7 +968,7 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
                 ['🔁', 'Failed orders stay in Positions tab for retry'],
                 ['🛑', 'Disable anytime — open positions not auto-closed'],
               ].map(([icon, text]) => (
-                <div key={text as string} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--text-faint)', alignItems: 'flex-start' }}>
+                <div key={text as string} style={{ display: 'flex', gap: 8, fontSize: 10, color: 'var(--t-dim)', alignItems: 'flex-start' }}>
                   <span style={{ fontSize: 12, flexShrink: 0 }}>{icon as string}</span>
                   <span style={{ lineHeight: 1.5 }}>{text as string}</span>
                 </div>
@@ -932,7 +976,7 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={closeModal}
-                style={{ flex: 1, padding: '9px 0', background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}>
+                style={{ flex: 1, padding: '8px 0', background: 'var(--t-bg2)', color: 'var(--t-dim)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                 Cancel
               </button>
               <button
@@ -940,12 +984,12 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
                 disabled={!canEnable}
                 title={canEnable ? 'Credentials verified — enable algo' : 'Preflight must succeed first'}
                 style={{
-                  flex: 2, padding: '9px 0',
-                  background: canEnable ? '#86c9a820' : 'var(--bg)',
-                  color: canEnable ? '#86c9a8' : 'var(--text-dim)',
-                  border: `1px solid ${canEnable ? '#86c9a866' : 'var(--border)'}`,
-                  borderRadius: 5, cursor: canEnable ? 'pointer' : 'not-allowed',
-                  fontFamily: 'inherit', fontSize: 12, fontWeight: 800,
+                  flex: 2, padding: '8px 0',
+                  background: canEnable ? 'var(--t-green)11' : 'var(--t-bg2)',
+                  color: canEnable ? 'var(--t-green)' : 'var(--t-dim)',
+                  border: `1px solid ${canEnable ? 'var(--t-green)44' : 'var(--t-border)'}`,
+                  borderRadius: 4, cursor: canEnable ? 'pointer' : 'not-allowed',
+                  fontFamily: 'inherit', fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
                   opacity: canEnable ? 1 : 0.6,
                 }}
               >
@@ -976,8 +1020,8 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
         bottom: 0,
         width: 380,
         zIndex: 2001,
-        background: 'var(--bg-card)',
-        borderLeft: '1px solid var(--border)',
+        background: 'var(--t-bg)',
+        borderLeft: '1px solid var(--t-border)',
         overflowY: 'auto',
         scrollbarWidth: 'thin',
         padding: '20px 22px 48px',
@@ -988,26 +1032,27 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
           alignItems: 'center',
           marginBottom: 24,
           paddingBottom: 16,
-          borderBottom: '1px solid var(--border)',
+          borderBottom: '1px solid var(--t-border)',
         }}>
           <span style={{
-            fontSize: 11,
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            letterSpacing: '0.12em',
+            fontSize: 10,
+            fontWeight: 800,
+            color: 'var(--t-bright)',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
           }}>
             SETTINGS
           </span>
           <button
             onClick={onClose}
             style={{
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              color: 'var(--text-muted)',
+              background: 'var(--t-bg2)',
+              border: '1px solid var(--t-border)',
+              borderRadius: 4,
+              color: 'var(--t-dim)',
               cursor: 'pointer',
-              fontSize: 14,
-              padding: '4px 10px',
+              fontSize: 12,
+              padding: '3px 8px',
               lineHeight: 1,
             }}
           >
@@ -1017,6 +1062,7 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
         <AlgoSection />
         <ExchangeSection />
         <TelegramSection />
+        <UiSection />
       </div>
     </>
   );

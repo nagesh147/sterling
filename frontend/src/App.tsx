@@ -18,6 +18,10 @@ function ThemedApp() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    const savedZoom = localStorage.getItem('sterling-zoom');
+    if (savedZoom) {
+      document.querySelector('.term-root')?.setAttribute('style', `--app-zoom: ${savedZoom}`);
+    }
   }, [theme]);
 
   // Single root view. Dashboard internally toggles between basic/pro layouts
