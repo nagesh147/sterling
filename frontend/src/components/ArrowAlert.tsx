@@ -89,7 +89,6 @@ function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => v
       border: `1px solid ${color}44`,
       borderLeft: `3px solid ${color}`,
       borderRadius: 7,
-      boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
       overflow: 'hidden',
       animation: 'slideUp 0.2s ease',
     }}>

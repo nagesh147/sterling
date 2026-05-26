@@ -281,7 +281,7 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
     const emptyCard = (
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
-        borderRadius: 10, padding: '36px 24px', textAlign: 'center',
+        borderRadius: 6, padding: '24px 16px', textAlign: 'center',
       }}>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
           No positions yet
@@ -300,7 +300,7 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
     <div style={{
       background: 'var(--bg-card)',
       border: '1px solid var(--border)',
-      borderRadius: 10,
+      borderRadius: 6,
       overflow: 'hidden',
       // Page mode: fill the (bounded) center area so the rows scroll inside the card.
       ...(asPage ? { height: '100%', display: 'flex' as const, flexDirection: 'column' as const } : {}),
@@ -453,7 +453,7 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
                   gridTemplateColumns: '100px 1fr 1fr 1fr 1fr auto',
                   alignItems: 'center',
                   gap: 12,
-                  padding: '12px 16px',
+                  padding: '8px 14px',
                   cursor: 'pointer',
                   borderLeft: `3px solid ${dir === 'long' ? ACCENT : dir === 'short' ? DANGER : 'var(--border)'}`,
                   background: isOpen ? 'var(--bg-card)' : 'var(--bg)',

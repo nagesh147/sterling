@@ -7,6 +7,7 @@ import { RiskConfigPanel } from './RiskConfigPanel';
 import { CalibrationPanel } from './CalibrationPanel';
 import LiveControlPanel from './LiveControlPanel';
 import { useSelectedUnderlying } from '../store/useStore';
+import { gridStyle } from '../styles/terminalUI';
 
 type BottomTab = 'live' | 'scanner' | 'chain' | 'watchlist' | 'analytics' | 'config';
 
@@ -68,13 +69,13 @@ export function BottomPanel() {
           </div>
         )}
         {tab === 'analytics' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={gridStyle(320, 16)}>
             <WalkForwardPanel />
             <SensitivityPanel />
           </div>
         )}
         {tab === 'config' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={gridStyle(320, 16)}>
             <RiskConfigPanel />
             <CalibrationPanel />
           </div>

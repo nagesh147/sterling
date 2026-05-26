@@ -6,6 +6,7 @@ import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useSto
 import { usePositions } from '../hooks/usePositions';
 import { useExchanges } from '../hooks/useExchanges';
 import { api } from '../utils/api';
+import { c as t, tint } from '../styles/terminalUI';
 
 function useDirectEntry() {
   const qc = useQueryClient();
@@ -42,8 +43,8 @@ function actionLevel(state: string): ActionLevel {
 
 const ACTION_CFG: Record<ActionLevel, { label: string; bg: string; color: string; border: string }> = {
   enter:    { label: 'BUY / ENTER',  bg: '#003d2e', color: 'var(--accent)', border: 'var(--accent)' },
-  ready:    { label: 'ENTER NOW',    bg: '#2a2000', color: '#f0c040', border: '#f0c040' },
-  early:    { label: 'ENTER EARLY',  bg: '#1a1200', color: '#f0a500', border: '#f0a500' },
+  ready:    { label: 'ENTER NOW',    bg: '#2a2000', color: t.amber, border: t.amber },
+  early:    { label: 'ENTER EARLY',  bg: '#1a1200', color: t.amber, border: t.amber },
   watching: { label: 'WATCHING',     bg: 'transparent', color: 'var(--text-faint)', border: 'var(--border-light)' },
 };
 
@@ -150,7 +151,7 @@ function SignalRow({
         display: 'flex', alignItems: 'center', gap: 14,
         padding: '14px 16px',
         background: selected ? '#13131f' : 'var(--bg-card)',
-        borderLeft: `3px solid ${selected ? '#88aaff' : isActionable ? dirColor : 'transparent'}`,
+        borderLeft: `3px solid ${selected ? t.blue : isActionable ? dirColor : 'transparent'}`,
         borderBottom: '1px solid var(--bg-input)',
         cursor: 'pointer',
         transition: 'background 0.15s',
@@ -302,7 +303,7 @@ export function SignalsList() {
           </span>
           <span style={{
             fontSize: 9, fontWeight: 700, letterSpacing: 1,
-            color: isLive ? 'var(--accent)' : '#88aaff',
+            color: isLive ? 'var(--accent)' : t.blue,
             background: isLive ? 'var(--accent)18' : '#88aaff18',
             border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
             borderRadius: 3, padding: '1px 6px',
@@ -314,7 +315,7 @@ export function SignalsList() {
           </span>
           {actionable.length > 0 && (
             <span style={{
-              fontSize: 10, fontWeight: 700, color: '#f0c040',
+              fontSize: 10, fontWeight: 700, color: t.amber,
               background: '#2a2000', border: '1px solid #f0c04044',
               borderRadius: 3, padding: '2px 8px', letterSpacing: 0.5,
             }}>

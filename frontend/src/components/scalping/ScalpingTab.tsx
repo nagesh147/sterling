@@ -9,10 +9,13 @@ import {
 } from '../../hooks/useScalping';
 import { usePositions } from '../../hooks/usePositions';
 import { useLivePnl } from '../../hooks/useLivePnl';
+import type { PaperPosition } from '../../types';
 import { useRouterMode, RouterMode } from '../../hooks/useRouterMode';
+import { useTradingMode } from '../../hooks/useTradingMode';
 import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
 import { useStreamPrices } from '../../hooks/useAppStream';
 import { ThreeColumnLayout, LeftSection, RightSection } from '../ThreeColumnLayout';
+import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint } from '../../styles/terminalUI';
 
 /* ── executed-trade tracking ───────────────────────────────────────────────── */
 
@@ -30,17 +33,9 @@ type SignalPnl = {
   };
 
 /* ── style tokens ──────────────────────────────────────────────────────────── */
+/* card / cardHead / cardBody / grpBox / grpTitle now come from the shared
+ * terminalUI module (single source of truth for the whole app). */
 
-const card: React.CSSProperties = {
-  background: 'var(--t-bg2)', border: '1px solid var(--t-border)',
-  borderRadius: 10, overflow: 'hidden',
-};
-const cardHead: React.CSSProperties = {
-  padding: '9px 14px', borderBottom: '1px solid var(--t-border)',
-  fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)',
-  display: 'flex', alignItems: 'center', gap: 8,
-};
-const cardBody: React.CSSProperties = { padding: 14 };
 const dim: React.CSSProperties = { color: 'var(--t-dim)', fontSize: 11 };
 
 /* ── shared components ────────────────────────────────────────────────────── */
@@ -88,7 +83,7 @@ function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onCha
     <button onClick={() => onChange(!on)} style={{
       fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
       border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
-      background: on ? 'var(--t-green)1c' : 'transparent',
+      background: on ? tint('var(--t-green)') : 'transparent',
       color: on ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s', whiteSpace: 'nowrap',
     }}>{on ? '● ' : '○ '}{label}</button>
   );
@@ -97,14 +92,21 @@ function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onCha
 const fmt = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : v.toFixed(d));
 const fmtUsd = (v: number | null | undefined) => (v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
 
+// Recover the strategy slug from a position's note tag, e.g.
+// "[SCALP-PRICE_ACTION] short …" → "price_action". This is what lets us
+// reconstruct executed rows from real positions rather than localStorage.
+const SCALP_TAG_RE = /\[SCALP-([A-Z_]+)\]/;
+const stratFromNotes = (notes?: string | null): string | null => {
+  const m = SCALP_TAG_RE.exec(notes || '');
+  return m ? m[1].toLowerCase() : null;
+};
+
 const STRATEGY_META: Record<string, { label: string; color: string }> = {
   price_action: { label: 'PRICE ACTION', color: 'var(--t-amber)' },
   smc: { label: 'SMC', color: 'var(--t-purple)' },
   ma_crossover: { label: 'MA CROSS', color: 'var(--t-blue)' },
 };
 
-const grpBox: React.CSSProperties = { background: 'var(--t-bg)', border: '1px solid var(--t-border)', borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 };
-const grpTitle: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-dim)', marginBottom: 2 };
 
 /* ── config panel (in drawer) ─────────────────────────────────────────────── */
 
@@ -143,7 +145,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         <ChipToggle label="SMC" on={draft.enable_smc} onChange={(v) => set('enable_smc', v)} />
         <ChipToggle label="MA Crossover" on={draft.enable_ma_crossover} onChange={(v) => set('enable_ma_crossover', v)} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'start' }}>
+      <div style={gridStyle()}>
         <div style={grpBox}>
           <div style={grpTitle}>4H LEVELS</div>
           <NumField label="Min touches" value={draft.level_touches} min={2} max={10} onChange={(v) => set('level_touches', v)} />
@@ -165,7 +167,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         </div>
         <div style={grpBox}>
           <div style={grpTitle}>DIRECTION & RISK</div>
-          <div style={{ display: 'flex', gap: 5 }}>
+          <div style={{ display: 'flex', gap: 5, marginBottom: 4 }}>
             <ChipToggle label="Long" on={draft.allow_long} onChange={(v) => set('allow_long', v)} />
             <ChipToggle label="Short" on={draft.allow_short} onChange={(v) => set('allow_short', v)} />
           </div>
@@ -186,16 +188,11 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
               {allMode ? `all ${universe.length}` : `${draft.symbols.length} selected`}
             </span>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, maxHeight: 100, overflow: 'auto' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 120, overflow: 'auto', paddingRight: 4 }}>
             {universe.map((s) => {
               const on = !allMode && selSet.has(s);
               return (
-                <button key={s} onClick={() => toggleSym(s)} style={{
-                  fontSize: 9, fontWeight: 600, padding: '2px 6px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-                  border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
-                  background: on ? 'var(--t-green)1c' : 'transparent',
-                  color: on ? 'var(--t-green)' : 'var(--t-dim)',
-                }}>{s}</button>
+                <button key={s} onClick={() => toggleSym(s)} style={chipStyle(on)}>{s}</button>
               );
             })}
           </div>
@@ -288,8 +285,8 @@ function GoLiveModal({ fromMode, hasCreds, onConfirm, onCancel }: { fromMode: Ro
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <div style={{
-        background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderTop: '2px solid var(--t-amber)',
-        borderRadius: 12, padding: '22px 24px', width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 6, padding: '22px 24px', width: 400,
       }}>
         <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--t-amber)', marginBottom: 6 }}>⚡ Switch to LIVE trading</div>
         <div style={{ fontSize: 11, color: 'var(--t-dim)', lineHeight: 1.6, marginBottom: 16 }}>
@@ -522,9 +519,66 @@ function ListGroupHeader({ label, count, color }: { label: string; count?: numbe
   );
 }
 
-function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode }: {
+// Visible execution log — proves whether ready signals are firing in the current
+// mode (and, when they don't, why the backend rejected them).
+function ExecLog({ entries, mode }: {
+  entries: { ts: number; key: string; mode: string; ok: boolean; status: string; reason: string; auto: boolean }[];
+  mode: string;
+}) {
+  if (entries.length === 0) {
+    return (
+      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, padding: 16 }}>
+        No execution attempts this session. With <b style={{ color: 'var(--t-bright)' }}>Algo ON</b>, every ready
+        signal fires here and its result (mode · status · reason) is logged — so you can confirm <b style={{ color: 'var(--t-bright)' }}>{mode}</b> is
+        actually placing orders, or see exactly why one was rejected.
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 16 }}>
+      {entries.map((e, i) => {
+        const col = e.ok ? 'var(--t-green)' : e.status === 'already_open' ? 'var(--t-blue)' : 'var(--t-red)';
+        const dash = e.key.indexOf('-');
+        const sym = dash >= 0 ? e.key.slice(0, dash) : e.key;
+        const strat = dash >= 0 ? e.key.slice(dash + 1) : '';
+        const bg = e.ok ? col + '16' : 'var(--t-bg)';
+        const borderColor = e.ok ? col + '44' : 'var(--t-border)';
+        return (
+          <div key={i} style={{ 
+            display: 'flex', flexDirection: 'column', gap: 7,
+            padding: '12px 16px 12px 0', borderRadius: 10,
+            border: `1px solid ${borderColor}`,
+            background: bg,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: col, flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em' }}>{sym}</span>
+                  <span style={{ fontSize: 11, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{strat.replace(/_/g, ' ').toUpperCase()}</span>
+                  <span style={{ marginLeft: 'auto', color: modeColorOf(e.mode), fontWeight: 800, fontSize: 9, letterSpacing: '0.06em', padding: '3px 8px', borderRadius: 6, background: modeColorOf(e.mode) + '18', border: `1px solid ${modeColorOf(e.mode)}44`, whiteSpace: 'nowrap' }}>
+                    {e.auto ? 'AUTO · ' : ''}{e.mode}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: col, fontWeight: 800, fontSize: 10, letterSpacing: '0.04em' }}>{e.ok ? '✓' : '✕'} {e.status.toUpperCase()}</span>
+                  <span style={{ marginLeft: 'auto', color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>
+                    {new Date(e.ts).toLocaleTimeString()}
+                  </span>
+                </div>
+                {e.reason && <div style={{ color: 'var(--t-amber)', fontSize: 10, lineHeight: 1.4, marginTop: 4, fontWeight: 600, wordBreak: 'break-word' }}>✕ {e.mode} — {e.reason}</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode }: {
   s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
-  executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string;
+  executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
 }) {
   const long = s.direction === 'long';
   const isWatch = s.entry_ok && !s.executable;
@@ -619,9 +673,15 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           <span style={{ fontSize: 11, color: 'var(--t-dim)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.reason}</span>
         )}
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, marginLeft: hasPlan ? 0 : 'auto' }}>
-          {/* fixed-width pill column so the pattern text lines up across rows */}
-          <div style={{ width: 104, flexShrink: 0 }}>
+          {/* fixed-width pill column so the pattern text lines up across rows.
+              Strategy tag + the macro trading mode it ran under, e.g. SMC [SWING]. */}
+          <div style={{ width: 150, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Pill text={meta.label} color={meta.color} />
+            {macroMode && (
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
+                [{macroMode}]
+              </span>
+            )}
           </div>
           {s.pattern && (
             <span style={{ fontSize: 9, fontWeight: 600, color: meta.color, whiteSpace: 'nowrap', width: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -645,7 +705,6 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 <span title="Signal alert sent to Telegram" style={{
                   width: 6, height: 6, borderRadius: '50%',
                   background: '#a78bfa',
-                  boxShadow: '0 0 6px #a78bfa',
                   flexShrink: 0,
                 }} />
               )}
@@ -802,6 +861,14 @@ export function ScalpingTab() {
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
   const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
+  // Visible execution log — every execute attempt (accepted OR rejected/errored)
+  // with the mode it ran in and the backend reason. Makes "is live actually
+  // firing?" answerable at a glance instead of guessing.
+  type ExecLogEntry = { ts: number; key: string; mode: string; ok: boolean; status: string; reason: string; auto: boolean };
+  const [execLog, setExecLog] = useState<ExecLogEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem('scalp.execLog') || '[]'); } catch { return []; }
+  });
+  const logExec = (e: ExecLogEntry) => setExecLog((l) => [e, ...l].slice(0, 40));
   const cfg = cfgQ.data?.config;
   const algoOn = useAlgoMode().data?.enabled ?? false;
   const autoExecRef = useRef<Set<string>>(new Set());   // auto-attempted this algo session
@@ -811,6 +878,10 @@ export function ScalpingTab() {
   // labels and the order routing on the backend. Selectable inline in the header.
   const { mode: routerMode, setMode: setRouterMode } = useRouterMode();
   const tradeMode = routerMode.toUpperCase();
+  // Active macro trading mode (scalping / intraday / swing / positional) — shown
+  // in [brackets] next to each strategy tag. Executed rows use the mode the trade
+  // was recorded under; live scan rows use the current active mode.
+  const macroMode = (useTradingMode().data?.name ?? '').toUpperCase();
   // The exchange account's is_paper flag is the OTHER half of "live" — real orders
   // need router=live AND is_paper=false. The mode picker manages both so the two
   // controls can't disagree (which caused "in live but exchange is paper").
@@ -862,6 +933,63 @@ export function ScalpingTab() {
     };
   };
 
+  // P&L straight from a real position (open or closed) — same shape as pnlFor but
+  // sourced from the position itself, so rows survive reloads and show up even when
+  // there's no localStorage execution record (e.g. trades placed in another session).
+  const pnlForPos = (pos: PaperPosition): SignalPnl => {
+    const realized = pos.status === 'closed';
+    const live = pnlByPos.get(pos.id);
+    const value = realized
+      ? (pos.realized_pnl_usd ?? live?.realized_pnl_usd ?? null)
+      : (live?.estimated_pnl_usd ?? null);
+    return {
+      value, realized, status: pos.status, currentSpot: live?.current_spot ?? null,
+      direction: live?.direction ?? (pos.sized_trade?.structure?.direction as string | undefined),
+      contracts: live?.contracts, leverage: live?.leverage,
+      entryTimeMs: live?.entry_timestamp_ms ?? pos.entry_timestamp_ms,
+      entryPriceReal: live?.entry_price_real ?? pos.entry_spot_price,
+      initialSl: live?.initial_sl ?? pos.initial_sl, initialTp: live?.initial_tp ?? pos.initial_tp,
+      currentSl: live?.current_sl ?? pos.current_sl, currentTp: live?.current_tp ?? pos.current_tp,
+      trailMode: live?.trail_mode ?? pos.trail_mode, trailState: live?.trail_state as SignalPnl['trailState'],
+      orderId: live?.order_id ?? pos.order_id, orderStatus: live?.order_status ?? pos.order_status,
+      mode: live?.mode, structureType: live?.structure_type,
+    };
+  };
+
+  // Synthesize a signal-row + execution-record from a real position so it renders
+  // with the executed (rich) layout: entry/stop/target come straight off the fill.
+  const signalFromPos = (pos: PaperPosition, strategy: string): ScalpingSignal => ({
+    underlying: pos.underlying, close: pos.entry_spot_price ?? 0,
+    strategy, direction: (pos.sized_trade?.structure?.direction as string) ?? 'none',
+    near_level: null, level_type: '', pattern: '', reason: pos.notes || '',
+    entry: pos.entry_spot_price ?? null, stop_loss: pos.initial_sl ?? null, take_profit: pos.initial_tp ?? null,
+    risk_pct: null, leverage: null, size_units: null, notional_usd: null,
+    entry_ok: true, executable: false, timestamp_ms: pos.entry_timestamp_ms ?? 0, error: null,
+  });
+  const execStateFromPos = (pos: PaperPosition, strategy: string): ExecState => {
+    // Execution mode pill is PAPER vs LIVE — derived from the book (is_paper).
+    // NOT pos.mode, which is the macro *trading* mode (scalping/intraday/swing/…)
+    // and would mislabel the pill as e.g. "SWING".
+    const modeStr = pos.is_paper ? 'PAPER' : 'LIVE';
+    // The [AUTO] tag in the notes (set at execute time) marks algo-placed trades,
+    // so reconstructed rows consistently show "AUTO · <MODE>" like fresh ones.
+    const auto = /\[AUTO\]/.test(pos.notes || '');
+    return {
+      mode: modeStr, auto,
+      resp: {
+        accepted: true, mode: modeStr.toLowerCase(),
+        underlying: pos.underlying, strategy,
+        direction: (pos.sized_trade?.structure?.direction as string) ?? 'none',
+        size_units: 0, notional_usd: 0,
+        entry_price: pos.entry_spot_price ?? null,
+        stop_loss: pos.initial_sl ?? null, take_profit: pos.initial_tp ?? null,
+        order_id: pos.order_id ?? null, paper_position_id: pos.id,
+        status: pos.status, reason: '', timestamp_ms: pos.entry_timestamp_ms ?? 0,
+        telegram_alert_sent: false,
+      },
+    };
+  };
+
   // mutateAsync (not mutate) is essential here: the auto-exec loop fires several
   // executions on one shared mutation observer, and mutate()'s per-call callbacks
   // only fire for the LAST call — leaving the rest stuck "queued". The promise
@@ -869,11 +997,11 @@ export function ScalpingTab() {
   const onExecute = (sym: string, strategy: string, auto = false) => {
     const key = `${sym}-${strategy}`;
     setExecKeys((s) => new Set(s).add(key));
-    exec.mutateAsync({ underlying: sym, strategy })
+    exec.mutateAsync({ underlying: sym, strategy, auto })
       // Tie the record to the mode the backend ACTUALLY ran in (r.mode), not the
       // mode picker — so a live order is stored as LIVE, shadow as SHADOW, etc.
-      .then((r) => { const ranMode = (r.mode || tradeMode).toUpperCase(); setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: ranMode } })); if (r.accepted) acceptedRef.current.add(key); })
-      .catch((e: Error) => { setExecStates((m) => ({ ...m, [key]: { error: e.message, auto, mode: tradeMode } })); })
+      .then((r) => { const ranMode = (r.mode || tradeMode).toUpperCase(); setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: ranMode } })); if (r.accepted) acceptedRef.current.add(key); logExec({ ts: Date.now(), key, mode: ranMode, ok: !!r.accepted, status: r.status, reason: r.reason, auto }); })
+      .catch((e: Error) => { setExecStates((m) => ({ ...m, [key]: { error: e.message, auto, mode: tradeMode } })); logExec({ ts: Date.now(), key, mode: tradeMode, ok: false, status: 'error', reason: e.message, auto }); })
       .finally(() => { setExecKeys((s) => { const n = new Set(s); n.delete(key); return n; }); });
   };
 
@@ -882,7 +1010,6 @@ export function ScalpingTab() {
   if (stratFilter !== 'all') {
     signals = signals.filter((s) => s.strategy === stratFilter);
   }
-  const armed = signals.filter((s) => s.entry_ok).length;
 
   // Current-mode view of executions. execStates keeps ALL modes (persisted), but
   // the list only shows trades that ran in the mode you're currently in — so
@@ -892,45 +1019,65 @@ export function ScalpingTab() {
     [execStates, tradeMode],
   );
 
-  // Pin executed trades into the list so they stay visible (with the two-line
-  // executed-info layout) even after the setup leaves the 30s scan or the
-  // "Armed only" filter would hide it. Synthesize a signal from the recorded
-  // execution for any executed key that isn't in the current scan.
-  const synthFromExec = (key: string, es: ExecState): ScalpingSignal => {
-    const dash = key.indexOf('-');
-    const r = es.resp;
+  // ── Executed rows are derived from REAL backend positions, not localStorage ──
+  // Scoped to the current book: LIVE shows is_paper=false fills, PAPER/SHADOW show
+  // is_paper=true. So live trades — including ones placed by the algo or from
+  // another browser session — render with full entry/stop/target/P&L just like
+  // paper. Each position is its own row (keyed by id) so repeated trades on the
+  // same setup don't collapse. localStorage execStates is kept only as transient
+  // feedback for a row you just clicked, before its position streams in.
+  type Row = { key: string; s: ScalpingSignal; es?: ExecState; pnl?: SignalPnl; executed: boolean; macroMode: string };
+  const wantPaper = tradeMode !== 'LIVE';
+
+  const scalpPositions = useMemo(
+    () => positions
+      .filter((p) => stratFromNotes(p.notes) && (!!p.is_paper === wantPaper))
+      .filter((p) => stratFilter === 'all' || stratFromNotes(p.notes) === stratFilter)
+      .sort((a, b) => {
+        const ao = a.status !== 'closed' ? 1 : 0, bo = b.status !== 'closed' ? 1 : 0;
+        if (ao !== bo) return bo - ao;                         // open positions before closed
+        return (b.entry_timestamp_ms ?? 0) - (a.entry_timestamp_ms ?? 0);  // newest first
+      }),
+    [positions, wantPaper, stratFilter],
+  );
+
+  const executedRows: Row[] = scalpPositions.map((p) => {
+    const strat = stratFromNotes(p.notes) as string;
     return {
-      underlying: key.slice(0, dash), strategy: key.slice(dash + 1),
-      close: r?.entry_price ?? 0, direction: r?.direction ?? 'none',
-      near_level: null, level_type: '', pattern: '', reason: r?.reason ?? '',
-      entry: r?.entry_price ?? null, stop_loss: r?.stop_loss ?? null,
-      take_profit: r?.take_profit ?? null, risk_pct: null, leverage: null,
-      size_units: r?.size_units ?? null, notional_usd: r?.notional_usd ?? null,
-      entry_ok: true, executable: false, timestamp_ms: r?.timestamp_ms ?? 0, error: null,
+      key: p.id, s: signalFromPos(p, strat), es: execStateFromPos(p, strat),
+      pnl: pnlForPos(p), executed: true, macroMode: (p.mode || macroMode || '').toUpperCase(),
     };
-  };
-  const inScan = new Set(signals.map((s) => `${s.underlying}-${s.strategy}`));
-  const pinned = Object.entries(modeExecStates)
-    .filter(([key]) => !inScan.has(key))
-    .filter(([key]) => stratFilter === 'all' || key.slice(key.indexOf('-') + 1) === stratFilter)
-    .map(([key, es]) => synthFromExec(key, es));
-  // Executed rows first (so the just-traded setup is right at the top), then the scan.
-  const isExecuted = (s: ScalpingSignal) => !!modeExecStates[`${s.underlying}-${s.strategy}`]?.resp?.accepted;
-  const sortedSignals = [...pinned, ...signals]
-    .sort((a, b) => Number(isExecuted(b)) - Number(isExecuted(a)));
-  const executedSignals = sortedSignals.filter(isExecuted);
-  const restSignals = sortedSignals.filter((s) => !isExecuted(s));
-  const displaySignals = sortedSignals;
+  });
+
+  // A setup with an OPEN position in this book is already shown above — drop its
+  // scan row so we don't show a duplicate "READY" line for a live trade.
+  const openSetupKeys = new Set(
+    scalpPositions.filter((p) => p.status !== 'closed').map((p) => `${p.underlying}-${stratFromNotes(p.notes)}`),
+  );
+
+  const scanRows: Row[] = signals
+    .filter((s) => !openSetupKeys.has(`${s.underlying}-${s.strategy}`))
+    .map((s) => {
+      const key = `${s.underlying}-${s.strategy}`;
+      const es = modeExecStates[key];
+      // Surface ONLY a rejection/error record inline (for the failure reason). An
+      // ACCEPTED record means a position opened — that's its own row from
+      // positions (above), and once it CLOSES the setup is free to re-arm, so a
+      // stale accept must never suppress the EXECUTE button on a live signal.
+      const feedbackEs = es && !es.resp?.accepted ? es : undefined;
+      return { key, s, es: feedbackEs, pnl: undefined, executed: false, macroMode };
+    });
+
+  const executedSignals: Row[] = executedRows;       // real open/closed positions for this book
+  const restSignals: Row[] = scanRows;               // live scan signals (button when ready & algo off)
+  const displaySignals: Row[] = [...executedSignals, ...restSignals];
 
   // Consolidated totals across the current mode's executed trades.
-  const consolidated = executedSignals.reduce((acc, s) => {
-    const r = modeExecStates[`${s.underlying}-${s.strategy}`]?.resp;
-    if (!r) return acc;
-    const p = pnlFor(r);
-    const v = p.value ?? 0;
+  const consolidated = executedSignals.reduce((acc, row) => {
+    const v = row.pnl?.value ?? 0;
     acc.totalPnl += v;
-    if (p.realized) acc.realizedPnl += v; else acc.openPnl += v;
-    acc.notional += r.notional_usd ?? 0;
+    if (row.pnl?.realized) acc.realizedPnl += v; else acc.openPnl += v;
+    acc.notional += row.es?.resp?.notional_usd ?? 0;
     if (v > 0) acc.wins += 1; else if (v < 0) acc.losses += 1;
     return acc;
   }, { totalPnl: 0, openPnl: 0, realizedPnl: 0, notional: 0, wins: 0, losses: 0 });
@@ -949,6 +1096,9 @@ export function ScalpingTab() {
   useEffect(() => {
     try { localStorage.setItem('scalp.execStates', JSON.stringify(execStates)); } catch { /* quota */ }
   }, [execStates]);
+  useEffect(() => {
+    try { localStorage.setItem('scalp.execLog', JSON.stringify(execLog)); } catch { /* quota */ }
+  }, [execLog]);
 
   // Algo auto-execution: while Algo is ON, EVERY ready (executable) signal is
   // fired immediately. The /scalping/execute endpoint routes through the active
@@ -1010,24 +1160,21 @@ export function ScalpingTab() {
 
   const btUnderlying = (selected?.split('-')[0]) || cfg?.symbols?.[0] || 'BTC';
 
-  const renderSignalCard = (s: ScalpingSignal) => {
-    const key = `${s.underlying}-${s.strategy}`;
-    const es = modeExecStates[key];  // only show this row's execution if it ran in the current mode
-    return (
-      <ScalpSignalCard
-        key={key} s={s}
-        selected={selected === key}
-        expanded={expandedKey === key}
-        onSelect={() => { setSelected(key); setExpandedKey((k) => (k === key ? null : key)); }}
-        onExecute={() => onExecute(s.underlying, s.strategy)}
-        executing={execKeys.has(key)}
-        execState={es}
-        pnl={es?.resp?.accepted ? pnlFor(es.resp) : undefined}
-        algoOn={algoOn}
-        mode={tradeMode}
-      />
-    );
-  };
+  const renderSignalCard = (row: Row) => (
+    <ScalpSignalCard
+      key={row.key} s={row.s}
+      selected={selected === row.key}
+      expanded={expandedKey === row.key}
+      onSelect={() => { setSelected(row.key); setExpandedKey((k) => (k === row.key ? null : row.key)); }}
+      onExecute={() => onExecute(row.s.underlying, row.s.strategy)}
+      executing={execKeys.has(`${row.s.underlying}-${row.s.strategy}`)}
+      execState={row.es}
+      pnl={row.pnl}
+      algoOn={algoOn}
+      mode={tradeMode}
+      macroMode={row.macroMode}
+    />
+  );
 
   return (
     <>
@@ -1036,7 +1183,18 @@ export function ScalpingTab() {
       activeNav={stratFilter}
       onNavClick={setStratFilter}
       leftSidebar={<>
-        <LeftSection label="Ready Only" collapsible defaultOpen />
+        <LeftSection label="Ready Only" collapsible defaultOpen>
+          <button onClick={() => { const v = !armedOnly; setArmedOnly(v); }} style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${armedOnly ? 'var(--t-green)44' : 'var(--t-border)'}`,
+            background: armedOnly ? 'var(--t-green)16' : 'transparent',
+            color: armedOnly ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s',
+          }}>
+            <span style={{ fontSize: 12 }}>{armedOnly ? '●' : '○'}</span>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>Ready only</span>
+          </button>
+        </LeftSection>
       </>}
       centerHeader={<>
         <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</div>
@@ -1048,37 +1206,60 @@ export function ScalpingTab() {
             <span style={{
               fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
               padding: '3px 9px', borderRadius: 5, whiteSpace: 'nowrap',
-              background: 'var(--t-green)1c', color: 'var(--t-green)', border: '1px solid var(--t-green)44',
+              background: tint('var(--t-green)'), color: 'var(--t-green)', border: '1px solid var(--t-green)44',
             }}>⚡ ALGO AUTO-EXEC</span>
           )}
           <ModeSelector mode={routerMode} onChange={onModeSelect} />
         </div>
       </>}
-      centerContent={<>
-        {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
-        {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
-        {data && displaySignals.length === 0 && (
-          <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>
-            {armedOnly ? 'No ready signals — clear the filter to see all.' : 'No signals on this data source.'}
+      centerContent={
+        <div style={{ display: 'flex', gap: 0, height: '100%', overflow: 'hidden' }}>
+          {/* ── Signals table (2/3 width) ── */}
+          <div style={{ flex: '2 1 0', overflowY: 'auto', minWidth: 0 }}>
+            {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
+            {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
+            {data && displaySignals.length === 0 && (
+              <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>
+                {armedOnly ? 'No ready signals — clear the filter to see all.' : 'No signals on this data source.'}
+              </div>
+            )}
+            {executedSignals.length > 0 && (
+              <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
+            )}
+            {executedSignals.map(renderSignalCard)}
+            {executedSignals.length > 0 && (
+              <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+            )}
+            {restSignals.length > 0 && (
+              <ListGroupHeader label={armedOnly ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
+            )}
+            {restSignals.map(renderSignalCard)}
+            {data && displaySignals.length > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4 }}>
+                <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · EXECUTE routes through Paper/Live mode
+              </div>
+            )}
           </div>
-        )}
-        {executedSignals.length > 0 && (
-          <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
-        )}
-        {executedSignals.map(renderSignalCard)}
-        {executedSignals.length > 0 && (
-          <ConsolidatedRow count={executedSignals.length} {...consolidated} />
-        )}
-        {restSignals.length > 0 && (
-          <ListGroupHeader label={armedOnly ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
-        )}
-        {restSignals.map(renderSignalCard)}
-        {data && displaySignals.length > 0 && (
-          <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4 }}>
-            <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · EXECUTE routes through Paper/Live mode
+          {/* ── Execution log (1/3 width) ── */}
+          <div style={{
+            flex: '1 1 0', minWidth: 0,
+            borderLeft: '1px solid var(--t-border)',
+            background: 'var(--t-bg2)',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+              color: 'var(--t-dim)', textTransform: 'uppercase',
+            }}>
+              Execution Log · {tradeMode}
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <ExecLog entries={execLog} mode={tradeMode} />
+            </div>
           </div>
-        )}
-      </>}
+        </div>
+      }
       rightSidebar={<>
         <RightSection label="Settings" collapsible defaultOpen={true}>
           <button onClick={() => setDrawer(true)} style={{
@@ -1113,7 +1294,6 @@ export function ScalpingTab() {
           width: 'min(700px, 94vw)', height: '100%', background: 'var(--t-bg)',
           borderLeft: '1px solid var(--t-border)', overflow: 'auto', padding: 16,
           display: 'flex', flexDirection: 'column', gap: 12,
-          boxShadow: '-8px 0 32px rgba(0,0,0,0.45)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Settings &amp; Backtest</span>

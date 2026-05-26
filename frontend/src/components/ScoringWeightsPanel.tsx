@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useScoringWeights, useUpdateScoringWeights, useResetScoringWeights } from '../hooks/useScoringWeights';
 import type { ScoringWeights } from '../hooks/useScoringWeights';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card:   { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title:  { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 14 },
+  card:   { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title:  { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 14 },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   row:    { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 },
-  label:  { color: '#888', fontSize: 11, width: 120, flexShrink: 0 },
-  slider: { flex: 1, accentColor: '#44cc88' },
-  val:    { color: '#e0e0e0', fontSize: 12, width: 40, textAlign: 'right' as const },
-  sum:    { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px solid #1e1e1e', marginTop: 8 },
-  btn:    { background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88', padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnGrey:{ background: '#1a1a1a', color: '#555', border: '1px solid #333', padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  warn:   { color: '#f0c040', fontSize: 10, marginTop: 4 },
-  saved:  { color: '#44cc88', fontSize: 10, marginTop: 4 },
+  label:  { color: t.dim, fontSize: 11, width: 120, flexShrink: 0 },
+  slider: { flex: 1, accentColor: t.green },
+  val:    { color: t.bright, fontSize: 12, width: 40, textAlign: 'right' as const },
+  sum:    { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: `1px solid ${t.border}`, marginTop: 8 },
+  btn:    { background: '#1a2a1a', color: t.green, border: `1px solid ${t.green}`, padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnGrey:{ background: t.raised, color: t.dim, border: `1px solid ${t.border}`, padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  warn:   { color: t.amber, fontSize: 10, marginTop: 4 },
+  saved:  { color: t.green, fontSize: 10, marginTop: 4 },
 };
 
 const LABELS: Record<keyof ScoringWeights, string> = {
@@ -89,8 +90,8 @@ export function ScoringWeightsPanel() {
       ))}
 
       <div style={S.sum}>
-        <span style={{ color: '#555', fontSize: 11 }}>Total weight</span>
-        <span style={{ color: sumOk ? '#44cc88' : '#cc4444', fontSize: 12, fontWeight: 700 }}>
+        <span style={{ color: t.dim, fontSize: 11 }}>Total weight</span>
+        <span style={{ color: sumOk ? t.green : t.red, fontSize: 12, fontWeight: 700 }}>
           {(totalWeight * 100).toFixed(0)}%
           {!sumOk && ' (must equal 100%)'}
         </span>

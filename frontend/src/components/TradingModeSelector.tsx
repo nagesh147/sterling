@@ -4,6 +4,7 @@ import { useTradingMode, useSetTradingMode } from '../hooks/useTradingMode';
 import { clearSignalFeed, clearSignalFeedState } from '../hooks/useSignalFeed';
 import { api } from '../utils/api';
 import { MODE_COLOR } from '../utils/fmt';
+import { tint } from '../styles/terminalUI';
 
 const MODE_LABEL: Record<string, string> = {
   scalping:   'SCALPING',
@@ -96,7 +97,7 @@ export function TradingModeSelector() {
               letterSpacing: 0.8,
               cursor: isChanging ? (loading ? 'wait' : 'default') : 'pointer',
               border: `1px solid ${active ? color : 'var(--border)'}`,
-              background: active ? color + '22' : 'transparent',
+              background: active ? tint(color, 13) : 'transparent',
               color: active ? color : isLoading ? 'var(--text-faint)' : 'var(--text-dim)',
               transition: 'all 0.15s',
               opacity: isChanging && !active && !loading ? 0.4 : 1,
@@ -112,11 +113,10 @@ export function TradingModeSelector() {
       {toast && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24,
-          background: toast.startsWith('❌') ? '#2a1a1a' : '#111f11',
+          background: toast.startsWith('❌') ? tint('var(--danger)', 12) : tint('var(--accent)', 12),
           color: toast.startsWith('❌') ? 'var(--danger)' : 'var(--accent)',
-          border: `1px solid ${toast.startsWith('❌') ? '#cc444466' : '#44cc8866'}`,
+          border: `1px solid ${toast.startsWith('❌') ? tint('var(--danger)', 40) : tint('var(--accent)', 40)}`,
           borderRadius: 5, padding: '10px 18px', fontSize: 12, zIndex: 2000,
-          boxShadow: '0 4px 20px #00000088',
         }}>
           {toast}
         </div>

@@ -43,7 +43,6 @@ export function StatusBar() {
         <span style={{
           width: 6, height: 6, borderRadius: '50%', display: 'inline-block',
           background: ds?.reachable ? 'var(--t-green)' : ds?.reachable === false ? 'var(--t-red)' : 'var(--t-dim)',
-          boxShadow: ds?.reachable ? '0 0 4px var(--t-green)' : 'none',
         }} />
         {ds ? ds.exchange.toUpperCase().replace('_', ' ') : 'DERIBIT'}
       </span>

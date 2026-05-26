@@ -83,43 +83,57 @@ def detect_ascending_triangle(
 
 
 def detect_double_bottom(
-    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int
+    highs: NDArray, lows: NDArray, closes: NDArray, lookback: int = 30
 ) -> Optional[dict]:
-    """Relaxed double bottom: two dips near the same price, with current close
-    above the neckline (the bounce high between the dips)."""
-    if len(lows) < lookback:
+    """
+    Detects a valid structural 'W' Double Bottom pattern using localized pivot points.
+    """
+    # 1. Identify local pivot lows (a low lower than 2 bars left and right)
+    pivot_low_indices = []
+    for idx in range(len(lows) - lookback, len(lows) - 2):
+        if lows[idx] < lows[idx-1] and lows[idx] < lows[idx-2] and \
+           lows[idx] < lows[idx+1] and lows[idx] < lows[idx+2]:
+            pivot_low_indices.append(idx)
+            
+    if len(pivot_low_indices) < 2:
         return None
-    lo = lows[-lookback:]
-    hi = highs[-lookback:]
-    c = closes[-lookback:]
-    # Find the two lowest points
-    sorted_indices = np.argsort(lo)
-    bottom_idx = int(sorted_indices[0])
-    bottom_val = float(lo[bottom_idx])
-    # Find the second bottom: must be at least 3 bars away and within 2% of the first
-    second_idx = None
-    for idx in sorted_indices[1:]:
-        idx = int(idx)
-        if abs(idx - bottom_idx) < 3:
-            continue
-        if abs(float(lo[idx]) - bottom_val) / max(bottom_val, 1e-6) < 0.02:
-            second_idx = idx
-            break
-    if second_idx is None:
+        
+    # Get the two most recent distinct pivot lows
+    b1_idx = pivot_low_indices[-2]
+    b2_idx = pivot_low_indices[-1]
+    
+    # Ensure they have adequate structural breathing room (at least 5 bars apart)
+    if (b2_idx - b1_idx) < 5:
         return None
-    # Neckline = highest point between the two bottoms
-    lo_idx, hi_idx = min(bottom_idx, second_idx), max(bottom_idx, second_idx)
-    neckline = round(float(np.max(hi[lo_idx:hi_idx + 1])), 4)
-    bottom = round(bottom_val, 4)
-    # Current close must be at or above neckline (breakout confirmation)
-    if c[-1] < neckline * 0.998:
+        
+    b1_val = float(lows[b1_idx])
+    b2_val = float(lows[b2_idx])
+    
+    # Check if the two bottoms are within a strict 1% variance of each other
+    if abs(b1_val - b2_val) / max(b1_val, 1e-6) > 0.01:
         return None
-    return {
-        "pattern": "double_bottom",
-        "direction": "long",
-        "neckline": neckline,
-        "stop_below": bottom,
-    }
+        
+    # 2. Extract Neckline: Find the distinct structural peak between the two bottoms
+    inter_highs = highs[b1_idx:b2_idx + 1]
+    neckline = float(np.max(inter_highs))
+    
+    # Ensure the neckline is a real structural peak (at least 1% higher than the bottoms)
+    avg_bottom = (b1_val + b2_val) / 2
+    if (neckline - avg_bottom) / avg_bottom < 0.01:
+        return None
+        
+    # 3. Confirmation: Current candle must be breaking cleanly ABOVE the neckline
+    # Avoid chasing huge overextended candles; ensure breakout is fresh
+    current_close = float(closes[-1])
+    if current_close > neckline and closes[-2] <= neckline * 1.002:
+        return {
+            "pattern": "double_bottom_confirmed",
+            "direction": "long",
+            "neckline": round(neckline, 4),
+            "stop_below": round(min(b1_val, b2_val) * 0.998, 4), # Local pattern invalidation
+        }
+        
+    return None
 
 
 def detect_bullish_consolidation(

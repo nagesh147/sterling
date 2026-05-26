@@ -33,7 +33,6 @@ function CoinIcon({ sym }: { sym: string }) {
       background: m.bg, color: m.fg,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: 12, fontWeight: 800, flexShrink: 0,
-      boxShadow: `0 0 8px ${m.bg}60`,
     }}>
       {m.icon}
     </div>

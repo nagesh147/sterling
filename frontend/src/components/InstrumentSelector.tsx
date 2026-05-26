@@ -2,22 +2,23 @@ import React, { useEffect } from 'react';
 import { useInstruments } from '../hooks/useInstruments';
 import { useDataSource } from '../hooks/useExchanges';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../store/useStore';
+import { c as t, tint } from '../styles/terminalUI';
 
 const styles: Record<string, React.CSSProperties> = {
   container: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' },
-  label: { color: '#888', fontSize: 13, letterSpacing: 1 },
+  label: { color: t.dim, fontSize: 13, letterSpacing: 1 },
   select: {
-    background: '#1a1a1a', color: '#e0e0e0', border: '1px solid #333',
+    background: t.raised, color: t.bright, border: `1px solid ${t.border}`,
     padding: '6px 12px', fontSize: 14, borderRadius: 4, cursor: 'pointer',
     fontFamily: 'inherit',
   },
   badge: {
     fontSize: 11, padding: '2px 6px', borderRadius: 3,
-    background: '#2a2a2a', color: '#aaa',
+    background: t.raised, color: t.text,
   },
   incompatibleBadge: {
     fontSize: 11, padding: '2px 6px', borderRadius: 3,
-    background: '#2a1a1a', color: '#cc6644',
+    background: tint(t.red, 14), color: t.red,
   },
 };
 

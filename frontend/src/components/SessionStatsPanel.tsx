@@ -1,16 +1,17 @@
 import React from 'react';
 import { useSessionStats } from '../hooks/useSessionStats';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 14, marginBottom: 12 },
-  title: { color: '#888', fontSize: 10, letterSpacing: 2, marginBottom: 10 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 14, marginBottom: 12 },
+  title: { color: t.dim, fontSize: 10, letterSpacing: 2, marginBottom: 10 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 },
   cell: { display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' },
-  key: { color: '#555', fontSize: 9, letterSpacing: 1, textAlign: 'center' },
+  key: { color: t.dim, fontSize: 9, letterSpacing: 1, textAlign: 'center' },
   val: { fontSize: 18, fontWeight: 700, textAlign: 'center' },
-  divider: { width: 1, background: '#1e1e1e', margin: '0 4px' },
+  divider: { width: 1, background: t.raised, margin: '0 4px' },
   underlyings: { display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' },
-  chip: { background: '#1a1a2a', border: '1px solid #334', borderRadius: 3, padding: '1px 7px', fontSize: 10, color: '#88aaff' },
+  chip: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 3, padding: '1px 7px', fontSize: 10, color: t.blue },
 };
 
 export function SessionStatsPanel() {
@@ -28,33 +29,33 @@ export function SessionStatsPanel() {
       <div style={S.grid}>
         <div style={S.cell}>
           <span style={S.key}>▲ ARROWS</span>
-          <span style={{ ...S.val, color: '#44cc88' }}>{data.green_arrows}</span>
+          <span style={{ ...S.val, color: t.green }}>{data.green_arrows}</span>
         </div>
         <div style={S.cell}>
           <span style={S.key}>▼ ARROWS</span>
-          <span style={{ ...S.val, color: '#cc4444' }}>{data.red_arrows}</span>
+          <span style={{ ...S.val, color: t.red }}>{data.red_arrows}</span>
         </div>
         <div style={S.cell}>
           <span style={S.key}>RUN-ONCE</span>
-          <span style={{ ...S.val, color: '#88aaff' }}>{data.run_once_total}</span>
+          <span style={{ ...S.val, color: t.blue }}>{data.run_once_total}</span>
         </div>
         <div style={S.cell}>
           <span style={S.key}>CONF LONG</span>
-          <span style={{ ...S.val, color: '#44cc88', fontSize: 14 }}>{data.confirmed_long_setups}</span>
+          <span style={{ ...S.val, color: t.green, fontSize: 14 }}>{data.confirmed_long_setups}</span>
         </div>
         <div style={S.cell}>
           <span style={S.key}>CONF SHORT</span>
-          <span style={{ ...S.val, color: '#cc4444', fontSize: 14 }}>{data.confirmed_short_setups}</span>
+          <span style={{ ...S.val, color: t.red, fontSize: 14 }}>{data.confirmed_short_setups}</span>
         </div>
         <div style={S.cell}>
           <span style={S.key}>PARTIAL CLOSE</span>
-          <span style={{ ...S.val, color: data.paper_positions_partially_closed > 0 ? '#f0c040' : '#333', fontSize: 14 }}>
+          <span style={{ ...S.val, color: data.paper_positions_partially_closed > 0 ? t.amber : '#333', fontSize: 14 }}>
             {data.paper_positions_partially_closed}
           </span>
         </div>
         <div style={S.cell}>
           <span style={S.key}>FIRED</span>
-          <span style={{ ...S.val, color: data.alerts_triggered > 0 ? '#f0a500' : '#555', fontSize: 14 }}>
+          <span style={{ ...S.val, color: data.alerts_triggered > 0 ? t.amber : t.dim, fontSize: 14 }}>
             {data.alerts_triggered}
           </span>
         </div>

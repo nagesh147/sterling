@@ -4,6 +4,7 @@ import { useSterlingStream } from '../hooks/useSterlingStream';
 import { useAppStream } from '../hooks/useAppStream';
 import { useExchanges } from '../hooks/useExchanges';
 import type { LivePnlResponse } from '../hooks/useLivePnl';
+import { c } from '../styles/terminalUI';
 
 interface V4AnalyticsDashboardProps {
   activeSymbol: string;
@@ -65,7 +66,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
   }, []);
 
   const tradingStatus = routerMode === 'live' ? 'LIVE TRADING' : 'PAPER TRADING';
-  const statusDotColor = routerMode === 'live' ? '#10b981' : '#f59e0b';
+  const statusDotColor = routerMode === 'live' ? c.green : c.amber;
 
   // PnL from SSE stream
   const { data: pnlData } = useAppStream<LivePnlResponse>('pnl');
@@ -109,47 +110,43 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
 
   const getStatusColor = (s: string) => {
     switch (s) {
-      case 'connected': return '#10b981';
-      case 'reconnecting': return '#f59e0b';
-      case 'disconnected': return '#ef4444';
-      default: return '#6b7280';
+      case 'connected': return c.green;
+      case 'reconnecting': return c.amber;
+      case 'disconnected': return c.red;
+      default: return c.dim;
     }
   };
 
   const isOFIThresholdBreached = mergedData.ofi < -5000 || mergedData.ofi > 5000;
 
   const getOFIColor = (ofi: number) => {
-    if (ofi < -5000) return '#ef4444';
-    if (ofi > 5000) return '#10b981';
-    return 'var(--text-primary, #f3f4f6)';
+    if (ofi < -5000) return c.red;
+    if (ofi > 5000) return c.green;
+    return c.bright;
   };
 
   return (
     <div style={{
-      padding: '16px 20px',
-      background: 'var(--bg-surface, rgba(20, 20, 30, 0.4))',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      borderRadius: '12px',
-      border: '1px solid var(--border, rgba(255, 255, 255, 0.08))',
+      padding: '12px 16px',
+      background: 'var(--t-bg)',
+      borderBottom: '1px solid var(--t-border)',
       display: 'flex',
       flexDirection: 'column',
-      gap: '16px',
-      color: 'var(--text-primary, #fff)',
-      position: 'relative',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)'
+      gap: '12px',
+      color: 'var(--t-bright)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h2 style={{
-          fontSize: '14px',
-          fontWeight: 700,
+          fontSize: '12px',
+          fontWeight: 800,
           margin: 0,
-          letterSpacing: '0.05em',
+          letterSpacing: '0.1em',
           display: 'flex',
           alignItems: 'center',
-          gap: '8px'
+          gap: '8px',
+          color: 'var(--t-dim)',
         }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 3v18h18" />
             <path d="m19 9-5 5-4-4-3 3" />
           </svg>
@@ -160,24 +157,23 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '4px 10px',
-            background: 'rgba(0, 0, 0, 0.2)',
-            borderRadius: '999px',
-            border: '1px solid rgba(255, 255, 255, 0.05)'
+            padding: '4px 8px',
+            background: 'var(--t-bg2)',
+            borderRadius: '4px',
+            border: '1px solid var(--t-border)',
           }}>
             <div style={{
               width: '6px',
               height: '6px',
               borderRadius: '50%',
               backgroundColor: statusDotColor,
-              boxShadow: `0 0 8px ${statusDotColor}`
             }} />
             <span style={{
               fontSize: '10px',
-              fontWeight: 600,
+              fontWeight: 700,
               textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: 'var(--text-muted, #9ca3af)'
+              letterSpacing: '0.1em',
+              color: 'var(--t-dim)'
             }}>
               {tradingStatus}
             </span>
@@ -188,27 +184,24 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
       {isLoading && !restData ? (
         <div style={{
           height: '60px',
-          background: 'rgba(255, 255, 255, 0.02)',
-          borderRadius: '8px',
-          animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          background: 'var(--t-bg2)',
+          borderRadius: '6px',
         }} />
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: '12px'
         }}>
           <div style={{
             position: 'relative',
-            padding: '16px',
-            background: 'rgba(0, 0, 0, 0.15)',
-            borderRadius: '10px',
-            border: '1px solid rgba(255, 255, 255, 0.04)',
+            padding: '12px',
+            background: 'var(--t-bg2)',
+            borderRadius: '6px',
+            border: '1px solid var(--t-border)',
             overflow: 'hidden',
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-            cursor: 'default',
           }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-dim, #6b7280)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '11px', color: c.dim, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Live Market Pressure
             </div>
             <div style={{
@@ -229,13 +222,12 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
                 padding: '2px 6px',
                 background: 'rgba(239, 68, 68, 0.1)',
                 border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#ef4444',
+                color: c.red,
                 fontSize: '9px',
                 fontWeight: 800,
                 textTransform: 'uppercase',
                 borderRadius: '4px',
                 animation: 'pulse 1.5s infinite',
-                boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)'
               }}>
                 TRADE OFF
               </div>
@@ -247,7 +239,7 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
                 padding: '2px 6px',
                 background: 'rgba(16, 185, 129, 0.1)',
                 border: '1px solid rgba(16, 185, 129, 0.3)',
-                color: '#10b981',
+                color: c.green,
                 fontSize: '9px',
                 fontWeight: 800,
                 textTransform: 'uppercase',
@@ -256,29 +248,22 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
                 TRADE ON
               </div>
             )}
-            {isOFIThresholdBreached && (
-              <div style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                background: `linear-gradient(45deg, transparent, ${getOFIColor(mergedData.ofi)}08)`,
-                pointerEvents: 'none'
-              }} />
-            )}
+            {/* Gradient background removed */}
           </div>
 
           <div style={{
-            padding: '16px',
-            background: 'rgba(0, 0, 0, 0.15)',
-            borderRadius: '10px',
-            border: '1px solid rgba(255, 255, 255, 0.04)',
+            padding: '12px',
+            background: 'var(--t-bg2)',
+            borderRadius: '6px',
+            border: '1px solid var(--t-border)'
           }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-dim, #6b7280)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '11px', color: c.dim, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Open Profit/Loss
             </div>
             <div style={{
               fontSize: '24px',
               fontWeight: 800,
-              color: mergedData.unrealized_pnl >= 0 ? '#10b981' : '#ef4444',
+              color: mergedData.unrealized_pnl >= 0 ? c.green : c.red,
               fontFamily: 'JetBrains Mono, monospace'
             }}>
               {mergedData.unrealized_pnl >= 0 ? '+' : ''}${mergedData.unrealized_pnl.toFixed(2)}
@@ -291,21 +276,21 @@ export const V4AnalyticsDashboard: React.FC<V4AnalyticsDashboardProps> = ({ acti
           </div>
 
           <div style={{
-            padding: '16px',
-            background: 'rgba(0, 0, 0, 0.15)',
-            borderRadius: '10px',
-            border: '1px solid rgba(255, 255, 255, 0.04)',
+            padding: '12px',
+            background: 'var(--t-bg2)',
+            borderRadius: '6px',
+            border: '1px solid var(--t-border)'
           }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-dim, #6b7280)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '11px', color: c.dim, marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Execution Slippage
             </div>
             <div style={{
               fontSize: '24px',
               fontWeight: 800,
-              color: 'var(--text-primary, #f3f4f6)',
+              color: c.bright,
               fontFamily: 'JetBrains Mono, monospace'
             }}>
-              {mergedData.drift_bps > 0 ? '+' : ''}{mergedData.drift_bps.toFixed(2)} <span style={{ fontSize: '14px', color: 'var(--text-dim, #6b7280)', fontWeight: 600 }}>bps</span>
+              {mergedData.drift_bps > 0 ? '+' : ''}{mergedData.drift_bps.toFixed(2)} <span style={{ fontSize: '14px', color: c.dim, fontWeight: 600 }}>bps</span>
             </div>
           </div>
         </div>

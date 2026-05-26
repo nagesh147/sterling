@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
 import { useRiskConfig } from '../hooks/useRiskConfig';
 import { fmtN, fmtUSD } from '../utils/fmt';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 14 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 14 },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
-  label: { color: '#555', fontSize: 10, letterSpacing: 1 },
-  input: { background: '#111', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '6px 8px', fontFamily: 'inherit', fontSize: 13 },
-  results: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, background: '#0d1a0d', border: '1px solid #44cc88' + '22', borderRadius: 4, padding: 12 },
+  label: { color: t.dim, fontSize: 10, letterSpacing: 1 },
+  input: { background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '6px 8px', fontFamily: 'inherit', fontSize: 13 },
+  results: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, background: '#0d1a0d', border: `1px solid ${t.green}` + '22', borderRadius: 4, padding: 12 },
   cell: { display: 'flex', flexDirection: 'column', gap: 3 },
-  key: { color: '#555', fontSize: 10, letterSpacing: 1 },
+  key: { color: t.dim, fontSize: 10, letterSpacing: 1 },
   val: { fontSize: 16, fontWeight: 700 },
-  warn: { color: '#cc4444', fontSize: 11, marginTop: 8 },
+  warn: { color: t.red, fontSize: 11, marginTop: 8 },
 };
 
 function calcSize(capital: number, riskPct: number, maxLossPerContract: number) {
@@ -68,7 +69,7 @@ export function PositionSizingCalc() {
         </div>
         <div style={S.field}>
           <label style={S.label}>MAX CONTRACTS (config)</label>
-          <input style={{ ...S.input, color: '#555' }} readOnly value={maxContractsGuard} />
+          <input style={{ ...S.input, color: t.dim }} readOnly value={maxContractsGuard} />
         </div>
       </div>
 
@@ -76,32 +77,32 @@ export function PositionSizingCalc() {
         <div style={S.results}>
           <div style={S.cell}>
             <span style={S.key}>CONTRACTS</span>
-            <span style={{ ...S.val, color: clamped ? '#f0a500' : '#44cc88' }}>
+            <span style={{ ...S.val, color: clamped ? t.amber : t.green }}>
               {clampedContracts}
-              {clamped && <span style={{ fontSize: 10, color: '#f0a500' }}> (capped)</span>}
+              {clamped && <span style={{ fontSize: 10, color: t.amber }}> (capped)</span>}
             </span>
           </div>
           <div style={S.cell}>
             <span style={S.key}>MAX RISK $</span>
-            <span style={{ ...S.val, color: '#ff8844' }}>
+            <span style={{ ...S.val, color: t.red }}>
               ${fmtUSD(clampedContracts! * ml)}
             </span>
           </div>
           <div style={S.cell}>
             <span style={S.key}>CAPITAL AT RISK</span>
-            <span style={{ ...S.val, color: result.actualRiskPct > 5 ? '#cc4444' : '#44cc88' }}>
+            <span style={{ ...S.val, color: result.actualRiskPct > 5 ? t.red : t.green }}>
               {fmtN((clampedContracts! * ml / cap) * 100, 2)}%
             </span>
           </div>
           <div style={S.cell}>
             <span style={S.key}>POSITION VALUE $</span>
-            <span style={{ ...S.val, color: '#ccc', fontSize: 14 }}>
+            <span style={{ ...S.val, color: t.text, fontSize: 14 }}>
               ${fmtUSD(clampedContracts! * (parseFloat(premium) || ml))}
             </span>
           </div>
         </div>
       ) : (
-        <div style={{ color: '#444', fontSize: 12 }}>
+        <div style={{ color: t.dim, fontSize: 12 }}>
           Enter max loss per contract (or option premium) to calculate position size.
         </div>
       )}

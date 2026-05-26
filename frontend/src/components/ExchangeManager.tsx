@@ -5,33 +5,34 @@ import {
   useActivateDataSource, useDataSource,
 } from '../hooks/useExchanges';
 import type { ExchangeConfigResponse } from '../hooks/useExchanges';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 14 },
-  row: { background: '#111', border: '1px solid #1e1e1e', borderRadius: 4, padding: '10px 14px', marginBottom: 8 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 14 },
+  row: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: '10px 14px', marginBottom: 8 },
   rowHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  name: { fontWeight: 700, color: '#e0e0e0', fontSize: 13 },
-  activeBadge: { background: '#44cc8822', color: '#44cc88', border: '1px solid #44cc88', padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 },
-  paperBadge: { background: '#f0a50022', color: '#f0a500', border: '1px solid #f0a500', padding: '2px 8px', borderRadius: 3, fontSize: 10 },
-  credsBadge: { background: '#88aaff22', color: '#88aaff', border: '1px solid #88aaff', padding: '2px 8px', borderRadius: 3, fontSize: 10 },
+  name: { fontWeight: 700, color: t.bright, fontSize: 13 },
+  activeBadge: { background: '#44cc8822', color: t.green, border: `1px solid ${t.green}`, padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 },
+  paperBadge: { background: '#f0a50022', color: t.amber, border: `1px solid ${t.amber}`, padding: '2px 8px', borderRadius: 3, fontSize: 10 },
+  credsBadge: { background: '#88aaff22', color: t.blue, border: `1px solid ${t.blue}`, padding: '2px 8px', borderRadius: 3, fontSize: 10 },
   dataBadge: { background: '#aa88ff22', color: '#aa88ff', border: '1px solid #aa88ff', padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700 },
   actions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 },
-  btn: { background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnGreen: { background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnRed: { background: '#2a1a1a', color: '#cc4444', border: '1px solid #cc4444', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnPurple: { background: '#1a1a2a', color: '#aa88ff', border: '1px solid #aa88ff', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  hint: { color: '#555', fontSize: 11 },
-  form: { background: '#0d0d0d', border: '1px solid #222', borderRadius: 4, padding: 16, marginTop: 12 },
-  formTitle: { color: '#888', fontSize: 11, letterSpacing: 1, marginBottom: 12 },
+  btn: { background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnGreen: { background: '#1a2a1a', color: t.green, border: `1px solid ${t.green}`, padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnRed: { background: t.raised, color: t.red, border: `1px solid ${t.red}`, padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnPurple: { background: t.raised, color: '#aa88ff', border: '1px solid #aa88ff', padding: '4px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  hint: { color: t.dim, fontSize: 11 },
+  form: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: 16, marginTop: 12 },
+  formTitle: { color: t.dim, fontSize: 11, letterSpacing: 1, marginBottom: 12 },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
-  label: { color: '#555', fontSize: 10, letterSpacing: 1 },
-  input: { background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 },
-  select: { background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 },
+  label: { color: t.dim, fontSize: 10, letterSpacing: 1 },
+  input: { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 },
+  select: { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '6px 8px', fontFamily: 'inherit', fontSize: 12 },
   testResult: { marginTop: 6, fontSize: 11 },
-  success: { color: '#44cc88', fontSize: 11, marginTop: 6 },
-  error: { color: '#cc4444', fontSize: 11 },
+  success: { color: t.green, fontSize: 11, marginTop: 6 },
+  error: { color: t.red, fontSize: 11 },
 };
 
 const EXTRA_HINTS: Record<string, string> = {
@@ -101,13 +102,13 @@ function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; cu
         <span style={S.hint}>{ex.api_key_hint}</span>
       </div>
 
-      <div style={{ color: '#555', fontSize: 11, marginBottom: 6 }}>
+      <div style={{ color: t.dim, fontSize: 11, marginBottom: 6 }}>
         {ex.name} · {ex.supported ? 'supported' : 'unsupported'}
         {!ex.has_credentials && ' · no credentials set'}
       </div>
 
       {test.data && (
-        <div style={{ ...S.testResult, color: test.data.connected ? '#44cc88' : '#cc4444' }}>
+        <div style={{ ...S.testResult, color: test.data.connected ? t.green : t.red }}>
           {test.data.connected ? '✓' : '✗'} {test.data.message ?? test.data.error}
         </div>
       )}
@@ -164,10 +165,10 @@ function ExchangeRow({ ex, currentDataSource }: { ex: ExchangeConfigResponse; cu
             autoComplete="new-password"
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ color: '#555', fontSize: 10, letterSpacing: 1 }}>
+            <span style={{ color: t.dim, fontSize: 10, letterSpacing: 1 }}>
               EXTRA CONFIG (JSON)
               {ex.name === 'zerodha' && (
-                <span style={{ color: '#f0a500', marginLeft: 6 }}>Zerodha: set access_token daily</span>
+                <span style={{ color: t.amber, marginLeft: 6 }}>Zerodha: set access_token daily</span>
               )}
             </span>
             <input
@@ -243,7 +244,7 @@ function AddExchangeForm({ onDone }: { onDone: () => void }) {
         <div style={S.field}>
           <label style={S.label}>
             EXTRA CONFIG (JSON)
-            <span style={{ color: '#f0a500', marginLeft: 8 }}>e.g. {EXTRA_HINTS[name]}</span>
+            <span style={{ color: t.amber, marginLeft: 8 }}>e.g. {EXTRA_HINTS[name]}</span>
           </label>
           <input
             style={{ ...S.input, fontFamily: 'monospace', fontSize: 11 }}
@@ -283,7 +284,7 @@ export function ExchangeManager() {
             <div style={{ color: '#aa88ff', fontSize: 11 }}>
               Data source: <strong>{dsData.display_name}</strong>
               {' '}
-              <span style={{ color: dsData.reachable ? '#44cc88' : '#cc4444' }}>
+              <span style={{ color: dsData.reachable ? t.green : t.red }}>
                 {dsData.reachable ? '● live' : '● unreachable'}
               </span>
             </div>
@@ -294,15 +295,15 @@ export function ExchangeManager() {
         </button>
       </div>
 
-      {isLoading && <div style={{ color: '#444', fontSize: 12 }}>Loading…</div>}
+      {isLoading && <div style={{ color: t.dim, fontSize: 12 }}>Loading…</div>}
       {data?.exchanges.map(ex => (
         <ExchangeRow key={ex.id} ex={ex} currentDataSource={dsData?.exchange} />
       ))}
 
       {showAdd && <AddExchangeForm onDone={() => setShowAdd(false)} />}
 
-      <div style={{ marginTop: 12, color: '#444', fontSize: 10, lineHeight: 1.8 }}>
-        <strong style={{ color: '#555' }}>ACCOUNT</strong> — active exchange for balance/positions/orders<br />
+      <div style={{ marginTop: 12, color: t.dim, fontSize: 10, lineHeight: 1.8 }}>
+        <strong style={{ color: t.dim }}>ACCOUNT</strong> — active exchange for balance/positions/orders<br />
         <strong style={{ color: '#aa88ff' }}>DATA SOURCE</strong> — exchange providing candles, prices, option chains<br />
         PAPER MODE: account calls return mock data. KEYS SET: real credentials saved.
       </div>

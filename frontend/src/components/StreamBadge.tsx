@@ -1,15 +1,16 @@
 import React from 'react';
 import { useSignalStream } from '../hooks/useSignalStream';
+import { c as t } from '../styles/terminalUI';
 
 const DOT: Record<string, string> = {
-  connecting: '#f0a500',
-  connected: '#44cc88',
-  disconnected: '#555',
+  connecting: t.amber,
+  connected: t.green,
+  disconnected: t.dim,
 };
 
 const styles: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6,
-  background: '#141414', border: '1px solid #222',
+  background: t.surface, border: `1px solid ${t.border}`,
   borderRadius: 4, padding: '4px 10px', fontSize: 11,
 };
 
@@ -28,22 +29,21 @@ export function StreamBadge({ underlying }: Props) {
       <span style={{
         width: 7, height: 7, borderRadius: '50%',
         background: dotColor,
-        boxShadow: status === 'connected' ? `0 0 6px ${dotColor}` : 'none',
         display: 'inline-block',
       }} />
-      <span style={{ color: status === 'connected' ? '#666' : status === 'connecting' ? '#888' : '#444' }}>
+      <span style={{ color: status === 'connected' ? t.dim : status === 'connecting' ? t.dim : t.dim }}>
         {label}
       </span>
       {data && !data.error && status === 'connected' && (
         <>
-          <span style={{ color: '#333', margin: '0 2px' }}>|</span>
-          <span style={{ color: data.signal_trend === 1 ? '#44cc88' : data.signal_trend === -1 ? '#cc4444' : '#888' }}>
+          <span style={{ color: t.border, margin: '0 2px' }}>|</span>
+          <span style={{ color: data.signal_trend === 1 ? t.green : data.signal_trend === -1 ? t.red : t.dim }}>
             {data.signal_trend === 1 ? '▲' : data.signal_trend === -1 ? '▼' : '~'}
           </span>
-          {data.green_arrow && <span style={{ color: '#44cc88', fontWeight: 700 }}>↑ ARROW</span>}
-          {data.red_arrow && <span style={{ color: '#cc4444', fontWeight: 700 }}>↓ ARROW</span>}
-          <span style={{ color: '#333', margin: '0 2px' }}>|</span>
-          <span style={{ color: '#888' }}>${(data.spot_price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+          {data.green_arrow && <span style={{ color: t.green, fontWeight: 700 }}>↑ ARROW</span>}
+          {data.red_arrow && <span style={{ color: t.red, fontWeight: 700 }}>↓ ARROW</span>}
+          <span style={{ color: t.border, margin: '0 2px' }}>|</span>
+          <span style={{ color: t.dim }}>${(data.spot_price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
         </>
       )}
     </div>

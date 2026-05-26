@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, IChartApi, ColorType, LineSeries } from 'lightweight-charts';
 import { useLivePnl } from '../hooks/useLivePnl';
+import { c as t, tint } from '../styles/terminalUI';
 
 export function EquityCurve() {
   const { data: pnlData } = useLivePnl();
@@ -12,9 +13,9 @@ export function EquityCurve() {
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#888',
+        textColor: t.dim,
       },
-      grid: { vertLines: { color: '#1e1e1e' }, horzLines: { color: '#1e1e1e' } },
+      grid: { vertLines: { color: t.dim }, horzLines: { color: t.dim } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: false },
       width: containerRef.current.clientWidth,
@@ -33,7 +34,7 @@ export function EquityCurve() {
     const now = Math.floor(Date.now() / 1000);
     const total = pnlData.total_estimated_pnl_usd ?? 0;
     const series = chartRef.current.addSeries(LineSeries, {
-      color: total >= 0 ? '#44cc88' : '#cc4444',
+      color: total >= 0 ? t.green : t.red,
       lineWidth: 2,
       lastValueVisible: true,
       priceLineVisible: false,
@@ -45,11 +46,11 @@ export function EquityCurve() {
   }, [pnlData]);
 
   const total = pnlData?.total_estimated_pnl_usd ?? 0;
-  const color = total >= 0 ? '#44cc88' : '#cc4444';
+  const color = total >= 0 ? t.green : t.red;
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 4 }}>
+      <div style={{ color: t.dim, fontSize: 10, letterSpacing: 1, marginBottom: 4 }}>
         SESSION P&L
         <span style={{ color, marginLeft: 8, fontWeight: 700 }}>
           {total >= 0 ? '+' : ''}${total.toFixed(2)}

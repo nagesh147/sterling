@@ -96,7 +96,6 @@ export function DataSourceSelector({ chipStyle }: { chipStyle?: React.CSSPropert
         background: dotColor, display: 'inline-block', flexShrink: 0,
         marginLeft: 10,
         transition: 'background 0.3s',
-        boxShadow: reachable ? `0 0 4px ${dotColor}` : 'none',
       }} />
 
       {/* Source select */}

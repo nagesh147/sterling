@@ -125,8 +125,8 @@ const inputStyle: React.CSSProperties = {
 const card: React.CSSProperties = {
   background: 'var(--bg-card)',
   border: '1px solid var(--border)',
-  borderRadius: 10,
-  marginBottom: 12,
+  borderRadius: 6,
+  marginBottom: 8,
   overflow: 'hidden',
 };
 
@@ -1012,11 +1012,6 @@ function FuturesSection({
               color: canTrade ? '#000' : 'var(--text-dim)',
               opacity: (!canTrade || placing) ? 0.65 : 1,
               transition: 'opacity 0.15s',
-              boxShadow: canTrade
-                ? direction === 'long'
-                  ? '0 0 20px var(--accent)30'
-                  : '0 0 20px var(--danger)30'
-                : 'none',
             }}
           >
             {placing

@@ -44,6 +44,17 @@ else
     done
 fi
 
+# 4.5 MCP Servers
+echo -e "${BLUE}--- MCP Servers ---${RESET}"
+if [[ -f ~/.gemini/antigravity/mcp_config.json ]]; then
+    grep -q '"zapier"' ~/.gemini/antigravity/mcp_config.json && echo -e "${GREEN}[OK] zapier (Webhooks & Automation)${RESET}"
+    grep -q '"stack"' ~/.gemini/antigravity/mcp_config.json && echo -e "${GREEN}[OK] stack (Slack/Discord Sync)${RESET}"
+    grep -q '"chrome-devtools-mcp"' ~/.gemini/antigravity/mcp_config.json && echo -e "${GREEN}[OK] chrome-devtools-mcp (Browser Automation)${RESET}"
+    grep -q '"code-review-graph"' ~/.gemini/antigravity/mcp_config.json && echo -e "${GREEN}[OK] code-review-graph (Knowledge Graph)${RESET}"
+else
+    echo -e "${YELLOW}[WARN] MCP config not found${RESET}"
+fi
+
 # 5. Workflows
 echo -e "${BLUE}--- Workflows ---${RESET}"
 echo -e "${GREEN}[OK] /plan /tdd /review /sec-review /agents /statusline /ck:design /bp:design /uiux${RESET}"

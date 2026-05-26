@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../utils/api';
+import { c as t, tint } from '../styles/terminalUI';
 
 type KillSwitch = { enabled: boolean; reason: string; set_ts_ms: number };
 type DailyLoss = {
@@ -39,15 +40,15 @@ type ScoringStrategy = 'by_edge_max_linear_agree' | 'unweighted_mean';
 const POLL_MS = 5_000;
 
 const levelColor: Record<DailyLoss['level'], string> = {
-  clear: '#10b981',
-  warning: '#f59e0b',
-  halt: '#ef4444',
+  clear: t.green,
+  warning: t.amber,
+  halt: t.red,
 };
 
 const modeColor: Record<RouterMode, string> = {
-  paper: '#6b7280',
-  shadow: '#3b82f6',
-  live: '#dc2626',
+  paper: t.dim,
+  shadow: t.blue,
+  live: t.red,
 };
 
 export default function LiveControlPanel() {
@@ -158,13 +159,13 @@ const changeMode = async (next: RouterMode) => {
   return (
     <div
       style={{
-        background: 'var(--bg-panel, #0b0d12)',
-        border: '1px solid #1f2937',
+        background: t.surface,
+        border: `1px solid ${t.border}`,
         borderRadius: 8,
         padding: 12,
         fontSize: 12,
-        color: '#e5e7eb',
-        fontFamily: 'ui-monospace, Menlo, monospace',
+        color: t.text,
+        fontFamily: 'inherit',
       }}
     >
       <div
@@ -176,7 +177,7 @@ const changeMode = async (next: RouterMode) => {
         }}
       >
         <strong style={{ fontSize: 13 }}>LIVE CONTROL · v4</strong>
-        {err && <span style={{ color: '#ef4444' }}>{err}</span>}
+        {err && <span style={{ color: t.red }}>{err}</span>}
       </div>
 
       {/* ── Kill switch ─────────────────────────────────────────── */}
@@ -186,7 +187,7 @@ const changeMode = async (next: RouterMode) => {
           onClick={toggleKill}
           disabled={busy}
           style={{
-            background: killSwitch?.enabled ? '#dc2626' : '#10b981',
+            background: killSwitch?.enabled ? t.red : t.green,
             color: 'white',
             border: 'none',
             padding: '4px 12px',
@@ -200,7 +201,7 @@ const changeMode = async (next: RouterMode) => {
         </button>
       </div>
       {killSwitch?.enabled && killSwitch.reason && (
-        <div style={{ ...subRow, color: '#fca5a5' }}>↳ {killSwitch.reason}</div>
+        <div style={{ ...subRow, color: t.red }}>↳ {killSwitch.reason}</div>
       )}
 
       {/* ── Daily loss ──────────────────────────────────────────── */}
@@ -208,7 +209,7 @@ const changeMode = async (next: RouterMode) => {
         <span style={label}>Daily PnL</span>
         <span
           style={{
-            color: dailyLoss ? levelColor[dailyLoss.level] : '#6b7280',
+            color: dailyLoss ? levelColor[dailyLoss.level] : t.dim,
             fontWeight: 600,
           }}
         >
@@ -233,7 +234,7 @@ const changeMode = async (next: RouterMode) => {
               onClick={() => changeMode(m)}
               disabled={busy}
               style={{
-                background: routerMode === m ? modeColor[m] : '#1f2937',
+                background: routerMode === m ? modeColor[m] : t.raised,
                 color: 'white',
                 border: 'none',
                 padding: '4px 8px',
@@ -257,7 +258,7 @@ const changeMode = async (next: RouterMode) => {
         </div>
       </div>
       {algoMode && routerMode === 'live' && (
-        <div style={{ ...subRow, color: algoMode.enabled ? '#10b981' : '#f59e0b' }}>
+        <div style={{ ...subRow, color: algoMode.enabled ? t.green : t.amber }}>
           algo_mode: {algoMode.enabled ? 'on' : 'off'}
         </div>
       )}
@@ -272,7 +273,7 @@ const changeMode = async (next: RouterMode) => {
               onClick={() => changeStrategy(s)}
               disabled={busy}
               style={{
-                background: scoringStrategy === s ? '#7c3aed' : '#1f2937',
+                background: scoringStrategy === s ? t.purple : t.raised,
                 color: 'white',
                 border: 'none',
                 padding: '4px 8px',
@@ -302,7 +303,7 @@ const changeMode = async (next: RouterMode) => {
       {/* ── Retry queue ─────────────────────────────────────────── */}
       <div style={row}>
         <span style={label}>Retry queue</span>
-        <span style={{ color: (retryQ?.count ?? 0) > 0 ? '#f59e0b' : '#10b981' }}>
+        <span style={{ color: (retryQ?.count ?? 0) > 0 ? t.amber : t.green }}>
           {retryQ?.count ?? 0} item{(retryQ?.count ?? 0) === 1 ? '' : 's'}
         </span>
       </div>
@@ -314,7 +315,7 @@ const changeMode = async (next: RouterMode) => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            background: item.poison ? '#7f1d1d' : 'transparent',
+            background: item.poison ? tint(t.red, 22) : 'transparent',
             padding: 4,
             borderRadius: 4,
           }}
@@ -327,8 +328,8 @@ const changeMode = async (next: RouterMode) => {
             onClick={() => removeRetry(item.id)}
             style={{
               background: 'transparent',
-              color: '#9ca3af',
-              border: '1px solid #374151',
+              color: t.dim,
+              border: `1px solid ${t.border}`,
               borderRadius: 3,
               padding: '2px 6px',
               fontSize: 10,
@@ -348,18 +349,18 @@ const row: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'center',
   padding: '6px 0',
-  borderBottom: '1px solid #1f2937',
+  borderBottom: `1px solid ${t.border}`,
 };
 
 const subRow: React.CSSProperties = {
   fontSize: 10,
-  color: '#9ca3af',
+  color: t.dim,
   paddingLeft: 8,
   marginBottom: 4,
 };
 
 const label: React.CSSProperties = {
-  color: '#9ca3af',
+  color: t.dim,
   textTransform: 'uppercase',
   fontSize: 10,
   letterSpacing: 0.5,

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCalibration } from '../hooks/useCalibration';
 import { useSelectedUnderlying } from '../store/useStore';
+import { grpBox, gridStyle } from '../styles/terminalUI';
 
 export function CalibrationPanel() {
   const underlying = useSelectedUnderlying();
@@ -16,18 +17,18 @@ export function CalibrationPanel() {
       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-dim)' }}>
         ADAPTIVE CALIBRATION — {underlying}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 6, padding: '10px 12px' }}>
+      <div style={gridStyle(150, 8)}>
+        <div style={grpBox}>
           <div style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--t-dim)', fontWeight: 600, marginBottom: 4 }}>WIN RATE</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--t-bright)' }}>{(data.win_rate * 100).toFixed(1)}%</div>
           <div style={{ fontSize: 9, color: 'var(--t-dim)', marginTop: 2 }}>{confidence}</div>
         </div>
-        <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 6, padding: '10px 12px' }}>
+        <div style={grpBox}>
           <div style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--t-dim)', fontWeight: 600, marginBottom: 4 }}>IVR BUY</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--t-bright)' }}>{data.ivr_buy_threshold.toFixed(1)}</div>
           <div style={{ fontSize: 9, color: 'var(--t-dim)', marginTop: 2 }}>{data.ivr_readings >= 20 ? 'adaptive' : `fallback (${data.ivr_readings}/20)`}</div>
         </div>
-        <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 6, padding: '10px 12px' }}>
+        <div style={grpBox}>
           <div style={{ fontSize: 9, letterSpacing: '0.08em', color: 'var(--t-dim)', fontWeight: 600, marginBottom: 4 }}>IVR SELL</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--t-bright)' }}>{data.ivr_sell_threshold.toFixed(1)}</div>
           <div style={{ fontSize: 9, color: 'var(--t-dim)', marginTop: 2 }}>{data.ivr_readings >= 20 ? 'adaptive' : ''}</div>

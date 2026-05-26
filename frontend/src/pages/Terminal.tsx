@@ -140,7 +140,7 @@ export function Terminal() {
 
       {/* Main workspace */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px', background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)' }}>
+        <div style={{ padding: '6px 12px', background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)' }}>
           <V4AnalyticsDashboard activeSymbol={underlying} />
         </div>
         {/* Three-pane area */}

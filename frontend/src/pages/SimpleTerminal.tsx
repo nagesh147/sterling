@@ -18,6 +18,7 @@ import { BacktestPanel } from '../components/BacktestPanel';
 import { StrategyTab } from '../components/strategy/StrategyTab';
 import { ScalpingTab } from '../components/scalping/ScalpingTab';
 import { ThreeColumnLayout, LeftSection, RightSection, StatCard } from '../components/ThreeColumnLayout';
+import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
 
 function CbChip() {
@@ -57,14 +58,11 @@ function BacktestView() {
     <div style={{ flex: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 10, padding: 0 }}>
 
       {/* ── Chart panel ── */}
-      <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+      <div style={{ ...card, flexShrink: 0 }}>
         {/* Chart header with toggle */}
-        <div style={{ padding: '8px 14px', borderBottom: showChart ? '1px solid var(--t-border)' : 'none',
-          display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
-            HISTORICAL CANDLES
-          </span>
-          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>Delta Exchange · 6m · 5m–4h</span>
+        <div style={{ ...cardHead, borderBottom: showChart ? '1px solid var(--t-border)' : 'none', gap: 10 }}>
+          <span>HISTORICAL CANDLES</span>
+          <span style={{ fontSize: 9, fontWeight: 400, letterSpacing: 0, color: 'var(--t-dim)' }}>Delta Exchange · 6m · 5m–4h</span>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
             {/* Symbol selector */}
             <div style={{ display: 'flex', gap: 3 }}>
@@ -86,17 +84,14 @@ function BacktestView() {
       </div>
 
       {/* ── Signal backtest panel ── */}
-      <div style={{ background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 10, overflow: 'hidden' }}>
-        <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--t-border)',
-          display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)' }}>
-            SIGNAL BACKTEST + SIMULATION
-          </span>
-          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
+      <div style={card}>
+        <div style={cardHead}>
+          <span>SIGNAL BACKTEST + SIMULATION</span>
+          <span style={{ fontSize: 9, fontWeight: 400, letterSpacing: 0, color: 'var(--t-dim)' }}>
             Sterling regime · signal quality · capital simulation with fees, SL/TP, trail, Kelly
           </span>
         </div>
-        <div style={{ padding: 14 }}>
+        <div style={cardBody}>
           <BacktestPanel underlying={symbol} />
         </div>
       </div>

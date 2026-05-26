@@ -84,7 +84,6 @@ function StreamBadge({ status }: { status: StreamStatus }) {
         borderRadius: '50%',
         background: dotColor,
         flexShrink: 0,
-        boxShadow: status === 'connected' ? `0 0 4px ${dotColor}` : 'none',
       }} />
       {status === 'disconnected' && (
         <span style={{ fontSize: 8, color: '#ff4757', fontWeight: 700, letterSpacing: 0.3 }}>
@@ -595,7 +594,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       transition: 'opacity 0.3s, background 0.1s',
     }}>
       {/* LEFT — time + symbol */}
-      <div style={{ width: 150, flexShrink: 0, padding: '14px 12px 14px 14px', borderRight: '1px solid var(--border)' }}>
+      <div style={{ width: 150, flexShrink: 0, padding: '10px 12px', borderRight: '1px solid var(--border)' }}>
         <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
         <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>{entry.underlying}</div>
         <div style={{ fontSize: 11, fontWeight: 800, color: dirColor, marginTop: 2 }}>
@@ -624,7 +623,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       </div>
 
       {/* CENTRE — instrument + prices */}
-      <div style={{ flex: 1, padding: '14px 12px', minWidth: 0 }}>
+      <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
         {/* instrument */}
         <div style={{ marginBottom: 8 }}>
           {isFutures ? (
@@ -849,7 +848,6 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
           border: `1px solid ${dirColor}44`,
           borderRadius: 12,
           width: 760, maxWidth: '98vw',
-          boxShadow: `0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px ${dirColor}22`,
           overflow: 'hidden',
           display: 'flex', flexDirection: 'column',
           maxHeight: '94vh',
@@ -1610,7 +1608,7 @@ export function SignalsTable() {
                   }}>{t.armed}</span>
                 )}
                 {t.id === 'options' && hasOptAlert && !active && (
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 4px #a78bfa' }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa' }} />
                 )}
               </button>
             );

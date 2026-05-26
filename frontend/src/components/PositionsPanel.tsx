@@ -10,49 +10,50 @@ import { fmtN, fmtUSD } from '../utils/fmt';
 import { api } from '../utils/api';
 import { downloadCSV } from '../hooks/useDownload';
 import { PnLSparkline } from './PnLSparkline';
+import { c as t, tint } from '../styles/terminalUI';
 
 const STATUS_COLOR: Record<PositionStatus, string> = {
-  open: '#44cc88',
-  partially_closed: '#f0c040',
-  closed: '#555',
+  open: t.green,
+  partially_closed: t.amber,
+  closed: t.dim,
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 12 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   counts: { display: 'flex', gap: 12 },
-  countBadge: { background: '#1a1a1a', border: '1px solid #222', borderRadius: 3, padding: '3px 10px', fontSize: 11 },
+  countBadge: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 3, padding: '3px 10px', fontSize: 11 },
   enterBtn: {
-    background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88',
+    background: '#1a2a1a', color: t.green, border: `1px solid ${t.green}`,
     padding: '6px 14px', borderRadius: 4, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
   },
-  noPos: { color: '#444', fontSize: 12, textAlign: 'center', padding: 20 },
+  noPos: { color: t.dim, fontSize: 12, textAlign: 'center', padding: 20 },
   posCard: {
-    background: '#111', border: '1px solid #1e1e1e',
+    background: t.bg, border: `1px solid ${t.border}`,
     borderRadius: 4, padding: 12, marginBottom: 8,
   },
   posHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  posType: { color: '#aaddff', fontWeight: 700, fontSize: 13 },
+  posType: { color: t.blue, fontWeight: 700, fontSize: 13 },
   statusBadge: { fontSize: 11, padding: '2px 8px', borderRadius: 3, fontWeight: 600 },
   posGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, fontSize: 11 },
   cell: { display: 'flex', flexDirection: 'column', gap: 2 },
-  key: { color: '#555' },
-  val: { color: '#ccc' },
+  key: { color: t.dim },
+  val: { color: t.text },
   actions: { display: 'flex', gap: 8, marginTop: 10 },
   closeBtn: {
-    background: '#2a1a1a', color: '#cc6644', border: '1px solid #cc6644',
+    background: t.raised, color: t.red, border: `1px solid ${t.red}`,
     padding: '4px 12px', borderRadius: 3, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 11,
   },
   deleteBtn: {
-    background: '#1a1a1a', color: '#555', border: '1px solid #333',
+    background: t.raised, color: t.dim, border: `1px solid ${t.border}`,
     padding: '4px 12px', borderRadius: 3, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 11,
   },
   pnl: { fontWeight: 700 },
-  error: { color: '#cc4444', fontSize: 11, marginTop: 4 },
+  error: { color: t.red, fontSize: 11, marginTop: 4 },
 };
 
 function fmt(n?: number, d = 2) {
@@ -88,7 +89,7 @@ function nextExitGuess(pos: PaperPosition, currentSpot: number | null): ExitGues
       return {
         label: 'DTE',
         distance_pct: 0,
-        color: '#cc6644',
+        color: t.red,
         detail: `≈${remaining.toFixed(1)}d to expiry — time stop fires at 3d`,
       };
     }
@@ -96,8 +97,8 @@ function nextExitGuess(pos: PaperPosition, currentSpot: number | null): ExitGues
 
   const ref = currentSpot ?? entry;
   const candidates: { label: string; price: number; color: string; reason: string }[] = [];
-  if (sl && sl > 0) candidates.push({ label: 'SL', price: sl, color: '#cc4444', reason: 'Trail stop hit' });
-  if (tp && tp > 0) candidates.push({ label: 'TP', price: tp, color: '#44cc88', reason: 'Take-profit hit' });
+  if (sl && sl > 0) candidates.push({ label: 'SL', price: sl, color: t.red, reason: 'Trail stop hit' });
+  if (tp && tp > 0) candidates.push({ label: 'TP', price: tp, color: t.green, reason: 'Take-profit hit' });
   if (candidates.length === 0) return null;
 
   const filtered = candidates.filter((c) => {
@@ -150,35 +151,35 @@ function TrailStopRow({ posId, entrySpot, currentSpot }: {
 
   return (
     <div style={{
-      background: '#0d0d0d', border: '1px solid #cc444433',
+      background: t.bg, border: '1px solid #cc444433',
       borderRadius: 4, padding: '6px 10px', marginTop: 6,
       display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, flexWrap: 'wrap',
     }}>
       <div>
-        <span style={{ color: '#555' }}>TRAIL STOP </span>
-        <span style={{ color: '#cc6644', fontWeight: 700, fontFamily: 'monospace' }}>
+        <span style={{ color: t.dim }}>TRAIL STOP </span>
+        <span style={{ color: t.red, fontWeight: 700, fontFamily: 'monospace' }}>
           ${trail.stop.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
         </span>
-        <span style={{ color: '#444', marginLeft: 4, fontSize: 10 }}>({trail.mode})</span>
+        <span style={{ color: t.dim, marginLeft: 4, fontSize: 10 }}>({trail.mode})</span>
       </div>
       {stopDistPct != null && (
         <div>
-          <span style={{ color: '#555' }}>DIST </span>
-          <span style={{ color: stopDistPct > 5 ? '#44cc88' : stopDistPct > 2 ? '#f0c040' : '#cc4444' }}>
+          <span style={{ color: t.dim }}>DIST </span>
+          <span style={{ color: stopDistPct > 5 ? t.green : stopDistPct > 2 ? t.amber : t.red }}>
             {stopDistPct.toFixed(2)}%
           </span>
         </div>
       )}
       {trail.partial_25_done && (
         <span style={{
-          background: '#44cc8822', color: '#44cc88',
+          background: '#44cc8822', color: t.green,
           border: '1px solid #44cc8844', borderRadius: 3,
           padding: '1px 6px', fontSize: 10, fontWeight: 600,
         }}>25% LOCKED</span>
       )}
       {trail.partial_50_done && (
         <span style={{
-          background: '#4499cc22', color: '#4499cc',
+          background: '#4499cc22', color: t.blue,
           border: '1px solid #4499cc44', borderRadius: 3,
           padding: '1px 6px', fontSize: 10, fontWeight: 600,
         }}>50% LOCKED</span>
@@ -189,15 +190,15 @@ function TrailStopRow({ posId, entrySpot, currentSpot }: {
 
 function MonitorResultInline({ result }: { result: MonitorResult }) {
   const sig = result.exit_signal;
-  const pnlColor = result.estimated_pnl_usd >= 0 ? '#44cc88' : '#cc4444';
-  const exitColor = sig.should_exit ? '#cc4444' : sig.partial ? '#f0c040' : '#44cc88';
+  const pnlColor = result.estimated_pnl_usd >= 0 ? t.green : t.red;
+  const exitColor = sig.should_exit ? t.red : sig.partial ? t.amber : t.green;
   return (
-    <div style={{ background: '#0d0d0d', border: `1px solid ${exitColor}33`, borderRadius: 4, padding: '8px 12px', marginTop: 8, fontSize: 11 }}>
+    <div style={{ background: t.bg, border: `1px solid ${exitColor}33`, borderRadius: 4, padding: '8px 12px', marginTop: 8, fontSize: 11 }}>
       <div style={{ color: exitColor, fontWeight: 700, marginBottom: 4 }}>
         {sig.should_exit ? `⚠ EXIT: ${sig.exit_type?.toUpperCase()}` : sig.partial ? '↘ PARTIAL PROFIT' : '✓ HOLD'}
       </div>
-      <div style={{ color: '#666' }}>{sig.reason}</div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 6, color: '#888' }}>
+      <div style={{ color: t.dim }}>{sig.reason}</div>
+      <div style={{ display: 'flex', gap: 16, marginTop: 6, color: t.dim }}>
         <span>Spot: ${fmtUSD(result.current_spot)}</span>
         <span style={{ color: pnlColor }}>Est P&L: {(result.estimated_pnl_usd ?? 0) >= 0 ? '+' : ''}{fmtN(result.estimated_pnl_usd, 2)}</span>
         <span>DTE: {result.current_dte}</span>
@@ -208,11 +209,11 @@ function MonitorResultInline({ result }: { result: MonitorResult }) {
 }
 
 const ORDER_STATUS_COLORS: Record<string, string> = {
-  filled: '#44cc88',
-  pending: '#f0c040',
-  failed: '#cc4444',
-  cancelled: '#888',
-  retry: '#4499cc',
+  filled: t.green,
+  pending: t.amber,
+  failed: t.red,
+  cancelled: t.dim,
+  retry: t.blue,
 };
 
 function RetryOrderButton({ posId, onDone }: { posId: string; onDone?: () => void }) {
@@ -236,7 +237,7 @@ function RetryOrderButton({ posId, onDone }: { posId: string; onDone?: () => voi
     <div>
       <button
         style={{
-          background: '#1a2233', color: '#4499cc', border: '1px solid #4499cc66',
+          background: '#1a2233', color: t.blue, border: '1px solid #4499cc66',
           padding: '4px 12px', borderRadius: 3, cursor: 'pointer',
           fontFamily: 'inherit', fontSize: 11, opacity: loading ? 0.6 : 1,
         }}
@@ -245,7 +246,7 @@ function RetryOrderButton({ posId, onDone }: { posId: string; onDone?: () => voi
       >
         {loading ? '⟳ RETRYING…' : '⟳ RETRY ORDER'}
       </button>
-      {error && <span style={{ color: '#cc4444', fontSize: 10, marginLeft: 8 }}>{error}</span>}
+      {error && <span style={{ color: t.red, fontSize: 10, marginLeft: 8 }}>{error}</span>}
     </div>
   );
 }
@@ -275,7 +276,7 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           {isLiveOrder && (
             <span style={{
               marginLeft: 8, fontSize: 10, padding: '1px 6px',
-              background: '#4499cc22', color: '#4499cc',
+              background: '#4499cc22', color: t.blue,
               border: '1px solid #4499cc44', borderRadius: 3,
             }}>LIVE</span>
           )}
@@ -294,7 +295,7 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           {livePnl != null && (
             <span style={{
               fontSize: 12, fontWeight: 700,
-              color: livePnl >= 0 ? '#44cc88' : '#cc4444',
+              color: livePnl >= 0 ? t.green : t.red,
             }}>
               {livePnl >= 0 ? '+' : ''}{fmtN(livePnl, 2)}
             </span>
@@ -302,8 +303,8 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           {pos.order_status && (
             <span style={{
               ...styles.statusBadge,
-              background: (ORDER_STATUS_COLORS[pos.order_status] ?? '#888') + '22',
-              color: ORDER_STATUS_COLORS[pos.order_status] ?? '#888',
+              background: (ORDER_STATUS_COLORS[pos.order_status] ?? t.dim) + '22',
+              color: ORDER_STATUS_COLORS[pos.order_status] ?? t.dim,
               marginRight: 4,
             }}>
               {pos.order_status === 'failed' ? '✕ FAILED' :
@@ -329,7 +330,7 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           <span style={styles.key}>LEGS</span>
           <span style={styles.val}>
             {s.legs.map((l, i) => (
-              <span key={i} style={{ display: 'block', fontSize: 11, color: '#aaa' }}>
+              <span key={i} style={{ display: 'block', fontSize: 11, color: t.text }}>
                 {i === 0 ? 'BUY' : 'SELL'} {l.strike.toLocaleString()} {l.expiry_date} {l.option_type.slice(0, 1).toUpperCase()}
               </span>
             ))}
@@ -345,7 +346,7 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
             <span style={styles.key}>REALIZED P&L</span>
             <span style={{
               ...styles.val, ...styles.pnl,
-              color: pos.realized_pnl_usd >= 0 ? '#44cc88' : '#cc4444',
+              color: pos.realized_pnl_usd >= 0 ? t.green : t.red,
             }}>
               {pos.realized_pnl_usd >= 0 ? '+' : ''}{fmt(pos.realized_pnl_usd)}
             </span>
@@ -354,8 +355,8 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
       </div>
 
       {pos.order_id && (
-        <div style={{ marginTop: 6, fontSize: 10, color: '#444' }}>
-          ORDER ID: <span style={{ color: '#666', fontFamily: 'monospace' }}>{pos.order_id}</span>
+        <div style={{ marginTop: 6, fontSize: 10, color: t.dim }}>
+          ORDER ID: <span style={{ color: t.dim, fontFamily: 'monospace' }}>{pos.order_id}</span>
         </div>
       )}
       {isFailed && (
@@ -364,10 +365,10 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
           background: '#cc444411', border: '1px solid #cc444433',
           borderRadius: 4, fontSize: 11,
         }}>
-          <div style={{ color: '#cc4444', fontWeight: 700, marginBottom: 6 }}>
+          <div style={{ color: t.red, fontWeight: 700, marginBottom: 6 }}>
             ✕ Order failed — position held for retry
           </div>
-          <div style={{ color: '#cc6644', marginBottom: 8 }}>
+          <div style={{ color: t.red, marginBottom: 8 }}>
             {pos.notes?.replace('[ALGO-FAILED] ', '').replace('[ALGO-RETRY] [ALGO-FAILED] ', '')}
           </div>
           <RetryOrderButton posId={pos.id} />
@@ -392,14 +393,14 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
       {(pos.status === 'open' || pos.status === 'partially_closed') && (
         <div style={styles.actions}>
           <button
-            style={{ ...styles.deleteBtn, color: '#88aaff', borderColor: '#88aaff33' }}
+            style={{ ...styles.deleteBtn, color: t.blue, borderColor: '#88aaff33' }}
             onClick={() => monitor.mutate(pos.id)}
             disabled={monitor.isPending}
           >
             {monitor.isPending ? '…' : '⟳ MONITOR'}
           </button>
           <button
-            style={{ ...styles.deleteBtn, color: '#aaa', borderColor: '#33333344' }}
+            style={{ ...styles.deleteBtn, color: t.text, borderColor: '#33333344' }}
             onClick={() => setShowNotes(!showNotes)}
             title="Edit trade journal notes"
           >
@@ -417,7 +418,7 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
                 value={closePrice}
                 onChange={e => setClosePrice(e.target.value)}
                 style={{
-                  background: '#1a1a1a', color: '#ccc', border: '1px solid #333',
+                  background: t.raised, color: t.text, border: `1px solid ${t.border}`,
                   padding: '4px 8px', borderRadius: 3, fontFamily: 'inherit', fontSize: 11, width: 140,
                 }}
               />
@@ -446,7 +447,7 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
       {showNotes && (
         <div style={{ marginTop: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
           <input
-            style={{ ...styles.deleteBtn, flex: 1, color: '#ccc', border: '1px solid #333', padding: '4px 8px' }}
+            style={{ ...styles.deleteBtn, flex: 1, color: t.text, border: `1px solid ${t.border}`, padding: '4px 8px' }}
             type="text"
             placeholder="Trade journal notes…"
             value={notesText}
@@ -504,7 +505,7 @@ export function PositionsPanel({ underlying }: Props) {
             POSITIONS
             <span style={{
               fontSize: 9, fontWeight: 700, letterSpacing: 1,
-              color: isLive ? 'var(--accent)' : '#88aaff',
+              color: isLive ? 'var(--accent)' : t.blue,
               background: isLive ? 'var(--accent)18' : '#88aaff18',
               border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
               borderRadius: 3, padding: '1px 6px',
@@ -514,15 +515,15 @@ export function PositionsPanel({ underlying }: Props) {
           </div>
           {data && (
             <div style={styles.counts}>
-              <span style={{ ...styles.countBadge, color: '#44cc88' }}>
+              <span style={{ ...styles.countBadge, color: t.green }}>
                 {data.open_count} OPEN
                 {data.partially_closed_count > 0 && (
-                  <span style={{ color: '#f0c040', marginLeft: 4, fontSize: 10 }}>
+                  <span style={{ color: t.amber, marginLeft: 4, fontSize: 10 }}>
                     ({data.partially_closed_count} partial)
                   </span>
                 )}
               </span>
-              <span style={{ ...styles.countBadge, color: '#888' }}>
+              <span style={{ ...styles.countBadge, color: t.dim }}>
                 {data.closed_count} CLOSED
               </span>
             </div>
@@ -537,7 +538,7 @@ export function PositionsPanel({ underlying }: Props) {
             {enter.isPending ? 'EVALUATING…' : `▶ PAPER ENTER — ${underlying}`}
           </button>
           <button
-            style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+            style={{ background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
             onClick={handleMonitorAll}
             disabled={monitorAll.isPending}
             title="Check all open/partial positions for exit signals"
@@ -546,7 +547,7 @@ export function PositionsPanel({ underlying }: Props) {
           </button>
           {!showCloseAllConfirm ? (
             <button
-              style={{ background: '#2a1a1a', color: '#cc6644', border: '1px solid #cc664433', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+              style={{ background: t.raised, color: t.red, border: '1px solid #cc664433', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
               onClick={() => setShowCloseAllConfirm(true)}
               disabled={(data?.open_count ?? 0) === 0}
               title="Close all open positions at current market price"
@@ -556,7 +557,7 @@ export function PositionsPanel({ underlying }: Props) {
           ) : (
             <>
               <button
-                style={{ background: '#2a0d0d', color: '#cc4444', border: '1px solid #cc4444', padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+                style={{ background: '#2a0d0d', color: t.red, border: `1px solid ${t.red}`, padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
                 onClick={() => {
                   closeAll.mutate(undefined, {
                     onSuccess: (d) => {
@@ -577,23 +578,23 @@ export function PositionsPanel({ underlying }: Props) {
                 {closeAll.isPending ? 'CLOSING…' : 'CONFIRM CLOSE ALL'}
               </button>
               <button
-                style={{ background: '#1a1a1a', color: '#555', border: '1px solid #333', padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+                style={{ background: t.raised, color: t.dim, border: `1px solid ${t.border}`, padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
                 onClick={() => setShowCloseAllConfirm(false)}
               >CANCEL</button>
             </>
           )}
           {closeAllResult && (
-            <div style={{ background: '#0d1a0d', border: '1px solid #44cc8844', borderRadius: 4, padding: '6px 12px', fontSize: 11, color: '#44cc88', marginTop: 6 }}>
+            <div style={{ background: '#0d1a0d', border: '1px solid #44cc8844', borderRadius: 4, padding: '6px 12px', fontSize: 11, color: t.green, marginTop: 6 }}>
               ✓ Closed {closeAllResult.count} position{closeAllResult.count !== 1 ? 's' : ''} · P&L {closeAllResult.pnl >= 0 ? '+' : ''}${closeAllResult.pnl.toFixed(2)}
             </div>
           )}
           {closeAllError && (
-            <div style={{ background: '#1a0d0d', border: '1px solid #cc444444', borderRadius: 4, padding: '6px 12px', fontSize: 11, color: '#cc4444', marginTop: 6 }}>
+            <div style={{ background: '#1a0d0d', border: '1px solid #cc444444', borderRadius: 4, padding: '6px 12px', fontSize: 11, color: t.red, marginTop: 6 }}>
               Close all failed: {closeAllError}
             </div>
           )}
           <button
-            style={{ background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
+            style={{ background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '5px 12px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 }}
             onClick={() => downloadCSV('/api/v1/positions/export', 'sterling_paper_positions.csv')}
           >
             ↓ CSV

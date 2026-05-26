@@ -7,38 +7,39 @@ import {
 import type { Alert, AlertCondition, AlertStatus } from '../hooks/useAlerts';
 import { fmtN } from '../utils/fmt';
 import { useInstruments } from '../hooks/useInstruments';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card:     { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title:    { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 14 },
+  card:     { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title:    { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 14 },
   header:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   counts:   { display: 'flex', gap: 10, fontSize: 11, marginTop: 4 },
   filterBar:{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' as const, alignItems: 'center' },
-  row:      { background: '#111', border: '1px solid #1e1e1e', borderRadius: 4, padding: '8px 12px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  row:      { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: '8px 12px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
   left:     { display: 'flex', flexDirection: 'column' as const, gap: 3, flex: 1 },
-  sym:      { fontWeight: 700, color: '#e0e0e0', fontSize: 13 },
-  cond:     { fontSize: 11, color: '#888' },
-  ts:       { fontSize: 10, color: '#444' },
+  sym:      { fontWeight: 700, color: t.bright, fontSize: 13 },
+  cond:     { fontSize: 11, color: t.dim },
+  ts:       { fontSize: 10, color: t.dim },
   statusChip: { fontSize: 11, padding: '2px 8px', borderRadius: 3, fontWeight: 600 },
   actions:  { display: 'flex', gap: 6, alignItems: 'center', marginLeft: 12 },
-  btn:      { background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '3px 8px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
-  btnRed:   { background: '#2a1a1a', color: '#cc6666', border: '1px solid #cc666644', padding: '3px 8px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
-  form:     { background: '#0d0d0d', border: '1px solid #1e1e1e', borderRadius: 4, padding: 12, marginTop: 10 },
+  btn:      { background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '3px 8px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
+  btnRed:   { background: t.raised, color: t.red, border: '1px solid #cc666644', padding: '3px 8px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
+  form:     { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: 12, marginTop: 10 },
   grid:     { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 },
   field:    { display: 'flex', flexDirection: 'column' as const, gap: 3 },
-  label:    { color: '#555', fontSize: 10, letterSpacing: 1 },
-  input:    { background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
-  select:   { background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
-  addBtn:   { background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88', padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  checkBtn: { background: '#1a1a2a', color: '#88aaff', border: '1px solid #88aaff', padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  noData:   { color: '#444', fontSize: 12, textAlign: 'center' as const, padding: 20 },
+  label:    { color: t.dim, fontSize: 10, letterSpacing: 1 },
+  input:    { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
+  select:   { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
+  addBtn:   { background: '#1a2a1a', color: t.green, border: `1px solid ${t.green}`, padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  checkBtn: { background: t.raised, color: t.blue, border: `1px solid ${t.blue}`, padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  noData:   { color: t.dim, fontSize: 12, textAlign: 'center' as const, padding: 20 },
   checkResult: { background: '#0d1a0d', border: '1px solid #44cc8844', borderRadius: 4, padding: '8px 12px', marginTop: 8, fontSize: 11 },
 };
 
 const STATUS_STYLE: Record<string, React.CSSProperties> = {
-  active:    { background: '#88aaff22', color: '#88aaff' },
+  active:    { background: '#88aaff22', color: t.blue },
   triggered: { background: '#cc888822', color: '#cc8888' },
-  dismissed: { background: '#33333322', color: '#555' },
+  dismissed: { background: '#33333322', color: t.dim },
 };
 
 const NEEDS_THRESHOLD = new Set<AlertCondition>(['price_above', 'price_below', 'ivr_above', 'ivr_below']);
@@ -72,9 +73,9 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
     <button onClick={onClick} style={{
       background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
       fontSize: 10, letterSpacing: 1,
-      color: active ? '#e0e0e0' : '#444',
+      color: active ? t.bright : '#444',
       padding: '4px 10px',
-      borderBottom: active ? '2px solid #44cc88' : '2px solid transparent',
+      borderBottom: active ? `2px solid ${t.green}` : '2px solid transparent',
     }}>
       {label}
     </button>
@@ -116,12 +117,12 @@ function AlertRow({ alert }: { alert: Alert }) {
           )}
         </div>
         {alert.fire_count > 0 && (
-          <span style={{ color: '#555', fontSize: 10 }}>
+          <span style={{ color: t.dim, fontSize: 10 }}>
             Fired {alert.fire_count}×
             {alert.cooldown_hours > 0 ? ` · cooldown ${alert.cooldown_hours}h` : ''}
           </span>
         )}
-        {alert.notes && <span style={{ color: '#555', fontSize: 10 }}>{alert.notes}</span>}
+        {alert.notes && <span style={{ color: t.dim, fontSize: 10 }}>{alert.notes}</span>}
       </div>
       <div style={S.actions}>
         {alert.status !== 'dismissed' && (
@@ -211,7 +212,7 @@ function AddAlertForm({ onDone }: { onDone: () => void }) {
         <button style={S.btn} onClick={onDone}>CANCEL</button>
       </div>
       {create.error && (
-        <div style={{ color: '#cc4444', fontSize: 11, marginTop: 6 }}>
+        <div style={{ color: t.red, fontSize: 11, marginTop: 6 }}>
           {(create.error as Error).message}
         </div>
       )}
@@ -245,13 +246,13 @@ function QuickAddBar({ onDone }: { onDone: () => void }) {
         {underlyings.slice(0, 4).map(sym => (
           <React.Fragment key={sym}>
             <button
-              style={{ background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc8844',
+              style={{ background: '#1a2a1a', color: t.green, border: '1px solid #44cc8844',
                 borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: 10 }}
               onClick={() => quick(sym, 'signal_green_arrow', `${sym} ▲`)}
             >▲ {sym}</button>
             <button
-              style={{ background: '#2a1a1a', color: '#cc4444', border: '1px solid #cc444444',
+              style={{ background: t.raised, color: t.red, border: '1px solid #cc444444',
                 borderRadius: 3, padding: '3px 10px', cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: 10 }}
               onClick={() => quick(sym, 'signal_red_arrow', `${sym} ▼`)}
@@ -290,7 +291,7 @@ export function AlertManager() {
           <div style={S.title}>PRICE & SIGNAL ALERTS</div>
           {data && (
             <div style={S.counts}>
-              <span style={{ color: '#88aaff' }}>{data.active_count} ACTIVE</span>
+              <span style={{ color: t.blue }}>{data.active_count} ACTIVE</span>
               <span style={{ color: '#cc8888' }}>{data.triggered_count} TRIGGERED</span>
             </div>
           )}
@@ -304,7 +305,7 @@ export function AlertManager() {
           </button>
           {hasDismissed && statusFilter !== 'active' && (
             <button
-              style={{ ...S.btn, color: '#666', borderColor: '#333' }}
+              style={{ ...S.btn, color: t.dim, borderColor: t.border }}
               onClick={() => bulkClear.mutate()} disabled={bulkClear.isPending}
             >
               CLEAR DISMISSED
@@ -324,7 +325,7 @@ export function AlertManager() {
 
       {/* Filter bar */}
       <div style={S.filterBar}>
-        <div style={{ display: 'flex', borderBottom: '1px solid #1e1e1e' }}>
+        <div style={{ display: 'flex', borderBottom: `1px solid ${t.border}` }}>
           {STATUS_TABS.map(([val, label]) => (
             <TabBtn key={val} label={label} active={statusFilter === val}
               onClick={() => setStatusFilter(val)} />
@@ -334,8 +335,8 @@ export function AlertManager() {
           {DAY_OPTIONS.map(([val, label]) => (
             <button key={val} onClick={() => setDayFilter(val)} style={{
               background: dayFilter === val ? '#1a2a1a' : 'none',
-              color: dayFilter === val ? '#44cc88' : '#444',
-              border: dayFilter === val ? '1px solid #44cc8844' : '1px solid #1e1e1e',
+              color: dayFilter === val ? t.green : '#444',
+              border: dayFilter === val ? '1px solid #44cc8844' : `1px solid ${t.border}`,
               padding: '3px 8px', borderRadius: 3, cursor: 'pointer',
               fontFamily: 'inherit', fontSize: 10,
             }}>
@@ -352,8 +353,8 @@ export function AlertManager() {
         }}>
           ✓ Checked {check.data.checked} alerts —{' '}
           {check.data.newly_triggered > 0
-            ? <span style={{ color: '#44cc88' }}>{check.data.newly_triggered} newly triggered</span>
-            : <span style={{ color: '#555' }}>none triggered</span>}
+            ? <span style={{ color: t.green }}>{check.data.newly_triggered} newly triggered</span>
+            : <span style={{ color: t.dim }}>none triggered</span>}
         </div>
       )}
 
@@ -365,21 +366,21 @@ export function AlertManager() {
       ) : !data || data.alerts.length === 0 ? (
         <div style={S.noData}>
           {statusFilter === 'all' && dayFilter === 0 ? (
-            <div style={{ color: '#555', fontSize: 12, padding: '20px 0', textAlign: 'center' as const, lineHeight: 1.8 }}>
+            <div style={{ color: t.dim, fontSize: 12, padding: '20px 0', textAlign: 'center' as const, lineHeight: 1.8 }}>
               No alerts configured.
               <br />
-              <span style={{ fontSize: 11, color: '#444' }}>
+              <span style={{ fontSize: 11, color: t.dim }}>
                 Click{' '}
                 <button
                   onClick={() => { setShowQuick(true); setShowAdd(false); }}
-                  style={{ background: 'none', border: 'none', color: '#44cc88', cursor: 'pointer',
+                  style={{ background: 'none', border: 'none', color: t.green, cursor: 'pointer',
                     fontFamily: 'inherit', fontSize: 11, padding: 0 }}
                 >
                   ⚡ QUICK
                 </button>
                 {' '}to add signal alerts for all instruments in one click,
                 or{' '}
-                <strong style={{ color: '#44cc88' }}>+ ADD</strong>
+                <strong style={{ color: t.green }}>+ ADD</strong>
                 {' '}to create a custom price, IVR, or state alert.
               </span>
             </div>

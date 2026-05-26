@@ -1,23 +1,24 @@
 import React from 'react';
 import { useVolatilityScan } from '../hooks/useVolatilityScan';
 import { fmtN } from '../utils/fmt';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 12 },
   btn: {
-    background: '#1a1a2a', color: '#88aaff', border: '1px solid #88aaff',
+    background: t.raised, color: t.blue, border: `1px solid ${t.blue}`,
     padding: '7px 18px', borderRadius: 4, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 12, letterSpacing: 1,
   },
-  struct: { background: '#111', border: '1px solid #1e1e1e', borderRadius: 4, padding: 12, marginBottom: 8 },
-  type: { color: '#88aaff', fontWeight: 700, fontSize: 13, marginBottom: 8 },
+  struct: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: 12, marginBottom: 8 },
+  type: { color: t.blue, fontWeight: 700, fontSize: 13, marginBottom: 8 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 11 },
   cell: { display: 'flex', flexDirection: 'column', gap: 2 },
-  key: { color: '#555', fontSize: 10 },
-  val: { color: '#ccc' },
-  note: { color: '#444', fontSize: 10, marginTop: 10, fontStyle: 'italic' },
-  empty: { color: '#444', fontSize: 12, padding: '16px 0', textAlign: 'center' },
+  key: { color: t.dim, fontSize: 10 },
+  val: { color: t.text },
+  note: { color: t.dim, fontSize: 10, marginTop: 10, fontStyle: 'italic' },
+  empty: { color: t.dim, fontSize: 12, padding: '16px 0', textAlign: 'center' },
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -44,7 +45,7 @@ export function VolatilityScanPanel({ underlying }: Props) {
       </div>
 
       {scan.error && (
-        <div style={{ color: '#cc4444', fontSize: 12 }}>{(scan.error as Error).message}</div>
+        <div style={{ color: t.red, fontSize: 12 }}>{(scan.error as Error).message}</div>
       )}
 
       {!scan.data && !scan.isPending && (
@@ -55,7 +56,7 @@ export function VolatilityScanPanel({ underlying }: Props) {
 
       {scan.data && (
         <>
-          <div style={{ color: '#555', fontSize: 11, marginBottom: 12 }}>
+          <div style={{ color: t.dim, fontSize: 11, marginBottom: 12 }}>
             Spot: ${scan.data.spot_price.toLocaleString('en-US', { maximumFractionDigits: 0 })} ·
             {scan.data.healthy_candidates} healthy contracts scanned
           </div>
@@ -81,7 +82,7 @@ export function VolatilityScanPanel({ underlying }: Props) {
                   </div>
                   <div style={S.cell}>
                     <span style={S.key}>NET DEBIT</span>
-                    <span style={{ ...S.val, color: '#cc6644' }}>{fmtN(s.net_debit, 4)}</span>
+                    <span style={{ ...S.val, color: t.red }}>{fmtN(s.net_debit, 4)}</span>
                   </div>
                   <div style={S.cell}>
                     <span style={S.key}>MAX LOSS</span>
@@ -89,11 +90,11 @@ export function VolatilityScanPanel({ underlying }: Props) {
                   </div>
                   <div style={S.cell}>
                     <span style={S.key}>B/E UP</span>
-                    <span style={{ ...S.val, color: '#44cc88' }}>${s.breakeven_up.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                    <span style={{ ...S.val, color: t.green }}>${s.breakeven_up.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                   </div>
                   <div style={S.cell}>
                     <span style={S.key}>B/E DOWN</span>
-                    <span style={{ ...S.val, color: '#cc4444' }}>${s.breakeven_down.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                    <span style={{ ...S.val, color: t.red }}>${s.breakeven_down.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                   </div>
                   <div style={S.cell}>
                     <span style={S.key}>AVG IV</span>
@@ -101,7 +102,7 @@ export function VolatilityScanPanel({ underlying }: Props) {
                   </div>
                   <div style={S.cell}>
                     <span style={S.key}>HEALTH</span>
-                    <span style={{ ...S.val, color: s.health_score > 60 ? '#44cc88' : '#f0c040' }}>
+                    <span style={{ ...S.val, color: s.health_score > 60 ? t.green : t.amber }}>
                       {fmtN(s.health_score, 0)}
                     </span>
                   </div>

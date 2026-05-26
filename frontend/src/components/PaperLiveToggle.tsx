@@ -276,13 +276,8 @@ function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: (
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderTop: '2px solid var(--accent)',
-        borderRadius: 12,
-        padding: '24px 26px',
-        width: 380,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+        width: 360, background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 6, padding: '24px 28px', textAlign: 'center',
       }}>
         {children}
       </div>

@@ -11,10 +11,13 @@ Endpoints mirror the RSI strategy surface for UI consistency:
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
+
+logger = logging.getLogger("sterling.scalping")
 
 from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
@@ -248,20 +251,48 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     sym = body.underlying.upper()
     strategy = body.strategy
 
-    # ── Idempotency guard ──────────────────────────────────────────────
-    # Never stack a second open position on the same symbol+strategy. Without
-    # this, any client re-fire (tab remount, mode switch, 30s rescan) created a
-    # brand-new position — which is how hundreds of duplicate paper positions
-    # accumulated. If one is already open, return it instead of opening another.
+    # ── Which book will this order route to? ───────────────────────────
+    # Mirror place_live_order's gate: a real (live) order is placed ONLY when
+    # router_mode == "live" AND the active exchange has usable live credentials
+    # and isn't itself in paper. Everything else (paper / shadow / live-without-
+    # creds) lands in the paper book. The idempotency guard below must be scoped
+    # to the SAME book, otherwise an open PAPER position silently blocks a LIVE
+    # order for the same setup (the guard returns "already_open / paper" and no
+    # live order is ever placed) — which is why live mode never mirrored paper.
+    from app.services import exchange_account_store
+    router_mode = (getattr(request.app.state, "algo_router_mode", "live") or "live").lower()
+    _active = exchange_account_store.get_active()
+    is_live_order = (
+        router_mode == "live"
+        and _active is not None
+        and _active.name in ("delta_india", "delta")
+        and bool(_active.api_key) and bool(_active.api_secret)
+        and not _active.api_key.startswith("DUMMY")
+        and not _active.is_paper
+    )
+    want_paper = not is_live_order
+
+    # ── Idempotency guard (scoped to the target book) ──────────────────
+    # Never stack a second open position on the same symbol+strategy WITHIN the
+    # same book. Without this, any client re-fire (tab remount, mode switch, 30s
+    # rescan) created a brand-new position — which is how hundreds of duplicate
+    # paper positions accumulated. A paper and a live position for the same setup
+    # are legitimate (different books), so the is_paper match keeps them separate.
     strat_tag = f"[SCALP-{strategy.upper()}]"
     existing = next(
         (p for p in paper_store.list_positions()
          if p.status.value in ("open", "partially_closed")
          and p.underlying == sym
-         and strat_tag in (p.notes or "")),
+         and strat_tag in (p.notes or "")
+         and p.is_paper == want_paper),
         None,
     )
     if existing is not None:
+        logger.info(
+            "scalp-exec %s/%s router=%s want_paper=%s -> ALREADY_OPEN (%s position #%s) — not re-placed",
+            sym, strategy, router_mode, want_paper,
+            "paper" if existing.is_paper else "live", existing.id,
+        )
         return ScalpingExecuteResponse(
             accepted=True,
             mode="paper" if existing.is_paper else "live",
@@ -287,6 +318,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
 
     matched = [s for s in sigs if s.strategy == strategy and s.entry_ok]
     if not matched:
+        logger.info("scalp-exec %s/%s -> no_signal (not armed at execute time)", sym, strategy)
         return ScalpingExecuteResponse(
             accepted=False, mode="paper", underlying=sym, strategy=strategy,
             direction="none", size_units=0, notional_usd=0,
@@ -310,6 +342,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     size_units = risk_usd / risk_dist if risk_dist > 0 else 0
     contracts = max(0, int(round(size_units)))
     if contracts < 1:
+        logger.info("scalp-exec %s/%s -> size_too_small (%.4f units, equity=%s risk%%=%s)",
+                    sym, strategy, size_units, cfg.account_equity, cfg.risk_percent)
         return ScalpingExecuteResponse(
             accepted=False, mode="paper", underlying=sym, strategy=strategy,
             direction=sig.direction, size_units=size_units, notional_usd=size_units * sig.entry,
@@ -319,23 +353,46 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
 
     leverage = max(1.0, min((size_units * sig.entry) / max(1, cfg.account_equity * (cfg.max_position_pct / 100)), 25))
 
+    # Tag the placer (algo auto-exec vs manual click) into the notes so the UI can
+    # consistently show "AUTO · <MODE>" on every reconstructed row, not just the
+    # one you just clicked. The [SCALP-...] tag stays intact for strategy parsing.
+    auto_tag = " [AUTO]" if body.auto else ""
     order = LiveOrderRequest(
         underlying=sym, direction=sig.direction, instrument_type="futures",
         size=float(contracts), leverage=round(leverage, 1),
         order_type="market", stop_loss=sig.stop_loss,
         take_profit=sig.take_profit,
-        notes=f"[SCALP-{strategy.upper()}] {sig.direction} {sig.pattern} near {sig.level_type} {sig.near_level:.0f}",
+        notes=f"[SCALP-{strategy.upper()}]{auto_tag} {sig.direction} {sig.pattern} near {sig.level_type} {sig.near_level:.0f}",
     )
     resp = await place_live_order(order, request)
 
-    # Check if Telegram alert was sent (all paper/shadow/live paths call _send_order_telegram)
-    telegram_sent = False
+    logger.info(
+        "scalp-exec %s/%s router=%s want_live=%s -> mode=%s status=%s order_id=%s entry=%s sl=%s tp=%s contracts=%s reason=%s",
+        sym, strategy, router_mode, is_live_order, resp.mode, resp.status,
+        resp.order_id, resp.entry_price, sig.stop_loss, sig.take_profit, contracts, resp.message,
+    )
+
+    # Trigger all active webhooks (Discord, Telegram, Zapier)
     if resp.status not in ("rejected", "error"):
-        try:
-            from app.services.notifications import telegram as _tg
-            telegram_sent = _tg.TELEGRAM_REACHABLE
-        except Exception:
-            pass
+        from app.services import webhook_store
+        asyncio.create_task(
+            webhook_store.deliver_all(
+                subject=f"SCALP EXECUTE ({resp.mode.upper()}) — {sym} {sig.direction.upper()}",
+                message=f"Strategy: {strategy}\nOrder Status: {resp.status}\nContracts: {contracts}\nEntry: {sig.entry}\nSL: {sig.stop_loss}\nTP: {sig.take_profit}",
+                data={
+                    "mode": resp.mode,
+                    "underlying": sym,
+                    "direction": sig.direction,
+                    "strategy": strategy,
+                    "contracts": contracts,
+                    "entry_price": sig.entry,
+                    "stop_loss": sig.stop_loss,
+                    "take_profit": sig.take_profit,
+                    "status": resp.status,
+                    "notional_usd": round(contracts * sig.entry, 2),
+                }
+            )
+        )
 
     return ScalpingExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
@@ -347,5 +404,5 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         order_id=resp.order_id, paper_position_id=resp.paper_position_id,
         status=resp.status, reason=resp.message,
         timestamp_ms=resp.timestamp_ms or int(time.time() * 1000),
-        telegram_alert_sent=telegram_sent,
+        telegram_alert_sent=resp.status not in ("rejected", "error"),
     )

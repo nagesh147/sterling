@@ -19,7 +19,6 @@ function StatusLight({ ok, label }: { ok: boolean | null; label: string }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
       <span style={{
         width: 7, height: 7, borderRadius: '50%', background: color,
-        boxShadow: ok === null ? 'none' : `0 0 5px ${color}`,
         display: 'inline-block', flexShrink: 0,
       }} />
       <span style={{ fontSize: 9, color, fontWeight: 700, letterSpacing: 0.5 }}>{label}</span>
@@ -580,12 +579,10 @@ function AlgoSection() {
       title="ALGO MODE"
       status={
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%',
+          <div style={{
+            width: 14, height: 14, borderRadius: '50%',
             background: enabled ? '#10b981' : '#333',
-            boxShadow: enabled ? '0 0 8px #10b981' : 'none',
-            display: 'inline-block',
-            animation: enabled ? 'none' : undefined,
+            transition: 'background 0.2s',
           }} />
           <span style={{ fontSize: 9, fontWeight: 700, color: enabled ? '#10b981' : 'var(--text-faint)', letterSpacing: 1 }}>
             {isLoading ? '…' : enabled ? 'ON' : 'OFF'}
@@ -643,14 +640,13 @@ function AlgoSection() {
       {/* Confirm enable modal */}
       {confirming && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
           zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-card)', border: '1px solid #10b98133',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderTop: '3px solid #10b981', borderRadius: 8,
             padding: '22px 24px', width: 400,
-            boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: '#10b981', marginBottom: 6 }}>
               ⚡ Enable Algo Trading?
@@ -841,7 +837,6 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
             : `1px solid ${(chipStyle as any)?.borderColor ?? 'var(--border)'}`,
           cursor: pending ? 'wait' : 'pointer',
           opacity: pending ? 0.6 : 1,
-          boxShadow: enabled ? '0 0 8px var(--accent, #10B981)22' : 'none',
           transition: 'all 0.15s',
         }}
       >
@@ -850,14 +845,13 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
 
       {confirming && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
           zIndex: 3100, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
-            background: 'var(--bg-card)', border: '1px solid #ff475733',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
             borderTop: '3px solid #ff4757', borderRadius: 8,
             padding: '22px 24px', width: 400,
-            boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
           }}>
             <div style={{ fontSize: 15, fontWeight: 900, color: '#ff4757', marginBottom: 6 }}>⚡ Enable Algo Trading?</div>
             <div style={{ fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.7, marginBottom: 14 }}>
@@ -973,7 +967,7 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
     <>
       <div
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 2000, backdropFilter: 'blur(2px)' }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000 }}
       />
       <div style={{
         position: 'fixed',
@@ -987,7 +981,6 @@ export function SimpleSettingsDrawer({ open, onClose }: { open: boolean; onClose
         overflowY: 'auto',
         scrollbarWidth: 'thin',
         padding: '20px 22px 48px',
-        boxShadow: '-12px 0 48px rgba(0,0,0,0.6)',
       }}>
         <div style={{
           display: 'flex',

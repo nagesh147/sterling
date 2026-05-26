@@ -163,7 +163,7 @@ export function useScalpingBacktest() {
 }
 
 export function useScalpingExecute() {
-  return useMutation<ScalpingExecuteResponse, Error, { underlying: string; strategy: string }>({
-    mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/scalping/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true }),
+  return useMutation<ScalpingExecuteResponse, Error, { underlying: string; strategy: string; auto?: boolean }>({
+    mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/scalping/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true, auto: req.auto ?? false }),
   });
 }

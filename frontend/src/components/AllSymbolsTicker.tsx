@@ -1,10 +1,11 @@
 import React, { useRef } from 'react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useLivePrices } from '../hooks/useLivePrices';
+import { c as t, tint } from '../styles/terminalUI';
 
 const REGIME_COLOR: Record<string, string> = {
-  BULL_TREND: '#00c87a', BEAR_TREND: '#f03050',
-  VOLATILE: '#f0a020', RANGING: '#4a5a6a', IDLE: '#4a5a6a',
+  BULL_TREND: t.green, BEAR_TREND: t.red,
+  VOLATILE: t.amber, RANGING: t.dim, IDLE: t.dim,
 };
 
 function fmtP(p: number) {
@@ -35,15 +36,15 @@ export function AllSymbolsTicker() {
     const sym = item.underlying;
     const price = liveP[sym] ?? item.spot_price ?? null;
     const regime = (item as any).macro_regime as string | undefined;
-    const regimeColor = REGIME_COLOR[regime ?? ''] ?? '#4a5a6a';
+    const regimeColor = REGIME_COLOR[regime ?? ''] ?? t.dim;
     const dailyChg = (item as any).daily_change_pct as number | null | undefined;
     const trend = item.signal_trend ?? 0;
-    const trendColor = trend > 0 ? '#00c87a' : trend < 0 ? '#f03050' : '#4a5a6a';
+    const trendColor = trend > 0 ? t.green : trend < 0 ? t.red : t.dim;
     const trendArrow = trend > 0 ? '▲' : trend < 0 ? '▼' : '◆';
 
     const chgColor = dailyChg == null ? 'var(--t-dim)'
-      : dailyChg > 0 ? '#00c87a'
-      : dailyChg < 0 ? '#f03050'
+      : dailyChg > 0 ? t.green
+      : dailyChg < 0 ? t.red
       : 'var(--t-dim)';
     const chgStr = dailyChg == null ? null
       : `${dailyChg >= 0 ? '+' : ''}${dailyChg.toFixed(2)}%`;

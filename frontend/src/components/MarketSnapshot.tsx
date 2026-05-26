@@ -1,18 +1,19 @@
 import React from 'react';
 import { useMarketSnapshot } from '../hooks/useMarketSnapshot';
 import { fmtN, fmtUSD, ivrColor } from '../utils/fmt';
+import { c as t, tint } from '../styles/terminalUI';
 
 const styles: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 12 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 },
   cell: { display: 'flex', flexDirection: 'column', gap: 4 },
-  key: { color: '#666', fontSize: 11 },
-  val: { fontSize: 14, fontWeight: 600, color: '#e0e0e0' },
-  source: { marginTop: 10, color: '#444', fontSize: 11 },
+  key: { color: t.dim, fontSize: 11 },
+  val: { fontSize: 14, fontWeight: 600, color: t.bright },
+  source: { marginTop: 10, color: t.dim, fontSize: 11 },
   candles: { display: 'flex', gap: 8, marginTop: 10 },
-  candleBadge: { background: '#1e1e1e', border: '1px solid #2a2a2a', borderRadius: 3, padding: '2px 8px', fontSize: 11, color: '#888' },
-  error: { color: '#cc4444', fontSize: 12 },
+  candleBadge: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 3, padding: '2px 8px', fontSize: 11, color: t.dim },
+  error: { color: t.red, fontSize: 12 },
 };
 
 interface Props { underlying: string }

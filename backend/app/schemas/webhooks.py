@@ -7,6 +7,7 @@ class WebhookType(str, Enum):
     DISCORD = "discord"
     TELEGRAM = "telegram"
     GENERIC = "generic"
+    ZAPIER = "zapier"
 
 
 class WebhookCreate(BaseModel):

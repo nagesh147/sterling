@@ -1,37 +1,39 @@
 import React, { useState } from 'react';
 import { useWebhooks, useAddWebhook, useDeleteWebhook, useToggleWebhook, useTestWebhook } from '../hooks/useWebhooks';
 import type { WebhookConfig, WebhookType } from '../hooks/useWebhooks';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 14 },
+  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 14 },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  row: { background: '#111', border: '1px solid #1e1e1e', borderRadius: 4, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  row: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   left: { display: 'flex', flexDirection: 'column', gap: 3 },
-  name: { fontWeight: 700, color: '#e0e0e0', fontSize: 13 },
-  sub: { fontSize: 11, color: '#555' },
+  name: { fontWeight: 700, color: t.bright, fontSize: 13 },
+  sub: { fontSize: 11, color: t.dim },
   badge: { fontSize: 10, padding: '2px 7px', borderRadius: 3, fontWeight: 600 },
   actions: { display: 'flex', gap: 6 },
-  btn: { background: '#1a1a2a', color: '#88aaff', border: '1px solid #334', padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
-  btnGreen: { background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc88', padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnRed: { background: '#2a1a1a', color: '#cc4444', border: '1px solid #cc444444', padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
-  form: { background: '#0d0d0d', border: '1px solid #1e1e1e', borderRadius: 4, padding: 14, marginTop: 10 },
+  btn: { background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
+  btnGreen: { background: '#1a2a1a', color: t.green, border: `1px solid ${t.green}`, padding: '5px 14px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnRed: { background: t.raised, color: t.red, border: '1px solid #cc444444', padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 },
+  form: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: 14, marginTop: 10 },
   field: { display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 },
-  label: { color: '#555', fontSize: 10, letterSpacing: 1 },
-  input: { background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
-  select: { background: '#141414', color: '#e0e0e0', border: '1px solid #2a2a2a', borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
-  noData: { color: '#444', fontSize: 12, padding: '16px 0', textAlign: 'center' },
-  testOk: { color: '#44cc88', fontSize: 11 },
-  testFail: { color: '#cc4444', fontSize: 11 },
+  label: { color: t.dim, fontSize: 10, letterSpacing: 1 },
+  input: { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
+  select: { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 12 },
+  noData: { color: t.dim, fontSize: 12, padding: '16px 0', textAlign: 'center' },
+  testOk: { color: t.green, fontSize: 11 },
+  testFail: { color: t.red, fontSize: 11 },
 };
 
 const TYPE_LABELS: Record<WebhookType, string> = {
-  discord: 'Discord', telegram: 'Telegram', generic: 'HTTP POST'
+  discord: 'Discord', telegram: 'Telegram', generic: 'HTTP POST', zapier: 'Zapier'
 };
 const TYPE_HINT: Record<WebhookType, string> = {
   discord: 'Webhook URL from Discord channel settings',
   telegram: 'Bot API URL — set chat_id in Extra JSON',
   generic: 'Any URL that accepts POST JSON',
+  zapier: 'Zapier Catch Hook URL (accepts flat JSON)',
 };
 
 function WebhookRow({ wh }: { wh: WebhookConfig }) {
@@ -45,7 +47,7 @@ function WebhookRow({ wh }: { wh: WebhookConfig }) {
         <span style={S.name}>{wh.name}</span>
         <span style={S.sub}>{TYPE_LABELS[wh.webhook_type as WebhookType]} · {wh.url.slice(0, 40)}…</span>
         {wh.trigger_count > 0 && (
-          <span style={{ ...S.sub, color: '#666' }}>Fired {wh.trigger_count}×</span>
+          <span style={{ ...S.sub, color: t.dim }}>Fired {wh.trigger_count}×</span>
         )}
         {test.data && (
           <span style={test.data.delivered ? S.testOk : S.testFail}>
@@ -54,7 +56,7 @@ function WebhookRow({ wh }: { wh: WebhookConfig }) {
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ ...S.badge, background: wh.active ? '#44cc8822' : '#33333322', color: wh.active ? '#44cc88' : '#555' }}>
+        <span style={{ ...S.badge, background: wh.active ? '#44cc8822' : '#33333322', color: wh.active ? t.green : t.dim }}>
           {wh.active ? 'ON' : 'OFF'}
         </span>
         <div style={S.actions}>
@@ -97,7 +99,7 @@ function AddWebhookForm({ onDone }: { onDone: () => void }) {
             <option key={t} value={t}>{TYPE_LABELS[t]}</option>
           ))}
         </select>
-        <span style={{ color: '#444', fontSize: 10 }}>{TYPE_HINT[type]}</span>
+        <span style={{ color: t.dim, fontSize: 10 }}>{TYPE_HINT[type]}</span>
       </div>
       <div style={S.field}>
         <label style={S.label}>URL</label>
@@ -113,7 +115,7 @@ function AddWebhookForm({ onDone }: { onDone: () => void }) {
         </button>
         <button style={S.btn} onClick={onDone}>CANCEL</button>
       </div>
-      {add.error && <div style={{ color: '#cc4444', fontSize: 11, marginTop: 6 }}>{(add.error as Error).message}</div>}
+      {add.error && <div style={{ color: t.red, fontSize: 11, marginTop: 6 }}>{(add.error as Error).message}</div>}
     </div>
   );
 }

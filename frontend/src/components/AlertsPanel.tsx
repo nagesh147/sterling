@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { useSignalAlerts, usePlaceOrder } from '../hooks/useSignalAlerts';
 import type { SignalAlert } from '../hooks/useSignalAlerts';
 import { fmtN } from '../utils/fmt';
+import { c as ui, tint } from '../styles/terminalUI';
 
 // ── shared constants ──────────────────────────────────────────────────────────
 
-const DIR_COLOR = { long: '#44cc88', short: '#cc4444' } as const;
+const DIR_COLOR = { long: ui.green, short: ui.red } as const;
 const DIR_LABEL = { long: 'BUY', short: 'SELL' } as const;
 const STATE_COLOR: Record<string, string> = {
-  ENTRY_ARMED_PULLBACK: '#44aaff', ENTRY_ARMED_CONTINUATION: '#66ccff',
-  CONFIRMED_SETUP_ACTIVE: '#f0c040', EARLY_SETUP_ACTIVE: '#f0a500',
+  ENTRY_ARMED_PULLBACK: ui.blue, ENTRY_ARMED_CONTINUATION: ui.cyan,
+  CONFIRMED_SETUP_ACTIVE: ui.amber, EARLY_SETUP_ACTIVE: ui.amber,
 };
 
 function fmtPrice(v: number | null | undefined): string {
@@ -51,7 +52,7 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const { mutate: placeOrder, isPending } = usePlaceOrder();
 
-  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? '#888';
+  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? ui.dim;
   const side = DIR_LABEL[alert.direction as keyof typeof DIR_LABEL] ?? alert.direction.toUpperCase();
 
   const handlePlace = () => {
@@ -98,7 +99,7 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
             <button key={t} onClick={() => setInstrType(t)} style={{
               flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer',
               background: instrType === t ? (t === 'futures' ? '#1a2a1a' : '#1a1a2a') : 'var(--bg)',
-              color: instrType === t ? (t === 'futures' ? '#44cc88' : '#88aaff') : 'var(--text-dim)',
+              color: instrType === t ? (t === 'futures' ? ui.green : ui.blue) : 'var(--text-dim)',
               fontFamily: 'inherit', fontSize: 11, fontWeight: 700, letterSpacing: 1,
             }}>{t.toUpperCase()}</button>
           ))}
@@ -131,11 +132,11 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
             {alert.opt_symbol ? (
               <>
                 <div style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 4 }}>
-                  OPTION: <span style={{ color: '#88aaff', fontWeight: 700 }}>{alert.opt_symbol}</span>
+                  OPTION: <span style={{ color: ui.blue, fontWeight: 700 }}>{alert.opt_symbol}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
                   <span>Strike: <b style={{ color: 'var(--text-primary)' }}>{fmtPrice(alert.opt_strike)}</b></span>
-                  <span>Type: <b style={{ color: alert.opt_type === 'CE' ? '#44cc88' : '#cc4444' }}>{alert.opt_type}</b></span>
+                  <span>Type: <b style={{ color: alert.opt_type === 'CE' ? ui.green : ui.red }}>{alert.opt_type}</b></span>
                   <span>Expiry: <b style={{ color: 'var(--text-primary)' }}>{alert.opt_expiry}</b></span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -156,16 +157,16 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
 
         {/* risk info */}
         <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--text-faint)', marginBottom: 16 }}>
-          <span>Risk: <b style={{ color: '#cc4444' }}>{alert.risk_pct}%</b></span>
+          <span>Risk: <b style={{ color: ui.red }}>{alert.risk_pct}%</b></span>
           <span>ADX: <b style={{ color: 'var(--text-muted)' }}>{alert.adx}</b></span>
           <span>RSI: <b style={{ color: 'var(--text-muted)' }}>{alert.rsi}</b></span>
-          <span>Score: <b style={{ color: '#f0c040' }}>{alert.score}</b></span>
+          <span>Score: <b style={{ color: ui.amber }}>{alert.score}</b></span>
         </div>
 
         {status && (
           <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 4,
             background: status.ok ? '#1a2a1a' : '#2a1a1a',
-            color: status.ok ? '#44cc88' : '#cc4444',
+            color: status.ok ? ui.green : ui.red,
             border: `1px solid ${status.ok ? '#44cc8833' : '#cc444433'}`,
             fontSize: 11 }}>
             {status.msg}
@@ -178,8 +179,8 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
           style={{
             width: '100%', padding: '12px 0',
             background: alert.direction === 'long' ? '#0f2a0f' : '#2a0f0f',
-            color: alert.direction === 'long' ? '#44cc88' : '#cc4444',
-            border: `1px solid ${alert.direction === 'long' ? '#44cc88' : '#cc4444'}`,
+            color: alert.direction === 'long' ? ui.green : ui.red,
+            border: `1px solid ${alert.direction === 'long' ? ui.green : ui.red}`,
             borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 14, fontWeight: 900, letterSpacing: 1,
           }}
@@ -193,8 +194,8 @@ function OrderModal({ alert, onClose }: { alert: SignalAlert; onClose: () => voi
 
 function AlertCard({ alert }: { alert: SignalAlert }) {
   const [showOrder, setShowOrder] = useState(false);
-  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? '#888';
-  const stateColor = STATE_COLOR[alert.state] ?? '#f0a500';
+  const dirColor = DIR_COLOR[alert.direction as keyof typeof DIR_COLOR] ?? ui.dim;
+  const stateColor = STATE_COLOR[alert.state] ?? ui.amber;
 
   return (
     <>
@@ -217,9 +218,9 @@ function AlertCard({ alert }: { alert: SignalAlert }) {
 
         {/* meta */}
         <div style={{ fontSize: 10, color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 80 }}>
-          <span>Risk: <b style={{ color: '#cc4444' }}>{alert.risk_pct}%</b></span>
+          <span>Risk: <b style={{ color: ui.red }}>{alert.risk_pct}%</b></span>
           <span>ADX: {alert.adx}  RSI: {alert.rsi}</span>
-          <span>Score: <b style={{ color: '#f0c040' }}>{alert.score}</b></span>
+          <span>Score: <b style={{ color: ui.amber }}>{alert.score}</b></span>
           <span style={{ color: 'var(--text-faint)', fontSize: 9 }}>{fmtAge(alert.timestamp_ms)}</span>
         </div>
 
@@ -229,8 +230,8 @@ function AlertCard({ alert }: { alert: SignalAlert }) {
           style={{
             padding: '10px 18px', borderRadius: 5, cursor: 'pointer',
             background: alert.direction === 'long' ? '#0f2a0f' : '#2a0f0f',
-            color: alert.direction === 'long' ? '#44cc88' : '#cc4444',
-            border: `1px solid ${alert.direction === 'long' ? '#44cc88' : '#cc4444'}`,
+            color: alert.direction === 'long' ? ui.green : ui.red,
+            border: `1px solid ${alert.direction === 'long' ? ui.green : ui.red}`,
             fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
           }}
         >
@@ -252,7 +253,7 @@ export function AlertsPanel() {
         marginBottom: 12, padding: '10px 14px',
         background: '#14291a', border: '1px solid #1e3a22', borderRadius: '6px 6px 0 0',
       }}>
-        <span style={{ color: '#44cc88', fontSize: 12, fontWeight: 900, letterSpacing: 2 }}>
+        <span style={{ color: ui.green, fontSize: 12, fontWeight: 900, letterSpacing: 2 }}>
           ● TRADING SIGNALS  <span style={{ color: '#2a4a2a' }}>— Professional Alerts</span>
         </span>
         <span style={{ fontSize: 10, color: '#2a4a2a' }}>{alerts.length} alerts</span>

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { PaperPosition } from '../types';
+import { c as t, tint } from '../styles/terminalUI';
 
 interface CorrelationWarningProps {
   newUnderlying: string;
@@ -38,10 +39,10 @@ export function CorrelationWarning({
       background: '#1a1400', border: '1px solid #f0c04055',
       borderRadius: 4, padding: '12px 16px', marginBottom: 12,
     }}>
-      <div style={{ color: '#f0c040', fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
+      <div style={{ color: t.amber, fontWeight: 700, fontSize: 12, marginBottom: 6 }}>
         Correlation Warning
       </div>
-      <div style={{ color: '#888', fontSize: 11, marginBottom: 12 }}>
+      <div style={{ color: t.dim, fontSize: 11, marginBottom: 12 }}>
         Adding {newUnderlying} {newDirection} — you already have {sameDirectionSameClass.length}{' '}
         {newClass} {newDirection}s open ({names}). High correlation risk.
       </div>
@@ -49,7 +50,7 @@ export function CorrelationWarning({
         <button
           onClick={onCancel}
           style={{
-            background: '#1a1a1a', color: '#555', border: '1px solid #333',
+            background: t.raised, color: t.dim, border: `1px solid ${t.border}`,
             borderRadius: 3, padding: '4px 14px', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: 11,
           }}
@@ -59,7 +60,7 @@ export function CorrelationWarning({
         <button
           onClick={onProceed}
           style={{
-            background: '#2a1a00', color: '#f0c040', border: '1px solid #f0c040',
+            background: '#2a1a00', color: t.amber, border: `1px solid ${t.amber}`,
             borderRadius: 3, padding: '4px 14px', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: 11,
           }}

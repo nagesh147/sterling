@@ -6,6 +6,7 @@ import { useLivePnl } from '../hooks/useLivePnl';
 import { useInstruments } from '../hooks/useInstruments';
 import { fmtN, fmtUSD, ivrColor, fmtAge, fmtState } from '../utils/fmt';
 import { api } from '../utils/api';
+import { c as t, tint } from '../styles/terminalUI';
 
 function useDirectEntry() {
   const qc = useQueryClient();
@@ -20,10 +21,10 @@ function useDirectEntry() {
 }
 
 const STATE_COLOR: Record<string, string> = {
-  ENTRY_ARMED_PULLBACK: '#44aaff',
-  ENTRY_ARMED_CONTINUATION: '#66ccff',
-  CONFIRMED_SETUP_ACTIVE: '#f0c040',
-  EARLY_SETUP_ACTIVE: '#f0a500',
+  ENTRY_ARMED_PULLBACK: t.blue,
+  ENTRY_ARMED_CONTINUATION: t.cyan,
+  CONFIRMED_SETUP_ACTIVE: t.amber,
+  EARLY_SETUP_ACTIVE: t.amber,
   FILTERED: 'var(--text-dim)', IDLE: 'var(--text-faint)',
 };
 
@@ -48,7 +49,7 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
 
 function BreakdownBar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
-  const color = value >= max * 0.7 ? '#44cc88' : value >= max * 0.4 ? '#f0c040' : 'var(--text-dim)';
+  const color = value >= max * 0.7 ? t.green : value >= max * 0.4 ? t.amber : 'var(--text-dim)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
       <span style={{ color: 'var(--text-faint)', fontSize: 9, width: 55, flexShrink: 0, letterSpacing: 0.5 }}>{label}</span>
@@ -63,7 +64,7 @@ function BreakdownBar({ label, value, max }: { label: string; value: number; max
 }
 
 function STBadge({ trend, label, value, spot }: { trend: number; label: string; value?: number; spot: number }) {
-  const c = trend === 1 ? '#44cc88' : trend === -1 ? '#cc4444' : 'var(--text-faint)';
+  const c = trend === 1 ? t.green : trend === -1 ? t.red : 'var(--text-faint)';
   const arrow = trend === 1 ? '▲' : trend === -1 ? '▼' : '·';
   const dist = value && spot ? `${((Math.abs(spot - value) / spot) * 100).toFixed(1)}%` : null;
   return (
@@ -103,7 +104,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
   if (isError || !data) return null;
 
   const stateColor = STATE_COLOR[data.state] ?? 'var(--text-faint)';
-  const dirColor = data.direction === 'long' ? '#44cc88' : data.direction === 'short' ? '#cc4444' : 'var(--text-dim)';
+  const dirColor = data.direction === 'long' ? t.green : data.direction === 'short' ? t.red : 'var(--text-dim)';
   const isArmed     = data.state.startsWith('ENTRY_ARMED');
   const isConfirmed = data.state === 'CONFIRMED_SETUP_ACTIVE';
   const isEarly     = data.state === 'EARLY_SETUP_ACTIVE';
@@ -169,16 +170,16 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
       {(data.green_arrow || data.red_arrow || data.all_green || data.all_red) && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' as const }}>
           {data.green_arrow && (
-            <span style={{ background: '#44cc8822', color: '#44cc88', border: '1px solid #44cc8855', borderRadius: 4, padding: '4px 12px', fontWeight: 800, fontSize: 13 }}>▲ GREEN ARROW</span>
+            <span style={{ background: '#44cc8822', color: t.green, border: '1px solid #44cc8855', borderRadius: 4, padding: '4px 12px', fontWeight: 800, fontSize: 13 }}>▲ GREEN ARROW</span>
           )}
           {data.red_arrow && (
-            <span style={{ background: '#cc444422', color: '#cc4444', border: '1px solid #cc444455', borderRadius: 4, padding: '4px 12px', fontWeight: 800, fontSize: 13 }}>▼ RED ARROW</span>
+            <span style={{ background: '#cc444422', color: t.red, border: '1px solid #cc444455', borderRadius: 4, padding: '4px 12px', fontWeight: 800, fontSize: 13 }}>▼ RED ARROW</span>
           )}
           {data.all_green && !data.green_arrow && (
-            <span style={{ background: '#44cc8818', color: '#44cc88', border: '1px solid #44cc8833', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}>ALL GREEN</span>
+            <span style={{ background: '#44cc8818', color: t.green, border: '1px solid #44cc8833', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}>ALL GREEN</span>
           )}
           {data.all_red && !data.red_arrow && (
-            <span style={{ background: '#cc444418', color: '#cc4444', border: '1px solid #cc444433', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}>ALL RED</span>
+            <span style={{ background: '#cc444418', color: t.red, border: '1px solid #cc444433', borderRadius: 4, padding: '3px 10px', fontSize: 11 }}>ALL RED</span>
           )}
         </div>
       )}
@@ -211,7 +212,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
         {data.perp_price != null && (
           <div>
             <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>PERP SPREAD</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: (data.perp_price - data.spot_price) > 0 ? '#44cc88' : '#cc4444' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: (data.perp_price - data.spot_price) > 0 ? t.green : t.red }}>
               {(data.perp_price - data.spot_price) >= 0 ? '+' : ''}{fmtN(data.perp_price - data.spot_price, 0)}
             </div>
           </div>
@@ -219,7 +220,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
         {data.funding_rate != null && (
           <div>
             <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>FUNDING</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: data.funding_rate > 0.001 ? 'var(--warning)' : data.funding_rate < -0.001 ? '#44aaff' : 'var(--text-muted)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: data.funding_rate > 0.001 ? 'var(--warning)' : data.funding_rate < -0.001 ? t.blue : 'var(--text-muted)' }}>
               {(data.funding_rate * 100).toFixed(4)}%
             </div>
           </div>
@@ -234,7 +235,7 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
         )}
         <div>
           <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 1 }}>EXEC MODE</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: data.exec_mode === 'wait' ? 'var(--text-faint)' : '#88aaff' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: data.exec_mode === 'wait' ? 'var(--text-faint)' : t.blue }}>
             {data.exec_mode.toUpperCase()} <span style={{ color: 'var(--text-dim)', fontSize: 9 }}>{fmtN(data.exec_confidence * 100, 0)}%</span>
           </div>
         </div>
@@ -274,13 +275,13 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
       {/* open position P&L */}
       {openPositions.length > 0 && (
         <div style={{ marginBottom: 12, padding: '8px 10px', background: '#0f1a0f', border: '1px solid #44cc8833', borderRadius: 4 }}>
-          <div style={{ fontSize: 9, color: '#44cc88', letterSpacing: 1, marginBottom: 4 }}>OPEN POSITION</div>
+          <div style={{ fontSize: 9, color: t.green, letterSpacing: 1, marginBottom: 4 }}>OPEN POSITION</div>
           {openPositions.map(pos => {
             const pnl = pnlData?.positions?.find(p => p.position_id === pos.id);
             return (
               <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                 <span style={{ color: 'var(--text-muted)' }}>{pos.sized_trade?.structure?.structure_type?.replace(/_/g, ' ') ?? 'position'} · {pos.sized_trade?.contracts ?? '?'} contracts</span>
-                <span style={{ color: pnl?.estimated_pnl_usd != null && pnl.estimated_pnl_usd >= 0 ? '#44cc88' : '#cc4444', fontWeight: 700 }}>
+                <span style={{ color: pnl?.estimated_pnl_usd != null && pnl.estimated_pnl_usd >= 0 ? t.green : t.red, fontWeight: 700 }}>
                   {pnl?.estimated_pnl_usd != null ? `${pnl.estimated_pnl_usd >= 0 ? '+' : ''}$${Math.abs(pnl.estimated_pnl_usd).toFixed(0)}` : '—'}
                 </span>
               </div>
@@ -304,8 +305,8 @@ export function InstrumentDetailCard({ underlying }: { underlying: string }) {
             style={{
               width: '100%', padding: '10px 0',
               background: isArmed ? '#1a2a1a' : isConfirmed ? '#2a2000' : '#1a1200',
-              color: isArmed ? '#44cc88' : isConfirmed ? '#f0c040' : '#f0a500',
-              border: `1px solid ${isArmed ? '#44cc88' : isConfirmed ? '#f0c040' : '#f0a500'}`,
+              color: isArmed ? t.green : isConfirmed ? t.amber : t.amber,
+              border: `1px solid ${isArmed ? t.green : isConfirmed ? t.amber : t.amber}`,
               borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
               fontSize: 13, fontWeight: 700, letterSpacing: 1,
             }}

@@ -5,19 +5,12 @@ import {
   useStrategyBacktest, useStrategyExecute, useStrategySignals,
   type TripleSTConfig, type BacktestResult, type SignalSummary,
 } from '../../hooks/useStrategy';
+import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint } from '../../styles/terminalUI';
 
-/* ── tiny style helpers (terminal token palette) ─────────────────────────── */
+/* ── tiny style helpers ───────────────────────────────────────────────────── */
+/* card / cardHead / cardBody / grpBox / grpTitle come from the shared
+ * terminalUI module so this tab matches ScalpingTab exactly. */
 
-const card: React.CSSProperties = {
-  background: 'var(--t-bg2)', border: '1px solid var(--t-border)',
-  borderRadius: 10, overflow: 'hidden',
-};
-const cardHead: React.CSSProperties = {
-  padding: '8px 12px', borderBottom: '1px solid var(--t-border)',
-  fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-bright)',
-  display: 'flex', alignItems: 'center', gap: 8,
-};
-const cardBody: React.CSSProperties = { padding: 12 };
 const dim: React.CSSProperties = { color: 'var(--t-dim)', fontSize: 10 };
 
 function SectionCard({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
@@ -69,14 +62,11 @@ function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onCha
     <button onClick={() => onChange(!on)} style={{
       fontSize: 10, fontWeight: 600, padding: '4px 9px', borderRadius: 13, cursor: 'pointer', fontFamily: 'inherit',
       border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
-      background: on ? 'var(--t-green)1c' : 'transparent',
+      background: on ? tint('var(--t-green)') : 'transparent',
       color: on ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s', whiteSpace: 'nowrap',
     }}>{on ? '● ' : '○ '}{label}</button>
   );
 }
-
-const grpBox: React.CSSProperties = { background: 'var(--t-bg)', border: '1px solid var(--t-border)', borderRadius: 8, padding: 11, display: 'flex', flexDirection: 'column', gap: 9 };
-const grpTitle: React.CSSProperties = { fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-dim)' };
 
 function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c: TripleSTConfig) => void; saving: boolean }) {
   const [draft, setDraft] = useState<TripleSTConfig>(cfg);
@@ -109,7 +99,7 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
         RSI&lt;{draft.rsi_oversold}, exit RSI&gt;{draft.rsi_exit}. <b style={{ color: 'var(--t-bright)' }}>Short</b>: the
         mirror (unvalidated).
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10, alignItems: 'start' }}>
+      <div style={gridStyle()}>
         {/* Trend & RSI */}
         <div style={grpBox}>
           <div style={grpTitle}>TREND &amp; RSI</div>
@@ -162,12 +152,7 @@ function ConfigPanel({ cfg, onSave, saving }: { cfg: TripleSTConfig; onSave: (c:
           {universe.map((s) => {
             const on = !allMode && selSet.has(s);
             return (
-              <button key={s} onClick={() => toggleSym(s)} style={{
-                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-                border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
-                background: on ? 'var(--t-green)1c' : 'transparent',
-                color: on ? 'var(--t-green)' : 'var(--t-dim)',
-              }}>{s}</button>
+              <button key={s} onClick={() => toggleSym(s)} style={chipStyle(on)}>{s}</button>
             );
           })}
           {universe.length === 0 && <span style={dim}>{universeQ.isLoading ? 'loading universe…' : 'no symbols available'}</span>}
@@ -334,9 +319,9 @@ function SignalCard({ s, selected, onSelect, onExecute, executing, result }: {
   const accent = long ? 'var(--t-green)' : short ? 'var(--t-red)' : watching ? 'var(--t-blue)' : 'var(--t-dim)';
   return (
     <div onClick={onSelect} style={{
-      display: 'flex', borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
-      border: `1px solid ${selected ? accent + '66' : 'var(--t-border)'}`,
-      background: s.entry_ok ? accent + '0e' : watching ? 'var(--t-blue)08' : 'var(--t-bg2)',
+      display: 'flex', borderRadius: 8, overflow: 'hidden', cursor: 'pointer',
+      border: `1px solid ${selected ? tint(accent, 45) : 'var(--t-border)'}`,
+      background: s.entry_ok ? tint(accent, 7) : watching ? tint('var(--t-blue)', 6) : 'var(--t-bg2)',
       transition: 'border-color .1s',
     }}>
       <div style={{ width: 4, background: accent, flexShrink: 0 }} />
@@ -484,7 +469,7 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
         <button onClick={() => setArmedOnly((v) => !v)} style={{
           fontSize: 10, fontWeight: 700, padding: '5px 12px', borderRadius: 6, fontFamily: 'inherit', cursor: 'pointer',
           border: `1px solid ${armedOnly ? 'var(--t-green)' : 'var(--t-border)'}`,
-          background: armedOnly ? 'var(--t-green)1c' : 'transparent',
+          background: armedOnly ? tint('var(--t-green)') : 'transparent',
           color: armedOnly ? 'var(--t-green)' : 'var(--t-dim)',
         }}>{armedOnly ? '● ARMED ONLY' : '○ ARMED ONLY'}</button>
         <button onClick={onOpenSettings} title="Strategy settings & backtest" style={{
@@ -568,7 +553,6 @@ export function StrategyTab() {
             style={{
               width: 'min(580px, 94vw)', height: '100%', background: 'var(--t-bg)',
               borderLeft: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column',
-              boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
             }}
           >
             <div style={{

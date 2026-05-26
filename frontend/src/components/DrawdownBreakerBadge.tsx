@@ -1,6 +1,7 @@
 import React from 'react';
 import { useDrawdownBreaker, useResetDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import { useQueryClient } from '@tanstack/react-query';
+import { c as t, tint } from '../styles/terminalUI';
 
 export function DrawdownBreakerBadge() {
   const { data } = useDrawdownBreaker();
@@ -11,15 +12,15 @@ export function DrawdownBreakerBadge() {
 
   const configs: Record<string, { bg: string; text: string; border: string; message: string }> = {
     warning: {
-      bg: '#1a1400', text: '#f0c040', border: '#f0c04055',
+      bg: tint(t.amber, 12), text: t.amber, border: tint(t.amber, 33),
       message: `Drawdown warning — position size halved (DD: ${(Math.abs(data.current_drawdown) * 100).toFixed(1)}%)`,
     },
     halt: {
-      bg: '#1a0000', text: '#cc4444', border: '#cc444455',
+      bg: tint(t.red, 12), text: t.red, border: tint(t.red, 33),
       message: `Trading halted — drawdown exceeded 10% (DD: ${(Math.abs(data.current_drawdown) * 100).toFixed(1)}%)`,
     },
     reset: {
-      bg: '#1a0000', text: '#cc4444', border: '#cc444488',
+      bg: tint(t.red, 12), text: t.red, border: tint(t.red, 53),
       message: `Manual reset required — drawdown ${(Math.abs(data.current_drawdown) * 100).toFixed(1)}%`,
     },
   };
@@ -40,7 +41,7 @@ export function DrawdownBreakerBadge() {
           disabled={resetting}
           onClick={() => reset(undefined, { onSuccess: () => qc.invalidateQueries({ queryKey: ['dd-circuit-breaker'] }) })}
           style={{
-            background: '#1a1a2a', color: '#4499cc', border: '1px solid #4499cc',
+            background: tint(t.blue, 14), color: t.blue, border: `1px solid ${t.blue}`,
             borderRadius: 3, padding: '3px 12px', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: 11,
           }}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { c as t, tint } from '../styles/terminalUI';
 
 interface SignalStrengthGaugeProps {
   strength: number;
@@ -29,8 +30,8 @@ export function SignalStrengthGauge({ strength, size = 'sm' }: SignalStrengthGau
           style={{
             width: segW, height: segH,
             borderRadius: 2,
-            background: i < filled ? color : '#1e1e1e',
-            border: `1px solid ${i < filled ? color : '#333'}`,
+            background: i < filled ? color: t.dim,
+            border: `1px solid ${i < filled ? color: t.dim}`,
             transition: 'background 0.2s',
           }}
         />

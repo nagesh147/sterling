@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
 import { downloadCSV } from '../hooks/useDownload';
+import { c as t, tint } from '../styles/terminalUI';
 
 const S: Record<string, React.CSSProperties> = {
   row: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 },
   btn: {
-    background: '#1a1a2a', color: '#88aaff', border: '1px solid #334',
+    background: t.raised, color: t.blue, border: `1px solid ${t.border}`,
     padding: '6px 14px', borderRadius: 3, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
   },
   btnRed: {
-    background: '#2a1a1a', color: '#cc6644', border: '1px solid #cc664433',
+    background: t.raised, color: t.red, border: '1px solid #cc664433',
     padding: '6px 14px', borderRadius: 3, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 11, letterSpacing: 1,
   },
-  label: { color: '#555', fontSize: 10, letterSpacing: 1 },
+  label: { color: t.dim, fontSize: 10, letterSpacing: 1 },
   confirm: {
-    background: '#1f0d0d', border: '1px solid #cc4444', borderRadius: 4,
+    background: '#1f0d0d', border: `1px solid ${t.red}`, borderRadius: 4,
     padding: '8px 12px', fontSize: 11, color: '#cc8888', display: 'flex',
     gap: 8, alignItems: 'center', marginTop: 6,
   },

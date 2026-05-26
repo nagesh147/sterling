@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useBacktest } from '../hooks/useBacktest';
 import type { BacktestStats, BacktestBarResult } from '../hooks/useBacktest';
+import { c as t, tint } from '../styles/terminalUI';
 
 // ── MTF backtest types + hook ─────────────────────────────────────────────────
 interface MTFProfileResult {
@@ -68,53 +69,53 @@ function useMTFBacktest() {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
+  card: { background: t.surface, border: `1px solid ${t.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: t.dim, fontSize: 11, fontWeight: 700, letterSpacing: 2, marginBottom: 12 },
   controls: { display: 'flex', gap: 12, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' },
   field: { display: 'flex', flexDirection: 'column', gap: 4 },
-  label: { color: '#555', fontSize: 11 },
+  label: { color: t.dim, fontSize: 11 },
   input: {
-    background: '#111', color: '#e0e0e0', border: '1px solid #2a2a2a',
+    background: t.bg, color: t.bright, border: `1px solid ${t.border}`,
     borderRadius: 3, padding: '5px 8px', fontFamily: 'inherit', fontSize: 13, width: 80,
   },
   runBtn: {
-    background: '#1a1a2a', color: '#88aaff', border: '1px solid #88aaff',
+    background: tint(t.blue, 14), color: t.blue, border: `1px solid ${t.blue}`,
     padding: '6px 16px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12,
   },
   section: { marginBottom: 16 },
-  sectionTitle: { color: '#555', fontSize: 10, letterSpacing: 2, marginBottom: 8 },
+  sectionTitle: { color: t.dim, fontSize: 10, letterSpacing: 2, marginBottom: 8 },
   grid3: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 },
   grid4: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 },
-  statCard: { background: '#111', border: '1px solid #1e1e1e', borderRadius: 4, padding: 10 },
-  statLabel: { color: '#555', fontSize: 10, letterSpacing: 1, marginBottom: 4 },
+  statCard: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 4, padding: 10 },
+  statLabel: { color: t.dim, fontSize: 10, letterSpacing: 1, marginBottom: 4 },
   statVal: { fontSize: 18, fontWeight: 700 },
   qualityRow: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '6px 0', borderBottom: '1px solid #1a1a1a',
+    padding: '6px 0', borderBottom: `1px solid ${t.border}`,
   },
-  qualityLabel: { color: '#666', fontSize: 11 },
+  qualityLabel: { color: t.dim, fontSize: 11 },
   qualityBar: { display: 'flex', alignItems: 'center', gap: 8 },
   barChart: { display: 'flex', gap: 2, height: 50, alignItems: 'flex-end', marginBottom: 8 },
   chartBar: { flex: 1, minWidth: 2, borderRadius: 1, cursor: 'pointer' },
-  legend: { display: 'flex', gap: 12, fontSize: 10, color: '#555', marginBottom: 8, flexWrap: 'wrap' },
+  legend: { display: 'flex', gap: 12, fontSize: 10, color: t.dim, marginBottom: 8, flexWrap: 'wrap' },
   dot: { width: 7, height: 7, borderRadius: '50%', display: 'inline-block', marginRight: 4 },
-  error: { color: '#cc4444', fontSize: 12 },
-  meta: { color: '#444', fontSize: 10, marginTop: 8 },
-  noData: { color: '#444', fontSize: 12, padding: '20px 0', textAlign: 'center' },
+  error: { color: t.red, fontSize: 12 },
+  meta: { color: t.dim, fontSize: 10, marginTop: 8 },
+  noData: { color: t.dim, fontSize: 12, padding: '20px 0', textAlign: 'center' },
 };
 
 const winRateStyle = (rate: number): React.CSSProperties => ({
   fontSize: 16, fontWeight: 700,
-  color: rate >= 60 ? '#44cc88' : rate >= 50 ? '#f0c040' : '#cc4444',
+  color: rate >= 60 ? t.green : rate >= 50 ? t.amber : t.red,
 });
 
 const returnValStyle = (val: number): React.CSSProperties => ({
   fontSize: 14, fontWeight: 600,
-  color: val >= 0 ? '#44cc88' : '#cc4444',
+  color: val >= 0 ? t.green : t.red,
 });
 
-function StatCard({ label, value, color = '#e0e0e0', sub }: {
+function StatCard({ label, value, color = t.bright, sub }: {
   label: string; value: number | string; color?: string; sub?: string;
 }) {
   return (

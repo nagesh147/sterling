@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 
-export type WebhookType = 'discord' | 'telegram' | 'generic';
+export type WebhookType = 'discord' | 'telegram' | 'generic' | 'zapier';
 
 export interface WebhookConfig {
   id: string;

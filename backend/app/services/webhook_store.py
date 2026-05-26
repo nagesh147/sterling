@@ -186,6 +186,14 @@ async def _send(wh: WebhookConfig, subject: str, message: str, data: dict) -> bo
     elif wh.webhook_type == WebhookType.TELEGRAM:
         chat_id = wh.extra.get("chat_id", "")
         payload = {"chat_id": chat_id, "text": f"🔔 *Sterling — {subject}*\n{message}", "parse_mode": "Markdown"}
+    elif wh.webhook_type == WebhookType.ZAPIER:
+        payload = {
+            "source": "Sterling Scalper",
+            "subject": subject,
+            "message": message,
+            "timestamp": int(time.time() * 1000),
+            **data
+        }
     else:
         payload = {"subject": subject, "message": message, "data": data}
 

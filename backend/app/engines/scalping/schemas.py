@@ -99,6 +99,7 @@ class ScalpingExecuteRequest(BaseModel):
     underlying: str
     strategy: str  # "price_action" | "smc" | "ma_crossover"
     confirm: bool = True
+    auto: bool = False  # True when fired by the algo auto-exec loop (vs a manual click)
 
 
 class ScalpingExecuteResponse(BaseModel):

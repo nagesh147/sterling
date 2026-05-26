@@ -3,35 +3,36 @@ import { useRunOnce } from '../hooks/useRunOnce';
 import { useEnterPosition } from '../hooks/usePositions'; // used inside TradeCard
 import type { SizedTrade } from '../types';
 import { fmtN, fmtStructure, fmtState } from '../utils/fmt';
+import { c as ui, tint } from '../styles/terminalUI';
 
 const styles: Record<string, React.CSSProperties> = {
-  card: { background: '#141414', border: '1px solid #222', borderRadius: 6, padding: 16, marginBottom: 16 },
-  title: { color: '#888', fontSize: 11, letterSpacing: 2, marginBottom: 12 },
+  card: { background: ui.raised, border: `1px solid ${ui.border}`, borderRadius: 6, padding: 16, marginBottom: 16 },
+  title: { color: ui.dim, fontSize: 11, letterSpacing: 2, marginBottom: 12 },
   btn: {
-    background: '#1e2e1e', color: '#44cc88', border: '1px solid #44cc88',
+    background: '#1e2e1e', color: ui.green, border: `1px solid ${ui.green}`,
     padding: '8px 20px', borderRadius: 4, cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 13, letterSpacing: 1,
     transition: 'background 0.15s',
   },
   btnDisabled: {
-    background: '#1a1a1a', color: '#444', border: '1px solid #333',
+    background: ui.raised, color: ui.dim, border: `1px solid ${ui.border}`,
     padding: '8px 20px', borderRadius: 4, cursor: 'not-allowed',
     fontFamily: 'inherit', fontSize: 13, letterSpacing: 1,
   },
   result: { marginTop: 16 },
   recommend: { fontSize: 20, fontWeight: 700, marginBottom: 8 },
-  reason: { color: '#888', fontSize: 12, marginBottom: 16 },
-  tradeRow: { background: '#111', border: '1px solid #1e1e1e', borderRadius: 4, padding: 12, marginBottom: 8 },
+  reason: { color: ui.dim, fontSize: 12, marginBottom: 16 },
+  tradeRow: { background: ui.bg, border: `1px solid ${ui.border}`, borderRadius: 4, padding: 12, marginBottom: 8 },
   tradeHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 6 },
-  structType: { color: '#aaddff', fontWeight: 700, fontSize: 13 },
+  structType: { color: ui.blue, fontWeight: 700, fontSize: 13 },
   score: { fontSize: 13, fontWeight: 600 },
   tradeGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 11 },
   cell: { display: 'flex', flexDirection: 'column', gap: 2 },
-  key: { color: '#555' },
-  val: { color: '#ccc' },
-  error: { color: '#cc4444', fontSize: 12, marginTop: 8 },
-  noTrade: { color: '#cc4444', fontSize: 16, fontWeight: 700 },
-  paperBadge: { display: 'inline-block', background: '#1a2a1a', color: '#44cc88', padding: '2px 8px', borderRadius: 3, fontSize: 11, marginLeft: 8 },
+  key: { color: ui.dim },
+  val: { color: ui.text },
+  error: { color: ui.red, fontSize: 12, marginTop: 8 },
+  noTrade: { color: ui.red, fontSize: 16, fontWeight: 700 },
+  paperBadge: { display: 'inline-block', background: '#1a2a1a', color: ui.green, padding: '2px 8px', borderRadius: 3, fontSize: 11, marginLeft: 8 },
 };
 
 const SCORE_META: Record<string, { label: string; max: number; tooltip: string }> = {
@@ -53,17 +54,17 @@ function ScoreBreakdown({ bd, ivr }: { bd: Record<string, number | string>; ivr?
   const vetoReason = bd['veto_reason'] as string | undefined;
   if (!entries.length) return null;
   return (
-    <div style={{ marginTop: 8, borderTop: '1px solid #1a1a1a', paddingTop: 8 }}>
-      <div style={{ color: '#444', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>SCORE BREAKDOWN</div>
+    <div style={{ marginTop: 8, borderTop: `1px solid ${ui.border}`, paddingTop: 8 }}>
+      <div style={{ color: ui.dim, fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>SCORE BREAKDOWN</div>
       {vetoReason && (
-        <div style={{ color: '#cc4444', fontSize: 10, marginBottom: 6 }}>✕ VETOED: {vetoReason}</div>
+        <div style={{ color: ui.red, fontSize: 10, marginBottom: 6 }}>✕ VETOED: {vetoReason}</div>
       )}
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
         <thead>
           <tr>
-            <th style={{ color: '#333', textAlign: 'left', padding: '2px 4px' }}>COMPONENT</th>
-            <th style={{ color: '#333', textAlign: 'right', padding: '2px 4px' }}>SCORE</th>
-            <th style={{ color: '#333', textAlign: 'right', padding: '2px 4px' }}>MAX</th>
+            <th style={{ color: ui.dim, textAlign: 'left', padding: '2px 4px' }}>COMPONENT</th>
+            <th style={{ color: ui.dim, textAlign: 'right', padding: '2px 4px' }}>SCORE</th>
+            <th style={{ color: ui.dim, textAlign: 'right', padding: '2px 4px' }}>MAX</th>
           </tr>
         </thead>
         <tbody>
@@ -72,24 +73,24 @@ function ScoreBreakdown({ bd, ivr }: { bd: Record<string, number | string>; ivr?
             const numVal = typeof val === 'number' ? val : 0;
             const maxVal = meta?.max ?? 100;
             const pct = (numVal / maxVal) * 100;
-            const color = pct >= 70 ? '#44cc88' : pct >= 40 ? '#f0c040' : '#cc4444';
+            const color = pct >= 70 ? ui.green : pct >= 40 ? ui.amber : ui.red;
             return (
               <tr key={key} title={meta?.tooltip} style={{ cursor: meta?.tooltip ? 'help' : 'default' }}>
-                <td style={{ padding: '3px 4px', color: '#666' }}>{meta?.label ?? key}</td>
+                <td style={{ padding: '3px 4px', color: ui.dim }}>{meta?.label ?? key}</td>
                 <td style={{ padding: '3px 4px', textAlign: 'right', color, fontWeight: 600 }}>{fmtN(numVal, 1)}</td>
-                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#333' }}>{maxVal}</td>
+                <td style={{ padding: '3px 4px', textAlign: 'right', color: ui.dim }}>{maxVal}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
       {ivr != null && ivr > 60 && (
-        <div style={{ marginTop: 6, fontSize: 10, color: '#f0a500' }}>
+        <div style={{ marginTop: 6, fontSize: 10, color: ui.amber }}>
           ⚠ IV Rank {ivr.toFixed(0)} — elevated premium. Spreads preferred over naked.
         </div>
       )}
       {ivr == null && (
-        <div style={{ marginTop: 6, fontSize: 10, color: '#888' }}>IV data unavailable — prefer defined-risk spreads.</div>
+        <div style={{ marginTop: 6, fontSize: 10, color: ui.dim }}>IV data unavailable — prefer defined-risk spreads.</div>
       )}
     </div>
   );
@@ -104,12 +105,12 @@ function TradeCard({ t, rank, underlying, ivr }: { t: SizedTrade; rank: number; 
       <div style={styles.tradeHeader}>
         <span style={styles.structType}>{fmtStructure(s.structure_type)}</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ ...styles.score, color: s.score >= 70 ? '#44cc88' : s.score >= 50 ? '#f0c040' : '#cc4444' }}>
+          <span style={{ ...styles.score, color: s.score >= 70 ? ui.green : s.score >= 50 ? ui.amber : ui.red }}>
             {fmtN(s.score, 1)}
           </span>
           <button
             style={{
-              background: '#1a2a1a', color: '#44cc88', border: '1px solid #44cc8866',
+              background: '#1a2a1a', color: ui.green, border: '1px solid #44cc8866',
               padding: '3px 8px', borderRadius: 3, cursor: enter.isPending ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit', fontSize: 10, letterSpacing: 1,
               opacity: enter.isPending ? 0.5 : 1,
@@ -143,8 +144,8 @@ export function RunOnceResult({ underlying }: Props) {
   const { mutate, data, isPending, error } = useRunOnce();
 
   const recColor = data
-    ? data.recommendation === 'no_trade' ? '#cc4444' : '#44cc88'
-    : '#e0e0e0';
+    ? data.recommendation === 'no_trade' ? ui.red : ui.green
+    : ui.bright;
 
   return (
     <div style={styles.card}>
@@ -180,16 +181,16 @@ export function RunOnceResult({ underlying }: Props) {
               data.ivr != null ? ['IV Rank', `${data.ivr.toFixed(0)} · ${data.ivr_band}`] : ['IV Rank', 'Unknown'],
               ['No-trade score', fmtN(data.no_trade_score, 1)],
             ].filter((x): x is [string, string] => Boolean(x)).map(([k, v]) => (
-              <span key={k as string} style={{ background: '#1a1a1a', border: '1px solid #222', borderRadius: 3, padding: '3px 8px', fontSize: 11 }}>
-                <span style={{ color: '#555' }}>{k} </span>
-                <span style={{ color: '#ccc' }}>{v}</span>
+              <span key={k as string} style={{ background: ui.raised, border: `1px solid ${ui.border}`, borderRadius: 3, padding: '3px 8px', fontSize: 11 }}>
+                <span style={{ color: ui.dim }}>{k} </span>
+                <span style={{ color: ui.text }}>{v}</span>
               </span>
             ))}
           </div>
 
           {data.ranked_structures.length > 0 && (
             <>
-              <div style={{ color: '#555', fontSize: 11, letterSpacing: 1, marginBottom: 8 }}>RANKED STRUCTURES · click + ENTER to paper-enter that structure</div>
+              <div style={{ color: ui.dim, fontSize: 11, letterSpacing: 1, marginBottom: 8 }}>RANKED STRUCTURES · click + ENTER to paper-enter that structure</div>
               {data.ranked_structures.map((t, i) => (
                 <TradeCard key={i} t={t} rank={i} underlying={underlying} ivr={data.ivr} />
               ))}

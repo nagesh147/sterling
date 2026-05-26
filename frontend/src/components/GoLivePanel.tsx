@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange, useTestConnection } from '../hooks/useExchanges';
+import { c as t, tint } from '../styles/terminalUI';
 
 /**
  * Prominent "Go Live" panel for Simple mode.
@@ -86,7 +87,7 @@ export function GoLivePanel() {
             fontSize: 10, fontWeight: 800, letterSpacing: 1,
             padding: '2px 8px', borderRadius: 3,
             background: isPaper ? '#f0c04022' : '#44cc8822',
-            color: isPaper ? '#f0c040' : '#44cc88',
+            color: isPaper ? t.amber : t.green,
             border: `1px solid ${isPaper ? '#f0c04055' : '#44cc8855'}`,
           }}>
             {isPaper ? '📋 PAPER' : '🟢 LIVE'}
@@ -107,7 +108,7 @@ export function GoLivePanel() {
             <>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
                 Enter your <b style={{ color: 'var(--text-primary)' }}>Delta Exchange India</b> API credentials.
-                Get them from: <span style={{ color: '#88aaff' }}>delta.exchange → API Keys</span>.
+                Get them from: <span style={{ color: t.blue }}>delta.exchange → API Keys</span>.
                 Orders will be placed as <b>market orders with bracket SL/TP</b>.
               </div>
 
@@ -146,7 +147,7 @@ export function GoLivePanel() {
                 <div style={{
                   marginBottom: 10, padding: '7px 10px', borderRadius: 4, fontSize: 11,
                   background: msg.ok ? '#0f2a0f' : '#2a0f0f',
-                  color: msg.ok ? '#44cc88' : '#cc4444',
+                  color: msg.ok ? t.green : t.red,
                   border: `1px solid ${msg.ok ? '#44cc8833' : '#cc444433'}`,
                 }}>
                   {msg.text}
@@ -159,7 +160,7 @@ export function GoLivePanel() {
                   disabled={saving || !apiKey.trim() || !apiSecret.trim()}
                   style={{
                     flex: 1, padding: '9px 0', borderRadius: 4, cursor: 'pointer',
-                    background: '#0f2a0f', color: '#44cc88', border: '1px solid #44cc88',
+                    background: '#0f2a0f', color: t.green, border: `1px solid ${t.green}`,
                     fontFamily: 'inherit', fontSize: 12, fontWeight: 800, letterSpacing: 1,
                     opacity: saving || !apiKey.trim() ? 0.6 : 1,
                   }}
@@ -184,7 +185,7 @@ export function GoLivePanel() {
           ) : (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ color: '#44cc88', fontWeight: 700, fontSize: 13, marginBottom: 4 }}>✅ Live trading active</div>
+                <div style={{ color: t.green, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>✅ Live trading active</div>
                 <div style={{ color: 'var(--text-faint)', fontSize: 11 }}>
                   API key: {deltaEx.api_key_hint} · Orders go to Delta Exchange India
                 </div>
@@ -198,7 +199,7 @@ export function GoLivePanel() {
                 })}
                 style={{
                   padding: '6px 14px', borderRadius: 4, cursor: 'pointer',
-                  background: '#2a1a1a', color: '#cc4444', border: '1px solid #cc444455',
+                  background: t.raised, color: t.red, border: '1px solid #cc444455',
                   fontFamily: 'inherit', fontSize: 11,
                 }}
               >

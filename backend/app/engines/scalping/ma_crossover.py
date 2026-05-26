@@ -50,6 +50,19 @@ def rolling_ema(values: NDArray[np.float64], period: int) -> NDArray[np.float64]
     return out
 
 
+def current_atr(closes: NDArray[np.float64], highs: NDArray[np.float64], lows: NDArray[np.float64], period: int = 14) -> float:
+    if len(closes) < period + 1:
+        return float(np.mean(highs[-period:] - lows[-period:])) if len(closes) > 0 else 0.0
+    tr = np.maximum(
+        highs[-period:] - lows[-period:],
+        np.maximum(
+            np.abs(highs[-period:] - closes[-period-1:-1]),
+            np.abs(lows[-period:] - closes[-period-1:-1])
+        )
+    )
+    return float(np.mean(tr))
+
+
 @dataclass
 class MACrossignal:
     underlying: str
@@ -154,10 +167,16 @@ def evaluate_ma_crossover(
             direction = "long"
             pattern = "sma_cross_above_ema"
             entry = round(current_price, 4)
-            support_zone_low = round(float(np.min([c.low for c in candles_4h[-20:]])), 4) if len(candles_4h) >= 20 else round(level_price * 0.99, 4)
-            stop_loss = round(support_zone_low * 0.999, 4)
+            
+            # Find the localized swing low of the last 10 candles on the 15m timeframe
+            local_15m_low = float(np.min(lows_15m[-10:]))
+            
+            # Apply a mild ATR buffer to prevent getting wicked out by noise
+            atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
+            stop_loss = round((local_15m_low - atr_buffer), 4)
+            
             tp_level = nearest_level(current_price, levels, "resistance")
-            take_profit = round(float(tp_level.price), 4) if tp_level else round(current_price + (current_price - support_zone_low) * 2, 4)
+            take_profit = round(float(tp_level.price), 4) if tp_level else round(entry + (entry - stop_loss) * 2, 4)
             entry_ok = True
             reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f}"
         elif sma_above:
@@ -174,10 +193,16 @@ def evaluate_ma_crossover(
             direction = "short"
             pattern = "sma_cross_below_ema"
             entry = round(current_price, 4)
-            resistance_zone_high = round(float(np.max([c.high for c in candles_4h[-20:]])), 4) if len(candles_4h) >= 20 else round(level_price * 1.01, 4)
-            stop_loss = round(resistance_zone_high * 1.001, 4)
+            
+            # Find the localized swing high of the last 10 candles on the 15m timeframe
+            local_15m_high = float(np.max(highs_15m[-10:]))
+            
+            # Apply a mild ATR buffer to prevent getting wicked out by noise
+            atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
+            stop_loss = round((local_15m_high + atr_buffer), 4)
+            
             tp_level = nearest_level(current_price, levels, "support")
-            take_profit = round(float(tp_level.price), 4) if tp_level else round(current_price - (resistance_zone_high - current_price) * 2, 4)
+            take_profit = round(float(tp_level.price), 4) if tp_level else round(entry - (stop_loss - entry) * 2, 4)
             entry_ok = True
             reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f}"
         elif sma_below:
