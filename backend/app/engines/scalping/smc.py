@@ -22,8 +22,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from app.engines.scalping.config import EngineConfig as ScalpingConfig
-from app.engines.scalping.levels import Level, price_near_level, nearest_level
-from app.engines.directional.dynamic_tp import dynamic_tp
+from app.engines.scalping.levels import Level, price_near_level, nearest_level, detect_levels
+from app.engines.scalping.risk import atr, resolve_trade_risk
 
 
 @dataclass
@@ -63,14 +63,18 @@ def evaluate_bullish_smc(
     # 1. Displacement/Imbalance Check: Current candle must be aggressively bullish
     if current_close <= current_open:
         return None
-        
-    current_body = current_close - current_open
-    prev_total_range = float(highs[n-1] - lows[n-1])
-    
-    # Bullish body must cleanly engulf the full high-to-low range of the preceding candle
-    if current_body < (prev_total_range * cfg.smc_imbalance_ratio):
+
+    prev_open = float(opens[n - 1]); prev_close = float(closes[n - 1])
+    prev_high = float(highs[n - 1]); prev_low = float(lows[n - 1])
+
+    # Doc: the bullish imbalance candle must completely engulf the range of the
+    # PREVIOUS BEARISH candle WITH ITS BODY — i.e. open at/below the prior low and
+    # close at/above the prior high. (Prior candle must itself be bearish.)
+    if prev_close >= prev_open:
         return None
-        
+    if not (current_open <= prev_low and current_close >= prev_high):
+        return None
+
     # 2. Time-Constrained Sweep Check
     # Scan only the immediate 1 to 3 bars prior to the imbalance candle
     inducement_found = False
@@ -115,13 +119,18 @@ def evaluate_bearish_smc(
     
     if current_close >= current_open:
         return None
-        
-    current_body = current_open - current_close
-    prev_total_range = float(highs[n-1] - lows[n-1])
-    
-    if current_body < (prev_total_range * cfg.smc_imbalance_ratio):
+
+    prev_open = float(opens[n - 1]); prev_close = float(closes[n - 1])
+    prev_high = float(highs[n - 1]); prev_low = float(lows[n - 1])
+
+    # Doc: the bearish imbalance candle must completely engulf the range of the
+    # PREVIOUS BULLISH candle WITH ITS BODY — open at/above the prior high and
+    # close at/below the prior low. (Prior candle must itself be bullish.)
+    if prev_close <= prev_open:
         return None
-        
+    if not (current_open >= prev_high and current_close <= prev_low):
+        return None
+
     inducement_found = False
     sweep_high = current_high
     scan_start = max(0, n - cfg.smc_max_sweep_window)
@@ -183,7 +192,10 @@ def evaluate_smc(
     lows = np.array([c.low for c in candles_15m], dtype=np.float64)
     opens = np.array([c.open for c in candles_15m], dtype=np.float64)
     closes = np.array([c.close for c in candles_15m], dtype=np.float64)
+    ts15 = np.array([c.timestamp_ms for c in candles_15m], dtype=np.int64)
     level_price = nearby.price
+    # Doc: SMC target is the closest *15-minute* key level (not the 4H zone).
+    levels_15m = detect_levels(highs, lows, closes, ts15, cfg)
 
     direction = "none"
     pattern = ""
@@ -193,51 +205,43 @@ def evaluate_smc(
     reason = ""
     entry_ok = False
 
+    atr_val = atr(highs, lows, closes)
+
     if nearby.level_type == "support" and cfg.allow_long:
         result = evaluate_bullish_smc(opens, highs, lows, closes, level_price, cfg)
         if result is not None:
-            direction = result["direction"]
             pattern = result["pattern"]
             entry = result["entry"]
-            stop_loss = result["stop_loss"]
-            tp_level = nearest_level(current_price, levels, "resistance")
-            tp_level_price = float(tp_level.price) if tp_level else None
-            take_profit, tp_source = dynamic_tp(
-                direction="long",
-                entry=entry,
-                stop_dist=entry - stop_loss,
-                rr=2.0,
-                highs=highs,
-                lows=lows,
-                atr=(entry - stop_loss), # Proxy ATR based on sweep
-                swing_lookback=10,
-                tp_level=tp_level_price
+            plan = resolve_trade_risk(
+                direction="long", entry=entry, structure_stop=float(result["stop_loss"]),
+                atr_val=atr_val, levels=levels_15m, tp_level_type="resistance",
             )
-            entry_ok = True
-            reason = f"bullish imbalance after inducement below 4H support {level_price:.0f}"
+            if plan.ok:
+                direction = "long"
+                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                entry_ok = True
+                reason = f"bullish imbalance engulfing prior bearish candle after inducement below 4H support {level_price:.0f} · R:R {plan.rr}"
+            else:
+                pattern = "smc_inducement_imbalance"; entry = None
+                reason = f"bullish imbalance near 4H support {level_price:.0f} — skipped: {plan.reason}"
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
         result = evaluate_bearish_smc(opens, highs, lows, closes, level_price, cfg)
         if result is not None:
-            direction = result["direction"]
             pattern = result["pattern"]
             entry = result["entry"]
-            stop_loss = result["stop_loss"]
-            tp_level = nearest_level(current_price, levels, "support")
-            tp_level_price = float(tp_level.price) if tp_level else None
-            take_profit, tp_source = dynamic_tp(
-                direction="short",
-                entry=entry,
-                stop_dist=stop_loss - entry,
-                rr=2.0,
-                highs=highs,
-                lows=lows,
-                atr=(stop_loss - entry), # Proxy ATR based on sweep
-                swing_lookback=10,
-                tp_level=tp_level_price
+            plan = resolve_trade_risk(
+                direction="short", entry=entry, structure_stop=float(result["stop_loss"]),
+                atr_val=atr_val, levels=levels_15m, tp_level_type="support",
             )
-            entry_ok = True
-            reason = f"bearish imbalance after inducement above 4H resistance {level_price:.0f}"
+            if plan.ok:
+                direction = "short"
+                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                entry_ok = True
+                reason = f"bearish imbalance engulfing prior bullish candle after inducement above 4H resistance {level_price:.0f} · R:R {plan.rr}"
+            else:
+                pattern = "smc_inducement_imbalance"; entry = None
+                reason = f"bearish imbalance near 4H resistance {level_price:.0f} — skipped: {plan.reason}"
 
     if not pattern:
         # Provide context even when no pattern is found

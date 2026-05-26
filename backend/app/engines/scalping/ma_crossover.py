@@ -23,7 +23,7 @@ from numpy.typing import NDArray
 
 from app.engines.scalping.config import EngineConfig as ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level
-from app.engines.directional.dynamic_tp import dynamic_tp
+from app.engines.scalping.risk import resolve_trade_risk
 
 
 def rolling_sma(values: NDArray[np.float64], period: int) -> NDArray[np.float64]:
@@ -154,6 +154,23 @@ def evaluate_ma_crossover(
 
     sma_above = sma[i] > ema[i]
     sma_below = sma[i] < ema[i]
+
+    # ── Anti-whipsaw filter ──────────────────────────────────────────────────
+    # In sideways chop SMA(5)/EMA(9) cross back and forth. Count crosses over the
+    # last `chop_window` bars — more than one recent flip is a whipsaw regime.
+    # Also require the MAs to be meaningfully separated vs ATR so a flat/overlapping
+    # pair (the visual "no trend" case) can't arm a trade on micro-noise.
+    atr_val = current_atr(closes, highs_15m, lows_15m)
+    chop_window = min(10, i)
+    flips = 0
+    for j in range(i - chop_window + 1, i + 1):
+        if j < 1 or sma[j] == 0 or ema[j] == 0 or sma[j - 1] == 0 or ema[j - 1] == 0:
+            continue
+        if (sma[j] > ema[j]) != (sma[j - 1] > ema[j - 1]):
+            flips += 1
+    sep_ok = atr_val <= 0 or abs(sma[i] - ema[i]) >= 0.10 * atr_val
+    clean_cross = (flips <= 1) and sep_ok
+
     level_price = nearby.price
     direction = "none"
     pattern = ""
@@ -164,71 +181,50 @@ def evaluate_ma_crossover(
     entry_ok = False
 
     if nearby.level_type == "support" and cfg.allow_long:
-        if recent_cross_bull:
-            # Fresh bullish crossover near support — ARMED, can execute
+        if recent_cross_bull and clean_cross:
+            # Fresh, non-choppy bullish crossover near 4H support.
             entry = round(current_price, 4)
-            
-            # Find the localized swing low of the last cfg.ma_risk_lookback candles on the 15m timeframe
-            local_15m_low = float(np.min(lows_15m[-cfg.ma_risk_lookback:]))
-            
-            atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
-            calculated_sl = round((local_15m_low - atr_buffer), 4)
-            
-            # Risk/Reward Guardrail: Avoid entry if the local structure demands an un-scalpable risk profile
-            max_allowable_risk_percentage = 0.025
-            if (entry - calculated_sl) / entry > max_allowable_risk_percentage:
-                reason = f"Bullish crossover near 4H support rejected: Risk ({(entry - calculated_sl) / entry * 100:.2f}%) exceeds 2.5% max limit"
-            else:
-                direction = "long"
-                pattern = "sma_cross_above_ema"
-                stop_loss = calculated_sl
-                
-                tp_level = nearest_level(current_price, levels, "resistance")
-                take_profit = round(float(tp_level.price), 4) if tp_level else round(entry * 1.05, 4)
-                tp_source = "Opposite Macro Zone"
-                
+            # Stop below the entire 4H support zone (per doc, this gives MA its
+            # bigger profit potential). The risk module adds an ATR cushion, floors
+            # the distance, R:R-gates the 4H target and rejects un-scalpable width.
+            plan = resolve_trade_risk(
+                direction="long", entry=entry, structure_stop=min(level_price, current_price),
+                atr_val=atr_val, levels=levels, tp_level_type="resistance",
+                max_risk_pct=4.0, max_stop_atr=6.0,
+            )
+            if plan.ok:
+                direction = "long"; pattern = "sma_cross_above_ema"
+                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
                 entry_ok = True
-                reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f}"
+                reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f} · R:R {plan.rr}"
+            else:
+                reason = f"bull cross near 4H support {level_price:.0f} — skipped: {plan.reason}"
+        elif recent_cross_bull:
+            reason = f"bull cross near 4H support {level_price:.0f} — skipped: choppy/flat MAs (whipsaw filter)"
         elif sma_above:
-            # MAs aligned but no fresh cross — watching, NOT executable
-            direction = "long"
-            pattern = "sma_above_ema"
-            support_zone_low = round(float(np.min([c.low for c in candles_4h[-20:]])), 4) if len(candles_4h) >= 20 else round(level_price * 0.99, 4)
-            tp_level = nearest_level(current_price, levels, "resistance")
+            direction = "long"; pattern = "sma_above_ema"
             reason = f"Watching: SMA({fast}) > EMA({slow}) near 4H support {level_price:.0f} — awaiting crossover"
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
-        if recent_cross_bear:
-            # Fresh bearish crossover near resistance — ARMED, can execute
+        if recent_cross_bear and clean_cross:
+            # Fresh, non-choppy bearish crossover near 4H resistance.
             entry = round(current_price, 4)
-            
-            # Find the localized swing high of the last cfg.ma_risk_lookback candles on the 15m timeframe
-            local_15m_high = float(np.max(highs_15m[-cfg.ma_risk_lookback:]))
-            
-            atr_buffer = current_atr(closes, highs_15m, lows_15m) * 0.5
-            calculated_sl = round((local_15m_high + atr_buffer), 4)
-            
-            # Risk/Reward Guardrail: Avoid entry if the local structure demands an un-scalpable risk profile
-            max_allowable_risk_percentage = 0.025
-            if (calculated_sl - entry) / entry > max_allowable_risk_percentage:
-                reason = f"Bearish crossover near 4H resistance rejected: Risk ({(calculated_sl - entry) / entry * 100:.2f}%) exceeds 2.5% max limit"
-            else:
-                direction = "short"
-                pattern = "sma_cross_below_ema"
-                stop_loss = calculated_sl
-                
-                tp_level = nearest_level(current_price, levels, "support")
-                take_profit = round(float(tp_level.price), 4) if tp_level else round(entry * 0.95, 4)
-                tp_source = "Opposite Macro Zone"
-                
+            plan = resolve_trade_risk(
+                direction="short", entry=entry, structure_stop=max(level_price, current_price),
+                atr_val=atr_val, levels=levels, tp_level_type="support",
+                max_risk_pct=4.0, max_stop_atr=6.0,
+            )
+            if plan.ok:
+                direction = "short"; pattern = "sma_cross_below_ema"
+                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
                 entry_ok = True
-                reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f}"
+                reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f} · R:R {plan.rr}"
+            else:
+                reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: {plan.reason}"
+        elif recent_cross_bear:
+            reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: choppy/flat MAs (whipsaw filter)"
         elif sma_below:
-            # MAs aligned but no fresh cross — watching, NOT executable
-            direction = "short"
-            pattern = "sma_below_ema"
-            resistance_zone_high = round(float(np.max([c.high for c in candles_4h[-20:]])), 4) if len(candles_4h) >= 20 else round(level_price * 1.01, 4)
-            tp_level = nearest_level(current_price, levels, "support")
+            direction = "short"; pattern = "sma_below_ema"
             reason = f"Watching: SMA({fast}) < EMA({slow}) near 4H resistance {level_price:.0f} — awaiting crossover"
 
     if not pattern:

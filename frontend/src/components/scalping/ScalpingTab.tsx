@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
-import { useAlgoMode } from '../../hooks/useSignalAlerts';
+import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
   useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
   useScalpingBacktest, useScalpingExecute, useScalpingSignals,
   type ScalpingConfig, type ScalpingSignal,
   type ScalpingExecuteResponse,
 } from '../../hooks/useScalping';
-import { usePositions } from '../../hooks/usePositions';
+import { usePositions, useClosePosition } from '../../hooks/usePositions';
 import { useLivePnl } from '../../hooks/useLivePnl';
 import type { PaperPosition } from '../../types';
 import { useRouterMode, RouterMode } from '../../hooks/useRouterMode';
@@ -101,6 +101,22 @@ const stratFromNotes = (notes?: string | null): string | null => {
   return m ? m[1].toLowerCase() : null;
 };
 
+// The setup details (direction / pattern / level) are embedded in the position
+// notes at execute time, e.g. "[SCALP-MA_CROSSOVER] [AUTO] short
+// sma_cross_below_ema near resistance 3217". Parse them back so reconstructed
+// executed rows show the same "sma cross below ema / double top" column as live
+// scan rows — keeping the table consistent across paper / shadow / live.
+const parseScalpNotes = (notes?: string | null): {
+  direction: string; pattern: string; level_type: string; near_level: number | null;
+} => {
+  // Strip every bracket tag ([PAPER]/[LIVE], [SCALP-…], [AUTO], …) to leave just
+  // "short sma_cross_below_ema near resistance 3217".
+  const body = (notes || '').replace(/\[[^\]]*\]/g, '').trim();
+  const m = /^(long|short)\s+(\S+)\s+near\s+(\S+)\s+([\d.]+)/.exec(body);
+  if (!m) return { direction: '', pattern: '', level_type: '', near_level: null };
+  return { direction: m[1], pattern: m[2], level_type: m[3], near_level: parseFloat(m[4]) };
+};
+
 const STRATEGY_META: Record<string, { label: string; color: string }> = {
   price_action: { label: 'PRICE ACTION', color: 'var(--t-amber)' },
   smc: { label: 'SMC', color: 'var(--t-purple)' },
@@ -153,7 +169,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         </div>
         <div style={grpBox}>
           <div style={grpTitle}>PRICE ACTION</div>
-          <NumField label="Lookback" value={draft.pa_lookback} min={5} max={100} onChange={(v) => set('pa_lookback', v)} />
+          <NumField label="Lookback" value={draft.pa_lookback_bars} min={5} max={100} onChange={(v) => set('pa_lookback_bars', v)} />
           <NumField label="Breakout %" value={draft.pa_breakout_pct} step={0.01} min={0.01} max={1} onChange={(v) => set('pa_breakout_pct', v)} />
         </div>
         <div style={grpBox}>
@@ -629,6 +645,9 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // time, else the currently-configured mode for the pending pill. Color-coded by risk.
   const pillMode = execState?.mode || mode || 'PAPER';
   const modeColor = modeColorOf(pillMode);
+  // An algo-opened position that's still open while Algo is OFF: it keeps running
+  // to SL/TP but won't re-enter — flag it so the provenance reads "paused".
+  const pausedAuto = !!execState?.auto && algoOn === false && pnl != null && pnl.realized === false;
 
   const statusLabel = accepted ? 'EXECUTED' : s.executable ? 'READY' : isWatch ? 'WATCH' : 'PENDING';
   const statusColor = accepted ? 'var(--t-blue)' : s.executable ? dirColor : isWatch ? 'var(--t-blue)' : 'var(--t-dim)';
@@ -747,11 +766,11 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
           {accepted ? (
             <>
-              <span style={{
-                fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: modeColor,
-                padding: '4px 9px', borderRadius: 6, background: modeColor + '18',
-                border: `1px solid ${modeColor}44`, whiteSpace: 'nowrap',
-              }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}</span>
+              <span title={pausedAuto ? 'Opened by Algo, which is now OFF — runs to SL/TP, no re-entry' : undefined} style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: pausedAuto ? 'var(--t-amber)' : modeColor,
+                padding: '4px 9px', borderRadius: 6, background: pausedAuto ? tint('var(--t-amber)', 12) : modeColor + '18',
+                border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : `${modeColor}44`}`, whiteSpace: 'nowrap',
+              }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}{pausedAuto ? ' ⏸' : ''}</span>
               {execState?.auto && execState?.resp?.telegram_alert_sent && (
                 <span title="Signal alert sent to Telegram" style={{
                   width: 6, height: 6, borderRadius: '50%',
@@ -962,6 +981,8 @@ export function ScalpingTab() {
   const livePnl = useLivePnl().data?.positions ?? [];
   const streamPrices = useStreamPrices();
   const pnlByPos = useMemo(() => new Map(livePnl.map((p) => [p.position_id, p])), [livePnl]);
+  const setAlgo = useSetAlgoMode();
+  const closePos = useClosePosition();
 
   const pnlFor = (r: ScalpingExecuteResponse): SignalPnl => {
     let pos = r.paper_position_id ? positions.find((p) => p.id === r.paper_position_id) : undefined;
@@ -1009,10 +1030,12 @@ export function ScalpingTab() {
 
   // Synthesize a signal-row + execution-record from a real position so it renders
   // with the executed (rich) layout: entry/stop/target come straight off the fill.
-  const signalFromPos = (pos: PaperPosition, strategy: string): ScalpingSignal => ({
+  const signalFromPos = (pos: PaperPosition, strategy: string): ScalpingSignal => {
+   const nd = parseScalpNotes(pos.notes);
+   return ({
     underlying: pos.underlying, close: pos.entry_spot_price ?? 0,
-    strategy, direction: (pos.sized_trade?.structure?.direction as string) ?? 'none',
-    near_level: null, level_type: '', pattern: '', reason: pos.notes || '',
+    strategy, direction: (pos.sized_trade?.structure?.direction as string) || nd.direction || 'none',
+    near_level: nd.near_level, level_type: nd.level_type, pattern: nd.pattern, reason: pos.notes || '',
     entry: pos.entry_spot_price ?? null, stop_loss: pos.initial_sl ?? null, take_profit: pos.initial_tp ?? null,
     risk_pct: pos.sized_trade?.capital_at_risk_pct ?? null,
     leverage: pos.sized_trade?.structure?.leverage ?? null,
@@ -1020,6 +1043,7 @@ export function ScalpingTab() {
     notional_usd: pos.sized_trade?.position_value ?? null,
     entry_ok: true, executable: false, timestamp_ms: pos.entry_timestamp_ms ?? 0, error: null,
   });
+  };
   const execStateFromPos = (pos: PaperPosition, strategy: string): ExecState => {
     // Execution mode pill is PAPER vs LIVE — derived from the book (is_paper).
     // NOT pos.mode, which is the macro *trading* mode (scalping/intraday/swing/…)
@@ -1095,6 +1119,25 @@ export function ScalpingTab() {
       }),
     [positions, wantPaper, stratFilter],
   );
+
+  // Open auto-trades still running in the current book (ignores the strategy
+  // filter — the "Algo paused" banner reflects ALL of them). When Algo is OFF
+  // these keep being managed to SL/TP by the backend monitor, but won't re-enter.
+  const openAutoPos = useMemo(
+    () => positions.filter((p) =>
+      p.status !== 'closed' &&
+      (!!p.is_paper === wantPaper) &&
+      stratFromNotes(p.notes) &&
+      /\[AUTO\]/.test(p.notes || '')),
+    [positions, wantPaper],
+  );
+  const resumeAlgo = () => setAlgo.mutate(true);
+  const closeAllAuto = () => {
+    for (const p of openAutoPos) {
+      const spot = pnlByPos.get(p.id)?.current_spot ?? streamPrices[p.underlying] ?? p.entry_spot_price ?? 0;
+      if (spot > 0) closePos.mutate({ id: p.id, exit_spot_price: spot });
+    }
+  };
 
   const executedRows: Row[] = scalpPositions.map((p) => {
     const strat = stratFromNotes(p.notes) as string;
@@ -1269,6 +1312,34 @@ export function ScalpingTab() {
       </>}
       centerContent={
         <div style={{ height: '100%', overflowY: 'auto' }}>
+            {/* Algo paused — open auto-trades remain (managed to SL/TP, no re-entry). */}
+            {!algoOn && openAutoPos.length > 0 && (
+              <div style={{
+                position: 'sticky', top: 0, zIndex: 5,
+                display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                padding: '9px 14px', borderRadius: 8, marginBottom: 8,
+                border: `1px solid ${tint('var(--t-amber)', 45)}`,
+                background: 'var(--t-bg2)',
+              }}>
+                <span style={{ fontSize: 13 }}>⏸</span>
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-amber)' }}>ALGO OFF</span>
+                <span style={{ fontSize: 11, color: 'var(--t-text)' }}>
+                  {openAutoPos.length} auto-trade{openAutoPos.length > 1 ? 's' : ''} still open ({tradeMode}) — being managed to SL/TP, but <b style={{ color: 'var(--t-bright)' }}>no re-entry</b> until Algo is back on.
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button onClick={resumeAlgo} disabled={setAlgo.isPending} style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 12px', borderRadius: 6,
+                    fontFamily: 'inherit', cursor: 'pointer', color: 'var(--t-green)',
+                    background: tint('var(--t-green)', 14), border: '1px solid var(--t-green)44',
+                  }}>{setAlgo.isPending ? '…' : '▶ Resume Algo'}</button>
+                  <button onClick={closeAllAuto} disabled={closePos.isPending} style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', padding: '4px 12px', borderRadius: 6,
+                    fontFamily: 'inherit', cursor: 'pointer', color: 'var(--t-red)',
+                    background: tint('var(--t-red)', 12), border: '1px solid var(--t-red)44',
+                  }}>Close all</button>
+                </div>
+              </div>
+            )}
             {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
             {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
             {data && displaySignals.length === 0 && (

@@ -81,10 +81,77 @@ class TrailingStopEngine:
         mode: TradingModeConfig,
         initial_tp: Optional[float] = None,
     ) -> TrailUpdate:
+        """ATR (or %/supertrend) trailing stop with breakeven and a monotonic
+        ratchet — the stop only ever moves in the trade's favour, never loosens.
+
+        • Track the best price seen (highest for longs, lowest for shorts).
+        • Trail `trail_mult × ATR` behind that extreme.
+        • Once price has run one full trail distance in favour, pull the stop to
+          breakeven (entry) so a winner can't turn into a loser.
+        • `stopped_out` when the live price has reached the (ratcheted) stop.
+
+        Implementing this here activates trailing for every position the monitor
+        tracks — scalping included — since `add_position` already attaches a
+        TrailState and the background monitor calls this each poll.
+        """
+        if not candles or len(candles) < 2:
+            return TrailUpdate(state.current_stop, None, False, False, initial_tp)
+
+        is_long = str(direction).lower() in ("long", "bullish", "buy")
+        price = float(candles[-1].close)
+        hi = float(candles[-1].high)
+        lo = float(candles[-1].low)
+
+        # ── ATR over the available candles ──────────────────────────────────
+        period = min(14, len(candles) - 1)
+        trs = []
+        for k in range(len(candles) - period, len(candles)):
+            h, l, pc = float(candles[k].high), float(candles[k].low), float(candles[k - 1].close)
+            trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+        atr = sum(trs) / len(trs) if trs else 0.0
+
+        mult = state.trail_mult or getattr(mode, "trail_atr_mult", 2.0) or 2.0
+        if state.mode == TrailMode.PERCENTAGE:
+            trail_dist = price * (mult / 100.0)
+        else:
+            trail_dist = mult * atr if atr > 0 else price * 0.01
+        if trail_dist <= 0:
+            trail_dist = price * 0.01
+
+        # ── Track the favourable extreme ────────────────────────────────────
+        state.highest_seen = max(state.highest_seen or price, hi, price)
+        prior_low = state.lowest_seen if (state.lowest_seen and state.lowest_seen > 0) else price
+        state.lowest_seen = min(prior_low, lo, price)
+
+        new_stop = state.current_stop
+        moved = False
+
+        if is_long:
+            cand = state.highest_seen - trail_dist
+            if state.mode == TrailMode.SUPERTREND and st_value and st_value > 0:
+                cand = max(cand, float(st_value))
+            if not state.breakeven_set and price >= entry_price + trail_dist:
+                cand = max(cand, entry_price)            # lock to breakeven
+                state.breakeven_set = True
+            if cand > new_stop:                          # ratchet up only
+                new_stop, moved = cand, True
+            stopped = price <= new_stop
+        else:
+            cand = state.lowest_seen + trail_dist
+            if state.mode == TrailMode.SUPERTREND and st_value and st_value > 0:
+                cand = min(cand, float(st_value))
+            if not state.breakeven_set and price <= entry_price - trail_dist:
+                cand = min(cand, entry_price)            # lock to breakeven
+                state.breakeven_set = True
+            if cand < new_stop:                          # ratchet down only
+                new_stop, moved = cand, True
+            stopped = price >= new_stop
+
+        state.current_stop = round(float(new_stop), 6)
         return TrailUpdate(
             new_stop=state.current_stop,
             partial=None,
-            stopped_out=False,
-            stop_moved=False,
+            stopped_out=bool(stopped),
+            stop_moved=moved,
             current_tp=initial_tp,
         )
