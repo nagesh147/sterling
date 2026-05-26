@@ -100,6 +100,8 @@ Auto-order fires only when `signal_strength == "STRONG"` (≥75% confluence scor
     → OrderRouter.submit()             Only if algo_mode=true + STRONG
 ```
 
+> **Deep Dive**: See the [Scalping Strategy Logic](backend/docs/SCALPING_LOGIC.md) for detailed logic, conditions, and code snippets behind the Price Action, SMC, and MA Crossover scalping engines.
+
 ## Track System (`config/tracks.yaml`)
 
 Each instrument+profile is routed to an ordered track list:

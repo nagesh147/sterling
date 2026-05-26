@@ -207,7 +207,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
 /* ── signal card ────────────────────────────────────────────────────────────── */
 
-function PlanCell({ label, value, color, width = 78 }: { label: string; value: string; color?: string; width?: number }) {
+function PlanCell({ label, value, color, width = 78 }: { label: string; value: React.ReactNode; color?: string; width?: number | string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, width, flexShrink: 0 }}>
       <span style={{ fontSize: 8, letterSpacing: '0.08em', color: 'var(--t-dim)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
@@ -371,7 +371,7 @@ function extractServerIp(raw?: string): string | null {
   }
 }
 
-function MetricItem({ label, value, color }: { label: string; value: string; color?: string }) {
+function MetricItem({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 60 }}>
       <span style={{ fontSize: 8, letterSpacing: '0.07em', color: 'var(--t-dim)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
@@ -438,11 +438,14 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
             const diff = pnl.currentSpot - entryPx;
             const fav = pnl.direction === 'short' ? diff < 0 : diff > 0;
             const diffColor = diff === 0 ? 'var(--t-dim)' : fav ? 'var(--t-green)' : 'var(--t-red)';
+            const sign = diff >= 0 ? '+' : '−';
+            const currentValNode = (
+              <span>
+                {fmtUsd(pnl.currentSpot)} <span style={{ fontSize: 9, opacity: 0.7, fontWeight: 600 }}>({sign}{Math.abs(diff).toFixed(2)})</span>
+              </span>
+            );
             return (
-              <>
-                <MetricItem label="Current" value={fmtUsd(pnl.currentSpot)} color={diffColor} />
-                <MetricItem label="Diff (pts)" value={`${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(2)}`} color={diffColor} />
-              </>
+              <MetricItem label="Current" value={currentValNode} color={diffColor} />
             );
           })()}
           <MetricItem label="Initial SL" value={fmtUsd(pnl?.initialSl ?? r.stop_loss)} color="#f87171" />
@@ -550,9 +553,30 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // Live current price next to Entry — live mark for executed trades, else the
   // latest scan close. Colored by whether price has moved the position's way.
   const currentPx = pnl?.currentSpot ?? (s.close || null);
-  const currentColor = currentPx == null || s.entry == null
+
+  const displayEntry = accepted ? (pnl?.entryPriceReal ?? resp?.entry_price ?? s.entry) : s.entry;
+  const displaySl = accepted ? (pnl?.currentSl ?? pnl?.initialSl ?? resp?.stop_loss ?? s.stop_loss) : s.stop_loss;
+  const displayTp = accepted ? (pnl?.currentTp ?? pnl?.initialTp ?? resp?.take_profit ?? s.take_profit) : s.take_profit;
+  const hasPlan = displayEntry != null;
+
+  const currentColor = currentPx == null || displayEntry == null
     ? 'var(--t-bright)'
-    : (long ? currentPx >= s.entry : currentPx <= s.entry) ? 'var(--t-green)' : 'var(--t-red)';
+    : (long ? currentPx >= displayEntry : currentPx <= displayEntry) ? 'var(--t-green)' : 'var(--t-red)';
+
+  let currentValNode: React.ReactNode = '—';
+  if (currentPx != null) {
+    if (displayEntry != null) {
+      const diff = long ? (currentPx - displayEntry) : (displayEntry - currentPx);
+      const sign = diff >= 0 ? '+' : '−';
+      currentValNode = (
+        <span>
+          {fmtUsd(currentPx)} <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 600 }}>({sign}{Math.abs(diff).toFixed(1)})</span>
+        </span>
+      );
+    } else {
+      currentValNode = fmtUsd(currentPx);
+    }
+  }
 
   // Two highlight levels: a strong colored tint while the row is open (expanded),
   // and a darker/recessed tone for the last-interacted row once collapsed.
@@ -583,18 +607,18 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
             padding: '1px 5px', borderRadius: 3, background: statusColor + '18', alignSelf: 'flex-start',
           }}>{statusLabel}</span>
         </div>
-        {s.entry != null ? (
+        {hasPlan ? (
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-            <PlanCell label="Entry" value={fmtUsd(s.entry)} />
-            <PlanCell label="Current" value={currentPx != null ? fmtUsd(currentPx) : '—'} color={currentColor} />
-            <PlanCell label="Stop" value={fmtUsd(s.stop_loss)} color="#f87171" />
-            <PlanCell label="Target" value={fmtUsd(s.take_profit)} color="var(--t-amber)" />
+            <PlanCell label="Entry" value={fmtUsd(displayEntry)} />
+            <PlanCell label="Current" value={currentValNode} color={currentColor} width={110} />
+            <PlanCell label="Stop" value={fmtUsd(displaySl)} color="#f87171" />
+            <PlanCell label="Target" value={fmtUsd(displayTp)} color="var(--t-amber)" />
             <PlanCell label="Risk" value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
           </div>
         ) : (
           <span style={{ fontSize: 11, color: 'var(--t-dim)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.reason}</span>
         )}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, marginLeft: s.entry != null ? 0 : 'auto' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, marginLeft: hasPlan ? 0 : 'auto' }}>
           {/* fixed-width pill column so the pattern text lines up across rows */}
           <div style={{ width: 104, flexShrink: 0 }}>
             <Pill text={meta.label} color={meta.color} />

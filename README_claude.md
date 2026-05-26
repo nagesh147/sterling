@@ -3,6 +3,8 @@
 A smart shell environment that injects the right context into every Claude session.
 Skills, memory, and project graph are loaded automatically — you just run `claude`.
 
+> **Looking for Trading Logic?** See the main [`README.md`](README.md) and [`backend/docs/SCALPING_LOGIC.md`](backend/docs/SCALPING_LOGIC.md).
+
 ---
 
 ## One-Time Setup
