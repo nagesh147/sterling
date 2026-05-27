@@ -15,6 +15,6 @@ Public surface
 - `ma_crossover` : Strategy 3 detector
 - `scanner`      : multi-symbol scan orchestrator
 """
-from app.engines.scalping.config import ScalpingConfig, default_config
+from app.engines.scalping.config import ScalpingConfig, TieredTPConfig, default_config
 
-__all__ = ["ScalpingConfig", "default_config"]
+__all__ = ["ScalpingConfig", "TieredTPConfig", "default_config"]

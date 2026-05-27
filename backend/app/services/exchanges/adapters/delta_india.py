@@ -506,6 +506,79 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         data = await self._auth_delete_with_body("/v2/orders", {"id": int(order_id), "product_id": product_id})
         return (data or {}).get("result") or {}
 
+    async def cancel_replace_stop(
+        self,
+        product_id: int,
+        side: str,
+        size: float,
+        old_stop: float,
+        new_stop: float,
+        take_profit: float | None = None,
+    ) -> dict:
+        """
+        Cancel existing bracket orders for this product and re-place a
+        reduce-only limit order carrying the new bracket stop_loss.
+
+        Delta India has no amend/order-edit endpoint, so the only
+        idempotent approach is cancel-all-then-replace.  The carrier order
+        is a deep reduce-only limit that, under normal conditions, will
+        never fill — it exists only to carry the bracket stop to the OMS.
+        """
+        from datetime import datetime as _dt
+        # 1. Cancel every open order for this product (bracket stops, TPs, etc.)
+        try:
+            await self.cancel_all_orders(product_id)
+        except Exception:
+            pass  # best-effort — existing stops will be overwritten by new bracket
+
+        # 2. Place a reduce-only limit carrier ~10% away so it cannot fill
+        #    under normal conditions.  The attached bracket_stop_loss becomes
+        #    the active stop for the existing position.
+        far_price = float(new_stop) * (1.10 if side == "sell" else 0.90)
+        far_price = round(far_price, 2)
+
+        bracket: dict = {
+            "bracket_stop_loss_price": str(round(new_stop, 2)),
+            "bracket_stop_trigger_method": "mark_price",
+        }
+        if take_profit is not None and take_profit > 0:
+            bracket["bracket_take_profit_price"] = str(round(take_profit, 2))
+
+        body = {
+            "product_id": product_id,
+            "size": int(size),
+            "side": side,
+            "order_type": "limit_order",
+            "limit_price": str(far_price),
+            "time_in_force": "gtc",
+            "reduce_only": "true",
+            **bracket,
+        }
+        data = await self._auth_post("/v2/orders", body)
+        return (data or {}).get("result") or {}
+
+    async def market_reduce_close(
+        self,
+        product_id: int,
+        side: str,
+        size: float,
+    ) -> dict:
+        """
+        Place an immediate market order to reduce/close a portion of an
+        existing position.  Side = "sell" to reduce a long, "buy" to cover
+        a short.  `reduce_only` is forced to true so the OMS cannot
+        accidentally flip the position direction.
+        """
+        body = {
+            "product_id": product_id,
+            "size": int(size),
+            "side": side,
+            "order_type": "market_order",
+            "reduce_only": "true",
+        }
+        data = await self._auth_post("/v2/orders", body)
+        return (data or {}).get("result") or {}
+
     async def place_order_option(
         self,
         option_symbol: str,  # e.g. "C-BTC-80000-050626"

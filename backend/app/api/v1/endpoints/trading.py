@@ -528,11 +528,14 @@ def _create_paper_tracking(
             max_risk_usd=round(max_risk, 2),
             capital_at_risk_pct=round(capital_at_risk, 2),
         )
+        mode_tag = body.notes.split(" ")[0] if body.notes else ""
+        is_scalp = mode_tag.startswith("[SCALP-")
         pos = paper_store.add_position(
             underlying=sym, sized_trade=sized,
             entry_spot_price=entry_price,
             notes=f"{'[LIVE]' if is_live_order else '[PAPER]'} {body.notes} order_id={order_id}",
             is_paper=not is_live_order,
+            trail_mode_name="scalping" if is_scalp else None,
             order_id=order_id or None,
             order_status=order_status,
             initial_sl=body.stop_loss,

@@ -33,6 +33,8 @@ class TrailState:
     partial_50_pct: float = 0.20
     tightening_offset: float = 0.0
     structure_dte: Optional[int] = None
+    # Tiered TP — persists whether the 1.5R scale-out clip has been taken
+    tp1_triggered: bool = False
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -48,6 +50,7 @@ class TrailState:
         d.setdefault("partial_50_pct", 0.20)
         d.setdefault("tightening_offset", 0.0)
         d.setdefault("structure_dte", None)
+        d.setdefault("tp1_triggered", False)
         return cls(**d)
 
 

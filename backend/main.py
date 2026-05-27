@@ -169,14 +169,27 @@ async def _background_position_monitor(app: FastAPI) -> None:
             import asyncio as _aio
             sem = _aio.Semaphore(3)
 
+            def _is_scalping(pos) -> bool:
+                mode = getattr(pos, "mode", None) or ""
+                notes = pos.notes or ""
+                return mode == "scalping" or "SCALP" in notes
+
             async def _auto_monitor_one(pos):
                 async with sem:
                     try:
                         inst = _reg.get_instrument(pos.underlying)
                         if not inst:
                             return
-                        c1h = await ad.get_candles(inst, "1H", limit=200)
-                        signal = compute_signal(c1h)
+
+                        # ── Timeframe selection ──────────────────────────
+                        # Scalping positions trail on 15m candles to avoid
+                        # the 1H lag that stops out 15m entries before the
+                        # trail can react.  Directional positions keep 1H.
+                        is_scalp = _is_scalping(pos)
+                        trail_tf = "15m" if is_scalp else "1H"
+
+                        c_trail = await ad.get_candles(inst, trail_tf, limit=200)
+                        signal = compute_signal(c_trail)
                         current_spot = await ad.get_index_price(inst)
                         leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
                         dte_exp = _dte_from_expiry(leg.expiry_date) if leg else -1
@@ -195,25 +208,117 @@ async def _background_position_monitor(app: FastAPI) -> None:
                             pos.sized_trade.structure.max_gain,
                         )
 
+                        # ── Tiered TP evaluation (scalping only) ────────
+                        if is_scalp and pos.trail_stop_json and pos.status.value == "open":
+                            try:
+                                _ts = TrailState.from_json(pos.trail_stop_json)
+                                _scalp_cfg = getattr(app.state, "scalping_config", None)
+                                _tp_cfg = getattr(_scalp_cfg, "tiered_tp", None) if _scalp_cfg else None
+                                if _tp_cfg and _tp_cfg.enabled and not _ts.tp1_triggered:
+                                    _entry = pos.entry_price_real or pos.entry_spot_price
+                                    _risk = abs(_entry - (pos.initial_sl or _entry * 0.95))
+                                    if _risk > 0:
+                                        if direction_sign == 1:
+                                            _r_mult = (current_spot - _entry) / _risk
+                                        else:
+                                            _r_mult = (_entry - current_spot) / _risk
+                                        if _r_mult >= _tp_cfg.tp1_r_multiple:
+                                            _clip = pos.sized_trade.contracts * _tp_cfg.tp1_size_pct
+                                            _clip = max(1, int(round(_clip)))
+                                            log.info("🎯 TP1 triggered: %s at %.2fR — closing %d/%d contracts",
+                                                     pos.underlying, _r_mult, _clip, pos.sized_trade.contracts)
+                                            # Fire market reduce-only close (live positions only)
+                                            if not pos.is_paper:
+                                                _exec_side = "sell" if direction_sign == 1 else "buy"
+                                                try:
+                                                    from app.services import exchange_account_store as _ecs_tp
+                                                    from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DiaTp
+                                                    _ac = _ecs_tp.get_active()
+                                                    if _ac and _ac.api_key and not _ac.api_key.startswith("DUMMY"):
+                                                        _base = (_ac.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+                                                        _live_ad = _DiaTp(api_key=_ac.api_key, api_secret=_ac.api_secret, is_paper=False, base_url=_base)
+                                                        _delta = inst.delta_perp_symbol or f"{pos.underlying}USD"
+                                                        _pid = await _live_ad.get_product_id(_delta)
+                                                        await _live_ad.market_reduce_close(_pid, _exec_side, float(_clip))
+                                                        log.info("TP1 market reduce-only order placed for %s: %d contracts", pos.underlying, _clip)
+                                                except Exception as _pex:
+                                                    log.warning("TP1 partial close failed for %s: %s", pos.id, _pex)
+                                            # Book the partial close in paper_store & refresh
+                                            _ps.partial_close_position(
+                                                pos.id, float(current_spot), _tp_cfg.tp1_size_pct,
+                                            )
+                                            pos = _ps.get_position(pos.id) or pos
+                                            # Mark TP1 triggered; pull stop to breakeven
+                                            _ts.tp1_triggered = True
+                                            if _tp_cfg.move_to_be_at_tp1:
+                                                _ts.current_stop = round(_entry, 4)
+                                                _ts.breakeven_set = True
+                                                _ps.update_position(
+                                                    pos.id,
+                                                    current_sl=round(_entry, 4),
+                                                    trail_stop_json=_ts.to_json(),
+                                                )
+                                                log.info("🛡️ Stop moved to breakeven (%.2f) for %s", _entry, pos.underlying)
+                                            else:
+                                                _ps.update_position(pos.id, trail_stop_json=_ts.to_json())
+                            except Exception as _tpe:
+                                log.debug("Tiered TP eval error for %s: %s", pos.id, _tpe)
+
                         # Trail update
                         if pos.trail_stop_json and pos.status.value in ("open", "partially_closed"):
                             try:
                                 _ts = TrailState.from_json(pos.trail_stop_json)
-                                _mo = getattr(app.state, "trading_mode", None) or MODES[DEFAULT_MODE]
+                                _global_mode = getattr(app.state, "trading_mode", None) or MODES[DEFAULT_MODE]
+                                _mo = MODES.get("scalping", _global_mode) if is_scalp else _global_mode
                                 _dir = "bullish" if direction_sign == 1 else "bearish"
                                 _st  = signal.st_values[0] if signal.st_values else 0.0
                                 _tu  = TrailingStopEngine().update(
-                                    state=_ts, candles=c1h[-30:], st_value=_st,
+                                    state=_ts, candles=c_trail[-30:], st_value=_st,
                                     direction=_dir,
                                     entry_price=pos.entry_price_real or pos.entry_spot_price,
                                     mode=_mo, initial_tp=pos.initial_tp,
                                 )
+                                old_sl = pos.current_sl
                                 _ps.update_position(
                                     pos.id,
                                     trail_stop_json=_ts.to_json(),
                                     current_sl=round(_tu.new_stop, 4),
                                     current_tp=pos.current_tp,
                                 )
+
+                                # ── Live stop amendment ──────────────────
+                                # When the stop ratcheted AND this is a live
+                                # non-paper position, push the new stop to
+                                # the exchange via cancel+replace.
+                                if (_tu.new_stop != old_sl and not pos.is_paper
+                                        and pos.order_id and pos.order_status == "filled"):
+                                    try:
+                                        from app.services import exchange_account_store
+                                        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+                                        active_cfg = exchange_account_store.get_active()
+                                        if active_cfg and active_cfg.api_key and not active_cfg.api_key.startswith("DUMMY"):
+                                            api_base = (active_cfg.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+                                            live_adapter = DeltaIndiaAdapter(
+                                                api_key=active_cfg.api_key,
+                                                api_secret=active_cfg.api_secret,
+                                                is_paper=False,
+                                                base_url=api_base,
+                                            )
+                                            product_id = await live_adapter.get_product_id(
+                                                inst.delta_perp_symbol or f"{pos.underlying}USD"
+                                            )
+                                            await live_adapter.cancel_replace_stop(
+                                                product_id=product_id,
+                                                side="sell" if direction_sign == 1 else "buy",
+                                                size=float(pos.sized_trade.contracts),
+                                                old_stop=float(old_sl) if old_sl else 0.0,
+                                                new_stop=round(float(_tu.new_stop), 2),
+                                            )
+                                            log.info("Auto-monitor: live stop amended %s — %.2f → %.2f",
+                                                     pos.underlying, old_sl or 0, _tu.new_stop)
+                                    except Exception as _le:
+                                        log.warning("Auto-monitor: live stop amendment failed for %s: %s", pos.id, _le)
+
                                 if _tu.stopped_out:
                                     _ps.close_position(pos.id, float(current_spot))
                                     log.info("Auto-monitor: trail stop hit for %s at %.2f", pos.id, current_spot)

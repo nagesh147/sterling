@@ -117,6 +117,13 @@ class _AsyncAdapterShim:
     async def place_order_option(self, **kwargs) -> Dict[str, Any]: ...
     async def set_leverage(self, product_id: int, leverage: float) -> None: ...
     async def get_product_id(self, symbol: str) -> int: ...
+    async def cancel_replace_stop(
+        self, product_id: int, side: str, size: float,
+        old_stop: float, new_stop: float, take_profit: float | None = None,
+    ) -> Dict[str, Any]: ...
+    async def market_reduce_close(
+        self, product_id: int, side: str, size: float,
+    ) -> Dict[str, Any]: ...
 
 
 # ─── Main router ──────────────────────────────────────────────────────────
@@ -318,6 +325,87 @@ class OrderRouter:
             status="filled" if not req.limit_price else "pending",
             timestamp_ms=now_ms,
         )
+
+    # ── stop amendment ──────────────────────────────────────────────────
+
+    async def execute_partial_market_close(
+        self, underlying: str, size_to_close: float, side: str,
+    ) -> dict:
+        """Immediately liquidate a fractional clip of an active position.
+
+        Paper/shadow mode is a no-op (simulated fills). Live mode fires a
+        market reduce-only order that cannot flip the position direction.
+        """
+        if self.mode not in (RouterMode.LIVE, RouterMode.SHADOW):
+            return {"status": "ok", "mode": self.mode.value, "note": "simulated partial fill"}
+
+        if self.adapter is None:
+            return {"status": "error", "reason": "no_adapter"}
+
+        inst = self._resolve(underlying.upper())
+        if inst is None:
+            return {"status": "error", "reason": f"unknown underlying: {underlying}"}
+
+        symbol = self._symbol_for(OrderRouterRequest(underlying=underlying, direction="long", instrument_type="futures"), inst)
+        try:
+            product_id = await self.adapter.get_product_id(symbol)
+        except Exception as exc:
+            return {"status": "error", "reason": f"product_id lookup failed: {exc}"}
+
+        # side is position direction ("long"/"short") — invert for the close
+        exec_side = "sell" if side == "long" else "buy"
+
+        try:
+            result = await self.adapter.market_reduce_close(
+                product_id=product_id, side=exec_side, size=size_to_close,
+            )
+            return {"status": "ok", "order": result}
+        except Exception as exc:
+            return {"status": "error", "reason": str(exc)}
+
+    async def amend_resting_stop(
+        self, underlying: str, new_stop: float, side: str, size: float,
+        take_profit: float | None = None,
+    ) -> dict:
+        """Push a trailing-stop update to the live exchange.
+
+        Paper mode is a no-op. Shadow mode is a no-op (shadows don't have
+        real orders to amend). Live mode performs a cancel+replace
+        operation on the exchange — cancelling all open bracket orders
+        for this product, then placing a reduce-only carrier order with
+        the new bracket_stop_loss.
+
+        *side* is the order side of the stop bracket: "sell" to close a
+        long position, "buy" to cover a short.
+        """
+        if self.mode != RouterMode.LIVE:
+            return {"status": "ok", "mode": self.mode.value, "note": "no live orders to amend"}
+
+        if self.adapter is None:
+            return {"status": "error", "reason": "no_adapter"}
+
+        inst = self._resolve(underlying.upper())
+        if inst is None:
+            return {"status": "error", "reason": f"unknown underlying: {underlying}"}
+
+        symbol = self._symbol_for(OrderRouterRequest(underlying=underlying, direction="long", instrument_type="futures"), inst)
+        try:
+            product_id = await self.adapter.get_product_id(symbol)
+        except Exception as exc:
+            return {"status": "error", "reason": f"product_id lookup failed: {exc}"}
+
+        try:
+            result = await self.adapter.cancel_replace_stop(
+                product_id=product_id,
+                side=side,
+                size=size,
+                old_stop=0.0,
+                new_stop=new_stop,
+                take_profit=take_profit,
+            )
+            return {"status": "ok", "order": result}
+        except Exception as exc:
+            return {"status": "error", "reason": str(exc)}
 
     # ── helpers ─────────────────────────────────────────────────────────
 
