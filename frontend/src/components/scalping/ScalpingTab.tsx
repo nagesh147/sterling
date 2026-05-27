@@ -170,7 +170,38 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         <div style={grpBox}>
           <div style={grpTitle}>PRICE ACTION</div>
           <NumField label="Lookback" value={draft.pa_lookback_bars} min={5} max={100} onChange={(v) => set('pa_lookback_bars', v)} />
-          <NumField label="Breakout %" value={draft.pa_breakout_pct} step={0.01} min={0.01} max={1} onChange={(v) => set('pa_breakout_pct', v)} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
+              <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                {[1, 3, 5].map((n) => {
+                  const on = draft.pa_confirm_bars === n;
+                  return (
+                    <button key={n} onClick={() => set('pa_confirm_bars', n)} style={{
+                      fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                      border: `1px solid ${on ? 'var(--t-blue)' : 'var(--t-border)'}`,
+                      background: on ? 'var(--t-bg3)' : 'transparent',
+                      color: on ? 'var(--t-blue)' : 'var(--t-dim)',
+                    }}>{n}</button>
+                  );
+                })}
+                <input
+                  type="number" value={draft.pa_confirm_bars} min={1} max={10}
+                  onChange={(e) => set('pa_confirm_bars', Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                  style={{
+                    width: 44, background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+                    borderRadius: 5, color: 'var(--t-bright)', fontFamily: 'inherit', fontSize: 10,
+                    padding: '3px 6px', textAlign: 'right',
+                  }}
+                />
+              </div>
+            </div>
+            <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>
+              Breakout confirmation window. <b style={{ color: 'var(--t-bright)' }}>1</b> = current bar only (rare signals) ·
+              <b style={{ color: 'var(--t-bright)' }}> 3</b> = balanced (default) ·
+              <b style={{ color: 'var(--t-bright)' }}> 5</b> = more signals, entries up to ~75 min old.
+            </span>
+          </div>
         </div>
         <div style={grpBox}>
           <div style={grpTitle}>SMC</div>
@@ -178,8 +209,8 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         </div>
         <div style={grpBox}>
           <div style={grpTitle}>MA CROSSOVER</div>
-          <NumField label="SMA period" value={draft.ma_fast_period} min={2} max={20} onChange={(v) => set('ma_fast_period', v)} />
-          <NumField label="EMA period" value={draft.ma_slow_period} min={3} max={50} onChange={(v) => set('ma_slow_period', v)} />
+          <NumField label="SMA period" value={draft.ma_fast_sma} min={2} max={20} onChange={(v) => set('ma_fast_sma', v)} />
+          <NumField label="EMA period" value={draft.ma_slow_ema} min={3} max={50} onChange={(v) => set('ma_slow_ema', v)} />
         </div>
         <div style={grpBox}>
           <div style={grpTitle}>DIRECTION & RISK</div>
@@ -231,6 +262,35 @@ function PlanCell({ value, color, width = 78 }: { value: React.ReactNode; color?
   );
 }
 
+/** Stop/Target cell: live (trailed) value on top, with the original struck through
+ *  and the points moved beneath it once the trail / dynamic-TP has shifted the level. */
+function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badges }: {
+  initial: number | null | undefined; current: number | null | undefined;
+  color?: string; width?: number; favorableUp?: boolean; badges?: React.ReactNode;
+}) {
+  const moved = current != null && initial != null && Math.abs(current - initial) > 1e-6;
+  const shown = current ?? initial;
+  const diff = moved ? (current! - initial!) : 0;
+  // "good" = moved in the trade's favour (stop ratcheting up / target extending for a long).
+  const good = favorableUp ? diff > 0 : diff < 0;
+  const sign = diff >= 0 ? '+' : '−';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', width, flexShrink: 0, justifyContent: 'center' }}>
+      <span style={{
+        fontSize: 13, fontWeight: 700, color: color || 'var(--t-bright)', lineHeight: 1.15,
+        fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        display: 'flex', alignItems: 'center', gap: 4,
+      }}>{fmtUsd(shown)}{badges}</span>
+      {moved && (
+        <span style={{ fontSize: 9, lineHeight: 1.25, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: 'var(--t-dim)' }}>
+          <span style={{ textDecoration: 'line-through', opacity: 0.65 }}>{fmtUsd(initial)}</span>{' '}
+          <span style={{ color: good ? 'var(--t-green)' : 'var(--t-red)', fontWeight: 700 }}>{sign}{Math.abs(diff).toFixed(1)}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SignalTableHeader() {
   return (
     <div style={{
@@ -244,8 +304,8 @@ function SignalTableHeader() {
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Entry</span>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 110, flexShrink: 0, textTransform: 'uppercase' }}>Current</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Stop</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Target</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 96, flexShrink: 0, textTransform: 'uppercase' }}>Stop</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 96, flexShrink: 0, textTransform: 'uppercase' }}>Target</span>
         <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 50, flexShrink: 0, textTransform: 'uppercase' }}>Risk</span>
       </div>
       <div style={{ width: 150, flexShrink: 0, marginLeft: 'auto' }}>
@@ -633,9 +693,13 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
 }) {
   const long = s.direction === 'long';
+  const short = s.direction === 'short';
   const isWatch = s.entry_ok && !s.executable;
   const meta = STRATEGY_META[s.strategy] || { label: s.strategy.toUpperCase(), color: 'var(--t-dim)' };
-  const dirColor = long ? 'var(--t-green)' : 'var(--t-red)';
+  // Color/label strictly by direction — never assume SHORT for a non-long row
+  // (a directionless "near level" row must not render as SHORT).
+  const dirColor = long ? 'var(--t-green)' : short ? 'var(--t-red)' : 'var(--t-dim)';
+  const dirLabel = long ? '▲ LONG' : short ? '▼ SHORT' : '○ NEAR LEVEL';
 
   const resp = execState?.resp;
   const accepted = !!resp?.accepted;
@@ -664,8 +728,14 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   const currentPx = pnl?.currentSpot ?? (s.close || null);
 
   const displayEntry = accepted ? (pnl?.entryPriceReal ?? resp?.entry_price ?? s.entry) : s.entry;
-  const displaySl = accepted ? (pnl?.currentSl ?? pnl?.initialSl ?? resp?.stop_loss ?? s.stop_loss) : s.stop_loss;
-  const displayTp = accepted ? (pnl?.currentTp ?? pnl?.initialTp ?? resp?.take_profit ?? s.take_profit) : s.take_profit;
+  // Initial (entry-time) vs trailed (live) stop & target. The row shows the live
+  // value, the original struck through, and the points moved once the trailing
+  // stop / dynamic TP has shifted them. Scan (non-executed) rows have only the
+  // initial level, so no trail is shown.
+  const initialSl = accepted ? (pnl?.initialSl ?? resp?.stop_loss ?? s.stop_loss) : s.stop_loss;
+  const trailSl = accepted ? (pnl?.currentSl ?? null) : null;
+  const initialTp = accepted ? (pnl?.initialTp ?? resp?.take_profit ?? s.take_profit) : s.take_profit;
+  const trailTp = accepted ? (pnl?.currentTp ?? null) : null;
   const hasPlan = displayEntry != null;
 
   const currentColor = currentPx == null || displayEntry == null
@@ -709,7 +779,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', width: 56, flexShrink: 0 }}>{s.underlying}</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: 68, flexShrink: 0 }}>
           <span style={{ fontSize: 12, fontWeight: 800, color: dirColor, letterSpacing: '0.04em', lineHeight: 1.1 }}>
-            {long ? '▲ LONG' : '▼ SHORT'}
+            {dirLabel}
           </span>
           {!accepted && (
             <span style={{
@@ -722,21 +792,23 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
             <PlanCell value={fmtUsd(displayEntry)} />
             <PlanCell value={currentValNode} color={currentColor} width={110} />
-            <PlanCell value={fmtUsd(displaySl)} color="#f87171" />
-            <PlanCell value={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {fmtUsd(displayTp)}
-                {s.tp_source && s.tp_source.includes('fallback') && (
-                  <span title="Target determined by fallback Risk-Reward" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[RR]</span>
-                )}
-                {s.tp_source && s.tp_source.includes('swing') && (
-                  <span title="Target determined by dynamic swing padding" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[SW]</span>
-                )}
-                {s.tp_source === 'structural_level' && (
-                  <span title="Target determined by structural level" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[LVL]</span>
-                )}
-              </div>
-            } color="var(--t-amber)" />
+            <PlanLevelCell initial={initialSl} current={trailSl} color="#f87171" favorableUp={long} />
+            <PlanLevelCell
+              initial={initialTp} current={trailTp} color="var(--t-amber)" favorableUp={long}
+              badges={
+                <>
+                  {s.tp_source && s.tp_source.includes('fallback') && (
+                    <span title="Target determined by fallback Risk-Reward" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[RR]</span>
+                  )}
+                  {s.tp_source && s.tp_source.includes('swing') && (
+                    <span title="Target determined by dynamic swing padding" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[SW]</span>
+                  )}
+                  {s.tp_source === 'structural_level' && (
+                    <span title="Target determined by structural level" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[LVL]</span>
+                  )}
+                </>
+              }
+            />
             <PlanCell value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
           </div>
         ) : (
@@ -1085,7 +1157,12 @@ export function ScalpingTab() {
   };
 
   const data = scanQ.data;
-  let signals = data?.signals ?? [];
+  // Only actionable setups are signals. A direction of "none" means "price is near
+  // a 4H level but no pattern confirmed" — not a tradeable signal, just scanner
+  // telemetry — so it's dropped from the feed (it used to flood the list and was
+  // mislabeled SHORT). long/short rows are kept even when entry_ok is false so the
+  // "skipped: stop too wide / cramped R:R" near-misses stay visible.
+  let signals = (data?.signals ?? []).filter((s) => s.direction === 'long' || s.direction === 'short');
   if (stratFilter !== 'all') {
     signals = signals.filter((s) => s.strategy === stratFilter);
   }
@@ -1247,7 +1324,7 @@ export function ScalpingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positions]);
 
-  const allSignals = data?.signals ?? [];
+  const allSignals = (data?.signals ?? []).filter((s) => s.direction === 'long' || s.direction === 'short');
 
   const navItems = [
     { id: 'all', label: 'All Strategies', color: 'var(--t-bright)', count: allSignals.length },

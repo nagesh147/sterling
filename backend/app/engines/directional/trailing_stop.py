@@ -1,13 +1,17 @@
-"""STRATEGY STUB — trailing-stop logic removed in the strategy reset.
+"""Trailing-stop engine — active for every monitored position (scalping included).
 
-The data containers (`TrailState`, `PartialExitSignal`, `TrailUpdate`) are kept
-intact because `paper_store` serialises `TrailState` to/from JSON and positions
-depend on that shape. Only the decision logic in `TrailingStopEngine.update`
-was stripped (preserved in git history on the `strategy-v2` branch): it now
-returns a no-op update that never moves the stop, never exits, and never takes
-partials.
+`TrailingStopEngine.update` implements an ATR / percentage / supertrend trailing
+stop with a breakeven lock and a monotonic ratchet (the stop only ever moves in
+the trade's favour). It is wired in three places:
+  • `add_position` attaches a `TrailState` at entry (scalping positions use the
+    "scalping" mode's PERCENTAGE trail).
+  • `_background_position_monitor` (main.py) calls `update` every poll on 15m
+    candles for scalping positions / 1H for directional, persists the new stop,
+    and amends the live exchange stop via cancel-replace.
+  • `monitor_all` / `monitor_position` endpoints call it on demand.
 
-Implement the new trailing logic in `TrailingStopEngine.update`.
+`TrailState`, `PartialExitSignal`, `TrailUpdate` are serialised to/from JSON by
+`paper_store`, so their shape must stay stable.
 """
 from __future__ import annotations
 
@@ -35,6 +39,10 @@ class TrailState:
     structure_dte: Optional[int] = None
     # Tiered TP — persists whether the 1.5R scale-out clip has been taken
     tp1_triggered: bool = False
+    # Initial risk distance (|entry − initial stop|) — lets the trail tighten and
+    # lock profit by R-multiple. 0 ⇒ unknown (legacy snapshot): fall back to the
+    # distance-based breakeven.
+    initial_risk: float = 0.0
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -51,6 +59,7 @@ class TrailState:
         d.setdefault("tightening_offset", 0.0)
         d.setdefault("structure_dte", None)
         d.setdefault("tp1_triggered", False)
+        d.setdefault("initial_risk", 0.0)
         return cls(**d)
 
 
@@ -72,7 +81,7 @@ class TrailUpdate:
 
 
 class TrailingStopEngine:
-    """STUB — trailing logic removed. `update` never moves the stop or exits."""
+    """ATR/%/supertrend trailing stop with breakeven and a monotonic ratchet."""
 
     def update(
         self,
@@ -84,18 +93,24 @@ class TrailingStopEngine:
         mode: TradingModeConfig,
         initial_tp: Optional[float] = None,
     ) -> TrailUpdate:
-        """ATR (or %/supertrend) trailing stop with breakeven and a monotonic
-        ratchet — the stop only ever moves in the trade's favour, never loosens.
+        """ATR (or %/supertrend) trailing stop with a monotonic ratchet plus
+        R-multiple profit locking — the stop only ever moves in the trade's
+        favour, never loosens.
 
-        • Track the best price seen (highest for longs, lowest for shorts).
-        • Trail `trail_mult × ATR` behind that extreme.
-        • Once price has run one full trail distance in favour, pull the stop to
-          breakeven (entry) so a winner can't turn into a loser.
+        • Track the best price seen (highest for longs, lowest for shorts) and
+          trail `trail_mult × ATR` (or %·price) behind it.
+        • Progressive tightening: once the trade is up ≥ 1R the trail narrows to
+          0.75×, and ≥ 2R to 0.5×, so paper profit is given less room to bleed
+          back the further the move runs.
+        • Stepped profit locks (needs `state.initial_risk`): pull the stop to
+          breakeven at +1R, lock +1R at +2R, lock +2R at +3R — a winner can't
+          round-trip to a loss, and a big winner banks guaranteed R. Falls back
+          to the legacy "breakeven after one trail distance" when initial_risk
+          is unknown (old snapshots).
         • `stopped_out` when the live price has reached the (ratcheted) stop.
 
-        Implementing this here activates trailing for every position the monitor
-        tracks — scalping included — since `add_position` already attaches a
-        TrailState and the background monitor calls this each poll.
+        Active for every monitored position (scalping included): `add_position`
+        attaches a TrailState and the background monitor calls this each poll.
         """
         if not candles or len(candles) < 2:
             return TrailUpdate(state.current_stop, None, False, False, initial_tp)
@@ -121,6 +136,37 @@ class TrailingStopEngine:
         if trail_dist <= 0:
             trail_dist = price * 0.01
 
+        # ── R-multiple achieved (drives tightening + profit locks) ──────────
+        risk = state.initial_risk if state.initial_risk and state.initial_risk > 0 else 0.0
+        profit = (price - entry_price) if is_long else (entry_price - price)
+        r_mult = (profit / risk) if risk > 0 else 0.0
+
+        # Progressive tightening: give a fresh trade room, squeeze a maturing one.
+        if risk > 0:
+            if r_mult >= 2.0:
+                trail_dist *= 0.5
+            elif r_mult >= 1.0:
+                trail_dist *= 0.75
+
+        # Stepped profit lock — the floor the stop is pulled up to (down for shorts).
+        # Uses R when known; else legacy "breakeven once price runs one trail dist".
+        lock: Optional[float] = None
+        if risk > 0:
+            if r_mult >= 1.0:
+                lock = entry_price                       # breakeven at +1R
+                state.breakeven_set = True
+            if r_mult >= 2.0:
+                step = entry_price + risk if is_long else entry_price - risk
+                lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+            if r_mult >= 3.0:
+                step = entry_price + 2 * risk if is_long else entry_price - 2 * risk
+                lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+        else:
+            ran_one_dist = (price >= entry_price + trail_dist) if is_long else (price <= entry_price - trail_dist)
+            if not state.breakeven_set and ran_one_dist:
+                lock = entry_price
+                state.breakeven_set = True
+
         # ── Track the favourable extreme ────────────────────────────────────
         state.highest_seen = max(state.highest_seen or price, hi, price)
         prior_low = state.lowest_seen if (state.lowest_seen and state.lowest_seen > 0) else price
@@ -133,9 +179,8 @@ class TrailingStopEngine:
             cand = state.highest_seen - trail_dist
             if state.mode == TrailMode.SUPERTREND and st_value and st_value > 0:
                 cand = max(cand, float(st_value))
-            if not state.breakeven_set and price >= entry_price + trail_dist:
-                cand = max(cand, entry_price)            # lock to breakeven
-                state.breakeven_set = True
+            if lock is not None:
+                cand = max(cand, lock)
             if cand > new_stop:                          # ratchet up only
                 new_stop, moved = cand, True
             stopped = price <= new_stop
@@ -143,9 +188,8 @@ class TrailingStopEngine:
             cand = state.lowest_seen + trail_dist
             if state.mode == TrailMode.SUPERTREND and st_value and st_value > 0:
                 cand = min(cand, float(st_value))
-            if not state.breakeven_set and price <= entry_price - trail_dist:
-                cand = min(cand, entry_price)            # lock to breakeven
-                state.breakeven_set = True
+            if lock is not None:
+                cand = min(cand, lock)
             if cand < new_stop:                          # ratchet down only
                 new_stop, moved = cand, True
             stopped = price >= new_stop

@@ -58,6 +58,38 @@ def _pivots(arr: NDArray, kind: str, dist: int = 2) -> List[int]:
     return out
 
 
+def _fresh_breakout(closes: NDArray, level: float, direction: str, confirm_bars: int) -> bool:
+    """A confirmed breakout of `level` in the trade's favour.
+
+    True when, within the last `confirm_bars` closed bars, a close *crossed*
+    `level` (prior bar on the wrong side, this bar on the right side) AND the
+    most recent close is *still* beyond `level`. This widens the old single-bar
+    guard (`c[-1] cross, c[-2] didn't`) to a small confirmation window so a
+    breakout that closed 1–N bars ago still arms — yet it never re-introduces
+    the stale-breakout bug, because price must remain past the neckline now
+    (a retrace back inside invalidates the setup).
+    """
+    n = len(closes)
+    if n < 2:
+        return False
+    is_long = direction == "long"
+    # Must still be beyond the neckline on the latest close.
+    if is_long and closes[-1] <= level:
+        return False
+    if not is_long and closes[-1] >= level:
+        return False
+    w = max(1, min(int(confirm_bars), n - 1))
+    for i in range(n - w, n):
+        if i < 1:
+            continue
+        prev, cur = float(closes[i - 1]), float(closes[i])
+        if is_long and cur > level and prev <= level:
+            return True
+        if not is_long and cur < level and prev >= level:
+            return True
+    return False
+
+
 def detect_inverse_head_shoulders(highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig) -> Optional[dict]:
     """Bullish inverse H&S: left shoulder, lower head, right shoulder (symmetric),
     breakout on a close above the neckline (peaks between the lows)."""
@@ -75,7 +107,7 @@ def detect_inverse_head_shoulders(highs: NDArray, lows: NDArray, closes: NDArray
     if abs(lv - rv) / max(lv, 1e-6) > 0.03:             # shoulders roughly symmetric
         return None
     neckline = float(np.max(h[ls:rs + 1]))
-    if c[-1] <= neckline:                               # breakout above neckline
+    if not _fresh_breakout(c, neckline, "long", cfg.pa_confirm_bars):   # confirmed break above
         return None
     return {"pattern": "inverse_head_shoulders", "direction": "long",
             "neckline": round(neckline, 4), "stop_below": round(hv, 4)}
@@ -98,7 +130,7 @@ def detect_head_shoulders(highs: NDArray, lows: NDArray, closes: NDArray, cfg: S
     if abs(lv - rv) / max(lv, 1e-6) > 0.03:             # shoulders roughly symmetric
         return None
     neckline = float(np.min(l[ls:rs + 1]))
-    if c[-1] >= neckline:                               # breakdown below neckline
+    if not _fresh_breakout(c, neckline, "short", cfg.pa_confirm_bars):  # confirmed break below
         return None
     return {"pattern": "head_shoulders", "direction": "short",
             "neckline": round(neckline, 4), "stop_above": round(hv, 4)}
@@ -124,7 +156,7 @@ def detect_cup_handle(highs: NDArray, lows: NDArray, closes: NDArray, cfg: Scalp
     if abs(right - left_rim) / left_rim > 0.03:         # right side recovered to the rim
         return None
     rim = max(left_rim, right)
-    if c[-1] <= rim:                                    # breakout above the rim
+    if not _fresh_breakout(c, rim, "long", cfg.pa_confirm_bars):        # confirmed break above rim
         return None
     handle_low = float(np.min(l[2 * third:]))
     return {"pattern": "cup_handle", "direction": "long",
@@ -151,7 +183,7 @@ def detect_inverse_cup_handle(highs: NDArray, lows: NDArray, closes: NDArray, cf
     if abs(right - left_rim) / left_rim > 0.03:         # right side fell back to the rim
         return None
     rim = min(left_rim, right)
-    if c[-1] >= rim:                                    # breakdown below the rim
+    if not _fresh_breakout(c, rim, "short", cfg.pa_confirm_bars):       # confirmed break below rim
         return None
     handle_high = float(np.max(h[2 * third:]))
     return {"pattern": "inverse_cup_handle", "direction": "short",
@@ -162,14 +194,17 @@ def detect_ascending_triangle(highs: NDArray, lows: NDArray, closes: NDArray, cf
     """Relaxed ascending triangle: roughly flat top with rising/lateral lows, and
     the close has broken above that ceiling in the last few bars."""
     lookback = cfg.pa_lookback_bars
-    if len(highs) < lookback:
+    w = max(1, min(cfg.pa_confirm_bars, len(highs) - 2))
+    if len(highs) < lookback + w:
         return None
-    h = highs[-lookback:]
-    l = lows[-lookback:]
-    c = closes[-lookback:]
+    # Ceiling is defined by the consolidation BEFORE the breakout window, so the
+    # breakout bars don't raise the very level they're meant to clear (the old
+    # `top = max(highs[-lookback:])` included the breakout bar, making `close >
+    # ceiling` structurally near-impossible — a close never exceeds its own high).
+    h = highs[-lookback - w:-w]
+    l = lows[-lookback - w:-w]
     top = float(np.max(h))
     top_mean = float(np.mean(h))
-    # Relaxed flat top: allow up to 3% coefficient of variation
     if top_mean == 0:
         return None
     top_cv = float(np.std(h)) / top_mean
@@ -182,10 +217,8 @@ def detect_ascending_triangle(highs: NDArray, lows: NDArray, closes: NDArray, cf
     if low_late <= low_early:                # must actually rise (not merely "not fall")
         return None
     resistance = round(top, 4)
-    # FRESH breakout only: this bar closed above the ceiling and the prior bar did
-    # not. The old "any close above in the last 6 bars" paired a stale breakout
-    # with the current level test (a temporal disconnect that entered late).
-    if not (c[-1] > resistance and c[-2] <= resistance):
+    # Confirmed breakout within the last `w` bars, price still above the ceiling.
+    if not _fresh_breakout(closes, resistance, "long", w):
         return None
     return {
         "pattern": "ascending_triangle",
@@ -237,20 +270,17 @@ def detect_double_bottom(
     if (neckline - avg_bottom) / avg_bottom < cfg.pa_min_neckline_height:
         return None
         
-    # 3. Confirmation Evaluation
-    current_close = float(closes[-1])
-    prior_close = float(closes[-2])
-    
-    # Fresh breakout validation (closed above neckline this bar, but wasn't already overextended)
-    if current_close > neckline and prior_close <= neckline * 1.002:
+    # 3. Confirmation Evaluation — confirmed break above the neckline within the
+    # last `pa_confirm_bars` bars, price still above it (windowed; see _fresh_breakout).
+    if _fresh_breakout(closes, neckline, "long", cfg.pa_confirm_bars):
         return {
             "pattern": "double_bottom_confirmed",
             "direction": "long",
-            "entry": round(current_close, 4),
+            "entry": round(float(closes[-1]), 4),
             "neckline": round(neckline, 4),
             "stop_loss": round(min(b1_val, b2_val) * 0.998, 4), # Invalidation tucked under pattern low
         }
-        
+
     return None
 
 
@@ -263,11 +293,13 @@ def detect_bullish_consolidation(
     band, i.e. on pure sideways chop. This requires a tight prior range and a
     FRESH close above its top."""
     lookback = cfg.pa_lookback_bars
-    if len(closes) < lookback + 2:
+    w = max(1, min(cfg.pa_confirm_bars, len(closes) - 2))
+    if len(closes) < lookback + w + 1:
         return None
-    # Range measured over the window PRIOR to the breakout bar (exclude last bar).
-    h = highs[-lookback - 1:-1]
-    l = lows[-lookback - 1:-1]
+    # Range measured over the window PRIOR to the confirmation window, so the
+    # post-breakout bars don't inflate the range that defines the level.
+    h = highs[-lookback - w:-w]
+    l = lows[-lookback - w:-w]
     if len(h) < 5:
         return None
     range_high = float(np.max(h))
@@ -277,8 +309,8 @@ def detect_bullish_consolidation(
         return None
     if (range_high - range_low) / mid_price > 0.03:      # must be a tight coil
         return None
-    # Fresh breakout: this close clears the range top; the prior close was inside.
-    if not (closes[-1] > range_high and closes[-2] <= range_high):
+    # Confirmed breakout within the last `w` bars, price still above the range top.
+    if not _fresh_breakout(closes, range_high, "long", w):
         return None
     return {
         "pattern": "range_breakout",
@@ -294,11 +326,13 @@ def detect_descending_triangle(
     """Relaxed descending triangle: roughly flat bottom with declining/lateral highs,
     and the close has broken below that floor in the last few bars."""
     lookback = cfg.pa_lookback_bars
-    if len(lows) < lookback:
+    w = max(1, min(cfg.pa_confirm_bars, len(lows) - 2))
+    if len(lows) < lookback + w:
         return None
-    h = highs[-lookback:]
-    l = lows[-lookback:]
-    c = closes[-lookback:]
+    # Floor defined by the consolidation BEFORE the breakdown window (same reason
+    # as the ascending triangle: don't let the breakdown bar lower its own floor).
+    h = highs[-lookback - w:-w]
+    l = lows[-lookback - w:-w]
     bottom = float(np.min(l))
     bottom_mean = float(np.mean(l))
     if bottom_mean == 0:
@@ -313,8 +347,8 @@ def detect_descending_triangle(
     if high_late >= high_early:
         return None
     support = round(bottom, 4)
-    # FRESH breakdown only: this bar closed below the floor, the prior bar did not.
-    if not (c[-1] < support and c[-2] >= support):
+    # Confirmed breakdown within the last `w` bars, price still below the floor.
+    if not _fresh_breakout(closes, support, "short", w):
         return None
     return {
         "pattern": "descending_triangle",
@@ -350,10 +384,10 @@ def detect_double_top(
         return None
     lo_idx, hi_idx = min(top_idx, second_idx), max(top_idx, second_idx)
     neckline = round(float(np.min(lo[lo_idx:hi_idx + 1])), 4)
-    # FRESH neckline breakdown this bar (prior bar was at/above it). Previously any
-    # close below the neckline armed the short — so a top that broke down hours ago
-    # still fired now, and price chopping under the neckline triggered repeatedly.
-    if not (c[-1] < neckline and c[-2] >= neckline):
+    # Confirmed neckline breakdown within the last `pa_confirm_bars` bars, price
+    # still below it — so a top that broke down hours ago no longer fires, and
+    # chop under the neckline doesn't re-trigger, but a 1–N bar-old break still arms.
+    if not _fresh_breakout(c, neckline, "short", cfg.pa_confirm_bars):
         return None
     return {
         "pattern": "double_top",
@@ -370,10 +404,11 @@ def detect_bearish_consolidation(
     a tight prior range and a FRESH close below its floor (not just price sitting
     in the lower part of a band)."""
     lookback = cfg.pa_lookback_bars
-    if len(closes) < lookback + 2:
+    w = max(1, min(cfg.pa_confirm_bars, len(closes) - 2))
+    if len(closes) < lookback + w + 1:
         return None
-    h = highs[-lookback - 1:-1]
-    l = lows[-lookback - 1:-1]
+    h = highs[-lookback - w:-w]
+    l = lows[-lookback - w:-w]
     if len(h) < 5:
         return None
     range_high = float(np.max(h))
@@ -383,7 +418,8 @@ def detect_bearish_consolidation(
         return None
     if (range_high - range_low) / mid_price > 0.03:
         return None
-    if not (closes[-1] < range_low and closes[-2] >= range_low):
+    # Confirmed breakdown within the last `w` bars, price still below the range floor.
+    if not _fresh_breakout(closes, range_low, "short", w):
         return None
     return {
         "pattern": "range_breakdown",

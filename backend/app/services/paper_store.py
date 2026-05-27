@@ -77,6 +77,8 @@ def add_position(
         trail_mult=mode.trail_atr_mult,
         partial_25_pct=mode.partial_25_pct,
         partial_50_pct=mode.partial_50_pct,
+        # Distance to the initial stop — drives R-multiple trail tightening / locks.
+        initial_risk=abs(entry_spot_price - sl_price),
     )
 
     pos = PaperPosition(

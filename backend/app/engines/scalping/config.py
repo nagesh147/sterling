@@ -41,6 +41,11 @@ class EngineConfig(BaseModel):
 
     # Strategy 1: Price Action Settings
     pa_lookback_bars: int = 30
+    pa_confirm_bars: int = Field(
+        default=3, ge=1, le=10,
+        description="Breakout counts if it closed within the last N bars and price "
+                    "is still beyond the neckline (1 = current bar only).",
+    )
     pa_min_pivot_distance: int = 5       # Minimum bars between peaks/valleys
     pa_max_bottom_variance: float = 0.01  # Max 1% variance between bottom 1 and 2
     pa_min_neckline_height: float = 0.01  # Neckline must be >= 1% above bottoms
