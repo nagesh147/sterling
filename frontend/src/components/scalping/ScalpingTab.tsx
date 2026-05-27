@@ -4,7 +4,7 @@ import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
   useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
   useScalpingBacktest, useScalpingExecute, useScalpingSignals,
-  useScalpingOptimize, useRunScalpingOptimize, useScalpingPresets,
+  useScalpingOptimize, useRunScalpingOptimize, useScalpingPresets, useScalpingDefaultConfig,
   type ScalpingConfig, type ScalpingSignal,
   type ScalpingExecuteResponse,
 } from '../../hooks/useScalping';
@@ -151,6 +151,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   const universeQ = useScalpingUniverse();
   const universe = universeQ.data?.symbols ?? [];
   const presets = useScalpingPresets().data;
+  const defaultCfg = useScalpingDefaultConfig().data?.config;
   const allMode = draft.symbols.length === 0;
   const selSet = new Set(draft.symbols);
   const toggleSym = (s: string) => setDraft((d) => {
@@ -161,17 +162,32 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
   return (
     <SectionCard title="SCALPING SETTINGS" right={
-      <button disabled={!dirty || saving} onClick={() => onSave(draft)} style={{
-        fontSize: 9, fontWeight: 700, padding: '4px 14px', borderRadius: 5, fontFamily: 'inherit',
-        cursor: dirty && !saving ? 'pointer' : 'default',
-        border: `1px solid ${dirty ? 'var(--t-green)' : 'var(--t-border)'}`,
-        background: dirty ? 'var(--t-green)22' : 'transparent',
-        color: dirty ? 'var(--t-green)' : 'var(--t-dim)',
-      }}>{saving ? 'SAVING…' : dirty ? 'APPLY' : 'SAVED'}</button>
+      <span style={{ display: 'inline-flex', gap: 6 }}>
+        <button
+          disabled={!defaultCfg || saving}
+          title="Reset every field to the validated factory defaults (4h/30m, all strategies on, 1% risk). Review, then APPLY to save."
+          onClick={() => { if (defaultCfg) setDraft(defaultCfg); }}
+          style={{
+            fontSize: 9, fontWeight: 700, padding: '4px 12px', borderRadius: 5, fontFamily: 'inherit',
+            cursor: defaultCfg && !saving ? 'pointer' : 'default',
+            border: '1px solid var(--t-border)', background: 'transparent', color: 'var(--t-dim)',
+          }}>↺ DEFAULTS</button>
+        <button disabled={!dirty || saving} onClick={() => onSave(draft)} style={{
+          fontSize: 9, fontWeight: 700, padding: '4px 14px', borderRadius: 5, fontFamily: 'inherit',
+          cursor: dirty && !saving ? 'pointer' : 'default',
+          border: `1px solid ${dirty ? 'var(--t-green)' : 'var(--t-border)'}`,
+          background: dirty ? 'var(--t-green)22' : 'transparent',
+          color: dirty ? 'var(--t-green)' : 'var(--t-dim)',
+        }}>{saving ? 'SAVING…' : dirty ? 'APPLY' : 'SAVED'}</button>
+      </span>
     }>
-      <div style={{ ...dim, marginBottom: 12, lineHeight: 1.5 }}>
-        4H structure + 15min entry — <b style={{ color: 'var(--t-bright)' }}>3 strategies</b>: Price Action, SMC, MA Crossover.
-        Only triggers when price is near a key 4H S/R level.
+      <div style={{ ...dim, marginBottom: 12, lineHeight: 1.6 }}>
+        <b style={{ color: 'var(--t-bright)' }}>How to choose:</b> pick a <b style={{ color: 'var(--t-bright)' }}>Trading Profile</b> below
+        (most users → <b style={{ color: 'var(--t-blue)' }}>Intraday</b>: lowest drawdown, fewest fees), then <b style={{ color: 'var(--t-green)' }}>APPLY</b>.
+        Fine-tune individual settings underneath if you want; <b>↺ DEFAULTS</b> resets everything.
+        The engine reads a <b style={{ color: 'var(--t-bright)' }}>structure</b> timeframe for S/R levels and an <b style={{ color: 'var(--t-bright)' }}>entry</b>
+        timeframe for the pattern breakout — it only fires when price is at a key level. Best-validated strategy is
+        <b style={{ color: 'var(--t-amber)' }}> Price Action</b>; SMC / MA Crossover are unvalidated extras (leave off if unsure).
       </div>
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
         <ChipToggle label="Price Action" on={draft.enable_price_action} onChange={(v) => set('enable_price_action', v)} />
@@ -1099,10 +1115,15 @@ function OptimizePanel({ cfg, onToggleOptimized }: { cfg: ScalpingConfig; onTogg
         border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
       }}>{running ? `RUNNING ${status?.progress ?? ''}` : runOpt.isPending ? 'STARTING…' : 'RUN SWEEP'}</button>
     }>
-      <div style={{ ...dim, marginBottom: 10, lineHeight: 1.5 }}>
-        Sweeps a focused grid (confirm bars · level tolerance · min R:R · trend filter) and ranks by
-        <b style={{ color: 'var(--t-bright)' }}> out-of-sample</b> profit factor. Results are isolated —
-        they never touch your manual settings until you enable the toggle.
+      <div style={{ ...dim, marginBottom: 10, lineHeight: 1.6 }}>
+        <b style={{ color: 'var(--t-bright)' }}>What it is:</b> a research tool that backtests many config
+        combinations and ranks them by <b style={{ color: 'var(--t-bright)' }}>out-of-sample</b> profit factor
+        (performance on data it didn't fit). It then checks if the winner actually <i>generalises</i>.<br />
+        <b style={{ color: 'var(--t-bright)' }}>Recommendation: leave the toggle OFF</b> and trade the Profiles.
+        It only changes anything if a sweep finds a config that beats yours out-of-sample with a positive
+        IS↔OOS correlation — otherwise it's a safe no-op. In testing it keeps saying <b style={{ color: 'var(--t-amber)' }}>“keep manual”</b> (this strategy overfits short windows).<br />
+        <b style={{ color: 'var(--t-bright)' }}>When to use:</b> run a sweep occasionally (longer window = firmer read)
+        to check for a better config; only flip the toggle on if the result shows <b style={{ color: 'var(--t-green)' }}>✓ ADOPT</b>.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>

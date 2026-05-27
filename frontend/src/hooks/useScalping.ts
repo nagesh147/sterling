@@ -167,6 +167,14 @@ export function useScalpingConfig() {
   });
 }
 
+export function useScalpingDefaultConfig() {
+  return useQuery<ScalpingConfigResponse>({
+    queryKey: ['scalping', 'config', 'default'],
+    queryFn: () => api.get<ScalpingConfigResponse>('/api/v1/scalping/config/default'),
+    staleTime: Infinity,
+  });
+}
+
 export function useSetScalpingConfig() {
   const qc = useQueryClient();
   return useMutation<ScalpingConfigResponse, Error, ScalpingConfig>({

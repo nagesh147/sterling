@@ -87,6 +87,13 @@ async def get_config(request: Request) -> ScalpingConfigResponse:
     return ScalpingConfigResponse(config=_get_config(request))
 
 
+@router.get("/config/default", response_model=ScalpingConfigResponse)
+async def get_default_config() -> ScalpingConfigResponse:
+    """Factory defaults (powers the 'Reset to defaults' button) — 4h/30m, PA+SMC+MA
+    on, 1% risk, etc. Does not change live config; the UI sets the draft from this."""
+    return ScalpingConfigResponse(config=default_config())
+
+
 @router.post("/config", response_model=ScalpingConfigResponse)
 async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigResponse:
     from app.services.db import set_config as _sc
