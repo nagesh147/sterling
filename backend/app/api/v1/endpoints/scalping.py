@@ -114,7 +114,8 @@ async def presets() -> dict:
 async def universe(request: Request) -> ScalpingUniverseResponse:
     """Symbols with enough 4H + 15min stored history."""
     cfg = _get_config(request)
-    min_bars = max(cfg.warmup_bars_4h, cfg.warmup_bars_15m // 4 + 20)
+    # Since profiles are independent, we'll use a conservative default min_bars
+    min_bars = 200
     syms = _store_symbols(min_bars_hours=min_bars)
     return ScalpingUniverseResponse(symbols=syms)
 

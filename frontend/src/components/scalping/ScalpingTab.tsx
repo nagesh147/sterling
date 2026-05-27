@@ -788,9 +788,8 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   const statusLabel = accepted ? 'EXECUTED' : s.executable ? 'READY' : isWatch ? 'WATCH' : 'PENDING';
   const statusColor = accepted ? 'var(--t-blue)' : s.executable ? dirColor : isWatch ? 'var(--t-blue)' : 'var(--t-dim)';
 
-  // Signal's own setup reason — shown only until an execution attempt replaces it
-  // with the richer ExecDetail block below.
-  const metaReason = s.entry != null ? s.reason : null;
+  // Signal's own setup reason
+  const metaReason = s.reason;
 
   const pnlVal = pnl?.value ?? null;
   const pnlColor = pnlVal == null ? 'var(--t-dim)' : pnlVal >= 0 ? 'var(--t-green)' : 'var(--t-red)';
@@ -1003,8 +1002,11 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
 
 const LOOKBACK_PRESETS_BT: [string, number][] = [['1M', 30], ['3M', 90], ['6M', 180]];
 
-function ScalpBacktestPanel({ underlying }: { underlying: string }) {
+function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }) {
   const [lookback, setLookback] = useState(90);
+  const [localUnderlying, setLocalUnderlying] = useState(initialUnderlying);
+  const universeQ = useScalpingUniverse();
+  const universe = universeQ.data?.symbols ?? [];
   const bt = useScalpingBacktest();
   const res = bt.data;
 
@@ -1021,7 +1023,18 @@ function ScalpBacktestPanel({ underlying }: { underlying: string }) {
         {LOOKBACK_PRESETS_BT.map(([lbl, d]) => (
           <button key={d} onClick={() => setLookback(d)} style={hdrBtn(lookback === d)}>{lbl}</button>
         ))}
-        <button disabled={bt.isPending} onClick={() => bt.mutate({ underlying, lookback_days: lookback })} style={{
+        <select 
+          value={localUnderlying} 
+          onChange={e => setLocalUnderlying(e.target.value)}
+          style={{
+            background: 'var(--t-bg2)', border: '1px solid var(--t-border)', color: 'var(--t-bright)',
+            padding: '2px 6px', borderRadius: 4, fontSize: 10, outline: 'none'
+          }}
+        >
+          {universe.includes(localUnderlying) ? null : <option value={localUnderlying}>{localUnderlying}</option>}
+          {universe.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <button disabled={bt.isPending} onClick={() => bt.mutate({ underlying: localUnderlying, lookback_days: lookback })} style={{
           fontSize: 9, fontWeight: 700, padding: '3px 10px', borderRadius: 5, fontFamily: 'inherit', cursor: 'pointer',
           border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
         }}>{bt.isPending ? 'RUNNING…' : 'RUN'}</button>
@@ -1720,7 +1733,7 @@ export function ScalpingTab() {
         background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'flex-end',
       }}>
         <div onClick={(e) => e.stopPropagation()} style={{
-          width: 'min(700px, 94vw)', height: '100%', background: 'var(--t-bg)',
+          width: 'min(700px, 94vw)', height: '100%', background: 'var(--t-bg)', boxSizing: 'border-box',
           borderLeft: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 'min-content' }}>
@@ -1745,7 +1758,7 @@ export function ScalpingTab() {
               onToggleOptimized={(v) => setCfg.mutate({ ...cfg, use_optimized: v })}
             />
           )}
-          <ScalpBacktestPanel underlying={btUnderlying} />
+          <ScalpBacktestPanel initialUnderlying={btUnderlying} />
           </div>
         </div>
       </div>
