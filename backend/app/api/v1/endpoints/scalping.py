@@ -11,8 +11,10 @@ Endpoints mirror the RSI strategy surface for UI consistency:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
+from dataclasses import asdict
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -53,6 +55,33 @@ def _get_config(request: Request) -> ScalpingConfig:
     return cfg
 
 
+def _get_optimized_params() -> dict:
+    """The persisted optimizer-found parameter set (empty if never run)."""
+    from app.services.db import get_config as _gc
+    raw = _gc("scalping_optimized_params")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) or {}
+    except Exception:
+        return {}
+
+
+def _effective_config(request: Request) -> ScalpingConfig:
+    """Manual config, with the optimizer's parameter set overlaid on a COPY when the
+    `use_optimized` toggle is on. The stored manual config is never mutated — toggle
+    off ⇒ this returns the manual config unchanged."""
+    cfg = _get_config(request)
+    if not getattr(cfg, "use_optimized", False):
+        return cfg
+    params = _get_optimized_params()
+    if not params:
+        return cfg
+    # Only overlay keys that exist on the config (defensive against stale results).
+    valid = {k: v for k, v in params.items() if k in ScalpingConfig.model_fields}
+    return cfg.model_copy(update=valid) if valid else cfg
+
+
 @router.get("/config", response_model=ScalpingConfigResponse)
 async def get_config(request: Request) -> ScalpingConfigResponse:
     return ScalpingConfigResponse(config=_get_config(request))
@@ -89,11 +118,32 @@ def _store_symbols(min_bars_hours: int = 200) -> List[str]:
     return sorted(syms)
 
 
+_BARS_PER_DAY = {"5m": 288, "15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}
+
+
+def _bpd(tf: str) -> int:
+    return _BARS_PER_DAY.get(tf, 24)
+
+
+def _load_pair(sym: str, cfg: ScalpingConfig):
+    """Load (macro, execution) candle arrays for `sym` at the config's timeframes.
+
+    Honors cfg.macro_timeframe / cfg.execution_timeframe (default 4h / 15m). The
+    lookback per TF is derived from the warmup bar counts so each timeframe gets
+    enough history regardless of resolution.
+    """
+    macro_tf = cfg.macro_timeframe or "4h"
+    exec_tf = cfg.execution_timeframe or "15m"
+    macro_days = max(30, cfg.warmup_bars_4h // _bpd(macro_tf) + 10)
+    exec_days = max(7, cfg.warmup_bars_15m // _bpd(exec_tf) + 3)
+    return _store_candles(sym, macro_tf, macro_days), _store_candles(sym, exec_tf, exec_days)
+
+
 def _store_candles(sym: str, resolution: str, lookback_days: int):
     """Load candles from the local OHLCV store."""
     from app.services import ohlcv_store
     from app.schemas.market import Candle
-    per_day = {"15m": 96, "4h": 6, "1h": 24}.get(resolution, 24)
+    per_day = _BARS_PER_DAY.get(resolution, 24)
     limit = min(lookback_days * per_day + 300, 40_000)
     since = int(time.time()) - lookback_days * 86_400
     rows = ohlcv_store.get_candles(f"{sym}USD", resolution, limit=limit, since=since)
@@ -131,11 +181,9 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     candles_15m_map: dict = {}
     tradeable_set: set = set()
 
-    lookup_days = max(30, cfg.warmup_bars_4h // 6 + 10)
     for sym in syms:
         try:
-            c4h = _store_candles(sym, "4h", lookup_days)
-            c15m = _store_candles(sym, "15m", max(7, cfg.warmup_bars_15m // 96 + 3))
+            c4h, c15m = _load_pair(sym, cfg)   # macro/exec arrays at cfg's timeframes
             if not c4h or not c15m:
                 continue
             candles_4h_map[sym] = c4h
@@ -154,7 +202,7 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
 async def signals(request: Request, armed_only: bool = False) -> ScalpingScanResponse:
     """Scan the stored-crypto universe, return signals from all enabled strategies."""
     import time as _t
-    cfg = _get_config(request)
+    cfg = _effective_config(request)   # overlays optimized params when the toggle is on
     src = _adm.get_data_source()
     key = (cfg.model_dump_json(), src, armed_only)
 
@@ -183,8 +231,10 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
     cfg = body.config or _get_config(request)
     sym = body.underlying.upper()
 
-    c4h = _store_candles(sym, "4h", body.lookback_days)
-    c15m = _store_candles(sym, "15m", min(body.lookback_days, 30))
+    macro_tf = cfg.macro_timeframe or "4h"
+    exec_tf = cfg.execution_timeframe or "15m"
+    c4h = _store_candles(sym, macro_tf, body.lookback_days)
+    c15m = _store_candles(sym, exec_tf, min(body.lookback_days, 30))
 
     if not c4h or not c15m:
         raise HTTPException(status_code=404, detail=f"No stored data for {sym}")
@@ -247,7 +297,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
     from app.services import paper_store
 
-    cfg = _get_config(request)
+    cfg = _effective_config(request)   # execute with optimized params when the toggle is on
     sym = body.underlying.upper()
     strategy = body.strategy
 
@@ -308,8 +358,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
             timestamp_ms=int(time.time() * 1000),
         )
 
-    c4h = _store_candles(sym, "4h", 60)
-    c15m = _store_candles(sym, "15m", 7)
+    c4h, c15m = _load_pair(sym, cfg)   # macro/exec arrays at cfg's timeframes
 
     if not c4h or not c15m:
         raise HTTPException(status_code=404, detail=f"No stored data for {sym}")
@@ -407,3 +456,101 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         timestamp_ms=resp.timestamp_ms or int(time.time() * 1000),
         telegram_alert_sent=resp.status not in ("rejected", "error"),
     )
+
+
+# ─── optimize (focused, OOS-robust parameter sweep) ──────────────────────────
+
+# Default sweep universe — liquid majors; filtered to what actually has data.
+_OPT_UNIVERSE = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ADA", "AVAX", "LINK", "LTC"]
+
+_optimize_state: dict = {
+    "running": False, "progress": "", "started_ms": 0, "done_ms": 0, "error": None,
+}
+
+
+async def _run_optimize(base_cfg: ScalpingConfig, days: int, max_symbols: int) -> None:
+    """Background worker: load candles per resolution, run the TF×param sweep
+    off-thread, persist results."""
+    from app.engines.scalping.optimizer import optimize as _optimize, DEFAULT_TF_PAIRS
+    from app.services.db import set_config as _sc
+
+    _optimize_state.update(running=True, progress="loading", started_ms=int(time.time() * 1000),
+                           done_ms=0, error=None)
+    try:
+        # every resolution referenced by the TF grid (+ the manual config's own TFs)
+        resolutions = {base_cfg.macro_timeframe or "4h", base_cfg.execution_timeframe or "15m"}
+        for m, e in DEFAULT_TF_PAIRS:
+            resolutions.add(m); resolutions.add(e)
+
+        syms = [s.upper() for s in base_cfg.symbols] or _OPT_UNIVERSE
+        candles_by_res: dict = {res: {} for res in resolutions}
+        chosen = 0
+        for s in syms:
+            if chosen >= max_symbols:
+                break
+            loaded, ok = {}, True
+            for res in resolutions:
+                extra = 60 if res in ("2h", "4h") else 20
+                arr = _store_candles(s, res, days + extra)
+                if len(arr) < 250:                 # need enough bars for the finest TF
+                    ok = False; break
+                loaded[res] = arr
+            if ok:
+                chosen += 1
+                for res in resolutions:
+                    candles_by_res[res][s] = loaded[res]
+        if not chosen:
+            _optimize_state.update(running=False, error="no stored data with all required timeframes",
+                                   done_ms=int(time.time() * 1000))
+            return
+
+        def _prog(n: int, total: int) -> None:
+            _optimize_state["progress"] = f"{n}/{total}"
+
+        result = await asyncio.to_thread(_optimize, candles_by_res, base_cfg, None, None, _prog)
+        _sc("scalping_optimize_result", json.dumps(asdict(result)))
+        _sc("scalping_optimized_params", json.dumps(result.best_params))
+        logger.info("scalp-optimize done: best=%s OOS-corr=%s universe=%s",
+                    result.best_params, result.is_oos_corr, result.universe)
+        _optimize_state.update(running=False, progress=f"{result.n_combos}/{result.n_combos}",
+                               done_ms=int(time.time() * 1000))
+    except Exception as exc:                                  # pragma: no cover - background safety
+        logger.warning("scalp-optimize failed: %s", exc)
+        _optimize_state.update(running=False, error=str(exc), done_ms=int(time.time() * 1000))
+
+
+@router.post("/optimize")
+async def optimize_run(request: Request, days: int = 60, max_symbols: int = 4) -> dict:
+    """Kick off a background OOS-robust timeframe×parameter sweep over the universe.
+
+    Ranks the grid by held-out (out-of-sample) profit factor; persists the ranked
+    results and the winning set. Does NOT change live behavior — enable the
+    `use_optimized` toggle to trade the winning set. Defaults are modest because
+    the TF sweep replays fine-grained (5m) data; raise days/max_symbols for a
+    firmer verdict at the cost of a longer (several-minute) background run.
+    """
+    if _optimize_state["running"]:
+        return {"status": "already_running", **_optimize_state}
+    days = max(30, min(int(days), 365))
+    max_symbols = max(2, min(int(max_symbols), 10))
+    base_cfg = _get_config(request)                          # manual config = the sweep's base
+    asyncio.create_task(_run_optimize(base_cfg, days, max_symbols))
+    return {"status": "started", "days": days, "max_symbols": max_symbols}
+
+
+@router.get("/optimize")
+async def optimize_get() -> dict:
+    """Current sweep status + last ranked results + the persisted winning params."""
+    from app.services.db import get_config as _gc
+    raw = _gc("scalping_optimize_result")
+    result = None
+    if raw:
+        try:
+            result = json.loads(raw)
+        except Exception:
+            result = None
+    return {
+        "status": dict(_optimize_state),
+        "result": result,
+        "optimized_params": _get_optimized_params() or None,
+    }

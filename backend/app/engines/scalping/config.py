@@ -83,6 +83,15 @@ class EngineConfig(BaseModel):
     risk_percent: float = Field(default=1.0, ge=0.05, le=5.0)
     max_position_pct: float = Field(default=15.0, ge=1.0, le=100.0)
     account_equity: float = Field(default=100_000.0, gt=0)
+    # Minimum reward:risk a setup must clear to arm (target ≥ pa_min_rr × stop).
+    # Default 1.5 matches the previously-hardcoded gate — no behavior change.
+    pa_min_rr: float = Field(default=1.5, ge=0.5, le=5.0)
+
+    # ── Auto-optimize (opt-in, isolated) ──
+    # When True the scanner overlays the persisted optimizer-found parameter set on
+    # TOP of this config (a copy) — it never overwrites the manual values here. Off
+    # ⇒ this config is used exactly as-is.
+    use_optimized: bool = False
 
     # ── Tiered take-profit ──
     tiered_tp: TieredTPConfig = Field(default_factory=TieredTPConfig)
