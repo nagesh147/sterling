@@ -5,7 +5,7 @@ and timeframe config. Each can be independently enabled/disabled.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel, Field
 
@@ -115,3 +115,37 @@ ScalpingConfig = EngineConfig
 
 def default_config() -> EngineConfig:
     return EngineConfig()
+
+
+# ── Timeframe presets ────────────────────────────────────────────────────────
+# One-click bundles mapping to the three pairs the 2-year OOS study highlighted.
+# Applying a preset only sets macro/execution TF + confirm bars on the active
+# config — it never touches risk, symbols, or other settings. confirm_bars is 3
+# (the value every reported metric was measured at). Trailing is intentionally NOT
+# a preset field: scalping trails on a %-based stop (separately validated), and the
+# TF study used fixed SL/TP, so per-preset ATR trail multiples would be unvalidated.
+
+class TimeframePreset(BaseModel):
+    macro_tf: str
+    exec_tf: str
+    confirm_bars: int
+    description: str
+
+
+TIMEFRAME_PRESETS: Dict[str, TimeframePreset] = {
+    "CONSERVATIVE_DEFAULT": TimeframePreset(
+        macro_tf="4h", exec_tf="30m", confirm_bars=3,
+        description="Default. Lowest drawdown (~7.4R) & best win-rate (~48.5%) over 2y; "
+                    "fewest trades ⇒ least fee/slippage drag. Smoothest equity curve.",
+    ),
+    "AGGRESSIVE_RETURN": TimeframePreset(
+        macro_tf="4h", exec_tf="5m", confirm_bars=3,
+        description="Highest total return (2y OOS PF ~1.46) but ~2x the drawdown and "
+                    "heavy 5m fee/slippage exposure — needs strict cost control.",
+    ),
+    "STRUCTURAL_SCALP": TimeframePreset(
+        macro_tf="2h", exec_tf="15m", confirm_bars=3,
+        description="Balanced (2y OOS PF ~1.44): more trades than the default, higher "
+                    "drawdown; structural 2h bias with 15m entries.",
+    ),
+}

@@ -95,6 +95,14 @@ async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigRe
     return ScalpingConfigResponse(config=body)
 
 
+@router.get("/presets")
+async def presets() -> dict:
+    """Named timeframe bundles (2y-OOS-grounded). The UI applies one by setting
+    macro/execution TF + confirm bars on the config draft, then Save."""
+    from app.engines.scalping.config import TIMEFRAME_PRESETS
+    return {k: v.model_dump() for k, v in TIMEFRAME_PRESETS.items()}
+
+
 @router.get("/universe", response_model=ScalpingUniverseResponse)
 async def universe(request: Request) -> ScalpingUniverseResponse:
     """Symbols with enough 4H + 15min stored history."""

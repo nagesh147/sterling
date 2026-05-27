@@ -4,7 +4,7 @@ import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
   useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
   useScalpingBacktest, useScalpingExecute, useScalpingSignals,
-  useScalpingOptimize, useRunScalpingOptimize,
+  useScalpingOptimize, useRunScalpingOptimize, useScalpingPresets,
   type ScalpingConfig, type ScalpingSignal,
   type ScalpingExecuteResponse,
 } from '../../hooks/useScalping';
@@ -149,6 +149,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
   const universeQ = useScalpingUniverse();
   const universe = universeQ.data?.symbols ?? [];
+  const presets = useScalpingPresets().data;
   const allMode = draft.symbols.length === 0;
   const selSet = new Set(draft.symbols);
   const toggleSym = (s: string) => setDraft((d) => {
@@ -179,6 +180,24 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
       <div style={gridStyle()}>
         <div style={grpBox}>
           <div style={grpTitle}>TIMEFRAMES</div>
+          {presets && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+              {Object.entries(presets).map(([key, p]) => {
+                const active = draft.macro_timeframe === p.macro_tf && draft.execution_timeframe === p.exec_tf && draft.pa_confirm_bars === p.confirm_bars;
+                const label = key.split('_')[0][0] + key.split('_')[0].slice(1).toLowerCase();
+                return (
+                  <button key={key} title={p.description}
+                    onClick={() => setDraft((d) => ({ ...d, macro_timeframe: p.macro_tf, execution_timeframe: p.exec_tf, pa_confirm_bars: p.confirm_bars }))}
+                    style={{
+                      fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                      border: `1px solid ${active ? 'var(--t-blue)' : 'var(--t-border)'}`,
+                      background: active ? 'var(--t-bg3)' : 'transparent',
+                      color: active ? 'var(--t-blue)' : 'var(--t-dim)', whiteSpace: 'nowrap',
+                    }}>{label} <span style={{ opacity: 0.7 }}>{p.macro_tf}/{p.exec_tf}</span></button>
+                );
+              })}
+            </div>
+          )}
           <TfSelect label="Structure" value={draft.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => set('macro_timeframe', v)} />
           <TfSelect label="Entry" value={draft.execution_timeframe} opts={['5m', '15m', '30m']} onChange={(v) => set('execution_timeframe', v)} />
           <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>

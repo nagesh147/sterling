@@ -178,6 +178,21 @@ export function useSetScalpingConfig() {
   });
 }
 
+export interface TimeframePreset {
+  macro_tf: string;
+  exec_tf: string;
+  confirm_bars: number;
+  description: string;
+}
+
+export function useScalpingPresets() {
+  return useQuery<Record<string, TimeframePreset>>({
+    queryKey: ['scalping', 'presets'],
+    queryFn: () => api.get<Record<string, TimeframePreset>>('/api/v1/scalping/presets'),
+    staleTime: 600_000,
+  });
+}
+
 export function useScalpingUniverse() {
   return useQuery<ScalpingUniverseResponse>({
     queryKey: ['scalping', 'universe'],
