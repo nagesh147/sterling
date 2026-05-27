@@ -179,9 +179,14 @@ export function useSetScalpingConfig() {
 }
 
 export interface TimeframePreset {
+  label: string;
   macro_tf: string;
   exec_tf: string;
   confirm_bars: number;
+  suggested_risk_pct: number;
+  oos_win_pct: number;
+  oos_pf: number;
+  oos_max_dd_r: number;
   description: string;
 }
 

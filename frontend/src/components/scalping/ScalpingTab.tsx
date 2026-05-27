@@ -179,26 +179,51 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         <ChipToggle label="MA Crossover" on={draft.enable_ma_crossover} onChange={(v) => set('enable_ma_crossover', v)} />
       </div>
       <div style={gridStyle()}>
-        <div style={grpBox}>
-          <div style={grpTitle}>TIMEFRAMES</div>
-          {presets && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+        {presets && (
+          <div style={{ ...grpBox, gridColumn: '1 / -1' }}>
+            <div style={grpTitle}>TRADING PROFILES · 2Y OOS (Price Action)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {Object.entries(presets).map(([key, p]) => {
                 const active = draft.macro_timeframe === p.macro_tf && draft.execution_timeframe === p.exec_tf && draft.pa_confirm_bars === p.confirm_bars;
-                const label = key.split('_')[0][0] + key.split('_')[0].slice(1).toLowerCase();
+                const stats: [string, string, string | undefined][] = [
+                  ['WIN', `${p.oos_win_pct}%`, undefined],
+                  ['PF', p.oos_pf.toFixed(2), p.oos_pf >= 1.3 ? 'var(--t-green)' : 'var(--t-amber)'],
+                  ['MAXDD', `${p.oos_max_dd_r}R`, 'var(--t-amber)'],
+                ];
                 return (
                   <button key={key} title={p.description}
-                    onClick={() => setDraft((d) => ({ ...d, macro_timeframe: p.macro_tf, execution_timeframe: p.exec_tf, pa_confirm_bars: p.confirm_bars }))}
+                    onClick={() => setDraft((d) => ({ ...d, macro_timeframe: p.macro_tf, execution_timeframe: p.exec_tf, pa_confirm_bars: p.confirm_bars, risk_percent: p.suggested_risk_pct }))}
                     style={{
-                      fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                      display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', width: '100%',
+                      padding: '7px 10px', borderRadius: 7,
                       border: `1px solid ${active ? 'var(--t-blue)' : 'var(--t-border)'}`,
-                      background: active ? 'var(--t-bg3)' : 'transparent',
-                      color: active ? 'var(--t-blue)' : 'var(--t-dim)', whiteSpace: 'nowrap',
-                    }}>{label} <span style={{ opacity: 0.7 }}>{p.macro_tf}/{p.exec_tf}</span></button>
+                      background: active ? tint('var(--t-blue)', 12) : 'transparent',
+                    }}>
+                    <div style={{ minWidth: 96, flexShrink: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, color: active ? 'var(--t-blue)' : 'var(--t-bright)' }}>{p.label}</div>
+                      <div style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums' }}>{p.macro_tf}/{p.exec_tf} · risk {p.suggested_risk_pct}%</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
+                      {stats.map(([l, v, c]) => (
+                        <div key={l} style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: c || 'var(--t-bright)', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+                          <span style={{ fontSize: 7, color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.06em' }}>{l}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <span style={{ flex: 1, minWidth: 70, fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.35 }}>{p.description}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: active ? 'var(--t-blue)' : 'var(--t-dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>{active ? '● ACTIVE' : 'APPLY →'}</span>
+                  </button>
                 );
               })}
             </div>
-          )}
+            <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4, marginTop: 6 }}>
+              Sets timeframe + confirm bars + suggested risk on the draft (then Save). Metrics = 2-year out-of-sample, Price Action only — a measured, overfit-prone edge, not a guarantee; fees/slippage not modeled.
+            </div>
+          </div>
+        )}
+        <div style={grpBox}>
+          <div style={grpTitle}>TIMEFRAMES</div>
           <TfSelect label="Structure" value={draft.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => set('macro_timeframe', v)} />
           <TfSelect label="Entry" value={draft.execution_timeframe} opts={['5m', '15m', '30m']} onChange={(v) => set('execution_timeframe', v)} />
           <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>

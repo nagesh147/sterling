@@ -126,26 +126,33 @@ def default_config() -> EngineConfig:
 # TF study used fixed SL/TP, so per-preset ATR trail multiples would be unvalidated.
 
 class TimeframePreset(BaseModel):
+    label: str                 # short display name (Intraday / Scalping / Aggressive)
     macro_tf: str
     exec_tf: str
     confirm_bars: int
-    description: str
+    suggested_risk_pct: float  # recommended per-trade risk for this profile (guidance)
+    oos_win_pct: float         # 2-year out-of-sample reference metrics (Price Action)
+    oos_pf: float
+    oos_max_dd_r: float
+    description: str           # when to use
 
 
+# Reference metrics are the 2-year OOS study (Price Action, defaults) — a measured,
+# overfit-prone edge, NOT a guarantee. Ordered intraday → scalping → aggressive.
 TIMEFRAME_PRESETS: Dict[str, TimeframePreset] = {
     "CONSERVATIVE_DEFAULT": TimeframePreset(
-        macro_tf="4h", exec_tf="30m", confirm_bars=3,
-        description="Default. Lowest drawdown (~7.4R) & best win-rate (~48.5%) over 2y; "
-                    "fewest trades ⇒ least fee/slippage drag. Smoothest equity curve.",
-    ),
-    "AGGRESSIVE_RETURN": TimeframePreset(
-        macro_tf="4h", exec_tf="5m", confirm_bars=3,
-        description="Highest total return (2y OOS PF ~1.46) but ~2x the drawdown and "
-                    "heavy 5m fee/slippage exposure — needs strict cost control.",
+        label="Intraday", macro_tf="4h", exec_tf="30m", confirm_bars=3, suggested_risk_pct=1.0,
+        oos_win_pct=48.5, oos_pf=1.42, oos_max_dd_r=7.4,
+        description="Default. Fewest, cleanest trades; lowest drawdown & best win-rate; least fee drag. Hold hours.",
     ),
     "STRUCTURAL_SCALP": TimeframePreset(
-        macro_tf="2h", exec_tf="15m", confirm_bars=3,
-        description="Balanced (2y OOS PF ~1.44): more trades than the default, higher "
-                    "drawdown; structural 2h bias with 15m entries.",
+        label="Scalping", macro_tf="2h", exec_tf="15m", confirm_bars=3, suggested_risk_pct=0.5,
+        oos_win_pct=44.4, oos_pf=1.44, oos_max_dd_r=16.6,
+        description="More frequent entries; balanced edge but ~2x the drawdown — size smaller.",
+    ),
+    "AGGRESSIVE_RETURN": TimeframePreset(
+        label="Aggressive", macro_tf="4h", exec_tf="5m", confirm_bars=3, suggested_risk_pct=0.5,
+        oos_win_pct=42.0, oos_pf=1.46, oos_max_dd_r=13.0,
+        description="Highest return & most trades, but heavy 5m fees/slippage not modeled — needs tight execution.",
     ),
 }
