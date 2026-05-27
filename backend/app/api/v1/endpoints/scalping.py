@@ -279,21 +279,21 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
                 sigs = scan_symbol(sym, c_macro, c_exec, strat_copy, profile_name=profile_id, tradeable=tradeable)
                 for s in sigs:
                     if s.entry_ok and s.entry and s.stop_loss:
-                direction_mult = 1 if s.direction == "long" else -1
-                risk_dist = abs(s.entry - s.stop_loss)
-                if risk_dist > 0 and s.take_profit:
-                    pnl_r = direction_mult * (s.take_profit - s.entry) / risk_dist
-                elif risk_dist > 0:
-                    pnl_r = direction_mult * 2.0
-                else:
-                    pnl_r = 0
-                all_trades.append(ScalpingBacktestTrade(
-                    direction=s.direction, strategy=strat,
-                    entry_ts=s.timestamp_ms, exit_ts=s.timestamp_ms + 86400000,
-                    entry_price=s.entry, exit_price=s.take_profit or s.entry,
-                    bars_held=1, pnl_r=round(pnl_r, 2),
-                    exit_reason="signal",
-                ))
+                        direction_mult = 1 if s.direction == "long" else -1
+                        risk_dist = abs(s.entry - s.stop_loss)
+                        if risk_dist > 0 and s.take_profit:
+                            pnl_r = direction_mult * (s.take_profit - s.entry) / risk_dist
+                        elif risk_dist > 0:
+                            pnl_r = direction_mult * 2.0
+                        else:
+                            pnl_r = 0
+                        all_trades.append(ScalpingBacktestTrade(
+                            direction=s.direction, strategy=strat,
+                            entry_ts=s.timestamp_ms, exit_ts=s.timestamp_ms + 86400000,
+                            entry_price=s.entry, exit_price=s.take_profit or s.entry,
+                            bars_held=1, pnl_r=round(pnl_r, 2),
+                            exit_reason="signal",
+                        ))
 
     total = len(all_trades)
     wins = sum(1 for t in all_trades if t.pnl_r > 0)
