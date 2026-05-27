@@ -31,9 +31,10 @@ from app.engines.scalping.levels import detect_levels
 from app.engines.scalping.price_action import evaluate_price_action
 from app.engines.scalping.scanner import _macro_regime, _is_counter_trend
 
-# (structure, entry) pairs to sweep — the baseline plus the two that generalised
-# best in the timeframe study. Each needs both resolutions present in the store.
-DEFAULT_TF_PAIRS: List[Tuple[str, str]] = [("4h", "15m"), ("4h", "30m"), ("1h", "5m")]
+# (structure, entry) pairs to sweep — the new 4h/30m default, the 30m-focused
+# alternatives that generalised best, and the old 4h/15m as a reference (it was
+# the worst OOS pair, so it confirms the move). Each needs both resolutions stored.
+DEFAULT_TF_PAIRS: List[Tuple[str, str]] = [("4h", "15m"), ("4h", "30m"), ("1h", "30m")]
 
 # Param grid (level_tolerance left at the config default to keep the TF-expanded
 # sweep tractable: 3 TF pairs × 8 param combos = 24 runs).

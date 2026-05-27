@@ -1,10 +1,9 @@
-"""Compare macro/execution timeframe pairs for the price-action scalper.
+"""Full-metric macro/execution timeframe study for the price-action scalper.
 
-Same OOS-robust methodology as the parameter optimizer (per-symbol 70/30 time
-split, ranked by held-out PF), but the swept dimension is the (structure TF,
-entry TF) pair instead of the pattern params — everything else held at defaults
-to isolate the timeframe effect. The engine is TF-agnostic (operates on candle
-arrays), so this just feeds it different resolutions.
+3 macro × 3 execution timeframes, OOS-robust (per-symbol 70/30 time split), params
+at defaults to isolate the timeframe effect. Reports win rate, profit factor,
+per-trade Sharpe (mean/std of R), expectancy, total R, and max drawdown — for the
+held-out (OOS) sample, plus IS PF for an overfit check. Engine is TF-agnostic.
 """
 from __future__ import annotations
 
@@ -19,22 +18,15 @@ from app.engines.scalping.config import default_config
 from app.engines.scalping.levels import detect_levels
 from app.engines.scalping.price_action import evaluate_price_action
 
-SYMS = ["BTC", "ETH", "SOL", "XRP"]
-DAYS = 75
-PAIRS = [
-    ("4h", "15m"),   # current baseline
-    ("4h", "30m"),
-    ("4h", "5m"),
-    ("2h", "15m"),
-    ("2h", "30m"),
-    ("1h", "15m"),
-    ("1h", "5m"),
-]
+SYMS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ADA", "LINK"]
+DAYS = 60
+MACROS = ["4h", "2h", "1h"]
+EXECS = ["30m", "15m", "5m"]
 W_EXEC, W_MACRO = 672, 180
 OOS_FRAC = 0.30
 TF_MIN = {"5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240}
-STEP = {"5m": 3, "15m": 2, "30m": 1, "1h": 1}        # eval cadence per exec TF
-MAXH = {"5m": 288, "15m": 96, "30m": 48, "1h": 24}   # ~1 trading day of exec bars
+STEP = {"5m": 6, "15m": 2, "30m": 1, "1h": 1}
+MAXH = {"5m": 288, "15m": 96, "30m": 48, "1h": 24}
 
 _DATA: dict = {}
 
@@ -63,8 +55,7 @@ def _replay(sym, macro, execr, cfg):
     if len(cE) < W_EXEC + 50 or len(cM) < W_MACRO + 5:
         return [], 0
     tsM = [c.timestamp_ms for c in cM]
-    step = STEP.get(execr, 2)
-    maxh = MAXH.get(execr, 96)
+    step, maxh = STEP.get(execr, 2), MAXH.get(execr, 96)
     out, cooldown, cj, levels = [], -1, -1, []
     n = len(cE)
     i = W_EXEC
@@ -90,44 +81,53 @@ def _replay(sym, macro, execr, cfg):
     return out, n
 
 
-def _pf_exp(trades):
+def _metrics(trades):
     n = len(trades)
     if not n:
-        return 0.0, 0.0, 0
-    wins = sum(t for t in trades if t > 0)
-    loss = abs(sum(t for t in trades if t <= 0))
-    pf = (wins / loss) if loss > 0 else (999.0 if wins > 0 else 0.0)
-    return round(pf, 2), round(sum(trades) / n, 3), n
+        return dict(n=0, win=0.0, pf=0.0, sharpe=0.0, exp=0.0, total=0.0, dd=0.0)
+    a = np.array(trades, dtype=np.float64)
+    gw = a[a > 0].sum()
+    gl = abs(a[a <= 0].sum())
+    pf = gw / gl if gl > 0 else (999.0 if gw > 0 else 0.0)
+    sharpe = float(a.mean() / a.std()) if a.std() > 1e-9 else 0.0
+    eq = np.cumsum(a)
+    dd = float((np.maximum.accumulate(eq) - eq).max())
+    return dict(n=n, win=round(len(a[a > 0]) / n * 100, 1), pf=round(float(pf), 2),
+                sharpe=round(sharpe, 2), exp=round(float(a.mean()), 3),
+                total=round(float(a.sum()), 1), dd=round(dd, 1))
 
 
 def main():
     cfg = default_config()
-    needed = set()
-    for m, e in PAIRS:
-        needed.add(m); needed.add(e)
     for s in SYMS:
         _DATA[s] = {}
-        for res in needed:
+        for res in set(MACROS) | set(EXECS):
             extra = 60 if TF_MIN[res] >= 120 else 20
             _DATA[s][res] = _load(s, res, DAYS + extra)
-    print(f"Universe {SYMS} · {DAYS}d · params at defaults (cb3/tol0.5/rr1.5/trend off)\n")
-    print(f"  {'macro/exec':12} {'OOSpf':>6} {'OOSexp':>7} {'nOOS':>5}  {'ISpf':>6} {'ISexp':>7} {'nIS':>5}")
+
+    print(f"Universe {SYMS} · {DAYS}d · defaults (cb3/tol0.5/rr1.5/trend off) · OOS=last 30% by time")
+    print(f"Sharpe = per-trade mean(R)/std(R). Fixed SL/TP exit, no fees/slippage.\n")
+    hdr = f"  {'macro/exec':11} | {'win%':>5} {'PF':>5} {'Shrp':>5} {'expR':>6} {'totR':>6} {'ddR':>5} {'nOOS':>5} | {'IS PF':>5} {'nIS':>5}"
+    print(hdr); print("  " + "-" * (len(hdr) - 2))
+
     rows = []
-    for macro, execr in PAIRS:
-        is_t, oos_t = [], []
-        for s in SYMS:
-            sigs, n = _replay(s, macro, execr, cfg)
-            if not n:
-                continue
-            split = int(W_EXEC + (n - W_EXEC) * (1 - OOS_FRAC))
-            for (i, pnl) in sigs:
-                (oos_t if i >= split else is_t).append(pnl)
-        opf, oexp, no = _pf_exp(oos_t)
-        ipf, iexp, ni = _pf_exp(is_t)
-        rows.append((f"{macro}/{execr}", opf, oexp, no, ipf, iexp, ni))
-    for r in sorted(rows, key=lambda x: x[1], reverse=True):
-        tag = "  <- baseline" if r[0] == "4h/15m" else ""
-        print(f"  {r[0]:12} {r[1]:>6} {r[2]:>7} {r[3]:>5}  {r[4]:>6} {r[5]:>7} {r[6]:>5}{tag}")
+    for macro in MACROS:
+        for execr in EXECS:
+            is_t, oos_t = [], []
+            for s in SYMS:
+                sigs, n = _replay(s, macro, execr, cfg)
+                if not n:
+                    continue
+                split = int(W_EXEC + (n - W_EXEC) * (1 - OOS_FRAC))
+                for (i, pnl) in sigs:
+                    (oos_t if i >= split else is_t).append(pnl)
+            o, isr = _metrics(oos_t), _metrics(is_t)
+            rows.append((f"{macro}/{execr}", o, isr))
+
+    for name, o, isr in sorted(rows, key=lambda r: r[1]["pf"], reverse=True):
+        tag = " <- baseline" if name == "4h/15m" else ""
+        print(f"  {name:11} | {o['win']:>5} {o['pf']:>5} {o['sharpe']:>5} {o['exp']:>6} "
+              f"{o['total']:>6} {o['dd']:>5} {o['n']:>5} | {isr['pf']:>5} {isr['n']:>5}{tag}")
 
 
 if __name__ == "__main__":

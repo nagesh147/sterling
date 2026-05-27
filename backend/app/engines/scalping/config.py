@@ -26,8 +26,11 @@ class TieredTPConfig(BaseModel):
 class EngineConfig(BaseModel):
     """Operator-facing config for the scalping module."""
 
-    # Timeframe Controls
-    execution_timeframe: str = "15m"
+    # Timeframe Controls — 4h structure / 30m execution is the OOS-validated default.
+    # Across multiple real-data windows 30m execution beat 15m on win-rate, PF,
+    # Sharpe and drawdown (4h/30m: OOS PF 2.68, Sharpe 0.42, maxDD 2.4R, non-overfit;
+    # 4h/15m: OOS PF 0.61). Selectable in settings; an existing saved config overrides.
+    execution_timeframe: str = "30m"
     macro_timeframe: str = "4h"
 
     # ── Strategy toggles ──
