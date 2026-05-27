@@ -19,6 +19,8 @@ export interface ScalpingConfig {
   allow_long: boolean;
   allow_short: boolean;
   macro_trend_filter: boolean;
+  pa_min_rr: number;
+  use_optimized: boolean;
   risk_percent: number;
   max_position_pct: number;
   account_equity: number;
@@ -121,6 +123,40 @@ export interface ScalpingExecuteResponse {
   telegram_alert_sent: boolean;
 }
 
+// ── Optimize ──────────────────────────────────────────────────────────────────
+
+export interface OptimizeComboResult {
+  params: Record<string, number | boolean>;
+  is_pf: number; is_exp: number; n_is: number;
+  oos_pf: number; oos_exp: number; n_oos: number;
+  total_trades: number; score: number;
+}
+
+export interface OptimizeResult {
+  combos: OptimizeComboResult[];
+  best_params: Record<string, number | boolean>;
+  baseline: OptimizeComboResult;
+  is_oos_corr: number;
+  recommend_change: boolean;
+  n_combos: number;
+  universe: string[];
+  note: string;
+}
+
+export interface OptimizeStatus {
+  running: boolean;
+  progress: string;
+  started_ms: number;
+  done_ms: number;
+  error: string | null;
+}
+
+export interface OptimizeResponse {
+  status: OptimizeStatus;
+  result: OptimizeResult | null;
+  optimized_params: Record<string, number | boolean> | null;
+}
+
 // ── Hooks ───────────────────────────────────────────────────────────────────
 
 export function useScalpingConfig() {
@@ -139,6 +175,21 @@ export function useSetScalpingConfig() {
       qc.setQueryData(['scalping', 'config'], data);
       qc.invalidateQueries({ queryKey: ['scalping', 'signals'] });
     },
+  });
+}
+
+export interface TimeframePreset {
+  macro_tf: string;
+  exec_tf: string;
+  confirm_bars: number;
+  description: string;
+}
+
+export function useScalpingPresets() {
+  return useQuery<Record<string, TimeframePreset>>({
+    queryKey: ['scalping', 'presets'],
+    queryFn: () => api.get<Record<string, TimeframePreset>>('/api/v1/scalping/presets'),
+    staleTime: 600_000,
   });
 }
 
@@ -168,5 +219,23 @@ export function useScalpingBacktest() {
 export function useScalpingExecute() {
   return useMutation<ScalpingExecuteResponse, Error, { underlying: string; strategy: string; auto?: boolean }>({
     mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/scalping/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true, auto: req.auto ?? false }),
+  });
+}
+
+// Optimizer: poll while a sweep is running so the UI shows live progress + results.
+export function useScalpingOptimize() {
+  return useQuery<OptimizeResponse>({
+    queryKey: ['scalping', 'optimize'],
+    queryFn: () => api.get<OptimizeResponse>('/api/v1/scalping/optimize'),
+    refetchInterval: (q) => (q.state.data?.status.running ? 3_000 : false),
+  });
+}
+
+export function useRunScalpingOptimize() {
+  const qc = useQueryClient();
+  return useMutation<{ status: string }, Error, { days?: number; max_symbols?: number }>({
+    mutationFn: (req) => api.post<{ status: string }>(
+      `/api/v1/scalping/optimize?days=${req.days ?? 90}&max_symbols=${req.max_symbols ?? 5}`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['scalping', 'optimize'] }); },
   });
 }

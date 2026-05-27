@@ -5,7 +5,7 @@ and timeframe config. Each can be independently enabled/disabled.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from pydantic import BaseModel, Field
 
@@ -26,8 +26,14 @@ class TieredTPConfig(BaseModel):
 class EngineConfig(BaseModel):
     """Operator-facing config for the scalping module."""
 
-    # Timeframe Controls
-    execution_timeframe: str = "15m"
+    # Timeframe Controls — 4h structure / 30m execution is the default.
+    # Over ~2y of real data (OOS) the top pairs cluster at PF ~1.4 (4h/5m 1.46,
+    # 2h/15m 1.44, 4h/30m 1.42). 4h/30m is chosen as the default for the best RISK
+    # profile, not the highest raw PF: highest win-rate (48.5%), lowest drawdown
+    # (7.4R, ~half its PF-rivals), and fewest trades ⇒ least fee/slippage drag.
+    # Higher-return alternatives (4h/5m, 2h/15m) carry ~2x the drawdown — pick them
+    # in settings if chasing return. A saved config overrides this default.
+    execution_timeframe: str = "30m"
     macro_timeframe: str = "4h"
 
     # ── Strategy toggles ──
@@ -83,6 +89,15 @@ class EngineConfig(BaseModel):
     risk_percent: float = Field(default=1.0, ge=0.05, le=5.0)
     max_position_pct: float = Field(default=15.0, ge=1.0, le=100.0)
     account_equity: float = Field(default=100_000.0, gt=0)
+    # Minimum reward:risk a setup must clear to arm (target ≥ pa_min_rr × stop).
+    # Default 1.5 matches the previously-hardcoded gate — no behavior change.
+    pa_min_rr: float = Field(default=1.5, ge=0.5, le=5.0)
+
+    # ── Auto-optimize (opt-in, isolated) ──
+    # When True the scanner overlays the persisted optimizer-found parameter set on
+    # TOP of this config (a copy) — it never overwrites the manual values here. Off
+    # ⇒ this config is used exactly as-is.
+    use_optimized: bool = False
 
     # ── Tiered take-profit ──
     tiered_tp: TieredTPConfig = Field(default_factory=TieredTPConfig)
@@ -100,3 +115,37 @@ ScalpingConfig = EngineConfig
 
 def default_config() -> EngineConfig:
     return EngineConfig()
+
+
+# ── Timeframe presets ────────────────────────────────────────────────────────
+# One-click bundles mapping to the three pairs the 2-year OOS study highlighted.
+# Applying a preset only sets macro/execution TF + confirm bars on the active
+# config — it never touches risk, symbols, or other settings. confirm_bars is 3
+# (the value every reported metric was measured at). Trailing is intentionally NOT
+# a preset field: scalping trails on a %-based stop (separately validated), and the
+# TF study used fixed SL/TP, so per-preset ATR trail multiples would be unvalidated.
+
+class TimeframePreset(BaseModel):
+    macro_tf: str
+    exec_tf: str
+    confirm_bars: int
+    description: str
+
+
+TIMEFRAME_PRESETS: Dict[str, TimeframePreset] = {
+    "CONSERVATIVE_DEFAULT": TimeframePreset(
+        macro_tf="4h", exec_tf="30m", confirm_bars=3,
+        description="Default. Lowest drawdown (~7.4R) & best win-rate (~48.5%) over 2y; "
+                    "fewest trades ⇒ least fee/slippage drag. Smoothest equity curve.",
+    ),
+    "AGGRESSIVE_RETURN": TimeframePreset(
+        macro_tf="4h", exec_tf="5m", confirm_bars=3,
+        description="Highest total return (2y OOS PF ~1.46) but ~2x the drawdown and "
+                    "heavy 5m fee/slippage exposure — needs strict cost control.",
+    ),
+    "STRUCTURAL_SCALP": TimeframePreset(
+        macro_tf="2h", exec_tf="15m", confirm_bars=3,
+        description="Balanced (2y OOS PF ~1.44): more trades than the default, higher "
+                    "drawdown; structural 2h bias with 15m entries.",
+    ),
+}

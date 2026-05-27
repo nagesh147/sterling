@@ -526,6 +526,7 @@ def evaluate_price_action(
             plan = resolve_trade_risk(
                 direction="long", entry=entry, structure_stop=structure_stop,
                 atr_val=atr(h15, l15, c15), levels=levels_15m, tp_level_type="resistance",
+                min_rr=cfg.pa_min_rr,
             )
             if plan.ok:
                 stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
@@ -554,6 +555,7 @@ def evaluate_price_action(
             plan = resolve_trade_risk(
                 direction="short", entry=entry, structure_stop=structure_stop,
                 atr_val=atr(h15, l15, c15), levels=levels_15m, tp_level_type="support",
+                min_rr=cfg.pa_min_rr,
             )
             if plan.ok:
                 stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source

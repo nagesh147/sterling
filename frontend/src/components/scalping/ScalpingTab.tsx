@@ -4,6 +4,7 @@ import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
   useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
   useScalpingBacktest, useScalpingExecute, useScalpingSignals,
+  useScalpingOptimize, useRunScalpingOptimize, useScalpingPresets,
   type ScalpingConfig, type ScalpingSignal,
   type ScalpingExecuteResponse,
 } from '../../hooks/useScalping';
@@ -65,6 +66,20 @@ function NumField({ label, value, step = 1, min, max, onChange }: {
           padding: '3px 6px', textAlign: 'right',
         }}
       />
+    </label>
+  );
+}
+
+function TfSelect({ label, value, opts, onChange }: { label: string; value: string; opts: string[]; onChange: (v: string) => void }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{
+        width: 74, background: 'var(--t-bg)', border: '1px solid var(--t-border)', borderRadius: 5,
+        color: 'var(--t-bright)', fontFamily: 'inherit', fontSize: 10, padding: '3px 6px', cursor: 'pointer',
+      }}>
+        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
     </label>
   );
 }
@@ -135,6 +150,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
   const universeQ = useScalpingUniverse();
   const universe = universeQ.data?.symbols ?? [];
+  const presets = useScalpingPresets().data;
   const allMode = draft.symbols.length === 0;
   const selSet = new Set(draft.symbols);
   const toggleSym = (s: string) => setDraft((d) => {
@@ -164,7 +180,33 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
       </div>
       <div style={gridStyle()}>
         <div style={grpBox}>
-          <div style={grpTitle}>4H LEVELS</div>
+          <div style={grpTitle}>TIMEFRAMES</div>
+          {presets && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
+              {Object.entries(presets).map(([key, p]) => {
+                const active = draft.macro_timeframe === p.macro_tf && draft.execution_timeframe === p.exec_tf && draft.pa_confirm_bars === p.confirm_bars;
+                const label = key.split('_')[0][0] + key.split('_')[0].slice(1).toLowerCase();
+                return (
+                  <button key={key} title={p.description}
+                    onClick={() => setDraft((d) => ({ ...d, macro_timeframe: p.macro_tf, execution_timeframe: p.exec_tf, pa_confirm_bars: p.confirm_bars }))}
+                    style={{
+                      fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                      border: `1px solid ${active ? 'var(--t-blue)' : 'var(--t-border)'}`,
+                      background: active ? 'var(--t-bg3)' : 'transparent',
+                      color: active ? 'var(--t-blue)' : 'var(--t-dim)', whiteSpace: 'nowrap',
+                    }}>{label} <span style={{ opacity: 0.7 }}>{p.macro_tf}/{p.exec_tf}</span></button>
+                );
+              })}
+            </div>
+          )}
+          <TfSelect label="Structure" value={draft.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => set('macro_timeframe', v)} />
+          <TfSelect label="Entry" value={draft.execution_timeframe} opts={['5m', '15m', '30m']} onChange={(v) => set('execution_timeframe', v)} />
+          <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>
+            <b style={{ color: 'var(--t-bright)' }}>4h/30m</b> default — best win-rate &amp; lowest drawdown over ~2y. <b style={{ color: 'var(--t-bright)' }}>4h/5m</b> / <b style={{ color: 'var(--t-bright)' }}>2h/15m</b> give higher return at ~2× drawdown.
+          </span>
+        </div>
+        <div style={grpBox}>
+          <div style={grpTitle}>STRUCTURE LEVELS</div>
           <NumField label="Min touches" value={draft.level_touches} min={2} max={10} onChange={(v) => set('level_touches', v)} />
           <NumField label="Tolerance %" value={draft.level_tolerance_pct} step={0.1} min={0.1} max={3} onChange={(v) => set('level_tolerance_pct', v)} />
         </div>
@@ -1008,6 +1050,100 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 
 /* ── main tab: 3-column layout ─────────────────────────────────────────────── */
 
+/* ── auto-optimize panel (in drawer) ──────────────────────────────────────── */
+
+function OptimizePanel({ cfg, onToggleOptimized }: { cfg: ScalpingConfig; onToggleOptimized: (v: boolean) => void }) {
+  const optQ = useScalpingOptimize();
+  const runOpt = useRunScalpingOptimize();
+  const data = optQ.data;
+  const status = data?.status;
+  const result = data?.result;
+  const running = !!status?.running;
+
+  const corr = result?.is_oos_corr ?? 0;
+  const corrColor = corr > 0.3 ? 'var(--t-green)' : corr < 0 ? 'var(--t-red)' : 'var(--t-amber)';
+  const pStr = (p?: Record<string, number | boolean>) =>
+    !p ? '—' : `${p.macro_timeframe ?? '4h'}/${p.execution_timeframe ?? '15m'} · cb ${p.pa_confirm_bars} · R:R ${p.pa_min_rr} · trend ${p.macro_trend_filter ? 'on' : 'off'}`;
+  const pfColor = (v: number) => (v >= 1.3 ? 'var(--t-green)' : v >= 1 ? 'var(--t-amber)' : 'var(--t-red)');
+
+  return (
+    <SectionCard title="AUTO-OPTIMIZE (EXPERIMENTAL)" right={
+      <button disabled={running || runOpt.isPending} onClick={() => runOpt.mutate({ days: 90, max_symbols: 5 })} style={{
+        fontSize: 9, fontWeight: 700, padding: '4px 12px', borderRadius: 5, fontFamily: 'inherit',
+        cursor: running || runOpt.isPending ? 'default' : 'pointer',
+        border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
+      }}>{running ? `RUNNING ${status?.progress ?? ''}` : runOpt.isPending ? 'STARTING…' : 'RUN SWEEP'}</button>
+    }>
+      <div style={{ ...dim, marginBottom: 10, lineHeight: 1.5 }}>
+        Sweeps a focused grid (confirm bars · level tolerance · min R:R · trend filter) and ranks by
+        <b style={{ color: 'var(--t-bright)' }}> out-of-sample</b> profit factor. Results are isolated —
+        they never touch your manual settings until you enable the toggle.
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <ChipToggle label="Use optimized parameters" on={cfg.use_optimized} onChange={onToggleOptimized} />
+        {cfg.use_optimized && data?.optimized_params && (
+          <span style={{ fontSize: 9, color: 'var(--t-green)' }}>active: {pStr(data.optimized_params)}</span>
+        )}
+        {cfg.use_optimized && !data?.optimized_params && (
+          <span style={{ fontSize: 9, color: 'var(--t-amber)' }}>no sweep yet — using manual config until you run one</span>
+        )}
+      </div>
+
+      {status?.error && <div style={{ color: 'var(--t-red)', fontSize: 10, marginBottom: 8 }}>✕ {status.error}</div>}
+
+      {result ? (
+        <>
+          <div style={{
+            fontSize: 10, lineHeight: 1.5, marginBottom: 8, padding: '6px 9px', borderRadius: 6,
+            color: result.recommend_change ? 'var(--t-green)' : corrColor,
+            background: (result.recommend_change ? 'var(--t-green)' : corrColor) + '14',
+            border: `1px solid ${(result.recommend_change ? 'var(--t-green)' : corrColor)}44`,
+          }}>
+            {result.recommend_change ? '✓ ADOPT' : '⚠ KEEP MANUAL'} · IS↔OOS corr <b>{corr.toFixed(2)}</b> — {result.note}
+          </div>
+          <div style={{ display: 'flex', gap: 18, marginBottom: 8, fontSize: 10, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.06em' }}>CURRENT (baseline)</div>
+              <div style={{ fontVariantNumeric: 'tabular-nums' }}>OOS PF {result.baseline.oos_pf} · exp {result.baseline.oos_exp}R · n {result.baseline.n_oos}</div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--t-green)', fontWeight: 700, letterSpacing: '0.06em' }}>BEST · {pStr(result.best_params)}</div>
+              <div style={{ fontVariantNumeric: 'tabular-nums' }}>OOS PF {result.combos[0]?.oos_pf} · exp {result.combos[0]?.oos_exp}R · n {result.combos[0]?.n_oos}</div>
+            </div>
+          </div>
+          <div style={{ maxHeight: 170, overflow: 'auto', border: '1px solid var(--t-border)', borderRadius: 6 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+              <thead>
+                <tr style={{ color: 'var(--t-dim)', textAlign: 'left' }}>
+                  {['Params', 'OOS PF', 'OOS exp', 'nOOS', 'IS PF', 'Score'].map((h) => (
+                    <th key={h} style={{ padding: '3px 6px', position: 'sticky', top: 0, background: 'var(--t-bg2)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.combos.slice(0, 12).map((c, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid var(--t-border)', fontVariantNumeric: 'tabular-nums' }}>
+                    <td style={{ padding: '2px 6px' }}>{pStr(c.params)}</td>
+                    <td style={{ padding: '2px 6px', color: pfColor(c.oos_pf), fontWeight: 700 }}>{c.oos_pf}</td>
+                    <td style={{ padding: '2px 6px' }}>{c.oos_exp}</td>
+                    <td style={{ padding: '2px 6px' }}>{c.n_oos}</td>
+                    <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{c.is_pf}</td>
+                    <td style={{ padding: '2px 6px' }}>{c.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--t-dim)', marginTop: 6 }}>Universe: {result.universe.join(', ')} · OOS = held-out last 30% by time</div>
+        </>
+      ) : (
+        !running && <div style={dim}>No sweep yet — run one to rank parameter sets by held-out (out-of-sample) performance.</div>
+      )}
+    </SectionCard>
+  );
+}
+
 export function ScalpingTab() {
   const selected = useSelectedUnderlying();
   const setSelected = useSetSelectedUnderlying();
@@ -1180,15 +1316,23 @@ export function ScalpingTab() {
   };
 
   const data = scanQ.data;
-  // Only actionable setups are signals. A direction of "none" means "price is near
-  // a 4H level but no pattern confirmed" — not a tradeable signal, just scanner
-  // telemetry — so it's dropped from the feed (it used to flood the list and was
-  // mislabeled SHORT). long/short rows are kept even when entry_ok is false so the
-  // "skipped: stop too wide / cramped R:R" near-misses stay visible.
-  let signals = (data?.signals ?? []).filter((s) => s.direction === 'long' || s.direction === 'short');
-  if (stratFilter !== 'all') {
-    signals = signals.filter((s) => s.strategy === stratFilter);
-  }
+  const stratScoped = (data?.signals ?? []).filter((s) => stratFilter === 'all' || s.strategy === stratFilter);
+  // Actionable rows have a direction (READY = executable, WATCH = armed-not-tradeable,
+  // PENDING = pattern found but risk-rejected). long/short kept even when entry_ok is
+  // false so "skipped: stop too wide / cramped R:R" near-misses stay visible.
+  const signals = stratScoped.filter((s) => s.direction === 'long' || s.direction === 'short');
+  // In-progress / watching: price is AT a 4H level but no pattern has confirmed yet
+  // (direction "none" + a near_level). These aren't tradeable, but they show what's
+  // brewing — sorted by proximity to the level (closest to triggering first). The
+  // pure-noise "none" rows (no nearby level / insufficient data) are excluded. Only
+  // present when "Ready only" is off (armed_only filters them server-side otherwise).
+  const watchingSignals = stratScoped
+    .filter((s) => s.direction === 'none' && s.near_level != null)
+    .sort((a, b) => {
+      const pa = a.close && a.near_level ? Math.abs(a.close - a.near_level) / a.close : 1;
+      const pb = b.close && b.near_level ? Math.abs(b.close - b.near_level) / b.close : 1;
+      return pa - pb;
+    });
 
   // Current-mode view of executions. execStates keeps ALL modes (persisted), but
   // the list only shows trades that ran in the mode you're currently in — so
@@ -1266,9 +1410,14 @@ export function ScalpingTab() {
       return { key, s, es: feedbackEs, pnl: undefined, executed: false, macroMode };
     });
 
+  // In-progress rows — price at a 4H level, no confirmed pattern yet (not tradeable).
+  const watchingRows: Row[] = watchingSignals
+    .filter((s) => !openSetupKeys.has(`${s.underlying}-${s.strategy}`))
+    .map((s) => ({ key: `${s.underlying}-${s.strategy}-watch`, s, es: undefined, pnl: undefined, executed: false, macroMode }));
+
   const executedSignals: Row[] = executedRows;       // real open/closed positions for this book
   const restSignals: Row[] = scanRows;               // live scan signals (button when ready & algo off)
-  const displaySignals: Row[] = [...executedSignals, ...restSignals];
+  const displaySignals: Row[] = [...executedSignals, ...restSignals, ...watchingRows];
 
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
@@ -1464,9 +1613,15 @@ export function ScalpingTab() {
               </>
             )}
             {restSignals.map(renderSignalCard)}
+            {watchingRows.length > 0 && (
+              <>
+                <ListGroupHeader label="Watching · at 4H level, awaiting pattern" count={watchingRows.length} color="var(--t-dim)" />
+                {watchingRows.map(renderSignalCard)}
+              </>
+            )}
             {data && displaySignals.length > 0 && (
               <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4 }}>
-                <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · EXECUTE routes through Paper/Live mode
+                <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
               </div>
             )}
           </div>
@@ -1548,6 +1703,12 @@ export function ScalpingTab() {
               cfg={cfg}
               saving={setCfg.isPending}
               onSave={(c) => setCfg.mutate(c)}
+            />
+          )}
+          {cfg && (
+            <OptimizePanel
+              cfg={cfg}
+              onToggleOptimized={(v) => setCfg.mutate({ ...cfg, use_optimized: v })}
             />
           )}
           <ScalpBacktestPanel underlying={btUnderlying} />
