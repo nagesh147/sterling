@@ -15,6 +15,7 @@ import { useTradingMode } from '../../hooks/useTradingMode';
 import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
 import { useStreamPrices } from '../../hooks/useAppStream';
 import { ThreeColumnLayout, LeftSection, RightSection } from '../ThreeColumnLayout';
+import { MultiPaneChart } from '../charts/MultiPaneChart';
 import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint } from '../../styles/terminalUI';
 
 /* ── executed-trade tracking ───────────────────────────────────────────────── */
@@ -770,6 +771,12 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   const bg = isOpen ? statusColor + '16' : selected ? 'rgba(0,0,0,0.16)' : 'var(--t-bg2)';
   const borderColor = isOpen ? statusColor + '66' : selected ? statusColor + '2e' : 'var(--t-border)';
 
+  const positionOverlayData = displayEntry != null ? {
+    entry: displayEntry,
+    stop: trailSl ?? initialSl,
+    target: initialTp ?? 0,
+  } : undefined;
+
   return (
     <div onClick={onSelect} style={{
       display: 'flex', flexDirection: 'column', gap: 7,
@@ -906,6 +913,17 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
 
       {/* expand-on-click: full execution metrics for an executed trade */}
       {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} />}
+
+      {expanded && (
+        <div style={{ marginTop: 12, padding: '0 4px' }} onClick={(e) => e.stopPropagation()}>
+          <MultiPaneChart 
+            underlying={s.underlying} 
+            tf="15m" 
+            position={positionOverlayData} 
+            reason={metaReason}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1468,10 +1486,27 @@ export function ScalpingTab() {
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <div style={{
             padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
-            color: 'var(--t-dim)', textTransform: 'uppercase',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            Execution Log · {tradeMode}
+            <span style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+              color: 'var(--t-dim)', textTransform: 'uppercase',
+            }}>
+              Execution Log · {tradeMode}
+            </span>
+            {execLog.length > 0 && (
+              <button 
+                onClick={() => setExecLog([])}
+                style={{
+                  background: 'transparent', border: '1px solid var(--t-border)', 
+                  color: 'var(--t-dim)', fontSize: 9, fontWeight: 700, 
+                  letterSpacing: '0.06em', cursor: 'pointer', fontFamily: 'inherit', 
+                  textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, 
+                }}
+              >
+                Clear
+              </button>
+            )}
           </div>
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <ExecLog entries={execLog} mode={tradeMode} />

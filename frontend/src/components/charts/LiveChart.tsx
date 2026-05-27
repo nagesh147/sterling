@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ColorType, CandlestickSeries } from 'lightweight-charts';
 import type { OHLCVBar } from '../../hooks/useCandles';
+import { PositionOverlay } from './overlays/PositionOverlay';
 
 export interface PositionOverlayData {
   entry: number;
@@ -19,10 +20,11 @@ interface LiveChartProps {
   position?: PositionOverlayData | null;
 }
 
-export function LiveChart({ candles, height = 400 }: LiveChartProps) {
+export function LiveChart({ candles, height = 400, position }: LiveChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<any>(null);
+  const [chart, setChart] = useState<IChartApi | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -54,6 +56,7 @@ export function LiveChart({ candles, height = 400 }: LiveChartProps) {
 
     chartRef.current = chart;
     seriesRef.current = series;
+    setChart(chart);
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current) {
@@ -85,6 +88,15 @@ export function LiveChart({ candles, height = 400 }: LiveChartProps) {
     <div
       ref={containerRef}
       style={{ width: '100%', height, background: 'transparent' }}
-    />
+    >
+      {position && chart && (
+        <PositionOverlay
+          chart={chart}
+          entry={position.entry}
+          trailStop={position.stop != null ? { stop: position.stop, mode: null, highest_seen: null, partial_25_done: false, partial_50_done: false, stop_moved_last_check: false } : null}
+          target={position.target}
+        />
+      )}
+    </div>
   );
 }

@@ -33,9 +33,11 @@ const styles: Record<string, React.CSSProperties> = {
 interface MultiPaneChartProps {
   underlying: string;
   tf?: string;
+  position?: any;
+  reason?: string | null;
 }
 
-export function MultiPaneChart({ underlying, tf: defaultTf = '15m' }: MultiPaneChartProps) {
+export function MultiPaneChart({ underlying, tf: defaultTf = '15m', position, reason }: MultiPaneChartProps) {
   const [activeTf, setActiveTf] = useState(defaultTf);
   const { data: candles = [], isLoading } = useCandles(underlying, activeTf, 1825);
 
@@ -70,6 +72,12 @@ export function MultiPaneChart({ underlying, tf: defaultTf = '15m' }: MultiPaneC
         </div>
       </div>
 
+      {reason && (
+        <div style={{ padding: '8px 12px', background: 'rgba(68, 204, 136, 0.05)', border: '1px solid rgba(68, 204, 136, 0.15)', borderRadius: 6, marginBottom: 12, fontSize: 11, color: '#aaa', lineHeight: 1.4 }}>
+          <strong style={{ color: '#44cc88', letterSpacing: '0.05em' }}>SETUP LOGIC:</strong> {reason}
+        </div>
+      )}
+
       {isLoading ? (
         <div style={{ color: '#444', fontSize: 11, padding: 20, textAlign: 'center' }}>
           Loading candles…
@@ -80,6 +88,7 @@ export function MultiPaneChart({ underlying, tf: defaultTf = '15m' }: MultiPaneC
           tf={activeTf}
           candles={candles}
           height={380}
+          position={position}
         />
       )}
     </div>
