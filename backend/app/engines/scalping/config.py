@@ -89,9 +89,11 @@ class ScalpingProfile(BaseModel):
     risk_percent: float = Field(default=1.0, ge=0.05, le=5.0)
     max_position_pct: float = Field(default=15.0, ge=1.0, le=100.0)
     account_equity: float = Field(default=100_000.0, gt=0)
-    # Minimum reward:risk a setup must clear to arm (target ≥ pa_min_rr × stop).
+    # Minimum reward:risk a setup must clear to arm (target ≥ min_rr × stop).
     # Default 1.5 matches the previously-hardcoded gate — no behavior change.
-    pa_min_rr: float = Field(default=1.5, ge=0.5, le=5.0)
+    min_rr: float = Field(default=1.5, ge=0.5, le=5.0)
+    # Maximum stop distance allowed as a multiple of ATR. Rejects unscalpable setups.
+    max_stop_atr: float = Field(default=4.0, ge=1.0, le=10.0)
 
 
 class EngineConfig(BaseModel):

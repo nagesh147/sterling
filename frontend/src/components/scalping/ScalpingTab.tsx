@@ -287,6 +287,8 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
               </div>
               <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
               <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
+              <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} onChange={(v) => setProfileField('min_rr', v)} />
+              <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} onChange={(v) => setProfileField('max_stop_atr', v)} />
               <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
             </div>
           </div>
@@ -895,6 +897,11 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
               Strategy tag + the macro trading mode it ran under, e.g. SMC [SWING]. */}
           <div style={{ width: 150, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Pill text={meta.label} color={meta.color} />
+            {s.profile && (
+              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
+                [{s.profile.toUpperCase()}]
+              </span>
+            )}
             {macroMode && (
               <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
                 [{macroMode}]

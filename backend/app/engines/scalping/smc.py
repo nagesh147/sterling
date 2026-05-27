@@ -215,6 +215,7 @@ def evaluate_smc(
             plan = resolve_trade_risk(
                 direction="long", entry=entry, structure_stop=float(result["stop_loss"]),
                 atr_val=atr_val, levels=levels_15m, tp_level_type="resistance",
+                min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
             )
             if plan.ok:
                 direction = "long"
@@ -233,6 +234,7 @@ def evaluate_smc(
             plan = resolve_trade_risk(
                 direction="short", entry=entry, structure_stop=float(result["stop_loss"]),
                 atr_val=atr_val, levels=levels_15m, tp_level_type="support",
+                min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
             )
             if plan.ok:
                 direction = "short"

@@ -190,7 +190,7 @@ def evaluate_ma_crossover(
             plan = resolve_trade_risk(
                 direction="long", entry=entry, structure_stop=min(level_price, current_price),
                 atr_val=atr_val, levels=levels, tp_level_type="resistance",
-                max_risk_pct=4.0, max_stop_atr=6.0,
+                max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
             )
             if plan.ok:
                 direction = "long"; pattern = "sma_cross_above_ema"
@@ -212,7 +212,7 @@ def evaluate_ma_crossover(
             plan = resolve_trade_risk(
                 direction="short", entry=entry, structure_stop=max(level_price, current_price),
                 atr_val=atr_val, levels=levels, tp_level_type="support",
-                max_risk_pct=4.0, max_stop_atr=6.0,
+                max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
             )
             if plan.ok:
                 direction = "short"; pattern = "sma_cross_below_ema"
