@@ -65,6 +65,20 @@ class EngineConfig(BaseModel):
     allow_long: bool = True
     allow_short: bool = True
 
+    # ── Macro-trend filter (opt-in) ──
+    # When on, counter-trend setups are suppressed: longs only in a 4H uptrend,
+    # shorts only in a downtrend (chop allows both). Off by default — counter-
+    # trend setups are still positive-EV, so forcing this trades total return for
+    # a higher per-trade PF / lower variance. Regime = 4H EMA(fast) vs EMA(slow)
+    # with a flat dead-band.
+    macro_trend_filter: bool = False
+    macro_trend_ema_fast: int = Field(default=50, ge=5, le=200)
+    macro_trend_ema_slow: int = Field(default=100, ge=20, le=400)
+    macro_trend_flat_band_pct: float = Field(
+        default=0.5, ge=0.0, le=5.0,
+        description="|emaFast−emaSlow|/price below this % ⇒ chop (both directions allowed)",
+    )
+
     # ── Risk & sizing ──
     risk_percent: float = Field(default=1.0, ge=0.05, le=5.0)
     max_position_pct: float = Field(default=15.0, ge=1.0, le=100.0)

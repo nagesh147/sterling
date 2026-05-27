@@ -18,6 +18,7 @@ export interface ScalpingConfig {
   ma_slow_ema: number;
   allow_long: boolean;
   allow_short: boolean;
+  macro_trend_filter: boolean;
   risk_percent: number;
   max_position_pct: number;
   account_equity: number;

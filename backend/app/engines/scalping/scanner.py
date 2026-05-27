@@ -33,6 +33,38 @@ def _level_to_schema(l, underlying: str = "") -> SupportResistanceLevel:
     )
 
 
+def _ema_last(closes: np.ndarray, period: int) -> float:
+    """Latest EMA value over `closes` (iterative; seeded with the first close)."""
+    if len(closes) == 0:
+        return 0.0
+    k = 2.0 / (period + 1)
+    e = float(closes[0])
+    for x in closes[1:]:
+        e = k * float(x) + (1 - k) * e
+    return e
+
+
+def _macro_regime(closes_4h: np.ndarray, cfg: ScalpingConfig) -> str:
+    """4H trend regime: 'bull' | 'bear' | 'chop' from EMA(fast) vs EMA(slow)."""
+    if len(closes_4h) < cfg.macro_trend_ema_slow:
+        return "chop"
+    fast = _ema_last(closes_4h, cfg.macro_trend_ema_fast)
+    slow = _ema_last(closes_4h, cfg.macro_trend_ema_slow)
+    last = float(closes_4h[-1]) or 1.0
+    spread = (fast - slow) / last
+    band = cfg.macro_trend_flat_band_pct / 100.0
+    if spread > band:
+        return "bull"
+    if spread < -band:
+        return "bear"
+    return "chop"
+
+
+def _is_counter_trend(direction: str, regime: str) -> bool:
+    """A long in a downtrend / a short in an uptrend (chop is never counter-trend)."""
+    return (direction == "long" and regime == "bear") or (direction == "short" and regime == "bull")
+
+
 # Normalize watch_long/watch_short to long/short for the API
 def _normalize_direction(d: str) -> str:
     if d in ("watch_long",):
@@ -106,6 +138,15 @@ def scan_symbol(
     if cfg.enable_ma_crossover:
         ma = evaluate_ma_crossover(underlying, candles_4h, candles_15m, levels, cfg)
         signals.append(_make_signal(ma, "ma_crossover"))
+
+    # Opt-in macro-trend filter: drop counter-trend setups (long in a 4H downtrend,
+    # short in an uptrend). Stats show trend-aligned setups carry a higher PF, but
+    # counter-trend is still +EV — so this is off by default and trades total
+    # return for per-trade quality / lower variance when enabled.
+    if cfg.macro_trend_filter:
+        regime = _macro_regime(closes_4h, cfg)
+        if regime in ("bull", "bear"):
+            signals = [s for s in signals if not _is_counter_trend(s.direction, regime)]
 
     return signals
 

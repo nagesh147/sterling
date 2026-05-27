@@ -214,10 +214,15 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         </div>
         <div style={grpBox}>
           <div style={grpTitle}>DIRECTION & RISK</div>
-          <div style={{ display: 'flex', gap: 5, marginBottom: 4 }}>
+          <div style={{ display: 'flex', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
             <ChipToggle label="Long" on={draft.allow_long} onChange={(v) => set('allow_long', v)} />
             <ChipToggle label="Short" on={draft.allow_short} onChange={(v) => set('allow_short', v)} />
+            <ChipToggle label="Trend filter" on={draft.macro_trend_filter} onChange={(v) => set('macro_trend_filter', v)} />
           </div>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4, marginBottom: 4 }}>
+            <b style={{ color: 'var(--t-bright)' }}>Trend filter</b>: only long in a 4H uptrend / short in a downtrend.
+            Off = direction-neutral (higher total return); on = trend-aligned only (higher PF, fewer trades).
+          </span>
           <NumField label="Risk % / trade" value={draft.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => set('risk_percent', v)} />
           <NumField label="Max position %" value={draft.max_position_pct} step={1} min={1} max={100} onChange={(v) => set('max_position_pct', v)} />
           <NumField label="Equity $" value={draft.account_equity} step={1000} min={100} onChange={(v) => set('account_equity', v)} />

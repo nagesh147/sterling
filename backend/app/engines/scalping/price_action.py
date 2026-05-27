@@ -361,40 +361,62 @@ def detect_descending_triangle(
 def detect_double_top(
     highs: NDArray, lows: NDArray, closes: NDArray, cfg: ScalpingConfig
 ) -> Optional[dict]:
-    """Relaxed double top: two peaks near the same price, current close below
-    the neckline (the valley between the peaks)."""
+    """Bearish double top — a strict mirror of `detect_double_bottom`.
+
+    Two structural pivot HIGHS near the same price, a meaningful neckline trough
+    between them, and a confirmed breakdown below it. This previously used a
+    permissive `argsort` with hardcoded 2% / 3-bar thresholds and *no* neckline
+    gate — far looser than double_bottom's config-driven 4-bar pivot test — so
+    short setups armed far more readily than longs (a mechanical short bias:
+    double_top was ~90% of all shorts). Mirroring the geometry removes it; the
+    long/short split now reflects market structure, not the detector.
+    """
     lookback = cfg.pa_lookback_bars
-    if len(highs) < lookback:
+
+    # 1. Locate structural pivot highs (local maxima with 2 bars clear each side).
+    pivot_high_indices = []
+    for idx in range(len(highs) - lookback, len(highs) - 2):
+        if highs[idx] > highs[idx - 1] and highs[idx] > highs[idx - 2] and \
+           highs[idx] > highs[idx + 1] and highs[idx] > highs[idx + 2]:
+            pivot_high_indices.append(idx)
+
+    if len(pivot_high_indices) < 2:
         return None
-    hi = highs[-lookback:]
-    lo = lows[-lookback:]
-    c = closes[-lookback:]
-    sorted_indices = np.argsort(-hi)  # descending
-    top_idx = int(sorted_indices[0])
-    top_val = float(hi[top_idx])
-    second_idx = None
-    for idx in sorted_indices[1:]:
-        idx = int(idx)
-        if abs(idx - top_idx) < 3:
-            continue
-        if abs(float(hi[idx]) - top_val) / max(top_val, 1e-6) < 0.02:
-            second_idx = idx
-            break
-    if second_idx is None:
+
+    # The two most recent distinct structural tops.
+    t1_idx = pivot_high_indices[-2]
+    t2_idx = pivot_high_indices[-1]
+
+    # Structural width (same constraint as double_bottom).
+    if (t2_idx - t1_idx) < cfg.pa_min_pivot_distance:
         return None
-    lo_idx, hi_idx = min(top_idx, second_idx), max(top_idx, second_idx)
-    neckline = round(float(np.min(lo[lo_idx:hi_idx + 1])), 4)
-    # Confirmed neckline breakdown within the last `pa_confirm_bars` bars, price
-    # still below it — so a top that broke down hours ago no longer fires, and
-    # chop under the neckline doesn't re-trigger, but a 1–N bar-old break still arms.
-    if not _fresh_breakout(c, neckline, "short", cfg.pa_confirm_bars):
+
+    t1_val = float(highs[t1_idx])
+    t2_val = float(highs[t2_idx])
+
+    # Peaks must line up within the same variance band as the bottoms.
+    if abs(t1_val - t2_val) / max(t1_val, 1e-6) > cfg.pa_max_bottom_variance:
         return None
-    return {
-        "pattern": "double_top",
-        "direction": "short",
-        "neckline": neckline,
-        "stop_above": round(top_val, 4),
-    }
+
+    # Neckline = the trough between the two tops; require a meaningful dip.
+    inter_lows = lows[t1_idx:t2_idx + 1]
+    neckline = float(np.min(inter_lows))
+    avg_top = (t1_val + t2_val) / 2
+    if (avg_top - neckline) / avg_top < cfg.pa_min_neckline_height:
+        return None
+
+    # Confirmed breakdown below the neckline within the last `pa_confirm_bars`
+    # bars, price still below it (windowed; see _fresh_breakout).
+    if _fresh_breakout(closes, neckline, "short", cfg.pa_confirm_bars):
+        return {
+            "pattern": "double_top",
+            "direction": "short",
+            "entry": round(float(closes[-1]), 4),
+            "neckline": round(neckline, 4),
+            "stop_loss": round(max(t1_val, t2_val) * 1.002, 4),  # invalidation above pattern high
+        }
+
+    return None
 
 
 def detect_bearish_consolidation(
