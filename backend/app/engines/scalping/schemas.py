@@ -21,6 +21,7 @@ class ScalpingSignal(BaseModel):
     underlying: str
     close: float
     strategy: str                  # "price_action" | "smc" | "ma_crossover"
+    profile: str = ""              # e.g. "intraday", "scalping", "aggressive"
     direction: str                 # "long" | "short" | "none"
 
     # 4H context

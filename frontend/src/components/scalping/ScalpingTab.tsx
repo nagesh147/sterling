@@ -145,7 +145,25 @@ const STRATEGY_META: Record<string, { label: string; color: string }> = {
 function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onSave: (c: ScalpingConfig) => void; saving: boolean }) {
   const [draft, setDraft] = useState<ScalpingConfig>(cfg);
   useEffect(() => { setDraft(cfg); }, [cfg]);
-  const set = <K extends keyof ScalpingConfig>(k: K, v: ScalpingConfig[K]) => setDraft((d) => ({ ...d, [k]: v }));
+  
+  const profileKeys = Object.keys(draft.profiles || {});
+  const [activeTab, setActiveTab] = useState<string>(profileKeys[0] || 'intraday');
+
+  const activeProfile = draft.profiles?.[activeTab];
+  const setProfileField = <K extends keyof ScalpingProfile>(k: K, v: ScalpingProfile[K]) => {
+    setDraft((d) => ({
+      ...d,
+      profiles: {
+        ...d.profiles,
+        [activeTab]: {
+          ...d.profiles[activeTab],
+          [k]: v
+        }
+      }
+    }));
+  };
+  const setRootField = <K extends keyof ScalpingConfig>(k: K, v: ScalpingConfig[K]) => setDraft((d) => ({ ...d, [k]: v }));
+
   const dirty = JSON.stringify(draft) !== JSON.stringify(cfg);
 
   const universeQ = useScalpingUniverse();
@@ -165,7 +183,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
       <span style={{ display: 'inline-flex', gap: 6 }}>
         <button
           disabled={!defaultCfg || saving}
-          title="Reset every field to the validated factory defaults (4h/30m, all strategies on, 1% risk). Review, then APPLY to save."
+          title="Reset every field to the validated factory defaults. Review, then APPLY to save."
           onClick={() => { if (defaultCfg) setDraft(defaultCfg); }}
           style={{
             fontSize: 9, fontWeight: 700, padding: '4px 12px', borderRadius: 5, fontFamily: 'inherit',
@@ -182,156 +200,119 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
       </span>
     }>
       <div style={{ ...dim, marginBottom: 12, lineHeight: 1.6 }}>
-        <b style={{ color: 'var(--t-bright)' }}>How to choose:</b> pick a <b style={{ color: 'var(--t-bright)' }}>Trading Profile</b> below
-        (most users → <b style={{ color: 'var(--t-blue)' }}>Intraday</b>: lowest drawdown, fewest fees), then <b style={{ color: 'var(--t-green)' }}>APPLY</b>.
-        Fine-tune individual settings underneath if you want; <b>↺ DEFAULTS</b> resets everything.
-        The engine reads a <b style={{ color: 'var(--t-bright)' }}>structure</b> timeframe for S/R levels and an <b style={{ color: 'var(--t-bright)' }}>entry</b>
-        timeframe for the pattern breakout — it only fires when price is at a key level. Best-validated strategy is
-        <b style={{ color: 'var(--t-amber)' }}> Price Action</b>; SMC / MA Crossover are unvalidated extras (leave off if unsure).
+        <b style={{ color: 'var(--t-bright)' }}>Active Tracks:</b> Toggle which profiles the scanner should run concurrently. Then select a tab below to tune its individual constraints (timeframes, risk, strategies).
       </div>
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
-        <ChipToggle label="Price Action" on={draft.enable_price_action} onChange={(v) => set('enable_price_action', v)} />
-        <ChipToggle label="SMC" on={draft.enable_smc} onChange={(v) => set('enable_smc', v)} />
-        <ChipToggle label="MA Crossover" on={draft.enable_ma_crossover} onChange={(v) => set('enable_ma_crossover', v)} />
+        {profileKeys.map(p => (
+          <ChipToggle 
+            key={p} 
+            label={`Run ${p.toUpperCase()}`} 
+            on={(draft.active_profiles || []).includes(p)} 
+            onChange={(on) => {
+              const cur = new Set(draft.active_profiles);
+              if (on) cur.add(p); else cur.delete(p);
+              setRootField('active_profiles', [...cur]);
+            }} 
+          />
+        ))}
       </div>
-      <div style={gridStyle()}>
-        {presets && (
-          <div style={{ ...grpBox, gridColumn: '1 / -1' }}>
-            <div style={grpTitle}>TRADING PROFILES · 2Y OOS (Price Action)</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {Object.entries(presets).map(([key, p]) => {
-                const active = draft.macro_timeframe === p.macro_tf && draft.execution_timeframe === p.exec_tf && draft.pa_confirm_bars === p.confirm_bars;
-                const stats: [string, string, string | undefined][] = [
-                  ['WIN', `${p.oos_win_pct}%`, undefined],
-                  ['PF', p.oos_pf.toFixed(2), p.oos_pf >= 1.3 ? 'var(--t-green)' : 'var(--t-amber)'],
-                  ['MAXDD', `${p.oos_max_dd_r}R`, 'var(--t-amber)'],
-                ];
-                return (
-                  <button key={key} title={p.description}
-                    onClick={() => setDraft((d) => ({ ...d, macro_timeframe: p.macro_tf, execution_timeframe: p.exec_tf, pa_confirm_bars: p.confirm_bars, risk_percent: p.suggested_risk_pct }))}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', width: '100%',
-                      padding: '7px 10px', borderRadius: 7,
-                      border: `1px solid ${active ? 'var(--t-blue)' : 'var(--t-border)'}`,
-                      background: active ? tint('var(--t-blue)', 12) : 'transparent',
-                    }}>
-                    <div style={{ minWidth: 96, flexShrink: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 800, color: active ? 'var(--t-blue)' : 'var(--t-bright)' }}>{p.label}</div>
-                      <div style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums' }}>{p.macro_tf}/{p.exec_tf} · risk {p.suggested_risk_pct}%</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-                      {stats.map(([l, v, c]) => (
-                        <div key={l} style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: c || 'var(--t-bright)', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
-                          <span style={{ fontSize: 7, color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.06em' }}>{l}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <span style={{ flex: 1, minWidth: 70, fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.35 }}>{p.description}</span>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: active ? 'var(--t-blue)' : 'var(--t-dim)', whiteSpace: 'nowrap', flexShrink: 0 }}>{active ? '● ACTIVE' : 'APPLY →'}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4, marginTop: 6 }}>
-              Sets timeframe + confirm bars + suggested risk on the draft (then Save). Metrics = 2-year out-of-sample, Price Action only — a measured, overfit-prone edge, not a guarantee; fees/slippage not modeled.
-            </div>
+
+      <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--t-border)', paddingBottom: 10, marginBottom: 12 }}>
+        {profileKeys.map(p => (
+          <button key={p} onClick={() => setActiveTab(p)} style={{
+            fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${activeTab === p ? 'var(--t-blue)' : 'var(--t-border)'}`,
+            background: activeTab === p ? 'var(--t-bg3)' : 'transparent',
+            color: activeTab === p ? 'var(--t-blue)' : 'var(--t-dim)',
+          }}>{p.toUpperCase()} SETTINGS</button>
+        ))}
+      </div>
+
+      {activeProfile && (
+        <>
+          <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
+            <ChipToggle label="Price Action" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
+            <ChipToggle label="SMC" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
+            <ChipToggle label="MA Crossover" on={activeProfile.enable_ma_crossover} onChange={(v) => setProfileField('enable_ma_crossover', v)} />
           </div>
-        )}
-        <div style={grpBox}>
-          <div style={grpTitle}>TIMEFRAMES</div>
-          <TfSelect label="Structure" value={draft.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => set('macro_timeframe', v)} />
-          <TfSelect label="Entry" value={draft.execution_timeframe} opts={['5m', '15m', '30m']} onChange={(v) => set('execution_timeframe', v)} />
-          <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>
-            <b style={{ color: 'var(--t-bright)' }}>4h/30m</b> default — best win-rate &amp; lowest drawdown over ~2y. <b style={{ color: 'var(--t-bright)' }}>4h/5m</b> / <b style={{ color: 'var(--t-bright)' }}>2h/15m</b> give higher return at ~2× drawdown.
-          </span>
-        </div>
-        <div style={grpBox}>
-          <div style={grpTitle}>STRUCTURE LEVELS</div>
-          <NumField label="Min touches" value={draft.level_touches} min={2} max={10} onChange={(v) => set('level_touches', v)} />
-          <NumField label="Tolerance %" value={draft.level_tolerance_pct} step={0.1} min={0.1} max={3} onChange={(v) => set('level_tolerance_pct', v)} />
-        </div>
-        <div style={grpBox}>
-          <div style={grpTitle}>PRICE ACTION</div>
-          <NumField label="Lookback" value={draft.pa_lookback_bars} min={5} max={100} onChange={(v) => set('pa_lookback_bars', v)} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
-              <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                {[1, 3, 5].map((n) => {
-                  const on = draft.pa_confirm_bars === n;
-                  return (
-                    <button key={n} onClick={() => set('pa_confirm_bars', n)} style={{
-                      fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-                      border: `1px solid ${on ? 'var(--t-blue)' : 'var(--t-border)'}`,
-                      background: on ? 'var(--t-bg3)' : 'transparent',
-                      color: on ? 'var(--t-blue)' : 'var(--t-dim)',
-                    }}>{n}</button>
-                  );
-                })}
-                <input
-                  type="number" value={draft.pa_confirm_bars} min={1} max={10}
-                  onChange={(e) => set('pa_confirm_bars', Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
-                  style={{
-                    width: 44, background: 'var(--t-bg)', border: '1px solid var(--t-border)',
-                    borderRadius: 5, color: 'var(--t-bright)', fontFamily: 'inherit', fontSize: 10,
-                    padding: '3px 6px', textAlign: 'right',
-                  }}
-                />
+
+          <div style={gridStyle()}>
+            <div style={grpBox}>
+              <div style={grpTitle}>TIMEFRAMES</div>
+              <TfSelect label="Structure" value={activeProfile.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => setProfileField('macro_timeframe', v)} />
+              <TfSelect label="Entry" value={activeProfile.execution_timeframe} opts={['1m', '5m', '15m', '30m']} onChange={(v) => setProfileField('execution_timeframe', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>STRUCTURE LEVELS</div>
+              <NumField label="Min touches" value={activeProfile.level_touches} min={2} max={10} onChange={(v) => setProfileField('level_touches', v)} />
+              <NumField label="Tolerance %" value={activeProfile.level_tolerance_pct} step={0.1} min={0.1} max={3} onChange={(v) => setProfileField('level_tolerance_pct', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>PRICE ACTION</div>
+              <NumField label="Lookback" value={activeProfile.pa_lookback_bars} min={5} max={100} onChange={(v) => setProfileField('pa_lookback_bars', v)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
+                  <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                    {[1, 3, 5].map((n) => {
+                      const on = activeProfile.pa_confirm_bars === n;
+                      return (
+                        <button key={n} onClick={() => setProfileField('pa_confirm_bars', n)} style={{
+                          fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                          border: `1px solid ${on ? 'var(--t-blue)' : 'var(--t-border)'}`,
+                          background: on ? 'var(--t-bg3)' : 'transparent',
+                          color: on ? 'var(--t-blue)' : 'var(--t-dim)',
+                        }}>{n}</button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
-            <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>
-              Breakout confirmation window. <b style={{ color: 'var(--t-bright)' }}>1</b> = current bar only (rare signals) ·
-              <b style={{ color: 'var(--t-bright)' }}> 3</b> = balanced (default) ·
-              <b style={{ color: 'var(--t-bright)' }}> 5</b> = more signals, entries up to ~75 min old.
-            </span>
+            <div style={grpBox}>
+              <div style={grpTitle}>SMC</div>
+              <NumField label="Imbalance ratio" value={activeProfile.smc_imbalance_ratio} step={0.1} min={1.0} max={3.0} onChange={(v) => setProfileField('smc_imbalance_ratio', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>MA CROSSOVER</div>
+              <NumField label="SMA period" value={activeProfile.ma_fast_sma} min={2} max={20} onChange={(v) => setProfileField('ma_fast_sma', v)} />
+              <NumField label="EMA period" value={activeProfile.ma_slow_ema} min={3} max={50} onChange={(v) => setProfileField('ma_slow_ema', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>DIRECTION & RISK</div>
+              <div style={{ display: 'flex', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
+                <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
+                <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
+                <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
+              </div>
+              <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
+              <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
+              <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
+            </div>
           </div>
-        </div>
-        <div style={grpBox}>
-          <div style={grpTitle}>SMC</div>
-          <NumField label="Imbalance ratio" value={draft.smc_imbalance_ratio} step={0.1} min={1.0} max={3.0} onChange={(v) => set('smc_imbalance_ratio', v)} />
-        </div>
-        <div style={grpBox}>
-          <div style={grpTitle}>MA CROSSOVER</div>
-          <NumField label="SMA period" value={draft.ma_fast_sma} min={2} max={20} onChange={(v) => set('ma_fast_sma', v)} />
-          <NumField label="EMA period" value={draft.ma_slow_ema} min={3} max={50} onChange={(v) => set('ma_slow_ema', v)} />
-        </div>
-        <div style={grpBox}>
-          <div style={grpTitle}>DIRECTION & RISK</div>
-          <div style={{ display: 'flex', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
-            <ChipToggle label="Long" on={draft.allow_long} onChange={(v) => set('allow_long', v)} />
-            <ChipToggle label="Short" on={draft.allow_short} onChange={(v) => set('allow_short', v)} />
-            <ChipToggle label="Trend filter" on={draft.macro_trend_filter} onChange={(v) => set('macro_trend_filter', v)} />
-          </div>
-          <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4, marginBottom: 4 }}>
-            <b style={{ color: 'var(--t-bright)' }}>Trend filter</b>: only long in a 4H uptrend / short in a downtrend.
-            Off = direction-neutral (higher total return); on = trend-aligned only (higher PF, fewer trades).
+        </>
+      )}
+
+      <div style={{ ...grpBox, marginTop: 12 }}>
+        <div style={grpTitle}>SYMBOLS (Global)</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <button onClick={() => setRootField('symbols', [] as string[])} style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${allMode ? 'var(--t-blue)' : 'var(--t-border)'}`,
+            background: allMode ? 'var(--t-bg3)' : 'transparent',
+            color: allMode ? 'var(--t-blue)' : 'var(--t-dim)',
+          }}>ALL</button>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
+            {allMode ? `all ${universe.length}` : `${draft.symbols.length} selected`}
           </span>
-          <NumField label="Risk % / trade" value={draft.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => set('risk_percent', v)} />
-          <NumField label="Max position %" value={draft.max_position_pct} step={1} min={1} max={100} onChange={(v) => set('max_position_pct', v)} />
-          <NumField label="Equity $" value={draft.account_equity} step={1000} min={100} onChange={(v) => set('account_equity', v)} />
         </div>
-        <div style={{ ...grpBox, gridColumn: '1 / -1' }}>
-          <div style={grpTitle}>SYMBOLS</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-            <button onClick={() => set('symbols', [] as string[])} style={{
-              fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
-              border: `1px solid ${allMode ? 'var(--t-blue)' : 'var(--t-border)'}`,
-              background: allMode ? 'var(--t-bg3)' : 'transparent',
-              color: allMode ? 'var(--t-blue)' : 'var(--t-dim)',
-            }}>ALL</button>
-            <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
-              {allMode ? `all ${universe.length}` : `${draft.symbols.length} selected`}
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 120, overflow: 'auto', paddingRight: 4 }}>
-            {universe.map((s) => {
-              const on = !allMode && selSet.has(s);
-              return (
-                <button key={s} onClick={() => toggleSym(s)} style={chipStyle(on)}>{s}</button>
-              );
-            })}
-          </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 160, overflowY: 'auto', paddingRight: 4, flexShrink: 0, marginTop: 8 }}>
+          {universe.map((s) => {
+            const on = !allMode && selSet.has(s);
+            return (
+              <button key={s} onClick={() => toggleSym(s)} style={chipStyle(on)}>{s}</button>
+            );
+          })}
         </div>
       </div>
     </SectionCard>
@@ -1733,9 +1714,9 @@ export function ScalpingTab() {
       }}>
         <div onClick={(e) => e.stopPropagation()} style={{
           width: 'min(700px, 94vw)', height: '100%', background: 'var(--t-bg)',
-          borderLeft: '1px solid var(--t-border)', overflow: 'auto', padding: 16,
-          display: 'flex', flexDirection: 'column', gap: 12,
+          borderLeft: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
         }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 'min-content' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Settings &amp; Backtest</span>
             <button onClick={() => setDrawer(false)} title="Close (Esc)" style={{
@@ -1758,6 +1739,7 @@ export function ScalpingTab() {
             />
           )}
           <ScalpBacktestPanel underlying={btUnderlying} />
+          </div>
         </div>
       </div>
     )}

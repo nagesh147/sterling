@@ -140,18 +140,16 @@ def _bpd(tf: str) -> int:
     return _BARS_PER_DAY.get(tf, 24)
 
 
-def _load_pair(sym: str, cfg: ScalpingConfig):
-    """Load (macro, execution) candle arrays for `sym` at the config's timeframes.
-
-    Honors cfg.macro_timeframe / cfg.execution_timeframe (default 4h / 15m). The
-    lookback per TF is derived from the warmup bar counts so each timeframe gets
-    enough history regardless of resolution.
-    """
-    macro_tf = cfg.macro_timeframe or "4h"
-    exec_tf = cfg.execution_timeframe or "15m"
-    macro_days = max(30, cfg.warmup_bars_4h // _bpd(macro_tf) + 10)
-    exec_days = max(7, cfg.warmup_bars_15m // _bpd(exec_tf) + 3)
-    return _store_candles(sym, macro_tf, macro_days), _store_candles(sym, exec_tf, exec_days)
+def _load_candles_by_res(syms: List[str], resolutions: set, days: int = 30) -> dict:
+    """Load candles for multiple symbols and resolutions."""
+    candles_by_res = {res: {} for res in resolutions}
+    for sym in syms:
+        for res in resolutions:
+            extra = 60 if res in ("2h", "4h") else 20
+            arr = _store_candles(sym, res, days + extra)
+            if arr:
+                candles_by_res[res][sym] = arr
+    return candles_by_res
 
 
 def _store_candles(sym: str, resolution: str, lookback_days: int):
@@ -192,24 +190,26 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
 
     now_ms = int(time.time() * 1000)
     all_signals: List[ScalpingSignal] = []
-    candles_4h_map: dict = {}
-    candles_15m_map: dict = {}
     tradeable_set: set = set()
+
+    resolutions = set()
+    for profile_id in cfg.active_profiles:
+        p = cfg.profiles.get(profile_id)
+        if p:
+            resolutions.add(p.macro_timeframe or "4h")
+            resolutions.add(p.execution_timeframe or "15m")
+
+    candles_by_res = _load_candles_by_res(syms, resolutions, days=30)
 
     for sym in syms:
         try:
-            c4h, c15m = _load_pair(sym, cfg)   # macro/exec arrays at cfg's timeframes
-            if not c4h or not c15m:
-                continue
-            candles_4h_map[sym] = c4h
-            candles_15m_map[sym] = c15m
             inst = registry.get_instrument(sym)
             if inst and _adapter_can_serve(inst, src):
                 tradeable_set.add(sym)
         except Exception:
             continue
 
-    result = scan_universe(syms, candles_4h_map, candles_15m_map, cfg, tradeable_set)
+    result = scan_universe(syms, candles_by_res, cfg, tradeable_set)
     return result
 
 
@@ -246,29 +246,38 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
     cfg = body.config or _get_config(request)
     sym = body.underlying.upper()
 
-    macro_tf = cfg.macro_timeframe or "4h"
-    exec_tf = cfg.execution_timeframe or "15m"
-    c4h = _store_candles(sym, macro_tf, body.lookback_days)
-    c15m = _store_candles(sym, exec_tf, min(body.lookback_days, 30))
-
-    if not c4h or not c15m:
-        raise HTTPException(status_code=404, detail=f"No stored data for {sym}")
-
+    resolutions = set()
+    for profile_id in cfg.active_profiles:
+        p = cfg.profiles.get(profile_id)
+        if p:
+            resolutions.add(p.macro_timeframe or "4h")
+            resolutions.add(p.execution_timeframe or "15m")
+            
+    candles_by_res = _load_candles_by_res([sym], resolutions, days=body.lookback_days)
     tradeable = bool(registry.get_instrument(sym))
     strategies = body.strategies or ["price_action", "smc", "ma_crossover"]
 
-    original_enable = {k: getattr(cfg, k) for k in ("enable_price_action", "enable_smc", "enable_ma_crossover")}
-
     all_trades: List[ScalpingBacktestTrade] = []
-    for strat in strategies:
-        strat_cfg = cfg.model_copy(update={
-            "enable_price_action": strat == "price_action" and original_enable["enable_price_action"],
-            "enable_smc": strat == "smc" and original_enable["enable_smc"],
-            "enable_ma_crossover": strat == "ma_crossover" and original_enable["enable_ma_crossover"],
-        })
-        sigs = scan_symbol(sym, c4h, c15m, strat_cfg, tradeable=tradeable)
-        for s in sigs:
-            if s.entry_ok and s.entry and s.stop_loss:
+    
+    # We only backtest the first active profile for now to avoid overlapping trades in the UI
+    if cfg.active_profiles:
+        profile_id = cfg.active_profiles[0]
+        strat_cfg = cfg.profiles.get(profile_id)
+        if strat_cfg:
+            c_macro = candles_by_res.get(strat_cfg.macro_timeframe or "4h", {}).get(sym, [])
+            c_exec = candles_by_res.get(strat_cfg.execution_timeframe or "15m", {}).get(sym, [])
+            if not c_macro or not c_exec:
+                raise HTTPException(status_code=404, detail=f"No stored data for {sym}")
+                
+            for strat in strategies:
+                strat_copy = strat_cfg.model_copy(update={
+                    "enable_price_action": strat == "price_action" and strat_cfg.enable_price_action,
+                    "enable_smc": strat == "smc" and strat_cfg.enable_smc,
+                    "enable_ma_crossover": strat == "ma_crossover" and strat_cfg.enable_ma_crossover,
+                })
+                sigs = scan_symbol(sym, c_macro, c_exec, strat_copy, profile_name=profile_id, tradeable=tradeable)
+                for s in sigs:
+                    if s.entry_ok and s.entry and s.stop_loss:
                 direction_mult = 1 if s.direction == "long" else -1
                 risk_dist = abs(s.entry - s.stop_loss)
                 if risk_dist > 0 and s.take_profit:
@@ -373,12 +382,19 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
             timestamp_ms=int(time.time() * 1000),
         )
 
-    c4h, c15m = _load_pair(sym, cfg)   # macro/exec arrays at cfg's timeframes
+    resolutions = set()
+    for profile_id in cfg.active_profiles:
+        p = cfg.profiles.get(profile_id)
+        if p:
+            resolutions.add(p.macro_timeframe or "4h")
+            resolutions.add(p.execution_timeframe or "15m")
+            
+    candles_by_res = _load_candles_by_res([sym], resolutions, days=30)
 
-    if not c4h or not c15m:
-        raise HTTPException(status_code=404, detail=f"No stored data for {sym}")
-
-    sigs = scan_symbol(sym, c4h, c15m, cfg, tradeable=True)
+    # Scan to find the armed signal across active profiles
+    from app.engines.scalping.scanner import scan_universe
+    scan_resp = scan_universe([sym], candles_by_res, cfg, tradeable_set={sym})
+    sigs = scan_resp.signals
 
     matched = [s for s in sigs if s.strategy == strategy and s.entry_ok]
     if not matched:

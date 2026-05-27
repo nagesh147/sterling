@@ -3,7 +3,7 @@ import { api } from '../utils/api';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-export interface ScalpingConfig {
+export interface ScalpingProfile {
   enable_price_action: boolean;
   enable_smc: boolean;
   enable_ma_crossover: boolean;
@@ -11,6 +11,11 @@ export interface ScalpingConfig {
   execution_timeframe: string;
   level_touches: number;
   level_tolerance_pct: number;
+  macro_trend_ema_fast: number;
+  macro_trend_ema_slow: number;
+  risk_percent: number;
+  max_position_pct: number;
+  account_equity: number;
   pa_lookback_bars: number;
   pa_confirm_bars: number;
   smc_imbalance_ratio: number;
@@ -19,14 +24,16 @@ export interface ScalpingConfig {
   allow_long: boolean;
   allow_short: boolean;
   macro_trend_filter: boolean;
-  pa_min_rr: number;
-  use_optimized: boolean;
-  risk_percent: number;
-  max_position_pct: number;
-  account_equity: number;
-  symbols: string[];
+  min_rr: number;
+  max_stop_atr: number;
   warmup_bars_4h: number;
   warmup_bars_15m: number;
+}
+
+export interface ScalpingConfig {
+  profiles: Record<string, ScalpingProfile>;
+  active_profiles: string[];
+  symbols: string[];
 }
 
 export interface ScalpingConfigResponse { config: ScalpingConfig; }
@@ -47,6 +54,7 @@ export interface ScalpingSignal {
   underlying: string;
   close: number;
   strategy: string;
+  profile: string;
   direction: string;
   near_level: number | null;
   level_type: string;

@@ -16,7 +16,7 @@ from typing import List
 
 import numpy as np
 
-from app.engines.scalping.config import EngineConfig as ScalpingConfig
+from app.engines.scalping.config import EngineConfig as ScalpingConfig, ScalpingProfile
 from app.engines.scalping.levels import detect_levels
 from app.engines.scalping.schemas import ScalpingSignal, ScalpingScanResponse, SupportResistanceLevel
 from app.engines.scalping.price_action import evaluate_price_action
@@ -44,7 +44,7 @@ def _ema_last(closes: np.ndarray, period: int) -> float:
     return e
 
 
-def _macro_regime(closes_4h: np.ndarray, cfg: ScalpingConfig) -> str:
+def _macro_regime(closes_4h: np.ndarray, cfg: ScalpingProfile) -> str:
     """4H trend regime: 'bull' | 'bear' | 'chop' from EMA(fast) vs EMA(slow)."""
     if len(closes_4h) < cfg.macro_trend_ema_slow:
         return "chop"
@@ -78,7 +78,8 @@ def scan_symbol(
     underlying: str,
     candles_4h: list,
     candles_15m: list,
-    cfg: ScalpingConfig,
+    cfg: ScalpingProfile,
+    profile_name: str = "",
     tradeable: bool = False,
 ) -> List[ScalpingSignal]:
     """Evaluate all enabled strategies for one symbol."""
@@ -109,6 +110,7 @@ def scan_symbol(
             underlying=underlying,
             close=float(candles_15m[-1].close),
             strategy=strategy,
+            profile=profile_name,
             direction=norm_dir,
             near_level=sig.near_level,
             level_type=sig.level_type,
@@ -153,33 +155,65 @@ def scan_symbol(
 
 def scan_universe(
     universe: List[str],
-    candles_4h_map: dict,
-    candles_15m_map: dict,
+    candles_by_res: dict,
     cfg: ScalpingConfig,
     tradeable_set: set,
 ) -> ScalpingScanResponse:
-    """Scan all symbols across all enabled strategies."""
+    """Scan all symbols across all enabled active profiles and their strategies."""
     now_ms = int(time.time() * 1000)
     all_signals: List[ScalpingSignal] = []
     all_levels: List[SupportResistanceLevel] = []
 
     for sym in universe:
-        c4h = candles_4h_map.get(sym, [])
-        c15m = candles_15m_map.get(sym, [])
-        if not c4h or not c15m:
-            continue
         tradeable = sym in tradeable_set
-        sigs = scan_symbol(sym, c4h, c15m, cfg, tradeable=tradeable)
-        all_signals.extend(sigs)
+        
+        # Deduplicate levels processing (compute levels on the macro timeframe of the first active profile)
+        # Assuming the first active profile dictates the primary structure TF for levels.
+        levels_computed = False
+        sym_levels = []
+        
+        for profile_id in cfg.active_profiles:
+            profile = cfg.profiles.get(profile_id)
+            if not profile:
+                continue
+                
+            macro_tf = profile.macro_timeframe or "4h"
+            exec_tf = profile.execution_timeframe or "15m"
+            
+            c_macro = candles_by_res.get(macro_tf, {}).get(sym, [])
+            c_exec = candles_by_res.get(exec_tf, {}).get(sym, [])
+            
+            if not c_macro or not c_exec:
+                continue
+                
+            if not levels_computed and len(c_macro) >= profile.warmup_bars_4h:
+                highs_4h = np.array([c.high for c in c_macro], dtype=np.float64)
+                lows_4h = np.array([c.low for c in c_macro], dtype=np.float64)
+                closes_4h = np.array([c.close for c in c_macro], dtype=np.float64)
+                ts_4h = np.array([c.timestamp_ms for c in c_macro], dtype=np.int64)
+                
+                levels = detect_levels(highs_4h, lows_4h, closes_4h, ts_4h, profile)
+                sym_levels = levels
+                all_levels.extend([_level_to_schema(l, sym) for l in levels])
+                levels_computed = True
+                
+            sigs = scan_symbol(sym, c_macro, c_exec, profile, profile_name=profile_id, tradeable=tradeable)
+            all_signals.extend(sigs)
 
-        closes_4h = np.array([c.close for c in c4h], dtype=np.float64)
-        highs_4h = np.array([c.high for c in c4h], dtype=np.float64)
-        lows_4h = np.array([c.low for c in c4h], dtype=np.float64)
-        ts_4h = np.array([c.timestamp_ms for c in c4h], dtype=np.int64)
-        for lvl in detect_levels(highs_4h, lows_4h, closes_4h, ts_4h, cfg):
-            all_levels.append(_level_to_schema(lvl, sym))
-
-    # Armed signals first, then by direction (long > short > none)
+    # Dedup logic: Only keep one active watch/armed signal per symbol + strategy (prioritize fastest TF)
+    dedup = {}
+    for s in all_signals:
+        key = (s.underlying, s.strategy)
+        if key not in dedup:
+            dedup[key] = s
+        else:
+            # If both are armed, keep the one with better risk/reward or the aggressive one
+            if s.entry_ok and not dedup[key].entry_ok:
+                dedup[key] = s
+    
+    all_signals = list(dedup.values())
+    
+    # Sort signals
     all_signals.sort(key=lambda s: (
         0 if s.entry_ok else 1,
         0 if s.direction == "long" else 1 if s.direction == "short" else 2,

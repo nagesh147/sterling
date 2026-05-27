@@ -23,8 +23,8 @@ class TieredTPConfig(BaseModel):
     move_to_be_at_tp1: bool = Field(default=True, description="Pull remaining stop to entry when TP1 hits")
 
 
-class EngineConfig(BaseModel):
-    """Operator-facing config for the scalping module."""
+class ScalpingProfile(BaseModel):
+    """Configuration for a specific timeframe track/profile."""
 
     # Timeframe Controls — 4h structure / 30m execution is the default.
     # Over ~2y of real data (OOS) the top pairs cluster at PF ~1.4 (4h/5m 1.46,
@@ -93,10 +93,13 @@ class EngineConfig(BaseModel):
     # Default 1.5 matches the previously-hardcoded gate — no behavior change.
     pa_min_rr: float = Field(default=1.5, ge=0.5, le=5.0)
 
-    # ── Auto-optimize (opt-in, isolated) ──
-    # When True the scanner overlays the persisted optimizer-found parameter set on
-    # TOP of this config (a copy) — it never overwrites the manual values here. Off
-    # ⇒ this config is used exactly as-is.
+
+class EngineConfig(BaseModel):
+    """The root configuration for the scalping module, managing multiple profiles."""
+    active_profiles: List[str] = Field(default_factory=lambda: ["intraday"])
+    profiles: Dict[str, ScalpingProfile] = Field(default_factory=dict)
+    
+    # Global settings
     use_optimized: bool = False
 
     # ── Tiered take-profit ──
@@ -114,7 +117,30 @@ ScalpingConfig = EngineConfig
 
 
 def default_config() -> EngineConfig:
-    return EngineConfig()
+    """Returns the default multi-track configuration."""
+    return EngineConfig(
+        active_profiles=["intraday"],
+        profiles={
+            "intraday": ScalpingProfile(
+                macro_timeframe="4h",
+                execution_timeframe="15m",
+                pa_confirm_bars=3,
+                risk_percent=1.0,
+            ),
+            "scalping": ScalpingProfile(
+                macro_timeframe="1h",
+                execution_timeframe="5m",
+                pa_confirm_bars=3,
+                risk_percent=0.5,
+            ),
+            "aggressive": ScalpingProfile(
+                macro_timeframe="15m",
+                execution_timeframe="1m",
+                pa_confirm_bars=1,
+                risk_percent=0.25,
+            ),
+        }
+    )
 
 
 # ── Timeframe presets ────────────────────────────────────────────────────────

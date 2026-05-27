@@ -24,7 +24,7 @@ from typing import List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from app.engines.scalping.config import EngineConfig as ScalpingConfig
+from app.engines.scalping.config import ScalpingProfile as ScalpingConfig
 from app.engines.scalping.levels import Level, price_near_level, nearest_level, detect_levels
 from app.engines.scalping.risk import atr, resolve_trade_risk
 
