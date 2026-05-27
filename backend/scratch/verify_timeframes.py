@@ -18,14 +18,15 @@ from app.engines.scalping.config import default_config
 from app.engines.scalping.levels import detect_levels
 from app.engines.scalping.price_action import evaluate_price_action
 
-SYMS = ["BTC", "ETH", "SOL", "XRP", "DOGE", "BNB", "ADA", "LINK"]
-DAYS = 60
+SYMS = ["BTC", "ETH", "SOL", "XRP"]
+DAYS = 730   # ~2 years
 MACROS = ["4h", "2h", "1h"]
 EXECS = ["30m", "15m", "5m"]
 W_EXEC, W_MACRO = 672, 180
 OOS_FRAC = 0.30
 TF_MIN = {"5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240}
-STEP = {"5m": 6, "15m": 2, "30m": 1, "1h": 1}
+# Coarser cadence for the 2-year run (≥3-bar confirm window still caught).
+STEP = {"5m": 6, "15m": 3, "30m": 2, "1h": 1}
 MAXH = {"5m": 288, "15m": 96, "30m": 48, "1h": 24}
 
 _DATA: dict = {}
@@ -108,8 +109,14 @@ def main():
     print(f"Universe {SYMS} · {DAYS}d · defaults (cb3/tol0.5/rr1.5/trend off) · OOS=last 30% by time")
     print(f"Sharpe = per-trade mean(R)/std(R). Fixed SL/TP exit, no fees/slippage.\n")
     hdr = f"  {'macro/exec':11} | {'win%':>5} {'PF':>5} {'Shrp':>5} {'expR':>6} {'totR':>6} {'ddR':>5} {'nOOS':>5} | {'IS PF':>5} {'nIS':>5}"
-    print(hdr); print("  " + "-" * (len(hdr) - 2))
 
+    def _line(name, o, isr):
+        tag = " <- baseline (4h/30m)" if name == "4h/30m" else ""
+        return (f"  {name:11} | {o['win']:>5} {o['pf']:>5} {o['sharpe']:>5} {o['exp']:>6} "
+                f"{o['total']:>6} {o['dd']:>5} {o['n']:>5} | {isr['pf']:>5} {isr['n']:>5}{tag}")
+
+    print("Computing (incremental — survives an early stop):", flush=True)
+    print(hdr, flush=True); print("  " + "-" * (len(hdr) - 2), flush=True)
     rows = []
     for macro in MACROS:
         for execr in EXECS:
@@ -123,11 +130,12 @@ def main():
                     (oos_t if i >= split else is_t).append(pnl)
             o, isr = _metrics(oos_t), _metrics(is_t)
             rows.append((f"{macro}/{execr}", o, isr))
+            print(_line(f"{macro}/{execr}", o, isr), flush=True)
 
+    print("\n=== RANKED BY OOS PF ===", flush=True)
+    print(hdr, flush=True); print("  " + "-" * (len(hdr) - 2), flush=True)
     for name, o, isr in sorted(rows, key=lambda r: r[1]["pf"], reverse=True):
-        tag = " <- baseline" if name == "4h/15m" else ""
-        print(f"  {name:11} | {o['win']:>5} {o['pf']:>5} {o['sharpe']:>5} {o['exp']:>6} "
-              f"{o['total']:>6} {o['dd']:>5} {o['n']:>5} | {isr['pf']:>5} {isr['n']:>5}{tag}")
+        print(_line(name, o, isr), flush=True)
 
 
 if __name__ == "__main__":

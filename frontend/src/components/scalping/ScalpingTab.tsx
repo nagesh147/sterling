@@ -182,7 +182,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
           <TfSelect label="Structure" value={draft.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => set('macro_timeframe', v)} />
           <TfSelect label="Entry" value={draft.execution_timeframe} opts={['5m', '15m', '30m']} onChange={(v) => set('execution_timeframe', v)} />
           <span style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.4 }}>
-            <b style={{ color: 'var(--t-bright)' }}>4h/30m</b> is the OOS-validated default (best win-rate/PF/Sharpe/drawdown). 15m entry is the weakest out-of-sample.
+            <b style={{ color: 'var(--t-bright)' }}>4h/30m</b> default — best win-rate &amp; lowest drawdown over ~2y. <b style={{ color: 'var(--t-bright)' }}>4h/5m</b> / <b style={{ color: 'var(--t-bright)' }}>2h/15m</b> give higher return at ~2× drawdown.
           </span>
         </div>
         <div style={grpBox}>
