@@ -47,6 +47,9 @@ def _get_config(request: Request) -> ScalpingConfig:
         if saved:
             try:
                 cfg = ScalpingConfig.model_validate_json(saved)
+                # Handle migration: if saved config has no profiles, fill with defaults
+                if not cfg.profiles:
+                    cfg.profiles = default_config().profiles
             except Exception:
                 cfg = default_config()
         else:
