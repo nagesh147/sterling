@@ -1976,7 +1976,7 @@ export function ScalpingTab() {
             )}
             
             {displaySignals.length > 0 && (
-              <SignalTableHeader showPlan={showPlan} />
+              <SignalTableHeader showPlan={showPlan} showAction={showAction} />
             )}
 
             {executedSignals.length > 0 && (
