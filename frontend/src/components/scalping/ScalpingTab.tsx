@@ -27,6 +27,7 @@ type SignalPnl = {
     currentSpot?: number | null;
     direction?: string; contracts?: number; leverage?: number;
     entryTimeMs?: number | null; entryPriceReal?: number | null;
+    exitPriceReal?: number | null;
     initialSl?: number | null; initialTp?: number | null;
     currentSl?: number | null; currentTp?: number | null;
     trailMode?: string | null; trailState?: { current_stop: number; highest_seen: number; lowest_seen: number; breakeven_set: boolean } | null;
@@ -765,6 +766,9 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', paddingTop: 1 }}>
           <MetricItem label="Qty" value={r.size_units ? fmt(r.size_units, 4) : '—'} />
           <MetricItem label="Entry" value={fmtUsd(pnl?.entryPriceReal ?? r.entry_price)} />
+          {pnl?.realized && pnl?.exitPriceReal != null && (
+            <MetricItem label="Exit" value={fmtUsd(pnl.exitPriceReal)} />
+          )}
           {pnl?.currentSpot != null && (() => {
             const entryPx = pnl?.entryPriceReal ?? r.entry_price ?? 0;
             const diff = pnl.currentSpot - entryPx;
@@ -993,8 +997,28 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // to SL/TP but won't re-enter — flag it so the provenance reads "paused".
   const pausedAuto = !!execState?.auto && algoOn === false && pnl != null && pnl.realized === false;
 
-  const statusLabel = accepted ? 'EXECUTED' : s.executable ? 'READY' : isWatch ? 'WATCH' : 'PENDING';
-  const statusColor = accepted ? 'var(--t-blue)' : s.executable ? dirColor : isWatch ? 'var(--t-blue)' : 'var(--t-dim)';
+  let statusLabel = 'PENDING';
+  let statusColor = 'var(--t-dim)';
+  if (accepted) {
+    if (pnl?.realized) {
+      statusLabel = 'CLOSED';
+      statusColor = 'var(--t-dim)';
+    } else {
+      statusLabel = 'OPEN';
+      statusColor = 'var(--t-blue)';
+    }
+  } else if (s.executable) {
+    statusLabel = 'READY';
+    statusColor = dirColor;
+  } else if (isWatch) {
+    statusLabel = 'WATCH';
+    statusColor = 'var(--t-blue)';
+  }
+
+  // Stable ID derived from underlying, strategy, and timestamp for easier tracking
+  const sigIdStr = `${s.underlying}-${s.strategy}-${s.timestamp_ms}`;
+  const sigIdHash = Array.from(sigIdStr).reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0) | 0, 0);
+  const sigId = Math.abs(sigIdHash).toString(16).substring(0, 5).toUpperCase();
 
   // Signal's own setup reason
   const metaReason = s.reason;
@@ -1069,8 +1093,11 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
       <div style={signalRowGrid({ plan: showPlan !== false, action: showAction !== false, dir: showDirection !== false })}>
         {/* accent */}
         <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color }} />
-        {/* symbol */}
-        <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
+        {/* symbol & id */}
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontFamily: 'monospace' }}>#{sigId}</span>
+        </div>
         {/* status — own column (so it has a header) */}
         <span style={{
           justifySelf: 'start', fontSize: 8.5, fontWeight: 800, letterSpacing: '0.07em', color: statusColor, lineHeight: 1,
@@ -1714,6 +1741,7 @@ export function ScalpingTab() {
       contracts: live?.contracts, leverage: live?.leverage,
       entryTimeMs: live?.entry_timestamp_ms ?? pos.entry_timestamp_ms,
       entryPriceReal: live?.entry_price_real ?? pos.entry_spot_price,
+      exitPriceReal: pos.exit_spot_price ?? null,
       initialSl: live?.initial_sl ?? pos.initial_sl, initialTp: live?.initial_tp ?? pos.initial_tp,
       currentSl: live?.current_sl ?? pos.current_sl, currentTp: live?.current_tp ?? pos.current_tp,
       trailMode: live?.trail_mode ?? pos.trail_mode, trailState: live?.trail_state as SignalPnl['trailState'],
