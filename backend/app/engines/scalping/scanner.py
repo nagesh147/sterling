@@ -136,33 +136,35 @@ def scan_symbol(
             timestamp_ms=now_ms,
         )
 
+    use_opt = getattr(cfg, "use_optimized", False)
+
     if cfg.enable_price_action:
-        if is_whitelisted("price_action", underlying, cfg.execution_timeframe):
+        if not use_opt or is_whitelisted("price_action", underlying, cfg.execution_timeframe):
             pa = evaluate_price_action(underlying, candles_4h, candles_15m, levels, cfg)
             signals.append(_make_signal(pa, "price_action"))
 
     if cfg.enable_smc:
-        if is_whitelisted("smc", underlying, cfg.execution_timeframe):
+        if not use_opt or is_whitelisted("smc", underlying, cfg.execution_timeframe):
             smc_sig = evaluate_smc(underlying, candles_4h, candles_15m, levels, cfg)
             signals.append(_make_signal(smc_sig, "smc"))
 
     if getattr(cfg, "enable_ma_crossover", False):
-        if is_whitelisted("ma_crossover", underlying, cfg.execution_timeframe):
+        if not use_opt or is_whitelisted("ma_crossover", underlying, cfg.execution_timeframe):
             ma = evaluate_ma_crossover(underlying, candles_4h, candles_15m, candles_1h, levels, cfg)
             signals.append(_make_signal(ma, "ma_crossover"))
 
     if getattr(cfg, "enable_mean_reversion", False):
-        if is_whitelisted("mean_reversion", underlying, cfg.execution_timeframe):
+        if not use_opt or is_whitelisted("mean_reversion", underlying, cfg.execution_timeframe):
             mr = evaluate_mean_reversion(underlying, candles_4h, candles_15m, levels, cfg)
             signals.append(_make_signal(mr, "mean_reversion"))
 
     if getattr(cfg, "enable_breakout", False):
-        if is_whitelisted("breakout", underlying, cfg.execution_timeframe):
+        if not use_opt or is_whitelisted("breakout", underlying, cfg.execution_timeframe):
             bo = evaluate_breakout(underlying, candles_4h, candles_15m, levels, cfg)
             signals.append(_make_signal(bo, "breakout"))
 
     if getattr(cfg, "enable_delta_gamma", False):
-        if is_whitelisted("delta_gamma", underlying, cfg.execution_timeframe):
+        if not use_opt or is_whitelisted("delta_gamma", underlying, cfg.execution_timeframe):
             dg = evaluate_delta_gamma(underlying, candles_4h, candles_15m, levels, cfg)
             signals.append(_make_signal(dg, "delta_gamma"))
 

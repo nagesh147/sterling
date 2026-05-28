@@ -229,15 +229,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         <b style={{ color: 'var(--t-bright)' }}>Active Tracks:</b> Toggle which profiles the scanner should run concurrently. Then select a tab below to tune its individual constraints (timeframes, risk, strategies).
       </div>
       
-      <div style={{ 
-        background: 'var(--t-blue)14', border: '1px solid var(--t-blue)44', 
-        padding: '10px 12px', borderRadius: 6, marginBottom: 16, fontSize: 10, 
-        color: 'var(--t-blue)', lineHeight: 1.5 
-      }}>
-        <strong>🤖 INSTITUTIONAL WFO ACTIVE:</strong> The Walk-Forward Optimizer now autonomously determines the best Timeframes, Patterns, and Assets. 
-        Manual inputs for Strategy Thresholds (e.g., SMC Imbalance, Breakout RSI) and R:R constraints are dynamically overridden for peak mathematical expectancy. 
-        <strong>Direction & Risk</strong> settings (Risk %, Position Size) are still manually enforced!
-      </div>
+
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
         {profileKeys.map(p => (
           <ChipToggle 
@@ -266,6 +258,23 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
       {activeProfile && (
         <>
+          <div style={{ 
+            background: activeProfile.use_optimized ? 'var(--t-blue)14' : 'var(--t-amber)14', 
+            border: `1px solid ${activeProfile.use_optimized ? 'var(--t-blue)44' : 'var(--t-amber)44'}`, 
+            padding: '10px 12px', borderRadius: 6, marginBottom: 16, fontSize: 10, 
+            color: activeProfile.use_optimized ? 'var(--t-blue)' : 'var(--t-amber)', lineHeight: 1.5,
+            display: 'flex', flexDirection: 'column', gap: 8
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>{activeProfile.use_optimized ? '🤖 INSTITUTIONAL WFO ACTIVE' : '👤 RETAIL MODE ACTIVE'}</strong>
+                <ChipToggle label="AI Gatekeeper" on={activeProfile.use_optimized} onChange={(v) => setProfileField('use_optimized', v)} />
+            </div>
+            {activeProfile.use_optimized ? (
+                <span>The Walk-Forward Optimizer autonomously determines the best Timeframes, Patterns, and Assets. Manual inputs for Strategy Thresholds (e.g., SMC Imbalance, Breakout RSI) and R:R constraints are dynamically overridden for peak mathematical expectancy. <strong>Direction & Risk</strong> settings are still manually enforced!</span>
+            ) : (
+                <span>The AI Gatekeeper is currently bypassed. The scanner will strictly follow your manual settings below and execute every valid signal it finds, regardless of historical profitability.</span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
             <ChipToggle label="Price Action" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
             <ChipToggle label="SMC" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
