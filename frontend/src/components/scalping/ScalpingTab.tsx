@@ -2111,6 +2111,9 @@ export function ScalpingTab() {
       leftWidth={300}
       rightWidth={380}
       leftSidebar={<>
+        <LeftSection label="Tools" collapsible defaultOpen>
+          <SettingsTrigger onClick={() => setDrawer(true)} />
+        </LeftSection>
         <LeftSection label="Strategies" collapsible defaultOpen>
           {renderNavGroup(stratNavItems, stratFilter, setStratFilter)}
         </LeftSection>
@@ -2119,9 +2122,6 @@ export function ScalpingTab() {
         </LeftSection>
         <LeftSection label="Status" collapsible defaultOpen>
           {renderNavGroup(statusNavItems, statusFilter, setStatusFilter)}
-        </LeftSection>
-        <LeftSection label="Tools" collapsible defaultOpen>
-          <SettingsTrigger onClick={() => setDrawer(true)} />
         </LeftSection>
         <LeftSection label={`Execution Log · ${tradeMode}`} collapsible defaultOpen={execLog.length > 0} border={false}>
           {execLog.length > 0 && (
