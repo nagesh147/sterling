@@ -358,7 +358,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                 </div>
               </>
             )}
-            <div style={grpBox}>
+            <div style={{ ...grpBox, gridColumn: '1 / -1' }}>
               <div style={grpTitle}>DIRECTION & RISK</div>
               {activeProfile.use_optimized && !activeProfile.macro_trend_filter && (
                 <div style={{
@@ -369,16 +369,20 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                   <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
-                <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
-                <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
-                <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 5, paddingRight: 16, borderRight: '1px solid var(--t-border)' }}>
+                  <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
+                  <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
+                  <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
+                </div>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', flex: 1 }}>
+                  <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
+                  <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
+                  <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} onChange={(v) => setProfileField('min_rr', v)} />
+                  <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} onChange={(v) => setProfileField('max_stop_atr', v)} />
+                  <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
+                </div>
               </div>
-              <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
-              <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
-              <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} onChange={(v) => setProfileField('min_rr', v)} />
-              <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} onChange={(v) => setProfileField('max_stop_atr', v)} />
-              <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
             </div>
           </div>
         </>
