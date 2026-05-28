@@ -14,7 +14,7 @@ import type { PaperPosition } from '../../types';
 import { useRouterMode, RouterMode } from '../../hooks/useRouterMode';
 import { useTradingMode } from '../../hooks/useTradingMode';
 import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
-import { useStreamPrices } from '../../hooks/useAppStream';
+import { useStreamPrices, useStreamStatus, useAppStream } from '../../hooks/useAppStream';
 import { ThreeColumnLayout, LeftSection, RightSection } from '../ThreeColumnLayout';
 
 import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint, alpha } from '../../styles/terminalUI';
@@ -415,48 +415,60 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
  * apart. The `plan` columns (the trade plan) are shown only when at least one
  * armed/executed signal exists — header and rows both honour `showPlan`, so a
  * "Watching-only" list collapses the plan columns in lockstep. */
-type SignalCol = { key: string; label: string; width: string; plan?: boolean };
+type SignalCol = {
+  key: string; label: string; width: string;
+  plan?: boolean; action?: boolean; align?: 'center' | 'left';
+};
+// Flexible columns (minmax + fr) absorb the spare width so the table fills the
+// center column instead of crowding to the left. Fixed columns stay fixed.
 const SIGNAL_COLS: SignalCol[] = [
-  { key: 'accent',   label: '',               width: '4px' },
-  { key: 'symbol',   label: 'Symbol',         width: '56px' },
-  { key: 'dir',      label: 'Direction',      width: '130px' },
-  { key: 'level',    label: 'Level/Location', width: '210px' },
-  { key: 'detail',   label: 'Status Detail',  width: '190px' },
-  { key: 'entry',    label: 'Entry',          width: '78px',  plan: true },
-  { key: 'current',  label: 'Current',        width: '110px', plan: true },
-  { key: 'stop',     label: 'Stop',           width: '96px',  plan: true },
-  { key: 'target',   label: 'Target',         width: '96px',  plan: true },
-  { key: 'risk',     label: 'Risk',           width: '50px',  plan: true },
-  { key: 'strategy', label: 'Strategy',       width: '85px' },
-  { key: 'pattern',  label: 'Pattern',        width: '120px' },
-  { key: 'profile',  label: 'Profile',        width: '70px' },
-  { key: 'time',     label: 'Time',           width: '90px' },
-  { key: 'action',   label: 'Action',         width: '100px' },
+  { key: 'accent',   label: '',                 width: '4px' },
+  { key: 'symbol',   label: 'Symbol',           width: '58px' },
+  { key: 'status',   label: 'Status',           width: '94px' },
+  { key: 'dir',      label: 'Direction',        width: '92px' },
+  { key: 'level',    label: 'Level / Location', width: 'minmax(150px, 1.3fr)' },
+  { key: 'detail',   label: 'Status Detail',    width: 'minmax(160px, 1.7fr)' },
+  { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
+  { key: 'current',  label: 'Current',          width: '118px', plan: true },
+  { key: 'stop',     label: 'Stop',             width: '96px',  plan: true },
+  { key: 'target',   label: 'Target',           width: '96px',  plan: true },
+  { key: 'risk',     label: 'Risk',             width: '52px',  plan: true },
+  { key: 'strategy', label: 'Strategy',         width: '100px' },
+  { key: 'pattern',  label: 'Pattern',          width: 'minmax(110px, 1fr)', align: 'center' },
+  { key: 'profile',  label: 'Profile',          width: '78px' },
+  { key: 'time',     label: 'Time',             width: '88px' },
+  { key: 'action',   label: 'Action',           width: '112px', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
 
+const showCol = (c: SignalCol, showPlan: boolean, showAction: boolean) =>
+  (showPlan || !c.plan) && (showAction || !c.action);
+
 /** Shared grid style for the header row and every card's main row — identical
- *  template + gap guarantees alignment. */
-function signalRowGrid(showPlan: boolean): React.CSSProperties {
+ *  template + gap guarantees the columns line up. Plan columns appear only when
+ *  an armed/executed signal exists; the Action column only when a row has an
+ *  action (otherwise it's dead empty space, so we drop it). */
+function signalRowGrid(showPlan: boolean, showAction: boolean): React.CSSProperties {
   return {
     display: 'grid',
     gridTemplateColumns: SIGNAL_COLS
-      .filter((c) => showPlan || !c.plan)
+      .filter((c) => showCol(c, showPlan, showAction))
       .map((c) => c.width)
       .join(' '),
-    columnGap: 20,
+    columnGap: 18,
     alignItems: 'center',
   };
 }
 
-function SignalTableHeader({ showPlan }: { showPlan?: boolean }) {
-  const show = showPlan !== false;
+function SignalTableHeader({ showPlan, showAction }: { showPlan?: boolean; showAction?: boolean }) {
+  const sp = showPlan !== false, sa = showAction !== false;
   return (
-    <div style={{ ...signalRowGrid(show), padding: '4px 16px 6px 0', marginBottom: 2 }}>
-      {SIGNAL_COLS.filter((c) => show || !c.plan).map((c) => (
+    <div style={{ ...signalRowGrid(sp, sa), padding: '4px 16px 7px 0', marginBottom: 2 }}>
+      {SIGNAL_COLS.filter((c) => showCol(c, sp, sa)).map((c) => (
         <span key={c.key} style={{
-          fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em',
+          fontSize: 10, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '0.05em',
           textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          textAlign: c.align === 'center' ? 'center' : 'left',
         }}>{c.label}</span>
       ))}
     </div>
