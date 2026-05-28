@@ -964,10 +964,11 @@ function ExecLog({ entries, mode }: {
   );
 }
 
-function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction, showDirection, showPattern }: {
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction, showDirection, showPattern, livePx }: {
   s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
   showPlan?: boolean; showAction?: boolean; showDirection?: boolean; showPattern?: boolean;
+  livePx?: number | null;
 }) {
   const long = s.direction === 'long';
   const short = s.direction === 'short';
@@ -1003,7 +1004,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
 
   // Live current price next to Entry — live mark for executed trades, else the
   // latest scan close. Colored by whether price has moved the position's way.
-  const currentPx = pnl?.currentSpot ?? (s.close || null);
+  const currentPx = livePx ?? pnl?.currentSpot ?? (s.close || null);
 
   const displayEntry = accepted ? (pnl?.entryPriceReal ?? resp?.entry_price ?? s.entry) : s.entry;
   // Initial (entry-time) vs trailed (live) stop & target. The row shows the live
@@ -2071,6 +2072,7 @@ export function ScalpingTab() {
       showAction={flags.action}
       showDirection={flags.dir}
       showPattern={flags.pattern}
+      livePx={streamPrices?.[row.s.underlying]}
     />
   );
 

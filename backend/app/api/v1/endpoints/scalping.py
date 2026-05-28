@@ -416,15 +416,25 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
             timestamp_ms=int(time.time() * 1000),
         )
 
+    profile_id = getattr(sig, "profile", "") or (cfg.active_profiles[0] if cfg.active_profiles else "intraday")
+    strat_cfg = cfg.profiles.get(profile_id)
+    if not strat_cfg:
+        return ScalpingExecuteResponse(
+            accepted=False, mode="paper", underlying=sym, strategy=strategy,
+            direction=sig.direction, size_units=0, notional_usd=0,
+            status="error", reason=f"Profile '{profile_id}' not found",
+            timestamp_ms=int(time.time() * 1000),
+        )
+
     risk_dist = abs(sig.entry - sig.stop_loss)
     if risk_dist <= 0:
         risk_dist = sig.entry * 0.02
-    risk_usd = cfg.account_equity * (cfg.risk_percent / 100)
+    risk_usd = strat_cfg.account_equity * (strat_cfg.risk_percent / 100)
     size_units = risk_usd / risk_dist if risk_dist > 0 else 0
     contracts = max(0, int(round(size_units)))
     if contracts < 1:
         logger.info("scalp-exec %s/%s -> size_too_small (%.4f units, equity=%s risk%%=%s)",
-                    sym, strategy, size_units, cfg.account_equity, cfg.risk_percent)
+                    sym, strategy, size_units, strat_cfg.account_equity, strat_cfg.risk_percent)
         return ScalpingExecuteResponse(
             accepted=False, mode="paper", underlying=sym, strategy=strategy,
             direction=sig.direction, size_units=size_units, notional_usd=size_units * sig.entry,
@@ -432,7 +442,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
             timestamp_ms=int(time.time() * 1000),
         )
 
-    leverage = max(1.0, min((size_units * sig.entry) / max(1, cfg.account_equity * (cfg.max_position_pct / 100)), 25))
+    leverage = max(1.0, min((size_units * sig.entry) / max(1, strat_cfg.account_equity * (strat_cfg.max_position_pct / 100)), 25))
 
     # Tag the placer (algo auto-exec vs manual click) into the notes so the UI can
     # consistently show "AUTO · <MODE>" on every reconstructed row, not just the
