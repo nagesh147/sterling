@@ -1582,7 +1582,6 @@ export function ScalpingTab() {
     try { return JSON.parse(localStorage.getItem('scalp.execLog') || '[]'); } catch { return []; }
   });
   const logExec = (e: ExecLogEntry) => setExecLog((l) => [e, ...l].slice(0, 40));
-  const cfg = cfgQ.data?.config;
   const algoOn = useAlgoMode().data?.enabled ?? false;
   const autoExecRef = useRef<Set<string>>(new Set());   // auto-attempted this algo session
   const acceptedRef = useRef<Set<string>>(new Set());   // ever accepted — never re-execute
@@ -1989,7 +1988,7 @@ export function ScalpingTab() {
 
   const btUnderlying = (selected?.split('-')[0]) || cfg?.symbols?.[0] || 'BTC';
 
-  const renderSignalCard = (row: Row) => (
+  const renderCardWithFlags = (row: Row, flags: ColFlags) => (
     <ScalpSignalCard
       key={row.key} s={row.s}
       selected={selected === row.key}
@@ -2002,9 +2001,9 @@ export function ScalpingTab() {
       algoOn={algoOn}
       mode={tradeMode}
       macroMode={row.macroMode}
-      showPlan={showPlan}
-      showAction={showAction}
-      showDirection={showDirection}
+      showPlan={flags.plan}
+      showAction={flags.action}
+      showDirection={flags.dir}
     />
   );
 
@@ -2169,14 +2168,11 @@ export function ScalpingTab() {
               </div>
             )}
             
-            {displaySignals.length > 0 && (
-              <SignalTableHeader flags={{ plan: showPlan, action: showAction, dir: showDirection }} />
-            )}
-
             {executedSignals.length > 0 && (
               <>
                 <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
-                {executedSignals.map(renderSignalCard)}
+                <SignalTableHeader flags={{ plan: true, action: false, dir: true }} />
+                {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: false, dir: true }))}
                 <ConsolidatedRow count={executedSignals.length} {...consolidated} />
               </>
             )}
@@ -2184,7 +2180,8 @@ export function ScalpingTab() {
             {restSignals.length > 0 && (
               <>
                 <ListGroupHeader label={statusFilter === 'ready' ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
-                {restSignals.map(renderSignalCard)}
+                <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
+                {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
               </>
             )}
             
@@ -2192,7 +2189,12 @@ export function ScalpingTab() {
               <>
                 <ListGroupHeader label="Watching" count={watchingRows.length} color="var(--t-dim)"
                   collapsible defaultOpen={false} onToggle={setWatchingOpen} />
-                {watchingOpen && watchingRows.map(renderSignalCard)}
+                {watchingOpen && (
+                  <>
+                    <SignalTableHeader flags={{ plan: false, action: false, dir: true }} />
+                    {watchingRows.map(r => renderCardWithFlags(r, { plan: false, action: false, dir: true }))}
+                  </>
+                )}
               </>
             )}
             {data && displaySignals.length > 0 && (
