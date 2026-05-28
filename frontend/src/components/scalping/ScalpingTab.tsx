@@ -890,6 +890,8 @@ function ExecLog({ entries, mode }: {
   entries: { ts: number; key: string; mode: string; ok: boolean; status: string; reason: string; auto: boolean }[];
   mode: string;
 }) {
+  const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set());
+
   if (entries.length === 0) {
     return (
       <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, padding: '6px 14px' }}>
@@ -905,6 +907,16 @@ function ExecLog({ entries, mode }: {
     : e.status === 'already_open' ? 'var(--t-blue)'
     : ['no_signal', 'no_plan', 'size_too_small'].includes(e.status) ? 'var(--t-amber)'
     : 'var(--t-red)';
+
+  const toggle = (i: number) => {
+    setExpandedIndices(prev => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       {entries.map((e, i) => {
@@ -914,17 +926,38 @@ function ExecLog({ entries, mode }: {
         const strat = (dash >= 0 ? e.key.slice(dash + 1) : '').replace(/_/g, ' ');
         const mc = e.auto ? 'var(--t-cyan)' : modeColorOf(e.mode);
         return (
-          <div key={i} title={e.reason ? `${e.status} — ${e.reason}` : e.status} style={{
-            display: 'flex', alignItems: 'center', gap: 6, padding: '4px 14px 4px 12px',
+          <div key={i} style={{ 
+            display: 'flex', flexDirection: 'column', 
             borderLeft: `2px solid ${col}`, background: e.ok ? alpha(col, 0.07) : 'transparent',
-            fontSize: 10, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden',
+            borderBottom: expandedIndices.has(i) ? '1px solid var(--t-border)' : 'none',
           }}>
-            <span style={{ color: col, fontWeight: 800, fontSize: 9, width: 9, textAlign: 'center', flexShrink: 0 }}>{e.ok ? '✓' : e.status === 'already_open' ? '•' : '✕'}</span>
-            <span style={{ color: 'var(--t-bright)', fontWeight: 800, flexShrink: 0 }}>{sym}</span>
-            <span style={{ color: 'var(--t-dim)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{strat}</span>
-            <span style={{ marginLeft: 'auto', color: col, fontWeight: 700, fontSize: 8.5, letterSpacing: '0.03em', textTransform: 'uppercase', flexShrink: 0 }}>{e.status.replace(/_/g, ' ')}</span>
-            <span style={{ color: mc, fontWeight: 800, fontSize: 8, letterSpacing: '0.04em', flexShrink: 0 }}>{e.auto ? 'A·' : ''}{e.mode}</span>
-            <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontSize: 8.5, flexShrink: 0 }}>{new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}</span>
+            <div 
+              onClick={() => e.reason && toggle(i)}
+              title={e.reason ? "Click to view details" : e.status}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '4px 14px 4px 12px',
+                fontSize: 10, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden',
+                cursor: e.reason ? 'pointer' : 'default',
+                transition: 'background 0.1s',
+              }}
+              onMouseEnter={(ev) => e.reason && (ev.currentTarget.style.background = 'var(--t-bg3)')}
+              onMouseLeave={(ev) => e.reason && (ev.currentTarget.style.background = 'transparent')}
+            >
+              <span style={{ color: col, fontWeight: 800, fontSize: 9, width: 9, textAlign: 'center', flexShrink: 0 }}>{e.ok ? '✓' : e.status === 'already_open' ? '•' : '✕'}</span>
+              <span style={{ color: 'var(--t-bright)', fontWeight: 800, flexShrink: 0 }}>{sym}</span>
+              <span style={{ color: 'var(--t-dim)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{strat}</span>
+              <span style={{ marginLeft: 'auto', color: col, fontWeight: 700, fontSize: 8.5, letterSpacing: '0.03em', textTransform: 'uppercase', flexShrink: 0 }}>{e.status.replace(/_/g, ' ')}</span>
+              <span style={{ color: mc, fontWeight: 800, fontSize: 8, letterSpacing: '0.04em', flexShrink: 0 }}>{e.auto ? 'A·' : ''}{e.mode}</span>
+              <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontSize: 8.5, flexShrink: 0 }}>{new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}</span>
+            </div>
+            {expandedIndices.has(i) && e.reason && (
+              <div style={{
+                padding: '4px 14px 8px 32px', fontSize: 9, color: 'var(--t-dim)', 
+                whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.5,
+              }}>
+                <span style={{ color: 'var(--t-amber)', fontWeight: 700 }}>REASON:</span> {e.reason}
+              </div>
+            )}
           </div>
         );
       })}
