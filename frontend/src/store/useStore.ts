@@ -15,7 +15,12 @@ const THEME_CYCLE: Theme[] = ['dark', 'grey', 'light'];
 
 function loadUnderlying(): string {
   try {
-    return localStorage.getItem(STORAGE_KEY) || 'BTC';
+    let val = localStorage.getItem(STORAGE_KEY) || 'BTC';
+    if (val.includes('-')) {
+      val = val.split('-')[0];
+      try { localStorage.setItem(STORAGE_KEY, val); } catch { /* ignore */ }
+    }
+    return val;
   } catch {
     return 'BTC';
   }
