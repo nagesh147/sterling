@@ -477,9 +477,9 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'target',   label: 'Target',           width: '96px',  plan: true },
   { key: 'risk',     label: 'Risk',             width: '52px',  plan: true },
   { key: 'strategy', label: 'Strategy',         width: '108px' },
-  { key: 'pattern',  label: 'Pattern',          width: 'minmax(150px, 1fr)', align: 'center', pattern: true },
+  { key: 'pattern',  label: 'Pattern',          width: '150px', align: 'center', pattern: true },
   { key: 'profile',  label: 'Profile',          width: '82px' },
-  { key: 'action',   label: 'Action',           width: '112px', action: true },
+  { key: 'action',   label: 'Action',           width: 'minmax(120px, 1fr)', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
 
