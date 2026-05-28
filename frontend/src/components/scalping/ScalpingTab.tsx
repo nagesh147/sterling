@@ -109,13 +109,13 @@ function BadgeColumn({ meta, profile }: { meta: { label: string; color: string }
   );
 }
 
-function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
-  const c = on ? 'var(--t-green)' : 'var(--t-dim)';
+function ChipToggle({ label, on, onChange, color }: { label: string; on: boolean; onChange: (v: boolean) => void; color?: string }) {
+  const c = on ? (color || 'var(--t-green)') : 'var(--t-dim)';
   return (
     <button onClick={() => onChange(!on)} style={{
-      fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '3px 8px',
+      fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', padding: '3px 8px',
       borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'inherit',
-      border: `1px solid ${on ? alpha(c, 0.4) : 'var(--t-border)'}`,
+      border: `1px solid ${on ? alpha(c, 0.27) : 'var(--t-border)'}`,
       background: on ? alpha(c, 0.13) : 'transparent',
       color: c, transition: 'all .1s', whiteSpace: 'nowrap', textTransform: 'uppercase',
     }}>{on ? '● ' : '○ '}{label}</button>
@@ -278,12 +278,12 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             )}
           </div>
           <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
-            <ChipToggle label="Price Action" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
-            <ChipToggle label="SMC" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
-            <ChipToggle label="MA Crossover" on={activeProfile.enable_ma_crossover} onChange={(v) => setProfileField('enable_ma_crossover', v)} />
-            <ChipToggle label="Mean Reversion" on={activeProfile.enable_mean_reversion} onChange={(v) => setProfileField('enable_mean_reversion', v)} />
-            <ChipToggle label="Breakout" on={activeProfile.enable_breakout} onChange={(v) => setProfileField('enable_breakout', v)} />
-            <ChipToggle label="Delta-Gamma" on={activeProfile.enable_delta_gamma} onChange={(v) => setProfileField('enable_delta_gamma', v)} />
+            <ChipToggle label="Price Action" color="var(--t-amber)" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
+            <ChipToggle label="SMC" color="var(--t-purple)" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
+            <ChipToggle label="MA Crossover" color="var(--t-blue)" on={activeProfile.enable_ma_crossover} onChange={(v) => setProfileField('enable_ma_crossover', v)} />
+            <ChipToggle label="Mean Reversion" color="var(--t-cyan)" on={activeProfile.enable_mean_reversion} onChange={(v) => setProfileField('enable_mean_reversion', v)} />
+            <ChipToggle label="Breakout" color="var(--t-green)" on={activeProfile.enable_breakout} onChange={(v) => setProfileField('enable_breakout', v)} />
+            <ChipToggle label="Delta-Gamma" color="var(--t-pink)" on={activeProfile.enable_delta_gamma} onChange={(v) => setProfileField('enable_delta_gamma', v)} />
           </div>
 
           <div style={gridStyle()}>
@@ -360,6 +360,15 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             )}
             <div style={grpBox}>
               <div style={grpTitle}>DIRECTION & RISK</div>
+              {activeProfile.use_optimized && !activeProfile.macro_trend_filter && (
+                <div style={{
+                  padding: '8px 10px', marginBottom: 8, borderRadius: 6,
+                  background: 'var(--t-amber)14', border: '1px solid var(--t-amber)44',
+                  fontSize: 10, color: 'var(--t-amber)', lineHeight: 1.4
+                }}>
+                  <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
                 <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
                 <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
