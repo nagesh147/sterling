@@ -888,10 +888,10 @@ function ExecLog({ entries, mode }: {
   );
 }
 
-function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan }: {
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction }: {
   s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
-  showPlan?: boolean;
+  showPlan?: boolean; showAction?: boolean;
 }) {
   const long = s.direction === 'long';
   const short = s.direction === 'short';
@@ -900,7 +900,9 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // Color/label strictly by direction — never assume SHORT for a non-long row
   // (a directionless "near level" row must not render as SHORT).
   const dirColor = long ? 'var(--t-green)' : short ? 'var(--t-red)' : 'var(--t-dim)';
-  const dirLabel = long ? '▲ LONG' : short ? '▼ SHORT' : '○ NEAR LEVEL';
+  // No directional bias yet (a "near level / watching" row) → em-dash, not a
+  // fake direction. The level/awaiting context lives in Status + Level columns.
+  const dirLabel = long ? '▲ LONG' : short ? '▼ SHORT' : '—';
 
   const resp = execState?.resp;
   const accepted = !!resp?.accepted;
@@ -981,23 +983,22 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
     }}>
       {/* ── main row: CSS grid from the shared SIGNAL_COLS spec — every value
           sits under its header because header + rows use the same template ── */}
-      <div style={signalRowGrid(showPlan !== false)}>
+      <div style={signalRowGrid(showPlan !== false, showAction !== false)}>
         {/* accent */}
         <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color }} />
         {/* symbol */}
         <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
-        {/* direction + status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: dirColor, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-            {dirLabel}
-          </span>
-          {!accepted && (
-            <span style={{
-              fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, lineHeight: 1,
-              padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: alpha(statusColor, 0.09), whiteSpace: 'nowrap',
-            }}>{statusLabel}</span>
-          )}
-        </div>
+        {/* status — own column (so it has a header) */}
+        <span style={{
+          justifySelf: 'start', fontSize: 8.5, fontWeight: 800, letterSpacing: '0.07em', color: statusColor, lineHeight: 1,
+          padding: '3px 7px', borderRadius: 'var(--radius-xs)', background: alpha(statusColor, 0.12),
+          border: `1px solid ${alpha(statusColor, 0.28)}`, whiteSpace: 'nowrap',
+        }}>{statusLabel}</span>
+        {/* direction — LONG / SHORT, or — when there's no directional bias yet */}
+        <span style={{
+          fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap',
+          color: (long || short) ? dirColor : 'var(--t-dim)',
+        }}>{dirLabel}</span>
         {/* level/location + status detail — two grid cells (placeholders keep
             the column positions when there's no reason to split) */}
         {(() => {
@@ -1007,10 +1008,10 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           const detail   = dashIdx >= 0 ? formatReason(metaReason.slice(dashIdx + 3)) : null;
           return (
             <>
-              <span style={{ fontSize: 10, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={location}>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--t-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={location}>
                 {location}
               </span>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={detail || location}>
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--t-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={detail || location}>
                 {detail || '—'}
               </span>
             </>
