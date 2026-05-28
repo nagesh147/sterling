@@ -1016,14 +1016,19 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   const trailTp = accepted ? (pnl?.currentTp ?? null) : null;
   const hasPlan = displayEntry != null;
 
-  const currentColor = currentPx == null || displayEntry == null
-    ? 'var(--t-bright)'
-    : (long ? currentPx >= displayEntry : currentPx <= displayEntry) ? 'var(--t-green)' : 'var(--t-red)';
-
+  let currentColor = 'var(--t-bright)';
   let currentValNode: React.ReactNode = '—';
+  
   if (currentPx != null) {
     if (displayEntry != null) {
       const diff = long ? (currentPx - displayEntry) : (displayEntry - currentPx);
+      
+      if (Math.abs(diff) < 0.000001) {
+        currentColor = 'var(--t-bright)';
+      } else {
+        currentColor = diff > 0 ? 'var(--t-green)' : 'var(--t-red)';
+      }
+      
       const sign = diff >= 0 ? '+' : '−';
       currentValNode = (
         <span>
