@@ -358,7 +358,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                 </div>
               </>
             )}
-            <div style={{ ...grpBox, gridColumn: '1 / -1' }}>
+            <div style={grpBox}>
               <div style={grpTitle}>DIRECTION & RISK</div>
               {activeProfile.use_optimized && !activeProfile.macro_trend_filter && (
                 <div style={{
@@ -369,19 +369,17 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                   <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
                 </div>
               )}
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', gap: 5, paddingRight: 16, borderRight: '1px solid var(--t-border)' }}>
-                  <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
-                  <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
-                  <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
-                </div>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', flex: 1 }}>
-                  <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
-                  <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
-                  <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} onChange={(v) => setProfileField('min_rr', v)} />
-                  <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} onChange={(v) => setProfileField('max_stop_atr', v)} />
-                  <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
-                </div>
+              <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
+                <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
+                <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
+                <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
+                <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
+                <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} onChange={(v) => setProfileField('min_rr', v)} />
+                <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} onChange={(v) => setProfileField('max_stop_atr', v)} />
+                <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
               </div>
             </div>
           </div>
@@ -1953,7 +1951,19 @@ export function ScalpingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positions]);
 
-  const baseSignals = (data?.signals ?? []).filter(s => getSignalStatus(s) !== 'other');
+  const isStrategyEnabled = (s: ScalpingSignal) => {
+    const p = cfg?.profiles?.[s.profile];
+    if (!p) return true;
+    if (s.strategy === 'price_action') return p.enable_price_action;
+    if (s.strategy === 'smc') return p.enable_smc;
+    if (s.strategy === 'ma_crossover') return p.enable_ma_crossover;
+    if (s.strategy === 'mean_reversion') return p.enable_mean_reversion;
+    if (s.strategy === 'breakout') return p.enable_breakout;
+    if (s.strategy === 'delta_gamma') return p.enable_delta_gamma;
+    return true;
+  };
+
+  const baseSignals = (data?.signals ?? []).filter(s => getSignalStatus(s) !== 'other' && isStrategyEnabled(s));
 
   const stratNavItems = [
     { id: 'all', label: 'All Strategies', color: 'var(--t-bright)', count: baseSignals.filter((s) => (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
