@@ -833,7 +833,7 @@ function ConsolidatedRow({ count, totalPnl, openPnl, realizedPnl, notional, wins
   );
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 22, flexWrap: 'wrap',
+      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 75, flexWrap: 'wrap',
       padding: '10px 16px', borderRadius: 'var(--radius-lg)',
       border: `1px solid ${alpha(c, 0.27)}`, background: alpha(c, 0.05),
     }}>
@@ -1155,6 +1155,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: pausedAuto ? 'var(--t-amber)' : modeColor,
                 padding: '4px 9px', borderRadius: 'var(--radius-md)', background: pausedAuto ? tint('var(--t-amber)', 12) : alpha(modeColor, 0.09),
                 border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
+                minWidth: 120, textAlign: 'center',
               }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}{pausedAuto ? ' ⏸' : ''}</span>
               {execState?.auto && execState?.resp?.telegram_alert_sent && (
                 <span title="Signal alert sent to Telegram" style={{
@@ -1164,7 +1165,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 }} />
               )}
               {!isOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.05, minWidth: 64 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05, minWidth: 120 }}>
                   <span style={{ fontSize: 14, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
                     {pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
                   </span>
@@ -1181,14 +1182,14 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
               fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: modeColor,
               padding: '5px 12px', borderRadius: 'var(--radius-md)', background: alpha(modeColor, 0.08),
               border: `1px solid ${alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
-              opacity: tried ? 0.7 : 1,
+              opacity: tried ? 0.7 : 1, minWidth: 120, textAlign: 'center',
             }}>⚡ {executing ? 'AUTO…' : `AUTO · ${pillMode}`}</span>
           ) : s.executable ? (
             <button disabled={executing} onClick={(e) => { e.stopPropagation(); onExecute(); }} style={{
               fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '6px 16px', borderRadius: 6,
               fontFamily: 'inherit', cursor: executing ? 'default' : 'pointer',
               color: '#fff', background: tried ? 'var(--t-amber)' : dirColor, border: 'none', lineHeight: 1,
-              opacity: executing ? 0.6 : 1,
+              opacity: executing ? 0.6 : 1, minWidth: 120, textAlign: 'center',
             }}>
               {executing ? '…' : tried ? 'RETRY' : 'EXECUTE'}
             </button>
