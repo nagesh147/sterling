@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { WatchlistPanel } from './WatchlistPanel';
 import { OptionChainViewer } from './OptionChainViewer';
 import { WalkForwardPanel } from './WalkForwardPanel';
+import { WFOImpactPanel } from './WFOImpactPanel';
 import { SensitivityPanel } from './SensitivityPanel';
 import { RiskConfigPanel } from './RiskConfigPanel';
 import { CalibrationPanel } from './CalibrationPanel';
@@ -70,6 +71,7 @@ export function BottomPanel() {
         )}
         {tab === 'analytics' && (
           <div style={gridStyle(320, 16)}>
+            <WFOImpactPanel />
             <WalkForwardPanel />
             <SensitivityPanel />
           </div>

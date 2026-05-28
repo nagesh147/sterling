@@ -32,6 +32,7 @@ from app.api.v1.endpoints.analytics_baseline import router as analytics_baseline
 from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
 from app.api.v1.endpoints.trading import router as trading_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
+from app.api.v1.endpoints.wfo import router as wfo_router
 from app.services import alert_store as _alert_store_svc
 from app.services.db_postgres import init_db_schema
 
@@ -1474,6 +1475,7 @@ def create_app() -> FastAPI:
     app.include_router(trading_mode_router, prefix="/api/v1")
     app.include_router(candles_router, prefix="/api/v1")
     app.include_router(ohlcv_router, prefix="/api/v1")
+    app.include_router(wfo_router, prefix="/api/v1")
     app.include_router(analytics_router, prefix="/api/v1")
     app.include_router(analytics_baseline_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
