@@ -397,13 +397,14 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     scan_resp = scan_universe([sym], candles_by_res, cfg, tradeable_set={sym})
     sigs = scan_resp.signals
 
-    matched = [s for s in sigs if s.strategy == strategy and s.entry_ok]
+    # If user confirms manually, bypass the entry_ok constraint
+    matched = [s for s in sigs if s.strategy == strategy and (s.entry_ok or body.confirm)]
     if not matched:
         logger.info("scalp-exec %s/%s -> no_signal (not armed at execute time)", sym, strategy)
         return ScalpingExecuteResponse(
             accepted=False, mode="paper", underlying=sym, strategy=strategy,
             direction="none", size_units=0, notional_usd=0,
-            status="no_signal", reason="no armed signal for this strategy",
+            status="no_signal", reason="No signal was ready to trade for this strategy at execution time.",
             timestamp_ms=int(time.time() * 1000),
         )
 
