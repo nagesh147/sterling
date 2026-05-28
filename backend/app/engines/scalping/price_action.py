@@ -464,7 +464,7 @@ def evaluate_price_action(
     now_ms = int(candles_15m[-1].timestamp_ms) if candles_15m else 0
     current_price = float(candles_15m[-1].close) if candles_15m else 0.0
 
-    if len(candles_15m) < cfg.warmup_bars_15m or len(candles_4h) < cfg.warmup_bars_4h:
+    if len(candles_15m) < 20 or len(candles_4h) < 20:
         return PriceActionSignal(
             underlying=underlying, direction="none", pattern="",
             near_level=None, level_type="",

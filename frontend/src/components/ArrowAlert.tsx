@@ -5,7 +5,9 @@ import { api } from '../utils/api';
 import type { SignalsResponse } from '../hooks/useSignals';
 import { injectArrowEntry } from '../hooks/useSignalFeed';
 import { useTradingMode } from '../hooks/useTradingMode';
-import { fpPrice, MODE_COLOR } from '../utils/fmt';
+import { fpPrice } from '../utils/fmt';
+import { MODE_COLOR } from '../utils/colors';
+import { alpha } from '../styles/terminalUI';
 
 function usePlaceNow() {
   const qc = useQueryClient();
@@ -47,7 +49,7 @@ function NotifCard({ notif, onDismiss }: { notif: TradeNotif; onDismiss: () => v
 
   const isLong    = notif.direction === 'long';
   const color     = isLong ? 'var(--accent)' : 'var(--danger)';
-  const bgDark    = isLong ? '#071f18' : '#1f0708';
+  const bgDark    = isLong ? alpha('var(--accent)', 0.08) : alpha('var(--danger)', 0.08);
   const side      = isLong ? 'BUY' : 'SELL';
   const arrow     = isLong ? '▲' : '▼';
   const modeColor = MODE_COLOR[notif.mode] ?? 'var(--text-dim)';

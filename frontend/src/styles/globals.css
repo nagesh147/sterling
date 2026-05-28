@@ -67,6 +67,63 @@
   --purple:       #7C3AED;
 }
 
+/* ── Design scale (shared border-radius, spacing, font-size) ── */
+:root {
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 12px;
+
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-md: 8px;
+  --space-lg: 12px;
+  --space-xl: 16px;
+  --space-2xl: 20px;
+}
+
+/* ── Theme-safe translucent surface tokens ── */
+:root,
+[data-theme="dark"] {
+  --surface-overlay:   rgba(0, 0, 0, 0.5);
+  --surface-green-08:  color-mix(in srgb, var(--accent) 8%, transparent);
+  --surface-green-12:  color-mix(in srgb, var(--accent) 12%, transparent);
+  --surface-green-16:  color-mix(in srgb, var(--accent) 16%, transparent);
+  --surface-red-08:    color-mix(in srgb, var(--danger) 8%, transparent);
+  --surface-red-12:    color-mix(in srgb, var(--danger) 12%, transparent);
+  --surface-red-16:    color-mix(in srgb, var(--danger) 16%, transparent);
+  --surface-amber-10:  color-mix(in srgb, var(--warning) 10%, transparent);
+  --surface-amber-15:  color-mix(in srgb, var(--warning) 15%, transparent);
+  --surface-purple-15: color-mix(in srgb, var(--purple) 15%, transparent);
+}
+
+[data-theme="grey"] {
+  --surface-overlay:   rgba(0, 0, 0, 0.5);
+  --surface-green-08:  color-mix(in srgb, var(--accent) 8%, transparent);
+  --surface-green-12:  color-mix(in srgb, var(--accent) 12%, transparent);
+  --surface-green-16:  color-mix(in srgb, var(--accent) 16%, transparent);
+  --surface-red-08:    color-mix(in srgb, var(--danger) 8%, transparent);
+  --surface-red-12:    color-mix(in srgb, var(--danger) 12%, transparent);
+  --surface-red-16:    color-mix(in srgb, var(--danger) 16%, transparent);
+  --surface-amber-10:  color-mix(in srgb, var(--warning) 10%, transparent);
+  --surface-amber-15:  color-mix(in srgb, var(--warning) 15%, transparent);
+  --surface-purple-15: color-mix(in srgb, var(--purple) 15%, transparent);
+}
+
+[data-theme="light"] {
+  --surface-overlay:   rgba(0, 0, 0, 0.3);
+  --surface-green-08:  color-mix(in srgb, var(--accent) 8%, transparent);
+  --surface-green-12:  color-mix(in srgb, var(--accent) 12%, transparent);
+  --surface-green-16:  color-mix(in srgb, var(--accent) 16%, transparent);
+  --surface-red-08:    color-mix(in srgb, var(--danger) 8%, transparent);
+  --surface-red-12:    color-mix(in srgb, var(--danger) 12%, transparent);
+  --surface-red-16:    color-mix(in srgb, var(--danger) 16%, transparent);
+  --surface-amber-10:  color-mix(in srgb, var(--warning) 10%, transparent);
+  --surface-amber-15:  color-mix(in srgb, var(--warning) 15%, transparent);
+  --surface-purple-15: color-mix(in srgb, var(--purple) 15%, transparent);
+}
+
 /* ─── Base resets ─── */
 *, *::before, *::after { box-sizing: border-box; }
 

@@ -73,8 +73,48 @@ class ScalpingBacktestTrade(BaseModel):
     entry_price: float
     exit_price: float
     bars_held: int
-    pnl_r: float
+    pnl_r: float           # NET R after costs (the honest per-trade outcome)
+    gross_pnl_r: float = 0.0
     exit_reason: str
+    regime: str = ""       # macro regime at entry: bull | bear | chop
+
+
+class SampleQuality(BaseModel):
+    """Adequacy of the trade sample. Under ~100 trades a backtest is unreliable;
+    500+ is robust."""
+    label: str             # robust | adequate | thin | unreliable | no_trades
+    note: str
+    min_reliable: int = 100
+    adequate: bool = False
+
+
+class RegimeStats(BaseModel):
+    trade_count: int = 0
+    win_rate: float = 0.0
+    avg_r: float = 0.0
+
+
+class RegimeCoverage(BaseModel):
+    """Did the lookback span both a bull and a bear leg, and how did the edge
+    perform in each regime?"""
+    covers_bull_and_bear: bool = False
+    bull_pct: float = 0.0
+    bear_pct: float = 0.0
+    chop_pct: float = 0.0
+    by_regime: dict = Field(default_factory=dict)  # regime -> RegimeStats-shaped
+
+
+class OOSSplit(BaseModel):
+    """70/30 in-sample vs out-of-sample split — does the edge generalise or is
+    it curve-fit to this window?"""
+    n_is: int = 0
+    n_oos: int = 0
+    is_pf: Optional[float] = None
+    is_exp: float = 0.0
+    oos_pf: Optional[float] = None
+    oos_exp: float = 0.0
+    generalises: bool = False
+    note: str = ""
 
 
 class ScalpingBacktestResult(BaseModel):
@@ -85,9 +125,18 @@ class ScalpingBacktestResult(BaseModel):
     trades: List[ScalpingBacktestTrade]
     total_trades: int
     win_rate: float
-    total_return_pct: float
+    total_return_pct: float          # net of costs (kept for UI back-compat)
     max_drawdown_pct: float
     timestamp_ms: int
+    # ── honest-replay additions ──
+    expectancy_r: float = 0.0        # mean NET R per trade
+    profit_factor: Optional[float] = None
+    avg_cost_r: float = 0.0          # avg fee+slippage+funding per trade, in R
+    cost_modeled: bool = True
+    equity_curve: List[float] = Field(default_factory=list)
+    sample_quality: Optional[SampleQuality] = None
+    regime_coverage: Optional[RegimeCoverage] = None
+    oos: Optional[OOSSplit] = None
 
 
 class ScalpingBacktestRequest(BaseModel):

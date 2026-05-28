@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTradingMode, useSetTradingMode } from '../hooks/useTradingMode';
 import { clearSignalFeed, clearSignalFeedState } from '../hooks/useSignalFeed';
 import { api } from '../utils/api';
-import { MODE_COLOR } from '../utils/fmt';
+import { MODE_COLOR } from '../utils/colors';
 import { tint } from '../styles/terminalUI';
 
 const MODE_LABEL: Record<string, string> = {

@@ -14,7 +14,9 @@ import { useSignals } from '../hooks/useSignals';
 import { useTradingMode } from '../hooks/useTradingMode';
 import { useExchanges } from '../hooks/useExchanges';
 import { useAccountSummary } from '../hooks/useAccount';
-import { fpPrice, MODE_COLOR, inferModeTag } from '../utils/fmt';
+import { fpPrice, inferModeTag } from '../utils/fmt';
+import { MODE_COLOR, STATE_COLOR, STATE_SHORT } from '../utils/colors';
+import { alpha } from '../styles/terminalUI';
 import { api } from '../utils/api';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -51,22 +53,6 @@ function fmtAge(ms: number): string {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   return `${Math.floor(diff / 3_600_000)}h ago`;
 }
-
-const STATE_COLOR: Record<string, string> = {
-  ENTRY_ARMED_PULLBACK: '#44aaff',
-  ENTRY_ARMED_CONTINUATION: '#66ccff',
-  CONFIRMED_SETUP_ACTIVE: 'var(--warning)',
-  EARLY_SETUP_ACTIVE: '#f0a500',
-};
-
-const STATE_SHORT: Record<string, string> = {
-  ENTRY_ARMED_PULLBACK: 'ARMED',
-  ENTRY_ARMED_CONTINUATION: 'ARMED',
-  CONFIRMED_SETUP_ACTIVE: 'CONFIRMED',
-  EARLY_SETUP_ACTIVE: 'FORMING',
-  FILTERED: 'FILTERED',
-  IDLE: 'IDLE',
-};
 
 // ── Stream connection indicator ───────────────────────────────────────────────
 
@@ -595,27 +581,27 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     }}>
       {/* LEFT — time + symbol */}
       <div style={{ width: 150, flexShrink: 0, padding: '10px 12px', borderRight: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 9, color: 'var(--text-faint)', marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
         <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>{entry.underlying}</div>
         <div style={{ fontSize: 11, fontWeight: 800, color: dirColor, marginTop: 2 }}>
           {arrow} {side}
         </div>
         <div style={{ fontSize: 9, color: stColor, marginTop: 4, letterSpacing: 0.5, fontWeight: 700 }}>{stLabel}</div>
-        <div style={{ fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: 'var(--text-dim)', marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
         <div
           title={`Signal ID: ${entry.signalId} — click to copy`}
           onClick={() => entry.signalId && navigator.clipboard?.writeText(entry.signalId)}
           style={{
             marginTop: 6, display: 'flex', alignItems: 'center', gap: 4,
             background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 3, padding: '3px 6px', cursor: 'pointer',
+            borderRadius: 'var(--radius-xs)', padding: '3px 6px', cursor: 'pointer',
             width: 'fit-content',
           }}
         >
-          <span style={{ fontSize: 7, color: 'var(--text-faint)', letterSpacing: 1, textTransform: 'uppercase', flexShrink: 0 }}>ID</span>
+          <span style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 0.5, textTransform: 'uppercase', flexShrink: 0 }}>ID</span>
           <span style={{
-            fontSize: 10, fontFamily: 'monospace', fontWeight: 800,
-            color: 'var(--text-primary)', letterSpacing: 1,
+            fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
+            color: 'var(--text-primary)', letterSpacing: 0.5,
           }}>
             {entry.signalId ?? '—'}
           </span>
@@ -627,7 +613,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         {/* instrument */}
         <div style={{ marginBottom: 8 }}>
           {isFutures ? (
-            <span style={{ fontSize: 12, color: '#88aaff', fontWeight: 700 }}>
+            <span style={{ fontSize: 12, color: 'var(--t-blue)', fontWeight: 700 }}>
               {entry.futuresSymbol} · {entry.leverage}× lev
             </span>
           ) : (
@@ -647,8 +633,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                 title="STRONG = ≥75% confluence on the 1H signal stack"
                 style={{
                   marginLeft: 6, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
-                  color: '#f0c040', background: '#3a2a08',
-                  border: '1px solid #f0c04055', borderRadius: 2, padding: '1px 4px',
+                  color: 'var(--warning)', background: alpha('var(--warning)', 0.15),
+                  border: `1px solid ${alpha('var(--warning)', 0.33)}`, borderRadius: 'var(--radius-sm)', padding: '1px 4px',
                   cursor: 'help',
                 }}
               >
@@ -660,7 +646,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               const tagColor = MODE_COLOR[tag] ?? 'var(--text-dim)';
               return (
                 <span style={{ marginLeft: 6, fontSize: 8, fontWeight: 700,
-                  color: tagColor, background: 'rgba(0,0,0,0.3)', borderRadius: 2, padding: '1px 4px',
+                  color: tagColor, background: alpha(tagColor, 0.10), borderRadius: 'var(--radius-sm)', padding: '1px 4px',
                 }}>
                   {tag.toUpperCase()}
                 </span>
@@ -698,10 +684,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               <span
                 title={entry.vetoReason}
                 style={{
-                  fontSize: 9, padding: '1px 6px', borderRadius: 3,
-                  background: 'rgba(255,71,87,0.10)',
-                  border: '1px solid var(--danger)55',
+                  fontSize: 9, padding: '1px 6px', borderRadius: 'var(--radius-xs)',
+                  background: alpha('var(--danger)', 0.10),
+                  border: `1px solid ${alpha('var(--danger)', 0.33)}`,
                   color: 'var(--danger)', cursor: 'help',
+                  fontFamily: 'monospace', letterSpacing: 0.5,
                 }}
               >
                 ✕ {entry.vetoReason.slice(0, 40)}{entry.vetoReason.length > 40 ? '…' : ''}
@@ -729,31 +716,31 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             ] as { label: string; val: string; color: string; sub: string; glow: boolean; initSl: string | null; diff: string | null }[])
             .map(({ label, val, color, sub, glow, initSl, diff }) => (
               <div key={label} style={{
-                background: glow ? 'rgba(29,215,96,0.06)' : 'var(--bg)',
-                border: `1px solid ${glow ? 'var(--accent)55' : 'var(--border)'}`,
-                borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
+                background: glow ? alpha('var(--accent)', 0.06) : 'var(--bg)',
+                border: `1px solid ${glow ? alpha('var(--accent)', 0.33) : 'var(--border)'}`,
+                borderRadius: 'var(--radius-sm)', padding: '7px 10px', textAlign: 'center', minWidth: 80,
               }}>
-                <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1.2, marginBottom: 2 }}>
+                <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 0.5, marginBottom: 2 }}>
                   {label}{glow && <span style={{ marginLeft: 3, color: 'var(--accent)', fontWeight: 900 }}>↑</span>}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
                 {initSl && (
-                  <div style={{ fontSize: 7, color: 'var(--text-faint)', marginTop: 1, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 8, color: 'var(--text-faint)', marginTop: 1, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums' }}>
                     {initSl}
                   </div>
                 )}
                 {diff && (
-                  <div style={{ fontSize: 7, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 8, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
                     +{diff}
                   </div>
                 )}
-                {!initSl && !diff && sub && <div style={{ fontSize: 8, color: 'var(--text-dim)' }}>{sub}</div>}
+                {!initSl && !diff && sub && <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>{sub}</div>}
                 {/* 1-second wire: distance from CURRENT price (updates each price tick) */}
                 {label === 'STOP LOSS' && liveSlDist != null && (
                   <div
                     title="Live distance from current spot to stop. Negative = price already through stop."
                     style={{
-                      fontSize: 7, color: liveSlDist > 0 ? 'var(--text-faint)' : 'var(--danger)',
+                      fontSize: 8, color: liveSlDist > 0 ? 'var(--text-faint)' : 'var(--danger)',
                       fontVariantNumeric: 'tabular-nums', marginTop: 1,
                     }}
                   >
@@ -764,7 +751,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   <div
                     title="Live distance from current spot to target."
                     style={{
-                      fontSize: 7, color: liveTpDist > 0 ? 'var(--text-faint)' : 'var(--accent)',
+                      fontSize: 8, color: liveTpDist > 0 ? 'var(--text-faint)' : 'var(--accent)',
                       fontVariantNumeric: 'tabular-nums', marginTop: 1,
                     }}
                   >
@@ -781,8 +768,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               className={`live-price-cell ${tickClass}`}
               style={{
                 background: 'var(--bg)',
-                border: `1px solid ${livePnl != null && livePnl >= 0 ? '#00d4aa44' : '#ff475744'}`,
-                borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
+                border: `1px solid ${livePnl != null && livePnl >= 0 ? alpha('var(--accent)', 0.27) : alpha('var(--danger)', 0.27)}`,
+                borderRadius: 'var(--radius-sm)', padding: '7px 10px', textAlign: 'center', minWidth: 80,
               }}
               title="NOW = live spot price · updates every 1 s from SSE prices event"
             >
@@ -805,7 +792,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
       {/* RIGHT — action */}
       <div style={{
-        width: 130, flexShrink: 0, padding: '14px 10px',
+        width: 130, flexShrink: 0, padding: '10px 12px',
         borderLeft: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center',
       }}>
@@ -818,10 +805,10 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             onClick={handleTrade}
             disabled={hasOpen || placing}
             style={{
-              padding: '11px 0', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
-              background: hasOpen ? 'var(--bg)' : entry.direction === 'long' ? '#003d2e' : '#3d0014',
+              padding: '9px 12px', borderRadius: 'var(--radius-sm)', cursor: hasOpen ? 'default' : 'pointer',
+              background: hasOpen ? 'var(--bg)' : entry.direction === 'long' ? alpha('var(--accent)', 0.12) : alpha('var(--danger)', 0.12),
               color: hasOpen ? 'var(--text-faint)' : dirColor,
-              border: `1px solid ${hasOpen ? 'var(--border)' : dirColor + 'cc'}`,
+              border: `1px solid ${hasOpen ? 'var(--border)' : alpha(dirColor, 0.80)}`,
               fontFamily: 'inherit', fontSize: 11, fontWeight: 900, letterSpacing: 0.5,
               opacity: placing ? 0.6 : 1,
             }}
@@ -1441,9 +1428,9 @@ function SignalsFeedBody({
 
       {/* footer */}
       <div style={{
-        padding: '5px 14px', background: 'var(--bg)',
+        padding: '8px 14px', background: 'var(--bg)',
         borderTop: '1px solid var(--border)',
-        fontSize: 9, color: 'var(--text-faint)',
+        fontSize: 8, color: 'var(--text-faint)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         flexShrink: 0,
       }}>
@@ -1528,8 +1515,8 @@ export function SignalsTable() {
 
   const TRACK_PILLS: Array<{ id: 'all' | 'latest' | 'legacy'; label: string; color: string }> = [
     { id: 'all',     label: 'ALL',     color: 'var(--text-dim)' },
-    { id: 'latest',  label: 'LATEST',  color: '#f59e0b' },
-    { id: 'legacy',  label: 'LEGACY',  color: '#8b5cf6' },
+    { id: 'latest',  label: 'LATEST',  color: 'var(--warning)' },
+    { id: 'legacy',  label: 'LEGACY',  color: 'var(--purple)' },
   ];
 
   const [localTrack, setLocalTrack] = React.useState<TrackFilter>('all');
@@ -1543,7 +1530,7 @@ export function SignalsTable() {
 
   const pillBase = (active: boolean): React.CSSProperties => ({
     padding: '3px 10px',
-    borderRadius: 5,
+    borderRadius: 'var(--radius-sm)',
     fontSize: 9,
     fontWeight: 600,
     letterSpacing: '0.07em',
@@ -1566,14 +1553,14 @@ export function SignalsTable() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-primary)' }}>
             SIGNAL FEED
           </span>
           <StreamBadge status={streamStatus} />
           {freshCount > 0 && (
             <span style={{
               fontSize: 9, fontWeight: 600, color: 'var(--accent)',
-              background: 'var(--accent)14', borderRadius: 4, padding: '2px 7px',
+              background: alpha('var(--accent)', 0.08), borderRadius: 'var(--radius-sm)', padding: '2px 7px',
             }}>
               {freshCount} live
             </span>
@@ -1589,9 +1576,9 @@ export function SignalsTable() {
                 onClick={() => setTab(t.id)}
                 style={{
                   padding: '4px 14px',
-                  borderRadius: 6,
-                  border: active ? `1px solid ${t.accent}40` : '1px solid transparent',
-                  background: active ? t.accent + '12' : 'transparent',
+                  borderRadius: 'var(--radius-md)',
+                  border: active ? `1px solid ${alpha(t.accent, 0.25)}` : '1px solid transparent',
+                  background: active ? alpha(t.accent, 0.07) : 'transparent',
                   color: active ? t.accent : 'var(--text-dim)',
                   fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
                   letterSpacing: '0.08em', cursor: 'pointer',
@@ -1603,12 +1590,12 @@ export function SignalsTable() {
                 {t.armed > 0 && (
                   <span style={{
                     fontSize: 9, fontWeight: 800,
-                    color: 'var(--warning)', background: 'var(--warning)18',
-                    borderRadius: 10, padding: '1px 6px',
+                    color: 'var(--warning)', background: alpha('var(--warning)', 0.09),
+                    borderRadius: 'var(--radius-pill)', padding: '1px 6px',
                   }}>{t.armed}</span>
                 )}
                 {t.id === 'options' && hasOptAlert && !active && (
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa' }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--t-purple)' }} />
                 )}
               </button>
             );
@@ -1621,7 +1608,7 @@ export function SignalsTable() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '6px 14px',
+        padding: '8px 14px',
         borderBottom: '1px solid var(--border)',
         background: 'var(--bg)',
         gap: 8,
@@ -1643,7 +1630,7 @@ export function SignalsTable() {
         </div>
 
         {/* Subtle vertical divider */}
-        <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
 
         {/* Track filter */}
         <div style={{ display: 'flex', gap: 2 }}>
@@ -1663,7 +1650,7 @@ export function SignalsTable() {
                 style={{
                   ...pillBase(active),
                   color: active ? t.color : 'var(--text-dim)',
-                  borderColor: active ? t.color + '40' : 'transparent',
+                  borderColor: active ? alpha(t.color, 0.25) : 'transparent',
                 }}
               >
                 {t.label}

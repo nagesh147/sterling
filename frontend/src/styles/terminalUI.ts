@@ -40,6 +40,13 @@ export function tint(color: string, pct = 12): string {
   return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 }
 
+/** Apply alpha (0–1 fraction) to any CSS variable.
+ *  `alpha('var(--t-green)', 0.13)` → `color-mix(in srgb, var(--t-green) 13%, transparent)`
+ *  Use this everywhere instead of the broken `${color}22` string concat. */
+export function alpha(color: string, opacity: number): string {
+  return `color-mix(in srgb, ${color} ${opacity * 100}%, transparent)`;
+}
+
 /* ── Card: bordered container with a header strip and a padded body ───────── */
 export const card: CSSProperties = {
   background: c.bg,

@@ -3,6 +3,7 @@ import { usePositions, useClosePosition, useCloseAll, useClearAllPositions } fro
 import { useLivePnl } from '../hooks/useLivePnl';
 import { useExchanges } from '../hooks/useExchanges';
 import { fmtUSD } from '../utils/fmt';
+import { alpha } from '../styles/terminalUI';
 import type { PaperPosition } from '../types';
 import { ThreeColumnLayout, LeftSection } from './ThreeColumnLayout';
 
@@ -480,7 +481,7 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
                     <DirBadge dir={dir} />
                     <StatusBadge status={pos.status} />
                     {(() => { const pm = posModeOf(pos); return (
-                      <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: MODE_COLORS[pm], background: MODE_COLORS[pm] + '18', borderRadius: 3, padding: '1px 5px' }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: MODE_COLORS[pm], background: alpha(MODE_COLORS[pm], 0.09), borderRadius: 'var(--radius-xs)', padding: '1px 5px' }}>
                         {pm.toUpperCase()}
                       </span>
                     ); })()}

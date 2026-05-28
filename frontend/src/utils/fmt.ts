@@ -6,15 +6,6 @@ export function fpPrice(v: number | null | undefined): string {
   return '$' + v.toFixed(2);
 }
 
-/** Mode badge colours — single source of truth for scalping/intraday/swing/positional/all */
-export const MODE_COLOR: Record<string, string> = {
-  scalping:   '#ff7f6e',
-  intraday:   '#f0c040',
-  swing:      'var(--accent)',
-  positional: '#aa88ff',
-  all:        '#88ccff',
-};
-
 /**
  * When ALL mode is active, infer the most specific mode a signal qualifies for.
  * Thresholds mirror the backend regime engine: ADX_WEAK=15, ADX_TREND=20, ADX_STRONG=25.

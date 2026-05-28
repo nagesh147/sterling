@@ -1098,11 +1098,27 @@ async def lifespan(app: FastAPI):
         log.warning("Telegram config restore skipped: %s", _e)
 
     # Restore persisted scalping config (survives server restarts)
+
+    # Restore persisted StatArb config (survives server restarts)
+    from app.engines.statarb.config import StatArbConfig as _SAC, default_statarb_config as _default_sac
+    _saved_sac = get_config("statarb_config")
+    if _saved_sac:
+        try:
+            cfg = _SAC.model_validate_json(_saved_sac)
+            app.state.statarb_config = cfg
+            log.info("Restored StatArb config from DB")
+        except Exception:
+            app.state.statarb_config = _default_sac()
+    else:
+        app.state.statarb_config = _default_sac()
     from app.engines.scalping.config import ScalpingConfig as _SC, default_config as _default_sc
     _saved_sc = get_config("scalping_config")
     if _saved_sc:
         try:
-            app.state.scalping_config = _SC.model_validate_json(_saved_sc)
+            cfg = _SC.model_validate_json(_saved_sc)
+            if not cfg.profiles:
+                cfg.profiles = _default_sc().profiles
+            app.state.scalping_config = cfg
             log.info("Restored scalping config from DB")
         except Exception:
             app.state.scalping_config = _default_sc()
@@ -1202,6 +1218,8 @@ async def lifespan(app: FastAPI):
     # and drives VCPExecutor.on_bar() → OrderRouter for each completed bar.
     vcp_feed_task = asyncio.create_task(_background_vcp_live_feed(app))
     log.info("VCP Live Feed task started")
+    statarb_task = asyncio.create_task(_background_statarb_trader(app, interval=15))
+    log.info("StatArb background trader started")
 
     # ── Telegram bot + signal-detection alerts ────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
@@ -1224,6 +1242,11 @@ async def lifespan(app: FastAPI):
     except (Exception, BaseException):
         pass
 
+    statarb_task.cancel()
+    try:
+        await statarb_task
+    except (Exception, BaseException):
+        pass
     vcp_feed_task.cancel()
     try:
         await vcp_feed_task
@@ -1258,6 +1281,154 @@ async def lifespan(app: FastAPI):
     await adapter_manager.close_current()
     log.info("Sterling shutdown complete")
 
+
+async def _background_statarb_trader(app: FastAPI, interval: int = 15) -> None:
+    """Periodically scans for StatArb signals and executes them if auto_trade is enabled."""
+    import asyncio
+    import time
+    from app.engines.statarb.scanner import scan_statarb_universe
+    from app.services import ohlcv_store, paper_store, exchange_account_store
+    from app.schemas.market import Candle
+    from app.services.execution.order_router import OrderRouter, RouterMode, RouterDeps, OrderRouterRequest
+    from app.services.exchanges import instrument_registry as registry
+    from app.api.v1.endpoints.trading import LiveOrderRequest, _create_paper_tracking
+
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            cfg = getattr(app.state, "statarb_config", None)
+            if not cfg or not cfg.enabled or not getattr(cfg, "auto_trade", False):
+                continue
+                
+            # Fetch candles for assets
+            assets_to_fetch = set()
+            for p in cfg.pairs:
+                if getattr(p, "enabled", True):
+                    assets_to_fetch.add(p.asset_x)
+                    assets_to_fetch.add(p.asset_y)
+                    if getattr(p, "asset_z", None):
+                        assets_to_fetch.add(p.asset_z)
+            
+            if not assets_to_fetch:
+                continue
+
+            data_dict = {cfg.timeframe: {}}
+            now_sec = int(time.time())
+            # Lookback enough days depending on timeframe
+            since = now_sec - (30 * 24 * 60 * 60)
+            
+            for symbol in assets_to_fetch:
+                try:
+                    rows = ohlcv_store.get_candles(symbol, cfg.timeframe, limit=2000, since=since)
+                    if rows:
+                        from app.services.delta_l2_socket import l2_manager
+                        candles = [
+                            Candle(
+                                timestamp_ms=int(r["time"]) * 1000, 
+                                open=r["open"], 
+                                high=r["high"], 
+                                low=r["low"], 
+                                close=r["close"],
+                                volume=r["volume"], 
+                                is_closed=True
+                            ) for r in rows
+                        ]
+                        
+                        best_bid = l2_manager.best_bid.get(symbol)
+                        best_ask = l2_manager.best_ask.get(symbol)
+                        if best_bid and best_ask:
+                            mid_price = (best_bid[0] + best_ask[0]) / 2.0
+                            candles.append(Candle(
+                                timestamp_ms=int(time.time() * 1000),
+                                open=mid_price, high=mid_price, low=mid_price, close=mid_price,
+                                volume=0.0, is_closed=False
+                            ))
+                        data_dict[cfg.timeframe][symbol] = candles
+                except Exception:
+                    pass
+            
+            res = scan_statarb_universe(data_dict, cfg)
+            
+            # Setup router
+            active = exchange_account_store.get_active()
+            if not active or not active.api_key or active.api_key.startswith("DUMMY"):
+                continue
+            
+            from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+            api_base = (active.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+            adapter = DeltaIndiaAdapter(
+                api_key=active.api_key, api_secret=active.api_secret,
+                is_paper=False, base_url=api_base,
+            )
+
+            router_mode_str = getattr(app.state, "algo_router_mode", "live") or "live"
+            try:
+                router_mode = RouterMode(router_mode_str)
+            except Exception:
+                router_mode = RouterMode.LIVE
+
+            def _list_open_positions():
+                return [p for p in paper_store.list_positions() if getattr(p.status, "value", p.status) in ("open", "partially_closed")]
+
+            def _create_paper_position(req, exch_symbol, entry_price, order_id):
+                body = LiveOrderRequest(
+                    underlying=req.underlying, direction=req.direction, instrument_type=req.instrument_type,
+                    size=req.size, leverage=req.leverage, order_type=req.order_type,
+                    stop_loss=req.stop_loss, take_profit=req.take_profit, notes=req.notes, client_order_id=req.client_order_id,
+                )
+                return _create_paper_tracking(
+                    body, req.underlying.upper(), float(entry_price),
+                    order_id or "", order_status="filled" if order_id else "open",
+                )
+                
+            deps = RouterDeps(
+                list_open_positions=_list_open_positions,
+                create_paper_position=_create_paper_position,
+                cooldown_blocked=lambda *a, **k: False,
+                correlation_penalty=lambda *a, **k: 1.0,
+                portfolio_cap_breach=lambda *a, **k: None,
+                microstructure_veto=lambda req: None,
+            )
+            
+            router = OrderRouter(mode=router_mode, adapter=adapter, deps=deps, instrument_resolver=registry.get_instrument)
+            
+            # Very simple idempotent execution based on signal state
+            for sig in res.signals:
+                if sig.action in ("ENTRY_LONG", "ENTRY_SHORT"):
+                    log.info("StatArb Auto-Trade triggered for %s: %s (Z=%.2f)", sig.pair_name, sig.action, sig.current_z)
+                    
+                    # Need to place 2 or 3 orders depending on pair legs.
+                    # This is simplified for demonstration of the hook.
+                    # We just execute Leg Y and Leg X in opposite directions.
+                    
+                    dir_y = "long" if sig.action == "ENTRY_LONG" else "short"
+                    dir_x = "short" if sig.action == "ENTRY_LONG" else "long"
+                    
+                    # Execute leg Y
+                    now_ms = int(time.time() * 1000)
+                    req_y = OrderRouterRequest(
+                        underlying=sig.asset_y.replace("USDT", "").replace("USD", ""),
+                        direction=dir_y, instrument_type="futures",
+                        size=sig.suggested_size_y, leverage=1.0, order_type="market",
+                        notes=f"[STATARB] {sig.pair_name} Leg Y", client_order_id=f"statarb_{sig.pair_name}_{now_ms}_y"
+                    )
+                    
+                    # Execute leg X
+                    req_x = OrderRouterRequest(
+                        underlying=sig.asset_x.replace("USDT", "").replace("USD", ""),
+                        direction=dir_x, instrument_type="futures",
+                        size=sig.suggested_size_x, leverage=1.0, order_type="market",
+                        notes=f"[STATARB] {sig.pair_name} Leg X", client_order_id=f"statarb_{sig.pair_name}_{now_ms}_x"
+                    )
+                    
+                    try:
+                        await router.submit(req_y)
+                        await router.submit(req_x)
+                    except Exception as e:
+                        log.error("StatArb Router failed: %s", e)
+                        
+        except Exception as exc:
+            log.warning("StatArb auto-trader error: %s", exc)
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -1315,6 +1486,9 @@ def create_app() -> FastAPI:
     # Scalping strategies (Price Action / SMC / MA Crossover)
     from app.api.v1.endpoints.scalping import router as scalping_router
     app.include_router(scalping_router, prefix="/api/v1")
+    
+    from app.api.v1.endpoints.statarb import router as statarb_router
+    app.include_router(statarb_router, prefix="/api/v1/statarb", tags=["statarb"])
 
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream

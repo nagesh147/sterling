@@ -163,7 +163,7 @@ def evaluate_smc(
     now_ms = int(candles_15m[-1].timestamp_ms) if candles_15m else 0
     current_price = float(candles_15m[-1].close) if candles_15m else 0.0
 
-    if len(candles_15m) < cfg.warmup_bars_15m or len(candles_4h) < cfg.warmup_bars_4h:
+    if len(candles_15m) < 20 or len(candles_4h) < 20:
         return SMCESignal(
             underlying=underlying, direction="none", pattern="",
             near_level=None, level_type="",
@@ -248,9 +248,9 @@ def evaluate_smc(
     if not pattern:
         # Provide context even when no pattern is found
         if nearby.level_type == "support":
-            reason = f"near 4H support @ {level_price:.0f} — no inducement + imbalance confirmed"
+            reason = f"Watching: near 4H support @ {level_price:.0f} — awaiting inducement + imbalance"
         else:
-            reason = f"near 4H resistance @ {level_price:.0f} — no inducement + imbalance confirmed"
+            reason = f"Watching: near 4H resistance @ {level_price:.0f} — awaiting inducement + imbalance"
 
     return SMCESignal(
         underlying=underlying, direction=direction, pattern=pattern,

@@ -95,7 +95,7 @@ def evaluate_ma_crossover(
     now_ms = int(candles_15m[-1].timestamp_ms) if candles_15m else 0
     current_price = float(candles_15m[-1].close) if candles_15m else 0.0
 
-    if len(candles_15m) < cfg.warmup_bars_15m or len(candles_4h) < cfg.warmup_bars_4h:
+    if len(candles_15m) < 20 or len(candles_4h) < 20:
         return MACrossignal(
             underlying=underlying, direction="none", pattern="",
             near_level=None, level_type="",
@@ -202,7 +202,7 @@ def evaluate_ma_crossover(
         elif recent_cross_bull:
             reason = f"bull cross near 4H support {level_price:.0f} — skipped: choppy/flat MAs (whipsaw filter)"
         elif sma_above:
-            direction = "long"; pattern = "sma_above_ema"
+            direction = "none"; pattern = "sma_above_ema"
             reason = f"Watching: SMA({fast}) > EMA({slow}) near 4H support {level_price:.0f} — awaiting crossover"
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
@@ -224,7 +224,7 @@ def evaluate_ma_crossover(
         elif recent_cross_bear:
             reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: choppy/flat MAs (whipsaw filter)"
         elif sma_below:
-            direction = "short"; pattern = "sma_below_ema"
+            direction = "none"; pattern = "sma_below_ema"
             reason = f"Watching: SMA({fast}) < EMA({slow}) near 4H resistance {level_price:.0f} — awaiting crossover"
 
     if not pattern:

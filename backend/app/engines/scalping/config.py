@@ -40,6 +40,9 @@ class ScalpingProfile(BaseModel):
     enable_price_action: bool = True
     enable_smc: bool = True
     enable_ma_crossover: bool = True
+    enable_mean_reversion: bool = True
+    enable_breakout: bool = True
+    enable_delta_gamma: bool = True
 
     # ── 4H level detection ──
     level_touches: int = Field(default=2, ge=2, le=10, description="Min touches to qualify a level")
@@ -66,6 +69,19 @@ class ScalpingProfile(BaseModel):
     ma_slow_ema: int = 9
     ma_cross_window: int = 2             # Signal valid if cross occurred within 2 bars
     ma_risk_lookback: int = 10           # Lookback for local swing low calculation
+
+    # Strategy 4: Mean Reversion
+    mr_zscore_window: int = 20
+    mr_zscore_threshold: float = 2.0     # Z-Score beyond this is considered overextended
+
+    # Strategy 5: Breakout Momentum
+    bo_rsi_long_threshold: float = 60.0
+    bo_rsi_short_threshold: float = 40.0
+
+    # Strategy 6: Delta-Gamma Risk Surface
+    dg_gex_flip_threshold: float = 0.0   # Positive vs Negative Gamma environment
+    dg_wall_proximity_pct: float = 0.005 # 0.5% proximity to a major call/put wall
+    dg_filter_breakouts: bool = True     # Reject breakouts in high positive gamma (low vol) environments
 
     # ── Direction toggles ──
     allow_long: bool = True

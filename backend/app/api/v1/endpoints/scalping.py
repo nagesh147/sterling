@@ -31,8 +31,6 @@ from app.engines.scalping.schemas import (
     ScalpingSignal, ScalpingBacktestRequest, ScalpingBacktestResult,
     ScalpingBacktestTrade, ScalpingExecuteRequest, ScalpingExecuteResponse,
 )
-from app.engines.scalping.scanner import scan_symbol
-
 router = APIRouter(prefix="/scalping", tags=["scalping"])
 
 
@@ -246,72 +244,71 @@ async def signals(request: Request, armed_only: bool = False) -> ScalpingScanRes
 
 @router.post("/backtest", response_model=ScalpingBacktestResult)
 async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingBacktestResult:
-    """Historical replay of scalping strategies on stored 4H+15min data."""
+    """Honest bar-by-bar replay of the scalping strategies on stored data.
+
+    Replays each enabled strategy with real SL/TP exits and real costs (fee +
+    slippage + funding), then reports sample-size adequacy, regime coverage,
+    and a 70/30 in-sample/out-of-sample split so a single run shows whether the
+    edge is real or curve-fit. See `engines.scalping.backtest`.
+    """
+    from app.engines.scalping.backtest import run_scalping_backtest
+    from app.engines.scalping.schemas import (
+        SampleQuality, RegimeCoverage, OOSSplit,
+    )
+
     cfg = body.config or _get_config(request)
     sym = body.underlying.upper()
 
-    resolutions = set()
-    for profile_id in cfg.active_profiles:
-        p = cfg.profiles.get(profile_id)
-        if p:
-            resolutions.add(p.macro_timeframe or "4h")
-            resolutions.add(p.execution_timeframe or "15m")
-            
-    candles_by_res = _load_candles_by_res([sym], resolutions, days=body.lookback_days)
-    tradeable = bool(registry.get_instrument(sym))
-    strategies = body.strategies or ["price_action", "smc", "ma_crossover"]
+    if not cfg.active_profiles:
+        raise HTTPException(status_code=400, detail="No active scalping profile configured")
+    profile_id = cfg.active_profiles[0]   # one profile to avoid overlapping trades in the UI
+    strat_cfg = cfg.profiles.get(profile_id)
+    if not strat_cfg:
+        raise HTTPException(status_code=400, detail=f"Active profile '{profile_id}' not found")
 
-    all_trades: List[ScalpingBacktestTrade] = []
-    
-    # We only backtest the first active profile for now to avoid overlapping trades in the UI
-    if cfg.active_profiles:
-        profile_id = cfg.active_profiles[0]
-        strat_cfg = cfg.profiles.get(profile_id)
-        if strat_cfg:
-            c_macro = candles_by_res.get(strat_cfg.macro_timeframe or "4h", {}).get(sym, [])
-            c_exec = candles_by_res.get(strat_cfg.execution_timeframe or "15m", {}).get(sym, [])
-            if not c_macro or not c_exec:
-                raise HTTPException(status_code=404, detail=f"No stored data for {sym}")
-                
-            for strat in strategies:
-                strat_copy = strat_cfg.model_copy(update={
-                    "enable_price_action": strat == "price_action" and strat_cfg.enable_price_action,
-                    "enable_smc": strat == "smc" and strat_cfg.enable_smc,
-                    "enable_ma_crossover": strat == "ma_crossover" and strat_cfg.enable_ma_crossover,
-                })
-                sigs = scan_symbol(sym, c_macro, c_exec, strat_copy, profile_name=profile_id, tradeable=tradeable)
-                for s in sigs:
-                    if s.entry_ok and s.entry and s.stop_loss:
-                        direction_mult = 1 if s.direction == "long" else -1
-                        risk_dist = abs(s.entry - s.stop_loss)
-                        if risk_dist > 0 and s.take_profit:
-                            pnl_r = direction_mult * (s.take_profit - s.entry) / risk_dist
-                        elif risk_dist > 0:
-                            pnl_r = direction_mult * 2.0
-                        else:
-                            pnl_r = 0
-                        all_trades.append(ScalpingBacktestTrade(
-                            direction=s.direction, strategy=strat,
-                            entry_ts=s.timestamp_ms, exit_ts=s.timestamp_ms + 86400000,
-                            entry_price=s.entry, exit_price=s.take_profit or s.entry,
-                            bars_held=1, pnl_r=round(pnl_r, 2),
-                            exit_reason="signal",
-                        ))
+    macro_tf = strat_cfg.macro_timeframe or "4h"
+    exec_tf = strat_cfg.execution_timeframe or "15m"
+    candles_by_res = _load_candles_by_res([sym], {macro_tf, exec_tf}, days=body.lookback_days)
+    c_macro = candles_by_res.get(macro_tf, {}).get(sym, [])
+    c_exec = candles_by_res.get(exec_tf, {}).get(sym, [])
+    if not c_macro or not c_exec:
+        raise HTTPException(status_code=404, detail=f"No stored {macro_tf}/{exec_tf} data for {sym}")
 
-    total = len(all_trades)
-    wins = sum(1 for t in all_trades if t.pnl_r > 0)
-    win_rate = wins / total if total else 0
-    equity = cfg.account_equity
-    total_return_pct = 0.0
-    max_dd = 0.0
+    strategies = body.strategies or list(
+        s for s in ("price_action", "smc", "ma_crossover", "mean_reversion", "breakout")
+        if getattr(strat_cfg, f"enable_{s}", False)
+    )
+
+    out = await asyncio.to_thread(
+        run_scalping_backtest, sym, c_macro, c_exec, strat_cfg, strategies,
+    )
 
     return ScalpingBacktestResult(
         underlying=sym, lookback_days=body.lookback_days,
-        bars_evaluated=len(c4h), config=cfg,
-        trades=all_trades, total_trades=total,
-        win_rate=round(win_rate, 3),
-        total_return_pct=round(total_return_pct, 2),
-        max_drawdown_pct=round(max_dd, 2),
+        bars_evaluated=out.bars_evaluated, config=cfg,
+        trades=[
+            ScalpingBacktestTrade(
+                direction=t.direction, strategy=t.strategy,
+                entry_ts=t.entry_ts, exit_ts=t.exit_ts,
+                entry_price=t.entry_price, exit_price=t.exit_price,
+                bars_held=t.bars_held, pnl_r=round(t.pnl_r, 2),
+                gross_pnl_r=round(t.gross_pnl_r, 2),
+                exit_reason=t.exit_reason, regime=t.regime,
+            )
+            for t in out.trades
+        ],
+        total_trades=out.total_trades,
+        win_rate=round(out.win_rate, 3),
+        total_return_pct=out.net_return_pct,
+        max_drawdown_pct=out.max_drawdown_pct,
+        expectancy_r=out.expectancy_r,
+        profit_factor=out.profit_factor,
+        avg_cost_r=out.avg_cost_r,
+        cost_modeled=True,
+        equity_curve=out.equity_curve,
+        sample_quality=SampleQuality(**out.sample_quality),
+        regime_coverage=RegimeCoverage(**out.regime_coverage),
+        oos=OOSSplit(**out.oos),
         timestamp_ms=int(time.time() * 1000),
     )
 

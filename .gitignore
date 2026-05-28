@@ -41,3 +41,10 @@ backups/*.tmp
 .gstack/
 backend/sterling_paper.db
 frontend/sterling_paper.db
+backend/sterling.db
+backend/server.pid
+*.pyc
+__pycache__/
+backend/scratch.py
+backend/test_crash.sh
+backend/test_statarb.py

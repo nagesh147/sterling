@@ -17,6 +17,7 @@ import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
 import { StrategyTab } from '../components/strategy/StrategyTab';
 import { ScalpingTab } from '../components/scalping/ScalpingTab';
+import { StatArbTab } from '../components/statarb/StatArbTab';
 import { ThreeColumnLayout, LeftSection, RightSection, StatCard } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
@@ -126,7 +127,7 @@ export function SimpleTerminal() {
   const underlying = useSelectedUnderlying();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
-  const [activeSection, setActiveSection] = useState<'scalping' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration'>('scalping');
+  const [activeSection, setActiveSection] = useState<'scalping' | 'statarb' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration'>('scalping');
 
   return (
     <div className="term-root">
@@ -190,12 +191,13 @@ export function SimpleTerminal() {
         }}>
           {([
             ['scalping',   'SCALPING'],
+            ['statarb',    'STAT ARB'],
             ['strategy',    'RSI MEAN-REV'],
             ['signals',     'SIGNALS'],
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
             ['calibration', 'CALIBRATION'],
-          ] as ['scalping' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
+          ] as ['scalping' | 'statarb' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -249,6 +251,9 @@ export function SimpleTerminal() {
         {/* V4 Analytics shown on signals, backtest, and calibration tabs — in the right sidebar of those tabs */}
         {activeSection === 'scalping' && (
           <ScalpingTab />
+        )}
+        {activeSection === 'statarb' && (
+          <StatArbTab />
         )}
         {activeSection === 'strategy' && (
           <StrategyTab />

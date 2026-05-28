@@ -22,6 +22,9 @@ from app.engines.scalping.schemas import ScalpingSignal, ScalpingScanResponse, S
 from app.engines.scalping.price_action import evaluate_price_action
 from app.engines.scalping.smc import evaluate_smc
 from app.engines.scalping.ma_crossover import evaluate_ma_crossover
+from app.engines.scalping.mean_reversion import evaluate_mean_reversion
+from app.engines.scalping.breakout import evaluate_breakout
+from app.engines.scalping.delta_gamma import evaluate_delta_gamma
 
 
 def _level_to_schema(l, underlying: str = "") -> SupportResistanceLevel:
@@ -79,13 +82,15 @@ def scan_symbol(
     candles_4h: list,
     candles_15m: list,
     cfg: ScalpingProfile,
+    warmup_bars_macro: int,
+    warmup_bars_exec: int,
     profile_name: str = "",
     tradeable: bool = False,
 ) -> List[ScalpingSignal]:
     """Evaluate all enabled strategies for one symbol."""
     now_ms = int(time.time() * 1000)
 
-    if len(candles_4h) < cfg.warmup_bars_4h or len(candles_15m) < cfg.warmup_bars_15m:
+    if len(candles_4h) < warmup_bars_macro or len(candles_15m) < warmup_bars_exec:
         return [ScalpingSignal(
             underlying=underlying, strategy="none", direction="none",
             close=float(candles_15m[-1].close) if candles_15m else 0,
@@ -137,9 +142,21 @@ def scan_symbol(
         smc_sig = evaluate_smc(underlying, candles_4h, candles_15m, levels, cfg)
         signals.append(_make_signal(smc_sig, "smc"))
 
-    if cfg.enable_ma_crossover:
+    if getattr(cfg, "enable_ma_crossover", False):
         ma = evaluate_ma_crossover(underlying, candles_4h, candles_15m, levels, cfg)
         signals.append(_make_signal(ma, "ma_crossover"))
+
+    if getattr(cfg, "enable_mean_reversion", False):
+        mr = evaluate_mean_reversion(underlying, candles_4h, candles_15m, levels, cfg)
+        signals.append(_make_signal(mr, "mean_reversion"))
+
+    if getattr(cfg, "enable_breakout", False):
+        bo = evaluate_breakout(underlying, candles_4h, candles_15m, levels, cfg)
+        signals.append(_make_signal(bo, "breakout"))
+
+    if getattr(cfg, "enable_delta_gamma", False):
+        dg = evaluate_delta_gamma(underlying, candles_4h, candles_15m, levels, cfg)
+        signals.append(_make_signal(dg, "delta_gamma"))
 
     # Opt-in macro-trend filter: drop counter-trend setups (long in a 4H downtrend,
     # short in an uptrend). Stats show trend-aligned setups carry a higher PF, but
@@ -186,7 +203,7 @@ def scan_universe(
             if not c_macro or not c_exec:
                 continue
                 
-            if not levels_computed and len(c_macro) >= profile.warmup_bars_4h:
+            if not levels_computed and len(c_macro) >= cfg.warmup_bars_4h:
                 highs_4h = np.array([c.high for c in c_macro], dtype=np.float64)
                 lows_4h = np.array([c.low for c in c_macro], dtype=np.float64)
                 closes_4h = np.array([c.close for c in c_macro], dtype=np.float64)
@@ -197,7 +214,16 @@ def scan_universe(
                 all_levels.extend([_level_to_schema(l, sym) for l in levels])
                 levels_computed = True
                 
-            sigs = scan_symbol(sym, c_macro, c_exec, profile, profile_name=profile_id, tradeable=tradeable)
+            sigs = scan_symbol(
+                sym, 
+                c_macro, 
+                c_exec, 
+                profile, 
+                warmup_bars_macro=cfg.warmup_bars_4h,
+                warmup_bars_exec=cfg.warmup_bars_15m,
+                profile_name=profile_id, 
+                tradeable=tradeable
+            )
             all_signals.extend(sigs)
 
     # Dedup logic: Only keep one active watch/armed signal per symbol + strategy (prioritize fastest TF)

@@ -5,7 +5,7 @@ import {
   useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
   useScalpingBacktest, useScalpingExecute, useScalpingSignals,
   useScalpingOptimize, useRunScalpingOptimize, useScalpingPresets, useScalpingDefaultConfig,
-  type ScalpingConfig, type ScalpingSignal,
+  type ScalpingConfig, type ScalpingSignal, type ScalpingProfile,
   type ScalpingExecuteResponse,
 } from '../../hooks/useScalping';
 import { usePositions, useClosePosition } from '../../hooks/usePositions';
@@ -16,8 +16,8 @@ import { useTradingMode } from '../../hooks/useTradingMode';
 import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
 import { useStreamPrices } from '../../hooks/useAppStream';
 import { ThreeColumnLayout, LeftSection, RightSection } from '../ThreeColumnLayout';
-import { MultiPaneChart } from '../charts/MultiPaneChart';
-import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint } from '../../styles/terminalUI';
+
+import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint, alpha } from '../../styles/terminalUI';
 
 /* ── executed-trade tracking ───────────────────────────────────────────────── */
 
@@ -87,17 +87,32 @@ function TfSelect({ label, value, opts, onChange }: { label: string; value: stri
 function Pill({ text, color }: { text: string; color: string }) {
   return (
     <span style={{
-      fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 7px',
-      borderRadius: 4, background: color + '22', color, border: `1px solid ${color}44`,
-      whiteSpace: 'nowrap',
+      fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 0',
+      borderRadius: 'var(--radius-sm)', background: alpha(color, 0.13), color, border: `1px solid ${alpha(color, 0.27)}`,
+      whiteSpace: 'nowrap', display: 'inline-block', width: '100%', textAlign: 'center',
     }}>{text}</span>
+  );
+}
+
+function BadgeColumn({ meta, profile }: { meta: { label: string; color: string }; profile?: string }) {
+  return (
+    <div style={{ width: 160, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ width: 82 }}>
+        <Pill text={meta.label} color={meta.color} />
+      </div>
+      {profile && (
+        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
+          [{profile.toUpperCase()}]
+        </span>
+      )}
+    </div>
   );
 }
 
 function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button onClick={() => onChange(!on)} style={{
-      fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+      fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-pill)', cursor: 'pointer', fontFamily: 'inherit',
       border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
       background: on ? tint('var(--t-green)') : 'transparent',
       color: on ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s', whiteSpace: 'nowrap',
@@ -137,6 +152,9 @@ const STRATEGY_META: Record<string, { label: string; color: string }> = {
   price_action: { label: 'PRICE ACTION', color: 'var(--t-amber)' },
   smc: { label: 'SMC', color: 'var(--t-purple)' },
   ma_crossover: { label: 'MA CROSS', color: 'var(--t-blue)' },
+  mean_reversion: { label: 'MEAN REV', color: 'var(--t-cyan)' },
+  breakout: { label: 'BREAKOUT', color: 'var(--t-green)' },
+  delta_gamma: { label: 'DELTA GAMMA', color: 'var(--t-pink)' },
 };
 
 
@@ -184,7 +202,15 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         <button
           disabled={!defaultCfg || saving}
           title="Reset every field to the validated factory defaults. Review, then APPLY to save."
-          onClick={() => { if (defaultCfg) setDraft(defaultCfg); }}
+          onClick={() => { 
+            if (defaultCfg) {
+              setDraft({
+                ...defaultCfg,
+                active_profiles: draft.active_profiles,
+                symbols: draft.symbols,
+              });
+            }
+          }}
           style={{
             fontSize: 9, fontWeight: 700, padding: '4px 12px', borderRadius: 5, fontFamily: 'inherit',
             cursor: defaultCfg && !saving ? 'pointer' : 'default',
@@ -234,6 +260,9 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             <ChipToggle label="Price Action" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
             <ChipToggle label="SMC" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
             <ChipToggle label="MA Crossover" on={activeProfile.enable_ma_crossover} onChange={(v) => setProfileField('enable_ma_crossover', v)} />
+            <ChipToggle label="Mean Reversion" on={activeProfile.enable_mean_reversion} onChange={(v) => setProfileField('enable_mean_reversion', v)} />
+            <ChipToggle label="Breakout" on={activeProfile.enable_breakout} onChange={(v) => setProfileField('enable_breakout', v)} />
+            <ChipToggle label="Delta-Gamma" on={activeProfile.enable_delta_gamma} onChange={(v) => setProfileField('enable_delta_gamma', v)} />
           </div>
 
           <div style={gridStyle()}>
@@ -277,6 +306,24 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
               <div style={grpTitle}>MA CROSSOVER</div>
               <NumField label="SMA period" value={activeProfile.ma_fast_sma} min={2} max={20} onChange={(v) => setProfileField('ma_fast_sma', v)} />
               <NumField label="EMA period" value={activeProfile.ma_slow_ema} min={3} max={50} onChange={(v) => setProfileField('ma_slow_ema', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>MEAN REVERSION</div>
+              <NumField label="Z-Score Window" value={activeProfile.mr_zscore_window} min={5} max={100} onChange={(v) => setProfileField('mr_zscore_window', v)} />
+              <NumField label="Z-Score Threshold" value={activeProfile.mr_zscore_threshold} step={0.1} min={1.0} max={5.0} onChange={(v) => setProfileField('mr_zscore_threshold', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>BREAKOUT</div>
+              <NumField label="RSI Long Threshold" value={activeProfile.bo_rsi_long_threshold} step={1} min={50} max={90} onChange={(v) => setProfileField('bo_rsi_long_threshold', v)} />
+              <NumField label="RSI Short Threshold" value={activeProfile.bo_rsi_short_threshold} step={1} min={10} max={50} onChange={(v) => setProfileField('bo_rsi_short_threshold', v)} />
+            </div>
+            <div style={grpBox}>
+              <div style={grpTitle}>DELTA-GAMMA</div>
+              <NumField label="GEX Flip Threshold" value={activeProfile.dg_gex_flip_threshold} step={0.1} min={-5.0} max={5.0} onChange={(v) => setProfileField('dg_gex_flip_threshold', v)} />
+              <NumField label="Wall Proximity %" value={activeProfile.dg_wall_proximity_pct} step={0.001} min={0.001} max={0.05} onChange={(v) => setProfileField('dg_wall_proximity_pct', v)} />
+              <div style={{ marginTop: 4 }}>
+                <ChipToggle label="Filter Breakouts by Gamma" on={activeProfile.dg_filter_breakouts} onChange={(v) => setProfileField('dg_filter_breakouts', v)} />
+              </div>
             </div>
             <div style={grpBox}>
               <div style={grpTitle}>DIRECTION & RISK</div>
@@ -325,7 +372,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
 function PlanCell({ value, color, width = 78 }: { value: React.ReactNode; color?: string; width?: number | string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width, flexShrink: 0, justifyContent: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width, minWidth: 0, flexShrink: 0, justifyContent: 'center' }}>
       <span style={{
         fontSize: 13, fontWeight: 700, color: color || 'var(--t-bright)', lineHeight: 1.2,
         fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -338,7 +385,7 @@ function PlanCell({ value, color, width = 78 }: { value: React.ReactNode; color?
  *  and the points moved beneath it once the trail / dynamic-TP has shifted the level. */
 function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badges }: {
   initial: number | null | undefined; current: number | null | undefined;
-  color?: string; width?: number; favorableUp?: boolean; badges?: React.ReactNode;
+  color?: string; width?: number | string; favorableUp?: boolean; badges?: React.ReactNode;
 }) {
   const moved = current != null && initial != null && Math.abs(current - initial) > 1e-6;
   const shown = current ?? initial;
@@ -347,7 +394,7 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
   const good = favorableUp ? diff > 0 : diff < 0;
   const sign = diff >= 0 ? '+' : '−';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width, flexShrink: 0, justifyContent: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width, minWidth: 0, flexShrink: 0, justifyContent: 'center' }}>
       <span style={{
         fontSize: 13, fontWeight: 700, color: color || 'var(--t-bright)', lineHeight: 1.15,
         fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -363,26 +410,55 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
   );
 }
 
-function SignalTableHeader() {
+/* Single source of truth for the signals "table" columns. The header and every
+ * row render from this one spec via CSS grid, so the columns can never drift
+ * apart. The `plan` columns (the trade plan) are shown only when at least one
+ * armed/executed signal exists — header and rows both honour `showPlan`, so a
+ * "Watching-only" list collapses the plan columns in lockstep. */
+type SignalCol = { key: string; label: string; width: string; plan?: boolean };
+const SIGNAL_COLS: SignalCol[] = [
+  { key: 'accent',   label: '',               width: '4px' },
+  { key: 'symbol',   label: 'Symbol',         width: '56px' },
+  { key: 'dir',      label: 'Direction',      width: '130px' },
+  { key: 'level',    label: 'Level/Location', width: '210px' },
+  { key: 'detail',   label: 'Status Detail',  width: '190px' },
+  { key: 'entry',    label: 'Entry',          width: '78px',  plan: true },
+  { key: 'current',  label: 'Current',        width: '110px', plan: true },
+  { key: 'stop',     label: 'Stop',           width: '96px',  plan: true },
+  { key: 'target',   label: 'Target',         width: '96px',  plan: true },
+  { key: 'risk',     label: 'Risk',           width: '50px',  plan: true },
+  { key: 'strategy', label: 'Strategy',       width: '85px' },
+  { key: 'pattern',  label: 'Pattern',        width: '120px' },
+  { key: 'profile',  label: 'Profile',        width: '70px' },
+  { key: 'time',     label: 'Time',           width: '90px' },
+  { key: 'action',   label: 'Action',         width: '100px' },
+];
+const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
+
+/** Shared grid style for the header row and every card's main row — identical
+ *  template + gap guarantees alignment. */
+function signalRowGrid(showPlan: boolean): React.CSSProperties {
+  return {
+    display: 'grid',
+    gridTemplateColumns: SIGNAL_COLS
+      .filter((c) => showPlan || !c.plan)
+      .map((c) => c.width)
+      .join(' '),
+    columnGap: 20,
+    alignItems: 'center',
+  };
+}
+
+function SignalTableHeader({ showPlan }: { showPlan?: boolean }) {
+  const show = showPlan !== false;
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 20,
-      padding: '4px 16px 6px 0',
-      marginBottom: 2,
-    }}>
-      <div style={{ width: 4, flexShrink: 0 }} />
-      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 56, flexShrink: 0, textTransform: 'uppercase' }}>Symbol</span>
-      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 68, flexShrink: 0, textTransform: 'uppercase' }}>Type</span>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 78, flexShrink: 0, textTransform: 'uppercase' }}>Entry</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 110, flexShrink: 0, textTransform: 'uppercase' }}>Current</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 96, flexShrink: 0, textTransform: 'uppercase' }}>Stop</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 96, flexShrink: 0, textTransform: 'uppercase' }}>Target</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', width: 50, flexShrink: 0, textTransform: 'uppercase' }}>Risk</span>
-      </div>
-      <div style={{ width: 150, flexShrink: 0, marginLeft: 'auto' }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Strategy / Mode</span>
-      </div>
+    <div style={{ ...signalRowGrid(show), padding: '4px 16px 6px 0', marginBottom: 2 }}>
+      {SIGNAL_COLS.filter((c) => show || !c.plan).map((c) => (
+        <span key={c.key} style={{
+          fontSize: 10, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.04em',
+          textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{c.label}</span>
+      ))}
     </div>
   );
 }
@@ -391,6 +467,30 @@ function SignalTableHeader() {
 
 const fmtTime = (ms?: number) =>
   ms ? new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '—';
+
+/** Format raw backend reason strings for user-friendly display:
+ *  - "SMA({fast}) crossed above EMA({slow})" → "SMA(10) crossed above EMA(20)"
+ *  - "bullish imbalance engulfing prior bearish candle after inducement below 4H support 83"
+ *    → "Bullish imbalance engulfing prior bearish candle after inducement below 4H support 83"
+ *  - "Watching: near 4H support @ 83" → "Near 4H support @ 83"
+ *  - "near 4H support @ 83" → "Near 4H support @ 83"
+ *  - "SMAbelow EMA" → "SMA below EMA"
+ *  - "sma_cross_below_ema" → "sma cross below ema" (handled by replaceAlready)
+ */
+function formatReason(raw: string): string {
+  let s = raw
+    .replace(/^Watching:\s*/i, '')
+    .replace(/^SMA(\d+)/i, (_, n) => `SMA(${n})`)
+    .replace(/^EMA(\d+)/i, (_, n) => `EMA(${n})`)
+    .replace(/SMAbelow/i, 'SMA below')
+    .replace(/SMAabove/i, 'SMA above')
+    .replace(/SMA\b(?!\()/i, 'SMA ')
+    .replace(/EMA\b(?!\()/i, 'EMA ')
+    .replace(/\s+@\s+/, ' @ ');
+  // Capitalize first letter
+  s = s.charAt(0).toUpperCase() + s.slice(1);
+  return s;
+}
 
 // Backend status codes → plain-English explanations.
 const EXEC_STATUS_FRIENDLY: Record<string, string> = {
@@ -453,7 +553,7 @@ function GoLiveModal({ fromMode, hasCreds, onConfirm, onCancel }: { fromMode: Ro
   return (
     <div
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ position: 'fixed', inset: 0, background: 'var(--surface-overlay)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <div style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -616,9 +716,9 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
               <MetricItem label="Current" value={currentValNode} color={diffColor} />
             );
           })()}
-          <MetricItem label="Initial SL" value={fmtUsd(pnl?.initialSl ?? r.stop_loss)} color="#f87171" />
+          <MetricItem label="Initial SL" value={fmtUsd(pnl?.initialSl ?? r.stop_loss)} color="var(--t-red)" />
           {pnl?.currentSl != null && pnl.currentSl !== pnl?.initialSl && (
-            <MetricItem label="Trail SL" value={fmtUsd(pnl.currentSl)} color="#fb923c" />
+            <MetricItem label="Trail SL" value={fmtUsd(pnl.currentSl)} color="var(--t-amber)" />
           )}
           <MetricItem label="Target" value={
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -671,8 +771,8 @@ function ConsolidatedRow({ count, totalPnl, openPnl, realizedPnl, notional, wins
   return (
     <div style={{
       display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 22, flexWrap: 'wrap',
-      padding: '10px 16px', borderRadius: 10,
-      border: `1px solid ${c}44`, background: `${c}0c`,
+      padding: '10px 16px', borderRadius: 'var(--radius-lg)',
+      border: `1px solid ${alpha(c, 0.27)}`, background: alpha(c, 0.05),
     }}>
       <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: c }}>Σ</span>
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
@@ -686,19 +786,35 @@ function ConsolidatedRow({ count, totalPnl, openPnl, realizedPnl, notional, wins
   );
 }
 
-/** Thin labelled divider used to group the signal list into sections. */
-function ListGroupHeader({ label, count, color }: { label: string; count?: number; color?: string }) {
+/** Thin labelled divider used to group the signal list into sections.
+ *  Click to expand/collapse when collapsible=true. */
+function ListGroupHeader({ label, count, color, collapsible, defaultOpen, onToggle }: {
+  label: string; count?: number; color?: string;
+  collapsible?: boolean; defaultOpen?: boolean; onToggle?: (open: boolean) => void;
+}) {
   const c = color || 'var(--t-dim)';
+  const [open, setOpen] = React.useState(defaultOpen !== false);
+  const handleClick = () => {
+    const next = !open;
+    setOpen(next);
+    onToggle?.(next);
+  };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px', marginTop: 2 }}>
+    <div onClick={collapsible ? handleClick : undefined} style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '14px 4px 6px', marginTop: 6,
+      cursor: collapsible ? 'pointer' : 'default',
+      userSelect: 'none',
+    }}>
+      {collapsible && <span style={{ fontSize: 9, color: 'var(--t-dim)', width: 12, flexShrink: 0 }}>{open ? '▼' : '▶'}</span>}
       <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.14em', color: c, textTransform: 'uppercase' }}>{label}</span>
       {count != null && (
         <span style={{
-          fontSize: 9, fontWeight: 700, color: c, background: c + '1c',
+          fontSize: 9, fontWeight: 700, color: c, background: alpha(c, 0.11),
           borderRadius: 9, padding: '0 6px', lineHeight: '15px',
         }}>{count}</span>
       )}
-      <div style={{ flex: 1, height: 1, background: 'var(--t-border)' }} />
+      <div style={{ flex: 1, height: 1, background: 'var(--t-border)', opacity: 0.5 }} />
     </div>
   );
 }
@@ -725,12 +841,12 @@ function ExecLog({ entries, mode }: {
         const dash = e.key.indexOf('-');
         const sym = dash >= 0 ? e.key.slice(0, dash) : e.key;
         const strat = dash >= 0 ? e.key.slice(dash + 1) : '';
-        const bg = e.ok ? col + '16' : 'var(--t-bg)';
-        const borderColor = e.ok ? col + '44' : 'var(--t-border)';
+        const bg = e.ok ? alpha(col, 0.09) : 'var(--t-bg)';
+        const borderColor = e.ok ? alpha(col, 0.27) : 'var(--t-border)';
         return (
           <div key={i} style={{ 
             display: 'flex', flexDirection: 'column', gap: 7,
-            padding: '12px 16px 12px 0', borderRadius: 10,
+            padding: '12px 16px 12px 0', borderRadius: 'var(--radius-lg)',
             border: `1px solid ${borderColor}`,
             background: bg,
           }}>
@@ -740,7 +856,7 @@ function ExecLog({ entries, mode }: {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em' }}>{sym}</span>
                   <span style={{ fontSize: 11, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{strat.replace(/_/g, ' ').toUpperCase()}</span>
-                  <span style={{ marginLeft: 'auto', color: modeColorOf(e.mode), fontWeight: 800, fontSize: 9, letterSpacing: '0.06em', padding: '3px 8px', borderRadius: 6, background: modeColorOf(e.mode) + '18', border: `1px solid ${modeColorOf(e.mode)}44`, whiteSpace: 'nowrap' }}>
+                  <span style={{ marginLeft: 'auto', color: modeColorOf(e.mode), fontWeight: 800, fontSize: 9, letterSpacing: '0.06em', padding: '3px 8px', borderRadius: 'var(--radius-md)', background: alpha(modeColorOf(e.mode), 0.09), border: `1px solid ${alpha(modeColorOf(e.mode), 0.27)}`, whiteSpace: 'nowrap' }}>
                     {e.auto ? 'AUTO · ' : ''}{e.mode}
                   </span>
                 </div>
@@ -760,9 +876,10 @@ function ExecLog({ entries, mode }: {
   );
 }
 
-function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode }: {
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan }: {
   s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
+  showPlan?: boolean;
 }) {
   const long = s.direction === 'long';
   const short = s.direction === 'short';
@@ -833,8 +950,8 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // A translucent black darkens in BOTH themes (a theme bg var would flip lighter
   // in the light theme), keeping the collapsed row visibly recessed vs the cards.
   const isOpen = accepted && !!expanded;
-  const bg = isOpen ? statusColor + '16' : selected ? 'rgba(0,0,0,0.16)' : 'var(--t-bg2)';
-  const borderColor = isOpen ? statusColor + '66' : selected ? statusColor + '2e' : 'var(--t-border)';
+  const bg = isOpen ? alpha(statusColor, 0.09) : selected ? 'var(--t-bg)' : 'var(--t-bg2)';
+  const borderColor = isOpen ? alpha(statusColor, 0.40) : selected ? alpha(statusColor, 0.18) : 'var(--t-border)';
 
   const positionOverlayData = displayEntry != null ? {
     entry: displayEntry,
@@ -845,33 +962,57 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   return (
     <div onClick={onSelect} style={{
       display: 'flex', flexDirection: 'column', gap: 7,
-      padding: '12px 16px 12px 0', borderRadius: 10, cursor: 'pointer',
+      padding: '12px 16px 12px 0', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
       border: `1px solid ${borderColor}`,
       background: bg,
       transition: 'border-color .12s, background .12s',
     }}>
-      {/* ── main row: fixed-width columns keep values aligned across cards ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-        <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color, flexShrink: 0 }} />
-        <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', width: 56, flexShrink: 0 }}>{s.underlying}</span>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: 68, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 800, color: dirColor, letterSpacing: '0.04em', lineHeight: 1.1 }}>
+      {/* ── main row: CSS grid from the shared SIGNAL_COLS spec — every value
+          sits under its header because header + rows use the same template ── */}
+      <div style={signalRowGrid(showPlan !== false)}>
+        {/* accent */}
+        <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color }} />
+        {/* symbol */}
+        <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
+        {/* direction + status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: dirColor, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
             {dirLabel}
           </span>
           {!accepted && (
             <span style={{
               fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', color: statusColor, lineHeight: 1,
-              padding: '1px 5px', borderRadius: 3, background: statusColor + '18', alignSelf: 'flex-start',
+              padding: '1px 5px', borderRadius: 'var(--radius-xs)', background: alpha(statusColor, 0.09), whiteSpace: 'nowrap',
             }}>{statusLabel}</span>
           )}
         </div>
-        {hasPlan ? (
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-            <PlanCell value={fmtUsd(displayEntry)} />
-            <PlanCell value={currentValNode} color={currentColor} width={110} />
-            <PlanLevelCell initial={initialSl} current={trailSl} color="#f87171" favorableUp={long} />
+        {/* level/location + status detail — two grid cells (placeholders keep
+            the column positions when there's no reason to split) */}
+        {(() => {
+          if (accepted || !metaReason) return (<><span /><span /></>);
+          const dashIdx = metaReason.indexOf(' — ');
+          const location = dashIdx >= 0 ? formatReason(metaReason.slice(0, dashIdx)) : formatReason(metaReason);
+          const detail   = dashIdx >= 0 ? formatReason(metaReason.slice(dashIdx + 3)) : null;
+          return (
+            <>
+              <span style={{ fontSize: 10, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={location}>
+                {location}
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={detail || location}>
+                {detail || '—'}
+              </span>
+            </>
+          );
+        })()}
+        {/* trade plan — five grid cells; a single span keeps the columns when
+            this row has no plan. Omitted entirely when plan columns are off. */}
+        {showPlan !== false && (hasPlan ? (
+          <>
+            <PlanCell value={fmtUsd(displayEntry)} width="100%" />
+            <PlanCell value={currentValNode} color={currentColor} width="100%" />
+            <PlanLevelCell initial={initialSl} current={trailSl} color="var(--t-red)" favorableUp={long} width="100%" />
             <PlanLevelCell
-              initial={initialTp} current={trailTp} color="var(--t-amber)" favorableUp={long}
+              initial={initialTp} current={trailTp} color="var(--t-amber)" favorableUp={long} width="100%"
               badges={
                 <>
                   {s.tp_source && s.tp_source.includes('fallback') && (
@@ -886,49 +1027,41 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 </>
               }
             />
-            <PlanCell value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width={50} />
-          </div>
+            <PlanCell value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width="100%" />
+          </>
         ) : (
-          <span style={{ fontSize: 11, color: 'var(--t-dim)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.reason}</span>
-        )}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, marginLeft: hasPlan ? 0 : 'auto' }}>
-          {/* fixed-width pill column so the pattern text lines up across rows.
-              Strategy tag + the macro trading mode it ran under, e.g. SMC [SWING]. */}
-          <div style={{ width: 150, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Pill text={meta.label} color={meta.color} />
-            {s.profile && (
-              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
-                [{s.profile.toUpperCase()}]
-              </span>
-            )}
-            {macroMode && (
-              <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
-                [{macroMode}]
-              </span>
-            )}
-          </div>
-          {s.pattern && (
-            <span style={{ fontSize: 9, fontWeight: 600, color: meta.color, whiteSpace: 'nowrap', width: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {s.pattern.replace(/_/g, ' ')}
-            </span>
-          )}
-          <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', marginLeft: 8 }}>
-            {fmtTime(s.timestamp_ms)}
-          </span>
+          <div style={{ gridColumn: `span ${PLAN_COL_SPAN}` }} />
+        ))}
+        {/* strategy */}
+        <div style={{ minWidth: 0 }}>
+          <Pill text={meta.label} color={meta.color} />
         </div>
-        {/* ── action / executed glance — mode · P&L · expand chevron, all on this row ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
+        {/* pattern */}
+        <span title={s.pattern ? s.pattern.replace(/_/g, ' ') : ''} style={{ fontSize: 9, fontWeight: 600, color: meta.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {s.pattern ? s.pattern.replace(/_/g, ' ') : '—'}
+        </span>
+        {/* profile */}
+        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {s.profile ? `[${s.profile.toUpperCase()}]` : '—'}
+        </span>
+        {/* time */}
+        <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          {fmtTime(s.timestamp_ms)}
+        </span>
+        {/* ── action / executed glance — last column; content may extend past the
+            track to the right edge (no column follows it) ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {accepted ? (
             <>
               <span title={pausedAuto ? 'Opened by Algo, which is now OFF — runs to SL/TP, no re-entry' : undefined} style={{
                 fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: pausedAuto ? 'var(--t-amber)' : modeColor,
-                padding: '4px 9px', borderRadius: 6, background: pausedAuto ? tint('var(--t-amber)', 12) : modeColor + '18',
-                border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : `${modeColor}44`}`, whiteSpace: 'nowrap',
+                padding: '4px 9px', borderRadius: 'var(--radius-md)', background: pausedAuto ? tint('var(--t-amber)', 12) : alpha(modeColor, 0.09),
+                border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
               }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}{pausedAuto ? ' ⏸' : ''}</span>
               {execState?.auto && execState?.resp?.telegram_alert_sent && (
                 <span title="Signal alert sent to Telegram" style={{
                   width: 6, height: 6, borderRadius: '50%',
-                  background: '#a78bfa',
+                  background: 'var(--t-purple)',
                   flexShrink: 0,
                 }} />
               )}
@@ -948,8 +1081,8 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
             // Algo handles execution — manual button is locked out. Pill shows the mode it runs in.
             <span title={`Algo is ON — auto-executes in ${pillMode} mode`} style={{
               fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: modeColor,
-              padding: '5px 12px', borderRadius: 6, background: modeColor + '14',
-              border: `1px solid ${modeColor}44`, whiteSpace: 'nowrap',
+              padding: '5px 12px', borderRadius: 'var(--radius-md)', background: alpha(modeColor, 0.08),
+              border: `1px solid ${alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
               opacity: tried ? 0.7 : 1,
             }}>⚡ {executing ? 'AUTO…' : `AUTO · ${pillMode}`}</span>
           ) : s.executable ? (
@@ -965,8 +1098,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         </div>
       </div>
 
-      {/* ── second line — only for NON-executed states (executed glance is on the main row) ──
-           failure note · auto-queued hint · setup reason */}
+      {/* ── second line — failure / auto-queued hint (reason is now in the main row) ── */}
       {execState && !accepted ? (
         <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-amber)', fontWeight: 600, wordBreak: 'break-word' }}>
           ✕ {pillMode} — {failureReason(execState)}
@@ -975,25 +1107,12 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-green)', wordBreak: 'break-word' }}>
           ⚡ Auto-executing in {pillMode}…
         </div>
-      ) : metaReason && !accepted ? (
-        <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-dim)', wordBreak: 'break-word' }}>
-          {metaReason}
-        </div>
       ) : null}
 
       {/* expand-on-click: full execution metrics for an executed trade */}
       {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} />}
 
-      {expanded && (
-        <div style={{ marginTop: 12, padding: '0 4px' }} onClick={(e) => e.stopPropagation()}>
-          <MultiPaneChart 
-            underlying={s.underlying} 
-            tf="15m" 
-            position={positionOverlayData} 
-            reason={metaReason}
-          />
-        </div>
-      )}
+
     </div>
   );
 }
@@ -1042,20 +1161,73 @@ function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }
     }>
       {bt.isError && <div style={{ color: 'var(--t-red)', fontSize: 10 }}>{bt.error.message}</div>}
       {!res && !bt.isPending && <div style={dim}>Run a backtest — 4H structure + 15min entry replay.</div>}
-      {res && (
+      {res && (() => {
+        const sq = res.sample_quality;
+        const cov = res.regime_coverage;
+        const oos = res.oos;
+        const sqColor = sq?.label === 'robust' || sq?.label === 'adequate' ? 'var(--t-green)'
+          : sq?.label === 'thin' ? 'var(--t-amber)'
+          : sq?.label === 'no_trades' ? 'var(--t-dim)' : 'var(--t-red)';
+        const pf = res.profit_factor;
+        const oosColor = oos?.generalises ? 'var(--t-green)' : 'var(--t-amber)';
+        return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Sample-size adequacy — a backtest under ~100 trades is unreliable. */}
+          {sq && (
+            <div style={{
+              fontSize: 10, lineHeight: 1.45, padding: '5px 9px', borderRadius: 'var(--radius-md)',
+              color: sqColor, background: alpha(sqColor, 0.08), border: `1px solid ${alpha(sqColor, 0.27)}`,
+            }}>
+              <b style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>{sq.label}</b> sample
+              {' · '}{res.total_trades} trades — {sq.note}
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
             <Stat label="TRADES" value={String(res.total_trades)} />
             <Stat label="WIN RATE" value={`${fmt(res.win_rate * 100, 0)}%`} color={res.win_rate >= 0.5 ? 'var(--t-green)' : 'var(--t-red)'} />
-            <Stat label="RETURN" value={`${fmt(res.total_return_pct, 1)}%`} color={res.total_return_pct >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
+            <Stat label="RETURN (net)" value={`${fmt(res.total_return_pct, 1)}%`} color={res.total_return_pct >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
             <Stat label="MAX DD" value={`${fmt(res.max_drawdown_pct, 1)}%`} color="var(--t-amber)" />
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            <Stat label="EXPECTANCY" value={`${(res.expectancy_r ?? 0) >= 0 ? '+' : ''}${fmt(res.expectancy_r ?? 0, 2)}R`} color={(res.expectancy_r ?? 0) >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
+            <Stat label="PROFIT FACTOR" value={pf == null ? '—' : fmt(pf, 2)} color={pf != null && pf >= 1 ? 'var(--t-green)' : 'var(--t-red)'} />
+            <Stat label="AVG COST" value={`${fmt(res.avg_cost_r ?? 0, 2)}R`} color="var(--t-dim)" />
+          </div>
+
+          {/* Regime coverage — does the window span both a bull and a bear leg? */}
+          {cov && (
+            <div style={{ fontSize: 9.5, color: 'var(--t-dim)', lineHeight: 1.5 }}>
+              <span style={{ color: cov.covers_bull_and_bear ? 'var(--t-green)' : 'var(--t-amber)' }}>
+                {cov.covers_bull_and_bear ? '✓ spans bull + bear' : '⚠ single-regime window'}
+              </span>
+              {' · '}bull {fmt(cov.bull_pct, 0)}% · bear {fmt(cov.bear_pct, 0)}% · chop {fmt(cov.chop_pct, 0)}%
+              {Object.keys(cov.by_regime || {}).length > 0 && (
+                <span>{'  ·  '}{Object.entries(cov.by_regime).map(([r, s]) =>
+                  `${r}: ${s.trade_count}t ${fmt(s.win_rate * 100, 0)}%w ${s.avg_r >= 0 ? '+' : ''}${fmt(s.avg_r, 2)}R`
+                ).join(' / ')}</span>
+              )}
+            </div>
+          )}
+
+          {/* In-sample vs out-of-sample — does the edge generalise or curve-fit? */}
+          {oos && (
+            <div style={{
+              fontSize: 10, lineHeight: 1.45, padding: '5px 9px', borderRadius: 'var(--radius-md)',
+              color: oosColor, background: alpha(oosColor, 0.08), border: `1px solid ${alpha(oosColor, 0.27)}`,
+            }}>
+              {oos.generalises ? '✓ GENERALISES' : '⚠ DOES NOT GENERALISE'}
+              {' · '}IS PF {oos.is_pf == null ? '—' : fmt(oos.is_pf, 2)} (n{oos.n_is})
+              {' → '}OOS PF {oos.oos_pf == null ? '—' : fmt(oos.oos_pf, 2)} (n{oos.n_oos})
+              <div style={{ color: 'var(--t-dim)', marginTop: 2 }}>{oos.note}</div>
+            </div>
+          )}
+
           {res.trades.length > 0 && (
             <div style={{ maxHeight: 140, overflow: 'auto', border: '1px solid var(--t-border)', borderRadius: 6 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
                 <thead>
                   <tr style={{ color: 'var(--t-dim)', textAlign: 'left' }}>
-                    {['Strat', 'Dir', 'Entry', 'Exit', 'R', 'Exit'].map((h) => (
+                    {['Strat', 'Dir', 'Regime', 'Entry', 'Exit', 'Net R', 'Exit'].map((h) => (
                       <th key={h} style={{ padding: '3px 6px', position: 'sticky', top: 0, background: 'var(--t-bg2)' }}>{h}</th>
                     ))}
                   </tr>
@@ -1065,6 +1237,7 @@ function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }
                     <tr key={i} style={{ borderTop: '1px solid var(--t-border)' }}>
                       <td style={{ padding: '2px 6px' }}><Pill text={t.strategy.replace('_', ' ').toUpperCase()} color={STRATEGY_META[t.strategy]?.color || 'var(--t-dim)'} /></td>
                       <td style={{ padding: '2px 6px', color: t.direction === 'long' ? 'var(--t-green)' : 'var(--t-red)' }}>{t.direction === 'long' ? 'L' : 'S'}</td>
+                      <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{t.regime || '—'}</td>
                       <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{fmtUsd(t.entry_price)}</td>
                       <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{fmtUsd(t.exit_price)}</td>
                       <td style={{ padding: '2px 6px', fontWeight: 700, color: t.pnl_r >= 0 ? 'var(--t-green)' : 'var(--t-red)' }}>{t.pnl_r >= 0 ? '+' : ''}{fmt(t.pnl_r, 2)}</td>
@@ -1076,7 +1249,8 @@ function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
     </SectionCard>
   );
 }
@@ -1094,7 +1268,7 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 
 /* ── auto-optimize panel (in drawer) ──────────────────────────────────────── */
 
-function OptimizePanel({ cfg, onToggleOptimized }: { cfg: ScalpingConfig; onToggleOptimized: (v: boolean) => void }) {
+function OptimizePanel({ cfg }: { cfg: ScalpingConfig }) {
   const optQ = useScalpingOptimize();
   const runOpt = useRunScalpingOptimize();
   const data = optQ.data;
@@ -1128,12 +1302,8 @@ function OptimizePanel({ cfg, onToggleOptimized }: { cfg: ScalpingConfig; onTogg
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <ChipToggle label="Use optimized parameters" on={cfg.use_optimized} onChange={onToggleOptimized} />
-        {cfg.use_optimized && data?.optimized_params && (
+        {data?.optimized_params && (
           <span style={{ fontSize: 9, color: 'var(--t-green)' }}>active: {pStr(data.optimized_params)}</span>
-        )}
-        {cfg.use_optimized && !data?.optimized_params && (
-          <span style={{ fontSize: 9, color: 'var(--t-amber)' }}>no sweep yet — using manual config until you run one</span>
         )}
       </div>
 
@@ -1142,10 +1312,10 @@ function OptimizePanel({ cfg, onToggleOptimized }: { cfg: ScalpingConfig; onTogg
       {result ? (
         <>
           <div style={{
-            fontSize: 10, lineHeight: 1.5, marginBottom: 8, padding: '6px 9px', borderRadius: 6,
+            fontSize: 10, lineHeight: 1.5, marginBottom: 8, padding: '6px 9px', borderRadius: 'var(--radius-md)',
             color: result.recommend_change ? 'var(--t-green)' : corrColor,
-            background: (result.recommend_change ? 'var(--t-green)' : corrColor) + '14',
-            border: `1px solid ${(result.recommend_change ? 'var(--t-green)' : corrColor)}44`,
+            background: alpha(result.recommend_change ? 'var(--t-green)' : corrColor, 0.08),
+            border: `1px solid ${alpha(result.recommend_change ? 'var(--t-green)' : corrColor, 0.27)}`,
           }}>
             {result.recommend_change ? '✓ ADOPT' : '⚠ KEEP MANUAL'} · IS↔OOS corr <b>{corr.toFixed(2)}</b> — {result.note}
           </div>
@@ -1191,6 +1361,35 @@ function OptimizePanel({ cfg, onToggleOptimized }: { cfg: ScalpingConfig; onTogg
   );
 }
 
+const getSignalStatus = (s: ScalpingSignal) => {
+  if (s.direction === 'long' || s.direction === 'short') {
+    return s.entry_ok ? 'ready' : 'pending';
+  }
+  if (s.near_level != null) return 'watching';
+  return 'other';
+};
+
+function SettingsTrigger({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+        padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'inherit',
+        border: '1px solid var(--t-border)',
+        background: hover ? alpha('var(--t-border)', 0.3) : 'transparent',
+        color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
+      }}
+    >
+      <span style={{ fontSize: 13 }}>⚙</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>Settings &amp; Backtest</span>
+    </button>
+  );
+}
+
 export function ScalpingTab() {
   const selected = useSelectedUnderlying();
   const setSelected = useSetSelectedUnderlying();
@@ -1198,8 +1397,9 @@ export function ScalpingTab() {
   const setCfg = useSetScalpingConfig();
   const [drawer, setDrawer] = useState(false);
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
-  const [armedOnly, setArmedOnly] = useState(() => localStorage.getItem('scalp.armedOnly') === '1');
-  const scanQ = useScalpingSignals(armedOnly);
+  const [profileFilter, setProfileFilter] = useState<string>(() => localStorage.getItem('scalp.profileFilter') || 'all');
+  const [statusFilter, setStatusFilter] = useState<string>(() => localStorage.getItem('scalp.statusFilter') || 'all');
+  const scanQ = useScalpingSignals(false);
   const exec = useScalpingExecute();
   const [execKeys, setExecKeys] = useState<Set<string>>(new Set());  // in-flight (supports concurrent auto-exec)
   // Executions persist across reloads and across mode switches; each entry carries
@@ -1320,6 +1520,7 @@ export function ScalpingTab() {
     size_units: pos.sized_trade?.contracts ?? null,
     notional_usd: pos.sized_trade?.position_value ?? null,
     entry_ok: true, executable: false, timestamp_ms: pos.entry_timestamp_ms ?? 0, error: null,
+    profile: pos.mode || 'intraday',
   });
   };
   const execStateFromPos = (pos: PaperPosition, strategy: string): ExecState => {
@@ -1363,17 +1564,22 @@ export function ScalpingTab() {
   };
 
   const data = scanQ.data;
-  const stratScoped = (data?.signals ?? []).filter((s) => stratFilter === 'all' || s.strategy === stratFilter);
+
+  const statusScoped = (data?.signals ?? []).filter((s) => 
+    (stratFilter === 'all' || s.strategy === stratFilter) &&
+    (profileFilter === 'all' || s.profile === profileFilter) &&
+    (statusFilter === 'all' ? getSignalStatus(s) !== 'other' : getSignalStatus(s) === statusFilter)
+  );
+
   // Actionable rows have a direction (READY = executable, WATCH = armed-not-tradeable,
   // PENDING = pattern found but risk-rejected). long/short kept even when entry_ok is
   // false so "skipped: stop too wide / cramped R:R" near-misses stay visible.
-  const signals = stratScoped.filter((s) => s.direction === 'long' || s.direction === 'short');
+  const signals = statusScoped.filter((s) => s.direction === 'long' || s.direction === 'short');
   // In-progress / watching: price is AT a 4H level but no pattern has confirmed yet
   // (direction "none" + a near_level). These aren't tradeable, but they show what's
   // brewing — sorted by proximity to the level (closest to triggering first). The
-  // pure-noise "none" rows (no nearby level / insufficient data) are excluded. Only
-  // present when "Ready only" is off (armed_only filters them server-side otherwise).
-  const watchingSignals = stratScoped
+  // pure-noise "none" rows (no nearby level / insufficient data) are excluded.
+  const watchingSignals = statusScoped
     .filter((s) => s.direction === 'none' && s.near_level != null)
     .sort((a, b) => {
       const pa = a.close && a.near_level ? Math.abs(a.close - a.near_level) / a.close : 1;
@@ -1402,13 +1608,17 @@ export function ScalpingTab() {
   const scalpPositions = useMemo(
     () => positions
       .filter((p) => stratFromNotes(p.notes) && (!!p.is_paper === wantPaper))
-      .filter((p) => stratFilter === 'all' || stratFromNotes(p.notes) === stratFilter)
+      .filter((p) => {
+        if (stratFilter !== 'all' && stratFromNotes(p.notes) !== stratFilter) return false;
+        // Position notes don't currently contain the profile, so we allow them through the profile filter.
+        return true;
+      })
       .sort((a, b) => {
         const ao = a.status !== 'closed' ? 1 : 0, bo = b.status !== 'closed' ? 1 : 0;
         if (ao !== bo) return bo - ao;                         // open positions before closed
         return (b.entry_timestamp_ms ?? 0) - (a.entry_timestamp_ms ?? 0);  // newest first
       }),
-    [positions, wantPaper, stratFilter],
+    [positions, wantPaper, stratFilter, profileFilter],
   );
 
   // Open auto-trades still running in the current book (ignores the strategy
@@ -1454,17 +1664,24 @@ export function ScalpingTab() {
       // positions (above), and once it CLOSES the setup is free to re-arm, so a
       // stale accept must never suppress the EXECUTE button on a live signal.
       const feedbackEs = es && !es.resp?.accepted ? es : undefined;
-      return { key, s, es: feedbackEs, pnl: undefined, executed: false, macroMode };
+      return { key, s, es: feedbackEs, pnl: undefined, executed: false, macroMode: s.profile };
     });
 
   // In-progress rows — price at a 4H level, no confirmed pattern yet (not tradeable).
   const watchingRows: Row[] = watchingSignals
     .filter((s) => !openSetupKeys.has(`${s.underlying}-${s.strategy}`))
-    .map((s) => ({ key: `${s.underlying}-${s.strategy}-watch`, s, es: undefined, pnl: undefined, executed: false, macroMode }));
+    .map((s) => ({ key: `${s.underlying}-${s.strategy}-watch`, s, es: undefined, pnl: undefined, executed: false, macroMode: s.profile }));
 
   const executedSignals: Row[] = executedRows;       // real open/closed positions for this book
   const restSignals: Row[] = scanRows;               // live scan signals (button when ready & algo off)
   const displaySignals: Row[] = [...executedSignals, ...restSignals, ...watchingRows];
+
+  // Show the trade-plan columns (Entry/Current/Stop/Target/Risk) only when at
+  // least one armed/executed signal exists. The header AND every card must
+  // agree on this, or the plan-width block in the cards drifts the later
+  // columns out from under their headers (a "Watching-only" list hid the plan
+  // header but the cards still reserved its width). Single source of truth:
+  const showPlan = executedSignals.length + restSignals.length > 0;
 
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
@@ -1483,9 +1700,10 @@ export function ScalpingTab() {
     return () => window.removeEventListener('keydown', onKey);
   }, [drawer]);
 
-  // Persist sidebar selections (Armed-only filter + active strategy nav) across reloads.
+  // Persist sidebar selections across reloads.
   useEffect(() => { localStorage.setItem('scalp.stratFilter', stratFilter); }, [stratFilter]);
-  useEffect(() => { localStorage.setItem('scalp.armedOnly', armedOnly ? '1' : '0'); }, [armedOnly]);
+  useEffect(() => { localStorage.setItem('scalp.profileFilter', profileFilter); }, [profileFilter]);
+  useEffect(() => { localStorage.setItem('scalp.statusFilter', statusFilter); }, [statusFilter]);
   // Persist executions (all modes) so the executed rows survive a reload.
   useEffect(() => {
     try { localStorage.setItem('scalp.execStates', JSON.stringify(execStates)); } catch { /* quota */ }
@@ -1543,14 +1761,53 @@ export function ScalpingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positions]);
 
-  const allSignals = (data?.signals ?? []).filter((s) => s.direction === 'long' || s.direction === 'short');
+  const baseSignals = (data?.signals ?? []).filter(s => getSignalStatus(s) !== 'other');
 
-  const navItems = [
-    { id: 'all', label: 'All Strategies', color: 'var(--t-bright)', count: allSignals.length },
-    { id: 'price_action', label: 'Price Action', color: 'var(--t-amber)', count: allSignals.filter((s) => s.strategy === 'price_action').length },
-    { id: 'smc', label: 'Smart Money', color: 'var(--t-purple)', count: allSignals.filter((s) => s.strategy === 'smc').length },
-    { id: 'ma_crossover', label: 'MA Crossover', color: 'var(--t-blue)', count: allSignals.filter((s) => s.strategy === 'ma_crossover').length },
+  const stratNavItems = [
+    { id: 'all', label: 'All Strategies', color: 'var(--t-bright)', count: baseSignals.filter((s) => (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'price_action', label: 'Price Action', color: 'var(--t-amber)', count: baseSignals.filter((s) => s.strategy === 'price_action' && (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'smc', label: 'Smart Money', color: 'var(--t-purple)', count: baseSignals.filter((s) => s.strategy === 'smc' && (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'ma_crossover', label: 'MA Crossover', color: 'var(--t-blue)', count: baseSignals.filter((s) => s.strategy === 'ma_crossover' && (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'mean_reversion', label: 'Mean Reversion', color: 'var(--t-cyan)', count: baseSignals.filter((s) => s.strategy === 'mean_reversion' && (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'breakout', label: 'Breakout', color: 'var(--t-green)', count: baseSignals.filter((s) => s.strategy === 'breakout' && (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
   ];
+
+  const profileNavItems = [
+    { id: 'all', label: 'All Profiles', color: 'var(--t-bright)', count: baseSignals.filter((s) => (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'intraday', label: 'Intraday', color: 'var(--t-cyan)', count: baseSignals.filter((s) => s.profile === 'intraday' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'scalping', label: 'Scalping', color: 'var(--t-orange)', count: baseSignals.filter((s) => s.profile === 'scalping' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'aggressive', label: 'Aggressive', color: 'var(--t-red)', count: baseSignals.filter((s) => s.profile === 'aggressive' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+  ];
+
+  const statusNavItems = [
+    { id: 'all', label: 'All Statuses', color: 'var(--t-bright)', count: baseSignals.filter((s) => (stratFilter === 'all' || s.strategy === stratFilter) && (profileFilter === 'all' || s.profile === profileFilter)).length },
+    { id: 'ready', label: 'Ready (Armed)', color: 'var(--t-green)', count: baseSignals.filter((s) => getSignalStatus(s) === 'ready' && (stratFilter === 'all' || s.strategy === stratFilter) && (profileFilter === 'all' || s.profile === profileFilter)).length },
+    { id: 'pending', label: 'Pending (Setup)', color: 'var(--t-amber)', count: baseSignals.filter((s) => getSignalStatus(s) === 'pending' && (stratFilter === 'all' || s.strategy === stratFilter) && (profileFilter === 'all' || s.profile === profileFilter)).length },
+    { id: 'watching', label: 'Watching (Levels)', color: 'var(--t-blue)', count: baseSignals.filter((s) => getSignalStatus(s) === 'watching' && (stratFilter === 'all' || s.strategy === stratFilter) && (profileFilter === 'all' || s.profile === profileFilter)).length },
+  ];
+
+  const renderNavGroup = (items: {id: string, label: string, color: string, count?: number}[], active: string, onClick: (id: string) => void) => (
+    <>
+      {items.map((item) => {
+        const isActive = active === item.id;
+        return (
+          <button key={item.id} onClick={() => onClick(item.id)} style={{
+            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+            padding: '10px 12px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+            background: isActive ? `var(--t-bg)` : 'transparent',
+            border: isActive ? `1px solid var(--t-border)` : '1px solid transparent',
+            color: isActive ? item.color : 'var(--t-dim)',
+            marginBottom: 4, transition: 'all .2s ease',
+            transform: isActive ? 'translateX(2px)' : 'none'
+          }}>
+            <div style={{ width: 8, height: 8, borderRadius: 4, background: item.color, flexShrink: 0, opacity: isActive ? 1 : 0.4 }} />
+            <span style={{ fontSize: 12, fontWeight: isActive ? 800 : 500, letterSpacing: '0.02em' }}>{item.label}</span>
+            {item.count != null && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, opacity: 0.8 }}>{item.count}</span>}
+          </button>
+        );
+      })}
+    </>
+  );
 
   const btUnderlying = (selected?.split('-')[0]) || cfg?.symbols?.[0] || 'BTC';
 
@@ -1567,27 +1824,22 @@ export function ScalpingTab() {
       algoOn={algoOn}
       mode={tradeMode}
       macroMode={row.macroMode}
+      showPlan={showPlan}
     />
   );
 
   return (
     <>
     <ThreeColumnLayout
-      leftNav={navItems}
-      activeNav={stratFilter}
-      onNavClick={setStratFilter}
       leftSidebar={<>
-        <LeftSection label="Ready Only" collapsible defaultOpen>
-          <button onClick={() => { const v = !armedOnly; setArmedOnly(v); }} style={{
-            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-            padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${armedOnly ? 'var(--t-green)44' : 'var(--t-border)'}`,
-            background: armedOnly ? 'var(--t-green)16' : 'transparent',
-            color: armedOnly ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s',
-          }}>
-            <span style={{ fontSize: 12 }}>{armedOnly ? '●' : '○'}</span>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>Ready only</span>
-          </button>
+        <LeftSection label="Strategies" collapsible defaultOpen>
+          {renderNavGroup(stratNavItems, stratFilter, setStratFilter)}
+        </LeftSection>
+        <LeftSection label="Profiles" collapsible defaultOpen>
+          {renderNavGroup(profileNavItems, profileFilter, setProfileFilter)}
+        </LeftSection>
+        <LeftSection label="Status" collapsible defaultOpen>
+          {renderNavGroup(statusNavItems, statusFilter, setStatusFilter)}
         </LeftSection>
       </>}
       centerHeader={<>
@@ -1636,30 +1888,92 @@ export function ScalpingTab() {
                 </div>
               </div>
             )}
-            {scanQ.isError && <div style={{ color: 'var(--t-red)', fontSize: 11 }}>{(scanQ.error as Error).message}</div>}
+            {scanQ.isError && (
+              <div style={{
+                margin: '20px 0',
+                padding: '20px',
+                border: '1px solid var(--t-red)33',
+                borderRadius: 12,
+                background: 'linear-gradient(180deg, var(--t-red)0c 0%, transparent 100%)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+                backdropFilter: 'blur(10px)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 24, height: 24, borderRadius: '50%', 
+                    background: 'var(--t-red)1c', color: 'var(--t-red)', 
+                    fontSize: 12, fontWeight: 900 
+                  }}>✕</div>
+                  <div style={{ color: 'var(--t-red)', fontSize: 13, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    Engine Disconnected
+                  </div>
+                </div>
+                
+                {((scanQ.error as Error).message === 'Failed to fetch' || (scanQ.error as Error).message.includes('Failed to fetch')) ? (
+                  <div style={{ paddingLeft: 34, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ color: 'var(--t-dim)', fontSize: 12, lineHeight: 1.5 }}>
+                      The local routing engine is unreachable. Please verify that the <strong style={{ color: 'var(--t-bright)', fontWeight: 600 }}>Python backend</strong> is currently running in your terminal.
+                    </div>
+                    
+                    <div style={{
+                      background: 'var(--bg-d)', 
+                      border: '1px solid var(--t-border)',
+                      borderRadius: 6,
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16
+                    }}>
+                      <code style={{ 
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        fontSize: 11,
+                        color: 'var(--t-bright)',
+                        userSelect: 'all',
+                        whiteSpace: 'nowrap',
+                        overflowX: 'auto',
+                      }}>
+                        <span style={{ color: 'var(--t-dim)', userSelect: 'none' }}>$ </span>
+                        cd backend && source .venv/bin/activate && uvicorn main:app --reload
+                      </code>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ paddingLeft: 34, color: 'var(--t-dim)', fontSize: 12, lineHeight: 1.5 }}>
+                    {(scanQ.error as Error).message}
+                  </div>
+                )}
+              </div>
+            )}
             {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
             {data && displaySignals.length === 0 && (
               <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>
-                {armedOnly ? 'No ready signals — clear the filter to see all.' : 'No signals on this data source.'}
+                {statusFilter === 'ready' ? 'No ready signals — clear the filter to see all.' : 'No signals on this data source.'}
               </div>
             )}
+            
+            {displaySignals.length > 0 && (
+              <SignalTableHeader showPlan={showPlan} />
+            )}
+
             {executedSignals.length > 0 && (
               <>
                 <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
-                <SignalTableHeader />
+                {executedSignals.map(renderSignalCard)}
+                <ConsolidatedRow count={executedSignals.length} {...consolidated} />
               </>
             )}
-            {executedSignals.map(renderSignalCard)}
-            {executedSignals.length > 0 && (
-              <ConsolidatedRow count={executedSignals.length} {...consolidated} />
-            )}
+            
             {restSignals.length > 0 && (
               <>
-                <ListGroupHeader label={armedOnly ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
-                <SignalTableHeader />
+                <ListGroupHeader label={statusFilter === 'ready' ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
+                {restSignals.map(renderSignalCard)}
               </>
             )}
-            {restSignals.map(renderSignalCard)}
+            
             {watchingRows.length > 0 && (
               <>
                 <ListGroupHeader label="Watching · at 4H level, awaiting pattern" count={watchingRows.length} color="var(--t-dim)" />
@@ -1675,15 +1989,7 @@ export function ScalpingTab() {
       }
       rightSidebar={<>
         <RightSection label="Settings" collapsible defaultOpen={true}>
-          <button onClick={() => setDrawer(true)} style={{
-            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-            padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-            border: '1px solid var(--t-border)', background: 'transparent',
-            color: 'var(--t-dim)', transition: 'all .1s',
-          }}>
-            <span style={{ fontSize: 13 }}>⚙</span>
-            <span style={{ fontSize: 11, fontWeight: 600 }}>Settings & Backtest</span>
-          </button>
+          <SettingsTrigger onClick={() => setDrawer(true)} />
         </RightSection>
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <div style={{
@@ -1730,13 +2036,13 @@ export function ScalpingTab() {
     {drawer && (
       <div onClick={() => setDrawer(false)} style={{
         position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'flex-end',
+        background: 'var(--surface-overlay)', display: 'flex', justifyContent: 'flex-end',
       }}>
         <div onClick={(e) => e.stopPropagation()} style={{
-          width: 'min(700px, 94vw)', height: '100%', background: 'var(--t-bg)', boxSizing: 'border-box',
+          width: 'min(700px, 94vw)', height: '100%', maxHeight: '100vh', background: 'var(--t-bg)', boxSizing: 'border-box',
           borderLeft: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 'min-content' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Settings &amp; Backtest</span>
             <button onClick={() => setDrawer(false)} title="Close (Esc)" style={{
@@ -1755,7 +2061,6 @@ export function ScalpingTab() {
           {cfg && (
             <OptimizePanel
               cfg={cfg}
-              onToggleOptimized={(v) => setCfg.mutate({ ...cfg, use_optimized: v })}
             />
           )}
           <ScalpBacktestPanel initialUnderlying={btUnderlying} />

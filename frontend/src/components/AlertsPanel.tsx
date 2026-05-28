@@ -3,15 +3,10 @@ import { useSignalAlerts, usePlaceOrder } from '../hooks/useSignalAlerts';
 import type { SignalAlert } from '../hooks/useSignalAlerts';
 import { fmtN } from '../utils/fmt';
 import { c as ui, tint } from '../styles/terminalUI';
-
-// ── shared constants ──────────────────────────────────────────────────────────
+import { STATE_COLOR } from '../utils/colors';
 
 const DIR_COLOR = { long: ui.green, short: ui.red } as const;
 const DIR_LABEL = { long: 'BUY', short: 'SELL' } as const;
-const STATE_COLOR: Record<string, string> = {
-  ENTRY_ARMED_PULLBACK: ui.blue, ENTRY_ARMED_CONTINUATION: ui.cyan,
-  CONFIRMED_SETUP_ACTIVE: ui.amber, EARLY_SETUP_ACTIVE: ui.amber,
-};
 
 function fmtPrice(v: number | null | undefined): string {
   if (v == null) return '—';

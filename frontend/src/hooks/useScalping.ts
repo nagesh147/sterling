@@ -7,6 +7,9 @@ export interface ScalpingProfile {
   enable_price_action: boolean;
   enable_smc: boolean;
   enable_ma_crossover: boolean;
+  enable_mean_reversion: boolean;
+  enable_breakout: boolean;
+  enable_delta_gamma: boolean;
   macro_timeframe: string;
   execution_timeframe: string;
   level_touches: number;
@@ -21,6 +24,13 @@ export interface ScalpingProfile {
   smc_imbalance_ratio: number;
   ma_fast_sma: number;
   ma_slow_ema: number;
+  mr_zscore_window: number;
+  mr_zscore_threshold: number;
+  bo_rsi_long_threshold: number;
+  bo_rsi_short_threshold: number;
+  dg_gex_flip_threshold: number;
+  dg_wall_proximity_pct: number;
+  dg_filter_breakouts: boolean;
   allow_long: boolean;
   allow_short: boolean;
   macro_trend_filter: boolean;
@@ -92,8 +102,42 @@ export interface ScalpingBacktestTrade {
   entry_price: number;
   exit_price: number;
   bars_held: number;
-  pnl_r: number;
+  pnl_r: number;          // NET R after costs
+  gross_pnl_r?: number;
   exit_reason: string;
+  regime?: string;        // bull | bear | chop at entry
+}
+
+export interface SampleQuality {
+  label: 'robust' | 'adequate' | 'thin' | 'unreliable' | 'no_trades';
+  note: string;
+  min_reliable: number;
+  adequate: boolean;
+}
+
+export interface RegimeStats {
+  trade_count: number;
+  win_rate: number;
+  avg_r: number;
+}
+
+export interface RegimeCoverage {
+  covers_bull_and_bear: boolean;
+  bull_pct: number;
+  bear_pct: number;
+  chop_pct: number;
+  by_regime: Record<string, RegimeStats>;
+}
+
+export interface OOSSplit {
+  n_is: number;
+  n_oos: number;
+  is_pf: number | null;
+  is_exp: number;
+  oos_pf: number | null;
+  oos_exp: number;
+  generalises: boolean;
+  note: string;
 }
 
 export interface ScalpingBacktestResult {
@@ -104,9 +148,17 @@ export interface ScalpingBacktestResult {
   trades: ScalpingBacktestTrade[];
   total_trades: number;
   win_rate: number;
-  total_return_pct: number;
+  total_return_pct: number;   // net of costs
   max_drawdown_pct: number;
   timestamp_ms: number;
+  expectancy_r?: number;
+  profit_factor?: number | null;
+  avg_cost_r?: number;
+  cost_modeled?: boolean;
+  equity_curve?: number[];
+  sample_quality?: SampleQuality;
+  regime_coverage?: RegimeCoverage;
+  oos?: OOSSplit;
 }
 
 // ── Execute ─────────────────────────────────────────────────────────────────
