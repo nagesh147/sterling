@@ -67,6 +67,8 @@ type ThreeColumnLayoutProps = {
   centerContent: React.ReactNode;
   centerFullBleed?: boolean;  // If true, center content fills the column with no padding
   rightSidebar?: React.ReactNode;
+  leftWidth?: number | string;   // override the left sidebar width (default 240px)
+  rightWidth?: number | string;  // override the right sidebar width (default 280px)
 };
 
 export function ThreeColumnLayout({
@@ -78,9 +80,12 @@ export function ThreeColumnLayout({
   centerContent,
   centerFullBleed,
   rightSidebar,
+  leftWidth = 240,
+  rightWidth = 280,
 }: ThreeColumnLayoutProps) {
+  const px = (v: number | string) => (typeof v === 'number' ? `${v}px` : v);
   return (
-    <div style={{ flex: 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: '240px 1fr 280px', gridTemplateRows: 'minmax(0, 1fr)', background: 'var(--t-bg)' }}>
+    <div style={{ flex: 1, overflow: 'hidden', display: 'grid', gridTemplateColumns: `${px(leftWidth)} 1fr ${px(rightWidth)}`, gridTemplateRows: 'minmax(0, 1fr)', background: 'var(--t-bg)' }}>
       {/* ── LEFT SIDEBAR ── */}
       <div style={{ background: 'var(--t-bg2)', borderRight: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column', overflow: 'auto', minHeight: 0 }}>
         {leftNav && leftNav.length > 0 && (

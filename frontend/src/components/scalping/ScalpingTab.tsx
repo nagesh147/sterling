@@ -426,17 +426,20 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'symbol',   label: 'Symbol',           width: '58px' },
   { key: 'status',   label: 'Status',           width: '94px' },
   { key: 'dir',      label: 'Direction',        width: '92px',  dir: true },
-  { key: 'level',    label: 'Level / Location', width: 'minmax(150px, 1.3fr)' },
-  { key: 'detail',   label: 'Status Detail',    width: 'minmax(160px, 1.7fr)' },
+  // Only the two long free-text columns flex (they hold the descriptive level /
+  // awaiting-reason text). Everything else is fixed so dropping the Direction /
+  // Action columns doesn't make a categorical column (e.g. Pattern) balloon.
+  { key: 'level',    label: 'Level / Location', width: 'minmax(150px, 1.1fr)' },
+  { key: 'detail',   label: 'Status Detail',    width: 'minmax(180px, 1.6fr)' },
   { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
   { key: 'current',  label: 'Current',          width: '118px', plan: true },
   { key: 'stop',     label: 'Stop',             width: '96px',  plan: true },
   { key: 'target',   label: 'Target',           width: '96px',  plan: true },
   { key: 'risk',     label: 'Risk',             width: '52px',  plan: true },
-  { key: 'strategy', label: 'Strategy',         width: '100px' },
-  { key: 'pattern',  label: 'Pattern',          width: 'minmax(110px, 1fr)', align: 'center' },
-  { key: 'profile',  label: 'Profile',          width: '78px' },
-  { key: 'time',     label: 'Time',             width: '88px' },
+  { key: 'strategy', label: 'Strategy',         width: '108px' },
+  { key: 'pattern',  label: 'Pattern',          width: '150px', align: 'center' },
+  { key: 'profile',  label: 'Profile',          width: '82px' },
+  { key: 'time',     label: 'Time',             width: '92px' },
   { key: 'action',   label: 'Action',           width: '112px', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
@@ -837,48 +840,39 @@ function ExecLog({ entries, mode }: {
 }) {
   if (entries.length === 0) {
     return (
-      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, padding: 16 }}>
-        No execution attempts this session. With <b style={{ color: 'var(--t-bright)' }}>Algo ON</b>, every ready
-        signal fires here and its result (mode · status · reason) is logged — so you can confirm <b style={{ color: 'var(--t-bright)' }}>{mode}</b> is
-        actually placing orders, or see exactly why one was rejected.
+      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, padding: '6px 14px' }}>
+        No execution attempts yet. With <b style={{ color: 'var(--t-bright)' }}>Algo ON</b>, every ready signal
+        fires here ({mode}) — confirm orders are placed, or see why one was rejected.
       </div>
     );
   }
+  // Status → colour. ok = green, already-open = blue, soft "didn't fire" reasons
+  // = amber, hard errors/rejections = red.
+  const statusCol = (e: { ok: boolean; status: string }) =>
+    e.ok ? 'var(--t-green)'
+    : e.status === 'already_open' ? 'var(--t-blue)'
+    : ['no_signal', 'no_plan', 'size_too_small'].includes(e.status) ? 'var(--t-amber)'
+    : 'var(--t-red)';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
       {entries.map((e, i) => {
-        const col = e.ok ? 'var(--t-green)' : e.status === 'already_open' ? 'var(--t-blue)' : 'var(--t-red)';
+        const col = statusCol(e);
         const dash = e.key.indexOf('-');
         const sym = dash >= 0 ? e.key.slice(0, dash) : e.key;
-        const strat = dash >= 0 ? e.key.slice(dash + 1) : '';
-        const bg = e.ok ? alpha(col, 0.09) : 'var(--t-bg)';
-        const borderColor = e.ok ? alpha(col, 0.27) : 'var(--t-border)';
+        const strat = (dash >= 0 ? e.key.slice(dash + 1) : '').replace(/_/g, ' ');
+        const mc = e.auto ? 'var(--t-cyan)' : modeColorOf(e.mode);
         return (
-          <div key={i} style={{ 
-            display: 'flex', flexDirection: 'column', gap: 7,
-            padding: '12px 16px 12px 0', borderRadius: 'var(--radius-lg)',
-            border: `1px solid ${borderColor}`,
-            background: bg,
+          <div key={i} title={e.reason ? `${e.status} — ${e.reason}` : e.status} style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '4px 14px 4px 12px',
+            borderLeft: `2px solid ${col}`, background: e.ok ? alpha(col, 0.07) : 'transparent',
+            fontSize: 10, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-              <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: col, flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em' }}>{sym}</span>
-                  <span style={{ fontSize: 11, color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{strat.replace(/_/g, ' ').toUpperCase()}</span>
-                  <span style={{ marginLeft: 'auto', color: modeColorOf(e.mode), fontWeight: 800, fontSize: 9, letterSpacing: '0.06em', padding: '3px 8px', borderRadius: 'var(--radius-md)', background: alpha(modeColorOf(e.mode), 0.09), border: `1px solid ${alpha(modeColorOf(e.mode), 0.27)}`, whiteSpace: 'nowrap' }}>
-                    {e.auto ? 'AUTO · ' : ''}{e.mode}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: col, fontWeight: 800, fontSize: 10, letterSpacing: '0.04em' }}>{e.ok ? '✓' : '✕'} {e.status.toUpperCase()}</span>
-                  <span style={{ marginLeft: 'auto', color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>
-                    {new Date(e.ts).toLocaleTimeString()}
-                  </span>
-                </div>
-                {e.reason && <div style={{ color: 'var(--t-amber)', fontSize: 10, lineHeight: 1.4, marginTop: 4, fontWeight: 600, wordBreak: 'break-word' }}>✕ {e.mode} — {e.reason}</div>}
-              </div>
-            </div>
+            <span style={{ color: col, fontWeight: 800, fontSize: 9, width: 9, textAlign: 'center', flexShrink: 0 }}>{e.ok ? '✓' : e.status === 'already_open' ? '•' : '✕'}</span>
+            <span style={{ color: 'var(--t-bright)', fontWeight: 800, flexShrink: 0 }}>{sym}</span>
+            <span style={{ color: 'var(--t-dim)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{strat}</span>
+            <span style={{ marginLeft: 'auto', color: col, fontWeight: 700, fontSize: 8.5, letterSpacing: '0.03em', textTransform: 'uppercase', flexShrink: 0 }}>{e.status.replace(/_/g, ' ')}</span>
+            <span style={{ color: mc, fontWeight: 800, fontSize: 8, letterSpacing: '0.04em', flexShrink: 0 }}>{e.auto ? 'A·' : ''}{e.mode}</span>
+            <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontSize: 8.5, flexShrink: 0 }}>{new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}</span>
           </div>
         );
       })}
@@ -1499,6 +1493,7 @@ export function ScalpingTab() {
     try { return JSON.parse(localStorage.getItem('scalp.execStates') || '{}'); } catch { return {}; }
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
+  const [watchingOpen, setWatchingOpen] = useState(false);  // Watching group collapsed by default (noisy, non-actionable)
   const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
   // Visible execution log — every execute attempt (accepted OR rejected/errored)
   // with the mode it ran in and the backend reason. Makes "is live actually
@@ -1937,6 +1932,8 @@ export function ScalpingTab() {
   return (
     <>
     <ThreeColumnLayout
+      leftWidth={300}
+      rightWidth={380}
       leftSidebar={<>
         <LeftSection label="Strategies" collapsible defaultOpen>
           {renderNavGroup(stratNavItems, stratFilter, setStratFilter)}
@@ -2107,8 +2104,9 @@ export function ScalpingTab() {
             
             {watchingRows.length > 0 && (
               <>
-                <ListGroupHeader label="Watching" count={watchingRows.length} color="var(--t-dim)" />
-                {watchingRows.map(renderSignalCard)}
+                <ListGroupHeader label="Watching" count={watchingRows.length} color="var(--t-dim)"
+                  collapsible defaultOpen={false} onToggle={setWatchingOpen} />
+                {watchingOpen && watchingRows.map(renderSignalCard)}
               </>
             )}
             {data && displaySignals.length > 0 && (
@@ -2136,11 +2134,11 @@ export function ScalpingTab() {
     {drawer && (
       <div onClick={() => setDrawer(false)} style={{
         position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'var(--surface-overlay)', display: 'flex', justifyContent: 'flex-end',
+        background: 'var(--surface-overlay)', display: 'flex', justifyContent: 'flex-start',
       }}>
         <div onClick={(e) => e.stopPropagation()} style={{
           width: 'min(700px, 94vw)', height: '100%', maxHeight: '100vh', background: 'var(--t-bg)', boxSizing: 'border-box',
-          borderLeft: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
+          borderRight: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
