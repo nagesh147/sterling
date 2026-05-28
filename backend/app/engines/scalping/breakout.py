@@ -47,6 +47,28 @@ def calculate_rsi(closes: NDArray[np.float64], period: int = 14) -> float:
     return 100.0 - (100.0 / (1.0 + rs))
 
 
+def calculate_atr_series(closes: NDArray[np.float64], highs: NDArray[np.float64], lows: NDArray[np.float64], period: int = 14) -> NDArray[np.float64]:
+    n = len(closes)
+    atr = np.zeros(n, dtype=np.float64)
+    tr = np.zeros(n, dtype=np.float64)
+    
+    if n > 0:
+        tr[0] = highs[0] - lows[0]
+        atr[0] = tr[0]
+        
+    for i in range(1, n):
+        hl = highs[i] - lows[i]
+        hc = abs(highs[i] - closes[i-1])
+        lc = abs(lows[i] - closes[i-1])
+        tr[i] = max(hl, hc, lc)
+    
+    for i in range(1, n):
+        start_idx = max(0, i - period + 1)
+        atr[i] = np.mean(tr[start_idx:i+1])
+        
+    return atr
+
+
 @dataclass
 class BreakoutSignal:
     underlying: str
@@ -104,6 +126,7 @@ def evaluate_breakout(
     closes = np.array([c.close for c in candles_15m], dtype=np.float64)
     lows_15m = np.array([c.low for c in candles_15m], dtype=np.float64)
     highs_15m = np.array([c.high for c in candles_15m], dtype=np.float64)
+    volumes = np.array([c.volume for c in candles_15m], dtype=np.float64)
 
     rsi = calculate_rsi(closes)
     atr_val = current_atr(closes, highs_15m, lows_15m)
@@ -118,55 +141,118 @@ def evaluate_breakout(
     entry_ok = False
     tp_source = ""
 
-    # Bullish Breakout: Must break ABOVE a resistance level
-    if nearby.level_type == "resistance" and cfg.allow_long:
-        tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
-        is_breakout = current_price > (level_price + tolerance)
-        
-        if is_breakout and rsi >= getattr(cfg, "bo_rsi_long_threshold", 60.0):
-            entry = round(current_price, 4)
-            # Stop loss below the broken resistance level
-            plan = resolve_trade_risk(
-                direction="long", entry=entry, structure_stop=level_price,
-                atr_val=atr_val, levels=levels, tp_level_type="resistance",
-                max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
-            )
-            if plan.ok:
-                direction = "long"; pattern = "bullish_breakout"
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"Breakout above 4H resistance {level_price:.0f} with RSI {rsi:.1f} · R:R {plan.rr}"
-            else:
-                reason = f"breakout above 4H resistance {level_price:.0f} — skipped: {plan.reason}"
-        elif is_breakout:
-            reason = f"Watching: Breakout above 4H resistance {level_price:.0f} — awaiting RSI >= {getattr(cfg, 'bo_rsi_long_threshold', 60.0)} (current: {rsi:.1f})"
-        else:
-            reason = f"Watching: Near 4H resistance {level_price:.0f} — awaiting breakout (current: {current_price:.0f}, RSI: {rsi:.1f})"
+    is_ultra = getattr(cfg, "use_optimized", False)
 
-    # Bearish Breakout: Must break BELOW a support level
-    elif nearby.level_type == "support" and cfg.allow_short:
-        tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
-        is_breakout = current_price < (level_price - tolerance)
-        
-        if is_breakout and rsi <= getattr(cfg, "bo_rsi_short_threshold", 40.0):
-            entry = round(current_price, 4)
-            # Stop loss above the broken support level
-            plan = resolve_trade_risk(
-                direction="short", entry=entry, structure_stop=level_price,
-                atr_val=atr_val, levels=levels, tp_level_type="support",
-                max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
-            )
-            if plan.ok:
-                direction = "short"; pattern = "bearish_breakout"
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"Breakout below 4H support {level_price:.0f} with RSI {rsi:.1f} · R:R {plan.rr}"
-            else:
-                reason = f"breakout below 4H support {level_price:.0f} — skipped: {plan.reason}"
-        elif is_breakout:
-            reason = f"Watching: Breakout below 4H support {level_price:.0f} — awaiting RSI <= {getattr(cfg, 'bo_rsi_short_threshold', 40.0)} (current: {rsi:.1f})"
+    if is_ultra:
+        # --- Ultra Breakout Momentum (Volatility-Based) ---
+        atr_series = calculate_atr_series(closes, highs_15m, lows_15m, period=14)
+        if len(atr_series) >= 20:
+            atr_sma20 = np.mean(atr_series[-20:])
+            current_atr_val = atr_series[-1]
+            is_squeeze = current_atr_val < atr_sma20
         else:
-            reason = f"Watching: Near 4H support {level_price:.0f} — awaiting breakout (current: {current_price:.0f}, RSI: {rsi:.1f})"
+            is_squeeze = False
+            
+        if len(closes) >= 50:
+            recent_highs = highs_15m[-50:-1]
+            recent_lows = lows_15m[-50:-1]
+            channel_high = np.max(recent_highs)
+            channel_low = np.min(recent_lows)
+            
+            vol_sma20 = np.mean(volumes[-20:-1]) if len(volumes) >= 20 else 0
+            current_vol = volumes[-1]
+            vol_spike = current_vol > (vol_sma20 * 2.5)
+            
+            bullish_breakout = current_price > channel_high and vol_spike
+            bearish_breakout = current_price < channel_low and vol_spike
+        else:
+            bullish_breakout = False
+            bearish_breakout = False
+            channel_high = 0
+            channel_low = 0
+
+        if nearby.level_type == "resistance" and cfg.allow_long:
+            if bullish_breakout and is_squeeze:
+                entry = round(current_price, 4)
+                stop_dist = 2.0 * max(atr_val, entry * 0.001)
+                tp_dist = 4.0 * max(atr_val, entry * 0.001)
+                
+                stop_loss = round(entry - stop_dist, 4)
+                take_profit = round(entry + tp_dist, 4)
+                tp_source = "fixed_atr_bracket"
+                direction = "long"
+                pattern = "ultra_bullish_breakout"
+                entry_ok = True
+                reason = f"Ultra Breakout: vol spike above channel {channel_high:.0f} near 4H {level_price:.0f} · Fixed ATR Bracket"
+            else:
+                reason = f"Watching Ultra: Squeeze={is_squeeze}, vol_spike={vol_spike} near 4H {level_price:.0f}"
+                
+        elif nearby.level_type == "support" and cfg.allow_short:
+            if bearish_breakout and is_squeeze:
+                entry = round(current_price, 4)
+                stop_dist = 2.0 * max(atr_val, entry * 0.001)
+                tp_dist = 4.0 * max(atr_val, entry * 0.001)
+                
+                stop_loss = round(entry + stop_dist, 4)
+                take_profit = round(entry - tp_dist, 4)
+                tp_source = "fixed_atr_bracket"
+                direction = "short"
+                pattern = "ultra_bearish_breakout"
+                entry_ok = True
+                reason = f"Ultra Breakout: vol spike below channel {channel_low:.0f} near 4H {level_price:.0f} · Fixed ATR Bracket"
+            else:
+                reason = f"Watching Ultra: Squeeze={is_squeeze}, vol_spike={vol_spike} near 4H {level_price:.0f}"
+
+    else:
+        # --- Standard Breakout Momentum (RSI-Based) ---
+        if nearby.level_type == "resistance" and cfg.allow_long:
+            tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
+            is_breakout = current_price > (level_price + tolerance)
+            
+            if is_breakout and rsi >= getattr(cfg, "bo_rsi_long_threshold", 60.0):
+                entry = round(current_price, 4)
+                # Stop loss below the broken resistance level
+                plan = resolve_trade_risk(
+                    direction="long", entry=entry, structure_stop=level_price,
+                    atr_val=atr_val, levels=levels, tp_level_type="resistance",
+                    max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
+                )
+                if plan.ok:
+                    direction = "long"; pattern = "bullish_breakout"
+                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                    entry_ok = True
+                    reason = f"Breakout above 4H resistance {level_price:.0f} with RSI {rsi:.1f} · R:R {plan.rr}"
+                else:
+                    reason = f"breakout above 4H resistance {level_price:.0f} — skipped: {plan.reason}"
+            elif is_breakout:
+                reason = f"Watching: Breakout above 4H resistance {level_price:.0f} — awaiting RSI >= {getattr(cfg, 'bo_rsi_long_threshold', 60.0)} (current: {rsi:.1f})"
+            else:
+                reason = f"Watching: Near 4H resistance {level_price:.0f} — awaiting breakout (current: {current_price:.0f}, RSI: {rsi:.1f})"
+    
+        # Bearish Breakout: Must break BELOW a support level
+        elif nearby.level_type == "support" and cfg.allow_short:
+            tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
+            is_breakout = current_price < (level_price - tolerance)
+            
+            if is_breakout and rsi <= getattr(cfg, "bo_rsi_short_threshold", 40.0):
+                entry = round(current_price, 4)
+                # Stop loss above the broken support level
+                plan = resolve_trade_risk(
+                    direction="short", entry=entry, structure_stop=level_price,
+                    atr_val=atr_val, levels=levels, tp_level_type="support",
+                    max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
+                )
+                if plan.ok:
+                    direction = "short"; pattern = "bearish_breakout"
+                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                    entry_ok = True
+                    reason = f"Breakout below 4H support {level_price:.0f} with RSI {rsi:.1f} · R:R {plan.rr}"
+                else:
+                    reason = f"breakout below 4H support {level_price:.0f} — skipped: {plan.reason}"
+            elif is_breakout:
+                reason = f"Watching: Breakout below 4H support {level_price:.0f} — awaiting RSI <= {getattr(cfg, 'bo_rsi_short_threshold', 40.0)} (current: {rsi:.1f})"
+            else:
+                reason = f"Watching: Near 4H support {level_price:.0f} — awaiting breakout (current: {current_price:.0f}, RSI: {rsi:.1f})"
 
     if not pattern and "Watching" not in reason and "skipped" not in reason:
         reason = f"near 4H {nearby.level_type} @ {level_price:.0f} — RSI: {rsi:.1f}"

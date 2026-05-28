@@ -1,0 +1,22 @@
+{
+    "breakout": {
+        "BTCUSD": {
+            "1m": false,
+            "5m": true,
+            "15m": false,
+            "1h": true
+        },
+        "ETHUSD": {
+            "1m": true,
+            "5m": false,
+            "15m": true,
+            "1h": false
+        },
+        "SOLUSD": {
+            "1m": true,
+            "5m": false,
+            "15m": true,
+            "1h": true
+        }
+    }
+}

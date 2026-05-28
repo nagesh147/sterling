@@ -207,45 +207,65 @@ def evaluate_smc(
 
     atr_val = atr(highs, lows, closes)
 
+    # Ultra Mode: 4H Macro-Fenced Scalper (Z-Score +/- 2.5)
+    z_score = 0.0
+    if getattr(cfg, "use_optimized", False):
+        closes_4h = np.array([c.close for c in candles_4h], dtype=np.float64)
+        if len(closes_4h) >= 20:
+            recent_closes = closes_4h[-20:]
+            mean_4h = np.mean(recent_closes)
+            std_4h = np.std(recent_closes)
+            if std_4h != 0:
+                z_score = (current_price - mean_4h) / std_4h
+                
+    macro_bullish = z_score <= -2.5 if getattr(cfg, "use_optimized", False) else True
+    macro_bearish = z_score >= 2.5 if getattr(cfg, "use_optimized", False) else True
+
     if nearby.level_type == "support" and cfg.allow_long:
-        result = evaluate_bullish_smc(opens, highs, lows, closes, level_price, cfg)
-        if result is not None:
-            pattern = result["pattern"]
-            entry = result["entry"]
-            plan = resolve_trade_risk(
-                direction="long", entry=entry, structure_stop=float(result["stop_loss"]),
-                atr_val=atr_val, levels=levels_15m, tp_level_type="resistance",
-                min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
-            )
-            if plan.ok:
-                direction = "long"
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"bullish imbalance engulfing prior bearish candle after inducement below 4H support {level_price:.0f} · R:R {plan.rr}"
-            else:
-                pattern = "smc_inducement_imbalance"; entry = None
-                reason = f"bullish imbalance near 4H support {level_price:.0f} — skipped: {plan.reason}"
+        if not macro_bullish:
+            reason = f"Watching: near 4H support @ {level_price:.0f} — skipped (4H Z-Score {z_score:.2f} > -2.5)"
+        else:
+            result = evaluate_bullish_smc(opens, highs, lows, closes, level_price, cfg)
+            if result is not None:
+                pattern = result["pattern"]
+                entry = result["entry"]
+                plan = resolve_trade_risk(
+                    direction="long", entry=entry, structure_stop=float(result["stop_loss"]),
+                    atr_val=atr_val, levels=levels_15m, tp_level_type="resistance",
+                    min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
+                )
+                if plan.ok:
+                    direction = "long"
+                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                    entry_ok = True
+                    reason = f"bullish imbalance engulfing prior bearish candle after inducement below 4H support {level_price:.0f} (Z: {z_score:.2f}) · R:R {plan.rr}"
+                else:
+                    pattern = "smc_inducement_imbalance"; entry = None
+                    reason = f"bullish imbalance near 4H support {level_price:.0f} — skipped: {plan.reason}"
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
-        result = evaluate_bearish_smc(opens, highs, lows, closes, level_price, cfg)
-        if result is not None:
-            pattern = result["pattern"]
-            entry = result["entry"]
-            plan = resolve_trade_risk(
-                direction="short", entry=entry, structure_stop=float(result["stop_loss"]),
-                atr_val=atr_val, levels=levels_15m, tp_level_type="support",
-                min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
-            )
-            if plan.ok:
-                direction = "short"
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"bearish imbalance engulfing prior bullish candle after inducement above 4H resistance {level_price:.0f} · R:R {plan.rr}"
-            else:
-                pattern = "smc_inducement_imbalance"; entry = None
-                reason = f"bearish imbalance near 4H resistance {level_price:.0f} — skipped: {plan.reason}"
+        if not macro_bearish:
+            reason = f"Watching: near 4H resistance @ {level_price:.0f} — skipped (4H Z-Score {z_score:.2f} < 2.5)"
+        else:
+            result = evaluate_bearish_smc(opens, highs, lows, closes, level_price, cfg)
+            if result is not None:
+                pattern = result["pattern"]
+                entry = result["entry"]
+                plan = resolve_trade_risk(
+                    direction="short", entry=entry, structure_stop=float(result["stop_loss"]),
+                    atr_val=atr_val, levels=levels_15m, tp_level_type="support",
+                    min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
+                )
+                if plan.ok:
+                    direction = "short"
+                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                    entry_ok = True
+                    reason = f"bearish imbalance engulfing prior bullish candle after inducement above 4H resistance {level_price:.0f} (Z: {z_score:.2f}) · R:R {plan.rr}"
+                else:
+                    pattern = "smc_inducement_imbalance"; entry = None
+                    reason = f"bearish imbalance near 4H resistance {level_price:.0f} — skipped: {plan.reason}"
 
-    if not pattern:
+    if not pattern and "skipped" not in reason:
         # Provide context even when no pattern is found
         if nearby.level_type == "support":
             reason = f"Watching: near 4H support @ {level_price:.0f} — awaiting inducement + imbalance"

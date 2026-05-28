@@ -1537,7 +1537,7 @@ export function ScalpingTab() {
     try { return JSON.parse(localStorage.getItem('scalp.execStates') || '{}'); } catch { return {}; }
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
-  const [watchingOpen, setWatchingOpen] = useState(false);  // Watching group collapsed by default (noisy, non-actionable)
+  const [watchingOpen, setWatchingOpen] = useState(true);
   const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
   // Visible execution log — every execute attempt (accepted OR rejected/errored)
   // with the mode it ran in and the backend reason. Makes "is live actually

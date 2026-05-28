@@ -36,9 +36,4 @@
 - Format backend reason strings for user-facing display: fix casing (title/sentence case where appropriate), correct grammar, and use readable labels — never show raw-backend underscore_delimited or ALL_CAPS strings directly to users. Confidence: 0.65
 
 # ui-layout
-- For ScalpSignalCard: direction label (○ NEAR LEVEL), status badge (PENDING), and reason text (near 4H support @ 83...) should render in a single horizontal line, not stacked in separate lines. Combine into one flex row. Confidence: 0.70
-- For the scalping signal table: use fixed-width columns (Symbol, Type, Entry, Current, Stop, Target, Risk, Strategy/Mode) so all rows align vertically, and strategy badges (PRICE ACTION, SMC, MA CROSS) share a common width with center-aligned text. Confidence: 0.75
-- Signal profile badges should display only the correct/relevant profile tag, not all available profiles. Confidence: 0.65
-- Backend scalping signal reasons use " — " (em dash with spaces) as delimiter: left side is location/level description, right side is status detail. Split on this delimiter for two-column display in the frontend. Confidence: 0.70
-- For watching signals in the scalping table, omit plan columns (Entry, Current, Stop, Target, Risk) — they are always empty for watching-mode signals. Show only Symbol, Direction, Level/Location, Status Detail, Pattern, and Profile. Confidence: 0.70
-
+See [ui-layout/taste.md](ui-layout/taste.md)

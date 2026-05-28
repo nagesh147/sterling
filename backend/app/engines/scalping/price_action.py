@@ -522,19 +522,16 @@ def evaluate_price_action(
             pattern = result["pattern"]
             direction = "long"
             entry = result.get("entry", round(current_price, 4))
-            structure_stop = float(result.get("stop_loss", result.get("stop_below", nearby.price * 0.98)))
-            plan = resolve_trade_risk(
-                direction="long", entry=entry, structure_stop=structure_stop,
-                atr_val=atr(h15, l15, c15), levels=levels_15m, tp_level_type="resistance",
-                min_rr=cfg.min_rr, max_stop_atr=cfg.max_stop_atr,
-            )
-            if plan.ok:
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"{pattern} long, 15m breakout above neckline near 4H support {nearby.price:.0f} · R:R {plan.rr}"
-            else:
-                entry = stop_loss = take_profit = None
-                reason = f"{pattern} near 4H support {nearby.price:.0f} — skipped: {plan.reason}"
+            atr_val = atr(h15, l15, c15)
+            # Hard ATR Brackets: 1.5x ATR Stop, 3.0x ATR Target (Fixed 2:1 RR)
+            stop_dist = 1.5 * max(atr_val, entry * 0.001)
+            tp_dist = 3.0 * max(atr_val, entry * 0.001)
+            
+            stop_loss = round(entry - stop_dist, 4)
+            take_profit = round(entry + tp_dist, 4)
+            tp_source = "fixed_atr_bracket"
+            entry_ok = True
+            reason = f"{pattern} long, 15m breakout above neckline near 4H support {nearby.price:.0f} · Fixed ATR Bracket"
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
         # Try bearish patterns in order (all 5 from the strategy doc)
@@ -551,19 +548,16 @@ def evaluate_price_action(
             pattern = result["pattern"]
             direction = "short"
             entry = result.get("entry", round(current_price, 4))
-            structure_stop = float(result.get("stop_loss", result.get("stop_above", nearby.price * 1.02)))
-            plan = resolve_trade_risk(
-                direction="short", entry=entry, structure_stop=structure_stop,
-                atr_val=atr(h15, l15, c15), levels=levels_15m, tp_level_type="support",
-                min_rr=cfg.min_rr,
-            )
-            if plan.ok:
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"{pattern} short, 15m breakdown below neckline near 4H resistance {nearby.price:.0f} · R:R {plan.rr}"
-            else:
-                entry = stop_loss = take_profit = None
-                reason = f"{pattern} near 4H resistance {nearby.price:.0f} — skipped: {plan.reason}"
+            atr_val = atr(h15, l15, c15)
+            # Hard ATR Brackets: 1.5x ATR Stop, 3.0x ATR Target (Fixed 2:1 RR)
+            stop_dist = 1.5 * max(atr_val, entry * 0.001)
+            tp_dist = 3.0 * max(atr_val, entry * 0.001)
+            
+            stop_loss = round(entry + stop_dist, 4)
+            take_profit = round(entry - tp_dist, 4)
+            tp_source = "fixed_atr_bracket"
+            entry_ok = True
+            reason = f"{pattern} short, 15m breakdown below neckline near 4H resistance {nearby.price:.0f} · Fixed ATR Bracket"
 
     if not pattern:
         reason = f"near 4H {nearby.level_type} @ {nearby.price:.0f} — no confirmed pattern"

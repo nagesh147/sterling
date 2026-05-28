@@ -82,10 +82,22 @@ class MACrossignal:
     ema_value: float = 0.0
 
 
+def check_1h_structure(candles_1h: list) -> tuple[bool, bool]:
+    """Check if the 1-hour market structure is bullish or bearish (higher highs and higher lows)."""
+    if not candles_1h or len(candles_1h) < 2:
+        return True, True
+    
+    c1, c2 = candles_1h[-2], candles_1h[-1]
+    bullish = c2.high > c1.high and c2.low > c1.low
+    bearish = c2.high < c1.high and c2.low < c1.low
+    return bullish, bearish
+
+
 def evaluate_ma_crossover(
     underlying: str,
     candles_4h: list,
     candles_15m: list,
+    candles_1h: list,
     levels: list[Level],
     cfg: ScalpingConfig,
 ) -> MACrossignal:
@@ -180,25 +192,30 @@ def evaluate_ma_crossover(
     reason = ""
     entry_ok = False
 
+    macro_trend_bullish, macro_trend_bearish = check_1h_structure(candles_1h)
+
     if nearby.level_type == "support" and cfg.allow_long:
         if recent_cross_bull and clean_cross:
-            # Fresh, non-choppy bullish crossover near 4H support.
-            entry = round(current_price, 4)
-            # Stop below the entire 4H support zone (per doc, this gives MA its
-            # bigger profit potential). The risk module adds an ATR cushion, floors
-            # the distance, R:R-gates the 4H target and rejects un-scalpable width.
-            plan = resolve_trade_risk(
-                direction="long", entry=entry, structure_stop=min(level_price, current_price),
-                atr_val=atr_val, levels=levels, tp_level_type="resistance",
-                max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
-            )
-            if plan.ok:
-                direction = "long"; pattern = "sma_cross_above_ema"
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f} · R:R {plan.rr}"
+            if not macro_trend_bullish:
+                reason = f"bull cross near 4H support {level_price:.0f} — skipped: 1h macro trend not bullish"
             else:
-                reason = f"bull cross near 4H support {level_price:.0f} — skipped: {plan.reason}"
+                # Fresh, non-choppy bullish crossover near 4H support.
+                entry = round(current_price, 4)
+                # Stop below the entire 4H support zone (per doc, this gives MA its
+                # bigger profit potential). The risk module adds an ATR cushion, floors
+                # the distance, R:R-gates the 4H target and rejects un-scalpable width.
+                plan = resolve_trade_risk(
+                    direction="long", entry=entry, structure_stop=min(level_price, current_price),
+                    atr_val=atr_val, levels=levels, tp_level_type="resistance",
+                    max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
+                )
+                if plan.ok:
+                    direction = "long"; pattern = "sma_cross_above_ema"
+                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                    entry_ok = True
+                    reason = f"SMA({fast}) crossed above EMA({slow}) near 4H support {level_price:.0f} · R:R {plan.rr}"
+                else:
+                    reason = f"bull cross near 4H support {level_price:.0f} — skipped: {plan.reason}"
         elif recent_cross_bull:
             reason = f"bull cross near 4H support {level_price:.0f} — skipped: choppy/flat MAs (whipsaw filter)"
         elif sma_above:
@@ -207,20 +224,23 @@ def evaluate_ma_crossover(
 
     elif nearby.level_type == "resistance" and cfg.allow_short:
         if recent_cross_bear and clean_cross:
-            # Fresh, non-choppy bearish crossover near 4H resistance.
-            entry = round(current_price, 4)
-            plan = resolve_trade_risk(
-                direction="short", entry=entry, structure_stop=max(level_price, current_price),
-                atr_val=atr_val, levels=levels, tp_level_type="support",
-                max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
-            )
-            if plan.ok:
-                direction = "short"; pattern = "sma_cross_below_ema"
-                stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                entry_ok = True
-                reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f} · R:R {plan.rr}"
+            if not macro_trend_bearish:
+                reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: 1h macro trend not bearish"
             else:
-                reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: {plan.reason}"
+                # Fresh, non-choppy bearish crossover near 4H resistance.
+                entry = round(current_price, 4)
+                plan = resolve_trade_risk(
+                    direction="short", entry=entry, structure_stop=max(level_price, current_price),
+                    atr_val=atr_val, levels=levels, tp_level_type="support",
+                    max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
+                )
+                if plan.ok:
+                    direction = "short"; pattern = "sma_cross_below_ema"
+                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
+                    entry_ok = True
+                    reason = f"SMA({fast}) crossed below EMA({slow}) near 4H resistance {level_price:.0f} · R:R {plan.rr}"
+                else:
+                    reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: {plan.reason}"
         elif recent_cross_bear:
             reason = f"bear cross near 4H resistance {level_price:.0f} — skipped: choppy/flat MAs (whipsaw filter)"
         elif sma_below:

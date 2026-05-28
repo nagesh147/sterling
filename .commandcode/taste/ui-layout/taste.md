@@ -1,0 +1,10 @@
+# ui-layout
+- For ScalpSignalCard: direction label (○ NEAR LEVEL), status badge (PENDING), and reason text (near 4H support @ 83...) should render in a single horizontal line, not stacked in separate lines. Combine into one flex row. Confidence: 0.70
+- For the scalping signal table: use fixed-width columns (Symbol, Type, Entry, Current, Stop, Target, Risk, Strategy/Mode) so all rows align vertically, and strategy badges (PRICE ACTION, SMC, MA CROSS) share a common width with center-aligned text. Confidence: 0.75
+- Signal profile badges should display only the correct/relevant profile tag, not all available profiles. Confidence: 0.65
+- Backend scalping signal reasons use " — " (em dash with spaces) as delimiter: left side is location/level description, right side is status detail. Split on this delimiter for two-column display in the frontend. Confidence: 0.70
+- For watching signals in the scalping table, omit plan columns (Entry, Current, Stop, Target, Risk) — they are always empty for watching-mode signals. Show only Symbol, Direction, Level/Location, Status Detail, Pattern, and Profile. Confidence: 0.70
+- The watching table in the scalping UI should be expanded by default, not collapsed. Confidence: 0.70
+- Drive both table headers and rows from a single shared column spec, using CSS grid rather than independent header/row markup. Confidence: 0.70
+- Use "IBM Plex Sans", system-ui, sans-serif as the font stack for terminal log components. Confidence: 0.65
+- Use emojis in terminal log output for user-friendly, colorful display. Confidence: 0.65

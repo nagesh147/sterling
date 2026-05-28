@@ -25,6 +25,7 @@ from app.engines.scalping.ma_crossover import evaluate_ma_crossover
 from app.engines.scalping.mean_reversion import evaluate_mean_reversion
 from app.engines.scalping.breakout import evaluate_breakout
 from app.engines.scalping.delta_gamma import evaluate_delta_gamma
+from app.engines.scalping.whitelist_manager import is_whitelisted
 
 
 def _level_to_schema(l, underlying: str = "") -> SupportResistanceLevel:
@@ -81,6 +82,7 @@ def scan_symbol(
     underlying: str,
     candles_4h: list,
     candles_15m: list,
+    candles_1h: list,
     cfg: ScalpingProfile,
     warmup_bars_macro: int,
     warmup_bars_exec: int,
@@ -135,28 +137,34 @@ def scan_symbol(
         )
 
     if cfg.enable_price_action:
-        pa = evaluate_price_action(underlying, candles_4h, candles_15m, levels, cfg)
-        signals.append(_make_signal(pa, "price_action"))
+        if is_whitelisted("price_action", underlying, cfg.execution_timeframe):
+            pa = evaluate_price_action(underlying, candles_4h, candles_15m, levels, cfg)
+            signals.append(_make_signal(pa, "price_action"))
 
     if cfg.enable_smc:
-        smc_sig = evaluate_smc(underlying, candles_4h, candles_15m, levels, cfg)
-        signals.append(_make_signal(smc_sig, "smc"))
+        if is_whitelisted("smc", underlying, cfg.execution_timeframe):
+            smc_sig = evaluate_smc(underlying, candles_4h, candles_15m, levels, cfg)
+            signals.append(_make_signal(smc_sig, "smc"))
 
     if getattr(cfg, "enable_ma_crossover", False):
-        ma = evaluate_ma_crossover(underlying, candles_4h, candles_15m, levels, cfg)
-        signals.append(_make_signal(ma, "ma_crossover"))
+        if is_whitelisted("ma_crossover", underlying, cfg.execution_timeframe):
+            ma = evaluate_ma_crossover(underlying, candles_4h, candles_15m, candles_1h, levels, cfg)
+            signals.append(_make_signal(ma, "ma_crossover"))
 
     if getattr(cfg, "enable_mean_reversion", False):
-        mr = evaluate_mean_reversion(underlying, candles_4h, candles_15m, levels, cfg)
-        signals.append(_make_signal(mr, "mean_reversion"))
+        if is_whitelisted("mean_reversion", underlying, cfg.execution_timeframe):
+            mr = evaluate_mean_reversion(underlying, candles_4h, candles_15m, levels, cfg)
+            signals.append(_make_signal(mr, "mean_reversion"))
 
     if getattr(cfg, "enable_breakout", False):
-        bo = evaluate_breakout(underlying, candles_4h, candles_15m, levels, cfg)
-        signals.append(_make_signal(bo, "breakout"))
+        if is_whitelisted("breakout", underlying, cfg.execution_timeframe):
+            bo = evaluate_breakout(underlying, candles_4h, candles_15m, levels, cfg)
+            signals.append(_make_signal(bo, "breakout"))
 
     if getattr(cfg, "enable_delta_gamma", False):
-        dg = evaluate_delta_gamma(underlying, candles_4h, candles_15m, levels, cfg)
-        signals.append(_make_signal(dg, "delta_gamma"))
+        if is_whitelisted("delta_gamma", underlying, cfg.execution_timeframe):
+            dg = evaluate_delta_gamma(underlying, candles_4h, candles_15m, levels, cfg)
+            signals.append(_make_signal(dg, "delta_gamma"))
 
     # Opt-in macro-trend filter: drop counter-trend setups (long in a 4H downtrend,
     # short in an uptrend). Stats show trend-aligned setups carry a higher PF, but
@@ -199,6 +207,7 @@ def scan_universe(
             
             c_macro = candles_by_res.get(macro_tf, {}).get(sym, [])
             c_exec = candles_by_res.get(exec_tf, {}).get(sym, [])
+            c_1h = candles_by_res.get("1h", {}).get(sym, [])
             
             if not c_macro or not c_exec:
                 continue
@@ -218,6 +227,7 @@ def scan_universe(
                 sym, 
                 c_macro, 
                 c_exec, 
+                c_1h,
                 profile, 
                 warmup_bars_macro=cfg.warmup_bars_4h,
                 warmup_bars_exec=cfg.warmup_bars_15m,
