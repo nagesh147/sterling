@@ -1625,9 +1625,6 @@ export function ScalpingTab() {
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null); // which row is highlighted
-  const [executedOpen, setExecutedOpen] = useState(true);
-  const [signalsOpen, setSignalsOpen] = useState(true);
-  const [watchingOpen, setWatchingOpen] = useState(true);
   const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
   // Visible execution log — every execute attempt (accepted OR rejected/errored)
   // with the mode it ran in and the backend reason. Makes "is live actually
@@ -2243,43 +2240,18 @@ export function ScalpingTab() {
               </div>
             )}
             
-            {executedSignals.length > 0 && (
+            {displaySignals.length > 0 && (
               <>
-                <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)"
-                  collapsible defaultOpen={true} onToggle={setExecutedOpen} />
-                {executedOpen && (
-                  <>
-                    <SignalTableHeader flags={{ plan: true, action: false, dir: true }} />
-                    {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: false, dir: true }))}
-                  </>
+                <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
+                
+                {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                {executedSignals.length > 0 && (
+                  <ConsolidatedRow count={executedSignals.length} {...consolidated} />
                 )}
-                <ConsolidatedRow count={executedSignals.length} {...consolidated} />
-              </>
-            )}
-            
-            {restSignals.length > 0 && (
-              <>
-                <ListGroupHeader label={statusFilter === 'ready' ? 'Ready Signals' : 'Signals'} count={restSignals.length}
-                  collapsible defaultOpen={true} onToggle={setSignalsOpen} />
-                {signalsOpen && (
-                  <>
-                    <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
-                    {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                  </>
-                )}
-              </>
-            )}
-            
-            {watchingRows.length > 0 && (
-              <>
-                <ListGroupHeader label="Watching" count={watchingRows.length} color="var(--t-dim)"
-                  collapsible defaultOpen={false} onToggle={setWatchingOpen} />
-                {watchingOpen && (
-                  <>
-                    <SignalTableHeader flags={{ plan: false, action: false, dir: false, pattern: false }} />
-                    {watchingRows.map(r => renderCardWithFlags(r, { plan: false, action: false, dir: false, pattern: false }))}
-                  </>
-                )}
+                
+                {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                
+                {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
               </>
             )}
             {data && displaySignals.length > 0 && (
