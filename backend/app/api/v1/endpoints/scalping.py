@@ -438,12 +438,13 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     # consistently show "AUTO · <MODE>" on every reconstructed row, not just the
     # one you just clicked. The [SCALP-...] tag stays intact for strategy parsing.
     auto_tag = " [AUTO]" if body.auto else ""
+    level_str = f" near {sig.level_type} {sig.near_level:.0f}" if sig.near_level is not None else ""
     order = LiveOrderRequest(
         underlying=sym, direction=sig.direction, instrument_type="futures",
         size=float(contracts), leverage=round(leverage, 1),
         order_type="market", stop_loss=sig.stop_loss,
         take_profit=sig.take_profit,
-        notes=f"[SCALP-{strategy.upper()}]{auto_tag} {sig.direction} {sig.pattern} near {sig.level_type} {sig.near_level:.0f}",
+        notes=f"[SCALP-{strategy.upper()}]{auto_tag} {sig.direction} {sig.pattern}{level_str}".strip(),
     )
     resp = await place_live_order(order, request)
 
