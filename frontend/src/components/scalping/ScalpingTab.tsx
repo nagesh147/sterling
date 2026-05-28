@@ -1099,9 +1099,9 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontFamily: 'monospace' }}>#{sigId}</span>
         </div>
         {/* status — own column (so it has a header) */}
-        <div style={{ justifySelf: 'start' }}>
-          <Pill text={statusLabel} color={statusColor} />
-        </div>
+        <span style={{
+          justifySelf: 'start', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', color: statusColor, whiteSpace: 'nowrap',
+        }}>{statusLabel}</span>
         {/* direction — LONG / SHORT; the whole column is dropped when no row has
             a directional bias yet (all "—"), so it isn't shown empty */}
         {showDirection !== false && (
