@@ -451,12 +451,20 @@ type ColFlags = { plan: boolean; action: boolean; dir: boolean };
 const showCol = (c: SignalCol, f: ColFlags) =>
   (f.plan || !c.plan) && (f.action || !c.action) && (f.dir || !c.dir);
 
+// Experiment toggle: when true, every column (except the thin accent bar) gets
+// an equal share of the width. Flip to false to restore the tailored per-column
+// widths in SIGNAL_COLS.
+const UNIFORM_COLS = true;
+
 /** Shared grid style for the header row and every card's main row — identical
  *  template + gap guarantees the columns line up. */
 function signalRowGrid(f: ColFlags): React.CSSProperties {
+  const cols = SIGNAL_COLS.filter((c) => showCol(c, f));
   return {
     display: 'grid',
-    gridTemplateColumns: SIGNAL_COLS.filter((c) => showCol(c, f)).map((c) => c.width).join(' '),
+    gridTemplateColumns: cols
+      .map((c) => (c.key === 'accent' ? c.width : UNIFORM_COLS ? 'minmax(0, 1fr)' : c.width))
+      .join(' '),
     columnGap: 18,
     alignItems: 'center',
   };
@@ -1383,7 +1391,11 @@ const getSignalStatus = (s: ScalpingSignal) => {
  * execution log. Sourced entirely from data already streaming to the UI (no
  * backend change): SSE connect/disconnect, the directional scan, and the
  * scalping scan (passed in via `scanInfo`). Keeps the last 200 lines, autoscrolls. */
-function TerminalLog({ scanInfo }: { scanInfo?: { count?: number; armed?: number; ts?: number } }) {
+type ExecEvent = { ts: number; key: string; mode: string; ok: boolean; status: string; reason: string; auto: boolean };
+function TerminalLog({ scanInfo, lastExec }: {
+  scanInfo?: { count?: number; armed?: number; ts?: number };
+  lastExec?: ExecEvent;
+}) {
   type Line = { id: number; t: number; emoji: string; msg: string; color: string };
   const [lines, setLines] = useState<Line[]>([]);
   const idRef = useRef(0);
@@ -1420,6 +1432,30 @@ function TerminalLog({ scanInfo }: { scanInfo?: { count?: number; armed?: number
     else push('🔍', `Scanned ${count} signal${count === 1 ? '' : 's'} · none ready yet`, 'var(--t-text)');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scalpTs]);
+
+  // Execution events — fired when a (manual or algo) trade is attempted. Seeded
+  // to the newest existing entry so prior history isn't replayed on mount.
+  const lastExecTs = lastExec?.ts;
+  const seenExecRef = useRef<number | undefined>(lastExec?.ts);
+  useEffect(() => {
+    if (lastExecTs == null || seenExecRef.current === lastExecTs || !lastExec) return;
+    seenExecRef.current = lastExecTs;
+    const dash = lastExec.key.indexOf('-');
+    const sym = dash >= 0 ? lastExec.key.slice(0, dash) : lastExec.key;
+    const strat = (dash >= 0 ? lastExec.key.slice(dash + 1) : '').replace(/_/g, ' ');
+    const who = lastExec.auto ? 'Algo' : 'Manual';
+    if (lastExec.ok) {
+      const m = lastExec.mode.toUpperCase();
+      if (m === 'PAPER') push('🟣', `${who} paper trade placed: ${sym} ${strat}`, 'var(--t-purple)');
+      else if (m === 'LIVE') push('✅', `${who} LIVE order placed: ${sym} ${strat}`, 'var(--t-green)');
+      else push('👁️', `${who} ${m.toLowerCase()} trade logged: ${sym} ${strat}`, 'var(--t-blue)');
+    } else if (lastExec.status === 'already_open') {
+      push('🔁', `${sym} ${strat} already open — skipped`, 'var(--t-blue)');
+    } else {
+      push('⚠️', `${sym} ${strat} not placed: ${lastExec.reason || lastExec.status.replace(/_/g, ' ')}`, 'var(--t-amber)');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastExecTs]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [lines]);
 
@@ -2125,7 +2161,7 @@ export function ScalpingTab() {
           </div>
       }
       rightSidebar={
-        <TerminalLog scanInfo={{ count: data?.count, armed: data?.armed_count, ts: data?.timestamp_ms }} />
+        <TerminalLog scanInfo={{ count: data?.count, armed: data?.armed_count, ts: data?.timestamp_ms }} lastExec={execLog[0]} />
       }
     >
     </ThreeColumnLayout>
