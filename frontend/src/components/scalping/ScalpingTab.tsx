@@ -1022,17 +1022,18 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   if (currentPx != null) {
     if (displayEntry != null) {
       const diff = long ? (currentPx - displayEntry) : (displayEntry - currentPx);
+      const roundedDiff = parseFloat(diff.toFixed(1));
       
-      if (Math.abs(diff) < 0.000001) {
+      if (Math.abs(roundedDiff) === 0) {
         currentColor = 'var(--t-bright)';
       } else {
-        currentColor = diff > 0 ? 'var(--t-green)' : 'var(--t-red)';
+        currentColor = roundedDiff > 0 ? 'var(--t-green)' : 'var(--t-red)';
       }
       
-      const sign = diff >= 0 ? '+' : '−';
+      const sign = roundedDiff > 0 ? '+' : roundedDiff < 0 ? '−' : '';
       currentValNode = (
         <span>
-          {fmtUsd(currentPx)} <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 600 }}>({sign}{Math.abs(diff).toFixed(1)})</span>
+          {fmtUsd(currentPx)} <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 600 }}>({sign}{Math.abs(roundedDiff).toFixed(1)})</span>
         </span>
       );
     } else {
@@ -1616,6 +1617,7 @@ export function ScalpingTab() {
     try { return JSON.parse(localStorage.getItem('scalp.execStates') || '{}'); } catch { return {}; }
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
+  const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null); // which row is highlighted
   const [executedOpen, setExecutedOpen] = useState(true);
   const [signalsOpen, setSignalsOpen] = useState(true);
   const [watchingOpen, setWatchingOpen] = useState(true);
@@ -2046,14 +2048,18 @@ export function ScalpingTab() {
     </>
   );
 
-  const btUnderlying = (selected?.split('-')[0]) || cfg?.symbols?.[0] || 'BTC';
+  const btUnderlying = selected || cfg?.symbols?.[0] || 'BTC';
 
   const renderCardWithFlags = (row: Row, flags: ColFlags) => (
     <ScalpSignalCard
       key={row.key} s={row.s}
-      selected={selected === row.key}
+      selected={selectedRowKey === row.key}
       expanded={expandedKey === row.key}
-      onSelect={() => { setSelected(row.key); setExpandedKey((k) => (k === row.key ? null : row.key)); }}
+      onSelect={() => { 
+        setSelected(row.s.underlying); 
+        setSelectedRowKey(row.key); 
+        setExpandedKey((k) => (k === row.key ? null : row.key)); 
+      }}
       onExecute={() => onExecute(row.s.underlying, row.s.strategy)}
       executing={execKeys.has(`${row.s.underlying}-${row.s.strategy}`)}
       execState={row.es}
