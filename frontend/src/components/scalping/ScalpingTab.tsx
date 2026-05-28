@@ -473,8 +473,7 @@ const SIGNAL_COLS: SignalCol[] = [
   // Only the two long free-text columns flex (they hold the descriptive level /
   // awaiting-reason text). Everything else is fixed so dropping the Direction /
   // Action columns doesn't make a categorical column (e.g. Pattern) balloon.
-  { key: 'level',    label: 'Level / Location', width: 'minmax(150px, 1.1fr)' },
-  { key: 'detail',   label: 'Status Detail',    width: 'minmax(180px, 1.6fr)' },
+  { key: 'level',    label: 'Level / Location', width: 'minmax(200px, 1.8fr)' },
   { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
   { key: 'current',  label: 'Current',          width: '118px', plan: true },
   { key: 'stop',     label: 'Stop',             width: '96px',  plan: true },
@@ -1079,22 +1078,16 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
             color: (long || short) ? dirColor : 'var(--t-dim)',
           }}>{dirLabel}</span>
         )}
-        {/* level/location + status detail — two grid cells (placeholders keep
-            the column positions when there's no reason to split) */}
+        {/* level/location — one grid cell (placeholder keeps
+            the column position when there's no reason) */}
         {(() => {
-          if (accepted || !metaReason) return (<><span /><span /></>);
-          const dashIdx = metaReason.indexOf(' — ');
-          const location = dashIdx >= 0 ? formatReason(metaReason.slice(0, dashIdx)) : formatReason(metaReason);
-          const detail   = dashIdx >= 0 ? formatReason(metaReason.slice(dashIdx + 3)) : null;
+          if (accepted || !metaReason) return <span />;
+          // even if there's a dash, we just show the whole reason in one cell now
+          const location = formatReason(metaReason);
           return (
-            <>
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--t-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={location}>
-                {location}
-              </span>
-              <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--t-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={detail || location}>
-                {detail || '—'}
-              </span>
-            </>
+            <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--t-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={location}>
+              {location}
+            </span>
           );
         })()}
         {/* trade plan — five grid cells; a single span keeps the columns when
@@ -1618,6 +1611,8 @@ export function ScalpingTab() {
     try { return JSON.parse(localStorage.getItem('scalp.execStates') || '{}'); } catch { return {}; }
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
+  const [executedOpen, setExecutedOpen] = useState(true);
+  const [signalsOpen, setSignalsOpen] = useState(true);
   const [watchingOpen, setWatchingOpen] = useState(true);
   const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
   // Visible execution log — every execute attempt (accepted OR rejected/errored)
@@ -2231,18 +2226,28 @@ export function ScalpingTab() {
             
             {executedSignals.length > 0 && (
               <>
-                <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)" />
-                <SignalTableHeader flags={{ plan: true, action: false, dir: true }} />
-                {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: false, dir: true }))}
-                <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+                <ListGroupHeader label="Executed" count={executedSignals.length} color="var(--t-blue)"
+                  collapsible defaultOpen={true} onToggle={setExecutedOpen} />
+                {executedOpen && (
+                  <>
+                    <SignalTableHeader flags={{ plan: true, action: false, dir: true }} />
+                    {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: false, dir: true }))}
+                    <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+                  </>
+                )}
               </>
             )}
             
             {restSignals.length > 0 && (
               <>
-                <ListGroupHeader label={statusFilter === 'ready' ? 'Ready Signals' : 'Signals'} count={restSignals.length} />
-                <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
-                {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                <ListGroupHeader label={statusFilter === 'ready' ? 'Ready Signals' : 'Signals'} count={restSignals.length}
+                  collapsible defaultOpen={true} onToggle={setSignalsOpen} />
+                {signalsOpen && (
+                  <>
+                    <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
+                    {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                  </>
+                )}
               </>
             )}
             
