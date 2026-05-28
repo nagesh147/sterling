@@ -1878,7 +1878,7 @@ export function ScalpingTab() {
   );
 
   const scanRows: Row[] = signals
-    .filter((s) => !openSetupKeys.has(`${s.underlying}-${s.strategy}`))
+    .filter((s) => !openSetupKeys.has(`${s.underlying}-${s.strategy}`) && !acceptedRef.current.has(`${s.underlying}-${s.strategy}`))
     .map((s) => {
       const key = `${s.underlying}-${s.strategy}`;
       const es = modeExecStates[key];
