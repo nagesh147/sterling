@@ -450,7 +450,7 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
  * "Watching-only" list collapses the plan columns in lockstep. */
 type SignalCol = {
   key: string; label: string; width: string;
-  plan?: boolean; action?: boolean; dir?: boolean; align?: 'center' | 'left';
+  plan?: boolean; action?: boolean; dir?: boolean; pattern?: boolean; align?: 'center' | 'left';
 };
 // Flexible columns (minmax + fr) absorb the spare width so the table fills the
 // center column instead of crowding to the left. Fixed columns stay fixed.
@@ -470,7 +470,7 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'target',   label: 'Target',           width: '96px',  plan: true },
   { key: 'risk',     label: 'Risk',             width: '52px',  plan: true },
   { key: 'strategy', label: 'Strategy',         width: '108px' },
-  { key: 'pattern',  label: 'Pattern',          width: '150px', align: 'center' },
+  { key: 'pattern',  label: 'Pattern',          width: '150px', align: 'center', pattern: true },
   { key: 'profile',  label: 'Profile',          width: '82px' },
   { key: 'time',     label: 'Time',             width: '92px' },
   { key: 'action',   label: 'Action',           width: '112px', action: true },
@@ -480,14 +480,14 @@ const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
 // Which optional columns are visible. Plan = an armed/executed signal exists;
 // Action = a row can act; Dir = a row has a long/short bias. Each is dropped
 // when empty so the table never shows an all-"—" or dead column.
-type ColFlags = { plan: boolean; action: boolean; dir: boolean };
+type ColFlags = { plan: boolean; action: boolean; dir: boolean; pattern?: boolean };
 const showCol = (c: SignalCol, f: ColFlags) =>
-  (f.plan || !c.plan) && (f.action || !c.action) && (f.dir || !c.dir);
+  (f.plan || !c.plan) && (f.action || !c.action) && (f.dir || !c.dir) && (f.pattern !== false || !c.pattern);
 
 // Experiment toggle: when true, every column (except the thin accent bar) gets
 // an equal share of the width. Flip to false to restore the tailored per-column
 // widths in SIGNAL_COLS.
-const UNIFORM_COLS = true;
+const UNIFORM_COLS = false;
 
 /** Shared grid style for the header row and every card's main row — identical
  *  template + gap guarantees the columns line up. */
@@ -921,10 +921,10 @@ function ExecLog({ entries, mode }: {
   );
 }
 
-function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction, showDirection }: {
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction, showDirection, showPattern }: {
   s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
-  showPlan?: boolean; showAction?: boolean; showDirection?: boolean;
+  showPlan?: boolean; showAction?: boolean; showDirection?: boolean; showPattern?: boolean;
 }) {
   const long = s.direction === 'long';
   const short = s.direction === 'short';
@@ -1086,9 +1086,11 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           <Pill text={meta.label} color={meta.color} />
         </div>
         {/* pattern — centered (so the em-dash placeholder sits mid-column) */}
-        <span title={s.pattern ? s.pattern.replace(/_/g, ' ') : ''} style={{ fontSize: 9, fontWeight: 600, color: s.pattern ? meta.color : 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>
-          {s.pattern ? s.pattern.replace(/_/g, ' ') : '—'}
-        </span>
+        {showPattern !== false && (
+          <span title={s.pattern ? s.pattern.replace(/_/g, ' ') : ''} style={{ fontSize: 9, fontWeight: 600, color: s.pattern ? meta.color : 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>
+            {s.pattern ? s.pattern.replace(/_/g, ' ') : '—'}
+          </span>
+        )}
         {/* profile */}
         <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {s.profile ? `[${s.profile.toUpperCase()}]` : '—'}
@@ -2004,6 +2006,7 @@ export function ScalpingTab() {
       showPlan={flags.plan}
       showAction={flags.action}
       showDirection={flags.dir}
+      showPattern={flags.pattern}
     />
   );
 
@@ -2191,8 +2194,8 @@ export function ScalpingTab() {
                   collapsible defaultOpen={false} onToggle={setWatchingOpen} />
                 {watchingOpen && (
                   <>
-                    <SignalTableHeader flags={{ plan: false, action: false, dir: true }} />
-                    {watchingRows.map(r => renderCardWithFlags(r, { plan: false, action: false, dir: true }))}
+                    <SignalTableHeader flags={{ plan: false, action: false, dir: false, pattern: false }} />
+                    {watchingRows.map(r => renderCardWithFlags(r, { plan: false, action: false, dir: false, pattern: false }))}
                   </>
                 )}
               </>

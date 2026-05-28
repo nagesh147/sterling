@@ -17,6 +17,7 @@
   --t-blue:   #2090f0;
   --t-cyan:   #00d4ff;
   --t-purple: #9060f0;
+  --t-pink:   #f040a0;
 
   position: fixed;
   inset: 0;
@@ -105,6 +106,7 @@
   --t-blue:   #3B82F6;
   --t-cyan:   #06B6D4;
   --t-purple: #A855F7;
+  --t-pink:   #EC4899;
   background: var(--t-bg);
   color: var(--t-text);
 }
@@ -125,6 +127,7 @@
   --t-blue:   #1560bd;
   --t-cyan:   #007a9e;
   --t-purple: #5b2d8e;
+  --t-pink:   #d81b60;
   background: var(--t-bg);
   color: var(--t-text);
 }

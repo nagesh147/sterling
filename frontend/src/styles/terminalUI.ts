@@ -32,6 +32,7 @@ export const c = {
   blue:    'var(--t-blue, var(--blue))',
   cyan:    'var(--t-cyan, var(--blue))',
   purple:  'var(--t-purple, var(--purple))',
+  pink:    'var(--t-pink, var(--pink))',
 } as const;
 
 /* Translucent tint of any token color — replaces the old `var(--x)1c`
