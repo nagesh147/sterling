@@ -1384,21 +1384,21 @@ const getSignalStatus = (s: ScalpingSignal) => {
  * backend change): SSE connect/disconnect, the directional scan, and the
  * scalping scan (passed in via `scanInfo`). Keeps the last 200 lines, autoscrolls. */
 function TerminalLog({ scanInfo }: { scanInfo?: { count?: number; armed?: number; ts?: number } }) {
-  type Line = { id: number; t: number; tag: string; msg: string; color: string };
+  type Line = { id: number; t: number; emoji: string; msg: string; color: string };
   const [lines, setLines] = useState<Line[]>([]);
   const idRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
-  const push = useCallback((tag: string, msg: string, color: string) => {
-    setLines((l) => [...l.slice(-199), { id: idRef.current++, t: Date.now(), tag, msg, color }]);
+  const push = useCallback((emoji: string, msg: string, color: string) => {
+    setLines((l) => [...l.slice(-199), { id: idRef.current++, t: Date.now(), emoji, msg, color }]);
   }, []);
 
-  useEffect(() => { push('sys', 'terminal attached — live activity', 'var(--t-blue)'); }, [push]);
+  useEffect(() => { push('🚀', 'Live activity feed started', 'var(--t-blue)'); }, [push]);
 
   const status = useStreamStatus();
   useEffect(() => {
-    push('net',
-      status === 'connected' ? 'stream connected' : status === 'connecting' ? 'connecting…' : 'stream disconnected',
-      status === 'connected' ? 'var(--t-green)' : status === 'connecting' ? 'var(--t-amber)' : 'var(--t-red)');
+    if (status === 'connected') push('🟢', 'Connected — live data is flowing', 'var(--t-green)');
+    else if (status === 'connecting') push('🟡', 'Connecting to the live feed…', 'var(--t-amber)');
+    else push('🔴', 'Disconnected — retrying…', 'var(--t-red)');
   }, [status, push]);
 
   const sig = useAppStream<{ signals?: { entry_ok?: boolean }[]; timestamp_ms?: number }>('signals');
@@ -1406,46 +1406,54 @@ function TerminalLog({ scanInfo }: { scanInfo?: { count?: number; armed?: number
   useEffect(() => {
     if (sigTs == null) return;
     const arr = sig.data?.signals ?? [];
-    push('scan', `directional · ${arr.length} signals · ${arr.filter((x) => x.entry_ok).length} armed`, 'var(--t-text)');
+    const armed = arr.filter((x) => x.entry_ok).length;
+    push('📡', `Market scan · ${arr.length} signals · ${armed} armed`, 'var(--t-dim)');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sigTs]);
 
   const scalpTs = scanInfo?.ts;
   useEffect(() => {
     if (scalpTs == null) return;
-    push('scalp', `scan · ${scanInfo?.count ?? 0} signals · ${scanInfo?.armed ?? 0} armed`, 'var(--t-cyan)');
+    const armed = scanInfo?.armed ?? 0;
+    const count = scanInfo?.count ?? 0;
+    if (armed > 0) push('🎯', `${armed} setup${armed === 1 ? '' : 's'} ready to trade · ${count} scanned`, 'var(--t-green)');
+    else push('🔍', `Scanned ${count} signal${count === 1 ? '' : 's'} · none ready yet`, 'var(--t-text)');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scalpTs]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [lines]);
 
-  const dot = status === 'connected' ? 'var(--t-green)' : status === 'connecting' ? 'var(--t-amber)' : 'var(--t-red)';
+  const head = status === 'connected'
+    ? { e: '🟢', t: 'Online', c: 'var(--t-green)' }
+    : status === 'connecting'
+    ? { e: '🟡', t: 'Connecting', c: 'var(--t-amber)' }
+    : { e: '🔴', t: 'Offline', c: 'var(--t-red)' };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       <div style={{
         padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--t-text)', textTransform: 'uppercase' }}>
-          Terminal · Live
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--t-text)', textTransform: 'uppercase' }}>
+          🖥️ Live Terminal
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, color: dot }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{status}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: head.c }}>
+          {head.e} {head.t}
         </span>
       </div>
       <div style={{
         flex: 1, overflowY: 'auto', padding: '8px 12px',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10.5, lineHeight: 1.55,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, lineHeight: 1.7,
       }}>
         {lines.length === 0 ? (
-          <div style={{ color: 'var(--t-dim)' }}>waiting for activity…</div>
+          <div style={{ color: 'var(--t-dim)' }}>⏳ Waiting for activity…</div>
         ) : lines.map((ln) => (
-          <div key={ln.id} style={{ display: 'flex', gap: 8 }}>
-            <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          <div key={ln.id} style={{ display: 'flex', gap: 7, alignItems: 'baseline' }}>
+            <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, fontSize: 9.5 }}>
               {new Date(ln.t).toLocaleTimeString('en-US', { hour12: false })}
             </span>
-            <span style={{ color: ln.color, fontWeight: 700, flexShrink: 0, minWidth: 42 }}>[{ln.tag}]</span>
-            <span style={{ color: 'var(--t-text)', minWidth: 0, wordBreak: 'break-word' }}>{ln.msg}</span>
+            <span style={{ flexShrink: 0 }}>{ln.emoji}</span>
+            <span style={{ color: ln.color, fontWeight: 600, minWidth: 0, wordBreak: 'break-word' }}>{ln.msg}</span>
           </div>
         ))}
         <div ref={endRef} />
