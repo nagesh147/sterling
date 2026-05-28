@@ -10,7 +10,7 @@ export interface ScalpingProfile {
   enable_mean_reversion: boolean;
   enable_breakout: boolean;
   enable_delta_gamma: boolean;
-  use_optimized: boolean;
+
   macro_timeframe: string;
   execution_timeframe: string;
   level_touches: number;
@@ -45,6 +45,7 @@ export interface ScalpingConfig {
   profiles: Record<string, ScalpingProfile>;
   active_profiles: string[];
   symbols: string[];
+  use_optimized: boolean;
 }
 
 export interface ScalpingConfigResponse { config: ScalpingConfig; }

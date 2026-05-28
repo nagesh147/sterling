@@ -230,7 +230,23 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
       <div style={{ ...dim, marginBottom: 12, lineHeight: 1.6 }}>
         <b style={{ color: 'var(--t-bright)' }}>Active Tracks:</b> Toggle which profiles the scanner should run concurrently. Then select a tab below to tune its individual constraints (timeframes, risk, strategies).
       </div>
-      
+      <div style={{ 
+        background: draft.use_optimized ? 'var(--t-blue)14' : 'var(--t-amber)14', 
+        border: `1px solid ${draft.use_optimized ? 'var(--t-blue)44' : 'var(--t-amber)44'}`, 
+        padding: '10px 12px', borderRadius: 6, marginBottom: 16, fontSize: 10, 
+        color: draft.use_optimized ? 'var(--t-blue)' : 'var(--t-amber)', lineHeight: 1.5,
+        display: 'flex', flexDirection: 'column', gap: 8
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong>{draft.use_optimized ? '🤖 INSTITUTIONAL WFO ACTIVE' : '👤 RETAIL MODE ACTIVE'}</strong>
+            <ChipToggle label="AI Gatekeeper" on={draft.use_optimized ?? false} onChange={(v) => setRootField('use_optimized', v)} />
+        </div>
+        {draft.use_optimized ? (
+            <span>The Walk-Forward Optimizer autonomously determines the best Timeframes, Patterns, and Assets. Manual inputs for Strategy Thresholds (e.g., SMC Imbalance, Breakout RSI) and R:R constraints are dynamically overridden for peak mathematical expectancy. <strong>Direction & Risk</strong> settings are still manually enforced!</span>
+        ) : (
+            <span>The AI Gatekeeper is currently bypassed. The scanner will strictly follow your manual settings below and execute every valid signal it finds, regardless of historical profitability.</span>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
         {profileKeys.map(p => (
@@ -260,23 +276,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
       {activeProfile && (
         <>
-          <div style={{ 
-            background: activeProfile.use_optimized ? 'var(--t-blue)14' : 'var(--t-amber)14', 
-            border: `1px solid ${activeProfile.use_optimized ? 'var(--t-blue)44' : 'var(--t-amber)44'}`, 
-            padding: '10px 12px', borderRadius: 6, marginBottom: 16, fontSize: 10, 
-            color: activeProfile.use_optimized ? 'var(--t-blue)' : 'var(--t-amber)', lineHeight: 1.5,
-            display: 'flex', flexDirection: 'column', gap: 8
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong>{activeProfile.use_optimized ? '🤖 INSTITUTIONAL WFO ACTIVE' : '👤 RETAIL MODE ACTIVE'}</strong>
-                <ChipToggle label="AI Gatekeeper" on={activeProfile.use_optimized} onChange={(v) => setProfileField('use_optimized', v)} />
-            </div>
-            {activeProfile.use_optimized ? (
-                <span>The Walk-Forward Optimizer autonomously determines the best Timeframes, Patterns, and Assets. Manual inputs for Strategy Thresholds (e.g., SMC Imbalance, Breakout RSI) and R:R constraints are dynamically overridden for peak mathematical expectancy. <strong>Direction & Risk</strong> settings are still manually enforced!</span>
-            ) : (
-                <span>The AI Gatekeeper is currently bypassed. The scanner will strictly follow your manual settings below and execute every valid signal it finds, regardless of historical profitability.</span>
-            )}
-          </div>
+
           <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
             <ChipToggle label="Price Action" color="var(--t-amber)" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
             <ChipToggle label="SMC" color="var(--t-purple)" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
@@ -287,7 +287,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
           </div>
 
           <div style={gridStyle()}>
-            {activeProfile.use_optimized ? (
+            {draft.use_optimized ? (
               <div style={{ ...grpBox, gridColumn: '1 / -1', textAlign: 'center', padding: '24px 12px', background: 'var(--t-bg2)', border: '1px dashed var(--t-blue)44' }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-blue)', marginBottom: 8, letterSpacing: '0.05em' }}>🔒 STRATEGY LOGIC MANAGED BY AI</div>
                 <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto' }}>
@@ -360,7 +360,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             )}
             <div style={grpBox}>
               <div style={grpTitle}>DIRECTION & RISK</div>
-              {activeProfile.use_optimized && !activeProfile.macro_trend_filter && (
+              {draft.use_optimized && !activeProfile.macro_trend_filter && (
                 <div style={{
                   padding: '8px 10px', marginBottom: 8, borderRadius: 6,
                   background: 'var(--t-amber)14', border: '1px solid var(--t-amber)44',
@@ -1603,7 +1603,7 @@ export function ScalpingTab() {
   const setSelected = useSetSelectedUnderlying();
   const cfgQ = useScalpingConfig();
   const cfg = cfgQ.data?.config;
-  const anyWfoActive = cfg ? cfg.active_profiles.some(p => cfg.profiles[p]?.use_optimized) : false;
+  const anyWfoActive = cfg ? cfg.use_optimized : false;
   const setCfg = useSetScalpingConfig();
   const [drawer, setDrawer] = useState(false);
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
@@ -1904,7 +1904,7 @@ export function ScalpingTab() {
   // wordy "4H structure · 15min entry" subtitle — and reflects the real config
   // instead of hardcoded values).
   const _activeProf = cfg?.profiles?.[cfg?.active_profiles?.[0] ?? ''];
-  const tfBadge = _activeProf?.use_optimized 
+  const tfBadge = cfg?.use_optimized 
     ? '🤖 WFO DYNAMIC' 
     : `${(_activeProf?.macro_timeframe ?? '4h').toUpperCase()} → ${(_activeProf?.execution_timeframe ?? '15m').toUpperCase()}`;
 

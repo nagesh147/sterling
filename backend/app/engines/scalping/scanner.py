@@ -88,6 +88,7 @@ def scan_symbol(
     warmup_bars_exec: int,
     profile_name: str = "",
     tradeable: bool = False,
+    use_optimized: bool = False,
 ) -> List[ScalpingSignal]:
     """Evaluate all enabled strategies for one symbol."""
     now_ms = int(time.time() * 1000)
@@ -136,7 +137,7 @@ def scan_symbol(
             timestamp_ms=now_ms,
         )
 
-    use_opt = getattr(cfg, "use_optimized", False)
+    use_opt = use_optimized
 
     if cfg.enable_price_action:
         if not use_opt or is_whitelisted("price_action", underlying, cfg.execution_timeframe):
@@ -234,7 +235,8 @@ def scan_universe(
                 warmup_bars_macro=cfg.warmup_bars_4h,
                 warmup_bars_exec=cfg.warmup_bars_15m,
                 profile_name=profile_id, 
-                tradeable=tradeable
+                tradeable=tradeable,
+                use_optimized=cfg.use_optimized
             )
             all_signals.extend(sigs)
 

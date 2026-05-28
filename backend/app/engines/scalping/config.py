@@ -45,7 +45,6 @@ class ScalpingProfile(BaseModel):
     enable_delta_gamma: bool = True
 
     # ── Master System ──
-    use_optimized: bool = False  # Toggle for "Ultra" hybrid configurations
 
     # ── 4H level detection ──
     level_touches: int = Field(default=2, ge=2, le=10, description="Min touches to qualify a level")
