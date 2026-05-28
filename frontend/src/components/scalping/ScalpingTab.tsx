@@ -110,12 +110,14 @@ function BadgeColumn({ meta, profile }: { meta: { label: string; color: string }
 }
 
 function ChipToggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+  const c = on ? 'var(--t-green)' : 'var(--t-dim)';
   return (
     <button onClick={() => onChange(!on)} style={{
-      fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-pill)', cursor: 'pointer', fontFamily: 'inherit',
-      border: `1px solid ${on ? 'var(--t-green)' : 'var(--t-border)'}`,
-      background: on ? tint('var(--t-green)') : 'transparent',
-      color: on ? 'var(--t-green)' : 'var(--t-dim)', transition: 'all .1s', whiteSpace: 'nowrap',
+      fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '3px 8px',
+      borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'inherit',
+      border: `1px solid ${on ? alpha(c, 0.4) : 'var(--t-border)'}`,
+      background: on ? alpha(c, 0.13) : 'transparent',
+      color: c, transition: 'all .1s', whiteSpace: 'nowrap', textTransform: 'uppercase',
     }}>{on ? '● ' : '○ '}{label}</button>
   );
 }
@@ -285,65 +287,77 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
           </div>
 
           <div style={gridStyle()}>
-            <div style={grpBox}>
-              <div style={grpTitle}>TIMEFRAMES</div>
-              <TfSelect label="Structure" value={activeProfile.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => setProfileField('macro_timeframe', v)} />
-              <TfSelect label="Entry" value={activeProfile.execution_timeframe} opts={['1m', '5m', '15m', '30m']} onChange={(v) => setProfileField('execution_timeframe', v)} />
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>STRUCTURE LEVELS</div>
-              <NumField label="Min touches" value={activeProfile.level_touches} min={2} max={10} onChange={(v) => setProfileField('level_touches', v)} />
-              <NumField label="Tolerance %" value={activeProfile.level_tolerance_pct} step={0.1} min={0.1} max={3} onChange={(v) => setProfileField('level_tolerance_pct', v)} />
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>PRICE ACTION</div>
-              <NumField label="Lookback" value={activeProfile.pa_lookback_bars} min={5} max={100} onChange={(v) => setProfileField('pa_lookback_bars', v)} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
-                  <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                    {[1, 3, 5].map((n) => {
-                      const on = activeProfile.pa_confirm_bars === n;
-                      return (
-                        <button key={n} onClick={() => setProfileField('pa_confirm_bars', n)} style={{
-                          fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-                          border: `1px solid ${on ? 'var(--t-blue)' : 'var(--t-border)'}`,
-                          background: on ? 'var(--t-bg3)' : 'transparent',
-                          color: on ? 'var(--t-blue)' : 'var(--t-dim)',
-                        }}>{n}</button>
-                      );
-                    })}
-                  </div>
+            {activeProfile.use_optimized ? (
+              <div style={{ ...grpBox, gridColumn: '1 / -1', textAlign: 'center', padding: '24px 12px', background: 'var(--t-bg2)', border: '1px dashed var(--t-blue)44' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-blue)', marginBottom: 8, letterSpacing: '0.05em' }}>🔒 STRATEGY LOGIC MANAGED BY AI</div>
+                <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto' }}>
+                  The Walk-Forward Optimizer is currently overriding manual thresholds for Timeframes, SMC, MA Crossover, Mean Reversion, Breakout, and Delta-Gamma. 
+                  It calculates dynamic expectancy limits in real-time. Turn off the AI Gatekeeper above to unlock manual overrides.
                 </div>
               </div>
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>SMC</div>
-              <NumField label="Imbalance ratio" value={activeProfile.smc_imbalance_ratio} step={0.1} min={1.0} max={3.0} onChange={(v) => setProfileField('smc_imbalance_ratio', v)} />
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>MA CROSSOVER</div>
-              <NumField label="SMA period" value={activeProfile.ma_fast_sma} min={2} max={20} onChange={(v) => setProfileField('ma_fast_sma', v)} />
-              <NumField label="EMA period" value={activeProfile.ma_slow_ema} min={3} max={50} onChange={(v) => setProfileField('ma_slow_ema', v)} />
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>MEAN REVERSION</div>
-              <NumField label="Z-Score Window" value={activeProfile.mr_zscore_window} min={5} max={100} onChange={(v) => setProfileField('mr_zscore_window', v)} />
-              <NumField label="Z-Score Threshold" value={activeProfile.mr_zscore_threshold} step={0.1} min={1.0} max={5.0} onChange={(v) => setProfileField('mr_zscore_threshold', v)} />
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>BREAKOUT</div>
-              <NumField label="RSI Long Threshold" value={activeProfile.bo_rsi_long_threshold} step={1} min={50} max={90} onChange={(v) => setProfileField('bo_rsi_long_threshold', v)} />
-              <NumField label="RSI Short Threshold" value={activeProfile.bo_rsi_short_threshold} step={1} min={10} max={50} onChange={(v) => setProfileField('bo_rsi_short_threshold', v)} />
-            </div>
-            <div style={grpBox}>
-              <div style={grpTitle}>DELTA-GAMMA</div>
-              <NumField label="GEX Flip Threshold" value={activeProfile.dg_gex_flip_threshold} step={0.1} min={-5.0} max={5.0} onChange={(v) => setProfileField('dg_gex_flip_threshold', v)} />
-              <NumField label="Wall Proximity %" value={activeProfile.dg_wall_proximity_pct} step={0.001} min={0.001} max={0.05} onChange={(v) => setProfileField('dg_wall_proximity_pct', v)} />
-              <div style={{ marginTop: 4 }}>
-                <ChipToggle label="Filter Breakouts by Gamma" on={activeProfile.dg_filter_breakouts} onChange={(v) => setProfileField('dg_filter_breakouts', v)} />
-              </div>
-            </div>
+            ) : (
+              <>
+                <div style={grpBox}>
+                  <div style={grpTitle}>TIMEFRAMES</div>
+                  <TfSelect label="Structure" value={activeProfile.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => setProfileField('macro_timeframe', v)} />
+                  <TfSelect label="Entry" value={activeProfile.execution_timeframe} opts={['1m', '5m', '15m', '30m']} onChange={(v) => setProfileField('execution_timeframe', v)} />
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>STRUCTURE LEVELS</div>
+                  <NumField label="Min touches" value={activeProfile.level_touches} min={2} max={10} onChange={(v) => setProfileField('level_touches', v)} />
+                  <NumField label="Tolerance %" value={activeProfile.level_tolerance_pct} step={0.1} min={0.1} max={3} onChange={(v) => setProfileField('level_tolerance_pct', v)} />
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>PRICE ACTION</div>
+                  <NumField label="Lookback" value={activeProfile.pa_lookback_bars} min={5} max={100} onChange={(v) => setProfileField('pa_lookback_bars', v)} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
+                      <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                        {[1, 3, 5].map((n) => {
+                          const on = activeProfile.pa_confirm_bars === n;
+                          return (
+                            <button key={n} onClick={() => setProfileField('pa_confirm_bars', n)} style={{
+                              fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                              border: `1px solid ${on ? 'var(--t-blue)' : 'var(--t-border)'}`,
+                              background: on ? 'var(--t-bg3)' : 'transparent',
+                              color: on ? 'var(--t-blue)' : 'var(--t-dim)',
+                            }}>{n}</button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>SMC</div>
+                  <NumField label="Imbalance ratio" value={activeProfile.smc_imbalance_ratio} step={0.1} min={1.0} max={3.0} onChange={(v) => setProfileField('smc_imbalance_ratio', v)} />
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>MA CROSSOVER</div>
+                  <NumField label="SMA period" value={activeProfile.ma_fast_sma} min={2} max={20} onChange={(v) => setProfileField('ma_fast_sma', v)} />
+                  <NumField label="EMA period" value={activeProfile.ma_slow_ema} min={3} max={50} onChange={(v) => setProfileField('ma_slow_ema', v)} />
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>MEAN REVERSION</div>
+                  <NumField label="Z-Score Window" value={activeProfile.mr_zscore_window} min={5} max={100} onChange={(v) => setProfileField('mr_zscore_window', v)} />
+                  <NumField label="Z-Score Threshold" value={activeProfile.mr_zscore_threshold} step={0.1} min={1.0} max={5.0} onChange={(v) => setProfileField('mr_zscore_threshold', v)} />
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>BREAKOUT</div>
+                  <NumField label="RSI Long Threshold" value={activeProfile.bo_rsi_long_threshold} step={1} min={50} max={90} onChange={(v) => setProfileField('bo_rsi_long_threshold', v)} />
+                  <NumField label="RSI Short Threshold" value={activeProfile.bo_rsi_short_threshold} step={1} min={10} max={50} onChange={(v) => setProfileField('bo_rsi_short_threshold', v)} />
+                </div>
+                <div style={grpBox}>
+                  <div style={grpTitle}>DELTA-GAMMA</div>
+                  <NumField label="GEX Flip Threshold" value={activeProfile.dg_gex_flip_threshold} step={0.1} min={-5.0} max={5.0} onChange={(v) => setProfileField('dg_gex_flip_threshold', v)} />
+                  <NumField label="Wall Proximity %" value={activeProfile.dg_wall_proximity_pct} step={0.001} min={0.001} max={0.05} onChange={(v) => setProfileField('dg_wall_proximity_pct', v)} />
+                  <div style={{ marginTop: 4 }}>
+                    <ChipToggle label="Filter Breakouts by Gamma" on={activeProfile.dg_filter_breakouts} onChange={(v) => setProfileField('dg_filter_breakouts', v)} />
+                  </div>
+                </div>
+              </>
+            )}
             <div style={grpBox}>
               <div style={grpTitle}>DIRECTION & RISK</div>
               <div style={{ display: 'flex', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
@@ -1542,6 +1556,8 @@ export function ScalpingTab() {
   const selected = useSelectedUnderlying();
   const setSelected = useSetSelectedUnderlying();
   const cfgQ = useScalpingConfig();
+  const cfg = cfgQ.data?.config;
+  const anyWfoActive = cfg ? cfg.active_profiles.some(p => cfg.profiles[p]?.use_optimized) : false;
   const setCfg = useSetScalpingConfig();
   const [drawer, setDrawer] = useState(false);
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
@@ -2039,6 +2055,13 @@ export function ScalpingTab() {
           </span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+            padding: '3px 9px', borderRadius: 5, whiteSpace: 'nowrap',
+            background: anyWfoActive ? 'var(--t-blue)14' : 'var(--t-border)',
+            color: anyWfoActive ? 'var(--t-blue)' : 'var(--t-dim)', 
+            border: `1px solid ${anyWfoActive ? 'var(--t-blue)44' : 'transparent'}`,
+          }}>{anyWfoActive ? '🤖 WFO: ON' : '👤 WFO: OFF'}</span>
           {algoOn && (
             <span style={{
               fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
