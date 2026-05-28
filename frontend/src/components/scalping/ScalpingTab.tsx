@@ -1046,7 +1046,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // and a darker/recessed tone for the last-interacted row once collapsed.
   // A translucent black darkens in BOTH themes (a theme bg var would flip lighter
   // in the light theme), keeping the collapsed row visibly recessed vs the cards.
-  const isOpen = accepted && !!expanded;
+  const isOpen = !!expanded;
   const bg = isOpen ? alpha(statusColor, 0.09) : selected ? 'var(--t-bg)' : 'var(--t-bg2)';
   const borderColor = isOpen ? alpha(statusColor, 0.40) : selected ? alpha(statusColor, 0.18) : 'var(--t-border)';
 
@@ -1209,6 +1209,12 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
       {/* expand-on-click: full execution metrics for an executed trade */}
       {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} />}
 
+      {/* expand-on-click: full reason/detail for non-executed signals */}
+      {!accepted && expanded && metaReason && (
+        <div style={{ padding: '12px 18px', fontSize: 11, color: 'var(--t-text)', lineHeight: 1.5, background: 'rgba(0,0,0,0.1)', borderTop: '1px solid var(--t-border)', marginTop: 8, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+          <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>DETAILS:</span> {formatReason(metaReason)}
+        </div>
+      )}
 
     </div>
   );
@@ -2245,9 +2251,9 @@ export function ScalpingTab() {
                   <>
                     <SignalTableHeader flags={{ plan: true, action: false, dir: true }} />
                     {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: false, dir: true }))}
-                    <ConsolidatedRow count={executedSignals.length} {...consolidated} />
                   </>
                 )}
+                <ConsolidatedRow count={executedSignals.length} {...consolidated} />
               </>
             )}
             
