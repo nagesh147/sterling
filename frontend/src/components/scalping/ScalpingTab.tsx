@@ -483,7 +483,6 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'strategy', label: 'Strategy',         width: '108px' },
   { key: 'pattern',  label: 'Pattern',          width: '150px', align: 'center', pattern: true },
   { key: 'profile',  label: 'Profile',          width: '82px' },
-  { key: 'time',     label: 'Time',             width: '92px' },
   { key: 'action',   label: 'Action',           width: '112px', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
@@ -1164,10 +1163,6 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {s.profile ? `[${s.profile.toUpperCase()}]` : '—'}
         </span>
-        {/* time */}
-        <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-          {fmtTime(s.timestamp_ms)}
-        </span>
         {/* ── action / executed glance — own column; only rendered when some row
             has an action, otherwise the empty Action column is dropped ── */}
         {showAction !== false && (
@@ -1235,9 +1230,12 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
       {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} />}
 
       {/* expand-on-click: full reason/detail for non-executed signals */}
-      {!accepted && expanded && metaReason && (
+      {!accepted && expanded && (
         <div style={{ padding: '12px 18px', fontSize: 11, color: 'var(--t-text)', lineHeight: 1.5, background: 'rgba(0,0,0,0.1)', borderTop: '1px solid var(--t-border)', marginTop: 8, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-          <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>DETAILS:</span> {formatReason(metaReason)}
+          <div style={{ color: 'var(--t-dim)', fontWeight: 600, marginBottom: metaReason ? 4 : 0, display: 'flex', gap: 12 }}>
+            <span>SIGNAL TIME: <span style={{ color: 'var(--t-muted)' }}>{fmtTime(s.timestamp_ms)}</span></span>
+          </div>
+          {metaReason && <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>DETAILS:</span> {formatReason(metaReason)}</div>}
         </div>
       )}
 
