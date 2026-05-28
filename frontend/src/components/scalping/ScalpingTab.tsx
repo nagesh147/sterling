@@ -471,10 +471,6 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'symbol',   label: 'Symbol',           width: '58px' },
   { key: 'status',   label: 'Status',           width: '94px' },
   { key: 'dir',      label: 'Direction',        width: '92px',  dir: true },
-  // Only the two long free-text columns flex (they hold the descriptive level /
-  // awaiting-reason text). Everything else is fixed so dropping the Direction /
-  // Action columns doesn't make a categorical column (e.g. Pattern) balloon.
-  { key: 'level',    label: 'Level / Location', width: 'minmax(200px, 1.8fr)' },
   { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
   { key: 'current',  label: 'Current',          width: '118px', plan: true },
   { key: 'stop',     label: 'Stop',             width: '96px',  plan: true },
@@ -1101,26 +1097,12 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <span style={{
           justifySelf: 'start', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', color: statusColor, whiteSpace: 'nowrap',
         }}>{statusLabel}</span>
-        {/* direction — LONG / SHORT; the whole column is dropped when no row has
-            a directional bias yet (all "—"), so it isn't shown empty */}
         {showDirection !== false && (
           <span style={{
             fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap',
             color: (long || short) ? dirColor : 'var(--t-dim)',
           }}>{dirLabel}</span>
         )}
-        {/* level/location — one grid cell (placeholder keeps
-            the column position when there's no reason) */}
-        {(() => {
-          if (accepted || !metaReason) return <span />;
-          // even if there's a dash, we just show the whole reason in one cell now
-          const location = formatReason(metaReason);
-          return (
-            <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--t-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={location}>
-              {location}
-            </span>
-          );
-        })()}
         {/* trade plan — five grid cells; a single span keeps the columns when
             this row has no plan. Omitted entirely when plan columns are off. */}
         {showPlan !== false && (hasPlan ? (
