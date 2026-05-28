@@ -1904,7 +1904,9 @@ export function ScalpingTab() {
   // wordy "4H structure · 15min entry" subtitle — and reflects the real config
   // instead of hardcoded values).
   const _activeProf = cfg?.profiles?.[cfg?.active_profiles?.[0] ?? ''];
-  const tfBadge = `${(_activeProf?.macro_timeframe ?? '4h').toUpperCase()} → ${(_activeProf?.execution_timeframe ?? '15m').toUpperCase()}`;
+  const tfBadge = _activeProf?.use_optimized 
+    ? '🤖 WFO DYNAMIC' 
+    : `${(_activeProf?.macro_timeframe ?? '4h').toUpperCase()} → ${(_activeProf?.execution_timeframe ?? '15m').toUpperCase()}`;
 
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
