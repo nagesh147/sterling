@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
@@ -15,7 +15,7 @@ import { useRouterMode, RouterMode } from '../../hooks/useRouterMode';
 import { useTradingMode } from '../../hooks/useTradingMode';
 import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
 import { useStreamPrices, useStreamStatus, useAppStream } from '../../hooks/useAppStream';
-import { ThreeColumnLayout, LeftSection, RightSection } from '../ThreeColumnLayout';
+import { ThreeColumnLayout, LeftSection } from '../ThreeColumnLayout';
 
 import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint, alpha } from '../../styles/terminalUI';
 
@@ -417,7 +417,7 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
  * "Watching-only" list collapses the plan columns in lockstep. */
 type SignalCol = {
   key: string; label: string; width: string;
-  plan?: boolean; action?: boolean; align?: 'center' | 'left';
+  plan?: boolean; action?: boolean; dir?: boolean; align?: 'center' | 'left';
 };
 // Flexible columns (minmax + fr) absorb the spare width so the table fills the
 // center column instead of crowding to the left. Fixed columns stay fixed.
@@ -425,7 +425,7 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'accent',   label: '',                 width: '4px' },
   { key: 'symbol',   label: 'Symbol',           width: '58px' },
   { key: 'status',   label: 'Status',           width: '94px' },
-  { key: 'dir',      label: 'Direction',        width: '92px' },
+  { key: 'dir',      label: 'Direction',        width: '92px',  dir: true },
   { key: 'level',    label: 'Level / Location', width: 'minmax(150px, 1.3fr)' },
   { key: 'detail',   label: 'Status Detail',    width: 'minmax(160px, 1.7fr)' },
   { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
@@ -441,30 +441,28 @@ const SIGNAL_COLS: SignalCol[] = [
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
 
-const showCol = (c: SignalCol, showPlan: boolean, showAction: boolean) =>
-  (showPlan || !c.plan) && (showAction || !c.action);
+// Which optional columns are visible. Plan = an armed/executed signal exists;
+// Action = a row can act; Dir = a row has a long/short bias. Each is dropped
+// when empty so the table never shows an all-"—" or dead column.
+type ColFlags = { plan: boolean; action: boolean; dir: boolean };
+const showCol = (c: SignalCol, f: ColFlags) =>
+  (f.plan || !c.plan) && (f.action || !c.action) && (f.dir || !c.dir);
 
 /** Shared grid style for the header row and every card's main row — identical
- *  template + gap guarantees the columns line up. Plan columns appear only when
- *  an armed/executed signal exists; the Action column only when a row has an
- *  action (otherwise it's dead empty space, so we drop it). */
-function signalRowGrid(showPlan: boolean, showAction: boolean): React.CSSProperties {
+ *  template + gap guarantees the columns line up. */
+function signalRowGrid(f: ColFlags): React.CSSProperties {
   return {
     display: 'grid',
-    gridTemplateColumns: SIGNAL_COLS
-      .filter((c) => showCol(c, showPlan, showAction))
-      .map((c) => c.width)
-      .join(' '),
+    gridTemplateColumns: SIGNAL_COLS.filter((c) => showCol(c, f)).map((c) => c.width).join(' '),
     columnGap: 18,
     alignItems: 'center',
   };
 }
 
-function SignalTableHeader({ showPlan, showAction }: { showPlan?: boolean; showAction?: boolean }) {
-  const sp = showPlan !== false, sa = showAction !== false;
+function SignalTableHeader({ flags }: { flags: ColFlags }) {
   return (
-    <div style={{ ...signalRowGrid(sp, sa), padding: '4px 16px 7px 0', marginBottom: 2 }}>
-      {SIGNAL_COLS.filter((c) => showCol(c, sp, sa)).map((c) => (
+    <div style={{ ...signalRowGrid(flags), padding: '4px 16px 7px 0', marginBottom: 2 }}>
+      {SIGNAL_COLS.filter((c) => showCol(c, flags)).map((c) => (
         <span key={c.key} style={{
           fontSize: 10, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '0.05em',
           textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -888,10 +886,10 @@ function ExecLog({ entries, mode }: {
   );
 }
 
-function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction }: {
+function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing, execState, pnl, algoOn, mode, macroMode, showPlan, showAction, showDirection }: {
   s: ScalpingSignal; selected: boolean; expanded?: boolean; onSelect: () => void; onExecute: () => void;
   executing: boolean; execState?: ExecState; pnl?: SignalPnl; algoOn?: boolean; mode?: string; macroMode?: string;
-  showPlan?: boolean; showAction?: boolean;
+  showPlan?: boolean; showAction?: boolean; showDirection?: boolean;
 }) {
   const long = s.direction === 'long';
   const short = s.direction === 'short';
@@ -983,7 +981,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
     }}>
       {/* ── main row: CSS grid from the shared SIGNAL_COLS spec — every value
           sits under its header because header + rows use the same template ── */}
-      <div style={signalRowGrid(showPlan !== false, showAction !== false)}>
+      <div style={signalRowGrid({ plan: showPlan !== false, action: showAction !== false, dir: showDirection !== false })}>
         {/* accent */}
         <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color }} />
         {/* symbol */}
@@ -994,11 +992,14 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
           padding: '3px 7px', borderRadius: 'var(--radius-xs)', background: alpha(statusColor, 0.12),
           border: `1px solid ${alpha(statusColor, 0.28)}`, whiteSpace: 'nowrap',
         }}>{statusLabel}</span>
-        {/* direction — LONG / SHORT, or — when there's no directional bias yet */}
-        <span style={{
-          fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap',
-          color: (long || short) ? dirColor : 'var(--t-dim)',
-        }}>{dirLabel}</span>
+        {/* direction — LONG / SHORT; the whole column is dropped when no row has
+            a directional bias yet (all "—"), so it isn't shown empty */}
+        {showDirection !== false && (
+          <span style={{
+            fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap',
+            color: (long || short) ? dirColor : 'var(--t-dim)',
+          }}>{dirLabel}</span>
+        )}
         {/* level/location + status detail — two grid cells (placeholders keep
             the column positions when there's no reason to split) */}
         {(() => {
@@ -1384,6 +1385,81 @@ const getSignalStatus = (s: ScalpingSignal) => {
   return 'other';
 };
 
+/* Live, console-styled activity feed for the right rail — replaces the static
+ * execution log. Sourced entirely from data already streaming to the UI (no
+ * backend change): SSE connect/disconnect, the directional scan, and the
+ * scalping scan (passed in via `scanInfo`). Keeps the last 200 lines, autoscrolls. */
+function TerminalLog({ scanInfo }: { scanInfo?: { count?: number; armed?: number; ts?: number } }) {
+  type Line = { id: number; t: number; tag: string; msg: string; color: string };
+  const [lines, setLines] = useState<Line[]>([]);
+  const idRef = useRef(0);
+  const endRef = useRef<HTMLDivElement>(null);
+  const push = useCallback((tag: string, msg: string, color: string) => {
+    setLines((l) => [...l.slice(-199), { id: idRef.current++, t: Date.now(), tag, msg, color }]);
+  }, []);
+
+  useEffect(() => { push('sys', 'terminal attached — live activity', 'var(--t-blue)'); }, [push]);
+
+  const status = useStreamStatus();
+  useEffect(() => {
+    push('net',
+      status === 'connected' ? 'stream connected' : status === 'connecting' ? 'connecting…' : 'stream disconnected',
+      status === 'connected' ? 'var(--t-green)' : status === 'connecting' ? 'var(--t-amber)' : 'var(--t-red)');
+  }, [status, push]);
+
+  const sig = useAppStream<{ signals?: { entry_ok?: boolean }[]; timestamp_ms?: number }>('signals');
+  const sigTs = sig.data?.timestamp_ms;
+  useEffect(() => {
+    if (sigTs == null) return;
+    const arr = sig.data?.signals ?? [];
+    push('scan', `directional · ${arr.length} signals · ${arr.filter((x) => x.entry_ok).length} armed`, 'var(--t-text)');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sigTs]);
+
+  const scalpTs = scanInfo?.ts;
+  useEffect(() => {
+    if (scalpTs == null) return;
+    push('scalp', `scan · ${scanInfo?.count ?? 0} signals · ${scanInfo?.armed ?? 0} armed`, 'var(--t-cyan)');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scalpTs]);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [lines]);
+
+  const dot = status === 'connected' ? 'var(--t-green)' : status === 'connecting' ? 'var(--t-amber)' : 'var(--t-red)';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <div style={{
+        padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--t-text)', textTransform: 'uppercase' }}>
+          Terminal · Live
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, color: dot }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{status}
+        </span>
+      </div>
+      <div style={{
+        flex: 1, overflowY: 'auto', padding: '8px 12px',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10.5, lineHeight: 1.55,
+      }}>
+        {lines.length === 0 ? (
+          <div style={{ color: 'var(--t-dim)' }}>waiting for activity…</div>
+        ) : lines.map((ln) => (
+          <div key={ln.id} style={{ display: 'flex', gap: 8 }}>
+            <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {new Date(ln.t).toLocaleTimeString('en-US', { hour12: false })}
+            </span>
+            <span style={{ color: ln.color, fontWeight: 700, flexShrink: 0, minWidth: 42 }}>[{ln.tag}]</span>
+            <span style={{ color: 'var(--t-text)', minWidth: 0, wordBreak: 'break-word' }}>{ln.msg}</span>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+    </div>
+  );
+}
+
 function SettingsTrigger({ onClick }: { onClick: () => void }) {
   const [hover, setHover] = useState(false);
   return (
@@ -1701,6 +1777,15 @@ export function ScalpingTab() {
   // list) — an always-empty column is just dead space. A row acts when it's an
   // executed position or a currently-executable signal.
   const showAction = executedSignals.length > 0 || restSignals.some((r) => r.s.executable);
+  // The Direction column is dropped when no row has a long/short bias yet (every
+  // value would be "—") — e.g. a list of "near level / watching" rows.
+  const showDirection = displaySignals.some((r) => r.s.direction === 'long' || r.s.direction === 'short');
+
+  // Active profile's timeframes, for the compact header badge (replaces the
+  // wordy "4H structure · 15min entry" subtitle — and reflects the real config
+  // instead of hardcoded values).
+  const _activeProf = cfg?.profiles?.[cfg?.active_profiles?.[0] ?? ''];
+  const tfBadge = `${(_activeProf?.macro_timeframe ?? '4h').toUpperCase()} → ${(_activeProf?.execution_timeframe ?? '15m').toUpperCase()}`;
 
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
@@ -1845,6 +1930,7 @@ export function ScalpingTab() {
       macroMode={row.macroMode}
       showPlan={showPlan}
       showAction={showAction}
+      showDirection={showDirection}
     />
   );
 
@@ -1861,11 +1947,36 @@ export function ScalpingTab() {
         <LeftSection label="Status" collapsible defaultOpen>
           {renderNavGroup(statusNavItems, statusFilter, setStatusFilter)}
         </LeftSection>
+        <LeftSection label="Tools" collapsible defaultOpen>
+          <SettingsTrigger onClick={() => setDrawer(true)} />
+        </LeftSection>
+        <LeftSection label={`Execution Log · ${tradeMode}`} collapsible defaultOpen={execLog.length > 0} border={false}>
+          {execLog.length > 0 && (
+            <button onClick={() => setExecLog([])} style={{
+              background: 'transparent', border: '1px solid var(--t-border)', color: 'var(--t-dim)',
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', fontFamily: 'inherit',
+              textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, marginBottom: 8,
+            }}>Clear</button>
+          )}
+          <div style={{ maxHeight: 360, overflow: 'auto', margin: '0 -14px' }}>
+            <ExecLog entries={execLog} mode={tradeMode} />
+          </div>
+        </LeftSection>
       </>}
       centerHeader={<>
-        <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</div>
-        <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>
-          4H structure · 15min entry · {scanQ.isFetching ? 'scanning…' : 'auto-refresh'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</span>
+          <span title="Structure → entry timeframe" style={{
+            fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-text)', whiteSpace: 'nowrap',
+            padding: '2px 7px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--t-border)', background: 'var(--t-bg2)',
+          }}>{tfBadge}</span>
+          <span title="Live scan auto-refreshes every ~30s" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700,
+            color: scanQ.isFetching ? 'var(--t-amber)' : 'var(--t-green)',
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
+            {scanQ.isFetching ? 'scanning' : 'live'}
+          </span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           {algoOn && (
@@ -1976,7 +2087,7 @@ export function ScalpingTab() {
             )}
             
             {displaySignals.length > 0 && (
-              <SignalTableHeader showPlan={showPlan} showAction={showAction} />
+              <SignalTableHeader flags={{ plan: showPlan, action: showAction, dir: showDirection }} />
             )}
 
             {executedSignals.length > 0 && (
@@ -1996,7 +2107,7 @@ export function ScalpingTab() {
             
             {watchingRows.length > 0 && (
               <>
-                <ListGroupHeader label="Watching · at 4H level, awaiting pattern" count={watchingRows.length} color="var(--t-dim)" />
+                <ListGroupHeader label="Watching" count={watchingRows.length} color="var(--t-dim)" />
                 {watchingRows.map(renderSignalCard)}
               </>
             )}
@@ -2007,40 +2118,9 @@ export function ScalpingTab() {
             )}
           </div>
       }
-      rightSidebar={<>
-        <RightSection label="Settings" collapsible defaultOpen={true}>
-          <SettingsTrigger onClick={() => setDrawer(true)} />
-        </RightSection>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div style={{
-            padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <span style={{
-              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
-              color: 'var(--t-dim)', textTransform: 'uppercase',
-            }}>
-              Execution Log · {tradeMode}
-            </span>
-            {execLog.length > 0 && (
-              <button 
-                onClick={() => setExecLog([])}
-                style={{
-                  background: 'transparent', border: '1px solid var(--t-border)', 
-                  color: 'var(--t-dim)', fontSize: 9, fontWeight: 700, 
-                  letterSpacing: '0.06em', cursor: 'pointer', fontFamily: 'inherit', 
-                  textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, 
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            <ExecLog entries={execLog} mode={tradeMode} />
-          </div>
-        </div>
-      </>}
+      rightSidebar={
+        <TerminalLog scanInfo={{ count: data?.count, armed: data?.armed_count, ts: data?.timestamp_ms }} />
+      }
     >
     </ThreeColumnLayout>
 
