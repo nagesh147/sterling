@@ -228,6 +228,16 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
       <div style={{ ...dim, marginBottom: 12, lineHeight: 1.6 }}>
         <b style={{ color: 'var(--t-bright)' }}>Active Tracks:</b> Toggle which profiles the scanner should run concurrently. Then select a tab below to tune its individual constraints (timeframes, risk, strategies).
       </div>
+      
+      <div style={{ 
+        background: 'var(--t-blue)14', border: '1px solid var(--t-blue)44', 
+        padding: '10px 12px', borderRadius: 6, marginBottom: 16, fontSize: 10, 
+        color: 'var(--t-blue)', lineHeight: 1.5 
+      }}>
+        <strong>🤖 INSTITUTIONAL WFO ACTIVE:</strong> The Walk-Forward Optimizer now autonomously determines the best Timeframes, Patterns, and Assets. 
+        Manual inputs for Strategy Thresholds (e.g., SMC Imbalance, Breakout RSI) and R:R constraints are dynamically overridden for peak mathematical expectancy. 
+        <strong>Direction & Risk</strong> settings (Risk %, Position Size) are still manually enforced!
+      </div>
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
         {profileKeys.map(p => (
           <ChipToggle 
