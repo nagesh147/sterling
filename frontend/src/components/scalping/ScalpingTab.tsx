@@ -1049,8 +1049,8 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <div style={{ minWidth: 0 }}>
           <Pill text={meta.label} color={meta.color} />
         </div>
-        {/* pattern */}
-        <span title={s.pattern ? s.pattern.replace(/_/g, ' ') : ''} style={{ fontSize: 9, fontWeight: 600, color: meta.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {/* pattern — centered (so the em-dash placeholder sits mid-column) */}
+        <span title={s.pattern ? s.pattern.replace(/_/g, ' ') : ''} style={{ fontSize: 9, fontWeight: 600, color: s.pattern ? meta.color : 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>
           {s.pattern ? s.pattern.replace(/_/g, ' ') : '—'}
         </span>
         {/* profile */}
@@ -1061,9 +1061,10 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {fmtTime(s.timestamp_ms)}
         </span>
-        {/* ── action / executed glance — last column; content may extend past the
-            track to the right edge (no column follows it) ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* ── action / executed glance — own column; only rendered when some row
+            has an action, otherwise the empty Action column is dropped ── */}
+        {showAction !== false && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'start' }}>
           {accepted ? (
             <>
               <span title={pausedAuto ? 'Opened by Algo, which is now OFF — runs to SL/TP, no re-entry' : undefined} style={{
@@ -1109,6 +1110,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
             </button>
           ) : null}
         </div>
+        )}
       </div>
 
       {/* ── second line — failure / auto-queued hint (reason is now in the main row) ── */}
@@ -1695,6 +1697,10 @@ export function ScalpingTab() {
   // columns out from under their headers (a "Watching-only" list hid the plan
   // header but the cards still reserved its width). Single source of truth:
   const showPlan = executedSignals.length + restSignals.length > 0;
+  // The Action column is dropped entirely when no row can act (a Watching-only
+  // list) — an always-empty column is just dead space. A row acts when it's an
+  // executed position or a currently-executable signal.
+  const showAction = executedSignals.length > 0 || restSignals.some((r) => r.s.executable);
 
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
@@ -1838,6 +1844,7 @@ export function ScalpingTab() {
       mode={tradeMode}
       macroMode={row.macroMode}
       showPlan={showPlan}
+      showAction={showAction}
     />
   );
 
