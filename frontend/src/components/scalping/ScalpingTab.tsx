@@ -469,6 +469,7 @@ type SignalCol = {
 const SIGNAL_COLS: SignalCol[] = [
   { key: 'accent',   label: '',                 width: '4px' },
   { key: 'symbol',   label: 'Symbol',           width: '58px' },
+  { key: 'time',     label: 'Time',             width: '96px' },
   { key: 'status',   label: 'Status',           width: '94px' },
   { key: 'dir',      label: 'Direction',        width: '92px',  dir: true },
   { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
@@ -1090,9 +1091,15 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
         <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color }} />
         {/* symbol & id */}
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
-          <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontFamily: 'monospace' }}>#{sigId}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
+          <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontFamily: "'JetBrains Mono', monospace" }}>#{sigId}</span>
         </div>
+        {/* time — moved to column 2 so the signal moment is the first thing the
+            eye reads after the symbol */}
+        <span style={{
+          fontSize: 11, color: 'var(--t-text)', fontWeight: 600,
+          fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+        }}>{fmtTime(s.timestamp_ms)}</span>
         {/* status — own column (so it has a header) */}
         <span style={{
           justifySelf: 'start', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', color: statusColor, whiteSpace: 'nowrap',
@@ -1570,7 +1577,7 @@ function TerminalLog({ scanInfo, lastExec }: {
       </div>
       <div style={{
         flex: 1, overflowY: 'auto', padding: '8px 12px',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, lineHeight: 1.7,
+        fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontSize: 11, lineHeight: 1.7,
       }}>
         {lines.length === 0 ? (
           <div style={{ color: 'var(--t-dim)' }}>⏳ Waiting for activity…</div>

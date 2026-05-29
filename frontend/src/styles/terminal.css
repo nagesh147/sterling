@@ -1,4 +1,11 @@
 /* Sterling Bloomberg Terminal Design System */
+/* App font (IBM Plex Sans) — only three weights are loaded so the codebase's
+ * 500/800/900 sprawl naturally collapses to the nearest of {400, 600, 700}
+ * without editing every inline fontWeight. JetBrains Mono is kept for the
+ * `.num` tabular-number class only. */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 
