@@ -30,7 +30,7 @@
   inset: 0;
   background: var(--t-bg);
   color: var(--t-text);
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--app-font, 'Inter', system-ui, sans-serif);
   font-size: 12px;
   line-height: 1.4;
   zoom: var(--app-zoom, 1);

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FontPicker } from '../FontPicker';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
@@ -1577,7 +1578,7 @@ function TerminalLog({ scanInfo, lastExec }: {
       </div>
       <div style={{
         flex: 1, overflowY: 'auto', padding: '8px 12px',
-        fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontSize: 11, lineHeight: 1.7,
+        fontFamily: 'inherit', fontSize: 11, lineHeight: 1.7,
       }}>
         {lines.length === 0 ? (
           <div style={{ color: 'var(--t-dim)' }}>⏳ Waiting for activity…</div>
@@ -2100,7 +2101,10 @@ export function ScalpingTab() {
       rightWidth={380}
       leftSidebar={<>
         <LeftSection label="Tools" collapsible defaultOpen>
-          <SettingsTrigger onClick={() => setDrawer(true)} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <SettingsTrigger onClick={() => setDrawer(true)} />
+            <FontPicker />
+          </div>
         </LeftSection>
         <LeftSection label="Strategies" collapsible defaultOpen>
           {renderNavGroup(stratNavItems, stratFilter, setStratFilter)}

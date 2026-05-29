@@ -130,7 +130,7 @@
 html, body { margin: 0; padding: 0; }
 
 body {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--app-font, 'Inter', system-ui, sans-serif);
   background: var(--bg);
   color: var(--text-primary);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';

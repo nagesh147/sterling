@@ -44,7 +44,7 @@
       }
 
       body {
-        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+        font-family: var(--app-font, 'Inter', system-ui, sans-serif);
         background: var(--bg);
         color: var(--text-primary);
         min-height: 100vh;
@@ -62,6 +62,20 @@
       /* Selection */
       ::selection { background: #00d4aa33; color: var(--text-primary); }
     </style>
+    <!-- App font picker: loads 14 popular UI fonts (the 15th option is system-ui
+         which needs no download) at the three weights we use (400/600/700, plus
+         500 for Roboto / no 600 for Lato). The chosen family is stored in
+         localStorage as 'app.font.stack' and applied to --app-font; the early
+         script below sets it before paint so there's no flash. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Geist:wght@400;600;700&family=DM+Sans:wght@400;600;700&family=Manrope:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&family=Outfit:wght@400;600;700&family=Poppins:wght@400;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600;700&family=Source+Sans+3:wght@400;600;700&family=Lato:wght@400;700&family=Work+Sans:wght@400;600;700&family=Nunito+Sans:wght@400;600;700&display=swap">
+    <script>
+      try {
+        var s = localStorage.getItem('app.font.stack');
+        if (s) document.documentElement.style.setProperty('--app-font', s);
+      } catch (e) { /* private mode / SSR */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>
