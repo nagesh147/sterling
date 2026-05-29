@@ -2101,10 +2101,7 @@ export function ScalpingTab() {
       rightWidth={380}
       leftSidebar={<>
         <LeftSection label="Tools" collapsible defaultOpen>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <SettingsTrigger onClick={() => setDrawer(true)} />
-            <FontPicker />
-          </div>
+          <SettingsTrigger onClick={() => setDrawer(true)} />
         </LeftSection>
         <LeftSection label="Strategies" collapsible defaultOpen>
           {renderNavGroup(stratNavItems, stratFilter, setStratFilter)}
@@ -2312,6 +2309,7 @@ export function ScalpingTab() {
               width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
             }}>×</button>
           </div>
+          <FontPicker />
           {cfg && (
             <ScalpingConfigPanel
               cfg={cfg}
