@@ -281,6 +281,26 @@ def close_position(
         # Cooldown is advisory — never let a failure here block a close
         pass
 
+    # Phase 5 — close the audit feedback loop. When the position's notes
+    # carry a [DERIV-aid=XXXXXXXX] tag (stamped by the per-strategy
+    # selector wiring), record the realised PnL on the matching audit
+    # row so the operator's seven-day observation feed has full
+    # post-trade outcomes per selector decision.
+    try:
+        import re as _re
+        m = _re.search(r"\[DERIV-aid=([0-9a-fA-F]{4,32})\]", pos.notes or "")
+        if m:
+            from app.services import derivatives_audit as _audit
+            # The short-form id stored in notes is the first 8 hex chars
+            # of the full uuid; find the matching audit entry in the ring.
+            short = m.group(1)
+            for r in _audit.list_recent(limit=5000):
+                if r["audit_id"].startswith(short):
+                    _audit.record_exit(r["audit_id"], exit_pnl=float(estimated_pnl))
+                    break
+    except Exception:
+        pass
+
     return update_position(
         pos_id,
         status=PositionStatus.CLOSED,

@@ -450,14 +450,90 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     # one you just clicked. The [SCALP-...] tag stays intact for strategy parsing.
     auto_tag = " [AUTO]" if body.auto else ""
     level_str = f" near {sig.level_type} {sig.near_level:.0f}" if sig.near_level is not None else ""
+
+    # ── Phase 5: route through DerivativesSelector when its profile is on ──
+    # Profile.enabled defaults to False on first install so the legacy
+    # futures path runs unchanged. Operator flips the per-strategy profile
+    # on via /derivatives/config after live observation. Selector
+    # PROFILE_OFF / FAIL_OPEN / DEFER all fall through to the legacy path
+    # so a selector hiccup never blocks the order.
+    selector_route_used = False
+    selector_audit_id: str | None = None
+    selector_inst_type = "futures"
+    selector_size = float(contracts)
+    selector_leverage = round(leverage, 1)
+    selector_sl = sig.stop_loss
+    selector_tp = sig.take_profit
+    selector_option_symbol: str | None = None
+
+    try:
+        from app.engines.derivatives.selector import decide as _sel_decide
+        from app.engines.derivatives.schemas import (
+            SignalContext as _SigCtx, MarketContext as _MktCtx, DecisionStatus as _DS,
+        )
+        from app.services import derivatives_audit as _audit
+        from app.services.exchanges import instrument_registry as _reg
+        overrides = getattr(request.app.state, "derivatives_profile_overrides", None) or {}
+
+        ad = request.app.state.adapter
+        inst = _reg.get_instrument(sym)
+        spot = float(await ad.get_index_price(inst)) if inst else float(sig.entry)
+        try:
+            pid = await ad.get_product_id(inst.delta_perp_symbol or f"{sym}USD") if inst else None
+            funding_8h = float((await ad.get_funding_rate(pid)).get("funding_rate_8h_pct") or 0.0001) if pid else 0.0001
+        except Exception:
+            funding_8h = 0.0001
+        cb = getattr(request.app.state, "dd_circuit_breaker", None)
+        cb_mult = float(cb.size_multiplier()) if cb is not None else 1.0
+        cal = getattr(request.app.state, "calibration_service", None)
+        win_rate = cal.win_rate() if cal is not None else None
+        chain = await ad.get_option_chain(inst) if (inst and getattr(inst, "has_options", False)) else None
+
+        sig_ctx = _SigCtx(
+            strategy=f"scalping/{strategy}", underlying=sym, direction=sig.direction,
+            entry=float(sig.entry), stop_loss=float(sig.stop_loss),
+            take_profit=sig.take_profit, atr=0.0, rr_target=2.0,
+            signal_score=50.0, signal_strength="STRONG",
+            expected_hold_minutes=75, mode_name="scalping",
+        )
+        mkt_ctx = _MktCtx(
+            spot=spot, underlying=sym, funding_8h_pct=funding_8h,
+            cb_size_mult=cb_mult, win_rate=win_rate, avg_R=None,
+            portfolio_value=float(strat_cfg.account_equity),
+        )
+        decision = _sel_decide(signal=sig_ctx, market=mkt_ctx, chain=chain,
+                               profile_overrides=overrides)
+        if decision.status == _DS.OK and decision.chosen is not None:
+            c = decision.chosen
+            selector_route_used = True
+            selector_inst_type = c.instrument_type
+            selector_size = float(c.contracts)
+            selector_leverage = float(c.leverage)
+            selector_sl = c.stop_loss
+            selector_tp = c.take_profit
+            selector_option_symbol = c.option_symbol
+            selector_audit_id = _audit.record(decision=decision, signal=sig_ctx, market=mkt_ctx)
+    except Exception as _sel_exc:
+        logger.debug("scalp-exec selector path failed for %s: %s — using legacy futures", sym, _sel_exc)
+
+    notes = f"[SCALP-{strategy.upper()}]{auto_tag} {sig.direction} {sig.pattern}{level_str}".strip()
+    if selector_audit_id:
+        notes += f" [DERIV-aid={selector_audit_id[:8]}]"
+
     order = LiveOrderRequest(
-        underlying=sym, direction=sig.direction, instrument_type="futures",
-        size=float(contracts), leverage=round(leverage, 1),
-        order_type="market", stop_loss=sig.stop_loss,
-        take_profit=sig.take_profit,
-        notes=f"[SCALP-{strategy.upper()}]{auto_tag} {sig.direction} {sig.pattern}{level_str}".strip(),
+        underlying=sym, direction=sig.direction, instrument_type=selector_inst_type,
+        size=selector_size, leverage=selector_leverage,
+        order_type="market", stop_loss=selector_sl, take_profit=selector_tp,
+        option_symbol=selector_option_symbol,
+        notes=notes,
     )
     resp = await place_live_order(order, request)
+    if selector_route_used and selector_audit_id and resp.status not in ("rejected", "error"):
+        try:
+            from app.services import derivatives_audit as _audit
+            _audit.mark_executed(selector_audit_id)
+        except Exception:
+            pass
 
     logger.info(
         "scalp-exec %s/%s router=%s want_live=%s -> mode=%s status=%s order_id=%s entry=%s sl=%s tp=%s contracts=%s reason=%s",

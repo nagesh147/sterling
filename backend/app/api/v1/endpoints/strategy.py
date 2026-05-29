@@ -14,6 +14,7 @@ live-safety, idempotency and bracket logic is reused (no duplication).
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import List, Optional
 
@@ -22,6 +23,8 @@ from fastapi import APIRouter, HTTPException, Request
 from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
 from app.api.v1.endpoints.directional import _adapter_can_serve
+
+log = logging.getLogger(__name__)
 
 from app.engines.triple_st.config import TripleSTConfig, default_config
 from app.engines.triple_st import backtest as bt
@@ -343,14 +346,85 @@ async def execute(body: ExecuteRequest, request: Request) -> ExecuteResponse:
     # No fixed take-profit: the strategy exits on the RSI/ADX signal flip.
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
 
+    # ── Phase 5: route through DerivativesSelector when triple_st profile is on ──
+    sel_used = False
+    sel_aid: str | None = None
+    inst_type = "futures"
+    sel_size = float(contracts)
+    sel_lev = plan.leverage
+    sel_sl = plan.stop_loss
+    sel_tp = None
+    sel_opt_symbol: str | None = None
+
+    try:
+        from app.engines.derivatives.selector import decide as _sel_decide
+        from app.engines.derivatives.schemas import (
+            SignalContext as _SigCtx, MarketContext as _MktCtx, DecisionStatus as _DS,
+        )
+        from app.services import derivatives_audit as _audit
+        from app.services.exchanges import instrument_registry as _reg
+        overrides = getattr(request.app.state, "derivatives_profile_overrides", None) or {}
+
+        ad = request.app.state.adapter
+        inst = _reg.get_instrument(sym)
+        spot = float(await ad.get_index_price(inst)) if inst else float(plan.entry)
+        try:
+            pid = await ad.get_product_id(inst.delta_perp_symbol or f"{sym}USD") if inst else None
+            funding_8h = float((await ad.get_funding_rate(pid)).get("funding_rate_8h_pct") or 0.0001) if pid else 0.0001
+        except Exception:
+            funding_8h = 0.0001
+        cb = getattr(request.app.state, "dd_circuit_breaker", None)
+        cb_mult = float(cb.size_multiplier()) if cb is not None else 1.0
+        cal = getattr(request.app.state, "calibration_service", None)
+        win_rate = cal.win_rate() if cal is not None else None
+        chain = await ad.get_option_chain(inst) if (inst and getattr(inst, "has_options", False)) else None
+
+        sig_ctx = _SigCtx(
+            strategy="triple_st", underlying=sym, direction=plan.direction,
+            entry=float(plan.entry), stop_loss=float(plan.stop_loss),
+            take_profit=None, atr=0.0, rr_target=2.0,
+            signal_score=50.0 + max(0.0, ev.rsi_oversold - ev.rsi),
+            signal_strength="STRONG", expected_hold_minutes=5 * 24 * 60, mode_name="swing",
+        )
+        mkt_ctx = _MktCtx(
+            spot=spot, underlying=sym, funding_8h_pct=funding_8h,
+            cb_size_mult=cb_mult, win_rate=win_rate, avg_R=None,
+            portfolio_value=float(cfg.account_equity),
+        )
+        decision = _sel_decide(signal=sig_ctx, market=mkt_ctx, chain=chain,
+                               profile_overrides=overrides)
+        if decision.status == _DS.OK and decision.chosen is not None:
+            c = decision.chosen
+            sel_used = True
+            inst_type = c.instrument_type
+            sel_size = float(c.contracts)
+            sel_lev = float(c.leverage)
+            sel_sl = c.stop_loss
+            sel_tp = c.take_profit
+            sel_opt_symbol = c.option_symbol
+            sel_aid = _audit.record(decision=decision, signal=sig_ctx, market=mkt_ctx)
+    except Exception as _sel_exc:
+        log.debug("triple_st selector path failed for %s: %s — using legacy futures", sym, _sel_exc)
+
+    notes = (f"[RSI2-MEANREV] {plan.direction} RSI={ev.rsi:.0f} "
+             f"(buy<{ev.rsi_oversold:.0f}, exit>{ev.rsi_exit:.0f})")
+    if sel_aid:
+        notes += f" [DERIV-aid={sel_aid[:8]}]"
+
     order = LiveOrderRequest(
-        underlying=sym, direction=plan.direction, instrument_type="futures",
-        size=float(contracts), leverage=plan.leverage, order_type="market",
-        stop_loss=plan.stop_loss, take_profit=None,
-        notes=f"[RSI2-MEANREV] {plan.direction} RSI={ev.rsi:.0f} "
-              f"(buy<{ev.rsi_oversold:.0f}, exit>{ev.rsi_exit:.0f})",
+        underlying=sym, direction=plan.direction, instrument_type=inst_type,
+        size=sel_size, leverage=sel_lev, order_type="market",
+        stop_loss=sel_sl, take_profit=sel_tp,
+        option_symbol=sel_opt_symbol,
+        notes=notes,
     )
     resp = await place_live_order(order, request)
+    if sel_used and sel_aid and resp.status not in ("rejected", "error"):
+        try:
+            from app.services import derivatives_audit as _audit
+            _audit.mark_executed(sel_aid)
+        except Exception:
+            pass
 
     return ExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
