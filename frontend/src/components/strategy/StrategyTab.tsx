@@ -6,6 +6,9 @@ import {
   type TripleSTConfig, type BacktestResult, type SignalSummary,
 } from '../../hooks/useStrategy';
 import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint } from '../../styles/terminalUI';
+import { DerivativesCandidatesTable } from '../derivatives/DerivativesCandidatesTable';
+import { DerivativesPanel } from '../derivatives/DerivativesPanel';
+import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 
 /* ── tiny style helpers ───────────────────────────────────────────────────── */
 /* card / cardHead / cardBody / grpBox / grpTitle come from the shared
@@ -476,6 +479,7 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
           fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '5px 12px', borderRadius: 6, fontFamily: 'inherit',
           cursor: 'pointer', border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
         }}>⚙ SETTINGS</button>
+        <DerivativesSettingsButton onClick={onOpenSettings} />
       </div>
 
       {/* summary tiles */}
@@ -510,6 +514,10 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
 
       {/* recent signal history */}
       <RecentSignals />
+
+      {/* Derivatives candidates table — populated by selector when triple_st profile.enabled */}
+      <DerivativesCandidatesTable strategy="triple_st" />
+
 
       {data && data.signals.length > 0 && (
         <div style={{ fontSize: 9, color: 'var(--t-dim)', lineHeight: 1.5 }}>
@@ -567,6 +575,7 @@ export function StrategyTab() {
             <div style={{ flex: 1, overflow: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {cfg && <ConfigPanel cfg={cfg} onSave={(c) => setCfg.mutate(c)} saving={setCfg.isPending} />}
               {cfgQ.isLoading && <div style={dim}>loading config…</div>}
+              <DerivativesPanel strategy="triple_st" />
               <BacktestPanel underlying={selected} />
             </div>
           </div>

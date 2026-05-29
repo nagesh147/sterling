@@ -15,6 +15,7 @@ import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
+import { GreeksBudgetHeaderChip } from '../components/GreeksBudgetHeaderChip';
 import { StrategyTab } from '../components/strategy/StrategyTab';
 import { ScalpingTab } from '../components/scalping/ScalpingTab';
 import { StatArbTab } from '../components/statarb/StatArbTab';
@@ -225,6 +226,7 @@ export function SimpleTerminal() {
             <AlgoToggle chipStyle={chip} />
             <DataSourceSelector chipStyle={chip} />
             <CbChip />
+            <GreeksBudgetHeaderChip />
             <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}

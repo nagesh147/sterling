@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FontPicker } from '../FontPicker';
+import { DerivativesCandidatesTable } from '../derivatives/DerivativesCandidatesTable';
+import { DerivativesPanel } from '../derivatives/DerivativesPanel';
+import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
@@ -2101,7 +2104,10 @@ export function ScalpingTab() {
       rightWidth={380}
       leftSidebar={<>
         <LeftSection label="Tools" collapsible defaultOpen>
-          <SettingsTrigger onClick={() => setDrawer(true)} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SettingsTrigger onClick={() => setDrawer(true)} />
+            <DerivativesSettingsButton onClick={() => setDrawer(true)} />
+          </div>
         </LeftSection>
         <LeftSection label="Strategies" collapsible defaultOpen>
           {renderNavGroup(stratNavItems, stratFilter, setStratFilter)}
@@ -2274,6 +2280,11 @@ export function ScalpingTab() {
                 <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
               </div>
             )}
+
+            {/* Phase 4: derivatives candidates table for every scalping strategy. */}
+            <div style={{ marginTop: 12 }}>
+              <DerivativesCandidatesTable />
+            </div>
           </div>
       }
       rightSidebar={
@@ -2322,6 +2333,7 @@ export function ScalpingTab() {
               cfg={cfg}
             />
           )}
+          <DerivativesPanel strategy="scalping/price_action" />
           <ScalpBacktestPanel initialUnderlying={btUnderlying} />
           </div>
         </div>
