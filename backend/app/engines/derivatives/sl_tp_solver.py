@@ -1,0 +1,95 @@
+"""SL/TP resolution for futures + options.
+
+Futures path delegates to the existing scalping risk solver which
+handles ATR cushion, anti-stop-hunt, R:R gating, and max-stop-ATR cap.
+
+Options path takes spot SL/TP from the signal and computes the
+EQUIVALENT premium SL/TP via BSM (time-shifted revaluation already
+gave us premium_at_tp / premium_at_sl). The premium SL has a floor
+at 50% of entry premium so a tiny adverse move can't immediately
+trigger close due to ordinary bid-ask noise — Plan-agent's anti-
+whipsaw rule, mirroring what we already do in the monitor.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
+
+
+@dataclass
+class SLTPResolution:
+    ok: bool
+    stop_loss: Optional[float]              # spot SL (futures + options)
+    take_profit: Optional[float]            # spot TP
+    sl_premium: Optional[float] = None      # options-only — BSM-derived
+    tp_premium: Optional[float] = None      # options-only — BSM-derived
+    tp_source: str = ""
+    rr: float = 0.0
+    risk_pct: float = 0.0
+    reason: str = ""
+
+
+def solve_futures(
+    *, direction: str, entry: float, structure_stop: float,
+    atr_val: float, take_profit: Optional[float], rr: float = 2.0,
+) -> SLTPResolution:
+    """Wrap app/engines/scalping/risk.resolve_trade_risk for futures.
+
+    For the integration path we have a direct stop/target so we synthesize
+    a degenerate "levels" list with just the target and ask the solver to
+    produce the cushioned SL + R:R-gated TP.
+    """
+    from app.engines.scalping.risk import resolve_trade_risk
+    from dataclasses import dataclass as _dc
+
+    @_dc
+    class _L:
+        price: float
+        level_type: str
+
+    is_long = direction == "long"
+    tp_level_type = "resistance" if is_long else "support"
+    # Provide the supplied TP as the structural level; solver R:R-gates.
+    levels = [_L(price=take_profit, level_type=tp_level_type)] if take_profit else []
+
+    plan = resolve_trade_risk(
+        direction=direction, entry=entry, structure_stop=structure_stop,
+        atr_val=atr_val, levels=levels, tp_level_type=tp_level_type,
+        min_rr=rr,
+    )
+
+    return SLTPResolution(
+        ok=plan.ok, stop_loss=plan.stop_loss, take_profit=plan.take_profit,
+        tp_source=plan.tp_source, rr=plan.rr, risk_pct=plan.risk_pct,
+        reason=plan.reason,
+    )
+
+
+def solve_options(
+    *, direction: str, entry_spot: float, stop_spot: float, target_spot: float,
+    premium_now: float, premium_at_tp: float, premium_at_sl: float,
+    premium_floor_pct: float = 0.50,
+) -> SLTPResolution:
+    """Spot SL/TP pass through unchanged; option SL/TP premium derives
+    from BSM (caller already computed via time_shifted_revaluation)
+    with a floor at `premium_floor_pct × premium_now` so noise can't
+    trigger.
+    """
+    if premium_now <= 0:
+        return SLTPResolution(ok=False, stop_loss=None, take_profit=None,
+                               reason="bsm_no_premium")
+
+    sl_premium = max(premium_at_sl, premium_floor_pct * premium_now)
+    tp_premium = premium_at_tp
+
+    risk_pct = abs(entry_spot - stop_spot) / entry_spot * 100 if entry_spot else 0.0
+    rr = (premium_at_tp - premium_now) / max(1e-9, premium_now - sl_premium)
+
+    return SLTPResolution(
+        ok=True, stop_loss=stop_spot, take_profit=target_spot,
+        sl_premium=round(sl_premium, 4), tp_premium=round(tp_premium, 4),
+        tp_source="bsm_at_exit_T", rr=round(rr, 3), risk_pct=risk_pct,
+        reason="ok",
+    )
