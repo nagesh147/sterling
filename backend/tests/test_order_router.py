@@ -304,10 +304,15 @@ class TestSafetyRejects:
 
     @pytest.mark.asyncio
     async def test_correlation_zero_size_rejects(self) -> None:
-        deps = _make_deps(correlation_penalty=0.4)
+        # Phase-0 fix: the correlation_penalty path now preserves fractional
+        # contracts (was silently rounding 0.4 → 1, a 60% size error on
+        # high-notional options). The reject path is now gated at 0.01
+        # contracts — small enough to be meaningless, large enough that no
+        # legitimate request ever lands below it.
+        deps = _make_deps(correlation_penalty=0.005)
         router = OrderRouter(RouterMode.PAPER, _make_adapter(), deps, _resolve)
 
-        # size=1 * 0.4 = 0.4 → cannot scale below 1 contract
+        # size=1 * 0.005 = 0.005 → below the 0.01 floor → reject.
         resp = await router.submit(_basic_req(size=1))
 
         assert resp.accepted is False

@@ -2,6 +2,7 @@
 Paper trading position store.
 In-memory dict (fast reads) + write-through to SQLite (persistence across restarts).
 """
+import logging
 import time
 import uuid
 from typing import Dict, List, Optional
@@ -9,7 +10,10 @@ from typing import Dict, List, Optional
 from app.schemas.positions import PaperPosition, PositionStatus
 from app.schemas.execution import SizedTrade
 from app.schemas.directional import TradeState
+from app.schemas.greeks import GreeksSnapshot
 from app.services import db
+
+log = logging.getLogger(__name__)
 
 _positions: Dict[str, PaperPosition] = {}
 _loaded = False
@@ -46,6 +50,14 @@ def add_position(
     initial_tp: float | None = None,
     order_id: str | None = None,
     order_status: str | None = None,
+    # ── Options snapshot (Phase 0). Callers entering an options trade pass
+    # premium + IV + DTE + Greeks at entry so the close-out PnL uses real
+    # premium arithmetic instead of delta-linear approximation, and the
+    # background monitor can drive DTE force-close + Greek-aware trailing.
+    entry_premium: float | None = None,
+    entry_iv: float | None = None,
+    entry_dte: int | None = None,
+    entry_greeks_snapshot: GreeksSnapshot | None = None,
 ) -> PaperPosition:
     # Issue 17 — refuse to record a position with a corrupt entry price.
     # Pre-TTACE seed data has rows where entry_spot_price == 0; tightening at
@@ -101,10 +113,46 @@ def add_position(
         order_id=order_id,
         order_status=order_status,
         mode=mode_name,
+        # Options snapshot fields. Auto-fall-back to first-leg mark_price /
+        # mark_iv / dte if the caller didn't supply them explicitly but the
+        # position is an option (structure_type != "futures"); makes the new
+        # premium-based PnL math useful even for legacy entry callsites that
+        # haven't been updated yet.
+        entry_premium=entry_premium if entry_premium is not None else _default_entry_premium(sized_trade),
+        entry_iv=entry_iv if entry_iv is not None else _default_entry_iv(sized_trade),
+        entry_dte=entry_dte if entry_dte is not None else _default_entry_dte(sized_trade),
+        entry_greeks_snapshot=entry_greeks_snapshot,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())
     return pos
+
+
+def _default_entry_premium(sized_trade: SizedTrade) -> Optional[float]:
+    """Use leg[0].mark_price as a fallback entry premium when the caller
+    didn't supply one explicitly. Returns None for futures (no premium).
+    """
+    s = sized_trade.structure
+    if s.structure_type == "futures" or not s.legs:
+        return None
+    return float(s.legs[0].mark_price or s.legs[0].mid_price or 0.0)
+
+
+def _default_entry_iv(sized_trade: SizedTrade) -> Optional[float]:
+    s = sized_trade.structure
+    if s.structure_type == "futures" or not s.legs:
+        return None
+    iv = float(s.legs[0].mark_iv or 0.0)
+    # Adapter sometimes returns IV as a percentage (65.0 for 65%) and
+    # sometimes as a decimal (0.65). Normalise to decimal.
+    return iv / 100.0 if iv > 5.0 else iv
+
+
+def _default_entry_dte(sized_trade: SizedTrade) -> Optional[int]:
+    s = sized_trade.structure
+    if s.structure_type == "futures" or not s.legs:
+        return None
+    return int(s.legs[0].dte or 0)
 
 
 def get_position(pos_id: str) -> Optional[PaperPosition]:
@@ -129,31 +177,93 @@ def close_position(
     pos_id: str,
     exit_spot_price: float,
     notes: str = "",
+    *,
+    exit_premium: Optional[float] = None,
+    exit_reason: Optional[str] = None,
+    fill_type: Optional[str] = None,
+    settlement_recorded: bool = False,
 ) -> Optional[PaperPosition]:
+    """Close a position and compute realised PnL with the correct formula
+    for the instrument:
+
+      • futures: `(exit_price − entry_price) × dir × contracts`. Leverage
+        does NOT enter the PnL formula — it only affects the margin posted.
+      • options: `(exit_premium − entry_premium) × contracts × multiplier`.
+        Delta India BTC/ETH index options have multiplier = 1 (1 contract
+        = $1 USD per $1 premium move). Callers should pass `exit_premium`
+        from the live option chain; we fall back to a delta-linear
+        estimate (and log a warning) when they don't.
+
+    Prior versions over-stated futures PnL by leverage× (`net_delta = leverage`)
+    and used delta-linear approximation for options (ignoring gamma/theta/vega
+    drift). Both were silent live-trading bugs. See plan Phase 0.
+    """
     pos = _positions.get(pos_id)
     if not pos or pos.status == PositionStatus.CLOSED:
         return None
 
     structure = pos.sized_trade.structure
-    spot_move = exit_spot_price - pos.entry_spot_price
     direction_sign = 1 if structure.direction.value == "long" else -1
-    legs = structure.legs
-    if not legs:
-        if getattr(structure, "structure_type", "") == "futures":
-            net_delta = float(getattr(structure, "leverage", 1) or 1)
-        else:
-            net_delta = 0.0
-    elif len(legs) == 1:
-        net_delta = abs(legs[0].delta)
+    contracts = pos.sized_trade.contracts
+    is_futures = structure.structure_type == "futures"
+
+    if is_futures:
+        # Futures: linear PnL in spot. Leverage absent.
+        spot_move = exit_spot_price - pos.entry_spot_price
+        raw_pnl = spot_move * direction_sign * contracts
     else:
-        net_delta = max(0.0, abs(legs[0].delta) - abs(legs[1].delta))
-    raw_pnl = spot_move * direction_sign * pos.sized_trade.contracts * net_delta
+        # Options: premium-based PnL. Multiplier = 1 for DEI BTC/ETH index opts.
+        entry_premium = (
+            pos.entry_premium
+            if pos.entry_premium is not None
+            else _default_entry_premium(pos.sized_trade) or 0.0
+        )
+        ex_prem = exit_premium
+        if ex_prem is None:
+            # Delta-linear fallback. Explicitly lossy and logged so callers
+            # are nudged to supply a real exit premium from the option chain.
+            spot_move = exit_spot_price - pos.entry_spot_price
+            leg_delta = abs(structure.legs[0].delta) if structure.legs else 0.5
+            ex_prem = max(0.0, entry_premium + (spot_move * direction_sign * leg_delta))
+            log.warning(
+                "close_position[%s] options: exit_premium not supplied; "
+                "using delta-linear estimate (entry=%.4f → est=%.4f, "
+                "spot Δ=%.2f, δ=%.3f). Pass exit_premium for correct PnL.",
+                pos_id, entry_premium, ex_prem, spot_move, leg_delta,
+            )
+        # Long options only today (place_order_option always side="buy"), so
+        # PnL is unconditionally (exit − entry) × contracts. When short-options
+        # is added the direction_sign multiplier comes in here.
+        raw_pnl = (ex_prem - entry_premium) * contracts
+
+    # Bound losses by sized max_risk. Apply max_gain cap only for
+    # defined-risk option spreads — futures and naked options have unbounded
+    # upside and the previous unconditional cap was silently truncating
+    # winners.
     max_risk = pos.sized_trade.max_risk_usd
-    max_gain = structure.max_gain
     bounded = max(-max_risk, raw_pnl)
-    if max_gain is not None:
-        bounded = min(max_gain * pos.sized_trade.contracts, bounded)
+    max_gain = structure.max_gain
+    DEFINED_RISK_STRUCTURES = {
+        "bull_call_spread", "bear_put_spread",
+        "bull_put_spread", "bear_call_spread",
+        "iron_condor", "iron_butterfly",
+    }
+    if max_gain is not None and structure.structure_type in DEFINED_RISK_STRUCTURES:
+        bounded = min(max_gain * contracts, bounded)
     estimated_pnl = round(bounded, 2)
+
+    # 1% TDS on the gross sell value for Indian crypto — surfaced for
+    # after-tax display, not used in trade decisions. Computed against
+    # gross USD value of the closing fill (options: ex_prem × contracts;
+    # futures: exit_price × contracts). Skip for paper positions and
+    # when fill_type == "settlement" (DEI handles TDS on settlement).
+    tds = 0.0
+    if not pos.is_paper and fill_type != "settlement":
+        gross_close_usd = (
+            (locals().get("ex_prem") or 0.0) * contracts if not is_futures
+            else exit_spot_price * contracts
+        )
+        tds = round(0.01 * gross_close_usd, 2)
 
     # Record exit in cooldown engine — keyed on (underlying, mode, direction).
     # Same-(underlying, mode, direction) re-entries are blocked for the
@@ -176,7 +286,12 @@ def close_position(
         status=PositionStatus.CLOSED,
         exit_timestamp_ms=int(time.time() * 1000),
         exit_spot_price=exit_spot_price,
+        exit_premium=(None if is_futures else round(float(locals().get("ex_prem") or 0.0), 4)),
         realized_pnl_usd=estimated_pnl,
+        tds_withheld_usd=(pos.tds_withheld_usd or 0.0) + tds,
+        fill_type=fill_type,
+        exit_reason=exit_reason,
+        settlement_recorded=settlement_recorded,
         notes=notes or pos.notes,
         run_once_state=TradeState.EXITED,
     )
@@ -186,11 +301,13 @@ def partial_close_position(
     pos_id: str,
     exit_spot_price: float = 0.0,
     partial_ratio: float = 0.50,
+    *,
+    exit_premium: Optional[float] = None,
 ) -> Optional[PaperPosition]:
-    """
-    Close `partial_ratio` of the position.
-    Reduces contracts proportionally, books partial realized P&L,
-    transitions to PARTIALLY_CLOSED.
+    """Close `partial_ratio` of the position. Uses the same corrected
+    instrument-aware PnL formula as `close_position`: futures = spot-linear
+    (no leverage), options = premium delta (with delta-linear fallback +
+    warning if `exit_premium` not supplied).
     """
     pos = _positions.get(pos_id)
     if not pos or pos.status != PositionStatus.OPEN:
@@ -198,25 +315,41 @@ def partial_close_position(
 
     structure      = pos.sized_trade.structure
     direction_sign = 1 if structure.direction.value == "long" else -1
-    legs = structure.legs
-    if not legs:
-        if getattr(structure, "structure_type", "") == "futures":
-            net_delta = float(getattr(structure, "leverage", 1) or 1)
-        else:
-            net_delta = 0.0
-    elif len(legs) == 1:
-        net_delta = abs(legs[0].delta)
-    else:
-        net_delta = max(0.0, abs(legs[0].delta) - abs(legs[1].delta))
+    is_futures     = structure.structure_type == "futures"
 
     closed_contracts    = max(1, round(pos.sized_trade.contracts * partial_ratio))
     remaining_contracts = max(0, pos.sized_trade.contracts - closed_contracts)
 
-    spot_move   = (exit_spot_price - pos.entry_spot_price) if exit_spot_price > 0 else 0.0
-    raw_pnl     = spot_move * direction_sign * closed_contracts * net_delta
+    if is_futures:
+        spot_move = (exit_spot_price - pos.entry_spot_price) if exit_spot_price > 0 else 0.0
+        raw_pnl = spot_move * direction_sign * closed_contracts
+    else:
+        entry_premium = (
+            pos.entry_premium
+            if pos.entry_premium is not None
+            else _default_entry_premium(pos.sized_trade) or 0.0
+        )
+        ex_prem = exit_premium
+        if ex_prem is None:
+            spot_move = (exit_spot_price - pos.entry_spot_price) if exit_spot_price > 0 else 0.0
+            leg_delta = abs(structure.legs[0].delta) if structure.legs else 0.5
+            ex_prem = max(0.0, entry_premium + (spot_move * direction_sign * leg_delta))
+            log.warning(
+                "partial_close_position[%s] options: exit_premium not supplied; "
+                "using delta-linear estimate (entry=%.4f → est=%.4f). "
+                "Pass exit_premium for correct partial PnL.",
+                pos_id, entry_premium, ex_prem,
+            )
+        raw_pnl = (ex_prem - entry_premium) * closed_contracts
+
     risk_closed = pos.sized_trade.max_risk_usd * partial_ratio
     partial_pnl = max(-risk_closed, raw_pnl)
-    if structure.max_gain is not None:
+    DEFINED_RISK_STRUCTURES = {
+        "bull_call_spread", "bear_put_spread",
+        "bull_put_spread", "bear_call_spread",
+        "iron_condor", "iron_butterfly",
+    }
+    if structure.max_gain is not None and structure.structure_type in DEFINED_RISK_STRUCTURES:
         partial_pnl = min(structure.max_gain * closed_contracts, partial_pnl)
     partial_pnl = round(partial_pnl, 2)
 

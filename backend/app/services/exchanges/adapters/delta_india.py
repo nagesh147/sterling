@@ -415,6 +415,26 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         data = await self._auth_get(f"/v2/products/{product_id}/orders/leverage")
         return (data or {}).get("result") or {}
 
+    async def set_margin_mode(self, product_id: int, mode: str = "isolated") -> dict:
+        """Set the margin mode for a product BEFORE placing orders.
+
+        `mode` is "isolated" (each position has its own margin pool — a bad
+        trade can't cascade-liquidate the rest of the book) or "cross"
+        (positions share margin — more efficient but contagious on a single
+        blow-up). The derivatives selector enforces isolated-per-position
+        as the default in OrderRouter._submit_live so a single mispriced
+        contract can't take out the whole account.
+
+        POST /v2/products/{product_id}/orders/margin_mode
+        """
+        if mode not in ("isolated", "cross"):
+            raise ValueError(f"margin mode must be 'isolated' or 'cross', got {mode!r}")
+        data = await self._auth_post(
+            f"/v2/products/{product_id}/orders/margin_mode",
+            {"margin_mode": mode},
+        )
+        return (data or {}).get("result") or {}
+
     async def cancel_all_orders(self, product_id: int) -> dict:
         """Cancel all open orders for a product. DELETE /v2/orders/all"""
         data = await self._auth_delete_with_body("/v2/orders/all", {"product_id": product_id})

@@ -28,11 +28,25 @@ class TradingModeConfig:
     rr_target: float
     partial_25_pct: float
     partial_50_pct: float
+    # IST equity-market session timestamp ("15:25" = 3:25pm). Used by
+    # Zerodha-shaped (NSE) adapters to force-close intraday positions
+    # before market close. KEEP for those flows. Crypto options on Delta
+    # India do not use this — use `force_close_minutes_before_expiry`
+    # below for the DTE-based force-close that the derivatives selector
+    # and background monitor consume.
     force_close_time: str | None
     max_hold_bars: int
     position_pct: float
     max_concurrent: int
     poll_interval_s: int
+    # Force-close any open options position N minutes before its expiry.
+    # The background monitor tiers this further by notional (positions
+    # with notional > $1k use the full window, smaller ones use a tighter
+    # 30-min default). Selector profiles may also override per-strategy.
+    # 120 default matches Delta India weekly options settlement at
+    # Friday 12:30 UTC — gives 2h cushion for settlement-period spread
+    # widening before the cash-settle mark is locked.
+    force_close_minutes_before_expiry: int = 120
 
 
 MODES: dict[str, TradingModeConfig] = {

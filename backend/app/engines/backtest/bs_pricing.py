@@ -89,6 +89,27 @@ def bs_theta(
     return round((term1 + term2) / 365.0, 6)
 
 
+def bs_rho(
+    spot: float, strike: float, dte: int, iv: float, option_type: str, r: float = 0.0
+) -> float:
+    """Rho per 1% rate move (divided by 100 from the standard formula).
+
+    Mostly negligible for short-dated crypto options (DTE < 30, r ≈ 0)
+    but real for the dte_max=90 positional profile and required for the
+    `bsm_greeks_full` Greeks-budget vector to be complete.
+    """
+    _d1, d2 = _d1_d2(spot, strike, dte, iv, r)
+    if d2 is None:
+        return 0.0
+    T = dte / 365.0
+    df = math.exp(-r * T)
+    if option_type == "call":
+        raw = strike * T * df * _norm_cdf(d2)
+    else:
+        raw = -strike * T * df * _norm_cdf(-d2)
+    return round(raw / 100.0, 6)
+
+
 def atm_option_pnl_pct(
     spot_entry: float,
     spot_exit: float,

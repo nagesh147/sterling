@@ -178,6 +178,18 @@ async def _background_position_monitor(app: FastAPI) -> None:
             async def _auto_monitor_one(pos):
                 async with sem:
                     try:
+                        # ── Instrument-type discriminator ─────────────────
+                        # Phase 0 of the derivatives build adds this branch
+                        # so Phase 1's options-aware monitoring (premium
+                        # trail via delta, DTE force-close, microstructure
+                        # veto on amend, chain-staleness gate, per-underlying
+                        # chain batching) can land without disturbing the
+                        # futures path. Phase 0 keeps both branches behaviorally
+                        # identical — the variable is read by close_position
+                        # callsites below for exit-reason attribution.
+                        _structure = pos.sized_trade.structure
+                        is_options = _structure.structure_type != "futures"
+
                         inst = _reg.get_instrument(pos.underlying)
                         if not inst:
                             return
@@ -321,7 +333,12 @@ async def _background_position_monitor(app: FastAPI) -> None:
                                         log.warning("Auto-monitor: live stop amendment failed for %s: %s", pos.id, _le)
 
                                 if _tu.stopped_out:
-                                    _ps.close_position(pos.id, float(current_spot))
+                                    # Phase 1 will fetch live option premium and pass exit_premium=...
+                                    # to get accurate options PnL. Phase 0: delta-linear estimate logged.
+                                    _ps.close_position(
+                                        pos.id, float(current_spot),
+                                        exit_reason="trail",
+                                    )
                                     log.info("Auto-monitor: trail stop hit for %s at %.2f", pos.id, current_spot)
                                     return
                                 if _tu.partial and pos.status.value == "open":
@@ -343,7 +360,10 @@ async def _background_position_monitor(app: FastAPI) -> None:
                         _pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte,
                                             int(__import__('time').time() * 1000))
                         if exit_sig.should_exit and not exit_sig.partial:
-                            _ps.close_position(pos.id, float(current_spot))
+                            _ps.close_position(
+                                pos.id, float(current_spot),
+                                exit_reason=f"signal:{exit_sig.exit_type}",
+                            )
                             log.info("Auto-monitor: %s closed (%s)", pos.id, exit_sig.exit_type)
                         elif exit_sig.partial and pos.status.value == "open":
                             _pr = getattr(exit_sig, "partial_ratio", 0.50)
@@ -481,6 +501,43 @@ _ALGO_ACTIONABLE = frozenset({
     'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION',
     'CONFIRMED_SETUP_ACTIVE',
 })
+
+
+def _build_greeks_budget_gate(app: FastAPI):
+    """Build the async `greeks_budget_gate` callable wired into every
+    OrderRouter construction. Reads `app.state.greeks_budget_checker` at
+    call time so a later update to the checker (e.g. NAV change) takes
+    effect on the next order without rebuilding the router. Resolves the
+    live adapter from `app.state.adapter` and uses it for option-chain
+    fetches when an options order arrives. Returns a no-op callable when
+    no checker is bound (early-boot or tests).
+    """
+    from app.engines.risk import portfolio_greeks_aggregator as _agg
+    from app.services.exchanges import instrument_registry as _reg
+
+    async def _gate(req, open_positions):
+        checker = getattr(app.state, "greeks_budget_checker", None)
+        if checker is None or checker.pv <= 0:
+            return None
+        adapter = getattr(app.state, "adapter", None)
+        if adapter is None:
+            return None
+
+        async def _get_spot(sym: str) -> float:
+            inst = _reg.get_instrument(sym)
+            if inst is None:
+                return 0.0
+            try:
+                return float(await adapter.get_index_price(inst))
+            except Exception:
+                return 0.0
+
+        return await _agg.check_against_budget(
+            req=req, open_positions=open_positions,
+            adapter=adapter, checker=checker, get_spot=_get_spot,
+        )
+
+    return _gate
 
 
 async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
@@ -690,6 +747,7 @@ async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
         correlation_penalty=_correlation_penalty,
         portfolio_cap_breach=_portfolio_cap_breach,
         microstructure_veto=lambda req: None,
+        greeks_budget_gate=_build_greeks_budget_gate(app),
     )
     router = OrderRouter(
         mode=router_mode, adapter=adapter, deps=deps,
@@ -928,6 +986,7 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
             correlation_penalty=lambda *a, **k: 1.0,
             portfolio_cap_breach=lambda *a, **k: None,
             microstructure_veto=lambda *a, **k: None,
+            greeks_budget_gate=_build_greeks_budget_gate(app),
         )
         return OrderRouter(
             mode=router_mode, adapter=adapter, deps=deps,
@@ -1159,6 +1218,16 @@ async def lifespan(app: FastAPI):
     app.state.correlation_tracker = CorrelationTracker(assets=['BTC', 'ETH', 'SOL'])
     app.state.calibration_service = CalibrationService(db_path=_db._DB_PATH)
 
+    # Portfolio Greeks budget hard gate (Phase 0 of the derivatives build).
+    # Read by `OrderRouter._submit_live` via the `greeks_budget_gate` dep
+    # wired in `_router_deps_with_greeks_gate()` below. Bound to the same
+    # NAV figure as `dd_circuit_breaker` so a single env knob moves both;
+    # both should be kept in sync with actual account NAV in production.
+    from app.engines.risk.greeks_budget import GreeksBudgetChecker, GreeksBudget
+    app.state.greeks_budget_checker = GreeksBudgetChecker(
+        GreeksBudget(), portfolio_value=100_000.0,
+    )
+
     # Build market data adapter (use pre-injected adapter in tests, else build fresh)
     if not getattr(app.state, "adapter", None):
         exchange = settings.exchange_adapter.lower()
@@ -1389,8 +1458,9 @@ async def _background_statarb_trader(app: FastAPI, interval: int = 15) -> None:
                 correlation_penalty=lambda *a, **k: 1.0,
                 portfolio_cap_breach=lambda *a, **k: None,
                 microstructure_veto=lambda req: None,
+                greeks_budget_gate=_build_greeks_budget_gate(app),
             )
-            
+
             router = OrderRouter(mode=router_mode, adapter=adapter, deps=deps, instrument_resolver=registry.get_instrument)
             
             # Very simple idempotent execution based on signal state

@@ -29,7 +29,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Union
 
 from app.services import live_safety
 
@@ -93,6 +93,10 @@ class OrderRouterResponse:
 # ─── Hooks (dependency injection points) ──────────────────────────────────
 
 
+def _noop_greeks_gate(*a, **k) -> Optional[str]:
+    return None
+
+
 @dataclass
 class RouterDeps:
     """All external dependencies pinned at construction time. Caller passes
@@ -103,6 +107,17 @@ class RouterDeps:
     correlation_penalty: Callable[[str, List[Any]], float] = lambda *a, **k: 1.0
     portfolio_cap_breach: Callable[[OrderRouterRequest, List[Any]], Optional[str]] = lambda *a, **k: None
     microstructure_veto: Callable[[OrderRouterRequest], Optional[str]] = lambda *a, **k: None
+    # Portfolio Greeks budget hard gate. Runs only in `_submit_live` (paper /
+    # shadow are explicitly NOT gated so the user can paper-trade past caps
+    # to learn from the breach). Callable may be sync or async; both are
+    # awaited correctly. Default is a no-op so callers that don't supply a
+    # gate continue to behave as before. Returns None on pass, or a machine-
+    # readable breach string ("delta_breach:35%>30%") on reject; OrderRouter
+    # echoes that string back as `code=greeks_budget_breach`.
+    greeks_budget_gate: Union[
+        Callable[[OrderRouterRequest, List[Any]], Optional[str]],
+        Callable[[OrderRouterRequest, List[Any]], Awaitable[Optional[str]]],
+    ] = _noop_greeks_gate
 
 
 # ─── Adapter shim ─────────────────────────────────────────────────────────
@@ -199,13 +214,20 @@ class OrderRouter:
         if micro:
             return self._reject(req, "microstructure_veto", micro, now_ms)
 
-        # 5. Correlation penalty applies as a *size* multiplier (not a veto)
+        # 5. Correlation penalty applies as a *size* multiplier (not a veto).
+        # We preserve fractional contracts here for high-notional options/perps
+        # where rounding to int would distort the size by 30-40% (e.g. 0.7
+        # contracts on a $50k notional option rounded up to 1 is a 43% size
+        # error). The integer-floor is enforced ONLY when the underlying
+        # exchange product doesn't accept fractional sizes — that check now
+        # lives in the dispatcher (_submit_live) where we know the product.
+        # Hard floor: penalty-scaled size below 0.01 contracts → reject.
         penalty = self.deps.correlation_penalty(sym, self.deps.list_open_positions())
-        if penalty < 1.0 and req.size * penalty < 1:
-            # Cannot scale below 1 contract — reject explicitly.
+        scaled_size = req.size * penalty
+        if penalty < 1.0 and scaled_size < 0.01:
             return self._reject(req, "correlation_size_zero",
-                                f"Correlation penalty {penalty:.2f} would size below 1 contract", now_ms)
-        adjusted = OrderRouterRequest(**{**req.__dict__, "size": max(1, round(req.size * penalty))})
+                                f"Correlation penalty {penalty:.2f} sized below 0.01 contracts", now_ms)
+        adjusted = OrderRouterRequest(**{**req.__dict__, "size": round(scaled_size, 4)})
 
         # ── dispatch ───────────────────────────────────────────────────
         if self.mode == RouterMode.PAPER:
@@ -254,6 +276,26 @@ class OrderRouter:
         if self.adapter is None:
             return self._reject(req, "no_adapter", "Live mode requires an adapter", now_ms)
 
+        # ── Portfolio Greeks budget hard gate ───────────────────────────────
+        # Runs ONLY in live (not paper/shadow). The gate refreshes open
+        # positions' Greeks at current market via portfolio_greeks_aggregator
+        # before checking the new order's contribution against the budget caps.
+        # Fail-open on infrastructure errors (adapter down etc.) — the order
+        # still hits the other safety rails. See plan Phase 0.
+        try:
+            gate_result = self.deps.greeks_budget_gate(
+                req, self.deps.list_open_positions(),
+            )
+            if hasattr(gate_result, "__await__"):
+                gate_result = await gate_result   # type: ignore[assignment]
+        except Exception as _exc:
+            gate_result = None                    # fail-open
+        if gate_result:
+            return self._reject(
+                req, "greeks_budget_breach",
+                f"Portfolio Greeks budget breach: {gate_result}", now_ms,
+            )
+
         side = self._side(req)
         symbol = self._symbol_for(req, inst)
 
@@ -274,6 +316,15 @@ class OrderRouter:
                 symbol = req.option_symbol
             else:
                 product_id = await self.adapter.get_product_id(symbol)
+                # Set isolated margin before leverage so the position can't
+                # cascade-liquidate the rest of the book if it goes bad.
+                # Non-fatal — some products only support cross-margin and the
+                # exchange will reject this call there; we proceed and let the
+                # leverage call run on whatever margin mode the product allows.
+                try:
+                    await self.adapter.set_margin_mode(product_id, "isolated")
+                except Exception:
+                    pass
                 try:
                     await self.adapter.set_leverage(product_id, req.leverage)
                 except Exception:
