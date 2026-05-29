@@ -440,6 +440,109 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         data = await self._auth_delete_with_body("/v2/orders/all", {"product_id": product_id})
         return (data or {})
 
+    # ── Phase 3 derivatives build: live funding + L2 book ──────────────
+
+    _FUNDING_CACHE_TTL_MS = 60_000
+
+    @property
+    def _funding_cache(self) -> dict[int, tuple[float, int]]:
+        """Per-instance funding-rate cache. Lazily attached so existing
+        constructors (paper/live + tests) don't need to touch __init__."""
+        if not hasattr(self, "_funding_cache_dict"):
+            self._funding_cache_dict = {}
+        return self._funding_cache_dict
+
+    async def get_funding_rate(self, product_id: int) -> dict:
+        """Live funding rate for a perpetual product. Per-minute cached so
+        the DerivativesSelector funding_cost_gate can run on every signal
+        without flooding the REST endpoint.
+
+        Returns a dict with at least:
+          {"funding_rate_8h_pct": float (decimal), "fetched_ts_ms": int,
+           "next_funding_ts_ms": int | None}
+
+        Falls back to the funding.py static defaults when the live read
+        fails (transient API hiccup); the gate still runs with stable
+        inputs in that case.
+        """
+        import time as _t
+        now_ms = int(_t.time() * 1000)
+        cached = self._funding_cache.get(product_id)
+        if cached is not None and (now_ms - cached[1]) < self._FUNDING_CACHE_TTL_MS:
+            return {"funding_rate_8h_pct": cached[0],
+                    "fetched_ts_ms": cached[1], "next_funding_ts_ms": None,
+                    "source": "cache"}
+        try:
+            data = await self._public_get(
+                f"/v2/products/{product_id}/funding_rate", params={}
+            )
+            result = (data or {}).get("result") or {}
+            # DEI ships funding as an 8h rate (decimal). Sometimes as 'rate',
+            # sometimes 'funding_rate', sometimes nested under 'current'.
+            rate = float(
+                result.get("rate") or
+                result.get("funding_rate") or
+                (result.get("current") or {}).get("rate") or
+                0.0001
+            )
+            self._funding_cache[product_id] = (rate, now_ms)
+            return {"funding_rate_8h_pct": rate,
+                    "fetched_ts_ms": now_ms,
+                    "next_funding_ts_ms": result.get("next_funding_ts_ms"),
+                    "source": "live"}
+        except Exception as exc:
+            log.debug("get_funding_rate fallback for product %s: %s", product_id, exc)
+            return {"funding_rate_8h_pct": 0.0001,
+                    "fetched_ts_ms": now_ms,
+                    "next_funding_ts_ms": None,
+                    "source": "fallback", "error": str(exc)}
+
+    async def get_l2_book(self, product_id: int, depth: int = 10) -> dict:
+        """L2 order book for a product. Used by the selector's slippage
+        estimator on options (book walks for multi-contract orders) and
+        by the FE microstructure preview.
+
+        Returns:
+          {"bids": [[price, size], ...],
+           "asks": [[price, size], ...],
+           "ts_ms": int}
+        """
+        try:
+            # DEI symbol-based L2 endpoint. We resolve product_id → symbol via
+            # the product cache (populated on first get_product_id call).
+            symbol = None
+            for sym, pid in self._product_id_cache.items():
+                if pid == product_id:
+                    symbol = sym
+                    break
+            if symbol is None:
+                # Brute-force lookup — costly but rare path
+                data = await self._public_get(
+                    "/v2/products", params={"page_size": 500}
+                )
+                for row in (data or {}).get("result") or []:
+                    if int(row.get("id") or 0) == product_id:
+                        symbol = row.get("symbol")
+                        self._product_id_cache[symbol] = product_id
+                        break
+            if symbol is None:
+                return {"bids": [], "asks": [], "ts_ms": 0,
+                        "error": f"product_id {product_id} not found"}
+            data = await self._public_get(
+                f"/v2/l2orderbook/{symbol}", params={"depth": depth}
+            )
+            result = (data or {}).get("result") or {}
+            return {
+                "bids": [[float(b.get("price") or 0), float(b.get("size") or 0)]
+                         for b in (result.get("buy") or [])[:depth]],
+                "asks": [[float(a.get("price") or 0), float(a.get("size") or 0)]
+                         for a in (result.get("sell") or [])[:depth]],
+                "ts_ms": int(_ts_ms(result.get("timestamp") or 0)),
+            }
+        except Exception as exc:
+            log.warning("get_l2_book failed for product %s: %s", product_id, exc)
+            return {"bids": [], "asks": [], "ts_ms": 0, "error": str(exc)}
+
     async def _auth_delete_with_body(self, path: str, body: dict) -> dict:
         """DELETE with body — needed for /v2/orders/all."""
         if self._is_paper or not self._api_key or not self._api_secret:

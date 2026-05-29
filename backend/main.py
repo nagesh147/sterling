@@ -31,6 +31,7 @@ from app.api.v1.endpoints.analytics import router as analytics_router
 from app.api.v1.endpoints.analytics_baseline import router as analytics_baseline_router
 from app.api.v1.endpoints.risk_dashboard import router as risk_dashboard_router
 from app.api.v1.endpoints.trading import router as trading_router
+from app.api.v1.endpoints.derivatives import router as derivatives_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.api.v1.endpoints.wfo import router as wfo_router
 from app.services import alert_store as _alert_store_svc
@@ -1676,6 +1677,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics_baseline_router, prefix="/api/v1")
     app.include_router(risk_dashboard_router, prefix="/api/v1")
     app.include_router(trading_router, prefix="/api/v1")
+    app.include_router(derivatives_router, prefix="/api/v1")
 
     # Triple SuperTrend strategy (self-contained module)
     from app.api.v1.endpoints.strategy import router as strategy_router
