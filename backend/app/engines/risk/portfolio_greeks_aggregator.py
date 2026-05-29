@@ -131,14 +131,17 @@ def _parse_option_symbol(symbol: str) -> Optional[dict]:
 
 async def compute_new_order_greeks(
     req: Any, adapter: Any, current_spot: float,
+    preloaded_chain: Optional[list] = None,
 ) -> tuple[PositionGreeks, float]:
     """Compute (Greeks, notional_usd) for a NEW order about to be placed.
 
     Futures: trivial — delta=±1, others=0, notional=spot×size.
-    Options: parses option_symbol, fetches the live option chain to read
-    the strike's current mark_iv, BSM-prices, returns scaled per-contract
-    Greeks. notional=spot×size (so the budget gate denominates in spot
-    exposure, matching how futures contribute).
+    Options: parses option_symbol, reads the strike's current mark_iv from
+    `preloaded_chain` if supplied (avoids a second adapter round-trip when
+    the caller already fetched the chain to refresh existing positions);
+    otherwise fetches the chain itself. BSM-prices and returns scaled
+    per-contract Greeks. notional=spot×size (so the budget gate denominates
+    in spot exposure, matching how futures contribute).
 
     On any failure (bad symbol, chain fetch error, missing IV) returns
     zero Greeks + zero notional with a log line; the gate treats this as
@@ -170,20 +173,21 @@ async def compute_new_order_greeks(
         )
         return PositionGreeks(0.0, 0.0, 0.0, 0.0, 0.0), 0.0
 
-    # Live IV from the option chain
-    try:
-        from app.services.exchanges import instrument_registry as _reg
-        inst = _reg.get_instrument(parsed["underlying"])
-        if inst is None:
-            raise RuntimeError(f"no instrument for {parsed['underlying']}")
-        chain = await adapter.get_option_chain(inst)
-    except Exception as exc:
-        log.warning(
-            "compute_new_order_greeks: option chain fetch failed for %s: %s; "
-            "gate sees zero Greeks for this order (fail-open).",
-            parsed["underlying"], exc,
-        )
-        return PositionGreeks(0.0, 0.0, 0.0, 0.0, 0.0), 0.0
+    chain = preloaded_chain
+    if chain is None:
+        try:
+            from app.services.exchanges import instrument_registry as _reg
+            inst = _reg.get_instrument(parsed["underlying"])
+            if inst is None:
+                raise RuntimeError(f"no instrument for {parsed['underlying']}")
+            chain = await adapter.get_option_chain(inst)
+        except Exception as exc:
+            log.warning(
+                "compute_new_order_greeks: option chain fetch failed for %s: %s; "
+                "gate sees zero Greeks for this order (fail-open).",
+                parsed["underlying"], exc,
+            )
+            return PositionGreeks(0.0, 0.0, 0.0, 0.0, 0.0), 0.0
 
     target = None
     for opt in chain:
@@ -214,6 +218,47 @@ async def compute_new_order_greeks(
 # ── the gate ────────────────────────────────────────────────────────────────
 
 
+async def _per_underlying_chain_cache(
+    underlyings: set[str], adapter: Any,
+) -> dict[str, list]:
+    """Fetch each underlying's option chain at most once for this check.
+    Returns `{underlying.upper(): chain}`. Failures leave the entry out
+    of the dict so callers fall back to stored entry_iv. Mirrors the
+    monitor's `OptionChainCache` design — same idea, narrower scope (one
+    check, not a whole poll cycle)."""
+    from app.services.exchanges import instrument_registry as _reg
+    out: dict[str, list] = {}
+    for ul in underlyings:
+        u = ul.upper()
+        if not u:
+            continue
+        inst = _reg.get_instrument(u)
+        if inst is None or not getattr(inst, "has_options", False):
+            continue
+        try:
+            out[u] = await adapter.get_option_chain(inst)
+        except Exception as exc:
+            log.warning("portfolio_greeks_aggregator: chain fetch failed for %s: %s", u, exc)
+    return out
+
+
+def _live_iv_for_position(pos: Any, chain: list) -> Optional[float]:
+    """Find the live IV for `pos` on the supplied chain by matching the
+    first leg's instrument_name. Returns the iv normalised to decimal
+    (DEI sometimes ships percent, e.g. 65.0 for 65%). None when the
+    chain doesn't carry the strike (DEI listed it but the contract has
+    expired since entry)."""
+    legs = pos.sized_trade.structure.legs
+    if not legs:
+        return None
+    target = legs[0].instrument_name
+    for o in chain:
+        if o.instrument_name == target and o.mark_iv:
+            iv = float(o.mark_iv)
+            return iv / 100.0 if iv > 5.0 else iv
+    return None
+
+
 async def check_against_budget(
     req: Any,
     open_positions: list,
@@ -232,6 +277,12 @@ async def check_against_budget(
     we'd rather miss a breach than reject every order. The hard rails
     (kill switch, daily loss, idempotency, cooldown) still gate the order
     even when this passes.
+
+    Phase 1 upgrade: refreshes each open option position's IV from a
+    one-shot per-underlying chain fetch instead of relying on
+    `entry_iv`. Without this an in-the-money position whose IV crushed
+    50% since entry would still gate as if the IV were unchanged,
+    silently over-stating vega exposure.
     """
     if checker is None or checker.pv <= 0:
         return None
@@ -252,7 +303,24 @@ async def check_against_budget(
     if new_spot <= 0:
         return None
 
-    # 2. Refresh existing positions' Greeks at their current spot.
+    # 2. Batch-fetch option chains for every underlying that has an open
+    #    options position. INCLUDE the new order's underlying when it's
+    #    also an options order — that lets compute_new_order_greeks reuse
+    #    the same fetch instead of a second round-trip to the adapter.
+    #    Futures-only portfolios + futures new order = zero chain fetches.
+    options_underlyings = {
+        (p.underlying or "").upper()
+        for p in open_positions
+        if (p.underlying or "") and p.sized_trade.structure.structure_type != "futures"
+    }
+    if getattr(req, "instrument_type", None) == "options":
+        options_underlyings.add(req.underlying.upper())
+    chain_cache: dict[str, list] = {}
+    if options_underlyings:
+        chain_cache = await _per_underlying_chain_cache(options_underlyings, adapter)
+
+    # 3. Refresh existing positions' Greeks at their current spot, using
+    #    live chain IV when available (else falls back to stored entry_iv).
     refreshed: list = []
     seen_spots: dict[str, float] = {req.underlying.upper(): new_spot}
     for pos in open_positions:
@@ -273,14 +341,27 @@ async def check_against_budget(
         spot_for_pos = seen_spots[sym]
         if spot_for_pos <= 0:
             continue
-        g = refresh_position_greeks(pos, current_spot=spot_for_pos)
+        # Live IV from chain when the position is an option AND the chain
+        # is populated for that underlying; otherwise iv_override=None
+        # falls through to stored entry_iv inside refresh_position_greeks.
+        iv_override = None
+        if pos.sized_trade.structure.structure_type != "futures":
+            chain = chain_cache.get(sym)
+            if chain is not None:
+                iv_override = _live_iv_for_position(pos, chain)
+        g = refresh_position_greeks(pos, current_spot=spot_for_pos, iv_override=iv_override)
         notional = spot_for_pos * float(pos.sized_trade.contracts or 0)
         # Wrap into the duck-typed shape GreeksBudgetChecker.check reads.
         refreshed.append(_GreeksAndNotional(greeks=g, notional=notional))
 
-    # 3. Compute the new order's Greeks contribution.
+    # 3. Compute the new order's Greeks contribution. Passes the
+    #    preloaded chain (when this underlying is in the cache) so the
+    #    new-order Greeks share the same fetch as the refresh path.
     try:
-        new_g, new_notional = await compute_new_order_greeks(req, adapter, new_spot)
+        preloaded = chain_cache.get(req.underlying.upper())
+        new_g, new_notional = await compute_new_order_greeks(
+            req, adapter, new_spot, preloaded_chain=preloaded,
+        )
     except Exception as exc:
         log.warning("check_against_budget: compute_new_order_greeks failed: %s; gate skipped (fail-open).", exc)
         return None

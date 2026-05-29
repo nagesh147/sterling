@@ -160,6 +160,7 @@ async def _background_position_monitor(app: FastAPI) -> None:
             from app.engines.directional.signal_engine import compute_signal
             from app.engines.directional.monitor_engine import check_exits
             from app.engines.directional.trailing_stop  import TrailState, TrailingStopEngine
+            from app.engines.risk import options_monitor as _opt_mon
             from app.schemas.risk import ExitSignal
             from app.api.v1.endpoints.config import get_runtime_risk
             from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
@@ -170,6 +171,19 @@ async def _background_position_monitor(app: FastAPI) -> None:
             import asyncio as _aio
             sem = _aio.Semaphore(3)
 
+            # Phase 1: one option-chain fetch per underlying per polling
+            # cycle, shared across every open options position. The
+            # Semaphore(3) bottleneck on per-position fetches stalled
+            # scalping positions at 5s cadence when >10 options were open.
+            chain_cache = _opt_mon.OptionChainCache()
+
+            # Resolve the active trading mode once so we can drive DTE
+            # force-close windows per its `force_close_minutes_before_expiry`.
+            _force_close_min = getattr(
+                getattr(app.state, "trading_mode", None) or MODES[DEFAULT_MODE],
+                "force_close_minutes_before_expiry", 120,
+            )
+
             def _is_scalping(pos) -> bool:
                 mode = getattr(pos, "mode", None) or ""
                 notes = pos.notes or ""
@@ -179,20 +193,43 @@ async def _background_position_monitor(app: FastAPI) -> None:
                 async with sem:
                     try:
                         # ── Instrument-type discriminator ─────────────────
-                        # Phase 0 of the derivatives build adds this branch
-                        # so Phase 1's options-aware monitoring (premium
-                        # trail via delta, DTE force-close, microstructure
-                        # veto on amend, chain-staleness gate, per-underlying
-                        # chain batching) can land without disturbing the
-                        # futures path. Phase 0 keeps both branches behaviorally
-                        # identical — the variable is read by close_position
-                        # callsites below for exit-reason attribution.
+                        # Phase 1 of the derivatives build implements the
+                        # options branch: per-underlying chain caching,
+                        # staleness gate, DTE force-close, microstructure
+                        # veto on amend, premium-aware close PnL. Futures
+                        # path behavior is unchanged.
                         _structure = pos.sized_trade.structure
                         is_options = _structure.structure_type != "futures"
 
                         inst = _reg.get_instrument(pos.underlying)
                         if not inst:
                             return
+
+                        # ── Options-only setup ────────────────────────────
+                        # Fetch chain (or use cached), locate this position's
+                        # option, set up the close-kwargs builder and
+                        # microstructure-veto helper. Falls back gracefully
+                        # to spot-based monitoring when chain is unavailable
+                        # — Phase 0 behavior — so a one-poll fetch failure
+                        # doesn't crash the monitor.
+                        chain_option = None
+                        chain_age_ms = -1
+                        if is_options:
+                            cache_entry = await chain_cache.get_or_fetch(
+                                pos.underlying, ad, _reg,
+                            )
+                            if cache_entry is not None:
+                                chain, chain_fetch_ts = cache_entry
+                                chain_age_ms = now_ms - chain_fetch_ts
+                                leg0 = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+                                if leg0 is not None:
+                                    chain_option = _opt_mon.find_option(chain, leg0.instrument_name)
+                                if _opt_mon.is_chain_stale(chain_fetch_ts, now_ms):
+                                    log.debug(
+                                        "monitor[%s]: chain stale (%dms > 30000ms); skipping Greek-dependent updates",
+                                        pos.id, chain_age_ms,
+                                    )
+                                    chain_option = None      # treat stale as unavailable
 
                         # ── Timeframe selection ──────────────────────────
                         # Scalping positions trail on 15m candles to avoid
@@ -204,6 +241,49 @@ async def _background_position_monitor(app: FastAPI) -> None:
                         c_trail = await ad.get_candles(inst, trail_tf, limit=200)
                         signal = compute_signal(c_trail)
                         current_spot = await ad.get_index_price(inst)
+
+                        # ── Phase 1: DTE force-close ─────────────────────
+                        # Run BEFORE trail/exit logic so an expiring options
+                        # position never wastes a cycle trying to ratchet a
+                        # stop that's about to settle. Tiered by notional
+                        # inside should_force_close: > $1k → 120 min window,
+                        # else 30 min. settlement_recorded flag is True only
+                        # when we crossed actual expiry — distinguishes a
+                        # pre-expiry market-close from a cash-settle event
+                        # for after-tax PnL accounting.
+                        if is_options and pos.status.value in ("open", "partially_closed"):
+                            should_fc, fc_reason = _opt_mon.should_force_close(
+                                pos, _force_close_min, now_ms,
+                            )
+                            if should_fc:
+                                at_settlement = _opt_mon.is_at_settlement(pos, now_ms)
+                                # If LIVE non-paper, fire the market reduce-close on the exchange.
+                                if not pos.is_paper and pos.order_id and pos.order_status == "filled":
+                                    try:
+                                        from app.services import exchange_account_store as _ecs_fc
+                                        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DiaFc
+                                        _ac = _ecs_fc.get_active()
+                                        if _ac and _ac.api_key and not _ac.api_key.startswith("DUMMY"):
+                                            _base = (_ac.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+                                            _live_ad = _DiaFc(api_key=_ac.api_key, api_secret=_ac.api_secret, is_paper=False, base_url=_base)
+                                            leg0 = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+                                            if leg0:
+                                                _pid = await _live_ad.get_product_id(leg0.instrument_name)
+                                                # Side for closing a long option = sell (we only buy options today)
+                                                await _live_ad.market_reduce_close(
+                                                    _pid, "sell", float(pos.sized_trade.contracts),
+                                                )
+                                                log.info("Force-close market reduce placed for %s: %s", pos.id, fc_reason)
+                                    except Exception as _fce:
+                                        log.warning("Force-close live order failed for %s: %s", pos.id, _fce)
+                                # Book the close in paper_store with premium + settlement attribution.
+                                _close_kw = _opt_mon.option_close_kwargs(
+                                    chain_option, at_settlement, "force_close_dte",
+                                )
+                                _ps.close_position(pos.id, float(current_spot), **_close_kw)
+                                log.info("Auto-monitor: force-closed %s (%s, settlement=%s)",
+                                         pos.id, fc_reason, at_settlement)
+                                return
                         leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
                         dte_exp = _dte_from_expiry(leg.expiry_date) if leg else -1
                         if dte_exp >= 0:
@@ -302,43 +382,78 @@ async def _background_position_monitor(app: FastAPI) -> None:
                                 # ── Live stop amendment ──────────────────
                                 # When the stop ratcheted AND this is a live
                                 # non-paper position, push the new stop to
-                                # the exchange via cancel+replace.
+                                # the exchange via cancel+replace. Phase 1
+                                # adds the microstructure veto for options:
+                                # if the current option spread is wider than
+                                # 8% of mid, defer the amend by one poll —
+                                # otherwise the carrier order fills against
+                                # a synthetic mid that's 10-20% off the true
+                                # price on illiquid strikes.
                                 if (_tu.new_stop != old_sl and not pos.is_paper
                                         and pos.order_id and pos.order_status == "filled"):
-                                    try:
-                                        from app.services import exchange_account_store
-                                        from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
-                                        active_cfg = exchange_account_store.get_active()
-                                        if active_cfg and active_cfg.api_key and not active_cfg.api_key.startswith("DUMMY"):
-                                            api_base = (active_cfg.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
-                                            live_adapter = DeltaIndiaAdapter(
-                                                api_key=active_cfg.api_key,
-                                                api_secret=active_cfg.api_secret,
-                                                is_paper=False,
-                                                base_url=api_base,
+                                    veto_amend = False
+                                    if is_options and chain_option is not None:
+                                        veto_amend, veto_reason = _opt_mon.should_veto_amend(chain_option)
+                                        if veto_amend:
+                                            log.info(
+                                                "Auto-monitor: amend deferred for %s (%s) — will retry next poll",
+                                                pos.id, veto_reason,
                                             )
-                                            product_id = await live_adapter.get_product_id(
-                                                inst.delta_perp_symbol or f"{pos.underlying}USD"
-                                            )
-                                            await live_adapter.cancel_replace_stop(
-                                                product_id=product_id,
-                                                side="sell" if direction_sign == 1 else "buy",
-                                                size=float(pos.sized_trade.contracts),
-                                                old_stop=float(old_sl) if old_sl else 0.0,
-                                                new_stop=round(float(_tu.new_stop), 2),
-                                            )
-                                            log.info("Auto-monitor: live stop amended %s — %.2f → %.2f",
-                                                     pos.underlying, old_sl or 0, _tu.new_stop)
-                                    except Exception as _le:
-                                        log.warning("Auto-monitor: live stop amendment failed for %s: %s", pos.id, _le)
+                                    if not veto_amend:
+                                        try:
+                                            from app.services import exchange_account_store
+                                            from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
+                                            active_cfg = exchange_account_store.get_active()
+                                            if active_cfg and active_cfg.api_key and not active_cfg.api_key.startswith("DUMMY"):
+                                                api_base = (active_cfg.extra or {}).get("api_base_url", "https://api.india.delta.exchange")
+                                                live_adapter = DeltaIndiaAdapter(
+                                                    api_key=active_cfg.api_key,
+                                                    api_secret=active_cfg.api_secret,
+                                                    is_paper=False,
+                                                    base_url=api_base,
+                                                )
+                                                # Options use the option's instrument_name; futures use the perp symbol.
+                                                if is_options:
+                                                    leg0 = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
+                                                    _amend_symbol = leg0.instrument_name if leg0 else None
+                                                    # Long-option close side is always "sell" (we only buy options today).
+                                                    _amend_side = "sell"
+                                                else:
+                                                    _amend_symbol = inst.delta_perp_symbol or f"{pos.underlying}USD"
+                                                    _amend_side = "sell" if direction_sign == 1 else "buy"
+                                                if _amend_symbol:
+                                                    product_id = await live_adapter.get_product_id(_amend_symbol)
+                                                    await live_adapter.cancel_replace_stop(
+                                                        product_id=product_id,
+                                                        side=_amend_side,
+                                                        size=float(pos.sized_trade.contracts),
+                                                        old_stop=float(old_sl) if old_sl else 0.0,
+                                                        new_stop=round(float(_tu.new_stop), 2),
+                                                    )
+                                                    log.info("Auto-monitor: live stop amended %s — %.2f → %.2f",
+                                                             pos.underlying, old_sl or 0, _tu.new_stop)
+                                        except Exception as _le:
+                                            log.warning("Auto-monitor: live stop amendment failed for %s: %s", pos.id, _le)
 
                                 if _tu.stopped_out:
-                                    # Phase 1 will fetch live option premium and pass exit_premium=...
-                                    # to get accurate options PnL. Phase 0: delta-linear estimate logged.
-                                    _ps.close_position(
-                                        pos.id, float(current_spot),
-                                        exit_reason="trail",
-                                    )
+                                    # Premium-aware close: when chain_option
+                                    # is present, pass its mark_price as
+                                    # exit_premium so the realised options
+                                    # PnL is correct. Falls back to the
+                                    # delta-linear estimate (with logged
+                                    # warning) when chain is stale/missing.
+                                    if is_options:
+                                        _close_kw = _opt_mon.option_close_kwargs(
+                                            chain_option,
+                                            _opt_mon.is_at_settlement(pos, now_ms),
+                                            "trail",
+                                        )
+                                        _ps.close_position(pos.id, float(current_spot), **_close_kw)
+                                    else:
+                                        _ps.close_position(
+                                            pos.id, float(current_spot),
+                                            exit_reason="trail",
+                                        )
                                     log.info("Auto-monitor: trail stop hit for %s at %.2f", pos.id, current_spot)
                                     return
                                 if _tu.partial and pos.status.value == "open":
@@ -360,10 +475,21 @@ async def _background_position_monitor(app: FastAPI) -> None:
                         _pnl_history.record(pos.id, current_spot, estimated_pnl, current_dte,
                                             int(__import__('time').time() * 1000))
                         if exit_sig.should_exit and not exit_sig.partial:
-                            _ps.close_position(
-                                pos.id, float(current_spot),
-                                exit_reason=f"signal:{exit_sig.exit_type}",
-                            )
+                            # Same premium-aware exit logic as the trail
+                            # close — options use exit_premium from current
+                            # chain, futures use the spot-linear formula.
+                            if is_options:
+                                _sig_close_kw = _opt_mon.option_close_kwargs(
+                                    chain_option,
+                                    _opt_mon.is_at_settlement(pos, now_ms),
+                                    f"signal:{exit_sig.exit_type}",
+                                )
+                                _ps.close_position(pos.id, float(current_spot), **_sig_close_kw)
+                            else:
+                                _ps.close_position(
+                                    pos.id, float(current_spot),
+                                    exit_reason=f"signal:{exit_sig.exit_type}",
+                                )
                             log.info("Auto-monitor: %s closed (%s)", pos.id, exit_sig.exit_type)
                         elif exit_sig.partial and pos.status.value == "open":
                             _pr = getattr(exit_sig, "partial_ratio", 0.50)

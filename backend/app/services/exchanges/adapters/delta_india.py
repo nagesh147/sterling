@@ -807,15 +807,30 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                     0.0
                 )
                 delta_val = float(greeks.get("delta") or item.get("delta") or 0.0)
+                # Phase 1: pull gamma/vega/theta/rho out of DEI's greeks block
+                # when present. Missing fields stay at 0; downstream
+                # `enrich_with_greeks` BSM-fills them and stamps
+                # greeks_enriched=True. Phase 0's OptionSummary defaults all
+                # of these to 0 so an adapter response that ships only delta+iv
+                # still validates the schema.
+                gamma_val = float(greeks.get("gamma") or 0.0)
+                vega_val  = float(greeks.get("vega")  or 0.0)
+                theta_val = float(greeks.get("theta") or 0.0)
+                rho_val   = float(greeks.get("rho")   or 0.0)
                 oi = float(item.get("oi") or item.get("oi_contracts") or 0.0)
                 vol = float(item.get("volume") or item.get("turnover") or 0.0)
                 ts_raw = item.get("timestamp") or item.get("time") or now_ms
+                # Spread% pre-computed once here so liquidity scoring and
+                # microstructure veto don't re-derive bid/ask per call.
+                spread_pct = ((ask - bid) / mid) if (bid > 0 and ask > 0 and mid > 0) else 0.0
                 options.append(OptionSummary(
                     instrument_name=symbol, underlying=instrument.underlying,
                     strike=strike, expiry_date=expiry_str, dte=dte,
                     option_type=opt_type, bid=bid, ask=ask,
                     mark_price=mark, mid_price=mid, mark_iv=iv, delta=delta_val,
                     open_interest=oi, volume_24h=vol, last_updated_ms=_ts_ms(ts_raw),
+                    gamma=gamma_val, vega=vega_val, theta=theta_val, rho=rho_val,
+                    spread_pct=spread_pct,
                 ))
             except (ValueError, TypeError, KeyError):
                 continue

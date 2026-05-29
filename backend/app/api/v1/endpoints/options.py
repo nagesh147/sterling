@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services.exchanges import instrument_registry as registry
 from app.engines.directional.contract_health_engine import assess_contract_health
+from app.engines.risk.option_pricing import enrich_chain
 
 router = APIRouter(prefix="/options", tags=["options"])
 
@@ -43,8 +44,14 @@ async def option_chain(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Option chain fetch failed: {exc}")
 
+    # Phase 1: BSM-fill any Greeks the adapter didn't ship (Delta India often
+    # only returns delta + IV). Every contract in the response carries the
+    # full 5-Greek vector; `greeks_enriched` flags which contracts were
+    # computed vs. exchange-supplied for audit.
+    enriched_chain = enrich_chain(raw_chain, spot=float(spot))
+
     # Filter by DTE and type
-    filtered = [o for o in raw_chain if min_dte <= o.dte <= max_dte]
+    filtered = [o for o in enriched_chain if min_dte <= o.dte <= max_dte]
     if type != "all":
         filtered = [o for o in filtered if o.option_type == type]
 
