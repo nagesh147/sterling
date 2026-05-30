@@ -292,8 +292,8 @@ export function useScalpingBacktest() {
 }
 
 export function useScalpingExecute() {
-  return useMutation<ScalpingExecuteResponse, Error, { underlying: string; strategy: string; auto?: boolean }>({
-    mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/scalping/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true, auto: req.auto ?? false }),
+  return useMutation<ScalpingExecuteResponse, Error, { underlying: string; strategy: string; auto?: boolean; override_entry?: number | null; override_stop?: number | null }>({
+    mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/scalping/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true, auto: req.auto ?? false, ...(req.override_entry != null ? { override_entry: req.override_entry } : {}), ...(req.override_stop != null ? { override_stop: req.override_stop } : {}) }),
   });
 }
 

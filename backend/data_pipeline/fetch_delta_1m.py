@@ -17,20 +17,8 @@ def sync_delta_1m_history(
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Ensure structural table integrity exists
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ohlcv_1m (
-            timestamp INTEGER,
-            symbol TEXT,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            volume REAL,
-            PRIMARY KEY (timestamp, symbol)
-        )
-    """)
-    conn.commit()
+    # We rely on the global ohlcv table defined in the core system.
+    # No need to create ohlcv_1m.
 
     # Calculate global temporal boundaries
     seconds_per_day = 86400
@@ -79,8 +67,8 @@ def sync_delta_1m_history(
             
             # Use INSERT OR IGNORE to automatically resolve duplicate records across chunk seams
             cursor.executemany("""
-                INSERT OR IGNORE INTO ohlcv_1m (timestamp, symbol, open, high, low, close, volume)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT OR IGNORE INTO ohlcv (time, symbol, resolution, open, high, low, close, volume)
+                VALUES (?, ?, '1m', ?, ?, ?, ?, ?)
             """, records)
             conn.commit()
             
@@ -98,6 +86,6 @@ def sync_delta_1m_history(
     print(f"🏁 Historical Sync Complete for {symbol}. Aggressive profile ready to backtest.")
 
 if __name__ == '__main__':
-    # Fetch 30 days of data for the top 3 assets to backtest Aggressive profile
+    # Fetch 5 YEARS (1825 days) of data for the top 3 assets to backtest 
     for sym in ["BTCUSD", "ETHUSD", "SOLUSD"]:
-        sync_delta_1m_history('backend/sterling_paper.db', sym, days_to_fetch=30)
+        sync_delta_1m_history('sterling_paper.db', sym, days_to_fetch=1825)

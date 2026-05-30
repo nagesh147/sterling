@@ -151,6 +151,8 @@ class ScalpingExecuteRequest(BaseModel):
     strategy: str  # "price_action" | "smc" | "ma_crossover"
     confirm: bool = True
     auto: bool = False  # True when fired by the algo auto-exec loop (vs a manual click)
+    override_entry: Optional[float] = None    # manual override: use this entry instead of the scan result
+    override_stop: Optional[float] = None     # manual override: use this stop instead of the scan result
 
 
 class ScalpingExecuteResponse(BaseModel):

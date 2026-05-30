@@ -35,5 +35,8 @@
 # ui-formatting
 - Format backend reason strings for user-facing display: fix casing (title/sentence case where appropriate), correct grammar, and use readable labels — never show raw-backend underscore_delimited or ALL_CAPS strings directly to users. Confidence: 0.65
 
+# engineering-philosophy
+- No MVPs, no band-aids, no shortcuts: build production-grade infrastructure the right way the first time, regardless of time cost. Confidence: 0.80
+
 # ui-layout
 See [ui-layout/taste.md](ui-layout/taste.md)

@@ -409,6 +409,10 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         )
 
     sig = matched[0]
+    if body.override_entry is not None:
+        sig.entry = body.override_entry
+    if body.override_stop is not None:
+        sig.stop_loss = body.override_stop
     if sig.entry is None or sig.stop_loss is None:
         return ScalpingExecuteResponse(
             accepted=False, mode="paper", underlying=sym, strategy=strategy,
