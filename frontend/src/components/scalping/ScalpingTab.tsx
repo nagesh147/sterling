@@ -474,19 +474,19 @@ type SignalCol = {
 // center column instead of crowding to the left. Fixed columns stay fixed.
 const SIGNAL_COLS: SignalCol[] = [
   { key: 'accent',   label: '',                 width: '4px' },
-  { key: 'symbol',   label: 'Symbol',           width: 'minmax(58px, 0.8fr)' },
-  { key: 'time',     label: 'Time',             width: 'minmax(80px, 1fr)' },
-  { key: 'status',   label: 'Status',           width: 'minmax(80px, 1fr)' },
-  { key: 'dir',      label: 'Direction',        width: 'minmax(80px, 1fr)',  dir: true },
-  { key: 'entry',    label: 'Entry',            width: 'minmax(82px, 1.1fr)',  plan: true },
-  { key: 'current',  label: 'Current',          width: 'minmax(100px, 1.3fr)', plan: true },
-  { key: 'stop',     label: 'Stop',             width: 'minmax(82px, 1.1fr)',  plan: true },
-  { key: 'target',   label: 'Target',           width: 'minmax(82px, 1.1fr)',  plan: true },
-  { key: 'risk',     label: 'Risk',             width: 'minmax(52px, 0.7fr)',  plan: true },
-  { key: 'strategy', label: 'Strategy',         width: 'minmax(100px, 1.3fr)' },
-  { key: 'pattern',  label: 'Pattern',          width: 'minmax(120px, 1.8fr)', align: 'center', pattern: true },
-  { key: 'profile',  label: 'Profile',          width: 'minmax(70px, 0.9fr)' },
-  { key: 'action',   label: 'Action',           width: 'minmax(140px, 1.5fr)', action: true },
+  { key: 'symbol',   label: 'Symbol',           width: 'minmax(50px, 0.7fr)' },
+  { key: 'time',     label: 'Time',             width: 'minmax(56px, 0.8fr)' },
+  { key: 'status',   label: 'Status',           width: 'minmax(60px, 0.8fr)' },
+  { key: 'dir',      label: 'Direction',        width: 'minmax(70px, 1fr)',  dir: true },
+  { key: 'entry',    label: 'Entry',            width: 'minmax(70px, 1fr)',  plan: true },
+  { key: 'current',  label: 'Current',          width: 'minmax(90px, 1.2fr)', plan: true },
+  { key: 'stop',     label: 'Stop',             width: 'minmax(70px, 1fr)',  plan: true },
+  { key: 'target',   label: 'Target',           width: 'minmax(70px, 1fr)',  plan: true },
+  { key: 'risk',     label: 'Risk',             width: 'minmax(46px, 0.6fr)',  plan: true },
+  { key: 'strategy', label: 'Strategy',         width: 'minmax(90px, 1.2fr)' },
+  { key: 'pattern',  label: 'Pattern',          width: 'minmax(100px, 1.4fr)', align: 'center', pattern: true },
+  { key: 'profile',  label: 'Profile',          width: 'minmax(60px, 0.8fr)' },
+  { key: 'action',   label: 'Action',           width: 'minmax(180px, 2fr)', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
 
@@ -1168,7 +1168,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: pausedAuto ? 'var(--t-amber)' : modeColor,
                 padding: '4px 9px', borderRadius: 'var(--radius-md)', background: pausedAuto ? tint('var(--t-amber)', 12) : alpha(modeColor, 0.09),
                 border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
-                minWidth: 120, textAlign: 'center',
+                textAlign: 'center', minWidth: 80,
               }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}{pausedAuto ? ' ⏸' : ''}</span>
               {execState?.auto && execState?.resp?.telegram_alert_sent && (
                 <span title="Signal alert sent to Telegram" style={{
@@ -1178,7 +1178,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
                 }} />
               )}
               {!isOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05, minWidth: 120 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
                   <span style={{ fontSize: 14, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
                     {pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
                   </span>
@@ -1195,14 +1195,14 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
               fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: modeColor,
               padding: '5px 12px', borderRadius: 'var(--radius-md)', background: alpha(modeColor, 0.08),
               border: `1px solid ${alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
-              opacity: tried ? 0.7 : 1, minWidth: 120, textAlign: 'center',
+              opacity: tried ? 0.7 : 1, minWidth: 80, textAlign: 'center',
             }}>⚡ {executing ? 'AUTO…' : `AUTO · ${pillMode}`}</span>
           ) : s.executable ? (
             <button disabled={executing} onClick={(e) => { e.stopPropagation(); onExecute(); }} style={{
               fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '6px 16px', borderRadius: 6,
               fontFamily: 'inherit', cursor: executing ? 'default' : 'pointer',
               color: '#fff', background: tried ? 'var(--t-amber)' : dirColor, border: 'none', lineHeight: 1,
-              opacity: executing ? 0.6 : 1, minWidth: 120, textAlign: 'center',
+              opacity: executing ? 0.6 : 1, minWidth: 80, textAlign: 'center',
             }}>
               {executing ? '…' : tried ? 'RETRY' : 'EXECUTE'}
             </button>
