@@ -15,11 +15,11 @@ export function MassiveBacktestDashboard({ underlying }: { underlying: string })
   const chartRef = useRef<IChartApi | null>(null);
 
   const strategies = [
-    { id: 'mean_reversion', name: 'Mean Reversion (RSI)' },
-    { id: 'ma_crossover', name: 'MA Crossover (9/21)' },
-    { id: 'breakout', name: '20-Period Breakout' },
-    { id: 'price_action', name: 'Price Action (Engulfing)' },
-    { id: 'smc', name: 'Smart Money Concepts (FVG)' },
+    { id: 'mean_reversion', name: 'Sterling: Mean Reversion (RSI)' },
+    { id: 'ma_crossover', name: 'Sterling: MA Crossover (9/21)' },
+    { id: 'breakout', name: 'Sterling: 20-Period Breakout' },
+    { id: 'price_action', name: 'Sterling: Price Action (Engulfing)' },
+    { id: 'smc', name: 'Sterling: Smart Money Concepts (FVG)' },
     { id: 'mean_reversion', name: 'Community: SuperTrend Scalp' },
     { id: 'breakout', name: 'Community: Bollinger Bands Breakout' },
     { id: 'smc', name: 'Community: ICT Silver Bullet' },
