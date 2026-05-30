@@ -288,6 +288,7 @@ export function Dashboard() {
         // ── SIMPLE MODE ─────────────────────────────────────────────────────
         <>
           <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
+          <PanelBoundary title="MASSIVE VECTORIZED BACKTEST"><MassiveBacktestDashboard underlying={selectedUnderlying} /></PanelBoundary>
           <PanelBoundary title="LIVE SIGNALS"><SignalsTable /></PanelBoundary>
           <PanelBoundary title="POSITIONS"><PositionsStrip /></PanelBoundary>
         </>
