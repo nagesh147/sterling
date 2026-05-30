@@ -57,7 +57,10 @@ def apply_strategy(df, strategy_name):
 @router.post("/run")
 async def run_vectorized_endpoint(body: VectorizedBacktestRequest, request: Request):
     t0 = time.time()
-    file_path = f"vector_store_1m_{body.symbol.upper()}.parquet"
+    sym = body.symbol.upper()
+    if not sym.endswith("USD"):
+        sym += "USD"
+    file_path = f"vector_store_1m_{sym}.parquet"
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail=f"Parquet file {file_path} not found.")
         
