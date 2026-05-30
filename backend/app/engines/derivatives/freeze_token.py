@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-FREEZE_TTL_MS = 30_000
+FREEZE_TTL_MS = 120_000
 
 
 @dataclass

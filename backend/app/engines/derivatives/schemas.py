@@ -111,6 +111,10 @@ class SignalContext(BaseModel):
     signal_strength: str = "SIGNAL"                 # "STRONG"/"SIGNAL"/etc — text label
     expected_hold_minutes: Optional[int] = None     # override profile when set
     mode_name: str = "swing"                        # MODES key — drives DTE bounds, etc.
+    presized: bool = False                          # True when entry/SL/TP are already
+                                                    # validated (edge feed) — the futures
+                                                    # solver passes them through without
+                                                    # re-cushioning or re-gating R:R.
 
 
 # ── Intermediate (liquidity) ──────────────────────────────────────────

@@ -51,7 +51,42 @@ def _scalping_breakout(strategy: str) -> StrategyDerivativesProfile:
     return p
 
 
+def _edge(strategy: str) -> StrategyDerivativesProfile:
+    """Edge-validated feed (4h swing combos from BACKTEST_EDGE_REPORT).
+
+    `enabled=True` so these candidates SHOW in the tables immediately —
+    the whole point of the edge feed is visibility into proven setups.
+    `auto_execute_*` stay OFF (inherited default): edge rows are
+    display-only until the operator opts in after the 7-day audit.
+    """
+    return StrategyDerivativesProfile(
+        strategy=strategy,
+        enabled=True,
+        instrument_bias=InstrumentBias.AUTO,
+        target_delta=0.55,                 # slightly-ITM directional
+        target_delta_tolerance=0.075,
+        dte_min=7,
+        dte_preferred=14,
+        dte_max=30,
+        expected_hold_minutes=2 * 24 * 60,  # ~2 days; per-signal override refines
+        expiry_close_minutes_before=240,
+        leverage_cap=10.0,
+        max_premium_pct_of_account=0.02,
+        funding_cost_max_pct_of_R=0.25,
+        min_oi=80.0,
+        max_spread_pct=0.04,
+        ivr_pct_naked_max=50,
+    )
+
+
+_EDGE_STRATEGIES = ("ma_crossover", "mean_reversion", "breakout",
+                    "price_action", "smc")
+
+
 DEFAULT_PROFILES: dict[str, StrategyDerivativesProfile] = {
+    # Edge-validated feed — one profile per shared strategy, display-only
+    **{f"edge/{s}": _edge(f"edge/{s}") for s in _EDGE_STRATEGIES},
+
     # Scalping
     "scalping/price_action":   _scalping_grind("scalping/price_action"),
     "scalping/smc":            _scalping_grind("scalping/smc"),

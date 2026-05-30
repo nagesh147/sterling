@@ -34,13 +34,36 @@ class SLTPResolution:
 def solve_futures(
     *, direction: str, entry: float, structure_stop: float,
     atr_val: float, take_profit: Optional[float], rr: float = 2.0,
+    validated: bool = False,
 ) -> SLTPResolution:
     """Wrap app/engines/scalping/risk.resolve_trade_risk for futures.
 
     For the integration path we have a direct stop/target so we synthesize
     a degenerate "levels" list with just the target and ask the solver to
     produce the cushioned SL + R:R-gated TP.
+
+    `validated=True` (edge feed): the stop/target were already proven in the
+    backtest with this exact geometry, so we pass them through unchanged —
+    no anti-stop-hunt cushion, no scalping risk-cap, no R:R re-gate. Adding
+    those would make the live trade differ from the validated one. We still
+    reject geometrically-incoherent stops (wrong side of entry).
     """
+    if validated:
+        is_long = direction == "long"
+        bad_stop = (is_long and structure_stop >= entry) or \
+                   (not is_long and structure_stop <= entry)
+        if bad_stop or entry <= 0:
+            return SLTPResolution(ok=False, stop_loss=None, take_profit=None,
+                                  reason="validated stop on wrong side of entry")
+        stop_dist = abs(entry - structure_stop)
+        rr_val = (abs(take_profit - entry) / stop_dist
+                  if take_profit and stop_dist > 0 else 0.0)
+        return SLTPResolution(
+            ok=True, stop_loss=structure_stop, take_profit=take_profit,
+            tp_source="validated", rr=round(rr_val, 3),
+            risk_pct=stop_dist / entry * 100.0, reason="ok",
+        )
+
     from app.engines.scalping.risk import resolve_trade_risk
     from dataclasses import dataclass as _dc
 

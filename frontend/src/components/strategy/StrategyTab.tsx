@@ -9,6 +9,7 @@ import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint 
 import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
 import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
 import { DerivativesPanel } from '../derivatives/DerivativesPanel';
+import { EdgeGatePanel } from '../derivatives/EdgeGatePanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 
 /* ── tiny style helpers ───────────────────────────────────────────────────── */
@@ -580,6 +581,7 @@ export function StrategyTab() {
               {cfg && <ConfigPanel cfg={cfg} onSave={(c) => setCfg.mutate(c)} saving={setCfg.isPending} />}
               {cfgQ.isLoading && <div style={dim}>loading config…</div>}
               <DerivativesPanel strategy="triple_st" />
+              <EdgeGatePanel />
               <BacktestPanel underlying={selected} />
             </div>
           </div>

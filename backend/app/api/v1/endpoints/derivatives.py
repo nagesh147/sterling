@@ -16,7 +16,10 @@ re-set on each session — restart is a clean slate by design).
 """
 from __future__ import annotations
 
+import asyncio
+import os
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -113,6 +116,7 @@ async def _option_chain_or_none(*, underlying: str, app, spot: float):
 
 class _CandidateRow(BaseModel):
     signal_id: str
+    source: str = "engine"          # "engine" (scalping/triple-ST) | "edge" (validated feed)
     strategy: str
     underlying: str
     direction: str
@@ -147,11 +151,17 @@ class _CandidatesResponse(BaseModel):
     timestamp_ms: int
 
 
+def _signal_source(strategy: str) -> str:
+    """Which feed a signal came from — drives the FE source badge."""
+    return "edge" if strategy.startswith("edge/") else "engine"
+
+
 def _row_from_decision(*, signal_id: str, signal: SignalContext,
                        decision: DerivativesDecision) -> _CandidateRow:
     c = decision.chosen
     return _CandidateRow(
         signal_id=signal_id,
+        source=_signal_source(signal.strategy),
         strategy=signal.strategy,
         underlying=signal.underlying,
         direction=signal.direction,
@@ -181,66 +191,44 @@ def _row_from_decision(*, signal_id: str, signal: SignalContext,
     )
 
 
+def _cached_rows(
+    app, leg: str, *, strategy: Optional[str], underlying: Optional[str],
+) -> tuple[list[_CandidateRow], int]:
+    """Read rows for one leg ("futures"|"options") from the background
+    scanner's cached snapshot, filtered by strategy/underlying.
+
+    The scanner is the SOLE producer (it runs the heavy selector pipeline
+    off-thread once per tick). Read endpoints never recompute — that is what
+    keeps the event loop free and the server responsive under FE polling.
+    """
+    cache = getattr(getattr(app, "state", None), "derivatives_scan_cache", None) or {}
+    ts = int(cache.get("last_scan_ms", 0))
+    out: list[_CandidateRow] = []
+    for d in cache.get(leg, []) or []:
+        row = d if isinstance(d, _CandidateRow) else _CandidateRow(**d)
+        if strategy and row.strategy != strategy:
+            continue
+        if underlying and row.underlying.upper() != underlying.upper():
+            continue
+        out.append(row)
+    return out, ts
+
+
 @router.get("/candidates", response_model=_CandidatesResponse)
 async def candidates(
     request: Request,
     strategy: Optional[str] = Query(default=None),
     underlying: Optional[str] = Query(default=None),
 ):
-    """Run the selector against every armed signal across strategies.
+    """Combined candidate rows (futures + options) from the scanner cache.
 
-    Filter by strategy (e.g. 'scalping/price_action') or by underlying.
-    Returns one row per (signal, decision). Profile-disabled strategies
-    are skipped — the FE shows only what's actionable.
-
-    Back-compat: this returns the single CHOSEN candidate per signal
-    (futures OR options based on `instrument_chooser`). The split
-    `/candidates/futures` and `/candidates/options` endpoints below
-    expose both legs from `decide_both()` for the parallel tables.
+    Filter by strategy (e.g. 'scalping/price_action') or underlying. The
+    split `/candidates/futures` and `/candidates/options` endpoints below
+    feed the parallel FE tables; this combined view is kept for back-compat.
     """
-    rows: list[_CandidateRow] = []
-    now_ms = int(time.time() * 1000)
-    overrides = _profile_overrides(request.app)
-
-    signals = await _collect_armed_signals(
-        request, strategy_filter=strategy, underlying_filter=underlying,
-    )
-    market_cache: dict[str, MarketContext] = {}
-    chain_cache: dict[str, Any] = {}
-
-    for signal_id, sig in signals:
-        prof = overrides.get(sig.strategy) or get_profile(sig.strategy)
-        if not prof.enabled:
-            continue
-        ul = sig.underlying.upper()
-        if ul not in market_cache:
-            try:
-                market_cache[ul] = await _market_context(
-                    underlying=ul, app=request.app,
-                    signal_score=sig.signal_score,
-                )
-            except HTTPException:
-                continue
-        if ul not in chain_cache:
-            chain_cache[ul] = await _option_chain_or_none(
-                underlying=ul, app=request.app, spot=market_cache[ul].spot,
-            )
-        decision = preview_one(
-            signal=sig, market=market_cache[ul], chain=chain_cache[ul],
-            profile_overrides=overrides,
-        )
-        # Audit every decision the selector emits, even un-executed ones —
-        # this is the operator's seven-day observation feed.
-        try:
-            derivatives_audit.record(decision=decision, signal=sig, market=market_cache[ul])
-        except Exception:
-            pass
-
-        if decision.status != DecisionStatus.OK or decision.chosen is None:
-            continue
-        rows.append(_row_from_decision(signal_id=signal_id, signal=sig, decision=decision))
-
-    return _CandidatesResponse(candidates=rows, timestamp_ms=now_ms)
+    fut, ts = _cached_rows(request.app, "futures", strategy=strategy, underlying=underlying)
+    opt, _ = _cached_rows(request.app, "options", strategy=strategy, underlying=underlying)
+    return _CandidatesResponse(candidates=fut + opt, timestamp_ms=ts)
 
 
 # ─── /candidates/futures + /candidates/options ────────────────────────
@@ -263,8 +251,11 @@ async def _both_rows(
     now_ms = int(time.time() * 1000)
     overrides = _profile_overrides(request.app)
 
-    signals = await _collect_armed_signals(
-        request, strategy_filter=strategy_filter, underlying_filter=underlying_filter,
+    # The collection is synchronous and heavy (~4.6s scalping scan) — run it
+    # OFF the event loop so the scanner tick never freezes the server.
+    signals = await asyncio.to_thread(
+        _collect_armed_signals, request,
+        strategy_filter=strategy_filter, underlying_filter=underlying_filter,
     )
     market_cache: dict[str, MarketContext] = {}
     chain_cache: dict[str, Any] = {}
@@ -316,12 +307,10 @@ async def candidates_futures(
     strategy: Optional[str] = Query(default=None),
     underlying: Optional[str] = Query(default=None),
 ):
-    """Futures-only candidate rows (one per armed signal). Each row
-    carries its OWN freeze_token — independent of any options row for
-    the same signal."""
-    fut, _opt, ts = await _both_rows(
-        request, strategy_filter=strategy, underlying_filter=underlying,
-    )
+    """Futures-only candidate rows from the scanner cache. Each row carries
+    its OWN freeze_token — independent of any options row for the same
+    signal. Served from cache (no live scan) so the FE can poll freely."""
+    fut, ts = _cached_rows(request.app, "futures", strategy=strategy, underlying=underlying)
     return _CandidatesResponse(candidates=fut, timestamp_ms=ts)
 
 
@@ -331,11 +320,9 @@ async def candidates_options(
     strategy: Optional[str] = Query(default=None),
     underlying: Optional[str] = Query(default=None),
 ):
-    """Options-only candidate rows (one per armed signal). Each row
-    carries its OWN freeze_token."""
-    _fut, opt, ts = await _both_rows(
-        request, strategy_filter=strategy, underlying_filter=underlying,
-    )
+    """Options-only candidate rows from the scanner cache. Each row carries
+    its OWN freeze_token. Served from cache (no live scan)."""
+    opt, ts = _cached_rows(request.app, "options", strategy=strategy, underlying=underlying)
     return _CandidatesResponse(candidates=opt, timestamp_ms=ts)
 
 
@@ -631,14 +618,167 @@ async def book(symbol: str, request: Request, depth: int = Query(default=10, ge=
         raise HTTPException(status_code=502, detail=f"book fetch failed: {exc}")
 
 
+# ─── edge feed (validated 4h winners) ─────────────────────────────────
+
+
+def _edge_csv_path() -> str:
+    """Locate backtest_edge_results.csv (repo root by default)."""
+    override = os.environ.get("STERLING_EDGE_CSV")
+    if override:
+        return override
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[5] / "backtest_edge_results.csv",  # <repo>/backtest_edge_results.csv
+        Path.cwd() / "backtest_edge_results.csv",
+        Path.cwd().parent / "backtest_edge_results.csv",
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return str(candidates[0])
+
+
+def _edge_gate(app):
+    """The operator-tunable EdgeGate, seeded with defaults on first access.
+    Adjusted via POST /derivatives/edge-gate; in-memory like the profiles."""
+    from app.engines.edge.registry import EdgeGate
+    gate = getattr(getattr(app, "state", None), "edge_gate", None)
+    if gate is None:
+        gate = EdgeGate()
+        if hasattr(app, "state"):
+            app.state.edge_gate = gate
+    return gate
+
+
+def _edge_registry(app):
+    """Load + cache the edge registry on app.state, gated by `_edge_gate(app)`.
+    Re-run the backtest and restart (or clear app.state.edge_registry) to
+    refresh the allow-list. Changing the gate clears the cache so the next
+    access rebuilds with the new thresholds."""
+    from app.engines.edge.registry import EdgeRegistry, load_edge_registry
+    reg = getattr(getattr(app, "state", None), "edge_registry", None)
+    if reg is None:
+        try:
+            reg = load_edge_registry(_edge_csv_path(), gate=_edge_gate(app))
+        except Exception:
+            reg = EdgeRegistry()
+        if hasattr(app, "state"):
+            app.state.edge_registry = reg
+    return reg
+
+
+def _edge_candle_fetcher(symbol: str, tf: str, lookback_bars: int):
+    """Pull recent bars at `tf` from the OHLCV store as Candle objects."""
+    from app.schemas.market import Candle
+    from app.services import ohlcv_store
+    rows = ohlcv_store.get_candles(symbol.upper(), tf, limit=lookback_bars)
+    return [
+        Candle(timestamp_ms=int(r["time"]) * 1000, open=r["open"], high=r["high"],
+               low=r["low"], close=r["close"], volume=r.get("volume", 0.0))
+        for r in rows
+    ]
+
+
+def _collect_edge_signals(
+    *, strategy_filter: Optional[str], underlying_filter: Optional[str], app,
+) -> list[tuple[str, SignalContext]]:
+    """Generate edge-feed signals from registry-admitted combos, honouring the
+    same strategy/underlying filters the candidate endpoints use."""
+    from app.engines.edge.signals import generate_edge_signals
+
+    # An explicit non-edge strategy filter means the caller wants the other feed.
+    if strategy_filter is not None and not strategy_filter.startswith("edge"):
+        return []
+
+    reg = _edge_registry(app)
+    if not reg.all():
+        return []
+
+    out: list[tuple[str, SignalContext]] = []
+    for sid, sig in generate_edge_signals(reg, fetch_candles=_edge_candle_fetcher):
+        if strategy_filter and sig.strategy != strategy_filter:
+            continue
+        if underlying_filter and sig.underlying.upper() != underlying_filter.upper():
+            continue
+        out.append((sid, sig))
+    return out
+
+
+# ─── /edge-gate — operator-tunable edge admission thresholds ───────────
+
+
+class _EdgeGateModel(BaseModel):
+    min_net_return: float = Field(0.0, ge=-1.0, le=100.0)
+    min_sharpe: float = Field(0.8, ge=-100.0, le=100.0)
+    min_trades: int = Field(50, ge=0)
+
+
+class _EdgeComboSummary(BaseModel):
+    symbol: str
+    tf: str
+    strategy: str
+    profile: str
+    trades: int
+    sharpe: float
+    pf: float
+    net_return: float
+    signal_score: float
+
+
+class _EdgeGateResponse(BaseModel):
+    gate: _EdgeGateModel
+    admitted_count: int
+    admitted: list[_EdgeComboSummary]
+
+
+def _edge_gate_response(app) -> _EdgeGateResponse:
+    gate = _edge_gate(app)
+    reg = _edge_registry(app)
+    admitted = sorted(reg.all(), key=lambda c: -c.signal_score)
+    return _EdgeGateResponse(
+        gate=_EdgeGateModel(min_net_return=gate.min_net_return,
+                            min_sharpe=gate.min_sharpe, min_trades=gate.min_trades),
+        admitted_count=len(admitted),
+        admitted=[_EdgeComboSummary(
+            symbol=c.symbol, tf=c.tf, strategy=c.strategy, profile=c.profile,
+            trades=c.trades, sharpe=c.sharpe, pf=c.pf,
+            net_return=c.net_return, signal_score=c.signal_score,
+        ) for c in admitted],
+    )
+
+
+@router.get("/edge-gate", response_model=_EdgeGateResponse)
+async def get_edge_gate(request: Request) -> _EdgeGateResponse:
+    return _edge_gate_response(request.app)
+
+
+@router.post("/edge-gate", response_model=_EdgeGateResponse)
+async def set_edge_gate(body: _EdgeGateModel, request: Request) -> _EdgeGateResponse:
+    """Update the edge admission thresholds and rebuild the allow-list. Changes
+    are in-memory (lost on restart), matching the per-strategy profile pattern."""
+    from app.engines.edge.registry import EdgeGate
+    request.app.state.edge_gate = EdgeGate(
+        min_net_return=body.min_net_return,
+        min_sharpe=body.min_sharpe,
+        min_trades=body.min_trades,
+    )
+    request.app.state.edge_registry = None       # force rebuild with new gate
+    return _edge_gate_response(request.app)
+
+
 # ─── armed-signal collection (per-strategy adapters) ──────────────────
 
 
-async def _collect_armed_signals(
+def _collect_armed_signals(
     request: Request, *, strategy_filter: Optional[str], underlying_filter: Optional[str],
 ) -> list[tuple[str, SignalContext]]:
     """Pull armed signals from every strategy module that the selector
     can drive. Returns `[(signal_id, SignalContext)]`.
+
+    Synchronous and CPU/IO-heavy (the scalping scan alone is ~4.6s). It has
+    NO awaits, so callers MUST run it via `asyncio.to_thread` — running it
+    directly on the event loop blocks every other request (the cause of the
+    wedged-server bug). Only the background scanner calls it now.
 
     Defensive — a missing scan helper or single-strategy crash doesn't
     break the candidates feed. The FE always falls back to the per-row
@@ -662,16 +802,34 @@ async def _collect_armed_signals(
                 if underlying_filter and sig.underlying.upper() != underlying_filter.upper():
                     continue
                 signal_id = f"scalp:{sig.underlying}:{sig.strategy}:{sig.timestamp_ms}"
+                entry = sig.entry or 0.0
+                stop = sig.stop_loss or 0.0
+                # Real stop distance feeds the SL/TP solver — a 0.0 atr starved
+                # the sizing path and is a known cause of empty candidate tables.
+                atr = abs(entry - stop) if (entry and stop) else 0.0
+                # The scalping engine has no numeric confidence, so tier the score
+                # by readiness: an executable signal cleared more gates than an
+                # armed-but-not-executable one. Beats a flat placeholder.
+                score = 65.0 if sig.executable else 50.0
                 out.append((signal_id, SignalContext(
                     strategy=strat, underlying=sig.underlying, direction=sig.direction,
-                    entry=sig.entry or 0.0, stop_loss=sig.stop_loss or 0.0,
-                    take_profit=sig.take_profit, atr=0.0,
-                    rr_target=2.0, signal_score=50.0,
+                    entry=entry, stop_loss=stop,
+                    take_profit=sig.take_profit, atr=atr,
+                    rr_target=2.0, signal_score=score,
                     signal_strength="STRONG" if sig.executable else "SIGNAL",
                     expected_hold_minutes=75, mode_name="scalping",
                 )))
         except Exception:
             pass
+
+    # Edge-validated feed (4h winners from BACKTEST_EDGE_REPORT)
+    try:
+        out.extend(_collect_edge_signals(
+            strategy_filter=strategy_filter, underlying_filter=underlying_filter,
+            app=request.app,
+        ))
+    except Exception:
+        pass
 
     # Triple-ST (RSI(2))
     if strategy_filter is None or strategy_filter == "triple_st":

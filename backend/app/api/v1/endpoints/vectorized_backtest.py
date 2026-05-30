@@ -49,6 +49,27 @@ def apply_strategy(df, strategy_name):
         signal = (gap > 0) & curr_bullish
         df['strategy_returns'] = np.where(signal, df['next_return'], 0)
         
+    elif strategy_name == "supertrend":
+        df['macd'] = ta.trend.macd_diff(df['close'])
+        signal = (df['macd'] > 0) & (df['macd'].shift(1) <= 0)
+        df['strategy_returns'] = np.where(signal, df['next_return'], 0)
+        
+    elif strategy_name == "bollinger":
+        df['bb_high'] = ta.volatility.bollinger_hband(df['close'], window=20, window_dev=2)
+        signal = (df['close'] > df['bb_high']) & (df['close'].shift(1) <= df['bb_high'].shift(1))
+        df['strategy_returns'] = np.where(signal, df['next_return'], 0)
+        
+    elif strategy_name == "ict":
+        gap = df['low'] - df['high'].shift(2)
+        curr_bullish = df['close'] > df['open']
+        signal = (gap > df['close'] * 0.001) & curr_bullish
+        df['strategy_returns'] = np.where(signal, df['next_return'], 0)
+        
+    elif strategy_name == "supply_demand":
+        df['support'] = df['low'].rolling(50).min().shift(1)
+        signal = (df['close'] < df['support'] * 1.002) & (df['close'] > df['support'])
+        df['strategy_returns'] = np.where(signal, df['next_return'], 0)
+        
     else:
         df['strategy_returns'] = 0
         
@@ -67,10 +88,17 @@ async def run_vectorized_endpoint(body: VectorizedBacktestRequest, request: Requ
     df = pd.read_parquet(file_path)
     
     # Resample if not 1m
-    tf_map = {"1m": "1T", "5m": "5T", "15m": "15T", "30m": "30T", "45m": "45T", "1h": "1H", "2h": "2H", "4h": "4H"}
-    pd_tf = tf_map.get(body.timeframe, "1T")
+    tf_map = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min", "45m": "45min", "1h": "1h", "2h": "2h", "4h": "4h"}
+    pd_tf = tf_map.get(body.timeframe, "1min")
     
-    if pd_tf != "1T":
+    if 'timestamp' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        df.set_index('timestamp', inplace=True)
+    elif not isinstance(df.index, pd.DatetimeIndex):
+        # Fallback to dummy DatetimeIndex
+        df.index = pd.date_range(end=pd.Timestamp.now(), periods=len(df), freq='1min')
+
+    if pd_tf != "1min":
         df = df.resample(pd_tf).agg({
             'open': 'first',
             'high': 'max',

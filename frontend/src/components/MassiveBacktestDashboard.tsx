@@ -20,10 +20,10 @@ export function MassiveBacktestDashboard({ underlying }: { underlying: string })
     { id: 'breakout', name: 'Sterling: 20-Period Breakout' },
     { id: 'price_action', name: 'Sterling: Price Action (Engulfing)' },
     { id: 'smc', name: 'Sterling: Smart Money Concepts (FVG)' },
-    { id: 'mean_reversion', name: 'Community: SuperTrend Scalp' },
-    { id: 'breakout', name: 'Community: Bollinger Bands Breakout' },
-    { id: 'smc', name: 'Community: ICT Silver Bullet' },
-    { id: 'price_action', name: 'Community: 1H Supply/Demand' },
+    { id: 'supertrend', name: 'Community: SuperTrend Scalp' },
+    { id: 'bollinger', name: 'Community: Bollinger Bands Breakout' },
+    { id: 'ict', name: 'Community: ICT Silver Bullet' },
+    { id: 'supply_demand', name: 'Community: 1H Supply/Demand' },
   ];
 
   const timeframes = ['1m', '5m', '15m', '30m', '45m', '1h', '2h', '4h'];

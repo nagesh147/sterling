@@ -16,6 +16,7 @@ import {
   useDerivativesExecute,
   DerivativesCandidateRow,
 } from '../../hooks/useDerivatives';
+import { SourceBadge, cleanStrategy } from './SourceBadge';
 
 const fmt = (v: number | null | undefined, d = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toFixed(d);
@@ -125,8 +126,9 @@ export const DerivativesCandidatesTable: React.FC<Props> = ({ strategy, underlyi
                     {' '}
                     {row.underlying}
                   </td>
-                  <td style={{ padding: '6px 8px', fontSize: 9, color: c.dim }}>
-                    {row.strategy.replace('scalping/', 'SC ').toUpperCase()}
+                  <td style={{ padding: '6px 8px', fontSize: 9, color: c.dim, whiteSpace: 'nowrap' }}>
+                    <SourceBadge source={row.source} />
+                    {cleanStrategy(row.strategy)}
                   </td>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>
                     {instLabel(row)}

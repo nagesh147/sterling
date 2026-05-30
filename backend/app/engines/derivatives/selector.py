@@ -55,6 +55,7 @@ def _futures_candidate(
         direction=signal.direction, entry=signal.entry,
         structure_stop=signal.stop_loss, atr_val=signal.atr,
         take_profit=signal.take_profit, rr=signal.rr_target,
+        validated=signal.presized,
     )
     if not sl_plan.ok:
         log.info("futures sl_tp rejected for %s: %s", signal.underlying, sl_plan.reason)

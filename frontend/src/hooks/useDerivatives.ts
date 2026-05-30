@@ -48,6 +48,7 @@ export interface StrategyDerivativesProfile {
 
 export interface DerivativesCandidateRow {
   signal_id: string;
+  source: string; // "engine" (scalping/triple-ST) | "edge" (backtest-validated feed)
   strategy: string;
   underlying: string;
   direction: string;
@@ -247,6 +248,53 @@ export function usePatchDerivativesProfile() {
     onSuccess: (data) => {
       qc.setQueryData(['derivatives', 'config'], data);
       qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
+    },
+  });
+}
+
+// ─── edge gate ──────────────────────────────────────────────────────────
+
+export interface EdgeGate {
+  min_net_return: number;
+  min_sharpe: number;
+  min_trades: number;
+}
+
+export interface EdgeComboSummary {
+  symbol: string;
+  tf: string;
+  strategy: string;
+  profile: string;
+  trades: number;
+  sharpe: number;
+  pf: number;
+  net_return: number;
+  signal_score: number;
+}
+
+export interface EdgeGateResponse {
+  gate: EdgeGate;
+  admitted_count: number;
+  admitted: EdgeComboSummary[];
+}
+
+export function useEdgeGate() {
+  return useQuery<EdgeGateResponse>({
+    queryKey: ['derivatives', 'edge-gate'],
+    queryFn: () => api.get<EdgeGateResponse>('/api/v1/derivatives/edge-gate'),
+  });
+}
+
+export function usePatchEdgeGate() {
+  const qc = useQueryClient();
+  return useMutation<EdgeGateResponse, Error, EdgeGate>({
+    mutationFn: (gate) =>
+      api.post<EdgeGateResponse>('/api/v1/derivatives/edge-gate', gate),
+    onSuccess: (data) => {
+      qc.setQueryData(['derivatives', 'edge-gate'], data);
+      // New allow-list → candidate tables and scan must refresh.
+      qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
+      qc.invalidateQueries({ queryKey: ['derivatives', 'scan'] });
     },
   });
 }
