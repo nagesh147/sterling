@@ -19,6 +19,7 @@ import { GreeksBudgetHeaderChip } from '../components/GreeksBudgetHeaderChip';
 import { StrategyTab } from '../components/strategy/StrategyTab';
 import { ScalpingTab } from '../components/scalping/ScalpingTab';
 import { StatArbTab } from '../components/statarb/StatArbTab';
+import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
 import { ThreeColumnLayout, LeftSection, RightSection, StatCard } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
@@ -83,6 +84,19 @@ function BacktestView() {
           </div>
         </div>
         {showChart && <OHLCVChart />}
+      </div>
+
+      {/* ── Massive Vectorized Backtest panel ── */}
+      <div style={card}>
+        <div style={cardHead}>
+          <span>MASSIVE VECTORIZED BACKTEST</span>
+          <span style={{ fontSize: 9, fontWeight: 400, letterSpacing: 0, color: 'var(--t-dim)' }}>
+            High-speed multi-year historical vector backtesting
+          </span>
+        </div>
+        <div style={cardBody}>
+          <MassiveBacktestDashboard underlying={symbol} />
+        </div>
       </div>
 
       {/* ── Signal backtest panel ── */}
