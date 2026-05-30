@@ -3,6 +3,7 @@ import { FontPicker } from '../FontPicker';
 import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
 import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
 import { DerivativesPanel } from '../derivatives/DerivativesPanel';
+import { EdgeGatePanel } from '../derivatives/EdgeGatePanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
@@ -473,19 +474,19 @@ type SignalCol = {
 // center column instead of crowding to the left. Fixed columns stay fixed.
 const SIGNAL_COLS: SignalCol[] = [
   { key: 'accent',   label: '',                 width: '4px' },
-  { key: 'symbol',   label: 'Symbol',           width: '58px' },
-  { key: 'time',     label: 'Time',             width: '96px' },
-  { key: 'status',   label: 'Status',           width: '94px' },
-  { key: 'dir',      label: 'Direction',        width: '92px',  dir: true },
-  { key: 'entry',    label: 'Entry',            width: '82px',  plan: true },
-  { key: 'current',  label: 'Current',          width: '118px', plan: true },
-  { key: 'stop',     label: 'Stop',             width: '96px',  plan: true },
-  { key: 'target',   label: 'Target',           width: '96px',  plan: true },
-  { key: 'risk',     label: 'Risk',             width: '52px',  plan: true },
-  { key: 'strategy', label: 'Strategy',         width: '108px' },
-  { key: 'pattern',  label: 'Pattern',          width: '150px', align: 'center', pattern: true },
-  { key: 'profile',  label: 'Profile',          width: '82px' },
-  { key: 'action',   label: 'Action',           width: 'minmax(120px, 1fr)', action: true },
+  { key: 'symbol',   label: 'Symbol',           width: 'minmax(58px, 0.8fr)' },
+  { key: 'time',     label: 'Time',             width: 'minmax(80px, 1fr)' },
+  { key: 'status',   label: 'Status',           width: 'minmax(80px, 1fr)' },
+  { key: 'dir',      label: 'Direction',        width: 'minmax(80px, 1fr)',  dir: true },
+  { key: 'entry',    label: 'Entry',            width: 'minmax(82px, 1.1fr)',  plan: true },
+  { key: 'current',  label: 'Current',          width: 'minmax(100px, 1.3fr)', plan: true },
+  { key: 'stop',     label: 'Stop',             width: 'minmax(82px, 1.1fr)',  plan: true },
+  { key: 'target',   label: 'Target',           width: 'minmax(82px, 1.1fr)',  plan: true },
+  { key: 'risk',     label: 'Risk',             width: 'minmax(52px, 0.7fr)',  plan: true },
+  { key: 'strategy', label: 'Strategy',         width: 'minmax(100px, 1.3fr)' },
+  { key: 'pattern',  label: 'Pattern',          width: 'minmax(120px, 1.8fr)', align: 'center', pattern: true },
+  { key: 'profile',  label: 'Profile',          width: 'minmax(70px, 0.9fr)' },
+  { key: 'action',   label: 'Action',           width: 'minmax(140px, 1.5fr)', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
 
@@ -510,7 +511,7 @@ function signalRowGrid(f: ColFlags): React.CSSProperties {
     gridTemplateColumns: cols
       .map((c) => (c.key === 'accent' ? c.width : UNIFORM_COLS ? 'minmax(0, 1fr)' : c.width))
       .join(' '),
-    columnGap: 18,
+    columnGap: 12,
     alignItems: 'center',
   };
 }
@@ -2339,6 +2340,7 @@ export function ScalpingTab() {
             />
           )}
           <DerivativesPanel strategy="scalping/price_action" />
+          <EdgeGatePanel />
           <ScalpBacktestPanel initialUnderlying={btUnderlying} />
           </div>
         </div>
