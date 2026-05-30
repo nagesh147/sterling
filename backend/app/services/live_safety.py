@@ -44,8 +44,8 @@ def set_kill_switch(enabled: bool, reason: str = "") -> Dict[str, Any]:
 @dataclass
 class DailyLossConfig:
     """All thresholds in absolute USD (negative loss reading is checked)."""
-    soft_warn_usd:  float = -200.0     # informational
-    hard_halt_usd:  float = -500.0     # blocks new orders
+    soft_warn_usd:  float = -1000.0    # informational
+    hard_halt_usd:  float = -1500.0    # blocks new orders
 
 
 _DAILY_LOSS_CFG = DailyLossConfig()
