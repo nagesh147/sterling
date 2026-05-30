@@ -1,1 +1,13 @@
-backend/sterling_paper.db
+# Virtual Environments
+.venv/
+__pycache__/
+
+# Databases
+*.db
+*.sqlite3
+
+# Vector Store Parquet Files
+*.parquet
+
+# Logs
+*.log

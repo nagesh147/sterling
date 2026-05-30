@@ -34,6 +34,7 @@ from app.api.v1.endpoints.trading import router as trading_router
 from app.api.v1.endpoints.derivatives import router as derivatives_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.api.v1.endpoints.wfo import router as wfo_router
+from app.api.v1.endpoints.vectorized_backtest import router as vectorized_backtest_router
 from app.services import alert_store as _alert_store_svc
 from app.services.db_postgres import init_db_schema
 
@@ -1696,6 +1697,7 @@ def create_app() -> FastAPI:
     app.include_router(positions_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(backtest_router, prefix="/api/v1")
+    app.include_router(vectorized_backtest_router, prefix="/api/v1")
     app.include_router(exchanges_router, prefix="/api/v1")
     app.include_router(account_router, prefix="/api/v1")
     app.include_router(alerts_router, prefix="/api/v1")

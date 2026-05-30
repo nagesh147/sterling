@@ -14,6 +14,7 @@ import { StreamBadge } from '../components/StreamBadge';
 import { RiskConfigPanel } from '../components/RiskConfigPanel';
 import { EvalHistoryPanel } from '../components/EvalHistoryPanel';
 import { BacktestPanel } from '../components/BacktestPanel';
+import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
 import { PortfolioSummary } from '../components/PortfolioSummary';
 import { ArrowAlert } from '../components/ArrowAlert';
 import { ArrowHistoryPanel } from '../components/ArrowHistoryPanel';
@@ -342,6 +343,7 @@ export function Dashboard() {
           )}
           {activeTab === 'backtest' && (
             <>
+              <PanelBoundary title="MASSIVE VECTORIZED BACKTEST"><MassiveBacktestDashboard underlying={selectedUnderlying} /></PanelBoundary>
               <PanelBoundary title="BACKTEST"><BacktestPanel underlying={selectedUnderlying} /></PanelBoundary>
               <PanelBoundary title="WALK-FORWARD"><WalkForwardPanel /></PanelBoundary>
               <PanelBoundary title="SENSITIVITY"><SensitivityPanel /></PanelBoundary>

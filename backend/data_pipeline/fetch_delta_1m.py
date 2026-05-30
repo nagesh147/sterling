@@ -25,8 +25,8 @@ def sync_delta_1m_history(
     end_global = int(time.time())
     start_global = end_global - (days_to_fetch * seconds_per_day)
     
-    # Delta API limit = 2000 candles. 1980 mins = ~33 hours per chunk loop
-    chunk_step_seconds = 1980 * 60 
+    # Delta API limit = 2000 candles per response. (2000 mins = 120,000 seconds)
+    chunk_step_seconds = 2000 * 60 
     current_start = start_global
 
     print(f"🚀 Initializing $1m$ Data Harvest for {symbol} | Target: {days_to_fetch} Days")
@@ -43,11 +43,19 @@ def sync_delta_1m_history(
         
         try:
             response = requests.get(base_url, params=params, timeout=15)
+            
+            # Handle rate limiting specifically
+            if response.status_code == 429:
+                print(f"🛑 Rate limit hit (HTTP 429). Sleeping for 5 seconds before retrying...")
+                time.sleep(5)
+                continue
+                
             data = response.json()
             
             if not data.get("success") or not data.get("result"):
                 print(f"⚠️ Warning or empty block between timestamps {current_start} -> {current_end}")
                 current_start = current_end
+                time.sleep(0.35) # Polite delay even on empty blocks
                 continue
                 
             candles = data["result"]
@@ -74,13 +82,15 @@ def sync_delta_1m_history(
             
             print(f"✅ Ingested {len(records)} bars from timestamp: {current_start}")
             
+            # Move the slide window forward to start of next batch
+            current_start = current_end
+            
+            # Respect Delta Exchange's API rate limits
+            time.sleep(0.35) 
+            
         except Exception as e:
             print(f"❌ Network/Database failure processing chunk: {str(e)}")
-            time.sleep(2) # Backoff logic to mitigate API rate-limits
-            
-        # Move the slide window forward to start of next batch
-        current_start = current_end
-        time.sleep(0.2) # Polite scraping delay
+            time.sleep(2) # Backoff logic to mitigate network errors
 
     conn.close()
     print(f"🏁 Historical Sync Complete for {symbol}. Aggressive profile ready to backtest.")
