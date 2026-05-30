@@ -3,7 +3,7 @@ import { createChart, IChartApi, ColorType, LineSeries } from 'lightweight-chart
 
 export function MassiveBacktestDashboard({ underlying }: { underlying: string }) {
   const [tf, setTf] = useState('1m');
-  const [strategy, setStrategy] = useState('mean_reversion');
+  const [strategy, setStrategy] = useState('Sterling: Mean Reversion (RSI)');
   const [profile, setProfile] = useState('Aggressive');
   const [capital, setCapital] = useState(500);
   
@@ -34,13 +34,14 @@ export function MassiveBacktestDashboard({ underlying }: { underlying: string })
     setError('');
     setResults(null);
     try {
+      const activeStrategy = strategies.find(s => s.name === strategy)?.id || 'mean_reversion';
       const res = await fetch('/api/v1/vectorized/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           symbol: underlying,
           timeframe: tf,
-          strategy: strategy,
+          strategy: activeStrategy,
           profile: profile,
           starting_capital: Number(capital)
         })
@@ -129,7 +130,7 @@ export function MassiveBacktestDashboard({ underlying }: { underlying: string })
         <div>
           <label style={{ display: 'block', fontSize: 10, color: 'var(--text-faint)', marginBottom: 4 }}>STRATEGY</label>
           <select value={strategy} onChange={e => setStrategy(e.target.value)} style={{ width: '100%', padding: '6px 12px', background: 'var(--bg-base)', borderRadius: 4, color: 'var(--text-primary)', border: '1px solid var(--border)' }}>
-            {strategies.map((s, i) => <option key={i} value={s.id}>{s.name}</option>)}
+            {strategies.map((s, i) => <option key={i} value={s.name}>{s.name}</option>)}
           </select>
         </div>
 
