@@ -40,6 +40,10 @@ export interface StrategyDerivativesProfile {
   min_volume_24h_x_contract: number;
   max_spread_pct: number;
   ivr_pct_naked_max: number;
+  // Auto-execute toggles — when algo_mode is ON the background scanner
+  // fires the chosen candidate per leg. Both default false.
+  auto_execute_futures: boolean;
+  auto_execute_options: boolean;
 }
 
 export interface DerivativesCandidateRow {
@@ -264,6 +268,53 @@ export function useGreeksBudgetState() {
     queryKey: ['derivatives', 'greeks-budget'],
     queryFn: () => api.get<GreeksBudgetState>('/api/v1/derivatives/greeks-budget'),
     refetchInterval: 10_000,
+    retry: 1,
+  });
+}
+
+// ── Split candidate hooks (parallel futures + options tables) ──────────
+
+export function useDerivativesFuturesCandidates(strategy?: string, underlying?: string) {
+  const qs = new URLSearchParams();
+  if (strategy) qs.append('strategy', strategy);
+  if (underlying) qs.append('underlying', underlying);
+  const qsStr = qs.toString() ? `?${qs.toString()}` : '';
+  return useQuery<CandidatesResponse>({
+    queryKey: ['derivatives', 'candidates', 'futures', strategy ?? '', underlying ?? ''],
+    queryFn: () => api.get<CandidatesResponse>(`/api/v1/derivatives/candidates/futures${qsStr}`),
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+}
+
+export function useDerivativesOptionsCandidates(strategy?: string, underlying?: string) {
+  const qs = new URLSearchParams();
+  if (strategy) qs.append('strategy', strategy);
+  if (underlying) qs.append('underlying', underlying);
+  const qsStr = qs.toString() ? `?${qs.toString()}` : '';
+  return useQuery<CandidatesResponse>({
+    queryKey: ['derivatives', 'candidates', 'options', strategy ?? '', underlying ?? ''],
+    queryFn: () => api.get<CandidatesResponse>(`/api/v1/derivatives/candidates/options${qsStr}`),
+    refetchInterval: 30_000,
+    retry: 1,
+  });
+}
+
+export interface DerivativesScanResponse {
+  futures: DerivativesCandidateRow[];
+  options: DerivativesCandidateRow[];
+  algo_mode: boolean;
+  last_scan_ms: number;
+  next_scan_ms: number;
+  auto_exec_attempts: number;
+  auto_exec_accepted: number;
+}
+
+export function useDerivativesScan() {
+  return useQuery<DerivativesScanResponse>({
+    queryKey: ['derivatives', 'scan'],
+    queryFn: () => api.get<DerivativesScanResponse>('/api/v1/derivatives/scan'),
+    refetchInterval: 30_000,
     retry: 1,
   });
 }

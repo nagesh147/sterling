@@ -125,6 +125,39 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
           </label>
         </div>
 
+        {/* Auto-execute toggles — gate per-leg auto-fire when algo is ON. */}
+        <div style={{ ...grpBox, gap: 8 }}>
+          <div style={grpTitle}>AUTO-EXECUTE (WHEN ALGO ON)</div>
+          {(['auto_execute_futures', 'auto_execute_options'] as const).map((flagKey) => {
+            const on = draft[flagKey];
+            const label = flagKey === 'auto_execute_futures' ? 'Futures' : 'Options';
+            return (
+              <label key={flagKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: c.bright }}>
+                <span>
+                  {label}
+                  <span style={{ marginLeft: 6, fontSize: 9, color: c.dim, fontWeight: 400 }}>
+                    — when ON, scanner fires {label.toLowerCase()} rows automatically
+                  </span>
+                </span>
+                <button
+                  onClick={() => set(flagKey, !on)}
+                  style={{
+                    padding: '4px 12px', borderRadius: 5, cursor: 'pointer',
+                    background: on ? alpha(c.amber, 0.15) : 'transparent',
+                    border: `1px solid ${on ? alpha(c.amber, 0.4) : c.border}`,
+                    color: on ? c.amber : c.dim, fontSize: 11, fontWeight: 800,
+                    letterSpacing: '0.08em', fontFamily: 'inherit',
+                  }}>
+                  {on ? '● AUTO' : '○ MANUAL'}
+                </button>
+              </label>
+            );
+          })}
+          <div style={{ fontSize: 9, color: c.dim, marginTop: 2 }}>
+            Both default OFF. Auto-execute requires both: master `enabled` AND the per-leg toggle.
+          </div>
+        </div>
+
         {/* Instrument selection */}
         <div style={{ ...grpBox, gap: 8 }}>
           <div style={grpTitle}>INSTRUMENT</div>

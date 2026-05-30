@@ -66,6 +66,13 @@ class StrategyDerivativesProfile(BaseModel):
     # IVR cap for long-options entries (reject buying expensive vol)
     ivr_pct_naked_max: int = 70
 
+    # Auto-execute toggles — fire automatically when algo_mode is ON.
+    # `enabled` gates the selector; these two gate the auto-fire arm.
+    # Default OFF so a flip of `enabled` alone NEVER auto-trades — the
+    # operator must explicitly opt into auto-execution.
+    auto_execute_futures: bool = False
+    auto_execute_options: bool = False
+
 
 # ── Inputs ────────────────────────────────────────────────────────────
 
@@ -188,5 +195,26 @@ class DerivativesDecision(BaseModel):
     freeze_token_ttl_ms: int = 0
     reason: str = ""                                # human-readable explanation
     code: str = ""                                  # machine-readable when status ∈ {DEFER, FAIL_OPEN, PROFILE_OFF}
+    timestamp_ms: int = 0
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DualDerivativesDecision(BaseModel):
+    """Selector output when the caller wants BOTH best-futures and
+    best-options candidates side-by-side (so the FE can render two
+    parallel tables instead of one mixed table).
+
+    Each leg is an independent `DerivativesDecision` with its own
+    freeze_token, so the user can execute futures, options, or both
+    without sharing freeze state.
+
+    `profile_off=True` short-circuits the whole pair (the strategy's
+    `profile.enabled` is False); both legs will be unset.
+    """
+    status: DecisionStatus
+    futures: Optional[DerivativesDecision] = None
+    options: Optional[DerivativesDecision] = None
+    reason: str = ""
+    code: str = ""
     timestamp_ms: int = 0
     warnings: list[str] = Field(default_factory=list)

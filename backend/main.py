@@ -1005,6 +1005,30 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
         await asyncio.sleep(interval)  # sleep at end so first run is immediate
 
 
+# ─── Derivatives scanner + auto-execute ─────────────────────────────────
+#
+# Scanner body lives in app/services/derivatives_scanner.py so the unit
+# tests can drive `auto_execute_derivative` + `run_scanner_tick`
+# without booting the full ASGI lifespan. Main.py keeps only the loop
+# that drives the tick every `interval` seconds.
+
+
+async def _background_derivatives_scanner(app: FastAPI, interval: int = 30) -> None:
+    """Loop driving `run_scanner_tick` every `interval` seconds. The
+    scanner caches futures+options rows on app.state.derivatives_scan_cache
+    and auto-fires candidates when `algo_mode` + per-strategy
+    `auto_execute_<leg>` are both ON."""
+    import asyncio
+    from app.services.derivatives_scanner import run_scanner_tick
+
+    while True:
+        try:
+            await run_scanner_tick(app, interval_s=interval)
+        except Exception as exc:
+            log.debug("DERIV scanner outer error: %s", exc)
+        await asyncio.sleep(interval)
+
+
 async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
     """Keeps OHLCV store fresh — runs immediately then every hour."""
     from app.services.delta_candle_fetcher import run_full_fetch
@@ -1418,6 +1442,11 @@ async def lifespan(app: FastAPI):
     statarb_task = asyncio.create_task(_background_statarb_trader(app, interval=15))
     log.info("StatArb background trader started")
 
+    # Derivatives scanner — populates /derivatives/scan cache and auto-fires
+    # candidates when `algo_mode` + per-strategy `auto_execute_<type>` are on.
+    deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
+    log.info("Derivatives scanner started (every 30s)")
+
     # ── Telegram bot + signal-detection alerts ────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
     tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
@@ -1442,6 +1471,11 @@ async def lifespan(app: FastAPI):
     statarb_task.cancel()
     try:
         await statarb_task
+    except (Exception, BaseException):
+        pass
+    deriv_scan_task.cancel()
+    try:
+        await deriv_scan_task
     except (Exception, BaseException):
         pass
     vcp_feed_task.cancel()

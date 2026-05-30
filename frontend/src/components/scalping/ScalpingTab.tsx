@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FontPicker } from '../FontPicker';
-import { DerivativesCandidatesTable } from '../derivatives/DerivativesCandidatesTable';
+import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
+import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
 import { DerivativesPanel } from '../derivatives/DerivativesPanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
@@ -1786,10 +1787,10 @@ export function ScalpingTab() {
   // executions on one shared mutation observer, and mutate()'s per-call callbacks
   // only fire for the LAST call — leaving the rest stuck "queued". The promise
   // returned by mutateAsync resolves independently for each call.
-  const onExecute = (sym: string, strategy: string, auto = false) => {
+  const onExecute = (sym: string, strategy: string, auto = false, override_entry: number | null = null, override_stop: number | null = null) => {
     const key = `${sym}-${strategy}`;
     setExecKeys((s) => new Set(s).add(key));
-    exec.mutateAsync({ underlying: sym, strategy, auto })
+    exec.mutateAsync({ underlying: sym, strategy, auto, override_entry, override_stop })
       // Tie the record to the mode the backend ACTUALLY ran in (r.mode), not the
       // mode picker — so a live order is stored as LIVE, shadow as SHADOW, etc.
       .then((r) => { const ranMode = (r.mode || tradeMode).toUpperCase(); setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: ranMode } })); if (r.accepted) acceptedRef.current.add(key); logExec({ ts: Date.now(), key, mode: ranMode, ok: !!r.accepted, status: r.status, reason: r.reason, auto }); })
@@ -1975,7 +1976,7 @@ export function ScalpingTab() {
       if (acceptedRef.current.has(key)) continue;  // never re-execute a filled trade
       if (autoExecRef.current.has(key)) continue;  // already attempted this session
       autoExecRef.current.add(key);
-      onExecute(s.underlying, s.strategy, true);
+      onExecute(s.underlying, s.strategy, true, s.entry ?? null, s.stop_loss ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [algoOn, data, tradeMode]);
@@ -2082,7 +2083,7 @@ export function ScalpingTab() {
         setSelectedRowKey(row.key); 
         setExpandedKey((k) => (k === row.key ? null : row.key)); 
       }}
-      onExecute={() => onExecute(row.s.underlying, row.s.strategy)}
+      onExecute={() => onExecute(row.s.underlying, row.s.strategy, false, row.s.entry ?? null, row.s.stop_loss ?? null)}
       executing={execKeys.has(`${row.s.underlying}-${row.s.strategy}`)}
       execState={row.es}
       pnl={row.pnl}
@@ -2281,9 +2282,13 @@ export function ScalpingTab() {
               </div>
             )}
 
-            {/* Phase 4: derivatives candidates table for every scalping strategy. */}
-            <div style={{ marginTop: 12 }}>
-              <DerivativesCandidatesTable />
+            {/* Phase 4 + auto-exec: two parallel derivatives tables (futures
+                + options) populated by the background scanner. EXECUTE
+                is manual when algo is OFF; the scanner auto-fires per
+                strategy profile when algo is ON. */}
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+              <FuturesCandidatesTable />
+              <OptionsCandidatesTable />
             </div>
           </div>
       }

@@ -26,9 +26,10 @@ from app.engines.derivatives.freeze_token import get_store as get_freeze_store
 from app.engines.derivatives.preview import preview_one
 from app.engines.derivatives.profiles import DEFAULT_PROFILES, get_profile
 from app.engines.derivatives.schemas import (
-    DecisionStatus, DerivativesDecision, MarketContext,
-    SignalContext, StrategyDerivativesProfile,
+    DecisionStatus, DerivativesDecision, DualDerivativesDecision,
+    MarketContext, SignalContext, StrategyDerivativesProfile,
 )
+from app.engines.derivatives.selector import decide_both as _decide_both
 from app.engines.risk.option_pricing import enrich_chain
 from app.services import derivatives_audit
 from app.services.exchanges import instrument_registry as registry
@@ -191,6 +192,11 @@ async def candidates(
     Filter by strategy (e.g. 'scalping/price_action') or by underlying.
     Returns one row per (signal, decision). Profile-disabled strategies
     are skipped — the FE shows only what's actionable.
+
+    Back-compat: this returns the single CHOSEN candidate per signal
+    (futures OR options based on `instrument_chooser`). The split
+    `/candidates/futures` and `/candidates/options` endpoints below
+    expose both legs from `decide_both()` for the parallel tables.
     """
     rows: list[_CandidateRow] = []
     now_ms = int(time.time() * 1000)
@@ -235,6 +241,142 @@ async def candidates(
         rows.append(_row_from_decision(signal_id=signal_id, signal=sig, decision=decision))
 
     return _CandidatesResponse(candidates=rows, timestamp_ms=now_ms)
+
+
+# ─── /candidates/futures + /candidates/options ────────────────────────
+
+
+async def _both_rows(
+    request: Request,
+    *,
+    strategy_filter: Optional[str],
+    underlying_filter: Optional[str],
+) -> tuple[list[_CandidateRow], list[_CandidateRow], int]:
+    """Returns (futures_rows, options_rows, timestamp_ms).
+
+    One pass through armed signals → one `decide_both()` per signal →
+    two row lists. Profile-disabled strategies are skipped here so
+    every row the FE sees is actionable.
+    """
+    futures_rows: list[_CandidateRow] = []
+    options_rows: list[_CandidateRow] = []
+    now_ms = int(time.time() * 1000)
+    overrides = _profile_overrides(request.app)
+
+    signals = await _collect_armed_signals(
+        request, strategy_filter=strategy_filter, underlying_filter=underlying_filter,
+    )
+    market_cache: dict[str, MarketContext] = {}
+    chain_cache: dict[str, Any] = {}
+
+    for signal_id, sig in signals:
+        prof = overrides.get(sig.strategy) or get_profile(sig.strategy)
+        if not prof.enabled:
+            continue
+        ul = sig.underlying.upper()
+        if ul not in market_cache:
+            try:
+                market_cache[ul] = await _market_context(
+                    underlying=ul, app=request.app,
+                    signal_score=sig.signal_score,
+                )
+            except HTTPException:
+                continue
+        if ul not in chain_cache:
+            chain_cache[ul] = await _option_chain_or_none(
+                underlying=ul, app=request.app, spot=market_cache[ul].spot,
+            )
+        dual = _decide_both(
+            signal=sig, market=market_cache[ul], chain=chain_cache[ul],
+            profile_overrides=overrides,
+        )
+        # Audit each leg so the operator's 7-day observation feed sees
+        # both arms even before either is enabled for auto-exec.
+        try:
+            for leg in (dual.futures, dual.options):
+                if leg is not None:
+                    derivatives_audit.record(decision=leg, signal=sig, market=market_cache[ul])
+        except Exception:
+            pass
+
+        if dual.futures and dual.futures.status == DecisionStatus.OK and dual.futures.chosen:
+            futures_rows.append(
+                _row_from_decision(signal_id=signal_id, signal=sig, decision=dual.futures)
+            )
+        if dual.options and dual.options.status == DecisionStatus.OK and dual.options.chosen:
+            options_rows.append(
+                _row_from_decision(signal_id=signal_id, signal=sig, decision=dual.options)
+            )
+    return futures_rows, options_rows, now_ms
+
+
+@router.get("/candidates/futures", response_model=_CandidatesResponse)
+async def candidates_futures(
+    request: Request,
+    strategy: Optional[str] = Query(default=None),
+    underlying: Optional[str] = Query(default=None),
+):
+    """Futures-only candidate rows (one per armed signal). Each row
+    carries its OWN freeze_token — independent of any options row for
+    the same signal."""
+    fut, _opt, ts = await _both_rows(
+        request, strategy_filter=strategy, underlying_filter=underlying,
+    )
+    return _CandidatesResponse(candidates=fut, timestamp_ms=ts)
+
+
+@router.get("/candidates/options", response_model=_CandidatesResponse)
+async def candidates_options(
+    request: Request,
+    strategy: Optional[str] = Query(default=None),
+    underlying: Optional[str] = Query(default=None),
+):
+    """Options-only candidate rows (one per armed signal). Each row
+    carries its OWN freeze_token."""
+    _fut, opt, ts = await _both_rows(
+        request, strategy_filter=strategy, underlying_filter=underlying,
+    )
+    return _CandidatesResponse(candidates=opt, timestamp_ms=ts)
+
+
+# ─── /scan — cached background snapshot ───────────────────────────────
+
+
+class _ScanResponse(BaseModel):
+    futures: list[_CandidateRow]
+    options: list[_CandidateRow]
+    algo_mode: bool
+    last_scan_ms: int
+    next_scan_ms: int
+    auto_exec_attempts: int = 0
+    auto_exec_accepted: int = 0
+
+
+@router.get("/scan", response_model=_ScanResponse)
+async def scan(request: Request) -> _ScanResponse:
+    """Read the cached scanner snapshot maintained by the background
+    derivatives scanner. Fast — no live work. The FE polls this every
+    30s instead of triggering a fresh selector pipeline on every refresh.
+
+    The scanner writes its output to `app.state.derivatives_scan_cache`
+    on each tick; this endpoint just returns the cached snapshot.
+    """
+    cache = getattr(request.app.state, "derivatives_scan_cache", None)
+    algo_on = bool(getattr(request.app.state, "algo_mode", False))
+    if cache is None:
+        return _ScanResponse(
+            futures=[], options=[], algo_mode=algo_on,
+            last_scan_ms=0, next_scan_ms=0,
+        )
+    return _ScanResponse(
+        futures=cache.get("futures", []),
+        options=cache.get("options", []),
+        algo_mode=algo_on,
+        last_scan_ms=cache.get("last_scan_ms", 0),
+        next_scan_ms=cache.get("next_scan_ms", 0),
+        auto_exec_attempts=cache.get("auto_exec_attempts", 0),
+        auto_exec_accepted=cache.get("auto_exec_accepted", 0),
+    )
 
 
 # ─── /preview ──────────────────────────────────────────────────────────

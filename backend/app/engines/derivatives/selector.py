@@ -30,8 +30,8 @@ from app.engines.derivatives import (
 from app.engines.derivatives.freeze_token import get_store as get_freeze_store
 from app.engines.derivatives.schemas import (
     DecisionStatus, DerivativesCandidate, DerivativesDecision,
-    InstrumentBias, LiquidityScore, MarketContext, SignalContext,
-    StrategyDerivativesProfile,
+    DualDerivativesDecision, InstrumentBias, LiquidityScore,
+    MarketContext, SignalContext, StrategyDerivativesProfile,
 )
 from app.engines.derivatives.strike_picker import ScoredStrike
 from app.schemas.market import OptionSummary
@@ -160,6 +160,52 @@ def _options_candidate_from_strike(
     )
 
 
+def _build_options_candidates(
+    *, signal: SignalContext, market: MarketContext,
+    profile: StrategyDerivativesProfile,
+    chain: Optional[list[OptionSummary]],
+) -> list[DerivativesCandidate]:
+    """Reusable: run expiry → strike → pinning gates and return top-N
+    options candidates. Empty list when chain is missing, profile bias
+    is FUTURES, or no strike survives the gates."""
+    if profile.instrument_bias == InstrumentBias.FUTURES or not chain:
+        return []
+    picked = expiry_picker.pick_expiry(chain, profile, signal.expected_hold_minutes)
+    if picked is None:
+        return []
+    dte, expiry, expiry_candidates = picked
+    wanted_type = "call" if signal.direction == "long" else "put"
+    expiry_filtered = [o for o in expiry_candidates if o.option_type == wanted_type]
+    if not expiry_filtered:
+        return []
+    hold_days = _hold_days(profile, signal.expected_hold_minutes)
+    spot_tp = signal.take_profit or signal.entry
+    spot_sl = signal.stop_loss
+    ranked = strike_picker.pick(
+        candidates=expiry_filtered, profile=profile, spot=market.spot,
+        spot_tp=spot_tp, spot_sl=spot_sl,
+        expected_hold_days=hold_days,
+        prefer_gamma=profile.expected_hold_minutes < 60 * 6,
+        full_chain=chain,
+    )
+    kept = [s for s in ranked if not s.drop_reason]
+    kept_post_pin: list[ScoredStrike] = []
+    for s in kept:
+        pr = pinning_gate.check_pinning(s.option, market.spot, chain)
+        if pr.veto:
+            s.drop_reason = pr.reason
+        else:
+            kept_post_pin.append(s)
+    out: list[DerivativesCandidate] = []
+    for idx, s in enumerate(kept_post_pin[:4]):
+        cand = _options_candidate_from_strike(
+            strike=s, signal=signal, market=market, profile=profile, rank=idx,
+        )
+        if cand:
+            out.append(cand)
+    return out
+
+
 def decide(
     *,
     signal: SignalContext,
@@ -186,41 +232,9 @@ def decide(
         )
 
     # 2. Build best options candidate (if profile allows and chain present)
-    options_candidates: list[DerivativesCandidate] = []
-    if profile.instrument_bias != InstrumentBias.FUTURES and chain:
-        picked = expiry_picker.pick_expiry(chain, profile, signal.expected_hold_minutes)
-        if picked is not None:
-            dte, expiry, expiry_candidates = picked
-            # CE for long, PE for short (we always buy options)
-            wanted_type = "call" if signal.direction == "long" else "put"
-            expiry_filtered = [o for o in expiry_candidates if o.option_type == wanted_type]
-            if expiry_filtered:
-                hold_days = _hold_days(profile, signal.expected_hold_minutes)
-                # Pinning gate
-                spot_tp = signal.take_profit or signal.entry
-                spot_sl = signal.stop_loss
-                ranked = strike_picker.pick(
-                    candidates=expiry_filtered, profile=profile, spot=market.spot,
-                    spot_tp=spot_tp, spot_sl=spot_sl,
-                    expected_hold_days=hold_days,
-                    prefer_gamma=profile.expected_hold_minutes < 60 * 6,  # < 6h hold favours gamma
-                    full_chain=chain,
-                )
-                kept = [s for s in ranked if not s.drop_reason]
-                # Apply pinning gate to kept
-                kept_post_pin: list[ScoredStrike] = []
-                for s in kept:
-                    pr = pinning_gate.check_pinning(s.option, market.spot, chain)
-                    if pr.veto:
-                        s.drop_reason = pr.reason
-                    else:
-                        kept_post_pin.append(s)
-                for idx, s in enumerate(kept_post_pin[:4]):
-                    cand = _options_candidate_from_strike(
-                        strike=s, signal=signal, market=market, profile=profile, rank=idx,
-                    )
-                    if cand:
-                        options_candidates.append(cand)
+    options_candidates: list[DerivativesCandidate] = _build_options_candidates(
+        signal=signal, market=market, profile=profile, chain=chain,
+    )
 
     # 3. Instrument chooser — best_option_expected_r from top option candidate
     best_option_r = options_candidates[0].expected_r if options_candidates else None
@@ -259,3 +273,104 @@ def decide(
     decision.freeze_token = token
     decision.freeze_token_ttl_ms = ttl
     return decision
+
+
+def decide_both(
+    *,
+    signal: SignalContext,
+    market: MarketContext,
+    chain: Optional[list[OptionSummary]] = None,
+    profile_overrides: Optional[dict[str, StrategyDerivativesProfile]] = None,
+) -> DualDerivativesDecision:
+    """Co-emit best-futures + best-options candidates for ONE signal.
+
+    Used by the FE which renders two parallel tables (one per instrument
+    type) and by the background scanner which auto-executes based on
+    `profile.auto_execute_futures` / `profile.auto_execute_options`
+    independently.
+
+    Each leg carries its own freeze_token; consuming one does not
+    invalidate the other. A profile in FUTURES bias returns
+    options=None; OPTIONS bias returns futures=None. AUTO bias returns
+    both legs whenever both are feasible.
+    """
+    now_ms = int(time.time() * 1000)
+    profile = profiles_mod.get_profile(signal.strategy, profile_overrides)
+
+    if not profile.enabled:
+        return DualDerivativesDecision(
+            status=DecisionStatus.PROFILE_OFF,
+            reason=f"profile {signal.strategy} is disabled",
+            code="profile_off",
+            timestamp_ms=now_ms,
+        )
+
+    futures_leg: Optional[DerivativesDecision] = None
+    options_leg: Optional[DerivativesDecision] = None
+
+    # ── Futures leg ────────────────────────────────────────────────────
+    if profile.instrument_bias != InstrumentBias.OPTIONS:
+        fut = _futures_candidate(signal=signal, market=market, profile=profile)
+        if fut is not None:
+            futures_decision = DerivativesDecision(
+                status=DecisionStatus.OK,
+                chosen=fut,
+                alternatives=[],
+                reason="futures via decide_both",
+                timestamp_ms=now_ms,
+                warnings=list(fut.warnings),
+            )
+            token, ttl = get_freeze_store().freeze(futures_decision)
+            futures_decision.freeze_token = token
+            futures_decision.freeze_token_ttl_ms = ttl
+            futures_leg = futures_decision
+        else:
+            futures_leg = DerivativesDecision(
+                status=DecisionStatus.DEFER,
+                reason=f"futures sl_tp_solver rejected for {signal.underlying}",
+                code="sl_tp_reject",
+                timestamp_ms=now_ms,
+            )
+
+    # ── Options leg ────────────────────────────────────────────────────
+    if profile.instrument_bias != InstrumentBias.FUTURES:
+        opts = _build_options_candidates(
+            signal=signal, market=market, profile=profile, chain=chain,
+        )
+        if opts:
+            options_decision = DerivativesDecision(
+                status=DecisionStatus.OK,
+                chosen=opts[0],
+                alternatives=opts[1:4],
+                reason="options via decide_both",
+                timestamp_ms=now_ms,
+                warnings=list(opts[0].warnings),
+            )
+            token, ttl = get_freeze_store().freeze(options_decision)
+            options_decision.freeze_token = token
+            options_decision.freeze_token_ttl_ms = ttl
+            options_leg = options_decision
+        else:
+            options_leg = DerivativesDecision(
+                status=DecisionStatus.DEFER,
+                reason=(
+                    "no option chain" if not chain
+                    else "no strike survived gates (liquidity / pinning / IVR)"
+                ),
+                code="no_options_candidate",
+                timestamp_ms=now_ms,
+            )
+
+    # OK if at least one leg landed an OK candidate
+    status = DecisionStatus.OK if (
+        (futures_leg and futures_leg.status == DecisionStatus.OK)
+        or (options_leg and options_leg.status == DecisionStatus.OK)
+    ) else DecisionStatus.DEFER
+
+    return DualDerivativesDecision(
+        status=status,
+        futures=futures_leg,
+        options=options_leg,
+        reason=f"bias={profile.instrument_bias.value}",
+        timestamp_ms=now_ms,
+    )

@@ -6,7 +6,8 @@ import {
   type TripleSTConfig, type BacktestResult, type SignalSummary,
 } from '../../hooks/useStrategy';
 import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint } from '../../styles/terminalUI';
-import { DerivativesCandidatesTable } from '../derivatives/DerivativesCandidatesTable';
+import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
+import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
 import { DerivativesPanel } from '../derivatives/DerivativesPanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 
@@ -515,8 +516,11 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
       {/* recent signal history */}
       <RecentSignals />
 
-      {/* Derivatives candidates table — populated by selector when triple_st profile.enabled */}
-      <DerivativesCandidatesTable strategy="triple_st" />
+      {/* Derivatives candidates — split into futures + options tables.
+          Background scanner populates both; EXECUTE is manual when algo
+          is OFF, auto-fires per profile flag when algo is ON. */}
+      <FuturesCandidatesTable strategy="triple_st" />
+      <OptionsCandidatesTable strategy="triple_st" />
 
 
       {data && data.signals.length > 0 && (
