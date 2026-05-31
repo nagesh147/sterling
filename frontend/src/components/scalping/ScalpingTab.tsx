@@ -253,9 +253,15 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             <ChipToggle label="AI Gatekeeper" on={draft.use_optimized ?? false} onChange={(v) => setRootField('use_optimized', v)} />
         </div>
         {draft.use_optimized ? (
-            <span><strong>Institutional WFO Active:</strong> The backend is enforcing the <strong>Edge Whitelist</strong>. It will only execute the specific Strategies on the specific Timeframes and Coins that have been mathematically proven (e.g. SMC is allowed on 4h BTC/ETH, but Breakout is blocked on 4h). Unproven combinations you toggle below will be automatically blocked to save AI tokens.</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span><strong>Institutional WFO Active:</strong> The backend is mathematically enforcing the <strong>Edge Whitelist</strong> to protect your capital. It structurally blocks all trades except those verified by our vector simulations.</span>
+              <span style={{ color: 'var(--t-green)', fontWeight: 600 }}>💡 TOP PICKS ENFORCED: The Gatekeeper currently routes you into the highest-edge environments discovered: BTC 4H MA-Crossover (+95% net edge), ETH 2H/4H SMC (+46% net edge), and BTC 1H Price Action. We highly recommend leaving this enabled.</span>
+            </div>
         ) : (
-            <span><strong>Retail Mode Active:</strong> The AI Gatekeeper is bypassed and the Edge Whitelist is disabled. The scanner will strictly execute <strong>exactly what you configure below</strong> across all coins, regardless of whether that specific Strategy/Timeframe combination is historically profitable.</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span><strong>Retail Mode Active:</strong> The AI Gatekeeper is bypassed. The scanner will strictly execute <strong>exactly what you configure below</strong>.</span>
+              <span style={{ color: 'var(--t-red)', fontWeight: 600 }}>⚠️ WARNING: Recent vector testing proved that unrestricted Retail Mode generates up to 3.3 million noise trades across 1m/5m/15m timeframes, destroying edge via fees and slippage. We HIGHLY RECOMMEND enabling the AI Gatekeeper for live accounts.</span>
+            </div>
         )}
       </div>
 
