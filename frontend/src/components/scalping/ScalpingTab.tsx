@@ -191,7 +191,12 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   };
   const setRootField = <K extends keyof ScalpingConfig>(k: K, v: ScalpingConfig[K]) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(cfg);
+  const stableStringify = (obj: any): string => {
+    if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+    if (Array.isArray(obj)) return `[${obj.map(stableStringify).join(',')}]`;
+    return `{${Object.keys(obj).sort().map(k => `"${k}":${stableStringify(obj[k])}`).join(',')}}`;
+  };
+  const dirty = stableStringify(draft) !== stableStringify(cfg);
 
   const universeQ = useScalpingUniverse();
   const universe = universeQ.data?.symbols ?? [];

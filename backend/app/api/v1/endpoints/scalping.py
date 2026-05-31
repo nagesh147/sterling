@@ -104,18 +104,21 @@ def _reentry_cooldown_remaining_min(
 
 
 def _effective_config(request: Request) -> ScalpingConfig:
-    """Manual config, with the optimizer's parameter set overlaid on a COPY when the
-    `use_optimized` toggle is on. The stored manual config is never mutated — toggle
-    off ⇒ this returns the manual config unchanged."""
+    """Manual config, with the institutional WFO parameters overlaid on a COPY when the
+    `use_optimized` toggle (AI Gatekeeper) is on. The stored manual config is never mutated."""
     cfg = _get_config(request)
     if not getattr(cfg, "use_optimized", False):
         return cfg
-    params = _get_optimized_params()
-    if not params:
-        return cfg
-    # Only overlay keys that exist on the config (defensive against stale results).
-    valid = {k: v for k, v in params.items() if k in ScalpingConfig.model_fields}
-    return cfg.model_copy(update=valid) if valid else cfg
+    
+    # WFO Active: mathematically enforce the Edge Whitelist!
+    # We overlay the verified profiles and active_profiles, but preserve the user's symbols, 
+    # risk rules, and global settings.
+    wfo = default_config()
+    return cfg.model_copy(update={
+        "active_profiles": wfo.active_profiles,
+        "profiles": wfo.profiles,
+        "tiered_tp": wfo.tiered_tp,
+    })
 
 
 @router.get("/config", response_model=ScalpingConfigResponse)
