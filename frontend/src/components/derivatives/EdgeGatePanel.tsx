@@ -91,9 +91,17 @@ export const EdgeGatePanel: React.FC = () => {
           <NumRow label="Min trades" hint="sample-size floor"
                   value={draft.min_trades} step={1} min={0}
                   onChange={(v) => set('min_trades', Math.round(v))} />
+          <NumRow label="Min OOS Sharpe" hint="out-of-sample (CPCV) floor"
+                  value={draft.min_oos_sharpe} step={0.5}
+                  onChange={(v) => set('min_oos_sharpe', v)} />
+          <NumRow label="Max P(loss)" hint="Monte-Carlo loss prob, e.g. 0.35"
+                  value={draft.max_p_loss} step={0.05} min={0}
+                  onChange={(v) => set('max_p_loss', v)} />
           <div style={{ fontSize: 9, color: c.dim, marginTop: 2 }}>
-            Default 0.8 / 0.0 / 50 admits the 4h winners. Lower Min Sharpe to ~0.7 to also
-            admit Price Action 1h. In-memory — resets on restart.
+            Robustness-first default (0 / 0 / 20 / 0 / 0.35) admits the 8 combos that
+            survive out-of-sample (OOS Sharpe &gt; 0) and Monte-Carlo P(loss) ≤ 35%.
+            Raw Min Sharpe is relaxed because OOS Sharpe is the stronger filter. Tighten
+            Max P(loss) to keep only the safest. In-memory — resets on restart.
           </div>
         </div>
 

@@ -258,6 +258,8 @@ export interface EdgeGate {
   min_net_return: number;
   min_sharpe: number;
   min_trades: number;
+  min_oos_sharpe: number;
+  max_p_loss: number;
 }
 
 export interface EdgeComboSummary {
@@ -296,6 +298,52 @@ export function usePatchEdgeGate() {
       qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
       qc.invalidateQueries({ queryKey: ['derivatives', 'scan'] });
     },
+  });
+}
+
+// ─── strategy catalog ───────────────────────────────────────────────────
+
+export interface StrategyCatalogCombo {
+  symbol: string;
+  tf: string;
+  profile: string;
+  bracket: string;
+  trades: number;
+  win_rate_pct: number;
+  net_return_pct: number;
+  sharpe: number;
+  oos_sharpe: number | null;
+  p_loss_pct: number;
+  max_dd_pct: number;
+  signal_score: number;
+}
+
+export interface StrategyCatalogEntry {
+  id: string;
+  name: string;
+  tagline: string;
+  how_it_works: string;
+  direction: string;
+  engine: string;
+  instrument: string;
+  note: string;
+  live: boolean;
+  live_combo_count: number;
+  combos: StrategyCatalogCombo[];
+}
+
+export interface StrategyCatalogResponse {
+  strategies: StrategyCatalogEntry[];
+  engines: { edge_feed: string; scalping_scanner: string };
+  routing: string;
+  gate: EdgeGate;
+}
+
+export function useStrategyCatalog() {
+  return useQuery<StrategyCatalogResponse>({
+    queryKey: ['derivatives', 'strategy-catalog'],
+    queryFn: () => api.get<StrategyCatalogResponse>('/api/v1/derivatives/strategy-catalog'),
+    staleTime: 60_000,
   });
 }
 

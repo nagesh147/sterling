@@ -4,6 +4,7 @@ import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
 import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
 import { DerivativesPanel } from '../derivatives/DerivativesPanel';
 import { EdgeGatePanel } from '../derivatives/EdgeGatePanel';
+import { StrategyCatalogPanel } from '../derivatives/StrategyCatalogPanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
@@ -2396,6 +2397,7 @@ export function ScalpingTab() {
             />
           )}
           <DerivativesPanel strategy="scalping/price_action" />
+          <StrategyCatalogPanel />
           <EdgeGatePanel />
           <ScalpBacktestPanel initialUnderlying={btUnderlying} />
           </div>
