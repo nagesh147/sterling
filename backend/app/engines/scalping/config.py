@@ -41,12 +41,18 @@ class ScalpingProfile(BaseModel):
     enable_smc: bool = True
     enable_ma_crossover: bool = True
     enable_mean_reversion: bool = True
-    # OFF by default: a 13.5-month bar-replay (4h/15m, BTC+ETH+SOL) had breakout
-    # at 44/44 stop-outs — 0 take-profits, ~-1.2 R each. Not a sign bug (stops are
-    # correct-side); it's a design flaw — the entry chases the extended breakout
-    # close while the stop sits at the just-broken level (~0.5% away, inside 15m
-    # reversion noise), so price retests the level before reaching TP. Needs a
-    # retest-entry + ATR-stop redesign before it should be re-enabled.
+    # OFF by default. Two designs were validated on 13.5mo (4h/15m, BTC+ETH+SOL)
+    # and BOTH lose: (1) the original CHASE (enter the extended breakout candle,
+    # stop at the just-broken level) → 44/44 stop-outs, ~-1.2 R each; (2) the
+    # rebuilt RETEST entry (2026-06-01: wait for the break, then a pullback that
+    # retests the level, enter on the hold) → 4-7% win rate, -85% to -96% — the
+    # retests systematically FAIL (price continues through the level) and the
+    # tight stop both gets hit constantly and inflates per-trade cost. Breakout
+    # as a strategy does NOT work in this intraday near-4H-level framework. The
+    # breakout edge that DOES work is the 4h CHANNEL breakout in the edge feed
+    # (close > 20-bar high, long-only) — a robustness survivor (OOS Sharpe 7.15).
+    # Keep this scanner breakout OFF; the retest code stays as the cleaner
+    # implementation but is validated-negative.
     enable_breakout: bool = False
     enable_delta_gamma: bool = True
 
@@ -96,6 +102,14 @@ class ScalpingProfile(BaseModel):
     # Strategy 5: Breakout Momentum
     bo_rsi_long_threshold: float = 60.0
     bo_rsi_short_threshold: float = 40.0
+    # Retest-entry breakout (rebuilt 2026-06-01). The old version chased the
+    # extended breakout candle with a stop at the just-broken level → 44/44
+    # stop-outs. This waits for the break, then for price to PULL BACK and retest
+    # the broken level, and enters on the hold with a tight stop just beyond it.
+    bo_retest_lookback: int = Field(default=12, ge=3, le=60,
+                                    description="Bars to look back for the breakout thrust")
+    bo_retest_band_pct: float = Field(default=0.4, ge=0.1, le=2.0,
+                                      description="Retest zone width as % of the level price")
 
     # Strategy 6: Delta-Gamma Risk Surface
     dg_gex_flip_threshold: float = 0.0   # Positive vs Negative Gamma environment

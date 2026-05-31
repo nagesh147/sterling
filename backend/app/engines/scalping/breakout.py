@@ -204,55 +204,76 @@ def evaluate_breakout(
                 reason = f"Watching Ultra: Squeeze={is_squeeze}, vol_spike={vol_spike} near 4H {level_price:.0f}"
 
     else:
-        # --- Standard Breakout Momentum (RSI-Based) ---
+        # --- Retest-entry Breakout (rebuilt 2026-06-01) ---
+        # Instead of CHASING the breakout candle (entry at the high, stop at the
+        # just-broken level → reverts and stops out), wait for the break, then
+        # for price to PULL BACK and retest the broken level, and enter on the
+        # hold with a tight stop just beyond the level.
+        tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
+        band = level_price * (getattr(cfg, "bo_retest_band_pct", 0.4) / 100.0)
+        lookback = int(getattr(cfg, "bo_retest_lookback", 12))
+        cur = candles_15m[-1]
+        prior_highs = highs_15m[-lookback - 1:-1] if len(highs_15m) > lookback else highs_15m[:-1]
+        prior_lows = lows_15m[-lookback - 1:-1] if len(lows_15m) > lookback else lows_15m[:-1]
+
         if nearby.level_type == "resistance" and cfg.allow_long:
-            tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
-            is_breakout = current_price > (level_price + tolerance)
-            
-            if is_breakout and rsi >= getattr(cfg, "bo_rsi_long_threshold", 60.0):
+            # 1. price broke ABOVE the level on a recent (prior) bar
+            broke_above = bool(prior_highs.size and np.any(prior_highs > level_price + tolerance))
+            # 2. price has pulled back into the retest band just above the level
+            retesting = level_price <= current_price <= level_price + band
+            # 3. this bar dipped to test the level (without falling through) and closed up
+            held = (cur.close >= cur.open
+                    and cur.low <= level_price + band
+                    and cur.low >= level_price - tolerance)
+            if broke_above and retesting and held:
                 entry = round(current_price, 4)
-                # Stop loss below the broken resistance level
-                plan = resolve_trade_risk(
-                    direction="long", entry=entry, structure_stop=level_price,
-                    atr_val=atr_val, levels=levels, tp_level_type="resistance",
-                    max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
-                )
-                if plan.ok:
-                    direction = "long"; pattern = "bullish_breakout"
-                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                    entry_ok = True
-                    reason = f"Breakout above 4H resistance {level_price:.0f} with RSI {rsi:.1f} · R:R {plan.rr}"
+                # Tight stop just BELOW the retested level (now support), ATR cushion.
+                cushion = 0.25 * atr_val if atr_val > 0 else level_price * 0.001
+                sl = level_price - cushion
+                risk = entry - sl
+                if risk > 0 and (atr_val <= 0 or risk <= cfg.max_stop_atr * atr_val):
+                    stop_loss = round(sl, 4)
+                    take_profit = round(entry + max(cfg.min_rr, 2.0) * risk, 4)
+                    direction = "long"; pattern = "breakout_retest_long"
+                    tp_source = "retest_atr_bracket"; entry_ok = True
+                    reason = (f"Retest of broken 4H resistance {level_price:.0f} held — long · "
+                              f"R:R {(take_profit - entry) / risk:.1f}")
                 else:
-                    reason = f"breakout above 4H resistance {level_price:.0f} — skipped: {plan.reason}"
-            elif is_breakout:
-                reason = f"Watching: Breakout above 4H resistance {level_price:.0f} — awaiting RSI >= {getattr(cfg, 'bo_rsi_long_threshold', 60.0)} (current: {rsi:.1f})"
+                    reason = f"retest of 4H resistance {level_price:.0f} — stop too wide, skip"
+            elif broke_above and not retesting:
+                reason = f"Watching: broke 4H resistance {level_price:.0f} — awaiting pullback to retest (price {current_price:.0f})"
+            elif broke_above:
+                reason = f"Watching: retesting 4H resistance {level_price:.0f} — awaiting a bullish hold"
             else:
-                reason = f"Watching: Near 4H resistance {level_price:.0f} — awaiting breakout (current: {current_price:.0f}, RSI: {rsi:.1f})"
-    
-        # Bearish Breakout: Must break BELOW a support level
+                reason = f"Watching: near 4H resistance {level_price:.0f} — no breakout yet"
+
         elif nearby.level_type == "support" and cfg.allow_short:
-            tolerance = level_price * (cfg.level_tolerance_pct / 100.0)
-            is_breakout = current_price < (level_price - tolerance)
-            
-            if is_breakout and rsi <= getattr(cfg, "bo_rsi_short_threshold", 40.0):
+            broke_below = bool(prior_lows.size and np.any(prior_lows < level_price - tolerance))
+            retesting = level_price - band <= current_price <= level_price
+            held = (cur.close <= cur.open
+                    and cur.high >= level_price - band
+                    and cur.high <= level_price + tolerance)
+            if broke_below and retesting and held:
                 entry = round(current_price, 4)
-                # Stop loss above the broken support level
-                plan = resolve_trade_risk(
-                    direction="short", entry=entry, structure_stop=level_price,
-                    atr_val=atr_val, levels=levels, tp_level_type="support",
-                    max_risk_pct=4.0, max_stop_atr=cfg.max_stop_atr, min_rr=cfg.min_rr,
-                )
-                if plan.ok:
-                    direction = "short"; pattern = "bearish_breakout"
-                    stop_loss, take_profit, tp_source = plan.stop_loss, plan.take_profit, plan.tp_source
-                    entry_ok = True
-                    reason = f"Breakout below 4H support {level_price:.0f} with RSI {rsi:.1f} · R:R {plan.rr}"
+                # Tight stop just ABOVE the retested level (now resistance), ATR cushion.
+                cushion = 0.25 * atr_val if atr_val > 0 else level_price * 0.001
+                sl = level_price + cushion
+                risk = sl - entry
+                if risk > 0 and (atr_val <= 0 or risk <= cfg.max_stop_atr * atr_val):
+                    stop_loss = round(sl, 4)
+                    take_profit = round(entry - max(cfg.min_rr, 2.0) * risk, 4)
+                    direction = "short"; pattern = "breakout_retest_short"
+                    tp_source = "retest_atr_bracket"; entry_ok = True
+                    reason = (f"Retest of broken 4H support {level_price:.0f} held — short · "
+                              f"R:R {(entry - take_profit) / risk:.1f}")
                 else:
-                    reason = f"breakout below 4H support {level_price:.0f} — skipped: {plan.reason}"
-            elif is_breakout:
-                reason = f"Watching: Breakout below 4H support {level_price:.0f} — awaiting RSI <= {getattr(cfg, 'bo_rsi_short_threshold', 40.0)} (current: {rsi:.1f})"
+                    reason = f"retest of 4H support {level_price:.0f} — stop too wide, skip"
+            elif broke_below and not retesting:
+                reason = f"Watching: broke 4H support {level_price:.0f} — awaiting pullback to retest (price {current_price:.0f})"
+            elif broke_below:
+                reason = f"Watching: retesting 4H support {level_price:.0f} — awaiting a bearish hold"
             else:
-                reason = f"Watching: Near 4H support {level_price:.0f} — awaiting breakout (current: {current_price:.0f}, RSI: {rsi:.1f})"
+                reason = f"Watching: near 4H support {level_price:.0f} — no breakdown yet"
 
     if not pattern and "Watching" not in reason and "skipped" not in reason:
         reason = f"near 4H {nearby.level_type} @ {level_price:.0f} — RSI: {rsi:.1f}"

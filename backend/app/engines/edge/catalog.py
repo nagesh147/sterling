@@ -79,9 +79,11 @@ DESCRIPTORS: dict[str, StrategyDescriptor] = {
         direction="Long only",
         engine="Edge feed (backtest-validated).",
         instrument="Routed to a future or option by the selector.",
-        note="The separate SCALPING-scanner breakout was DISABLED — it bought the "
-             "extended breakout candle with a stop at the just-broken level and was "
-             "stopped out 44/44 times. A retest-entry redesign is in progress.",
+        note="THIS edge-feed breakout (4h channel, long-only) works and is live. "
+             "The separate SCALPING-scanner breakout is DISABLED: both its original "
+             "chase entry (44/44 stop-outs) and a rebuilt retest entry (4-7% win, "
+             "-90%) were validated as losers — breakout doesn't work in the intraday "
+             "near-level framework, only as this 4h channel version.",
     ),
     "price_action": StrategyDescriptor(
         id="price_action",
