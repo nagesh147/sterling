@@ -21,14 +21,24 @@ REQUEST_DELAY   = 0.35       # seconds between requests (avoid 429)
 LOOKBACK_SECS   = 1095 * 86_400  # 3 years
 
 SYMBOLS     = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]
+# 1m is deliberately EXCLUDED from the all-symbol hourly fetch — fetching 1m
+# across 100+ Delta products would hammer the API. It is kept fresh separately
+# for CORE_SYMBOLS via fetch_core_1m() on a tight loop (see _background_1m_updater).
 RESOLUTIONS = ["5m", "15m", "30m", "1h", "2h", "4h"]
+CORE_SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]
 
 RES_SECS: Dict[str, int] = {
+    "1m": 60,
     "5m": 300, "15m": 900, "30m": 1800,
     "1h": 3600, "2h": 7200, "4h": 14400,
 }
 
+# Fresh-pull cap for 1m so an empty store doesn't trigger a 3-year (≈1.5M-bar)
+# backfill per symbol. Incremental updates (the common case) ignore this.
+ONE_MIN_LOOKBACK_SECS = 7 * 86_400
+
 _is_fetching = False
+_is_fetching_1m = False
 _last_run_summary: Dict[str, int] = {}
 
 
@@ -74,10 +84,12 @@ async def _fetch_chunk(
     return []
 
 
-async def fetch_symbol_resolution(symbol: str, resolution: str) -> int:
+async def fetch_symbol_resolution(
+    symbol: str, resolution: str, lookback_secs: int = LOOKBACK_SECS,
+) -> int:
     """
     Fetch all missing candles for (symbol, resolution).
-    Starts from the latest stored candle (or 6 months ago) and walks to now.
+    Starts from the latest stored candle (or `lookback_secs` ago) and walks to now.
     Returns total candles fetched.
     """
     res_secs   = RES_SECS.get(resolution, 3600)
@@ -88,7 +100,7 @@ async def fetch_symbol_resolution(symbol: str, resolution: str) -> int:
     if latest:
         start = latest + res_secs   # one candle after the newest stored
     else:
-        start = now - LOOKBACK_SECS
+        start = now - lookback_secs
 
     if start >= now - res_secs:
         return 0  # up to date
@@ -110,6 +122,36 @@ async def fetch_symbol_resolution(symbol: str, resolution: str) -> int:
             await asyncio.sleep(REQUEST_DELAY)
 
     return total
+
+
+async def fetch_core_1m(symbols: Optional[List[str]] = None) -> Dict[str, int]:
+    """Keep the 1-minute store fresh for the core traded symbols.
+
+    1m is excluded from the all-symbol hourly fetch (too heavy across every Delta
+    product), so it gets its own tight loop. Incremental from the latest stored
+    1m bar; a cold store backfills at most ONE_MIN_LOOKBACK_SECS. Guarded so
+    overlapping ticks don't double-fetch.
+    """
+    global _is_fetching_1m
+    if _is_fetching_1m:
+        return {"status": "already_running"}
+    _is_fetching_1m = True
+    summary: Dict[str, int] = {}
+    try:
+        for sym in (symbols or CORE_SYMBOLS):
+            try:
+                added = await fetch_symbol_resolution(
+                    sym, "1m", lookback_secs=ONE_MIN_LOOKBACK_SECS)
+                summary[f"{sym}:1m"] = added
+                if added > 0:
+                    log.info("OHLCV 1m fetched %s: +%d candles", sym, added)
+                    await asyncio.sleep(REQUEST_DELAY)
+            except Exception as exc:
+                log.warning("OHLCV 1m fetch error %s: %s", sym, exc)
+                summary[f"{sym}:1m"] = -1
+    finally:
+        _is_fetching_1m = False
+    return summary
 
 
 async def get_all_delta_symbols() -> List[str]:

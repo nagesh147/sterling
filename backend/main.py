@@ -1051,6 +1051,20 @@ async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
         await asyncio.sleep(interval_hours * 3600)
 
 
+async def _background_1m_updater(interval_min: int = 5) -> None:
+    """Keep the 1-minute store fresh for core symbols — runs immediately then
+    every `interval_min`. 1m is excluded from the hourly all-symbol fetch (too
+    heavy across every product), so without this dedicated loop the 1m store
+    silently freezes. Tight cadence keeps it ~real-time."""
+    from app.services.delta_candle_fetcher import fetch_core_1m
+    while True:
+        try:
+            await fetch_core_1m()
+        except Exception as exc:
+            log.warning("1m OHLCV background update error: %s", exc)
+        await asyncio.sleep(interval_min * 60)
+
+
 async def _broadcast_ofi(app: FastAPI) -> None:
     """
     Broadcasts Level 2 Order Flow Imbalance (OFI) to the active websocket channels.
@@ -1314,12 +1328,12 @@ async def lifespan(app: FastAPI):
             
         dp_str = get_config("derivatives_profiles")
         if dp_str:
-            from app.schemas.derivatives import StrategyDerivativesProfile
+            from app.engines.derivatives.schemas import StrategyDerivativesProfile
             parsed = json.loads(dp_str)
             restored = {}
             for k, v in parsed.items():
                 restored[k] = StrategyDerivativesProfile(**v)
-            app.state.derivatives_profiles = restored
+            app.state.derivatives_profile_overrides = restored
             log.info(f"Restored derivatives_profiles from DB for {list(restored.keys())}")
     except Exception as e:
         log.warning(f"Failed to restore configs from DB: {e}")
@@ -1465,6 +1479,8 @@ async def lifespan(app: FastAPI):
     log.info("Background retry worker started (every 60s + exponential backoff)")
     ohlcv_task = asyncio.create_task(_background_ohlcv_updater(interval_hours=1))
     log.info("OHLCV background updater started (hourly)")
+    ohlcv_1m_task = asyncio.create_task(_background_1m_updater(interval_min=5))
+    log.info("OHLCV 1m updater started (every 5 min, core symbols)")
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
@@ -1522,6 +1538,11 @@ async def lifespan(app: FastAPI):
     ohlcv_task.cancel()
     try:
         await ohlcv_task
+    except (Exception, BaseException):
+        pass
+    ohlcv_1m_task.cancel()
+    try:
+        await ohlcv_1m_task
     except (Exception, BaseException):
         pass
     bg_task.cancel()
