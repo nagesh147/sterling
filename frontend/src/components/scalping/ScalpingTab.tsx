@@ -1972,8 +1972,8 @@ export function ScalpingTab() {
 
   const profName = displayProf ? displayProf.toUpperCase() : 'MULTI-PROFILE';
   const stratLine2 = cfg?.use_optimized 
-    ? `WFO Active: Mathematically enforcing edge on ${profName}.`
-    : `${profName} Mode: Unrestricted execution (Retail Mode).`;
+    ? <span style={{ color: 'var(--t-green)' }}>💡 WFO Active: Mathematically enforcing top-tier edge on {profName}.</span>
+    : <span style={{ color: 'var(--t-red)', fontWeight: 600 }}>⚠️ WARNING (RETAIL MODE): Unrestricted execution. Vector tests prove sub-1H noise trades destroy capital via fees. ENABLE AI GATEKEEPER!</span>;
 
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
