@@ -181,10 +181,24 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _configure(conn: sqlite3.Connection) -> None:
+    """Apply concurrency pragmas. WAL lets readers and a writer coexist (the
+    server runs ~10 background loops against this DB); busy_timeout makes a
+    blocked writer WAIT instead of failing instantly with 'database is locked'
+    (the cause of dropped config/position/state writes on the 2.8GB store)."""
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=15000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except Exception:
+        pass
+
+
 def init() -> bool:
     global _available
     try:
-        conn = sqlite3.connect(_DB_PATH)
+        conn = sqlite3.connect(_DB_PATH, timeout=15.0)
+        _configure(conn)
         _create_tables(conn)
         conn.close()
         _available = True
@@ -198,8 +212,9 @@ def init() -> bool:
 
 @contextmanager
 def _conn():
-    c = sqlite3.connect(_DB_PATH)
+    c = sqlite3.connect(_DB_PATH, timeout=15.0)
     c.row_factory = sqlite3.Row
+    _configure(c)
     try:
         yield c
         c.commit()
