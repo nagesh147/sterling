@@ -17,6 +17,7 @@ re-set on each session — restart is a clean slate by design).
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from pathlib import Path
@@ -38,6 +39,7 @@ from app.services import derivatives_audit
 from app.services.exchanges import instrument_registry as registry
 
 router = APIRouter(prefix="/derivatives", tags=["derivatives"])
+log = logging.getLogger(__name__)
 
 
 # ─── helpers ───────────────────────────────────────────────────────────
@@ -206,7 +208,10 @@ def _cached_rows(
     out: list[_CandidateRow] = []
     for d in cache.get(leg, []) or []:
         row = d if isinstance(d, _CandidateRow) else _CandidateRow(**d)
-        if strategy and row.strategy != strategy:
+        # Edge is a cross-strategy validated feed — its rows show on every tab
+        # regardless of the per-strategy filter, so a proven signal is never
+        # hidden. Engine rows still respect the strategy filter.
+        if strategy and row.strategy != strategy and row.source != "edge":
             continue
         if underlying and row.underlying.upper() != underlying.upper():
             continue
@@ -475,7 +480,11 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
         option_symbol=candidate.option_symbol,
         notes=f"[DERIV-{candidate.instrument_type.upper()}] freeze={body.freeze_token[:8]} R={candidate.expected_r:.2f}",
     )
-    resp = await place_live_order(order, request)
+    try:
+        resp = await place_live_order(order, request)
+    except Exception as e:
+        store.restore(body.freeze_token, decision)
+        raise e
 
     return _ExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
@@ -514,8 +523,20 @@ async def get_config(request: Request) -> _ConfigResponse:
 
 @router.post("/config", response_model=_ConfigResponse)
 async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigResponse:
+    from app.services.db import set_config
+    import json
+
     overrides = _profile_overrides(request.app)
     overrides[body.profile.strategy] = body.profile
+
+    # Persist to DB (StrategyDerivativesProfile is a pydantic model — model_dump,
+    # not dataclasses.asdict).
+    try:
+        dict_overrides = {k: v.model_dump() for k, v in overrides.items()}
+        set_config("derivatives_profiles", json.dumps(dict_overrides))
+    except Exception as e:
+        log.warning(f"Failed to persist derivatives_profiles: {e}")
+        
     return _ConfigResponse(profiles=overrides)
 
 

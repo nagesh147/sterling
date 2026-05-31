@@ -35,7 +35,10 @@ def _scalping_grind(strategy: str) -> StrategyDerivativesProfile:
         leverage_cap=25.0,
         max_premium_pct_of_account=0.015,
         funding_cost_max_pct_of_R=0.25,
-        min_oi=50.0,
+        # Delta India options are thin (near-ATM OI single digits) — floors are
+        # sanity gates, not deep-liquidity gates. Spread cap stays the real gate.
+        min_oi=1.0,
+        min_volume_24h_x_contract=1.0,
         max_spread_pct=0.05,
         ivr_pct_naked_max=85,
     )
@@ -73,7 +76,13 @@ def _edge(strategy: str) -> StrategyDerivativesProfile:
         leverage_cap=10.0,
         max_premium_pct_of_account=0.02,
         funding_cost_max_pct_of_R=0.25,
-        min_oi=80.0,
+        # Delta India options are thin — near-ATM OI/24h-volume are single
+        # digits, not the dozens a deep venue shows. Floors are sanity gates
+        # (drop dead strikes), not deep-liquidity gates; the liquidity SCORE
+        # still surfaces thinness on the row. Spreads here are tight (~0.6-2%),
+        # so the 4% spread cap stays the real quality gate.
+        min_oi=1.0,
+        min_volume_24h_x_contract=1.0,
         max_spread_pct=0.04,
         ivr_pct_naked_max=50,
     )
@@ -109,7 +118,8 @@ DEFAULT_PROFILES: dict[str, StrategyDerivativesProfile] = {
         leverage_cap=10.0,
         max_premium_pct_of_account=0.015,
         funding_cost_max_pct_of_R=0.25,
-        min_oi=100.0,
+        min_oi=1.0,                        # Delta India options are thin — venue-realistic floor
+        min_volume_24h_x_contract=1.0,
         max_spread_pct=0.04,
         ivr_pct_naked_max=40,              # tighter — swing options need cheap IV
     ),
@@ -140,7 +150,8 @@ DEFAULT_PROFILES: dict[str, StrategyDerivativesProfile] = {
         leverage_cap=8.0,
         max_premium_pct_of_account=0.02,
         funding_cost_max_pct_of_R=0.25,
-        min_oi=80.0,
+        min_oi=1.0,                        # Delta India options are thin — venue-realistic floor
+        min_volume_24h_x_contract=1.0,
         max_spread_pct=0.04,
         ivr_pct_naked_max=50,
     ),

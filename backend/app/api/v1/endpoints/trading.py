@@ -499,7 +499,15 @@ def _create_paper_tracking(
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         contracts = max(1, int(body.size))
         position_value = contracts * entry_price
-        max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
+        # Real risk = distance to the stop × size — what you actually lose if
+        # stopped out — NOT a flat % of notional. The old notional-% formula
+        # reported absurd "capital at risk" (e.g. 54% for a 0.5%-risk trade
+        # whose only sin was a tight stop). Fall back to the notional estimate
+        # only when no stop is set.
+        if body.stop_loss and entry_price > 0:
+            max_risk = abs(entry_price - body.stop_loss) * contracts
+        else:
+            max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
         capital_at_risk = (max_risk / 100_000.0) * 100.0 if entry_price > 0 else 0.0
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
@@ -592,7 +600,12 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         contracts = max(1, int(body.size))
         position_value = contracts * spot_price if spot_price > 0 else 0.0
-        max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
+        # Real risk = stop distance × size, not a flat % of notional (see
+        # _create_paper_tracking). Fall back to notional estimate only without a stop.
+        if body.stop_loss and spot_price > 0:
+            max_risk = abs(spot_price - body.stop_loss) * contracts
+        else:
+            max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
         capital_at_risk = (max_risk / 100_000.0) * 100.0 if spot_price > 0 else 0.0
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",

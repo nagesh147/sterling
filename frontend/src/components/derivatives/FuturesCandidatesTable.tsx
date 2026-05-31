@@ -58,12 +58,26 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
       } else {
         setToast(`✗ ${resp.reason || resp.code}`);
       }
-    } catch (err) {
+        } catch (err) {
       const msg = (err as Error)?.message || String(err);
-      if (msg.includes('stale_candidate') || msg.includes('409')) {
-        setToast('Candidates refreshed — re-confirm');
+      
+      let parsed = msg;
+      let isLocked = false;
+      try {
+        const obj = JSON.parse(msg);
+        if (obj.code === 'daily_loss_halt' || obj.error?.includes('Daily loss')) isLocked = true;
+        parsed = obj.error || obj.reason || obj.code || msg;
+      } catch (e) {
+        // Not JSON
+        if (msg.includes('daily_loss_halt')) isLocked = true;
+      }
+
+      if (parsed.includes('stale_candidate') || parsed.includes('409') || parsed.includes('freeze_token')) {
+        setToast('✗ Candidates refreshed — re-confirm (Stale 409)');
+      } else if (isLocked || parsed.includes('Locked') || parsed.includes('423')) {
+        setToast(`🔒 LOCKED: ${parsed}`);
       } else {
-        setToast(`✗ ${msg}`);
+        setToast(`✗ ${parsed}`);
       }
       refetch();
     }

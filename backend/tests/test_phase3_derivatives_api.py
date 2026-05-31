@@ -202,7 +202,7 @@ class TestPreviewEndpoint:
         assert body["status"] == "ok"
         assert body["chosen"] is not None
         assert body["freeze_token"]
-        assert body["freeze_token_ttl_ms"] == 30_000
+        assert body["freeze_token_ttl_ms"] == 120_000
 
 
 # ─── /candidates ───────────────────────────────────────────────────────

@@ -68,6 +68,41 @@ def _get_optimized_params() -> dict:
         return {}
 
 
+def _reentry_cooldown_remaining_min(
+    positions, *, sym: str, strat_tag: str, want_paper: bool,
+    direction: str, cooldown_min: float, now_ms: int,
+) -> float:
+    """Minutes left before the algo may re-enter this exact setup
+    (symbol + strategy + direction + book). 0.0 = clear to enter.
+
+    Looks at the most recent CLOSED matching position's exit time. Stops the
+    rapid sequential re-entry that churned the same 4H level (e.g. the May-30
+    cluster of ETH 'overbought' shorts, each a small loss). Manual clicks are
+    exempt (the caller only applies this to auto-exec).
+    """
+    if cooldown_min <= 0:
+        return 0.0
+    last_exit = 0
+    for p in positions:
+        if getattr(p, "underlying", None) != sym:
+            continue
+        if strat_tag not in (getattr(p, "notes", "") or ""):
+            continue
+        if getattr(p, "is_paper", None) != want_paper:
+            continue
+        if getattr(getattr(p, "status", None), "value", None) != "closed":
+            continue
+        st = getattr(p, "sized_trade", None)
+        pdir = getattr(getattr(getattr(st, "structure", None), "direction", None), "value", None)
+        if pdir != direction:
+            continue
+        last_exit = max(last_exit, int(getattr(p, "exit_timestamp_ms", 0) or 0))
+    if not last_exit:
+        return 0.0
+    remaining_ms = cooldown_min * 60_000 - (now_ms - last_exit)
+    return max(0.0, remaining_ms / 60_000)
+
+
 def _effective_config(request: Request) -> ScalpingConfig:
     """Manual config, with the optimizer's parameter set overlaid on a COPY when the
     `use_optimized` toggle is on. The stored manual config is never mutated — toggle
@@ -430,6 +465,28 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
             status="error", reason=f"Profile '{profile_id}' not found",
             timestamp_ms=int(time.time() * 1000),
         )
+
+    # ── Re-entry cooldown (auto-exec only) ─────────────────────────────
+    # Manual clicks are exempt; the algo must wait after closing this exact
+    # setup so it can't churn one 4H level into a pile of small losses.
+    if body.auto:
+        _cd_left = _reentry_cooldown_remaining_min(
+            paper_store.list_positions(), sym=sym, strat_tag=strat_tag,
+            want_paper=want_paper, direction=sig.direction,
+            cooldown_min=getattr(strat_cfg, "reentry_cooldown_min", 45),
+            now_ms=int(time.time() * 1000),
+        )
+        if _cd_left > 0:
+            logger.info("scalp-exec %s/%s %s -> COOLDOWN (%.0fmin left) — not re-entered",
+                        sym, strategy, sig.direction, _cd_left)
+            return ScalpingExecuteResponse(
+                accepted=False, mode="paper" if want_paper else "live",
+                underlying=sym, strategy=strategy, direction=sig.direction,
+                size_units=0, notional_usd=0, status="cooldown",
+                reason=(f"{strategy} {sig.direction} {sym} in re-entry cooldown "
+                        f"— {_cd_left:.0f} min left after the last exit."),
+                timestamp_ms=int(time.time() * 1000),
+            )
 
     risk_dist = abs(sig.entry - sig.stop_loss)
     if risk_dist <= 0:

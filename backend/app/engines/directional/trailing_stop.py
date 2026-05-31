@@ -23,6 +23,29 @@ from app.core.trading_mode import TrailMode, TradingModeConfig
 from app.schemas.market import Candle
 
 
+def realistic_stop_fill(
+    stop: float, spot: float, direction_sign: int, max_slip_bps: float = 5.0,
+) -> float:
+    """Price to book when a stop is hit, modelling a real stop order's fill.
+
+    The background monitor polls on an interval, so by the time it sees a
+    breach the live `spot` has run past the stop. Booking the exit at that
+    overshot `spot` charges the whole interval's drift as slippage — which on
+    a large position turns a breakeven stop into a big loss. A real stop fills
+    ~at the stop ± a few bps, so cap the booked slippage at `max_slip_bps`
+    (use the smaller of the actual overshoot and the cap), direction-aware.
+
+    `direction_sign`: +1 long (stop below, adverse = price lower),
+                      −1 short (stop above, adverse = price higher).
+    """
+    cap = abs(stop) * max_slip_bps / 10_000.0
+    if direction_sign >= 0:                      # long
+        overshoot = max(0.0, stop - spot)        # price dropped through the stop
+        return stop - min(overshoot, cap)
+    overshoot = max(0.0, spot - stop)            # short: price rose through the stop
+    return stop + min(overshoot, cap)
+
+
 @dataclass
 class TrailState:
     mode: TrailMode

@@ -117,7 +117,8 @@ class TestLiquidityScore:
 
     def test_oi_floor_breach(self):
         p = DEFAULT_PROFILES["triple_st"]
-        s = liquidity_score.score(_opt(oi=50), p)
+        # OI below the venue-realistic floor (min_oi=1.0) must breach.
+        s = liquidity_score.score(_opt(oi=0.5), p)
         assert not s.passes_floor
         assert "oi" in s.floor_breach_reason
 
@@ -462,7 +463,7 @@ class TestStrikePicker:
 
     def test_drops_low_liquidity(self):
         p = DEFAULT_PROFILES["triple_st"]
-        candidates = [_opt(strike=50_000, dte=14, delta=0.55, iv=55, oi=30, vol=100, spread_pct=0.02)]
+        candidates = [_opt(strike=50_000, dte=14, delta=0.55, iv=55, oi=0.5, vol=100, spread_pct=0.02)]
         ranked = strike_picker.pick(
             candidates=candidates, profile=p, spot=50_000,
             spot_tp=51_500, spot_sl=49_250, expected_hold_days=5, prefer_gamma=False,
@@ -477,7 +478,7 @@ class TestFreezeToken:
     def test_roundtrip(self):
         store = FreezeTokenStore()
         token, ttl = store.freeze({"x": 1})
-        assert ttl == 30_000
+        assert ttl == 120_000
         assert store.get(token) == {"x": 1}
 
     def test_consume_removes(self):
@@ -578,7 +579,7 @@ class TestSelectorPipeline:
         assert d.status == DecisionStatus.OK
         assert d.chosen is not None
         assert d.freeze_token is not None
-        assert d.freeze_token_ttl_ms == 30_000
+        assert d.freeze_token_ttl_ms == 120_000
         # Token must round-trip
         assert get_store().get(d.freeze_token) is d
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useRiskConfig, useUpdateRiskConfig, useResetRiskConfig } from '../hooks/useRiskConfig';
+import { useRiskConfig, useUpdateRiskConfig, useResetRiskConfig, useDailyLossConfig, useUpdateDailyLossConfig } from '../hooks/useRiskConfig';
 import type { RiskParams } from '../hooks/useRiskConfig';
 import { c, gridStyle, tint } from '../styles/terminalUI';
 
@@ -103,3 +103,5 @@ export function RiskConfigPanel() {
     </div>
   );
 }
+
+

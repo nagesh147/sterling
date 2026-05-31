@@ -41,7 +41,13 @@ class ScalpingProfile(BaseModel):
     enable_smc: bool = True
     enable_ma_crossover: bool = True
     enable_mean_reversion: bool = True
-    enable_breakout: bool = True
+    # OFF by default: a 13.5-month bar-replay (4h/15m, BTC+ETH+SOL) had breakout
+    # at 44/44 stop-outs — 0 take-profits, ~-1.2 R each. Not a sign bug (stops are
+    # correct-side); it's a design flaw — the entry chases the extended breakout
+    # close while the stop sits at the just-broken level (~0.5% away, inside 15m
+    # reversion noise), so price retests the level before reaching TP. Needs a
+    # retest-entry + ATR-stop redesign before it should be re-enabled.
+    enable_breakout: bool = False
     enable_delta_gamma: bool = True
 
     # ── Master System ──
@@ -67,10 +73,21 @@ class ScalpingProfile(BaseModel):
     smc_max_sweep_window: int = 3        # Imbalance must follow sweep within 3 bars
 
     # Strategy 3: Moving Averages
+    # Reconciled 2026-05-31 to the VALIDATED edge logic: the live scanner now
+    # delegates to edge/strategies.py:signals_ma_crossover (EMA9 × EMA21 cross,
+    # long-only, on the 4H series) — the exact function the edge feed trades and
+    # the 270-config matrix validated (MA Crossover 4h BTC: Sharpe 1.83, +95%).
+    # The old SMA(5)/EMA(9)-near-levels bidirectional logic was a different,
+    # BTC-losing strategy (−40%). These SMA params are retained only for legacy
+    # callers; the validated path uses EMA 9/21 fixed in the edge function.
     ma_fast_sma: int = 5
     ma_slow_ema: int = 9
     ma_cross_window: int = 2             # Signal valid if cross occurred within 2 bars
     ma_risk_lookback: int = 10           # Lookback for local swing low calculation
+    # ATR bracket for the reconciled ma_crossover (validated "Intraday" profile:
+    # SL 2.0×ATR, TP 3.5×ATR ⇒ R:R 1.75 on the 4H ATR).
+    ma_atr_sl: float = Field(default=2.0, ge=0.5, le=6.0)
+    ma_atr_tp: float = Field(default=3.5, ge=1.0, le=10.0)
 
     # Strategy 4: Mean Reversion
     mr_zscore_window: int = 20
@@ -89,13 +106,27 @@ class ScalpingProfile(BaseModel):
     allow_long: bool = True
     allow_short: bool = True
 
-    # ── Macro-trend filter (opt-in) ──
+    # ── Re-entry cooldown (auto-exec) ──
+    # After a position for a symbol+strategy+direction closes, the algo waits
+    # this many minutes before re-entering the SAME setup. 0 disables. Manual
+    # clicks are exempt.
+    # DEFAULT 0 (OFF): a 13.5-month bar-replay (4h/15m, BTC+ETH+SOL) showed ANY
+    # cooldown removes net-positive trades — mean_reversion is +123 R and its
+    # edge IS rapid re-entry; a 45m cooldown cut it to +13 R, and even 10m
+    # craters the blended book from +33 R to -97 R. The May-30 ETH-short cluster
+    # that motivated this was an unlucky local window of a strongly +EV strategy,
+    # NOT a structural flaw. The mechanism is kept for manual opt-in if live
+    # churn recurs, but it must not throttle the validated edge by default.
+    reentry_cooldown_min: int = Field(default=0, ge=0, le=720)
+
+    # ── Macro-trend filter ──
     # When on, counter-trend setups are suppressed: longs only in a 4H uptrend,
-    # shorts only in a downtrend (chop allows both). Off by default — counter-
-    # trend setups are still positive-EV, so forcing this trades total return for
-    # a higher per-trade PF / lower variance. Regime = 4H EMA(fast) vs EMA(slow)
-    # with a flat dead-band.
-    macro_trend_filter: bool = False
+    # shorts only in a downtrend (chop allows both). Regime = 4H EMA(fast) vs
+    # EMA(slow) with a flat dead-band.
+    # Default ON: live paper auto-exec showed counter-trend setups (e.g. fading
+    # bounces) bleeding when the higher-TF trend ran them over. Trend-aligned
+    # setups carry a higher PF; the variance reduction is worth the trade-count.
+    macro_trend_filter: bool = True
     macro_trend_ema_fast: int = Field(default=50, ge=5, le=200)
     macro_trend_ema_slow: int = Field(default=100, ge=20, le=400)
     macro_trend_flat_band_pct: float = Field(

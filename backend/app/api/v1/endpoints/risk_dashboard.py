@@ -162,3 +162,51 @@ async def get_slippage_estimate(leverage: float = 10.0, oi: Optional[float] = No
         'effective_entry_adjustment_pct': round(adj_long, 4),
         'size_reduction_factor': round(size_factor, 4),
     }
+
+
+class DailyLossRequest(BaseModel):
+    enabled: bool = True
+    soft_warn_usd: float
+    hard_halt_usd: float
+
+@router.get("/daily-loss")
+async def get_daily_loss(request: Request) -> dict:
+    from app.services.live_safety import daily_loss_state, _DAILY_LOSS_CFG
+    from app.services.paper_store import list_positions
+    state = daily_loss_state(list_positions())
+    return {
+        "pnl_usd": state["pnl_usd"],
+        "level": state["level"],
+        "enabled": _DAILY_LOSS_CFG.enabled,
+        "soft_warn_usd": _DAILY_LOSS_CFG.soft_warn_usd,
+        "hard_halt_usd": _DAILY_LOSS_CFG.hard_halt_usd,
+        "timestamp_ms": int(time.time() * 1000)
+    }
+
+@router.post("/daily-loss")
+async def set_daily_loss(body: DailyLossRequest, request: Request) -> dict:
+    from app.services.live_safety import configure_daily_loss, DailyLossConfig
+    from app.services.db import set_config
+    
+    cfg = DailyLossConfig(
+        enabled=body.enabled,
+        soft_warn_usd=body.soft_warn_usd,
+        hard_halt_usd=body.hard_halt_usd
+    )
+    configure_daily_loss(cfg)
+    
+    # Persist
+    import json
+    set_config("daily_loss_config", json.dumps({"enabled": body.enabled, "soft_warn_usd": body.soft_warn_usd, "hard_halt_usd": body.hard_halt_usd}))
+    
+    from app.services.paper_store import list_positions
+    from app.services.live_safety import daily_loss_state
+    state = daily_loss_state(list_positions())
+    return {
+        "pnl_usd": state["pnl_usd"],
+        "level": state["level"],
+        "enabled": cfg.enabled,
+        "soft_warn_usd": cfg.soft_warn_usd,
+        "hard_halt_usd": cfg.hard_halt_usd,
+        "timestamp_ms": int(time.time() * 1000)
+    }

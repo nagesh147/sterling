@@ -44,6 +44,7 @@ def set_kill_switch(enabled: bool, reason: str = "") -> Dict[str, Any]:
 @dataclass
 class DailyLossConfig:
     """All thresholds in absolute USD (negative loss reading is checked)."""
+    enabled:        bool  = True
     soft_warn_usd:  float = -1000.0    # informational
     hard_halt_usd:  float = -1500.0    # blocks new orders
 
@@ -79,11 +80,12 @@ def daily_loss_state(positions: List[Any]) -> Dict[str, Any]:
     """Return {pnl, level: clear|warning|halt}. List is read-only."""
     pnl = daily_realized_pnl(positions)
     level = "clear"
-    if pnl <= _DAILY_LOSS_CFG.hard_halt_usd:
-        level = "halt"
-    elif pnl <= _DAILY_LOSS_CFG.soft_warn_usd:
-        level = "warning"
-    return {"pnl_usd": pnl, "level": level,
+    if _DAILY_LOSS_CFG.enabled:
+        if pnl <= _DAILY_LOSS_CFG.hard_halt_usd:
+            level = "halt"
+        elif pnl <= _DAILY_LOSS_CFG.soft_warn_usd:
+            level = "warning"
+    return {"pnl_usd": pnl, "level": level, "enabled": _DAILY_LOSS_CFG.enabled,
             "soft_warn_usd": _DAILY_LOSS_CFG.soft_warn_usd,
             "hard_halt_usd": _DAILY_LOSS_CFG.hard_halt_usd}
 

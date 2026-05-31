@@ -71,6 +71,13 @@ class FreezeTokenStore:
     def clear(self) -> None:
         self._store.clear()
 
+    def restore(self, token: str, decision: object) -> None:
+        """Restore a consumed token if execution fails (e.g. 423 Locked)."""
+        now = int(time.time() * 1000)
+        self._store[token] = FreezeEntry(
+            decision=decision, expires_at_ms=now + FREEZE_TTL_MS,
+        )
+
 
 # Module-level singleton — main.py sets app.state.derivatives_freeze_cache
 # to point at this; the /execute endpoint reads it via the request app.

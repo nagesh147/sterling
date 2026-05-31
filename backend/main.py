@@ -161,7 +161,7 @@ async def _background_position_monitor(app: FastAPI) -> None:
 
             from app.engines.directional.signal_engine import compute_signal
             from app.engines.directional.monitor_engine import check_exits
-            from app.engines.directional.trailing_stop  import TrailState, TrailingStopEngine
+            from app.engines.directional.trailing_stop  import TrailState, TrailingStopEngine, realistic_stop_fill
             from app.engines.risk import options_monitor as _opt_mon
             from app.schemas.risk import ExitSignal
             from app.api.v1.endpoints.config import get_runtime_risk
@@ -438,6 +438,15 @@ async def _background_position_monitor(app: FastAPI) -> None:
                                             log.warning("Auto-monitor: live stop amendment failed for %s: %s", pos.id, _le)
 
                                 if _tu.stopped_out:
+                                    # Fill at ~the stop, NOT the poll-time spot.
+                                    # The monitor polls on an interval, so a
+                                    # breach is seen after price has run past the
+                                    # stop; booking that overshoot charged the
+                                    # whole interval's drift as slippage and turned
+                                    # breakeven stops into large losses. Model a
+                                    # real stop fill (stop ± a few bps).
+                                    _stop_px = float(_tu.new_stop) if _tu.new_stop else float(current_spot)
+                                    _exit_px = realistic_stop_fill(_stop_px, float(current_spot), direction_sign)
                                     # Premium-aware close: when chain_option
                                     # is present, pass its mark_price as
                                     # exit_premium so the realised options
@@ -453,10 +462,11 @@ async def _background_position_monitor(app: FastAPI) -> None:
                                         _ps.close_position(pos.id, float(current_spot), **_close_kw)
                                     else:
                                         _ps.close_position(
-                                            pos.id, float(current_spot),
+                                            pos.id, _exit_px,
                                             exit_reason="trail",
                                         )
-                                    log.info("Auto-monitor: trail stop hit for %s at %.2f", pos.id, current_spot)
+                                    log.info("Auto-monitor: trail stop hit for %s — fill %.4f (stop %.4f, spot %.4f)",
+                                             pos.id, _exit_px, _stop_px, current_spot)
                                     return
                                 if _tu.partial and pos.status.value == "open":
                                     _pr = getattr(_tu.partial, "partial_ratio", 0.25)
@@ -1289,6 +1299,30 @@ async def lifespan(app: FastAPI):
     if _router_mode not in ("paper", "shadow", "live"):
         _router_mode = "live"
     app.state.algo_router_mode = _router_mode
+
+    # Phase: derivatives_profiles and DailyLossConfig persistence loading
+    try:
+        from app.services.db import get_config
+        import json
+        
+        dl_str = get_config("daily_loss_config")
+        if dl_str:
+            from app.services.live_safety import configure_daily_loss
+            parsed = json.loads(dl_str)
+            from app.services.live_safety import DailyLossConfig
+            configure_daily_loss(DailyLossConfig(enabled=parsed.get("enabled", True), soft_warn_usd=parsed.get("soft_warn_usd", -500.0), hard_halt_usd=parsed.get("hard_halt_usd", -1500.0)))
+            
+        dp_str = get_config("derivatives_profiles")
+        if dp_str:
+            from app.schemas.derivatives import StrategyDerivativesProfile
+            parsed = json.loads(dp_str)
+            restored = {}
+            for k, v in parsed.items():
+                restored[k] = StrategyDerivativesProfile(**v)
+            app.state.derivatives_profiles = restored
+            log.info(f"Restored derivatives_profiles from DB for {list(restored.keys())}")
+    except Exception as e:
+        log.warning(f"Failed to restore configs from DB: {e}")
 
     # Restore persisted Telegram credentials. They're saved to config by
     # PUT /config/telegram but the module only read env vars at import — so after

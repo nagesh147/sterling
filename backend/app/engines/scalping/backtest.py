@@ -55,13 +55,47 @@ from app.engines.backtest.costs import compute_trade_costs
 # Default round-trip taker fee (matches engines.backtest.costs futures default).
 FEE_RT_PCT = 0.001
 
+def _resample_15m_to_1h(c_exec: list) -> list:
+    """Aggregate a 15m candle list into 1h bars (open=first, high=max, low=min,
+    close=last, volume=sum), bucketed by the wall-clock hour. ma_crossover gates
+    entries on 1h structure (`check_1h_structure`); the live scanner passes a real
+    1h series, so the replay must too — without it the strategy can never arm."""
+    from app.schemas.market import Candle
+    H = 3_600_000
+    buckets: Dict[int, list] = {}
+    order: list = []
+    for c in c_exec:
+        b = (int(c.timestamp_ms) // H) * H
+        if b not in buckets:
+            buckets[b] = []
+            order.append(b)
+        buckets[b].append(c)
+    out = []
+    for b in order:
+        grp = buckets[b]
+        out.append(Candle(
+            timestamp_ms=b, open=grp[0].open,
+            high=max(x.high for x in grp), low=min(x.low for x in grp),
+            close=grp[-1].close, volume=sum(x.volume for x in grp),
+        ))
+    return out
+
+
+def _ma_crossover_5arg(sym, c_macro, c_exec, levels, cfg):
+    """Uniform 5-arg replay adapter for evaluate_ma_crossover, which uniquely
+    needs a `candles_1h` series. Derive it from the 15m exec window so the
+    backtest exercises the SAME 1h-gated logic the live scanner trades."""
+    c_1h = _resample_15m_to_1h(c_exec)
+    return evaluate_ma_crossover(sym, c_macro, c_exec, c_1h, levels, cfg)
+
+
 # Strategy id -> evaluator. All share the (underlying, c_macro, c_exec, levels,
 # cfg) signature and evaluate "as of" the last bar of the passed exec slice, so
 # slicing the candle arrays gives a no-lookahead point-in-time signal.
 EVALUATORS: Dict[str, Callable] = {
     "price_action":   evaluate_price_action,
     "smc":            evaluate_smc,
-    "ma_crossover":   evaluate_ma_crossover,
+    "ma_crossover":   _ma_crossover_5arg,
     "mean_reversion": evaluate_mean_reversion,
     "breakout":       evaluate_breakout,
 }

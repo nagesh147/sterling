@@ -1,0 +1,25 @@
+Loading vector_store_1m_BTCUSD.parquet...
+Loading vector_store_1m_ETHUSD.parquet...
+Loading vector_store_1m_SOLUSD.parquet...
+
+--- TOP 20 CONFIGS ---
+Mean Reversion (RSI) (ETH 1m) | WinRate: 57.1% | PF: 1.17 | Exp: $0.09 | Gross P: $9101.27 | Gross L: -$7762.43 | Net: 267.8% ($1338.84)
+MA Crossover (9/21) (ETH 15m) | WinRate: 48.9% | PF: 1.02 | Exp: $0.02 | Gross P: $51709.50 | Gross L: -$50770.33 | Net: 187.8% ($939.17)
+MA Crossover (9/21) (BTC 15m) | WinRate: 49.0% | PF: 1.02 | Exp: $0.02 | Gross P: $36151.45 | Gross L: -$35439.76 | Net: 142.3% ($711.69)
+1H Supply/Demand (SOL 5m) | WinRate: 52.8% | PF: 1.06 | Exp: $0.04 | Gross P: $9418.97 | Gross L: -$8847.09 | Net: 114.4% ($571.88)
+Mean Reversion (RSI) (SOL 1m) | WinRate: 53.4% | PF: 1.10 | Exp: $0.03 | Gross P: $5656.00 | Gross L: -$5164.42 | Net: 98.3% ($491.57)
+Mean Reversion (RSI) (SOL 5m) | WinRate: 55.6% | PF: 1.15 | Exp: $0.15 | Gross P: $3200.49 | Gross L: -$2792.38 | Net: 81.6% ($408.11)
+MA Crossover (9/21) (ETH 30m) | WinRate: 49.2% | PF: 1.01 | Exp: $0.02 | Gross P: $29819.35 | Gross L: -$29417.82 | Net: 80.3% ($401.53)
+Mean Reversion (RSI) (BTC 1m) | WinRate: 54.7% | PF: 1.12 | Exp: $0.03 | Gross P: $3699.39 | Gross L: -$3299.05 | Net: 80.1% ($400.34)
+MA Crossover (9/21) (BTC 30m) | WinRate: 48.8% | PF: 1.02 | Exp: $0.02 | Gross P: $19863.63 | Gross L: -$19477.77 | Net: 77.2% ($385.85)
+MA Crossover (9/21) (BTC 45m) | WinRate: 49.2% | PF: 1.02 | Exp: $0.03 | Gross P: $17546.84 | Gross L: -$17162.86 | Net: 76.8% ($383.98)
+MA Crossover (9/21) (BTC 1h) | WinRate: 49.3% | PF: 1.02 | Exp: $0.03 | Gross P: $14766.80 | Gross L: -$14428.54 | Net: 67.7% ($338.26)
+MA Crossover (9/21) (ETH 45m) | WinRate: 49.4% | PF: 1.02 | Exp: $0.02 | Gross P: $20399.38 | Gross L: -$20073.25 | Net: 65.2% ($326.14)
+Mean Reversion (RSI) (ETH 5m) | WinRate: 57.5% | PF: 1.12 | Exp: $0.09 | Gross P: $2316.55 | Gross L: -$2064.06 | Net: 50.5% ($252.49)
+MA Crossover (9/21) (BTC 4h) | WinRate: 50.6% | PF: 1.03 | Exp: $0.09 | Gross P: $7504.56 | Gross L: -$7264.04 | Net: 48.1% ($240.52)
+1H Supply/Demand (BTC 5m) | WinRate: 51.9% | PF: 1.03 | Exp: $0.01 | Gross P: $9474.57 | Gross L: -$9234.48 | Net: 48.0% ($240.09)
+Price Action (Engulfing) (BTC 1m) | WinRate: 49.9% | PF: 1.04 | Exp: $0.01 | Gross P: $5653.39 | Gross L: -$5433.09 | Net: 44.1% ($220.29)
+Mean Reversion (RSI) (SOL 45m) | WinRate: 57.2% | PF: 1.25 | Exp: $0.55 | Gross P: $1096.11 | Gross L: -$879.94 | Net: 43.2% ($216.17)
+Mean Reversion (RSI) (BTC 5m) | WinRate: 55.7% | PF: 1.15 | Exp: $0.07 | Gross P: $1602.45 | Gross L: -$1389.05 | Net: 42.7% ($213.40)
+MA Crossover (9/21) (ETH 5m) | WinRate: 48.5% | PF: 1.00 | Exp: $0.00 | Gross P: $55177.28 | Gross L: -$54981.81 | Net: 39.1% ($195.47)
+SuperTrend Scalp (ETH 1h) | WinRate: 53.6% | PF: 1.17 | Exp: $0.23 | Gross P: $1191.29 | Gross L: -$1015.93 | Net: 35.1% ($175.35)

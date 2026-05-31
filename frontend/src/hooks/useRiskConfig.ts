@@ -35,3 +35,28 @@ export function useResetRiskConfig() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['risk-config'] }),
   });
 }
+
+export interface DailyLossConfig {
+  enabled: boolean;
+  pnl_usd: number;
+  level: string;
+  soft_warn_usd: number;
+  hard_halt_usd: number;
+  timestamp_ms: number;
+}
+
+export function useDailyLossConfig() {
+  return useQuery<DailyLossConfig>({
+    queryKey: ['daily-loss-config'],
+    queryFn: () => api.get<DailyLossConfig>('/api/v1/risk/daily-loss'),
+    staleTime: 5000,
+  });
+}
+
+export function useUpdateDailyLossConfig() {
+  const qc = useQueryClient();
+  return useMutation<DailyLossConfig, Error, { enabled: boolean; soft_warn_usd: number; hard_halt_usd: number }>({
+    mutationFn: (params) => api.post<DailyLossConfig>('/api/v1/risk/daily-loss', params),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['daily-loss-config'] }),
+  });
+}

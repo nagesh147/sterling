@@ -1286,7 +1286,7 @@ type PanelState = ReturnType<typeof useSignalsPanelState>;
 
 type FeedFilter  = 'active' | 'armed' | 'expired' | 'all';
 type ModeFilter  = 'all' | 'scalping' | 'intraday' | 'swing' | 'positional';
-type TrackFilter = 'all' | 'latest' | 'legacy';
+type TrackFilter = 'all' | 'vcp' | 'trend_following' | 'mean_reversion';
 
 const ARMED_STATES = new Set([
   'ENTRY_ARMED_PULLBACK', 'ENTRY_ARMED_CONTINUATION', 'CONFIRMED_SETUP_ACTIVE',
@@ -1316,7 +1316,7 @@ function SignalsFeedBody({
   const trackSignalSet = (() => {
     if (localTrack === 'all') return null;
     const s = signals?.signals ?? [];
-    const allowed = new Set(s.filter((sig: any) => sig.strategy === localTrack).map((sig: any) => sig.underlying));
+    const allowed = new Set(s.filter((sig: any) => sig.track === localTrack).map((sig: any) => sig.underlying));
     return allowed;
   })();
   const visible = (() => {
@@ -1513,10 +1513,11 @@ export function SignalsTable() {
     { id: 'positional', label: 'POSITIONAL' },
   ];
 
-  const TRACK_PILLS: Array<{ id: 'all' | 'latest' | 'legacy'; label: string; color: string }> = [
-    { id: 'all',     label: 'ALL',     color: 'var(--text-dim)' },
-    { id: 'latest',  label: 'LATEST',  color: 'var(--warning)' },
-    { id: 'legacy',  label: 'LEGACY',  color: 'var(--purple)' },
+  const TRACK_PILLS: Array<{ id: TrackFilter; label: string; color: string }> = [
+    { id: 'all',             label: 'ALL',       color: 'var(--text-dim)' },
+    { id: 'vcp',             label: 'VCP',       color: 'var(--amber)' },
+    { id: 'trend_following', label: 'TREND',     color: 'var(--green)' },
+    { id: 'mean_reversion',  label: 'REVERSION', color: 'var(--purple)' },
   ];
 
   const [localTrack, setLocalTrack] = React.useState<TrackFilter>('all');
@@ -1640,7 +1641,7 @@ export function SignalsTable() {
             // so neutral/IDLE instruments must be excluded — with no strategy
             // loaded every signal is neutral, so these tabs read 0.
             const cnt = (signals?.signals ?? []).filter((s: any) =>
-              s.fresh && s.direction !== 'neutral' && (t.id === 'all' || s.strategy === t.id)
+              s.fresh && s.direction !== 'neutral' && (t.id === 'all' || s.track === t.id)
             ).length;
             const active = localTrack === t.id;
             return (
