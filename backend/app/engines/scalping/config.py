@@ -168,25 +168,43 @@ ScalpingConfig = EngineConfig
 
 
 def default_config() -> EngineConfig:
-    """Returns the default multi-track configuration."""
+    """Returns the default multi-track configuration using optimized Strategy+Timeframe pairs."""
     return EngineConfig(
-        active_profiles=["intraday"],
+        active_profiles=["intraday_smc", "intraday_pa", "scalping_mr"],
         profiles={
-            "intraday": ScalpingProfile(
-                macro_timeframe="4h",
-                execution_timeframe="15m",
+            # 1. Intraday - Highest Quality (4h SMC)
+            "intraday_smc": ScalpingProfile(
+                macro_timeframe="1d",
+                execution_timeframe="4h",
+                enable_smc=True,
+                enable_price_action=False,
+                enable_ma_crossover=False,
+                enable_mean_reversion=False,
+                enable_breakout=False,
                 pa_confirm_bars=3,
                 risk_percent=1.0,
             ),
-            "scalping": ScalpingProfile(
+            # 2. Intraday - Top Overall Return (5m Price Action)
+            "intraday_pa": ScalpingProfile(
                 macro_timeframe="1h",
                 execution_timeframe="5m",
+                enable_smc=False,
+                enable_price_action=True,
+                enable_ma_crossover=False,
+                enable_mean_reversion=False,
+                enable_breakout=False,
                 pa_confirm_bars=3,
                 risk_percent=0.5,
             ),
-            "aggressive": ScalpingProfile(
+            # 3. Scalping - High Volatility (1m Mean Reversion)
+            "scalping_mr": ScalpingProfile(
                 macro_timeframe="15m",
                 execution_timeframe="1m",
+                enable_smc=False,
+                enable_price_action=False,
+                enable_ma_crossover=False,
+                enable_mean_reversion=True,
+                enable_breakout=False,
                 pa_confirm_bars=1,
                 risk_percent=0.25,
             ),

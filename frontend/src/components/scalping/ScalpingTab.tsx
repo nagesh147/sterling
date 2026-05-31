@@ -215,9 +215,13 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             if (defaultCfg) {
               setDraft({
                 ...defaultCfg,
-                active_profiles: draft.active_profiles,
+                active_profiles: defaultCfg.active_profiles, // Overwrite with new optimized profile list
                 symbols: draft.symbols,
               });
+              // Reset the active tab to the first newly loaded profile
+              if (defaultCfg.active_profiles?.length > 0) {
+                setActiveTab(defaultCfg.active_profiles[0]);
+              }
             }
           }}
           style={{
@@ -249,9 +253,9 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             <ChipToggle label="AI Gatekeeper" on={draft.use_optimized ?? false} onChange={(v) => setRootField('use_optimized', v)} />
         </div>
         {draft.use_optimized ? (
-            <span>The Walk-Forward Optimizer autonomously determines the best Timeframes, Patterns, and Assets. Manual inputs for Strategy Thresholds (e.g., SMC Imbalance, Breakout RSI) and R:R constraints are dynamically overridden for peak mathematical expectancy. <strong>Direction & Risk</strong> settings are still manually enforced!</span>
+            <span><strong>Institutional WFO Active:</strong> The backend is enforcing the <strong>Edge Whitelist</strong>. It will only execute the specific Strategies on the specific Timeframes and Coins that have been mathematically proven (e.g. SMC is allowed on 4h BTC/ETH, but Breakout is blocked on 4h). Unproven combinations you toggle below will be automatically blocked to save AI tokens.</span>
         ) : (
-            <span>The AI Gatekeeper is currently bypassed. The scanner will strictly follow your manual settings below and execute every valid signal it finds, regardless of historical profitability.</span>
+            <span><strong>Retail Mode Active:</strong> The AI Gatekeeper is bypassed and the Edge Whitelist is disabled. The scanner will strictly execute <strong>exactly what you configure below</strong> across all coins, regardless of whether that specific Strategy/Timeframe combination is historically profitable.</span>
         )}
       </div>
 
@@ -1934,6 +1938,37 @@ export function ScalpingTab() {
     ? '🤖 WFO DYNAMIC' 
     : `${(_activeProf?.macro_timeframe ?? '4h').toUpperCase()} → ${(_activeProf?.execution_timeframe ?? '15m').toUpperCase()}`;
 
+  const selectedRow = displaySignals.find(r => r.key === selectedRowKey);
+  const displayStrat = (stratFilter !== 'all') ? stratFilter : (selectedRow ? selectedRow.s.strategy : null);
+  const displayProf = (profileFilter !== 'all') ? profileFilter : (selectedRow ? selectedRow.s.profile : null);
+
+  let stratLine1 = "";
+  let stratName = "";
+  if (displayStrat === 'price_action') {
+    stratName = "PRICE ACTION";
+    stratLine1 = "Breakout from 5 strict patterns (Double Bottom/Triangles) with 1:2 Risk.";
+  } else if (displayStrat === 'smc') {
+    stratName = "SMC";
+    stratLine1 = "Hunts for Orderblocks, FVGs, and Liquidity Sweeps.";
+  } else if (displayStrat === 'ma_crossover') {
+    stratName = "MA CROSSOVER";
+    stratLine1 = "Trend-following via moving average momentum shifts.";
+  } else if (displayStrat === 'mean_reversion') {
+    stratName = "MEAN REVERSION";
+    stratLine1 = "Fades overextended price action back to the mean.";
+  } else if (displayStrat === 'breakout') {
+    stratName = "BREAKOUT";
+    stratLine1 = "Enters on high-volume breaches of key support/resistance.";
+  } else {
+    stratName = "GLOBAL";
+    stratLine1 = "Select a specific signal row or filter by strategy to view execution logic.";
+  }
+
+  const profName = displayProf ? displayProf.toUpperCase() : 'MULTI-PROFILE';
+  const stratLine2 = cfg?.use_optimized 
+    ? `WFO Active: Mathematically enforcing edge on ${profName}.`
+    : `${profName} Mode: Unrestricted execution (Retail Mode).`;
+
   // Consolidated totals across the current mode's executed trades.
   const consolidated = executedSignals.reduce((acc, row) => {
     const v = row.pnl?.value ?? 0;
@@ -2134,19 +2169,29 @@ export function ScalpingTab() {
         </LeftSection>
       </>}
       centerHeader={<>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</span>
-          <span title="Structure → entry timeframe" style={{
-            fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-text)', whiteSpace: 'nowrap',
-            padding: '2px 7px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--t-border)', background: 'var(--t-bg2)',
-          }}>{tfBadge}</span>
-          <span title="Live scan auto-refreshes every ~30s" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700,
-            color: scanQ.isFetching ? 'var(--t-amber)' : 'var(--t-green)',
-          }}>
-            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
-            {scanQ.isFetching ? 'scanning' : 'live'}
-          </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</span>
+            
+            <span style={{
+              fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: cfg?.use_optimized ? 'var(--t-blue)' : 'var(--t-text)', whiteSpace: 'nowrap',
+              padding: '2px 7px', borderRadius: 'var(--radius-xs)', border: `1px solid ${cfg?.use_optimized ? 'var(--t-blue)40' : 'var(--t-border)'}`, 
+              background: cfg?.use_optimized ? 'var(--t-blue)10' : 'var(--t-bg2)'
+            }}>{tfBadge}</span>
+
+            <span title="Live scan auto-refreshes every ~30s" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700,
+              color: scanQ.isFetching ? 'var(--t-amber)' : 'var(--t-green)',
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
+              {scanQ.isFetching ? 'scanning' : 'live'}
+            </span>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', fontSize: 10, lineHeight: 1.4, color: 'var(--t-dim)' }}>
+            <div><strong style={{ color: 'var(--t-text)' }}>{stratName}:</strong> {stratLine1}</div>
+            <div>{stratLine2}</div>
+          </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
