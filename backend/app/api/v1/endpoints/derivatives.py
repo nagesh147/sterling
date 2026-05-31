@@ -802,6 +802,33 @@ async def set_edge_gate(body: _EdgeGateModel, request: Request) -> _EdgeGateResp
     return _edge_gate_response(request.app)
 
 
+@router.get("/strategy-catalog")
+async def strategy_catalog(request: Request) -> dict:
+    """Plain-English catalog of every strategy + the live, validated combos it is
+    running. Powers the strategy info panel so a user can see what each cryptic id
+    ('ma_crossover', 'smc', …) actually does, on what timeframe, long/short, which
+    engine, how it routes to futures/options, and how each live config performs."""
+    from app.engines.edge.catalog import build_catalog
+    reg = _edge_registry(request.app)
+    return {
+        "strategies": build_catalog(reg),
+        "engines": {
+            "edge_feed": ("Backtest-validated, long-only signals (the functions in "
+                          "edge/strategies.py). Only combos that survive the robustness "
+                          "gate — out-of-sample Sharpe > 0 and Monte-Carlo P(loss) ≤ "
+                          "35% — are admitted. These feed both candidate tables."),
+            "scalping_scanner": ("Intraday near-4H-level setups (some bidirectional). "
+                                 "Same strategy NAMES but different logic from the edge "
+                                 "feed — always check the engine label."),
+        },
+        "routing": ("A strategy only produces a directional SIGNAL. The derivatives "
+                    "selector then decides whether to express it as a FUTURE or an "
+                    "OPTION based on liquidity and the Greeks budget — which is why the "
+                    "same signal can surface in either table."),
+        "gate": _edge_gate_response(request.app).gate.model_dump(),
+    }
+
+
 # ─── armed-signal collection (per-strategy adapters) ──────────────────
 
 
