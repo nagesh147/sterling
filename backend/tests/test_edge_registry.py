@@ -88,6 +88,65 @@ def test_combo_carries_metrics(tmp_path):
     assert 0.0 <= combo.signal_score <= 100.0
 
 
+# --- robustness gate (OOS Sharpe + Monte-Carlo P(loss)) ------------------
+
+_RHEADER = ("symbol,tf,strategy,profile,trades,win_rate,pf,sharpe,expectancy,"
+            "net_return,pnl_usd,max_dd,oos_sharpe,p_loss\n")
+
+
+def _rrow(sym, tf, strat, prof, trades, sharpe, net, oos, ploss, pf=1.2, exp=0.003):
+    return (f"{sym},{tf},{strat},{prof},{trades},0.42,{pf},{sharpe},{exp},"
+            f"{net},300,-0.3,{oos},{ploss}\n")
+
+
+def _write_rcsv(tmp_path, rows):
+    p = tmp_path / "robust.csv"
+    p.write_text(_RHEADER + "".join(rows))
+    return str(p)
+
+
+def test_missing_robustness_columns_are_backward_compatible(tmp_path):
+    """Old CSVs without oos_sharpe/p_loss still load under a robustness gate."""
+    csv = _write_csv(tmp_path, [
+        _row("BTCUSD", "4h", "ma_crossover", "Intraday", 166, 1.83, 0.953),
+    ])
+    reg = load_edge_registry(csv, gate=EdgeGate(min_oos_sharpe=0.0, max_p_loss=0.35))
+    assert reg.allowed("BTCUSD", "4h", "ma_crossover", "Intraday")
+
+
+def test_negative_oos_sharpe_rejected_by_robustness_gate(tmp_path):
+    csv = _write_rcsv(tmp_path, [
+        # strong in-sample but OOS Sharpe collapses → reject
+        _rrow("BTCUSD", "4h", "mean_reversion", "Intraday", 104, 1.5, 0.30, oos=-0.2, ploss=0.4),
+    ])
+    reg = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                min_oos_sharpe=0.0, max_p_loss=0.35))
+    assert not reg.allowed("BTCUSD", "4h", "mean_reversion", "Intraday")
+
+
+def test_high_p_loss_rejected(tmp_path):
+    csv = _write_rcsv(tmp_path, [
+        _rrow("ETHUSD", "2h", "smc", "Aggressive", 240, 0.91, 0.46, oos=5.2, ploss=0.45),
+    ])
+    reg = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                min_oos_sharpe=0.0, max_p_loss=0.35))
+    assert not reg.allowed("ETHUSD", "2h", "smc", "Aggressive")
+
+
+def test_robust_survivor_with_low_raw_sharpe_admitted(tmp_path):
+    """price_action 1h: raw Sharpe 0.69 (< old 0.8 gate) but survives OOS + MC.
+    The robustness gate must admit it by relaxing raw Sharpe."""
+    csv = _write_rcsv(tmp_path, [
+        _rrow("BTCUSD", "1h", "price_action", "Intraday", 434, 0.69, 0.39, oos=3.97, ploss=0.24),
+    ])
+    reg = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                min_oos_sharpe=0.0, max_p_loss=0.35))
+    assert reg.allowed("BTCUSD", "1h", "price_action", "Intraday")
+    c = reg.get("BTCUSD", "1h", "price_action", "Intraday")
+    assert c.oos_sharpe == pytest.approx(3.97)
+    assert c.p_loss == pytest.approx(0.24)
+
+
 # --- scoring -------------------------------------------------------------
 
 def test_score_monotonic_in_sharpe():

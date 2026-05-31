@@ -24,15 +24,31 @@ PROFILE_ATR = {
 
 @dataclass(frozen=True)
 class EdgeGate:
-    """Threshold a combo must clear to emit live signals."""
+    """Threshold a combo must clear to emit live signals.
+
+    The raw in-sample gate (net_return / sharpe / trades) is the original floor.
+    The robustness gate (min_oos_sharpe / max_p_loss) is additive and reads the
+    optional `oos_sharpe` / `p_loss` columns produced by `robustness_scan.py`
+    (CPCV out-of-sample Sharpe + Monte-Carlo probability of loss). Its defaults
+    are no-ops, so CSVs without those columns behave exactly as before.
+    """
     min_net_return: float = 0.0   # strictly positive net return required
     min_sharpe: float = 0.8
     min_trades: int = 50
+    # Robustness gate — additive. Defaults disable it (oos always passes a
+    # -inf floor; p_loss ≤ 1.0 is vacuous for a probability).
+    min_oos_sharpe: float = -1e18
+    max_p_loss: float = 1.0
 
-    def passes(self, *, net_return: float, sharpe: float, trades: int) -> bool:
+    def passes(
+        self, *, net_return: float, sharpe: float, trades: int,
+        oos_sharpe: float = float("inf"), p_loss: float = 0.0,
+    ) -> bool:
         return (net_return > self.min_net_return
                 and sharpe >= self.min_sharpe
-                and trades >= self.min_trades)
+                and trades >= self.min_trades
+                and oos_sharpe > self.min_oos_sharpe
+                and p_loss <= self.max_p_loss)
 
 
 def signal_score_from_metrics(*, sharpe: float, expectancy: float, pf: float) -> float:
@@ -60,6 +76,8 @@ class EdgeCombo:
     pnl_usd: float
     max_dd: float
     signal_score: float
+    oos_sharpe: float = float("inf")   # CPCV out-of-sample Sharpe (∞ = not measured)
+    p_loss: float = 0.0                # Monte-Carlo probability of loss (0 = not measured)
 
     @property
     def key(self) -> tuple[str, str, str, str]:
@@ -95,7 +113,12 @@ def load_edge_registry(csv_path: str, gate: EdgeGate | None = None) -> EdgeRegis
             net_return = _f(row, "net_return")
             sharpe = _f(row, "sharpe")
             trades = int(_f(row, "trades"))
-            if not gate.passes(net_return=net_return, sharpe=sharpe, trades=trades):
+            # Robustness columns are optional — default to always-pass values so
+            # legacy CSVs (no oos_sharpe/p_loss) behave exactly as before.
+            oos_sharpe = _f(row, "oos_sharpe", float("inf"))
+            p_loss = _f(row, "p_loss", 0.0)
+            if not gate.passes(net_return=net_return, sharpe=sharpe, trades=trades,
+                               oos_sharpe=oos_sharpe, p_loss=p_loss):
                 continue
             pf = _f(row, "pf")
             expectancy = _f(row, "expectancy")
@@ -114,6 +137,8 @@ def load_edge_registry(csv_path: str, gate: EdgeGate | None = None) -> EdgeRegis
                 max_dd=_f(row, "max_dd"),
                 signal_score=signal_score_from_metrics(
                     sharpe=sharpe, expectancy=expectancy, pf=pf),
+                oos_sharpe=oos_sharpe,
+                p_loss=p_loss,
             )
             reg.combos[combo.key] = combo
     return reg

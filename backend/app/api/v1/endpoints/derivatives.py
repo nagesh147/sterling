@@ -643,20 +643,22 @@ async def book(symbol: str, request: Request, depth: int = Query(default=10, ge=
 
 
 def _edge_csv_path() -> str:
-    """Locate backtest_edge_results.csv (repo root by default)."""
+    """Locate the edge results CSV. Prefers `robustness_scan_results.csv`
+    (the CPCV+Monte-Carlo enriched matrix from `robustness_scan.py`) so the
+    live feed gates on out-of-sample Sharpe + P(loss), and falls back to the
+    raw `backtest_edge_results.csv` if only that exists."""
     override = os.environ.get("STERLING_EDGE_CSV")
     if override:
         return override
     here = Path(__file__).resolve()
-    candidates = [
-        here.parents[5] / "backtest_edge_results.csv",  # <repo>/backtest_edge_results.csv
-        Path.cwd() / "backtest_edge_results.csv",
-        Path.cwd().parent / "backtest_edge_results.csv",
-    ]
-    for c in candidates:
-        if c.exists():
-            return str(c)
-    return str(candidates[0])
+    # parents[4] = backend/ (where robustness_scan.py writes), parents[5] = repo root.
+    roots = [here.parents[4], here.parents[5], Path.cwd(), Path.cwd().parent]
+    for name in ("robustness_scan_results.csv", "backtest_edge_results.csv"):
+        for root in roots:
+            c = root / name
+            if c.exists():
+                return str(c)
+    return str(here.parents[5] / "backtest_edge_results.csv")
 
 
 def _edge_gate(app):
@@ -665,7 +667,13 @@ def _edge_gate(app):
     from app.engines.edge.registry import EdgeGate
     gate = getattr(getattr(app, "state", None), "edge_gate", None)
     if gate is None:
-        gate = EdgeGate()
+        # Robustness-first default: admit only combos that survive CPCV (OOS
+        # Sharpe > 0) and Monte-Carlo P(loss) ≤ 35%. Raw in-sample Sharpe is
+        # relaxed (min_sharpe=0) because OOS Sharpe is the better filter — some
+        # survivors (e.g. price_action 1h) have raw Sharpe < 0.8 but hold OOS.
+        # min_trades=20 matches robustness_scan.py's floor.
+        gate = EdgeGate(min_sharpe=0.0, min_trades=20,
+                        min_oos_sharpe=0.0, max_p_loss=0.35)
         if hasattr(app, "state"):
             app.state.edge_gate = gate
     return gate
@@ -730,8 +738,12 @@ def _collect_edge_signals(
 
 class _EdgeGateModel(BaseModel):
     min_net_return: float = Field(0.0, ge=-1.0, le=100.0)
-    min_sharpe: float = Field(0.8, ge=-100.0, le=100.0)
-    min_trades: int = Field(50, ge=0)
+    min_sharpe: float = Field(0.0, ge=-100.0, le=100.0)
+    min_trades: int = Field(20, ge=0)
+    # Robustness gate (reads robustness_scan_results.csv columns). Defaults match
+    # the live survivor gate: OOS Sharpe > 0 and Monte-Carlo P(loss) ≤ 35%.
+    min_oos_sharpe: float = Field(0.0, ge=-100.0, le=100.0)
+    max_p_loss: float = Field(0.35, ge=0.0, le=1.0)
 
 
 class _EdgeComboSummary(BaseModel):
@@ -758,7 +770,8 @@ def _edge_gate_response(app) -> _EdgeGateResponse:
     admitted = sorted(reg.all(), key=lambda c: -c.signal_score)
     return _EdgeGateResponse(
         gate=_EdgeGateModel(min_net_return=gate.min_net_return,
-                            min_sharpe=gate.min_sharpe, min_trades=gate.min_trades),
+                            min_sharpe=gate.min_sharpe, min_trades=gate.min_trades,
+                            min_oos_sharpe=gate.min_oos_sharpe, max_p_loss=gate.max_p_loss),
         admitted_count=len(admitted),
         admitted=[_EdgeComboSummary(
             symbol=c.symbol, tf=c.tf, strategy=c.strategy, profile=c.profile,
@@ -782,6 +795,8 @@ async def set_edge_gate(body: _EdgeGateModel, request: Request) -> _EdgeGateResp
         min_net_return=body.min_net_return,
         min_sharpe=body.min_sharpe,
         min_trades=body.min_trades,
+        min_oos_sharpe=body.min_oos_sharpe,
+        max_p_loss=body.max_p_loss,
     )
     request.app.state.edge_registry = None       # force rebuild with new gate
     return _edge_gate_response(request.app)
