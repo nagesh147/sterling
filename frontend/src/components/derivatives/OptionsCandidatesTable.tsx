@@ -256,6 +256,16 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                             [rp.realized ? 'Realized P&L' : 'Unrealized P&L', fmtSigned(rp.pnl)] as [string, string],
                           ] : [['Position', 'not executed yet'] as [string, string]]),
                         ]} pnlVal={rp?.pnl ?? null} />
+                        {row.structure_summary && (
+                          <div style={{ marginTop: 8, fontSize: 10, color: c.text }}>
+                            <b style={{ color: c.amber }}>STRUCTURE</b>{' '}
+                            <span style={{ color: c.dim }}>{row.structure_summary}</span>
+                            {' · '}max loss{' '}
+                            <b style={{ color: c.red }}>{fmtUsd(row.structure_max_loss_usd)}</b>
+                            {' · '}max profit{' '}
+                            <b style={{ color: c.green }}>{fmtUsd(row.structure_max_profit_usd)}</b>
+                          </div>
+                        )}
                         {row.reason && <div style={{ marginTop: 8, fontSize: 9.5, color: c.dim }}>{row.reason}</div>}
                         {row.warnings?.length > 0 && (
                           <div style={{ marginTop: 4, fontSize: 9.5, color: c.amber }}>⚠ {row.warnings.join(' · ')}</div>
