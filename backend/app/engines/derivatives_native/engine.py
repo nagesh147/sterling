@@ -21,6 +21,7 @@ from app.engines.derivatives.schemas import (
     DecisionStatus, DerivativesCandidate, DerivativesDecision, DualDerivativesDecision,
     InstrumentBias, MarketContext, SignalContext, StrategyDerivativesProfile,
 )
+from app.engines.derivatives_native import regime as _regime
 from app.engines.derivatives_native import structures as _structures
 from app.engines.derivatives_native.config import DerivativesEngineConfig, RiskPosture
 from app.schemas.market import OptionSummary
@@ -72,6 +73,28 @@ def _defined_risk_candidate(
     )
 
 
+def _naked_candidate(
+    *, signal: SignalContext, market: MarketContext,
+    profile: StrategyDerivativesProfile, chain: list[OptionSummary],
+) -> Optional[DerivativesCandidate]:
+    """NAKED short strangle — UNCAPPED tail. Opt-in + regime-gated by the caller;
+    sized to a premium budget; never auto-executed (auto-exec flags stay OFF)."""
+    s = _structures.build_short_strangle(
+        chain=chain, spot=market.spot, width_pct=0.04,
+        nav_usd=market.portfolio_value, premium_pct=profile.max_premium_pct_of_account)
+    if s is None:
+        return None
+    return DerivativesCandidate(
+        rank=0, instrument_type="options", underlying=signal.underlying,
+        entry_price=signal.entry, direction="neutral",
+        contracts=s.contracts, leverage=1.0,
+        notional_usd=round(s.contracts * signal.entry, 2),
+        premium_usd=round(s.net_premium_usd, 2),
+        expected_r=0.0, score=1.0, structure=s,
+        warnings=["UNCAPPED TAIL RISK — naked short vol"],
+    )
+
+
 def decide_both(
     *,
     signal: SignalContext,
@@ -104,8 +127,33 @@ def decide_both(
     # ── Options leg (long premium only in 2a) ─────────────────────────────
     if (sources & {"vrp_voltiming", "skew_put"}) and chain:
         if cfg.risk_posture == RiskPosture.NAKED:
-            warnings.append("risk_posture=naked not implemented (Phase 2d); using defined_risk")
-        if cfg.risk_posture in (RiskPosture.DEFINED_RISK, RiskPosture.NAKED):
+            # Naked is gated on a RICH vol regime (high IV-rank). Otherwise we do
+            # NOT sell cheap vol naked — fall back to defined-risk.
+            ivr = market.ivr_pct
+            if ivr is not None and ivr >= _regime.RICH_IVR:
+                cand = _naked_candidate(
+                    signal=signal, market=market, profile=profile, chain=chain)
+                if cand is not None:
+                    warnings.append(
+                        "naked short vol — UNCAPPED TAIL RISK (opt-in; never auto-executed)")
+                    options_leg = _frozen_ok(cand, reason="native:naked_short_vol", now_ms=now_ms)
+                else:
+                    options_leg = DerivativesDecision(
+                        status=DecisionStatus.DEFER,
+                        reason="no naked structure buildable from chain",
+                        code="no_structure", timestamp_ms=now_ms)
+            else:
+                warnings.append(
+                    f"naked requested but regime not rich (ivr={ivr}); using defined_risk")
+                cand = _defined_risk_candidate(
+                    signal=signal, market=market, profile=profile, chain=chain, sources=sources)
+                options_leg = (
+                    _frozen_ok(cand, reason="native:defined_risk", now_ms=now_ms)
+                    if cand is not None else DerivativesDecision(
+                        status=DecisionStatus.DEFER,
+                        reason="no defined-risk structure buildable from chain",
+                        code="no_structure", timestamp_ms=now_ms))
+        elif cfg.risk_posture == RiskPosture.DEFINED_RISK:
             cand = _defined_risk_candidate(
                 signal=signal, market=market, profile=profile, chain=chain, sources=sources)
             if cand is not None:

@@ -321,6 +321,16 @@ class TestStructureBuilders:
         assert s.net_premium_usd < 0      # net credit
         assert s.max_loss_usd > 0
 
+    def test_build_short_strangle_is_undefined_risk(self):
+        s = st.build_short_strangle(
+            chain=_chain_btc(), spot=50000.0,
+            width_pct=0.04, nav_usd=100_000.0, premium_pct=0.02)
+        assert s is not None and s.structure_type == "short_strangle"
+        assert len(s.legs) == 2
+        assert all(l.side == "sell" for l in s.legs)
+        assert s.defined is False         # uncapped tail
+        assert s.net_premium_usd < 0      # credit collected
+
 
 class TestNativeDefinedRisk:
     def test_vrp_defined_risk_builds_condor(self):
@@ -344,13 +354,27 @@ class TestNativeDefinedRisk:
             signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
         assert dual.options.chosen.structure.structure_type == "credit_vertical"
 
-    def test_naked_still_falls_back_with_warning(self):
+    def test_naked_low_regime_falls_back_to_defined_risk(self):
+        # ivr=20 → not rich → don't sell cheap vol naked; fall back to defined_risk.
         cfg = DerivativesEngineConfig(
             engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
             risk_posture=RiskPosture.NAKED)
         dual = native_engine.decide_both(
             signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
         assert any("naked" in w.lower() for w in dual.warnings)
+        # fell back to a defined-risk structure (capped)
+        assert dual.options.chosen.structure.defined is True
+
+    def test_naked_rich_regime_builds_uncapped_strangle(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.NAKED)
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=85.0), chain=_chain_btc(), config=cfg)
+        s = dual.options.chosen.structure
+        assert s.structure_type == "short_strangle"
+        assert s.defined is False
+        assert any("uncapped" in w.lower() or "tail" in w.lower() for w in dual.warnings)
 
 
 from app.engines.derivatives_native import regime as rg

@@ -140,6 +140,31 @@ def build_credit_vertical(
         net_premium_usd=net, max_loss_usd=ml, max_profit_usd=mp, breakevens=bes)
 
 
+def build_short_strangle(
+    *, chain: Sequence[OptionSummary], spot: float,
+    width_pct: float, nav_usd: float, premium_pct: float,
+) -> Optional[DerivativesStructure]:
+    """NAKED short strangle: sell OTM put + sell OTM call. UNCAPPED tail risk —
+    `defined=False`. Sized to a PREMIUM budget (not max-loss, which is unbounded):
+    contracts so collected credit ≈ premium_pct × NAV. Opt-in + regime-gated by
+    the caller; never auto-executed."""
+    sp = _nearest(chain, "put", spot * (1.0 - width_pct))
+    sc = _nearest(chain, "call", spot * (1.0 + width_pct))
+    if sp is None or sc is None or sp.strike == sc.strike:
+        return None
+    legs = [_leg_from_option(sp, "sell"), _leg_from_option(sc, "sell")]
+    credit_per_contract = abs(_net_debit(legs))   # net credit (debit is negative)
+    if credit_per_contract <= 0:
+        return None
+    budget = nav_usd * premium_pct
+    contracts = max(0.01, math.floor((budget / credit_per_contract) * 100) / 100)
+    net, ml, mp, bes = compute_economics(legs, contracts)
+    return DerivativesStructure(
+        structure_type="short_strangle", underlying=sp.underlying, direction="neutral",
+        legs=legs, contracts=contracts, defined=False,
+        net_premium_usd=net, max_loss_usd=ml, max_profit_usd=mp, breakevens=bes)
+
+
 def build_iron_condor(
     *, chain: Sequence[OptionSummary], spot: float,
     width_pct: float, nav_usd: float, max_loss_pct: float,

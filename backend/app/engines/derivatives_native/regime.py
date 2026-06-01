@@ -17,6 +17,7 @@ from typing import Optional
 VRP_CHEAP = 1.0     # IV below realized → buying is relatively cheap
 VRP_RICH = 1.2      # IV well above realized → selling defined-risk vol is paid
 MIN_IV_SAMPLES = 60  # distinct IV observations before the percentile is trusted
+RICH_IVR = 70.0     # IV-rank above this = rich regime (gates the naked tier)
 
 
 @dataclass

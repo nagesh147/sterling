@@ -154,11 +154,12 @@ class DerivativesStructure(BaseModel):
     Economics are computed by `derivatives_native.structures.compute_economics`
     and stored here; `net_premium_usd` > 0 = net debit paid, < 0 = net credit
     received. `max_loss_usd` / `max_profit_usd` are positive magnitudes."""
-    structure_type: str                             # "debit_vertical"|"credit_vertical"|"iron_condor"
+    structure_type: str                             # "debit_vertical"|"credit_vertical"|"iron_condor"|"short_strangle"
     underlying: str
     direction: str                                  # "long"|"short"|"neutral"
     legs: list[StructureLeg] = Field(default_factory=list)
     contracts: float = 1.0
+    defined: bool = True                            # False = uncapped tail (naked); requires opt-in
     net_premium_usd: float = 0.0
     max_loss_usd: float = 0.0
     max_profit_usd: float = 0.0
