@@ -54,7 +54,7 @@ def _parse_symbol(symbol: str) -> Optional[ParsedSym]:
 
 
 def _dte(expiry_ddmmyy: str, today: Optional[dt.date] = None) -> int:
-    today = today or dt.datetime.utcnow().date()
+    today = today or dt.datetime.now(dt.timezone.utc).date()
     try:
         d = int(expiry_ddmmyy[0:2])
         m = int(expiry_ddmmyy[2:4])
