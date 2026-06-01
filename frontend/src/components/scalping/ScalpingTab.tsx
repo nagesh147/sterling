@@ -176,6 +176,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   
   const profileKeys = Object.keys(draft.profiles || {});
   const [activeTab, setActiveTab] = useState<string>(profileKeys[0] || 'intraday');
+  const [derivStrategy, setDerivStrategy] = useState<string>('scalping/price_action');
 
   const activeProfile = draft.profiles?.[activeTab];
   const setProfileField = <K extends keyof ScalpingProfile>(k: K, v: ScalpingProfile[K]) => {
@@ -405,6 +406,32 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                 <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
               </div>
             </div>
+            </div>
+
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--t-bg3)', borderRadius: 8, border: '1px solid var(--t-border)' }}>
+            <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.04em' }}>
+                DERIVATIVES ROUTING CONFIG
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--t-dim)', marginLeft: 'auto' }}>Configure strategy:</span>
+              <select 
+                value={derivStrategy} 
+                onChange={e => setDerivStrategy(e.target.value)} 
+                style={{
+                  background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+                  borderRadius: 4, color: 'var(--t-bright)', padding: '4px 8px',
+                  fontFamily: 'inherit', fontSize: 11, cursor: 'pointer'
+                }}
+              >
+                <option value="scalping/price_action">Price Action</option>
+                <option value="scalping/smc">SMC</option>
+                <option value="scalping/ma_crossover">MA Crossover</option>
+                <option value="scalping/mean_reversion">Mean Reversion</option>
+                <option value="scalping/breakout">Breakout</option>
+                <option value="scalping/delta_gamma">Delta Gamma</option>
+              </select>
+            </div>
+            <DerivativesPanel strategy={derivStrategy} />
           </div>
         </>
       )}
@@ -1670,7 +1697,6 @@ export function ScalpingTab() {
   });
   const logExec = (e: ExecLogEntry) => setExecLog((l) => [e, ...l].slice(0, 40));
   const algoOn = useAlgoMode().data?.enabled ?? false;
-  const autoExecRef = useRef<Set<string>>(new Set());   // auto-attempted this algo session
   const acceptedRef = useRef<Set<string>>(new Set());   // ever accepted — never re-execute
 
   // Authoritative trading mode (paper / shadow / live). Drives the AUTO · <MODE>
@@ -2010,27 +2036,6 @@ export function ScalpingTab() {
     try { localStorage.setItem('scalp.execLog', JSON.stringify(execLog)); } catch { /* quota */ }
   }, [execLog]);
 
-  // Algo auto-execution: while Algo is ON, EVERY ready (executable) signal is
-  // fired immediately. The /scalping/execute endpoint routes through the active
-  // Paper/Shadow/Live mode. Runaway is prevented at the source — the backend
-  // refuses to open a second position on the same symbol+strategy — so no
-  // frontend position cap is needed; every distinct ready setup executes.
-  // De-duped per symbol+strategy so the 30s rescan never re-fires the same setup.
-  useEffect(() => {
-    if (!algoOn) return;
-    for (const s of data?.signals ?? []) {
-      if (!s.executable) continue;
-      const key = `${s.underlying}-${s.strategy}`;
-      if (acceptedRef.current.has(key)) continue;  // never re-execute a filled trade
-      if (autoExecRef.current.has(key)) continue;  // already attempted this session
-      autoExecRef.current.add(key);
-      onExecute(s.underlying, s.strategy, true, s.entry ?? null, s.stop_loss ?? null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [algoOn, data, tradeMode]);
-
-  // Forget de-dupe keys once Algo is switched off, so re-enabling starts fresh.
-  useEffect(() => { if (!algoOn) autoExecRef.current.clear(); }, [algoOn]);
 
   // On mode change (and on mount/reload), re-scope the de-dup refs to the current
   // mode WITHOUT deleting executions — every mode keeps its own trades. Only trades
@@ -2041,7 +2046,6 @@ export function ScalpingTab() {
         .filter(([, es]) => (es.mode || 'PAPER') === tradeMode && es.resp?.accepted)
         .map(([k]) => k),
     );
-    autoExecRef.current.clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeMode]);
 
@@ -2053,7 +2057,6 @@ export function ScalpingTab() {
     for (const [k, es] of Object.entries(execStates)) {
       if (es.resp?.accepted && pnlFor(es.resp).realized) {
         acceptedRef.current.delete(k);
-        autoExecRef.current.delete(k);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2396,7 +2399,6 @@ export function ScalpingTab() {
               cfg={cfg}
             />
           )}
-          <DerivativesPanel strategy="scalping/price_action" />
           <StrategyCatalogPanel />
           <EdgeGatePanel />
           <ScalpBacktestPanel initialUnderlying={btUnderlying} />

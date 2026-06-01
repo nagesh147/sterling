@@ -167,44 +167,59 @@ def _build_options_candidates(
     chain: Optional[list[OptionSummary]],
 ) -> list[DerivativesCandidate]:
     """Reusable: run expiry → strike → pinning gates and return top-N
-    options candidates. Empty list when chain is missing, profile bias
-    is FUTURES, or no strike survives the gates."""
+    options candidates. Tries alternative expiries if the preferred
+    one gets completely vetoed (e.g., by pinning risk).
+    Empty list when chain is missing, profile bias is FUTURES, or
+    no strike survives the gates."""
     if profile.instrument_bias == InstrumentBias.FUTURES or not chain:
         return []
-    picked = expiry_picker.pick_expiry(chain, profile, signal.expected_hold_minutes)
-    if picked is None:
+        
+    grouped = expiry_picker.candidate_expiries(chain, profile, signal.expected_hold_minutes)
+    if not grouped:
         return []
-    dte, expiry, expiry_candidates = picked
+
     wanted_type = "call" if signal.direction == "long" else "put"
-    expiry_filtered = [o for o in expiry_candidates if o.option_type == wanted_type]
-    if not expiry_filtered:
-        return []
     hold_days = _hold_days(profile, signal.expected_hold_minutes)
     spot_tp = signal.take_profit or signal.entry
     spot_sl = signal.stop_loss
-    ranked = strike_picker.pick(
-        candidates=expiry_filtered, profile=profile, spot=market.spot,
-        spot_tp=spot_tp, spot_sl=spot_sl,
-        expected_hold_days=hold_days,
-        prefer_gamma=profile.expected_hold_minutes < 60 * 6,
-        full_chain=chain,
-    )
-    kept = [s for s in ranked if not s.drop_reason]
-    kept_post_pin: list[ScoredStrike] = []
-    for s in kept:
-        pr = pinning_gate.check_pinning(s.option, market.spot, chain)
-        if pr.veto:
-            s.drop_reason = pr.reason
-        else:
-            kept_post_pin.append(s)
-    out: list[DerivativesCandidate] = []
-    for idx, s in enumerate(kept_post_pin[:4]):
-        cand = _options_candidate_from_strike(
-            strike=s, signal=signal, market=market, profile=profile, rank=idx,
+
+    for (dte, expiry), expiry_candidates in grouped.items():
+        expiry_filtered = [o for o in expiry_candidates if o.option_type == wanted_type]
+        if not expiry_filtered:
+            continue
+            
+        ranked = strike_picker.pick(
+            candidates=expiry_filtered, profile=profile, spot=market.spot,
+            spot_tp=spot_tp, spot_sl=spot_sl,
+            expected_hold_days=hold_days,
+            prefer_gamma=profile.expected_hold_minutes < 60 * 6,
+            full_chain=chain,
         )
-        if cand:
-            out.append(cand)
-    return out
+        
+        kept = [s for s in ranked if not s.drop_reason]
+        if not kept:
+            continue
+            
+        kept_post_pin: list[ScoredStrike] = []
+        for s in kept:
+            pr = pinning_gate.check_pinning(s.option, market.spot, chain)
+            if pr.veto:
+                s.drop_reason = pr.reason
+            else:
+                kept_post_pin.append(s)
+                
+        if kept_post_pin:
+            out: list[DerivativesCandidate] = []
+            for idx, s in enumerate(kept_post_pin[:4]):
+                cand = _options_candidate_from_strike(
+                    strike=s, signal=signal, market=market, profile=profile, rank=idx,
+                )
+                if cand:
+                    out.append(cand)
+            if out:
+                return out
+
+    return []
 
 
 def decide(

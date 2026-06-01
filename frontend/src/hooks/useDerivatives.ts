@@ -240,10 +240,10 @@ export function useDerivativesConfig() {
 export function usePatchDerivativesProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (profile: StrategyDerivativesProfile) =>
+    mutationFn: ({ strategy, profile }: { strategy: string; profile: StrategyDerivativesProfile }) =>
       api.post<{ profiles: Record<string, StrategyDerivativesProfile> }>(
         '/api/v1/derivatives/config',
-        { profile }
+        { profile: { ...profile, strategy } }
       ),
     onSuccess: (data) => {
       qc.setQueryData(['derivatives', 'config'], data);

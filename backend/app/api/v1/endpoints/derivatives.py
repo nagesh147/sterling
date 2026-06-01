@@ -37,6 +37,7 @@ from app.engines.derivatives.selector import decide_both as _decide_both
 from app.engines.risk.option_pricing import enrich_chain
 from app.services import derivatives_audit
 from app.services.exchanges import instrument_registry as registry
+from app.services import adapter_manager as _adm
 
 router = APIRouter(prefix="/derivatives", tags=["derivatives"])
 log = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ async def _market_context(
     *, underlying: str, app, signal_score: float = 0.0,
 ) -> MarketContext:
     """Build a MarketContext from live adapter calls + calibration + CB."""
-    adapter = getattr(app.state, "adapter", None)
+    adapter = _adm.get_adapter() or getattr(app.state, "adapter", None)
     inst = registry.get_instrument(underlying.upper())
     if adapter is None or inst is None:
         raise HTTPException(status_code=503, detail="adapter or instrument unavailable")
@@ -102,14 +103,16 @@ async def _market_context(
 
 
 async def _option_chain_or_none(*, underlying: str, app, spot: float):
-    adapter = getattr(app.state, "adapter", None)
+    adapter = _adm.get_adapter() or getattr(app.state, "adapter", None)
     inst = registry.get_instrument(underlying.upper())
     if adapter is None or inst is None or not getattr(inst, "has_options", False):
         return None
     try:
         chain = await adapter.get_option_chain(inst)
+        log.info(f"Chain for {underlying}: {'None' if chain is None else len(chain)} items")
         return enrich_chain(chain, spot=spot)
-    except Exception:
+    except Exception as e:
+        log.error(f"Failed to fetch option chain for {underlying}: {e}")
         return None
 
 
@@ -555,10 +558,11 @@ async def greeks_budget_state(request: Request) -> dict:
     from app.engines.risk.greeks_budget import GreeksBudget
     from app.engines.risk import portfolio_greeks_aggregator as _agg
     from app.services import paper_store as _ps
+    from app.services import adapter_manager as _adm
 
     checker = getattr(request.app.state, "greeks_budget_checker", None)
     budget = (checker.budget if checker else GreeksBudget())
-    adapter = getattr(request.app.state, "adapter", None)
+    adapter = _adm.get_adapter() or getattr(request.app.state, "adapter", None)
 
     open_positions = [
         p for p in _ps.list_positions()
@@ -616,7 +620,8 @@ async def greeks_budget_state(request: Request) -> dict:
 
 @router.get("/funding/{underlying}")
 async def funding(underlying: str, request: Request) -> dict:
-    adapter = getattr(request.app.state, "adapter", None)
+    from app.services import adapter_manager as _adm
+    adapter = _adm.get_adapter() or getattr(request.app.state, "adapter", None)
     inst = registry.get_instrument(underlying.upper())
     if adapter is None or inst is None:
         raise HTTPException(status_code=503, detail="adapter or instrument unavailable")
@@ -881,9 +886,11 @@ def _collect_armed_signals(
                     rr_target=2.0, signal_score=score,
                     signal_strength="STRONG" if sig.executable else "SIGNAL",
                     expected_hold_minutes=75, mode_name="scalping",
+                    presized=True,
                 )))
-        except Exception:
-            pass
+        except Exception as e:
+            import traceback
+            log.error(f"Error collecting scalping signals for derivatives: {e}\n{traceback.format_exc()}")
 
     # Edge-validated feed (4h winners from BACKTEST_EDGE_REPORT)
     try:
@@ -891,8 +898,9 @@ def _collect_armed_signals(
             strategy_filter=strategy_filter, underlying_filter=underlying_filter,
             app=request.app,
         ))
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        log.error(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
 
     # Triple-ST (RSI(2))
     if strategy_filter is None or strategy_filter == "triple_st":

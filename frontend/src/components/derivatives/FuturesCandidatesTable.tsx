@@ -23,12 +23,17 @@ import {
   DerivativesCandidateRow,
 } from '../../hooks/useDerivatives';
 import { SourceBadge, cleanStrategy } from './SourceBadge';
+import { useDerivativesPositionPnl } from '../../hooks/useDerivativesPositionPnl';
+import { DetailGrid } from './DetailGrid';
 
 const fmt = (v: number | null | undefined, d = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toFixed(d);
 
 const fmtUsd = (v: number | null | undefined): string =>
   v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+
+const fmtSigned = (v: number | null | undefined): string =>
+  v == null || !isFinite(v) ? '—' : (v < 0 ? '-' : '+') + '$' + Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
 
 interface Props {
   strategy?: string;
@@ -40,7 +45,9 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
   const cfg = useDerivativesConfig();
   const algoOn = useAlgoMode().data?.enabled ?? false;
   const execute = useDerivativesExecute();
+  const pnl = useDerivativesPositionPnl('futures');
   const [toast, setToast] = useState<string>('');
+  const [expanded, setExpanded] = useState<string>('');
 
   const rows = (data?.candidates ?? []).filter((r) => r.instrument_type === 'futures');
 
@@ -109,9 +116,9 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                 fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
                 textTransform: 'uppercase',
               }}>
-                {['Symbol', 'Strategy', 'Lev', 'Contracts', 'Notional', 'SL', 'TP', 'R', 'Funding', ''].map((h, i) => (
+                {['Symbol', 'Strategy', 'Lev', 'Contracts', 'Notional', 'SL', 'TP', 'R', 'Funding', 'P&L', ''].map((h, i) => (
                   <th key={i} style={{
-                    padding: '6px 8px', textAlign: i === 9 ? 'right' : 'left',
+                    padding: '6px 8px', textAlign: i >= 9 ? 'right' : 'left',
                     borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap',
                   }}>{h}</th>
                 ))}
@@ -120,11 +127,18 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
             <tbody>
               {rows.map((row) => {
                 const auto = isAutoExec(row);
+                const rp = pnl.pnlForRow(row.underlying, row.direction, row.strategy);
+                const isExp = expanded === row.freeze_token;
                 return (
-                  <tr key={row.freeze_token} style={{
-                    borderBottom: `1px solid ${c.border2}`, color: c.text,
-                  }}>
+                  <React.Fragment key={row.freeze_token}>
+                  <tr
+                    onClick={() => setExpanded(isExp ? '' : row.freeze_token)}
+                    style={{
+                      borderBottom: isExp ? 'none' : `1px solid ${c.border2}`, color: c.text,
+                      cursor: 'pointer', background: isExp ? alpha(c.blue, 0.06) : undefined,
+                    }}>
                     <td style={{ padding: '6px 8px', fontWeight: 700 }}>
+                      <span style={{ color: c.dim, fontSize: 9, marginRight: 3 }}>{isExp ? '▾' : '▸'}</span>
                       <span style={{ color: row.direction === 'long' ? c.green : c.red }}>
                         {row.direction === 'long' ? '▲' : '▼'}
                       </span>{' '}{row.underlying}
@@ -147,6 +161,14 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                     <td style={{ padding: '6px 8px', fontSize: 10, color: c.dim }}>
                       {fmtUsd(row.funding_cost_usd)}
                     </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
+                      {rp && rp.pnl != null ? (
+                        <span style={{ color: rp.pnl >= 0 ? c.green : c.red }}
+                              title={`${rp.mode} · ${rp.realized ? 'realized' : 'unrealized'} · ${rp.status}`}>
+                          {fmtSigned(rp.pnl)}
+                        </span>
+                      ) : <span style={{ color: c.dim }}>—</span>}
+                    </td>
                     <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                       {auto ? (
                         <span title="Algo is ON — auto-executes via background scanner" style={{
@@ -159,7 +181,7 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       ) : (
                         <button
                           disabled={execute.isPending}
-                          onClick={() => handleExecute(row)}
+                          onClick={(e) => { e.stopPropagation(); handleExecute(row); }}
                           style={{
                             padding: '4px 12px', borderRadius: 5,
                             background: alpha(c.green, 0.14),
@@ -173,9 +195,52 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       )}
                     </td>
                   </tr>
+                  {isExp && (
+                    <tr style={{ borderBottom: `1px solid ${c.border2}`, background: alpha(c.blue, 0.04) }}>
+                      <td colSpan={11} style={{ padding: '8px 14px' }}>
+                        <DetailGrid items={[
+                          ['Direction', row.direction.toUpperCase()],
+                          ['Leverage', `${row.leverage.toFixed(0)}×`],
+                          ['Contracts', fmt(row.contracts, 4)],
+                          ['Notional', fmtUsd(row.notional_usd)],
+                          ['Entry SL', fmtUsd(row.stop_loss)],
+                          ['Entry TP', fmtUsd(row.take_profit)],
+                          ['Expected R', `${fmt(row.expected_r, 2)}R`],
+                          ['Funding', fmtUsd(row.funding_cost_usd)],
+                          ['Liquidity', row.liquidity_score != null ? fmt(row.liquidity_score, 1) : '—'],
+                          ...(rp ? [
+                            ['Position', `${rp.mode} · ${rp.status.replace(/_/g, ' ')}`] as [string, string],
+                            [rp.realized ? 'Realized P&L' : 'Unrealized P&L', fmtSigned(rp.pnl)] as [string, string],
+                          ] : [['Position', 'not executed yet'] as [string, string]]),
+                        ]} pnlVal={rp?.pnl ?? null} />
+                        {row.reason && <div style={{ marginTop: 8, fontSize: 9.5, color: c.dim }}>{row.reason}</div>}
+                        {row.warnings?.length > 0 && (
+                          <div style={{ marginTop: 4, fontSize: 9.5, color: c.amber }}>⚠ {row.warnings.join(' · ')}</div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
+            {pnl.count > 0 && (
+              <tfoot>
+                <tr style={{ borderTop: `2px solid ${c.border}`, color: c.text }}>
+                  <td colSpan={9} style={{ padding: '7px 8px', fontSize: 10, color: c.dim, letterSpacing: '0.04em', fontWeight: 700 }}>
+                    CONSOLIDATED · {pnl.count} position{pnl.count === 1 ? '' : 's'}
+                    <span style={{ marginLeft: 10, fontWeight: 400 }}>
+                      unrealized <b style={{ color: pnl.totalUnrealized >= 0 ? c.green : c.red }}>{fmtSigned(pnl.totalUnrealized)}</b>
+                      {' · '}realized <b style={{ color: pnl.totalRealized >= 0 ? c.green : c.red }}>{fmtSigned(pnl.totalRealized)}</b>
+                    </span>
+                  </td>
+                  <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 800, color: pnl.total >= 0 ? c.green : c.red }}>
+                    {fmtSigned(pnl.total)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
       </div>

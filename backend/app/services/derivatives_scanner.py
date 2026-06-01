@@ -122,6 +122,7 @@ async def run_scanner_tick(app: Any, interval_s: int = 30) -> dict:
     from app.engines.derivatives.profiles import get_profile
     from app.api.v1.endpoints import derivatives as _deriv_ep
 
+    log.info("DERIV scanner tick starting")
     futures_rows, options_rows, ts_ms = await _deriv_ep._both_rows(
         _ReqProxy(app), strategy_filter=None, underlying_filter=None,
     )
@@ -129,17 +130,25 @@ async def run_scanner_tick(app: Any, interval_s: int = 30) -> dict:
     attempts = 0
     accepted = 0
     algo_on = bool(getattr(app.state, "algo_mode", False))
+    log.info(f"DERIV scanner tick: algo_on={algo_on}")
     if algo_on:
         overrides = _deriv_ep._profile_overrides(app)
         for rows, leg in ((futures_rows, "futures"), (options_rows, "options")):
             for row in rows:
                 prof = overrides.get(row.strategy) or get_profile(row.strategy)
                 flag_attr = f"auto_execute_{leg}"
-                if not getattr(prof, flag_attr, False):
+                
+                # Granular logging for investigation
+                auto_exec_flag = getattr(prof, flag_attr, False)
+                log.info(f"DERIV scanner checking {row.strategy}/{row.underlying}/{leg}: {flag_attr}={auto_exec_flag}, token={row.freeze_token}")
+                
+                if not auto_exec_flag:
                     continue
                 key = f"{row.strategy}|{row.underlying}|{leg}"
                 now_ms = int(time.time() * 1000)
-                if now_ms - _deriv_last_ordered.get(key, 0) < deriv_cooldown_ms():
+                cooldown_elapsed = now_ms - _deriv_last_ordered.get(key, 0)
+                if cooldown_elapsed < deriv_cooldown_ms():
+                    log.debug(f"DERIV scanner skipped {key} due to cooldown ({cooldown_elapsed}ms < {deriv_cooldown_ms()}ms)")
                     continue
                 _deriv_last_ordered[key] = now_ms
                 attempts += 1

@@ -197,8 +197,8 @@ def _configure(conn: sqlite3.Connection) -> None:
 def init() -> bool:
     global _available
     try:
-        conn = sqlite3.connect(_DB_PATH, timeout=15.0)
-        _configure(conn)
+        conn = sqlite3.connect(_DB_PATH, timeout=30.0)
+        conn.execute("PRAGMA journal_mode=WAL")
         _create_tables(conn)
         conn.close()
         _available = True
@@ -212,7 +212,8 @@ def init() -> bool:
 
 @contextmanager
 def _conn():
-    c = sqlite3.connect(_DB_PATH, timeout=15.0)
+    c = sqlite3.connect(_DB_PATH, timeout=30.0)
+    c.execute("PRAGMA journal_mode=WAL")
     c.row_factory = sqlite3.Row
     _configure(c)
     try:

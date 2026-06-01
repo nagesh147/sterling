@@ -51,6 +51,7 @@ def _scalping_breakout(strategy: str) -> StrategyDerivativesProfile:
     p.target_delta = 0.40                  # OTM lottery-ticket bias
     p.prefer_asymmetry = True
     p.leverage_cap = 15.0
+    p.max_spread_pct = 0.10                # relax spread for OTM lottery-tickets
     return p
 
 

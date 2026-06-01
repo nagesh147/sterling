@@ -123,7 +123,7 @@ def _effective_config(request: Request) -> ScalpingConfig:
 
 @router.get("/config", response_model=ScalpingConfigResponse)
 async def get_config(request: Request) -> ScalpingConfigResponse:
-    return ScalpingConfigResponse(config=_get_config(request))
+    return ScalpingConfigResponse(config=_effective_config(request))
 
 
 @router.get("/config/default", response_model=ScalpingConfigResponse)
@@ -138,7 +138,7 @@ async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigRe
     from app.services.db import set_config as _sc
     request.app.state.scalping_config = body
     _sc("scalping_config", body.model_dump_json())
-    return ScalpingConfigResponse(config=body)
+    return ScalpingConfigResponse(config=_effective_config(request))
 
 
 @router.get("/presets")

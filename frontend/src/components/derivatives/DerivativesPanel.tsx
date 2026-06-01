@@ -86,7 +86,7 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
         <span style={{ marginLeft: 'auto' }}>
           <button
             disabled={!dirty || patch.isPending}
-            onClick={() => patch.mutate(draft)}
+            onClick={() => patch.mutate({ strategy, profile: draft })}
             style={{
               padding: '4px 10px', borderRadius: 5,
               background: dirty ? alpha(c.blue, 0.15) : 'transparent',

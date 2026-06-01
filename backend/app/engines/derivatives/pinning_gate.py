@@ -61,7 +61,7 @@ def check_pinning(
     # Find the nearest strike with > PIN_OI_CONCENTRATION_PCT of total OI.
     pinning_strikes = [
         k for k, v in oi_by_strike.items()
-        if v / total_oi >= PIN_OI_CONCENTRATION_PCT
+        if v / total_oi >= PIN_OI_CONCENTRATION_PCT and v >= 50.0
     ]
     if not pinning_strikes:
         return PinningResult(veto=False)
