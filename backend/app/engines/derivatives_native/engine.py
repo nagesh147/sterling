@@ -18,9 +18,10 @@ from app.engines.derivatives import selector as _sel
 from app.engines.derivatives.freeze_token import get_store as _get_freeze_store
 from app.engines.derivatives.profiles import get_profile
 from app.engines.derivatives.schemas import (
-    DecisionStatus, DerivativesDecision, DualDerivativesDecision,
+    DecisionStatus, DerivativesCandidate, DerivativesDecision, DualDerivativesDecision,
     InstrumentBias, MarketContext, SignalContext, StrategyDerivativesProfile,
 )
+from app.engines.derivatives_native import structures as _structures
 from app.engines.derivatives_native.config import DerivativesEngineConfig, RiskPosture
 from app.schemas.market import OptionSummary
 
@@ -34,6 +35,41 @@ def _frozen_ok(candidate, *, reason: str, now_ms: int) -> DerivativesDecision:
     dec.freeze_token = token
     dec.freeze_token_ttl_ms = ttl
     return dec
+
+
+def _defined_risk_candidate(
+    *, signal: SignalContext, market: MarketContext,
+    profile: StrategyDerivativesProfile, chain: list[OptionSummary], sources: set[str],
+) -> Optional[DerivativesCandidate]:
+    """Build a defined-risk structure candidate based on the active source.
+    Provisional rule (until Phase 1 calibrates): vrp→iron condor (sell vol),
+    skew→put credit vertical, else debit vertical matching direction."""
+    nav = market.portfolio_value
+    max_loss_pct = profile.max_premium_pct_of_account
+    width = 0.04
+    if "vrp_voltiming" in sources:
+        s = _structures.build_iron_condor(
+            chain=chain, spot=market.spot, width_pct=width,
+            nav_usd=nav, max_loss_pct=max_loss_pct)
+    elif "skew_put" in sources:
+        s = _structures.build_credit_vertical(
+            chain=chain, spot=market.spot, direction=signal.direction,
+            width_pct=width, nav_usd=nav, max_loss_pct=max_loss_pct)
+    else:
+        s = _structures.build_debit_vertical(
+            chain=chain, spot=market.spot, direction=signal.direction,
+            width_pct=width, nav_usd=nav, max_loss_pct=max_loss_pct)
+    if s is None:
+        return None
+    return DerivativesCandidate(
+        rank=0, instrument_type="options", underlying=signal.underlying,
+        entry_price=signal.entry, direction=signal.direction,
+        contracts=s.contracts, leverage=1.0,
+        notional_usd=round(s.contracts * signal.entry, 2),
+        premium_usd=round(s.net_premium_usd, 2),
+        expected_r=(round(s.max_profit_usd / s.max_loss_usd, 3) if s.max_loss_usd > 0 else 0.0),
+        score=1.0, structure=s,
+    )
 
 
 def decide_both(
@@ -67,22 +103,32 @@ def decide_both(
 
     # ── Options leg (long premium only in 2a) ─────────────────────────────
     if (sources & {"vrp_voltiming", "skew_put"}) and chain:
-        if cfg.risk_posture != RiskPosture.LONG_ONLY:
-            warnings.append(
-                f"risk_posture={cfg.risk_posture.value} not implemented in 2a; using long_only")
-        # Native ignores per-strategy instrument_bias so options aren't suppressed.
-        opt_profile = profile.model_copy(update={"instrument_bias": InstrumentBias.AUTO})
-        opts = _sel._build_options_candidates(
-            signal=signal, market=market, profile=opt_profile, chain=chain)
-        if opts:
-            options_leg = _frozen_ok(opts[0], reason="native:long_premium", now_ms=now_ms)
-            options_leg.alternatives = opts[1:4]
+        if cfg.risk_posture == RiskPosture.NAKED:
+            warnings.append("risk_posture=naked not implemented (Phase 2d); using defined_risk")
+        if cfg.risk_posture in (RiskPosture.DEFINED_RISK, RiskPosture.NAKED):
+            cand = _defined_risk_candidate(
+                signal=signal, market=market, profile=profile, chain=chain, sources=sources)
+            if cand is not None:
+                options_leg = _frozen_ok(cand, reason="native:defined_risk", now_ms=now_ms)
+            else:
+                options_leg = DerivativesDecision(
+                    status=DecisionStatus.DEFER,
+                    reason="no defined-risk structure buildable from chain",
+                    code="no_structure", timestamp_ms=now_ms)
         else:
-            options_leg = DerivativesDecision(
-                status=DecisionStatus.DEFER,
-                reason="no long-premium strike survived tradeability gates",
-                code="no_options_candidate", timestamp_ms=now_ms,
-            )
+            # long_only: single long premium via the existing builder.
+            # Native ignores per-strategy instrument_bias so options aren't suppressed.
+            opt_profile = profile.model_copy(update={"instrument_bias": InstrumentBias.AUTO})
+            opts = _sel._build_options_candidates(
+                signal=signal, market=market, profile=opt_profile, chain=chain)
+            if opts:
+                options_leg = _frozen_ok(opts[0], reason="native:long_premium", now_ms=now_ms)
+                options_leg.alternatives = opts[1:4]
+            else:
+                options_leg = DerivativesDecision(
+                    status=DecisionStatus.DEFER,
+                    reason="no long-premium strike survived tradeability gates",
+                    code="no_options_candidate", timestamp_ms=now_ms)
 
     status = DecisionStatus.OK if (
         (futures_leg and futures_leg.status == DecisionStatus.OK)

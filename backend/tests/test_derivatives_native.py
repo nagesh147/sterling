@@ -169,14 +169,16 @@ class TestNativeOptionsLeg:
             signal=_signal(), market=_market(ivr=90.0), chain=_chain_btc(), config=cfg)
         assert dual.futures.status == DecisionStatus.OK
 
-    def test_defined_risk_falls_back_to_long_only_with_warning(self):
+    def test_defined_risk_builds_structure(self):
+        # 2b: defined_risk now builds a multi-leg structure (no long_only fallback).
         cfg = DerivativesEngineConfig(
             engine_mode=EngineMode.NATIVE,
             active_alpha_sources=["vrp_voltiming"],
             risk_posture=RiskPosture.DEFINED_RISK)
         dual = native_engine.decide_both(
             signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
-        assert any("long_only" in w for w in dual.warnings)
+        assert dual.options.chosen.structure is not None
+        assert not any("long_only" in w for w in dual.warnings)
 
 
 from fastapi import FastAPI
@@ -318,3 +320,34 @@ class TestStructureBuilders:
         assert len(s.legs) == 4
         assert s.net_premium_usd < 0      # net credit
         assert s.max_loss_usd > 0
+
+
+class TestNativeDefinedRisk:
+    def test_vrp_defined_risk_builds_condor(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.DEFINED_RISK)
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        assert dual.options is not None and dual.options.status == DecisionStatus.OK
+        cand = dual.options.chosen
+        assert cand.structure is not None
+        assert cand.structure.structure_type == "iron_condor"
+        assert cand.structure.max_loss_usd > 0
+        assert not any("long_only" in w for w in dual.warnings)
+
+    def test_skew_defined_risk_builds_credit_vertical(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["skew_put"],
+            risk_posture=RiskPosture.DEFINED_RISK)
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        assert dual.options.chosen.structure.structure_type == "credit_vertical"
+
+    def test_naked_still_falls_back_with_warning(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.NAKED)
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        assert any("naked" in w.lower() for w in dual.warnings)
