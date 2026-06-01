@@ -20,13 +20,19 @@
 import React, { useEffect, useState } from 'react';
 import { c, alpha, card, cardHead, cardBody, grpBox, grpTitle } from '../../styles/terminalUI';
 import {
+  AlphaSource,
+  DerivativesEngineConfig,
+  EngineMode,
+  RiskPosture,
   StrategyDerivativesProfile,
   useDerivativesConfig,
+  useDerivativesEngineConfig,
+  usePatchDerivativesEngineConfig,
   usePatchDerivativesProfile,
 } from '../../hooks/useDerivatives';
 
 const NumRow: React.FC<{ label: string; value: number; defaultVal?: number; step?: number; min?: number; max?: number; onChange: (v: number) => void }> = ({ label, value, defaultVal, step = 0.01, min, max, onChange }) => {
-  const isDefault = defaultVal !== undefined ? value === defaultVal : true;
+  const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
     <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11, color: c.dim }}>
@@ -56,7 +62,7 @@ const NumRow: React.FC<{ label: string; value: number; defaultVal?: number; step
 }
 
 const SelectRow: React.FC<{ label: string; value: string; defaultVal?: string; options: string[]; onChange: (v: string) => void }> = ({ label, value, defaultVal, options, onChange }) => {
-  const isDefault = defaultVal !== undefined ? value === defaultVal : true;
+  const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
     <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11, color: c.dim }}>
@@ -85,6 +91,59 @@ const SelectRow: React.FC<{ label: string; value: string; defaultVal?: string; o
 );
 }
 
+const ALPHA_SOURCE_LABELS: Record<AlphaSource, string> = {
+  directional_futures: 'Directional (futures)',
+  vrp_voltiming: 'VRP / vol-timing',
+  skew_put: 'Skew (put-side)',
+  gex_pinning: 'GEX / pinning',
+};
+
+// Global engine settings (routing_gate ↔ native + alpha sources + risk posture).
+// Distinct from the per-strategy profile knobs below; reads/writes /config/engine.
+const EngineSettings: React.FC = () => {
+  const ec = useDerivativesEngineConfig();
+  const patchEngine = usePatchDerivativesEngineConfig();
+  const cfg = ec.data;
+  if (!cfg) return null;
+
+  const update = (p: Partial<DerivativesEngineConfig>) => patchEngine.mutate({ ...cfg, ...p });
+  const toggleSource = (s: AlphaSource, on: boolean) =>
+    update({
+      active_alpha_sources: on
+        ? Array.from(new Set([...cfg.active_alpha_sources, s]))
+        : cfg.active_alpha_sources.filter((x) => x !== s),
+    });
+
+  return (
+    <div style={{ ...grpBox, gap: 8 }}>
+      <div style={grpTitle}>ENGINE · GLOBAL</div>
+      <SelectRow label="Mode" value={cfg.engine_mode} options={['routing_gate', 'native']}
+        onChange={(v) => update({ engine_mode: v as EngineMode })} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {(Object.keys(ALPHA_SOURCE_LABELS) as AlphaSource[]).map((s) => (
+          <label key={s} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11, color: c.dim }}>
+            {ALPHA_SOURCE_LABELS[s]}
+            <input type="checkbox" checked={cfg.active_alpha_sources.includes(s)}
+              onChange={(e) => toggleSource(s, e.target.checked)} />
+          </label>
+        ))}
+      </div>
+      <SelectRow label="Risk posture" value={cfg.risk_posture} options={['long_only', 'defined_risk', 'naked']}
+        onChange={(v) => update({ risk_posture: v as RiskPosture })} />
+      {cfg.risk_posture === 'naked' && (
+        <div style={{ fontSize: 9, color: c.red, fontStyle: 'italic' }}>
+          Naked short vol — uncapped tail risk (Phase 2d; falls back to long-only until then)
+        </div>
+      )}
+      {cfg.risk_posture === 'defined_risk' && (
+        <div style={{ fontSize: 9, color: c.amber, fontStyle: 'italic' }}>
+          Defined-risk spreads land in Phase 2b; falls back to long-only until then
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface Props {
   strategy: string;
 }
@@ -109,23 +168,35 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
     setDraft({ ...draft, [k]: v });
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(persisted);
+  const defaultsResettable = !!defaults && JSON.stringify({
+    ...defaults,
+    enabled: draft.enabled,
+    auto_execute_futures: draft.auto_execute_futures,
+    auto_execute_options: draft.auto_execute_options,
+  }) !== JSON.stringify(draft);
 
   return (
     <div style={card}>
       <div style={cardHead}>
-        <span>DERIVATIVES · {strategy.toUpperCase()}</span>
+        <span>{strategy.replace('scalping/', '').toUpperCase().replace(/_/g, ' ')}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button
-            onClick={() => defaults && setDraft(defaults)}
+            disabled={!defaultsResettable}
+            onClick={() => defaults && setDraft({ 
+              ...defaults, 
+              enabled: draft.enabled, 
+              auto_execute_futures: draft.auto_execute_futures, 
+              auto_execute_options: draft.auto_execute_options 
+            })}
             style={{
               padding: '4px 10px', borderRadius: 5,
               background: 'transparent',
               border: `1px solid ${c.border}`,
               color: c.dim, fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.06em', cursor: 'pointer',
+              letterSpacing: '0.06em', cursor: defaultsResettable ? 'pointer' : 'default',
               fontFamily: 'inherit',
             }}>
-            DEFAULTS
+            STRATEGY DEFAULTS
           </button>
           <button
             disabled={!dirty || patch.isPending}
@@ -144,7 +215,8 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
       </div>
       <div style={{ ...cardBody, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-
+        {/* Global engine mode + alpha sources + risk posture */}
+        <EngineSettings />
 
         {/* Instrument selection */}
         <div style={{ ...grpBox, gap: 8 }}>

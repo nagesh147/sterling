@@ -252,6 +252,20 @@ export function usePatchDerivativesProfile() {
   });
 }
 
+export function useResetDerivativesConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.delete<{ profiles: Record<string, StrategyDerivativesProfile>; defaults: Record<string, StrategyDerivativesProfile> }>(
+        '/api/v1/derivatives/config'
+      ),
+    onSuccess: (data) => {
+      qc.setQueryData(['derivatives', 'config'], data);
+      qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
+    },
+  });
+}
+
 export function usePatchDerivativesGlobal() {
   const qc = useQueryClient();
   return useMutation({
@@ -263,6 +277,44 @@ export function usePatchDerivativesGlobal() {
     onSuccess: (data) => {
       qc.setQueryData(['derivatives', 'config'], data);
       qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
+    },
+  });
+}
+
+// ─── engine config (Phase 2a: routing_gate vs native) ────────────────────
+
+export type EngineMode = 'routing_gate' | 'native';
+export type RiskPosture = 'long_only' | 'defined_risk' | 'naked';
+export type AlphaSource =
+  | 'directional_futures'
+  | 'vrp_voltiming'
+  | 'skew_put'
+  | 'gex_pinning';
+
+export interface DerivativesEngineConfig {
+  engine_mode: EngineMode;
+  active_alpha_sources: AlphaSource[];
+  risk_posture: RiskPosture;
+  validation_method: 1 | 2 | 3;
+}
+
+export function useDerivativesEngineConfig() {
+  return useQuery<DerivativesEngineConfig>({
+    queryKey: ['derivatives', 'engine-config'],
+    queryFn: () => api.get<DerivativesEngineConfig>('/api/v1/derivatives/config/engine'),
+  });
+}
+
+export function usePatchDerivativesEngineConfig() {
+  const qc = useQueryClient();
+  return useMutation<DerivativesEngineConfig, Error, DerivativesEngineConfig>({
+    mutationFn: (cfg) =>
+      api.post<DerivativesEngineConfig>('/api/v1/derivatives/config/engine', cfg),
+    onSuccess: (data) => {
+      qc.setQueryData(['derivatives', 'engine-config'], data);
+      // New engine mode → candidate tables + scan must refresh.
+      qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
+      qc.invalidateQueries({ queryKey: ['derivatives', 'scan'] });
     },
   });
 }
