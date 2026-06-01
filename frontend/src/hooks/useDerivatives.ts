@@ -76,6 +76,9 @@ export interface DerivativesCandidateRow {
   reason: string;
   warnings: string[];
   chain_age_ms: number | null;
+  structure_summary: string | null;
+  structure_max_loss_usd: number | null;
+  structure_max_profit_usd: number | null;
 }
 
 export interface CandidatesResponse {

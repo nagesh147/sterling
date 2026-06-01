@@ -351,3 +351,18 @@ class TestNativeDefinedRisk:
         dual = native_engine.decide_both(
             signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
         assert any("naked" in w.lower() for w in dual.warnings)
+
+
+class TestStructureRow:
+    def test_row_carries_structure_summary(self):
+        from app.api.v1.endpoints.derivatives import _row_from_decision
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.DEFINED_RISK)
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        row = _row_from_decision(
+            signal_id="sig1", signal=_signal(), decision=dual.options)
+        assert row.structure_summary is not None
+        assert "iron_condor" in row.structure_summary
+        assert row.structure_max_loss_usd is not None and row.structure_max_loss_usd > 0

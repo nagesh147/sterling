@@ -153,6 +153,9 @@ class _CandidateRow(BaseModel):
     reason: str
     warnings: list[str] = []
     chain_age_ms: Optional[int] = None
+    structure_summary: Optional[str] = None
+    structure_max_loss_usd: Optional[float] = None
+    structure_max_profit_usd: Optional[float] = None
 
 
 class _CandidatesResponse(BaseModel):
@@ -168,6 +171,7 @@ def _signal_source(strategy: str) -> str:
 def _row_from_decision(*, signal_id: str, signal: SignalContext,
                        decision: DerivativesDecision) -> _CandidateRow:
     c = decision.chosen
+    struct = getattr(c, "structure", None) if c else None
     return _CandidateRow(
         signal_id=signal_id,
         source=_signal_source(signal.strategy),
@@ -197,6 +201,9 @@ def _row_from_decision(*, signal_id: str, signal: SignalContext,
         status=decision.status.value,
         reason=decision.reason,
         warnings=decision.warnings,
+        structure_summary=(struct.summary() if struct else None),
+        structure_max_loss_usd=(struct.max_loss_usd if struct else None),
+        structure_max_profit_usd=(struct.max_profit_usd if struct else None),
     )
 
 
