@@ -29,6 +29,7 @@ import {
   useDerivativesEngineConfig,
   usePatchDerivativesEngineConfig,
   usePatchDerivativesProfile,
+  useStudyReport,
 } from '../../hooks/useDerivatives';
 
 const NumRow: React.FC<{ label: string; value: number; defaultVal?: number; step?: number; min?: number; max?: number; onChange: (v: number) => void }> = ({ label, value, defaultVal, step = 0.01, min, max, onChange }) => {
@@ -100,9 +101,15 @@ const ALPHA_SOURCE_LABELS: Record<AlphaSource, string> = {
 
 // Global engine settings (routing_gate ↔ native + alpha sources + risk posture).
 // Distinct from the per-strategy profile knobs below; reads/writes /config/engine.
+const VALIDATION_LABELS: Record<number, string> = {
+  1: '1 · calibrate-to-live', 2: '2 · real-only/forward', 3: '3 · live snapshot',
+};
+
 const EngineSettings: React.FC = () => {
   const ec = useDerivativesEngineConfig();
   const patchEngine = usePatchDerivativesEngineConfig();
+  const [showReport, setShowReport] = useState(false);
+  const report = useStudyReport(showReport);
   const cfg = ec.data;
   if (!cfg) return null;
 
@@ -135,10 +142,34 @@ const EngineSettings: React.FC = () => {
           Naked short vol — uncapped tail risk (Phase 2d; falls back to long-only until then)
         </div>
       )}
-      {cfg.risk_posture === 'defined_risk' && (
-        <div style={{ fontSize: 9, color: c.amber, fontStyle: 'italic' }}>
-          Defined-risk spreads land in Phase 2b; falls back to long-only until then
+      {cfg.risk_posture === 'naked' && (
+        <div style={{ fontSize: 9, color: c.dim, fontStyle: 'italic' }}>
+          Naked is gated to a rich IV regime (IVR≥70); otherwise falls back to defined-risk.
         </div>
+      )}
+      <SelectRow label="Validation method" value={String(cfg.validation_method)}
+        options={['1', '2', '3']}
+        onChange={(v) => update({ validation_method: Number(v) as 1 | 2 | 3 })} />
+      <div style={{ fontSize: 9, color: c.dim }}>{VALIDATION_LABELS[cfg.validation_method]}</div>
+      <button
+        onClick={() => setShowReport(!showReport)}
+        style={{
+          padding: '3px 10px', borderRadius: 4, alignSelf: 'flex-start',
+          background: 'transparent', border: `1px solid ${c.border}`,
+          color: c.dim, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+        {showReport ? 'Hide study report' : 'View study report'}
+      </button>
+      {showReport && (
+        <pre style={{
+          maxHeight: 280, overflow: 'auto', fontSize: 9, lineHeight: 1.5,
+          color: c.dim, whiteSpace: 'pre-wrap', margin: 0,
+          background: c.bg, border: `1px solid ${c.border}`, borderRadius: 4, padding: 8,
+        }}>
+          {report.isLoading
+            ? 'loading…'
+            : (report.data?.study ?? 'No study report generated yet — run the Phase 1 study.')}
+        </pre>
       )}
     </div>
   );

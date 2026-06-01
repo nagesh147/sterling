@@ -322,6 +322,22 @@ export function usePatchDerivativesEngineConfig() {
   });
 }
 
+export interface StudyReportResponse {
+  validation_method: 1 | 2 | 3;
+  study: string | null;
+  study_generated_at: number | null;
+  gate_overfilter: string | null;
+}
+
+export function useStudyReport(enabled = true) {
+  return useQuery<StudyReportResponse>({
+    queryKey: ['derivatives', 'study-report'],
+    queryFn: () => api.get<StudyReportResponse>('/api/v1/derivatives/study/report'),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 // ─── edge gate ──────────────────────────────────────────────────────────
 
 export interface EdgeGate {

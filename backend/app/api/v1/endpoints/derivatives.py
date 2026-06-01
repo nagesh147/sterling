@@ -621,6 +621,37 @@ async def set_engine_config_ep(
     return set_engine_config(request.app, body)
 
 
+@router.get("/study/report")
+async def study_report(request: Request) -> dict:
+    """Return the stored Phase-1 study artifacts for the selected validation
+    method. Running the study is an offline job (heavy); this serves the latest
+    generated reports so the FE selector can display them."""
+    import os
+    cfg = get_engine_config(request.app)
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, "..", "..", "..", "..", ".."))
+
+    def _read(name: str):
+        for d in (root, os.path.join(root, "backend")):
+            p = os.path.join(d, name)
+            if os.path.exists(p):
+                try:
+                    with open(p) as fh:
+                        return {"text": fh.read(), "generated_at": int(os.path.getmtime(p))}
+                except Exception:
+                    pass
+        return None
+
+    study = _read("DERIVATIVES_EDGE_STUDY.md")
+    gate = _read("GATE_OVERFILTER.md")
+    return {
+        "validation_method": cfg.validation_method,
+        "study": study["text"] if study else None,
+        "study_generated_at": study["generated_at"] if study else None,
+        "gate_overfilter": gate["text"] if gate else None,
+    }
+
+
 # ─── /greeks-budget ────────────────────────────────────────────────────
 
 

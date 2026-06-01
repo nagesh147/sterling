@@ -248,6 +248,16 @@ class TestEngineConfigEndpoints:
         assert r.json()["engine_mode"] == "native"
 
 
+class TestStudyReportEndpoint:
+    def test_study_report_returns_artifacts(self, engine_client):
+        r = engine_client.get("/api/v1/derivatives/study/report")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["validation_method"] == 1          # default
+        assert body["study"] is not None                # committed at repo root
+        assert "Derivatives Edge Study" in body["study"]
+
+
 from app.engines.derivatives_native import structures as st
 
 
