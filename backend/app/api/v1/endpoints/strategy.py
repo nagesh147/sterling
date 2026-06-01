@@ -333,13 +333,26 @@ async def execute(body: ExecuteRequest, request: Request) -> ExecuteResponse:
         )
 
     plan = ev.trade_plan
-    # Size in integer contracts; reject sub-1-contract plans.
-    contracts = max(0, int(round(plan.size_units)))
+
+    contract_value = 1.0
+    try:
+        _ad = _adm.get_raw_adapter() or getattr(request.app.state, "adapter", None)
+        _get_cv = getattr(_ad, "get_contract_value", None)
+        if _get_cv is not None:
+            _inst_cv = registry.get_instrument(sym)
+            _delta_sym = (_inst_cv.delta_perp_symbol if _inst_cv else None) or f"{sym}USD"
+            contract_value = float(await _get_cv(_delta_sym)) or 1.0
+    except Exception:
+        pass
+
+    cv = contract_value if contract_value and contract_value > 0 else 1.0
+    contracts = max(0, int(round(plan.size_units / cv)))
     if contracts < 1:
         return ExecuteResponse(
             accepted=False, mode="paper", underlying=sym, direction=plan.direction,
             size_units=plan.size_units, notional_usd=plan.notional_usd, status="size_too_small",
-            reason="sized below 1 contract", timestamp_ms=now_ms,
+            reason=f"sized below 1 contract ({plan.size_units:.4f} coins / cv={cv} = {plan.size_units / cv:.3f} lots)",
+            timestamp_ms=now_ms,
         )
 
     # Delegate to the existing live/paper order path (reuses safety + brackets).

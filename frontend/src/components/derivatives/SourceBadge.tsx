@@ -32,4 +32,4 @@ export const SourceBadge: React.FC<{ source?: string }> = ({ source }) => {
 
 /** Strip feed prefixes for a clean strategy label. */
 export const cleanStrategy = (s: string): string =>
-  s.replace('scalping/', 'SC ').replace('edge/', '').toUpperCase();
+  s.replace('scalping/', '').replace('edge/', '').toUpperCase();

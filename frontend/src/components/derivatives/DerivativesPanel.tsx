@@ -200,12 +200,6 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
     setDraft({ ...draft, [k]: v });
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(persisted);
-  const defaultsResettable = !!defaults && JSON.stringify({
-    ...defaults,
-    enabled: draft.enabled,
-    auto_execute_futures: draft.auto_execute_futures,
-    auto_execute_options: draft.auto_execute_options,
-  }) !== JSON.stringify(draft);
 
   return (
     <div style={card}>
@@ -213,7 +207,6 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
         <span>{strategy.replace('scalping/', '').toUpperCase().replace(/_/g, ' ')}</span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button
-            disabled={!defaultsResettable}
             onClick={() => defaults && setDraft({ 
               ...defaults, 
               enabled: draft.enabled, 
@@ -225,7 +218,7 @@ export const DerivativesPanel: React.FC<Props> = ({ strategy }) => {
               background: 'transparent',
               border: `1px solid ${c.border}`,
               color: c.dim, fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.06em', cursor: defaultsResettable ? 'pointer' : 'default',
+              letterSpacing: '0.06em', cursor: 'pointer',
               fontFamily: 'inherit',
             }}>
             STRATEGY DEFAULTS

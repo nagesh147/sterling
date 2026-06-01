@@ -450,22 +450,31 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
             timestamp_ms=int(time.time() * 1000),
         )
 
-    resolutions = set()
-    for profile_id in cfg.active_profiles:
-        p = cfg.profiles.get(profile_id)
-        if p:
-            resolutions.add(p.macro_timeframe or "4h")
-            resolutions.add(p.execution_timeframe or "15m")
-            
-    candles_by_res = _load_candles_by_res([sym], resolutions, days=30)
+    # Try the cached scan result first — this is what the UI displayed when the
+    # user clicked execute. A fresh re-scan can lose signals (regime shift,
+    # macro_trend_filter, candle data change) between the periodic scan and
+    # this execute call, causing "no_signal" on a setup the user literally
+    # clicked on. Cache → fresh fallback ensures the clicked signal is found.
+    matched = []
+    cached: ScalpingScanResponse | None = _scan_cache.get("data")
+    if cached and cached.signals:
+        matched = [s for s in cached.signals
+                    if s.underlying == sym and s.strategy == strategy
+                    and (s.entry_ok or body.confirm)]
 
-    # Scan to find the armed signal across active profiles
-    from app.engines.scalping.scanner import scan_universe
-    scan_resp = scan_universe([sym], candles_by_res, cfg, tradeable_set={sym})
-    sigs = scan_resp.signals
+    if not matched:
+        resolutions = set()
+        for profile_id in cfg.active_profiles:
+            p = cfg.profiles.get(profile_id)
+            if p:
+                resolutions.add(p.macro_timeframe or "4h")
+                resolutions.add(p.execution_timeframe or "15m")
+        candles_by_res = _load_candles_by_res([sym], resolutions, days=30)
+        from app.engines.scalping.scanner import scan_universe
+        scan_resp = scan_universe([sym], candles_by_res, cfg, tradeable_set={sym})
+        sigs = scan_resp.signals
+        matched = [s for s in sigs if s.strategy == strategy and (s.entry_ok or body.confirm)]
 
-    # If user confirms manually, bypass the entry_ok constraint
-    matched = [s for s in sigs if s.strategy == strategy and (s.entry_ok or body.confirm)]
     if not matched:
         logger.info("scalp-exec %s/%s -> no_signal (not armed at execute time)", sym, strategy)
         return ScalpingExecuteResponse(
@@ -525,7 +534,11 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     # (coin == lot) when the adapter can't supply it, so sizing never mis-fires.
     contract_value = 1.0
     try:
-        _ad = getattr(request.app.state, "adapter", None)
+        # Use the RAW adapter — the CachingAdapter/RetryingAdapter wrappers from
+        # get_adapter() only proxy a fixed method list and don't expose
+        # get_contract_value (nor get_product_id). app.state.adapter is a raw
+        # fallback that's only populated when the user switches exchanges.
+        _ad = _adm.get_raw_adapter() or getattr(request.app.state, "adapter", None)
         _get_cv = getattr(_ad, "get_contract_value", None)
         if _get_cv is not None:
             _inst = registry.get_instrument(sym)

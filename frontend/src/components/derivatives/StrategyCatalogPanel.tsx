@@ -58,7 +58,7 @@ const SimpleStrategyCard: React.FC<{ s: StrategyCatalogEntry }> = ({ s }) => {
     <div style={{ ...grpBox, padding: '10px 12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: c.bright }}>
-          {s.name.toUpperCase()}
+          {s.name.replace('scalping/', '').toUpperCase().replace(/_/g, ' ')}
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           {s.combos.slice(0, 3).map((cb, i) => (

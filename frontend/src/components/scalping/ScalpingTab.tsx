@@ -6,7 +6,7 @@ import { DerivativesPanel } from '../derivatives/DerivativesPanel';
 import { EdgeGatePanel } from '../derivatives/EdgeGatePanel';
 import { StrategyCatalogPanel } from '../derivatives/StrategyCatalogPanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
-import { useDerivativesConfig, usePatchDerivativesGlobal } from '../../hooks/useDerivatives';
+import { useDerivativesConfig, usePatchDerivativesGlobal, useResetDerivativesConfig } from '../../hooks/useDerivatives';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
@@ -1154,8 +1154,10 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   // A translucent black darkens in BOTH themes (a theme bg var would flip lighter
   // in the light theme), keeping the collapsed row visibly recessed vs the cards.
   const isOpen = !!expanded;
-  const bg = isOpen ? alpha(statusColor, 0.09) : selected ? 'var(--t-bg)' : 'var(--t-bg2)';
-  const borderColor = isOpen ? alpha(statusColor, 0.40) : selected ? alpha(statusColor, 0.18) : 'var(--t-border)';
+  const isClosed = accepted && pnl?.realized;
+  const isLive = accepted && !pnl?.realized;
+  const bg = isClosed ? alpha('var(--t-amber)', 0.05) : isLive ? alpha('var(--t-green)', 0.05) : isOpen ? alpha(statusColor, 0.09) : selected ? 'var(--t-bg)' : 'var(--t-bg2)';
+  const borderColor = isClosed ? alpha('var(--t-amber)', 0.15) : isLive ? alpha('var(--t-green)', 0.15) : isOpen ? alpha(statusColor, 0.40) : selected ? alpha(statusColor, 0.18) : 'var(--t-border)';
 
   const positionOverlayData = displayEntry != null ? {
     entry: displayEntry,
@@ -1488,12 +1490,18 @@ function TerminalLog({ scanInfo, lastExec }: {
   scanInfo?: { count?: number; armed?: number; ts?: number };
   lastExec?: ExecEvent;
 }) {
-  type Line = { id: number; t: number; emoji: string; msg: string; color: string };
+  type Line = { id: number; t: number; emoji: string; msg: string; color: string; count: number };
   const [lines, setLines] = useState<Line[]>([]);
   const idRef = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
   const push = useCallback((emoji: string, msg: string, color: string) => {
-    setLines((l) => [...l.slice(-199), { id: idRef.current++, t: Date.now(), emoji, msg, color }]);
+    setLines((l) => {
+      const last = l[l.length - 1];
+      if (last && last.emoji === emoji && last.msg === msg) {
+        return [...l.slice(0, -1), { ...last, t: Date.now(), count: last.count + 1 }];
+      }
+      return [...l.slice(-199), { id: idRef.current++, t: Date.now(), emoji, msg, color, count: 1 }];
+    });
   }, []);
 
   useEffect(() => { push('🚀', 'Live activity feed started', 'var(--t-blue)'); }, [push]);
@@ -1581,7 +1589,9 @@ function TerminalLog({ scanInfo, lastExec }: {
               {new Date(ln.t).toLocaleTimeString('en-US', { hour12: false })}
             </span>
             <span style={{ flexShrink: 0 }}>{ln.emoji}</span>
-            <span style={{ color: ln.color, fontWeight: 600, minWidth: 0, wordBreak: 'break-word' }}>{ln.msg}</span>
+            <span style={{ color: ln.color, fontWeight: 600, minWidth: 0, wordBreak: 'break-word' }}>
+              {ln.msg}{ln.count > 1 && <span style={{ color: 'var(--t-dim)', fontWeight: 400, marginLeft: 6 }}>({ln.count})</span>}
+            </span>
           </div>
         ))}
         <div ref={endRef} />
@@ -1680,6 +1690,7 @@ export function ScalpingTab() {
   const cfg = cfgQ.data?.config;
   const derivConfig = useDerivativesConfig();
   const derivPatchGlobal = usePatchDerivativesGlobal();
+  const derivResetAll = useResetDerivativesConfig();
 
   const globalDerivEnabled = useMemo(() => {
     if (!derivConfig.data?.profiles) return false;
@@ -2508,7 +2519,7 @@ export function ScalpingTab() {
             <div style={{ marginTop: 12, padding: 12, background: 'var(--t-bg3)', borderRadius: 8, border: '1px solid var(--t-border)' }}>
               <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.04em' }}>
-                  DERIVATIVES ROUTING CONFIG
+                  ROUTING CONFIG
                 </span>
               </div>
 
@@ -2542,13 +2553,13 @@ export function ScalpingTab() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 10 }}>
                   <ChipToggle 
                     label="Auto - Futures" 
-                    color="var(--t-amber)"
+                    color="var(--t-green)"
                     on={globalDraft?.fut ?? false} 
                     onChange={(v) => setGlobalDraft(prev => prev ? { ...prev, fut: v, enabled: v || prev.opt } : null)} 
                   />
                   <ChipToggle 
                     label="Auto - Options" 
-                    color="var(--t-amber)"
+                    color="var(--t-green)"
                     on={globalDraft?.opt ?? false} 
                     onChange={(v) => setGlobalDraft(prev => prev ? { ...prev, opt: v, enabled: v || prev.fut } : null)} 
                   />
