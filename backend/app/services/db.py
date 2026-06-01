@@ -115,6 +115,45 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS ix_iv_history_und ON iv_history(underlying, ts)"
     )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS option_iv_ticks (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying TEXT NOT NULL,
+            expiry     TEXT NOT NULL,
+            strike     REAL NOT NULL,
+            opt_type   TEXT NOT NULL,
+            mark_iv    REAL,
+            bid_iv     REAL,
+            ask_iv     REAL,
+            delta      REAL,
+            gamma      REAL,
+            theta      REAL,
+            vega       REAL,
+            rho        REAL,
+            ts         REAL NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_option_iv_ticks_und_ts ON option_iv_ticks(underlying, ts)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_option_iv_ticks_expiry ON option_iv_ticks(expiry)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS iv_surface_params (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            underlying TEXT NOT NULL,
+            c0         REAL NOT NULL,
+            c1         REAL NOT NULL,
+            c2         REAL NOT NULL,
+            c3         REAL NOT NULL,
+            c4         REAL NOT NULL,
+            ts         REAL NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_iv_surface_params_und_ts ON iv_surface_params(underlying, ts)"
+    )
     # Add trail stop columns to positions (idempotent)
     for stmt in [
         "ALTER TABLE positions ADD COLUMN trail_stop_json TEXT",
@@ -316,6 +355,36 @@ def record_iv(underlying: str, ivr: float) -> None:
             )
     except Exception as exc:
         log.warning("DB record_iv failed: %s", exc)
+
+
+def record_option_ticks(ticks_data: list[tuple]) -> None:
+    if not _available or not ticks_data:
+        return
+    try:
+        with _conn() as c:
+            c.executemany(
+                """INSERT INTO option_iv_ticks 
+                   (underlying, expiry, strike, opt_type, mark_iv, bid_iv, ask_iv, delta, gamma, theta, vega, rho, ts) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ticks_data
+            )
+    except Exception as exc:
+        log.warning("DB record_option_ticks failed: %s", exc)
+
+
+def record_surface_params(underlying: str, coeffs: list[float], ts: float) -> None:
+    if not _available or len(coeffs) != 5:
+        return
+    try:
+        with _conn() as c:
+            c.execute(
+                """INSERT INTO iv_surface_params 
+                   (underlying, c0, c1, c2, c3, c4, ts) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (underlying, coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], ts)
+            )
+    except Exception as exc:
+        log.warning("DB record_surface_params failed: %s", exc)
 
 
 def get_iv_history(underlying: str, limit: int = 252) -> list:

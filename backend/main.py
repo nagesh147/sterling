@@ -1503,8 +1503,10 @@ async def lifespan(app: FastAPI):
     # never open a live socket.
     if os.environ.get("STERLING_IV_STREAM") == "1":
         from app.services.delta_iv_socket import iv_manager
+        from app.services.delta_iv_recorder import start_recorder
         iv_manager.start()
-        log.info("Delta real-time IV stream started")
+        start_recorder()
+        log.info("Delta real-time IV stream and recorder started")
 
     # ── Telegram bot + signal-detection alerts ────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
@@ -1573,6 +1575,15 @@ async def lifespan(app: FastAPI):
         await retry_worker_task
     except (Exception, BaseException):
         pass
+    if os.environ.get("STERLING_IV_STREAM") == "1":
+        try:
+            from app.services.delta_iv_recorder import stop_recorder
+            from app.services.delta_iv_socket import iv_manager
+            stop_recorder()
+            iv_manager.stop()
+        except Exception as exc:
+            log.warning("Error stopping IV stream/recorder: %s", exc)
+
     await adapter_manager.close_current()
     log.info("Sterling shutdown complete")
 
