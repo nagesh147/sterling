@@ -353,6 +353,35 @@ class TestNativeDefinedRisk:
         assert any("naked" in w.lower() for w in dual.warnings)
 
 
+from app.engines.derivatives_native import regime as rg
+
+
+class TestRegime:
+    def test_cheap_when_iv_below_realized(self):
+        r = rg.compute_regime(atm_iv=0.30, realized_vol=0.40, underlying="BTC", iv_history=[])
+        assert round(r.vrp, 3) == 0.75
+        assert r.label == "cheap"
+        assert r.provisional is True   # no IV history
+
+    def test_rich_when_iv_well_above_realized(self):
+        r = rg.compute_regime(atm_iv=0.60, realized_vol=0.40, underlying="BTC", iv_history=[])
+        assert r.label == "rich"
+
+    def test_fair_band(self):
+        r = rg.compute_regime(atm_iv=0.44, realized_vol=0.40, underlying="BTC", iv_history=[])
+        assert r.label == "fair"
+
+    def test_unknown_when_no_realized(self):
+        r = rg.compute_regime(atm_iv=0.40, realized_vol=None, underlying="BTC", iv_history=[])
+        assert r.label == "unknown" and r.vrp is None
+
+    def test_iv_percentile_non_provisional_with_enough_history(self):
+        hist = [0.30 + 0.001 * i for i in range(80)]   # 80 samples, 0.30..0.379
+        r = rg.compute_regime(atm_iv=0.35, realized_vol=0.40, underlying="BTC", iv_history=hist)
+        assert r.provisional is False
+        assert r.iv_percentile is not None and 0 <= r.iv_percentile <= 100
+
+
 class TestStructureRow:
     def test_row_carries_structure_summary(self):
         from app.api.v1.endpoints.derivatives import _row_from_decision
