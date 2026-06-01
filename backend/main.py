@@ -1498,6 +1498,14 @@ async def lifespan(app: FastAPI):
     deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
     log.info("Derivatives scanner started (every 30s)")
 
+    # Real-time Delta options IV stream (Component ① of realtime-iv-stream).
+    # Off by default — opt in with STERLING_IV_STREAM=1 so tests/CI/backtests
+    # never open a live socket.
+    if os.environ.get("STERLING_IV_STREAM") == "1":
+        from app.services.delta_iv_socket import iv_manager
+        iv_manager.start()
+        log.info("Delta real-time IV stream started")
+
     # ── Telegram bot + signal-detection alerts ────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
     tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
