@@ -4,6 +4,7 @@ import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
 import { useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
 import { api } from '../utils/api';
 import { useDailyLossConfig, useUpdateDailyLossConfig } from '../hooks/useRiskConfig';
+import { FontPicker } from './FontPicker';
 
 interface TelegramConfig {
   bot_token_set: boolean;
@@ -590,44 +591,9 @@ function DailyLossSection() {
 }
 
 function UiSection() {
-  const [zoom, setZoom] = useState(() => {
-    const root = document.querySelector('.term-root') as HTMLElement;
-    return parseFloat(root?.style.getPropertyValue('--app-zoom') || '1');
-  });
-
-  const updateZoom = (val: number) => {
-    const root = document.querySelector('.term-root') as HTMLElement;
-    if (root) {
-      root.style.setProperty('--app-zoom', val.toString());
-      setZoom(val);
-      localStorage.setItem('sterling-zoom', val.toString());
-    }
-  };
-
-  useEffect(() => {
-    const saved = localStorage.getItem('sterling-zoom');
-    if (saved) {
-      const v = parseFloat(saved);
-      if (!isNaN(v)) updateZoom(v);
-    }
-  }, []);
-
   return (
-    <Section title="DISPLAY" status={<span style={{ fontSize: 9, color: 'var(--t-dim)' }}>{(zoom * 100).toFixed(0)}%</span>}>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => updateZoom(Math.max(0.6, zoom - 0.1))}
-          style={{ flex: 1, padding: '6px 0', background: 'var(--t-bg)', color: 'var(--t-bright)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14 }}>
-          -
-        </button>
-        <button onClick={() => updateZoom(1)}
-          style={{ flex: 2, padding: '6px 0', background: 'var(--t-bg)', color: 'var(--t-dim)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 500, letterSpacing: '0.1em' }}>
-          RESET
-        </button>
-        <button onClick={() => updateZoom(Math.min(1.5, zoom + 0.1))}
-          style={{ flex: 1, padding: '6px 0', background: 'var(--t-bg)', color: 'var(--t-bright)', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14 }}>
-          +
-        </button>
-      </div>
+    <Section title="DISPLAY">
+      <FontPicker />
     </Section>
   );
 }

@@ -159,7 +159,7 @@ class EngineConfig(BaseModel):
     tiered_tp: TieredTPConfig = Field(default_factory=TieredTPConfig)
 
     # ── Scanner scope ──
-    symbols: List[str] = Field(default_factory=list, description="Empty = scan all stored coins")
+    symbols: List[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT"], description="Empty = scan all stored coins")
 
     # ── Warmup ──
     warmup_bars_4h: int = Field(default=50, ge=20, le=200, description="Min 4H bars before first signal")

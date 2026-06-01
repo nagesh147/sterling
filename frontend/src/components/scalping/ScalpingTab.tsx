@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FontPicker } from '../FontPicker';
+
 import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
 import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
 import { DerivativesPanel } from '../derivatives/DerivativesPanel';
@@ -64,47 +64,61 @@ function NumField({ label, value, step = 1, min, max, defaultVal, onChange }: {
 }) {
   const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
-    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
-      <span>{label}</span>
-      <input
-        type="number" value={value} step={step} min={min} max={max}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        style={{
-          width: 68, 
-          background: isDefault ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg)', 
-          border: isDefault ? '1px solid rgba(32, 144, 240, 0.3)' : '1px solid var(--t-border)',
-          borderRadius: 5, 
-          color: isDefault ? 'var(--t-blue)' : 'var(--t-bright)', 
-          fontFamily: 'inherit', fontSize: 10,
-          padding: '3px 6px', textAlign: 'right',
-          transition: 'all 0.15s ease',
-        }}
-      />
-    </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
+        <span>{label}</span>
+        <input
+          type="number" value={value} step={step} min={min} max={max}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          style={{
+            width: 68, 
+            background: isDefault ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg)', 
+            border: isDefault ? '1px solid rgba(32, 144, 240, 0.3)' : '1px solid var(--t-border)',
+            borderRadius: 5, 
+            color: isDefault ? 'var(--t-blue)' : 'var(--t-bright)', 
+            fontFamily: 'inherit', fontSize: 10,
+            padding: '3px 6px', textAlign: 'right',
+            transition: 'all 0.15s ease',
+          }}
+        />
+      </label>
+      {defaultVal !== undefined && !isDefault && (
+        <div style={{ fontSize: 8, color: 'var(--t-dim)', textAlign: 'right', paddingRight: 2, fontStyle: 'italic', opacity: 0.8 }}>
+          Factory Default: {defaultVal}
+        </div>
+      )}
+    </div>
   );
 }
 
 function TfSelect({ label, value, opts, defaultVal, onChange }: { label: string; value: string; opts: string[]; defaultVal?: string; onChange: (v: string) => void }) {
   const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
-    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
-      <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} style={{
-        width: 74, 
-        background: isDefault ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg)', 
-        border: isDefault ? '1px solid rgba(32, 144, 240, 0.3)' : '1px solid var(--t-border)', 
-        borderRadius: 5,
-        color: isDefault ? 'var(--t-blue)' : 'var(--t-bright)', 
-        fontFamily: 'inherit', fontSize: 10, padding: '3px 6px', cursor: 'pointer',
-        transition: 'all 0.15s ease',
-      }}>
-        {opts.map((o) => (
-          <option key={o} value={o} style={{ background: 'var(--t-bg)', color: 'var(--t-text)' }}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
+        <span>{label}</span>
+        <select value={value} onChange={(e) => onChange(e.target.value)} style={{
+          width: 74, 
+          background: isDefault ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg)', 
+          border: isDefault ? '1px solid rgba(32, 144, 240, 0.3)' : '1px solid var(--t-border)', 
+          borderRadius: 5,
+          color: isDefault ? 'var(--t-blue)' : 'var(--t-bright)', 
+          fontFamily: 'inherit', fontSize: 10, padding: '3px 6px', cursor: 'pointer',
+          transition: 'all 0.15s ease',
+        }}>
+          {opts.map((o) => (
+            <option key={o} value={o} style={{ background: 'var(--t-bg)', color: 'var(--t-text)' }}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </label>
+      {defaultVal !== undefined && !isDefault && (
+        <div style={{ fontSize: 8, color: 'var(--t-dim)', textAlign: 'right', paddingRight: 2, fontStyle: 'italic', opacity: 0.8 }}>
+          Factory Default: {defaultVal}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -192,7 +206,6 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   
   const profileKeys = Object.keys(draft.profiles || {});
   const [activeTab, setActiveTab] = useState<string>(profileKeys[0] || 'intraday');
-  const [derivStrategy, setDerivStrategy] = useState<string>('scalping/price_action');
 
   const activeProfile = draft.profiles?.[activeTab];
   const setProfileField = <K extends keyof ScalpingProfile>(k: K, v: ScalpingProfile[K]) => {
@@ -431,54 +444,56 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
               </>
             );
           })()}
-          <div style={{ marginTop: 12, padding: 12, background: 'var(--t-bg3)', borderRadius: 8, border: '1px solid var(--t-border)' }}>
-            <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.04em' }}>
-                DERIVATIVES ROUTING CONFIG
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--t-dim)', marginLeft: 'auto' }}>Configure strategy:</span>
-              <select 
-                value={derivStrategy} 
-                onChange={e => setDerivStrategy(e.target.value)} 
-                style={{
-                  background: 'var(--t-bg)', border: '1px solid var(--t-border)',
-                  borderRadius: 4, color: 'var(--t-bright)', padding: '4px 8px',
-                  fontFamily: 'inherit', fontSize: 11, cursor: 'pointer'
-                }}
-              >
-                <option value="scalping/price_action">Price Action</option>
-                <option value="scalping/smc">SMC</option>
-                <option value="scalping/ma_crossover">MA Crossover</option>
-                <option value="scalping/mean_reversion">Mean Reversion</option>
-                <option value="scalping/breakout">Breakout</option>
-                <option value="scalping/delta_gamma">Delta Gamma</option>
-              </select>
-            </div>
-            <DerivativesPanel strategy={derivStrategy} />
-          </div>
         </>
       )}
 
       <div style={{ ...grpBox, marginTop: 12 }}>
         <div style={grpTitle}>SYMBOLS (Global)</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-          <button onClick={() => setRootField('symbols', [] as string[])} style={{
-            fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${allMode ? 'var(--t-blue)' : 'var(--t-border)'}`,
-            background: allMode ? 'var(--t-bg3)' : 'transparent',
-            color: allMode ? 'var(--t-blue)' : 'var(--t-dim)',
-          }}>ALL</button>
-          <span style={{ fontSize: 9, color: 'var(--t-dim)' }}>
-            {allMode ? `all ${universe.length}` : `${draft.symbols.length} selected`}
-          </span>
+        
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 160, overflowY: 'auto', paddingRight: 4, flexShrink: 0, marginTop: 4 }}>
+          {draft.symbols.length === 0 ? (
+            <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Scanning ALL symbols. Add a symbol to restrict scanning.</span>
+          ) : (
+            draft.symbols.map((s) => {
+              const isLocked = ['BTC', 'ETH', 'SOL'].includes(s);
+              return (
+                <button 
+                  key={s} 
+                  onClick={() => !isLocked && toggleSym(s)} 
+                  style={{ 
+                    ...chipStyle(true), 
+                    background: 'var(--t-blue)15', 
+                    borderColor: 'var(--t-blue)44',
+                    cursor: isLocked ? 'default' : 'pointer',
+                  }}
+                  title={isLocked ? "Core symbols cannot be removed" : "Click to remove"}
+                >
+                  {s} 
+                  {!isLocked && <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>}
+                  {isLocked && <span style={{ marginLeft: 4, opacity: 0.4 }}>🔒</span>}
+                </button>
+              );
+            })
+          )}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 160, overflowY: 'auto', paddingRight: 4, flexShrink: 0, marginTop: 8 }}>
-          {universe.map((s) => {
-            const on = !allMode && selSet.has(s);
-            return (
-              <button key={s} onClick={() => toggleSym(s)} style={chipStyle(on)}>{s}</button>
-            );
-          })}
+
+        <div style={{ marginTop: 12 }}>
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) toggleSym(e.target.value);
+            }}
+            style={{
+              width: '100%', background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+              borderRadius: 4, color: 'var(--t-dim)', padding: '6px 8px',
+              fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', outline: 'none'
+            }}
+          >
+            <option value="" disabled>+ Search & Add optional symbols...</option>
+            {universe.filter(s => !selSet.has(s)).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
       </div>
     </SectionCard>
@@ -1596,6 +1611,68 @@ function SettingsTrigger({ onClick }: { onClick: () => void }) {
   );
 }
 
+function DerivativesTrigger({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+        padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'inherit',
+        border: '1px solid var(--t-border)',
+        background: hover ? alpha('var(--t-border)', 0.3) : 'transparent',
+        color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
+      }}
+    >
+      <span style={{ fontSize: 13 }}>⚡</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>Derivatives Config</span>
+    </button>
+  );
+}
+
+function StrategyCatalogTrigger({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+        padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'inherit',
+        border: '1px solid var(--t-border)',
+        background: hover ? alpha('var(--t-border)', 0.3) : 'transparent',
+        color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
+      }}
+    >
+      <span style={{ fontSize: 13 }}>📚</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>Strategy Catalog</span>
+    </button>
+  );
+}
+
+function EdgeGateTrigger({ onClick }: { onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+        padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'inherit',
+        border: '1px solid var(--t-border)',
+        background: hover ? alpha('var(--t-border)', 0.3) : 'transparent',
+        color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
+      }}
+    >
+      <span style={{ fontSize: 13 }}>🛡️</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>Edge Gate Admission</span>
+    </button>
+  );
+}
 export function ScalpingTab() {
   const selected = useSelectedUnderlying();
   const setSelected = useSetSelectedUnderlying();
@@ -1604,6 +1681,10 @@ export function ScalpingTab() {
   const anyWfoActive = cfg ? cfg.use_optimized : false;
   const setCfg = useSetScalpingConfig();
   const [drawer, setDrawer] = useState(false);
+  const [derivDrawer, setDerivDrawer] = useState(false);
+  const [catalogDrawer, setCatalogDrawer] = useState(false);
+  const [edgeGateDrawer, setEdgeGateDrawer] = useState(false);
+  const [derivStrategy, setDerivStrategy] = useState<string>('scalping/price_action');
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
   const [profileFilter, setProfileFilter] = useState<string>(() => localStorage.getItem('scalp.profileFilter') || 'all');
   const [statusFilter, setStatusFilter] = useState<string>(() => localStorage.getItem('scalp.statusFilter') || 'all');
@@ -2088,7 +2169,9 @@ export function ScalpingTab() {
         <LeftSection label="Tools" collapsible defaultOpen>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <SettingsTrigger onClick={() => setDrawer(true)} />
-            <DerivativesSettingsButton onClick={() => setDrawer(true)} />
+            <DerivativesTrigger onClick={() => setDerivDrawer(true)} />
+            <StrategyCatalogTrigger onClick={() => setCatalogDrawer(true)} />
+            <EdgeGateTrigger onClick={() => setEdgeGateDrawer(true)} />
           </div>
         </LeftSection>
         <LeftSection label="Strategies" collapsible defaultOpen>
@@ -2320,14 +2403,13 @@ export function ScalpingTab() {
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Settings &amp; Backtest</span>
+            <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Settings</span>
             <button onClick={() => setDrawer(false)} title="Close (Esc)" style={{
               marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
               border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',
               width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
             }}>×</button>
           </div>
-          <FontPicker />
           {cfg && (
             <ScalpingConfigPanel
               cfg={cfg}
@@ -2335,10 +2417,103 @@ export function ScalpingTab() {
               onSave={(c) => setCfg.mutate(c)}
             />
           )}
+          </div>
+        </div>
+      </div>
+    )}
 
-          <StrategyCatalogPanel />
-          <EdgeGatePanel />
-          <ScalpBacktestPanel initialUnderlying={btUnderlying} />
+    {derivDrawer && (
+      <div onClick={() => setDerivDrawer(false)} style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'var(--surface-overlay)', display: 'flex', justifyContent: 'flex-start',
+      }}>
+        <div onClick={(e) => e.stopPropagation()} style={{
+          width: 'min(700px, 94vw)', height: '100%', maxHeight: '100vh', background: 'var(--t-bg)', boxSizing: 'border-box',
+          borderRight: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Derivatives Config</span>
+              <button onClick={() => setDerivDrawer(false)} title="Close (Esc)" style={{
+                marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
+                border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',
+                width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
+              }}>×</button>
+            </div>
+            
+            <div style={{ marginTop: 12, padding: 12, background: 'var(--t-bg3)', borderRadius: 8, border: '1px solid var(--t-border)' }}>
+              <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.04em' }}>
+                  DERIVATIVES ROUTING CONFIG
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--t-dim)', marginLeft: 'auto' }}>Configure strategy:</span>
+                <select 
+                  value={derivStrategy} 
+                  onChange={e => setDerivStrategy(e.target.value)} 
+                  style={{
+                    background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+                    borderRadius: 4, color: 'var(--t-bright)', padding: '4px 8px',
+                    fontFamily: 'inherit', fontSize: 11, cursor: 'pointer'
+                  }}
+                >
+                  <option value="scalping/price_action">Price Action</option>
+                  <option value="scalping/smc">SMC</option>
+                  <option value="scalping/ma_crossover">MA Crossover</option>
+                  <option value="scalping/mean_reversion">Mean Reversion</option>
+                  <option value="scalping/breakout">Breakout</option>
+                  <option value="scalping/delta_gamma">Delta Gamma</option>
+                </select>
+              </div>
+              <DerivativesPanel strategy={derivStrategy} />
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {catalogDrawer && (
+      <div onClick={() => setCatalogDrawer(false)} style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'var(--surface-overlay)', display: 'flex', justifyContent: 'flex-start',
+      }}>
+        <div onClick={(e) => e.stopPropagation()} style={{
+          width: 'min(700px, 94vw)', height: '100%', maxHeight: '100vh', background: 'var(--t-bg)', boxSizing: 'border-box',
+          borderRight: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Strategy Catalog</span>
+              <button onClick={() => setCatalogDrawer(false)} title="Close (Esc)" style={{
+                marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
+                border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',
+                width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
+              }}>×</button>
+            </div>
+            <StrategyCatalogPanel />
+          </div>
+        </div>
+      </div>
+    )}
+
+    {edgeGateDrawer && (
+      <div onClick={() => setEdgeGateDrawer(false)} style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'var(--surface-overlay)', display: 'flex', justifyContent: 'flex-start',
+      }}>
+        <div onClick={(e) => e.stopPropagation()} style={{
+          width: 'min(700px, 94vw)', height: '100%', maxHeight: '100vh', background: 'var(--t-bg)', boxSizing: 'border-box',
+          borderRight: '1px solid var(--t-border)', overflowY: 'auto', padding: 16,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Edge Gate Admission</span>
+              <button onClick={() => setEdgeGateDrawer(false)} title="Close (Esc)" style={{
+                marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
+                border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',
+                width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
+              }}>×</button>
+            </div>
+            <EdgeGatePanel />
           </div>
         </div>
       </div>
