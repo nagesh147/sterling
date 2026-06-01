@@ -121,3 +121,56 @@ class TestNativeFuturesLeg:
         dual = native_engine.decide_both(
             signal=_signal(), market=_market(), chain=None, config=cfg)
         assert dual.futures is None
+
+
+from app.schemas.market import OptionSummary
+
+
+def _chain_btc(spot=50000.0) -> list[OptionSummary]:
+    """A small tradeable call chain around spot (14 DTE, tight spread, real OI)."""
+    out = []
+    for strike in (48000, 49000, 50000, 51000, 52000):
+        intrinsic = max(0.0, spot - strike)
+        mark = intrinsic + 1200.0
+        out.append(OptionSummary(
+            instrument_name=f"C-BTC-{strike}-140625", underlying="BTC",
+            strike=float(strike), expiry_date="140625", dte=14,
+            option_type="call", bid=mark * 0.985, ask=mark * 1.015,
+            mark_price=mark, mid_price=mark, mark_iv=55.0,
+            delta=0.55 if strike <= spot else 0.40,
+            gamma=0.0006, vega=20.0, theta=-15.0, rho=5.0,
+            open_interest=400.0, volume_24h=200.0,
+            last_updated_ms=int(time.time() * 1000), spread_pct=0.03))
+    return out
+
+
+class TestNativeOptionsLeg:
+    def test_emits_long_premium_when_options_source_active(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE,
+            active_alpha_sources=["directional_futures", "vrp_voltiming"])
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        assert dual.options is not None
+        assert dual.options.status == DecisionStatus.OK
+        assert dual.options.chosen.instrument_type == "options"
+        assert dual.options.freeze_token
+
+    def test_overfilter_bypass_high_ivr_still_emits_futures(self):
+        # ivr=90 > edge profile ivr_pct_naked_max(50): routing gate would veto
+        # options→futures via instrument_chooser. Native emits futures directly.
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE,
+            active_alpha_sources=["directional_futures"])
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=90.0), chain=_chain_btc(), config=cfg)
+        assert dual.futures.status == DecisionStatus.OK
+
+    def test_defined_risk_falls_back_to_long_only_with_warning(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE,
+            active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.DEFINED_RISK)
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        assert any("long_only" in w for w in dual.warnings)
