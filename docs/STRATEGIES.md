@@ -56,3 +56,20 @@ All generated signals from these models are aggregated into the `DirectionalOrch
 1. **Scoring:** The orchestrator scores the signals based on confluence (e.g., if SMC and MA Cross both point Long, the score increases).
 2. **Veto Checks:** Evaluates `snapshot_cache` for systemic vetoes (e.g., high funding rates, extreme RSI).
 3. **Execution Routing:** The signal is passed to the `OrderRouter`, which checks the `algo_router_mode` (`paper`, `shadow`, or `live`) and submits the order to the respective exchange client (e.g., `DeltaIndiaClient`).
+
+---
+
+## Derivatives Verification & Live IV Modeling
+
+Behind the scenes, Sterling supports an advanced derivatives pricing matrix that evaluates routing signals to linear (Futures) or convex (Options) execution depending on mathematical expectancy derived from real-time Implied Volatility (IV) surface fits.
+
+### 1. Live IV Streaming & Persistence
+- **Socket Ingestion:** Instead of relying on static Black-Scholes approximations or lagging historical volatility, Sterling ingests live options chains via WebSockets (e.g., `DeltaIVManager`).
+- **Surface Modeling:** The engine continuously calculates and fits a mathematical surface (`iv_surface_fit.py`) accounting for both **term-structure** and **skew** across strikes and expirations. 
+- **Backtest Replayability:** These 5-coefficient surface variables are archived to SQLite (`iv_surface_params`). When simulating, the engine queries this preserved IV surface to highly accurately price historical options scenarios.
+
+### 2. Futures vs. Options Routing Logic
+By default, strategies are optimized for linear Futures logic. However, the system runs side-by-side models for options routing:
+- **The Options Leg:** Modeled dynamically (e.g., long ATM calls for long-only momentum setups). Downside risk is strictly capped to the initial premium allocation (e.g., 5-10% of portfolio), insulating the account from catastrophic flash-crashes.
+- **Timeframe Convexity (The 4H Edge):** Backtesting over 12,000 permutations reveals that options drastically outperform futures exclusively on **high timeframes (4h+)** within strategies like `ma_crossover`. On smaller intraday frames (15m/30m), options underperform due to severe theta decay and bid-ask spread drag. On the 4h, directional price moves are large enough to break even on premium decay and drive exponential returns.
+- **Config Sweet-Spots:** Extensive vector simulations show that targeting **7 DTE** options with a **10% premium allocation** offers the highest balanced Profit Factor (PF > 1.9) and win rate retention for these trending structures.

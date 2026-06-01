@@ -117,8 +117,17 @@ def decide(
             lev_pre_funding = funding_result.max_leverage_for_budget
     components["after_funding"] = lev_pre_funding
 
+    # Timeframe Adaptive Leverage Scaling
+    # Short-term -> Higher leverage (20-50x effective). Longer holds -> Lower (5-15x).
+    expected_hold = getattr(profile, "expected_hold_minutes", 60)
+    timeframe_max_leverage = 50.0
+    if expected_hold > 1440: # > 24h (Swing/Positional)
+        timeframe_max_leverage = 15.0
+    elif expected_hold > 240: # > 4h (Overnight)
+        timeframe_max_leverage = 25.0
+
     # Profile cap
-    lev_after_profile = min(lev_pre_funding, float(profile.leverage_cap))
+    lev_after_profile = min(lev_pre_funding, float(profile.leverage_cap), timeframe_max_leverage)
     components["after_profile"] = lev_after_profile
 
     # Exchange product cap

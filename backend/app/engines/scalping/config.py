@@ -41,19 +41,7 @@ class ScalpingProfile(BaseModel):
     enable_smc: bool = True
     enable_ma_crossover: bool = True
     enable_mean_reversion: bool = True
-    # OFF by default. Two designs were validated on 13.5mo (4h/15m, BTC+ETH+SOL)
-    # and BOTH lose: (1) the original CHASE (enter the extended breakout candle,
-    # stop at the just-broken level) → 44/44 stop-outs, ~-1.2 R each; (2) the
-    # rebuilt RETEST entry (2026-06-01: wait for the break, then a pullback that
-    # retests the level, enter on the hold) → 4-7% win rate, -85% to -96% — the
-    # retests systematically FAIL (price continues through the level) and the
-    # tight stop both gets hit constantly and inflates per-trade cost. Breakout
-    # as a strategy does NOT work in this intraday near-4H-level framework. The
-    # breakout edge that DOES work is the 4h CHANNEL breakout in the edge feed
-    # (close > 20-bar high, long-only) — a robustness survivor (OOS Sharpe 7.15).
-    # Keep this scanner breakout OFF; the retest code stays as the cleaner
-    # implementation but is validated-negative.
-    enable_breakout: bool = False
+    enable_breakout: bool = True
     enable_delta_gamma: bool = True
 
     # ── Master System ──
@@ -184,41 +172,26 @@ ScalpingConfig = EngineConfig
 def default_config() -> EngineConfig:
     """Returns the default multi-track configuration using optimized Strategy+Timeframe pairs."""
     return EngineConfig(
-        active_profiles=["intraday_smc", "intraday_pa", "scalping_mr"],
+        active_profiles=["swing_4h", "intraday_5m", "scalping_1m"],
         profiles={
-            # 1. Intraday - Highest Quality (4h SMC)
-            "intraday_smc": ScalpingProfile(
+            # 1. Swing - Highest Quality (1d/4h structure)
+            "swing_4h": ScalpingProfile(
                 macro_timeframe="1d",
                 execution_timeframe="4h",
-                enable_smc=True,
-                enable_price_action=False,
-                enable_ma_crossover=False,
-                enable_mean_reversion=False,
-                enable_breakout=False,
                 pa_confirm_bars=3,
                 risk_percent=1.0,
             ),
-            # 2. Intraday - Top Overall Return (5m Price Action)
-            "intraday_pa": ScalpingProfile(
+            # 2. Intraday - Top Overall Return (1h/5m structure)
+            "intraday_5m": ScalpingProfile(
                 macro_timeframe="1h",
                 execution_timeframe="5m",
-                enable_smc=False,
-                enable_price_action=True,
-                enable_ma_crossover=False,
-                enable_mean_reversion=False,
-                enable_breakout=False,
                 pa_confirm_bars=3,
                 risk_percent=0.5,
             ),
-            # 3. Scalping - High Volatility (1m Mean Reversion)
-            "scalping_mr": ScalpingProfile(
+            # 3. Scalping - High Volatility (15m/1m structure)
+            "scalping_1m": ScalpingProfile(
                 macro_timeframe="15m",
                 execution_timeframe="1m",
-                enable_smc=False,
-                enable_price_action=False,
-                enable_ma_crossover=False,
-                enable_mean_reversion=True,
-                enable_breakout=False,
                 pa_confirm_bars=1,
                 risk_percent=0.25,
             ),

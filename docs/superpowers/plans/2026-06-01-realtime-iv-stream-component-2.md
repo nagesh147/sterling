@@ -1,6 +1,6 @@
 # Real-Time IV Streaming — Component ② TDD Plan (Forward IV Recorder)
 
-_Date: 2026-06-01 · Status: in-progress_
+_Date: 2026-06-01 · Status: completed_
 
 ## Goal
 Implement the Forward IV Recorder (Component ②), which subscribes to the IV Stream Manager (Component ①) and persists options Greeks/IV data into SQLite to build a historical surface for future backtests.

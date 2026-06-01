@@ -36,13 +36,7 @@ DESCRIPTORS: dict[str, StrategyDescriptor] = {
         id="ma_crossover",
         name="EMA Crossover (Trend)",
         tagline="Buys the moment a fast trend line crosses above a slow one.",
-        how_it_works=(
-            "On each bar it computes a fast EMA(9) and a slow EMA(21) of the close. "
-            "It fires a LONG the instant EMA9 crosses from below to above EMA21 — a "
-            "fresh trend-onset signal. It does NOT fire while they stay crossed; only "
-            "on the flip. Exit is a fixed ATR bracket (stop = 2.0×ATR below entry, "
-            "target = 3.5×ATR above ⇒ ~1.75 reward:risk)."
-        ),
+        how_it_works="Waits for the fast EMA(9) to cross above the slow EMA(21) to catch a new trend early. It uses an ATR-based stop and target.",
         direction="Long only",
         engine="Edge feed (backtest-validated). The live scalping scanner now "
                "delegates to this exact EMA9/21 logic too, so both paths agree.",
@@ -56,11 +50,7 @@ DESCRIPTORS: dict[str, StrategyDescriptor] = {
         id="mean_reversion",
         name="RSI Mean Reversion",
         tagline="Buys oversold bounces as momentum turns back up.",
-        how_it_works=(
-            "Computes RSI(14) on the close. Fires a LONG when RSI crosses up through "
-            "30 — i.e. the bar that exits 'oversold'. The idea is to catch the bounce "
-            "after a flush, not to short strength. Exit is the profile's ATR bracket."
-        ),
+        how_it_works="Waits for RSI to drop below 30 (oversold) and then cross back up, catching the bounce. It uses an ATR-based stop and target.",
         direction="Long only",
         engine="Edge feed (backtest-validated).",
         instrument="Routed to a future or option by the selector.",
@@ -72,10 +62,7 @@ DESCRIPTORS: dict[str, StrategyDescriptor] = {
         id="breakout",
         name="Channel Breakout",
         tagline="Buys a fresh break above the recent high.",
-        how_it_works=(
-            "Tracks the rolling 20-bar high. Fires a LONG the first bar the close "
-            "pushes above that high (a breakout). Long-only, ATR bracket exit."
-        ),
+        how_it_works="Tracks the 20-bar high. If the price breaks and closes above this high, it buys immediately. It uses an ATR-based stop and target.",
         direction="Long only",
         engine="Edge feed (backtest-validated).",
         instrument="Routed to a future or option by the selector.",
@@ -89,11 +76,7 @@ DESCRIPTORS: dict[str, StrategyDescriptor] = {
         id="price_action",
         name="Bullish Engulfing",
         tagline="Buys a bullish engulfing candle after a down bar.",
-        how_it_works=(
-            "Fires a LONG when the current bar is bullish (close > open) AND it "
-            "engulfs the prior bearish bar — it opens below the prior close and "
-            "closes above the prior open. A classic reversal candle. ATR bracket exit."
-        ),
+        how_it_works="Looks for a classic Bullish Engulfing candle pattern to catch market reversals. It uses an ATR-based stop and target.",
         direction="Long only",
         engine="Edge feed (backtest-validated).",
         instrument="Routed to a future or option by the selector.",
@@ -104,11 +87,7 @@ DESCRIPTORS: dict[str, StrategyDescriptor] = {
         id="smc",
         name="Smart-Money FVG",
         tagline="Buys a bullish fair-value-gap imbalance.",
-        how_it_works=(
-            "Detects a bullish Fair Value Gap: the current bar's LOW sits above the "
-            "HIGH of two bars back, leaving an unfilled price gap (an institutional "
-            "imbalance), confirmed by a bullish close. Fires LONG. ATR bracket exit."
-        ),
+        how_it_works="Spots a 'Fair Value Gap' (an imbalance in price) and buys when it's confirmed by a bullish close. It uses an ATR-based stop and target.",
         direction="Long only",
         engine="Edge feed (backtest-validated).",
         instrument="Routed to a future or option by the selector.",

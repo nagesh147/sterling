@@ -114,9 +114,28 @@ def _effective_config(request: Request) -> ScalpingConfig:
     # We overlay the verified profiles and active_profiles, but preserve the user's symbols, 
     # risk rules, and global settings.
     wfo = default_config()
+    
+    merged_profiles = {}
+    for pid, wfo_prof in wfo.profiles.items():
+        user_prof = cfg.profiles.get(pid)
+        if user_prof:
+            merged_prof = wfo_prof.model_copy(update={
+                "account_equity": user_prof.account_equity,
+                "risk_percent": user_prof.risk_percent,
+                "max_position_pct": user_prof.max_position_pct,
+                "allow_long": user_prof.allow_long,
+                "allow_short": user_prof.allow_short,
+                "min_rr": user_prof.min_rr,
+                "max_stop_atr": user_prof.max_stop_atr,
+                "macro_trend_filter": user_prof.macro_trend_filter,
+            })
+            merged_profiles[pid] = merged_prof
+        else:
+            merged_profiles[pid] = wfo_prof
+
     return cfg.model_copy(update={
         "active_profiles": wfo.active_profiles,
-        "profiles": wfo.profiles,
+        "profiles": merged_profiles,
         "tiered_tp": wfo.tiered_tp,
     })
 

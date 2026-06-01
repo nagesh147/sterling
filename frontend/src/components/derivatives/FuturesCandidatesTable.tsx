@@ -96,7 +96,8 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
       <div style={cardHead}>
         <span>DERIVATIVES · FUTURES</span>
         <span style={{ marginLeft: 8, fontSize: 9, color: c.dim, letterSpacing: 0 }}>
-          {strategy ? `strategy=${strategy}` : 'all strategies'}
+          leveraged execution candidates
+          {strategy ? ` · ${strategy}` : ''}
           {underlying ? ` · ${underlying}` : ''}
         </span>
         <span style={{ marginLeft: 'auto', fontSize: 9, color: c.dim }}>

@@ -205,7 +205,7 @@ export function SimpleTerminal() {
           borderTop: '1px solid var(--t-border)',
         }}>
           {([
-            ['scalping',   'SCALPING'],
+            ['scalping',   'STERLING ENGINE'],
             ['statarb',    'STAT ARB'],
             ['strategy',    'RSI MEAN-REV'],
             ['signals',     'SIGNALS'],

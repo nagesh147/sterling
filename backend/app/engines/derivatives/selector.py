@@ -110,12 +110,18 @@ def _options_candidate_from_strike(
     if strike.premium_at_tp <= 0 or strike.premium_at_sl < 0:
         return None
 
+    entry_premium = o.mark_price if o.mark_price > 0 else o.mid_price
+    expected_hold_days = getattr(profile, "expected_hold_minutes", 60) / 1440.0
+    current_iv = o.mark_iv / 100.0 if o.mark_iv > 5.0 else o.mark_iv
     sl_plan = sl_tp_solver.solve_options(
         direction=signal.direction, entry_spot=signal.entry,
         stop_spot=signal.stop_loss, target_spot=signal.take_profit or signal.entry,
-        premium_now=strike.premium_at_tp - (strike.premium_at_tp - strike.premium_at_sl) / 2,
+        premium_now=entry_premium,
         premium_at_tp=strike.premium_at_tp,
         premium_at_sl=strike.premium_at_sl,
+        expected_hold_days=expected_hold_days,
+        current_iv=current_iv,
+        entry_iv=current_iv,
     )
 
     # Premium-budget cap: notional = contracts × premium ≤ profile.max_premium_pct × NAV
@@ -252,11 +258,23 @@ def decide(
         signal=signal, market=market, profile=profile, chain=chain,
     )
 
-    # 3. Instrument chooser — best_option_expected_r from top option candidate
     best_option_r = options_candidates[0].expected_r if options_candidates else None
+    best_option_spread = options_candidates[0].spread_pct if options_candidates else None
+    best_option_gamma = options_candidates[0].gamma if options_candidates else None
+    
+    # GEX Calculation
+    gex_influence = 50.0
+    if chain:
+        from app.engines.derivatives.gex_engine import calculate_gex_profile, get_gex_routing_influence
+        gex_prof = calculate_gex_profile(chain, market.spot)
+        gex_influence = get_gex_routing_influence(gex_prof, market.spot)
+
     chooser = instrument_chooser.choose(
         signal=signal, profile=profile, market=market,
         best_option_expected_r=best_option_r,
+        best_option_spread=best_option_spread,
+        best_option_gamma=best_option_gamma,
+        gex_influence_score=gex_influence,
     )
 
     if chooser.instrument_type == "options" and options_candidates:

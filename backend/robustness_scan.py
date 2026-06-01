@@ -23,6 +23,8 @@ alongside a running server). 4h is where the edge has historically lived.
 from __future__ import annotations
 
 import gc
+import glob
+import os
 import sys
 import time
 
@@ -30,19 +32,24 @@ import numpy as np
 import pandas as pd
 
 from app.engines.edge.strategies import SIGNAL_FNS, resample
+from app.engines.edge.registry import PROFILE_ATR
 from app.engines.analytics.cpcv import calculate_pbo
 from app.engines.analytics.monte_carlo import monte_carlo_trades
 
 FEE_RT = 0.001
 MAX_HOLD = 200
 
-SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD"]
+_parquet_files = glob.glob("vector_store_1m_*.parquet")
+SYMBOLS = sorted([os.path.basename(f).replace("vector_store_1m_", "").replace(".parquet", "") for f in _parquet_files])
+if not SYMBOLS:
+    SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD"]
+
 # Skip 1m/5m: pure fee-death (matrix already shows ~-100%) and they explode CPCV
 # trade counts. The edge, if any, lives at >=15m.
 TIMEFRAMES = [("15min", "15m"), ("30min", "30m"), ("1h", "1h"),
               ("2h", "2h"), ("4h", "4h")]
-STRATEGIES = ["ma_crossover", "mean_reversion", "breakout", "price_action", "smc"]
-PROFILES = {"Scalping": (1.0, 2.0), "Intraday": (2.0, 3.5), "Aggressive": (1.5, 4.5)}
+STRATEGIES = list(SIGNAL_FNS.keys())
+PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_ATR.items()}
 
 # Survival gate
 MIN_TRADES = 20

@@ -6,6 +6,7 @@ class TrailMode(str, Enum):
     ATR = "atr"
     SUPERTREND = "supertrend"
     PERCENTAGE = "percentage"
+    HYBRID = "hybrid"
 
 
 @dataclass(frozen=True)

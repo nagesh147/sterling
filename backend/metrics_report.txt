@@ -1,0 +1,30 @@
+====================================================================================================
+ TRADING METRICS SIMULATION: Portfolio Level ($500 Capital)
+====================================================================================================
+
+[ SCENARIO 1: The 'AI Gatekeeper' (Using ALL Standard Profiles) ]
+If you run standard profiles, the backend generates this RAW portfolio BEFORE the Gatekeeper:
+Total Trades Generated: 3,311,526
+Raw Win Rate:           48.63%
+Raw Profit Factor:      0.99
+Raw Sharpe:             -0.04
+Raw Final Balance:      $0.00
+
+If the AI Gatekeeper works FLAWLESSLY and rejects all 3.3 million bad trades,
+leaving only the Top 3 pairs, you get these POST-FILTER metrics:
+Total Trades Executed: 73,870
+Filtered Win Rate:     52.98%
+Filtered Profit Factor:1.10
+Filtered Sharpe:       0.37
+Filtered Final Balance:$25,556.90
+
+====================================================================================================
+[ SCENARIO 2: Refactored Backend (Optimized Strategy+Timeframe Pairs) ]
+Backend ONLY generates signals for the combinations with proven mathematical edge.
+The RAW portfolio BEFORE the Gatekeeper is exactly the same as the flawless post-filter above:
+Total Trades Generated: 73,870 (NO TRASH FILTERING NEEDED)
+Optimized Win Rate:     52.98%
+Optimized Profit Factor:1.10
+Optimized Sharpe:       0.37
+Optimized Final Balance:$25,556.90
+====================================================================================================

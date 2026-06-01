@@ -7,7 +7,7 @@ For each candidate at the chosen expiry:
   4. Score gamma magnitude (favoured for scalping ATM, penalised for swing).
   5. BSM-revalue at expected-exit T (time_shifted_revaluation) for
      expected_R + theta_burn — drop contracts with veto_reason set.
-  6. Compute composite rank score; return ranked candidates.
+  6. Compute composite rank score using dynamic timeframe weights; return ranked candidates.
 
 The picker does NOT make the final futures-vs-options choice — that's
 instrument_chooser. By the time picker runs, we already decided to look
@@ -35,6 +35,7 @@ class ScoredStrike:
     premium_at_sl: float
     delta_proximity_score: float
     gamma_score: float
+    moneyness: float
     composite: float
     breakdown: dict[str, float]
     drop_reason: str = ""
@@ -59,6 +60,41 @@ def _gamma_score(gamma: float, scaled_max: float = 1e-3) -> float:
     return min(1.0, gamma / scaled_max)
 
 
+def _get_timeframe(hold_days: float) -> str:
+    if hold_days < 2 / 24:
+        return "scalping"
+    elif hold_days < 8 / 24:
+        return "intraday"
+    elif hold_days < 1.0:
+        return "overnight"
+    elif hold_days < 7.0:
+        return "positional"
+    else:
+        return "swing"
+
+
+def _get_weights(timeframe: str) -> dict[str, float]:
+    """Dynamic weights table for crypto option strike selection."""
+    if timeframe == "scalping":
+        return {"delta": 0.20, "gamma": 0.25, "theta": 0.10, "vega": 0.15, "liquidity": 0.20, "skew": 0.10}
+    elif timeframe == "intraday":
+        return {"delta": 0.25, "gamma": 0.20, "theta": 0.15, "vega": 0.15, "liquidity": 0.15, "skew": 0.10}
+    elif timeframe == "overnight":
+        return {"delta": 0.25, "gamma": 0.15, "theta": 0.20, "vega": 0.15, "liquidity": 0.15, "skew": 0.10}
+    elif timeframe == "positional":
+        return {"delta": 0.30, "gamma": 0.10, "theta": 0.20, "vega": 0.15, "liquidity": 0.10, "skew": 0.15}
+    else:  # swing
+        return {"delta": 0.30, "gamma": 0.05, "theta": 0.25, "vega": 0.15, "liquidity": 0.10, "skew": 0.15}
+
+
+def _skew_edge(contract: OptionSummary, spot: float) -> float:
+    """Basic skew edge estimator. Crypto often has steep put skew.
+    We grant a small bonus to calls over puts to offset natural skew premium."""
+    if contract.option_type == "call":
+        return 0.6  # Natural edge vs overpriced puts
+    return 0.4
+
+
 def pick(
     *,
     candidates: list[OptionSummary],
@@ -74,32 +110,49 @@ def pick(
     composite. Dropped contracts come last with `drop_reason` set."""
     full_chain = full_chain or candidates
     scored: list[ScoredStrike] = []
+    
+    # ── GEX & Market Setup ──────────────────────────────────────────────────
+    gex_prof = None
+    if full_chain:
+        from app.engines.derivatives.gex_engine import calculate_gex_profile
+        gex_prof = calculate_gex_profile(full_chain, spot)
+
+    # ATM IV Baseline
+    atm_opt = min(candidates, key=lambda o: abs(o.strike - spot)) if candidates else None
+    atm_iv = (atm_opt.mark_iv / 100.0) if atm_opt and atm_opt.mark_iv > 5.0 else (atm_opt.mark_iv if atm_opt else 0.0)
+    
+    timeframe = _get_timeframe(expected_hold_days)
+    weights = _get_weights(timeframe)
 
     # ── per-contract scoring ──────────────────────────────────────────
     for opt in candidates:
         enriched = enrich_with_greeks(opt, spot=spot)
 
-        liq = liquidity_score(enriched, profile)
+        liq = liquidity_score(enriched, profile, expected_hold_days)
         if not liq.passes_floor:
             scored.append(ScoredStrike(
                 option=enriched, liquidity=liq,
                 expected_r=0, theta_burn_pct=0,
                 premium_at_tp=0, premium_at_sl=0,
                 delta_proximity_score=0, gamma_score=0,
+                moneyness=0,
                 composite=0, breakdown={},
                 drop_reason=f"liquidity:{liq.floor_breach_reason}",
             ))
             continue
 
+        # Moneyness calculated strictly from spot
+        moneyness = abs(enriched.strike - spot) / spot
+
         # IVR cap — adapter ships IV as percent; normalise to decimal
         iv = enriched.mark_iv
         if iv > 5.0:
             iv = iv / 100.0
-        # We treat profile.ivr_pct_naked_max as "max acceptable IV percentile"
-        # but at the chain level we can only see absolute IV. As a proxy
-        # we cap absolute IV at ivr_pct_naked_max / 100 × 1.5 (75% IV cap
-        # for triple_st with ivr_pct_naked_max=40). Imperfect; Phase 1 of
-        # the selector should consult CalibrationService.ivr_bands().
+            
+        # Proxy IVR: treat raw IV mapped to historical bands.
+        # Until CalibrationService IVR is ready, we use absolute IV vs 40% (0.40) as baseline.
+        ivr_proxy = min(100.0, (iv / 0.80) * 100) # 80% absolute IV = 100 IVR roughly for BTC
+        
         proxy_iv_cap = max(0.20, profile.ivr_pct_naked_max / 100.0 * 1.5)
         if iv > proxy_iv_cap:
             scored.append(ScoredStrike(
@@ -107,6 +160,7 @@ def pick(
                 expected_r=0, theta_burn_pct=0,
                 premium_at_tp=0, premium_at_sl=0,
                 delta_proximity_score=0, gamma_score=0,
+                moneyness=moneyness,
                 composite=0, breakdown={},
                 drop_reason=f"iv_too_high:{iv:.2%}>{proxy_iv_cap:.0%}",
             ))
@@ -124,6 +178,7 @@ def pick(
                 expected_r=0, theta_burn_pct=0,
                 premium_at_tp=0, premium_at_sl=0,
                 delta_proximity_score=0, gamma_score=0,
+                moneyness=moneyness,
                 composite=0, breakdown={},
                 drop_reason="bsm_degenerate",
             ))
@@ -134,6 +189,7 @@ def pick(
                 expected_r=reval.expected_r, theta_burn_pct=reval.theta_burn_pct,
                 premium_at_tp=reval.premium_at_tp, premium_at_sl=reval.premium_at_sl,
                 delta_proximity_score=0, gamma_score=0,
+                moneyness=moneyness,
                 composite=0, breakdown={},
                 drop_reason=reval.veto_reason,
             ))
@@ -142,36 +198,78 @@ def pick(
         delta_score = _delta_proximity_score(
             enriched.delta, profile.target_delta, profile.target_delta_tolerance,
         )
-        gamma_score = _gamma_score(enriched.gamma)
-
-        # Composite weights tuned for "Greeks-aware":
-        #   0.30 delta proximity, 0.25 liquidity, 0.20 expected R,
-        #   0.15 gamma (when prefer_gamma) or theta-friendliness (when not), 0.10 spread
-        gamma_weight = 0.15 if prefer_gamma else 0.0
-        theta_weight = 0.15 if not prefer_gamma else 0.0
-        theta_friend = max(0.0, 1.0 - reval.theta_burn_pct)        # 1 = no theta drag
-
-        # Expected R contribution: saturate at 3R (anything above is rare and noise-prone)
+        
+        # Gamma vs Theta dynamically weighted by timeframe
+        gamma_s = _gamma_score(enriched.gamma)
+        gamma_weight = weights["gamma"]
+        
+        theta_burn = abs(enriched.theta) * enriched.dte
+        theta_s = max(0.0, 1.0 - reval.theta_burn_pct)  # Reval accurately measures true burn
+        theta_weight = weights["theta"]
+        
+        # Vega/IV
+        vega_s = enriched.vega * (1.0 if ivr_proxy < 70 else max(0, 1.3 - ivr_proxy / 100))
+        vega_s_norm = min(1.0, vega_s / 0.10) # Normalize
+        vega_weight = weights["vega"]
+        
+        # Liquidity (Vol/OI/Spread)
+        # Assuming liq.composite encapsulates spread, OI, and depth
+        liq_s = liq.composite
+        liq_weight = weights["liquidity"]
+        
+        # Skew Correction: Penalize strikes where local IV deviates >15% from ATM IV
+        skew_s = _skew_edge(enriched, spot)
+        if atm_iv > 0:
+            iv_deviation = abs(iv - atm_iv) / atm_iv
+            if iv_deviation > 0.15:
+                skew_s *= max(0.2, 1.0 - (iv_deviation - 0.15) * 2) # steep penalty
+        skew_weight = weights["skew"]
+        
+        # Expected R contribution (bonus)
         r_score = min(1.0, max(0.0, reval.expected_r / 3.0))
 
+        # GEX Influence Bonus/Veto
+        gex_score_bonus = 0.0
+        if gex_prof:
+            total_gex = gex_prof.get("total_gex", 0.0)
+            # Boost if near high positive gamma node
+            if total_gex > 50_000 and abs(enriched.strike - gex_prof.get("call_wall", spot)) / spot < 0.05:
+                gex_score_bonus = 0.15
+            # Veto deep negative gamma zones for long holds
+            if total_gex < -50_000 and expected_hold_days > 1.0:
+                scored.append(ScoredStrike(
+                    option=enriched, liquidity=liq,
+                    expected_r=reval.expected_r, theta_burn_pct=reval.theta_burn_pct,
+                    premium_at_tp=reval.premium_at_tp, premium_at_sl=reval.premium_at_sl,
+                    delta_proximity_score=0, gamma_score=0,
+                    moneyness=moneyness,
+                    composite=0, breakdown={},
+                    drop_reason="veto:negative_gex_for_long_hold",
+                ))
+                continue
+
+        # Core weighted composite
         composite = (
-            0.30 * delta_score
-            + 0.25 * liq.composite
-            + 0.20 * r_score
-            + gamma_weight * gamma_score
-            + theta_weight * theta_friend
-            + 0.10 * liq.spread_score
+            weights["delta"] * delta_score
+            + gamma_weight * gamma_s
+            + theta_weight * theta_s
+            + vega_weight * vega_s_norm
+            + liq_weight * liq_s
+            + skew_weight * skew_s
+            + 0.10 * r_score # R score remains a universal additive bonus
+            + gex_score_bonus
         )
 
         scored.append(ScoredStrike(
             option=enriched, liquidity=liq,
             expected_r=reval.expected_r, theta_burn_pct=reval.theta_burn_pct,
             premium_at_tp=reval.premium_at_tp, premium_at_sl=reval.premium_at_sl,
-            delta_proximity_score=delta_score, gamma_score=gamma_score,
+            delta_proximity_score=delta_score, gamma_score=gamma_s,
+            moneyness=moneyness,
             composite=composite, breakdown={
-                "delta": delta_score, "liquidity": liq.composite,
-                "expected_r": r_score, "gamma": gamma_score,
-                "theta_friend": theta_friend, "spread": liq.spread_score,
+                "delta": delta_score, "gamma": gamma_s,
+                "theta": theta_s, "vega": vega_s_norm,
+                "liquidity": liq_s, "skew": skew_s, "expected_r": r_score,
             },
         ))
 

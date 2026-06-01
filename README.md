@@ -235,7 +235,7 @@ The Scalping Terminal header has been completely overhauled to surface these WFO
 ## Known Issues Fixed
 
 - **Scalping UI Malformed JSX**: Fixed an `oxc` parse error in `ScalpingTab.tsx` caused by a broken fragment during the dynamic header refactor.
-- **Scalping Profile Persistence**: Fixed the "↺ DEFAULTS" button in the `ScalpingConfigPanel` so it aggressively forces the UI state to align with the new WFO arrays (e.g., jumping immediately to `intraday_smc`).
+- **Scalping Profile Persistence**: Fixed the "↺ DEFAULTS" button in the `ScalpingConfigPanel` so it aggressively forces the UI state to align with the new WFO arrays (e.g., jumping immediately to `swing_4h`).
 - **PaperLiveToggle shadow switching**: SHADOW button in LIVE mode was opening a confirmation modal that did the wrong thing. Fixed — LIVE→SHADOW now directly sets `is_paper: true`.
 - **Mode persistence**: `algo_router_mode` now stored in SQLite via `set_config`, survives restarts.
 - **Signal strategy exposure**: Backend now exposes `track` + `strategy` fields in `/signals` — shows which strategy won (VCP/trend_following/mean_reversion) and whether track system or legacy path was used.

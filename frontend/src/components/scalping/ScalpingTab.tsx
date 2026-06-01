@@ -59,34 +59,50 @@ function SectionCard({ title, right, children }: { title: string; right?: React.
   );
 }
 
-function NumField({ label, value, step = 1, min, max, onChange }: {
-  label: string; value: number; step?: number; min?: number; max?: number; onChange: (v: number) => void;
+function NumField({ label, value, step = 1, min, max, defaultVal, onChange }: {
+  label: string; value: number; step?: number; min?: number; max?: number; defaultVal?: number; onChange: (v: number) => void;
 }) {
+  const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
-      {label}
+      <span>{label}</span>
       <input
         type="number" value={value} step={step} min={min} max={max}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         style={{
-          width: 68, background: 'var(--t-bg)', border: '1px solid var(--t-border)',
-          borderRadius: 5, color: 'var(--t-bright)', fontFamily: 'inherit', fontSize: 10,
+          width: 68, 
+          background: isDefault ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg)', 
+          border: isDefault ? '1px solid rgba(32, 144, 240, 0.3)' : '1px solid var(--t-border)',
+          borderRadius: 5, 
+          color: isDefault ? 'var(--t-blue)' : 'var(--t-bright)', 
+          fontFamily: 'inherit', fontSize: 10,
           padding: '3px 6px', textAlign: 'right',
+          transition: 'all 0.15s ease',
         }}
       />
     </label>
   );
 }
 
-function TfSelect({ label, value, opts, onChange }: { label: string; value: string; opts: string[]; onChange: (v: string) => void }) {
+function TfSelect({ label, value, opts, defaultVal, onChange }: { label: string; value: string; opts: string[]; defaultVal?: string; onChange: (v: string) => void }) {
+  const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
-      {label}
+      <span>{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value)} style={{
-        width: 74, background: 'var(--t-bg)', border: '1px solid var(--t-border)', borderRadius: 5,
-        color: 'var(--t-bright)', fontFamily: 'inherit', fontSize: 10, padding: '3px 6px', cursor: 'pointer',
+        width: 74, 
+        background: isDefault ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg)', 
+        border: isDefault ? '1px solid rgba(32, 144, 240, 0.3)' : '1px solid var(--t-border)', 
+        borderRadius: 5,
+        color: isDefault ? 'var(--t-blue)' : 'var(--t-bright)', 
+        fontFamily: 'inherit', fontSize: 10, padding: '3px 6px', cursor: 'pointer',
+        transition: 'all 0.15s ease',
       }}>
-        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+        {opts.map((o) => (
+          <option key={o} value={o} style={{ background: 'var(--t-bg)', color: 'var(--t-text)' }}>
+            {o}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -213,7 +229,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   });
 
   return (
-    <SectionCard title="SCALPING SETTINGS" right={
+    <SectionCard title="Sterling SETTINGS" right={
       <span style={{ display: 'inline-flex', gap: 6 }}>
         <button
           disabled={!defaultCfg || saving}
@@ -300,114 +316,121 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
 
       {activeProfile && (
         <>
-
-          <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
-            <ChipToggle label="Price Action" color="var(--t-amber)" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
-            <ChipToggle label="SMC" color="var(--t-purple)" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
-            <ChipToggle label="MA Crossover" color="var(--t-blue)" on={activeProfile.enable_ma_crossover} onChange={(v) => setProfileField('enable_ma_crossover', v)} />
-            <ChipToggle label="Mean Reversion" color="var(--t-cyan)" on={activeProfile.enable_mean_reversion} onChange={(v) => setProfileField('enable_mean_reversion', v)} />
-            <ChipToggle label="Breakout" color="var(--t-green)" on={activeProfile.enable_breakout} onChange={(v) => setProfileField('enable_breakout', v)} />
-            <ChipToggle label="Delta-Gamma" color="var(--t-pink)" on={activeProfile.enable_delta_gamma} onChange={(v) => setProfileField('enable_delta_gamma', v)} />
-          </div>
-
-          <div style={gridStyle()}>
-            {draft.use_optimized ? (
-              <div style={{ ...grpBox, gridColumn: '1 / -1', textAlign: 'center', padding: '24px 12px', background: 'var(--t-bg2)', border: '1px dashed var(--t-blue)44' }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-blue)', marginBottom: 8, letterSpacing: '0.05em' }}>🔒 STRATEGY LOGIC MANAGED BY AI</div>
-                <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto' }}>
-                  The Walk-Forward Optimizer is currently overriding manual thresholds for Timeframes, SMC, MA Crossover, Mean Reversion, Breakout, and Delta-Gamma. 
-                  It calculates dynamic expectancy limits in real-time. Turn off the AI Gatekeeper above to unlock manual overrides.
-                </div>
-              </div>
-            ) : (
+          {(() => {
+            const defP = defaultCfg?.profiles?.[activeTab];
+            return (
               <>
-                <div style={grpBox}>
-                  <div style={grpTitle}>TIMEFRAMES</div>
-                  <TfSelect label="Structure" value={activeProfile.macro_timeframe} opts={['1h', '2h', '4h']} onChange={(v) => setProfileField('macro_timeframe', v)} />
-                  <TfSelect label="Entry" value={activeProfile.execution_timeframe} opts={['1m', '5m', '15m', '30m']} onChange={(v) => setProfileField('execution_timeframe', v)} />
+                <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <ChipToggle label="Price Action" color="var(--t-amber)" on={activeProfile.enable_price_action} onChange={(v) => setProfileField('enable_price_action', v)} />
+                  <ChipToggle label="SMC" color="var(--t-purple)" on={activeProfile.enable_smc} onChange={(v) => setProfileField('enable_smc', v)} />
+                  <ChipToggle label="MA Crossover" color="var(--t-blue)" on={activeProfile.enable_ma_crossover} onChange={(v) => setProfileField('enable_ma_crossover', v)} />
+                  <ChipToggle label="Mean Reversion" color="var(--t-cyan)" on={activeProfile.enable_mean_reversion} onChange={(v) => setProfileField('enable_mean_reversion', v)} />
+                  <ChipToggle label="Breakout" color="var(--t-green)" on={activeProfile.enable_breakout} onChange={(v) => setProfileField('enable_breakout', v)} />
+                  <ChipToggle label="Delta-Gamma" color="var(--t-pink)" on={activeProfile.enable_delta_gamma} onChange={(v) => setProfileField('enable_delta_gamma', v)} />
                 </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>STRUCTURE LEVELS</div>
-                  <NumField label="Min touches" value={activeProfile.level_touches} min={2} max={10} onChange={(v) => setProfileField('level_touches', v)} />
-                  <NumField label="Tolerance %" value={activeProfile.level_tolerance_pct} step={0.1} min={0.1} max={3} onChange={(v) => setProfileField('level_tolerance_pct', v)} />
-                </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>PRICE ACTION</div>
-                  <NumField label="Lookback" value={activeProfile.pa_lookback_bars} min={5} max={100} onChange={(v) => setProfileField('pa_lookback_bars', v)} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
-                      <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                        {[1, 3, 5].map((n) => {
-                          const on = activeProfile.pa_confirm_bars === n;
-                          return (
-                            <button key={n} onClick={() => setProfileField('pa_confirm_bars', n)} style={{
-                              fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
-                              border: `1px solid ${on ? 'var(--t-blue)' : 'var(--t-border)'}`,
-                              background: on ? 'var(--t-bg3)' : 'transparent',
-                              color: on ? 'var(--t-blue)' : 'var(--t-dim)',
-                            }}>{n}</button>
-                          );
-                        })}
+
+                <div style={gridStyle()}>
+                  {draft.use_optimized ? (
+                    <div style={{ ...grpBox, gridColumn: '1 / -1', textAlign: 'center', padding: '24px 12px', background: 'var(--t-bg2)', border: '1px dashed var(--t-blue)44' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-blue)', marginBottom: 8, letterSpacing: '0.05em' }}>🔒 STRATEGY LOGIC MANAGED BY AI</div>
+                      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto' }}>
+                        The Walk-Forward Optimizer is currently overriding manual thresholds for Timeframes, SMC, MA Crossover, Mean Reversion, Breakout, and Delta-Gamma. 
+                        It calculates dynamic expectancy limits in real-time. Turn off the AI Gatekeeper above to unlock manual overrides.
                       </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>TIMEFRAMES</div>
+                        <TfSelect label="Structure" value={activeProfile.macro_timeframe} opts={['1h', '2h', '4h']} defaultVal={defP?.macro_timeframe} onChange={(v) => setProfileField('macro_timeframe', v)} />
+                        <TfSelect label="Entry" value={activeProfile.execution_timeframe} opts={['1m', '5m', '15m', '30m']} defaultVal={defP?.execution_timeframe} onChange={(v) => setProfileField('execution_timeframe', v)} />
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>STRUCTURE LEVELS</div>
+                        <NumField label="Min touches" value={activeProfile.level_touches} min={2} max={10} defaultVal={defP?.level_touches} onChange={(v) => setProfileField('level_touches', v)} />
+                        <NumField label="Tolerance %" value={activeProfile.level_tolerance_pct} step={0.1} min={0.1} max={3} defaultVal={defP?.level_tolerance_pct} onChange={(v) => setProfileField('level_tolerance_pct', v)} />
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>PRICE ACTION</div>
+                        <NumField label="Lookback" value={activeProfile.pa_lookback_bars} min={5} max={100} defaultVal={defP?.pa_lookback_bars} onChange={(v) => setProfileField('pa_lookback_bars', v)} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                            <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Confirm bars</span>
+                            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                              {[1, 3, 5].map((n) => {
+                                const on = activeProfile.pa_confirm_bars === n;
+                                const isDef = defP && n === defP.pa_confirm_bars;
+                                return (
+                                  <button key={n} onClick={() => setProfileField('pa_confirm_bars', n)} style={{
+                                    fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit',
+                                    border: `1px solid ${on ? (isDef ? 'rgba(32, 144, 240, 0.4)' : 'var(--t-border)') : 'transparent'}`,
+                                    background: on ? (isDef ? 'rgba(32, 144, 240, 0.1)' : 'var(--t-bg3)') : 'transparent',
+                                    color: on ? (isDef ? 'var(--t-blue)' : 'var(--t-bright)') : 'var(--t-dim)',
+                                    transition: 'all 0.15s ease',
+                                  }}>{n}</button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>SMC</div>
+                        <NumField label="Imbalance ratio" value={activeProfile.smc_imbalance_ratio} step={0.1} min={1.0} max={3.0} defaultVal={defP?.smc_imbalance_ratio} onChange={(v) => setProfileField('smc_imbalance_ratio', v)} />
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>MA CROSSOVER</div>
+                        <NumField label="SMA period" value={activeProfile.ma_fast_sma} min={2} max={20} defaultVal={defP?.ma_fast_sma} onChange={(v) => setProfileField('ma_fast_sma', v)} />
+                        <NumField label="EMA period" value={activeProfile.ma_slow_ema} min={3} max={50} defaultVal={defP?.ma_slow_ema} onChange={(v) => setProfileField('ma_slow_ema', v)} />
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>MEAN REVERSION</div>
+                        <NumField label="Z-Score Window" value={activeProfile.mr_zscore_window} min={5} max={100} defaultVal={defP?.mr_zscore_window} onChange={(v) => setProfileField('mr_zscore_window', v)} />
+                        <NumField label="Z-Score Threshold" value={activeProfile.mr_zscore_threshold} step={0.1} min={1.0} max={5.0} defaultVal={defP?.mr_zscore_threshold} onChange={(v) => setProfileField('mr_zscore_threshold', v)} />
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>BREAKOUT</div>
+                        <NumField label="RSI Long Threshold" value={activeProfile.bo_rsi_long_threshold} step={1} min={50} max={90} defaultVal={defP?.bo_rsi_long_threshold} onChange={(v) => setProfileField('bo_rsi_long_threshold', v)} />
+                        <NumField label="RSI Short Threshold" value={activeProfile.bo_rsi_short_threshold} step={1} min={10} max={50} defaultVal={defP?.bo_rsi_short_threshold} onChange={(v) => setProfileField('bo_rsi_short_threshold', v)} />
+                      </div>
+                      <div style={grpBox}>
+                        <div style={grpTitle}>DELTA-GAMMA</div>
+                        <NumField label="GEX Flip Threshold" value={activeProfile.dg_gex_flip_threshold} step={0.1} min={-5.0} max={5.0} defaultVal={defP?.dg_gex_flip_threshold} onChange={(v) => setProfileField('dg_gex_flip_threshold', v)} />
+                        <NumField label="Wall Proximity %" value={activeProfile.dg_wall_proximity_pct} step={0.001} min={0.001} max={0.05} defaultVal={defP?.dg_wall_proximity_pct} onChange={(v) => setProfileField('dg_wall_proximity_pct', v)} />
+                        <div style={{ marginTop: 4 }}>
+                          <ChipToggle label="Filter Breakouts by Gamma" on={activeProfile.dg_filter_breakouts} onChange={(v) => setProfileField('dg_filter_breakouts', v)} />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  <div style={grpBox}>
+                    <div style={grpTitle}>DIRECTION & RISK</div>
+                    {draft.use_optimized && !activeProfile.macro_trend_filter && (
+                      <div style={{
+                        padding: '8px 10px', marginBottom: 8, borderRadius: 6,
+                        background: 'var(--t-amber)14', border: '1px solid var(--t-amber)44',
+                        fontSize: 10, color: 'var(--t-amber)', lineHeight: 1.4
+                      }}>
+                        <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
+                      <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
+                      <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
+                      <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} defaultVal={defP?.risk_percent} onChange={(v) => setProfileField('risk_percent', v)} />
+                      <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} defaultVal={defP?.max_position_pct} onChange={(v) => setProfileField('max_position_pct', v)} />
+                      <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} defaultVal={defP?.min_rr} onChange={(v) => setProfileField('min_rr', v)} />
+                      <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} defaultVal={defP?.max_stop_atr} onChange={(v) => setProfileField('max_stop_atr', v)} />
+                      <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} defaultVal={defP?.account_equity} onChange={(v) => setProfileField('account_equity', v)} />
                     </div>
                   </div>
                 </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>SMC</div>
-                  <NumField label="Imbalance ratio" value={activeProfile.smc_imbalance_ratio} step={0.1} min={1.0} max={3.0} onChange={(v) => setProfileField('smc_imbalance_ratio', v)} />
-                </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>MA CROSSOVER</div>
-                  <NumField label="SMA period" value={activeProfile.ma_fast_sma} min={2} max={20} onChange={(v) => setProfileField('ma_fast_sma', v)} />
-                  <NumField label="EMA period" value={activeProfile.ma_slow_ema} min={3} max={50} onChange={(v) => setProfileField('ma_slow_ema', v)} />
-                </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>MEAN REVERSION</div>
-                  <NumField label="Z-Score Window" value={activeProfile.mr_zscore_window} min={5} max={100} onChange={(v) => setProfileField('mr_zscore_window', v)} />
-                  <NumField label="Z-Score Threshold" value={activeProfile.mr_zscore_threshold} step={0.1} min={1.0} max={5.0} onChange={(v) => setProfileField('mr_zscore_threshold', v)} />
-                </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>BREAKOUT</div>
-                  <NumField label="RSI Long Threshold" value={activeProfile.bo_rsi_long_threshold} step={1} min={50} max={90} onChange={(v) => setProfileField('bo_rsi_long_threshold', v)} />
-                  <NumField label="RSI Short Threshold" value={activeProfile.bo_rsi_short_threshold} step={1} min={10} max={50} onChange={(v) => setProfileField('bo_rsi_short_threshold', v)} />
-                </div>
-                <div style={grpBox}>
-                  <div style={grpTitle}>DELTA-GAMMA</div>
-                  <NumField label="GEX Flip Threshold" value={activeProfile.dg_gex_flip_threshold} step={0.1} min={-5.0} max={5.0} onChange={(v) => setProfileField('dg_gex_flip_threshold', v)} />
-                  <NumField label="Wall Proximity %" value={activeProfile.dg_wall_proximity_pct} step={0.001} min={0.001} max={0.05} onChange={(v) => setProfileField('dg_wall_proximity_pct', v)} />
-                  <div style={{ marginTop: 4 }}>
-                    <ChipToggle label="Filter Breakouts by Gamma" on={activeProfile.dg_filter_breakouts} onChange={(v) => setProfileField('dg_filter_breakouts', v)} />
-                  </div>
-                </div>
               </>
-            )}
-            <div style={grpBox}>
-              <div style={grpTitle}>DIRECTION & RISK</div>
-              {draft.use_optimized && !activeProfile.macro_trend_filter && (
-                <div style={{
-                  padding: '8px 10px', marginBottom: 8, borderRadius: 6,
-                  background: 'var(--t-amber)14', border: '1px solid var(--t-amber)44',
-                  fontSize: 10, color: 'var(--t-amber)', lineHeight: 1.4
-                }}>
-                  <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
-                <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
-                <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
-                <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} onChange={(v) => setProfileField('risk_percent', v)} />
-                <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} onChange={(v) => setProfileField('max_position_pct', v)} />
-                <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} onChange={(v) => setProfileField('min_rr', v)} />
-                <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} onChange={(v) => setProfileField('max_stop_atr', v)} />
-                <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} onChange={(v) => setProfileField('account_equity', v)} />
-              </div>
-            </div>
-            </div>
-
+            );
+          })()}
           <div style={{ marginTop: 12, padding: 12, background: 'var(--t-bg3)', borderRadius: 8, border: '1px solid var(--t-border)' }}>
             <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.04em' }}>
@@ -1431,100 +1454,7 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
 
 /* ── main tab: 3-column layout ─────────────────────────────────────────────── */
 
-/* ── auto-optimize panel (in drawer) ──────────────────────────────────────── */
 
-function OptimizePanel({ cfg }: { cfg: ScalpingConfig }) {
-  const optQ = useScalpingOptimize();
-  const runOpt = useRunScalpingOptimize();
-  const data = optQ.data;
-  const status = data?.status;
-  const result = data?.result;
-  const running = !!status?.running;
-
-  const corr = result?.is_oos_corr ?? 0;
-  const corrColor = corr > 0.3 ? 'var(--t-green)' : corr < 0 ? 'var(--t-red)' : 'var(--t-amber)';
-  const pStr = (p?: Record<string, number | boolean>) =>
-    !p ? '—' : `${p.macro_timeframe ?? '4h'}/${p.execution_timeframe ?? '15m'} · cb ${p.pa_confirm_bars} · R:R ${p.pa_min_rr} · trend ${p.macro_trend_filter ? 'on' : 'off'}`;
-  const pfColor = (v: number) => (v >= 1.3 ? 'var(--t-green)' : v >= 1 ? 'var(--t-amber)' : 'var(--t-red)');
-
-  return (
-    <SectionCard title="AUTO-OPTIMIZE (EXPERIMENTAL)" right={
-      <button disabled={running || runOpt.isPending} onClick={() => runOpt.mutate({ days: 90, max_symbols: 5 })} style={{
-        fontSize: 9, fontWeight: 700, padding: '4px 12px', borderRadius: 5, fontFamily: 'inherit',
-        cursor: running || runOpt.isPending ? 'default' : 'pointer',
-        border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
-      }}>{running ? `RUNNING ${status?.progress ?? ''}` : runOpt.isPending ? 'STARTING…' : 'RUN SWEEP'}</button>
-    }>
-      <div style={{ ...dim, marginBottom: 10, lineHeight: 1.6 }}>
-        <b style={{ color: 'var(--t-bright)' }}>What it is:</b> a research tool that backtests many config
-        combinations and ranks them by <b style={{ color: 'var(--t-bright)' }}>out-of-sample</b> profit factor
-        (performance on data it didn't fit). It then checks if the winner actually <i>generalises</i>.<br />
-        <b style={{ color: 'var(--t-bright)' }}>Recommendation: leave the toggle OFF</b> and trade the Profiles.
-        It only changes anything if a sweep finds a config that beats yours out-of-sample with a positive
-        IS↔OOS correlation — otherwise it's a safe no-op. In testing it keeps saying <b style={{ color: 'var(--t-amber)' }}>“keep manual”</b> (this strategy overfits short windows).<br />
-        <b style={{ color: 'var(--t-bright)' }}>When to use:</b> run a sweep occasionally (longer window = firmer read)
-        to check for a better config; only flip the toggle on if the result shows <b style={{ color: 'var(--t-green)' }}>✓ ADOPT</b>.
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        {data?.optimized_params && (
-          <span style={{ fontSize: 9, color: 'var(--t-green)' }}>active: {pStr(data.optimized_params)}</span>
-        )}
-      </div>
-
-      {status?.error && <div style={{ color: 'var(--t-red)', fontSize: 10, marginBottom: 8 }}>✕ {status.error}</div>}
-
-      {result ? (
-        <>
-          <div style={{
-            fontSize: 10, lineHeight: 1.5, marginBottom: 8, padding: '6px 9px', borderRadius: 'var(--radius-md)',
-            color: result.recommend_change ? 'var(--t-green)' : corrColor,
-            background: alpha(result.recommend_change ? 'var(--t-green)' : corrColor, 0.08),
-            border: `1px solid ${alpha(result.recommend_change ? 'var(--t-green)' : corrColor, 0.27)}`,
-          }}>
-            {result.recommend_change ? '✓ ADOPT' : '⚠ KEEP MANUAL'} · IS↔OOS corr <b>{corr.toFixed(2)}</b> — {result.note}
-          </div>
-          <div style={{ display: 'flex', gap: 18, marginBottom: 8, fontSize: 10, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.06em' }}>CURRENT (baseline)</div>
-              <div style={{ fontVariantNumeric: 'tabular-nums' }}>OOS PF {result.baseline.oos_pf} · exp {result.baseline.oos_exp}R · n {result.baseline.n_oos}</div>
-            </div>
-            <div>
-              <div style={{ color: 'var(--t-green)', fontWeight: 700, letterSpacing: '0.06em' }}>BEST · {pStr(result.best_params)}</div>
-              <div style={{ fontVariantNumeric: 'tabular-nums' }}>OOS PF {result.combos[0]?.oos_pf} · exp {result.combos[0]?.oos_exp}R · n {result.combos[0]?.n_oos}</div>
-            </div>
-          </div>
-          <div style={{ maxHeight: 170, overflow: 'auto', border: '1px solid var(--t-border)', borderRadius: 6 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
-              <thead>
-                <tr style={{ color: 'var(--t-dim)', textAlign: 'left' }}>
-                  {['Params', 'OOS PF', 'OOS exp', 'nOOS', 'IS PF', 'Score'].map((h) => (
-                    <th key={h} style={{ padding: '3px 6px', position: 'sticky', top: 0, background: 'var(--t-bg2)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {result.combos.slice(0, 12).map((c, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid var(--t-border)', fontVariantNumeric: 'tabular-nums' }}>
-                    <td style={{ padding: '2px 6px' }}>{pStr(c.params)}</td>
-                    <td style={{ padding: '2px 6px', color: pfColor(c.oos_pf), fontWeight: 700 }}>{c.oos_pf}</td>
-                    <td style={{ padding: '2px 6px' }}>{c.oos_exp}</td>
-                    <td style={{ padding: '2px 6px' }}>{c.n_oos}</td>
-                    <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{c.is_pf}</td>
-                    <td style={{ padding: '2px 6px' }}>{c.score}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ fontSize: 9, color: 'var(--t-dim)', marginTop: 6 }}>Universe: {result.universe.join(', ')} · OOS = held-out last 30% by time</div>
-        </>
-      ) : (
-        !running && <div style={dim}>No sweep yet — run one to rank parameter sets by held-out (out-of-sample) performance.</div>
-      )}
-    </SectionCard>
-  );
-}
 
 const getSignalStatus = (s: ScalpingSignal) => {
   if (s.direction === 'long' || s.direction === 'short') {
@@ -2186,7 +2116,7 @@ export function ScalpingTab() {
       centerHeader={<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Scalping</span>
+            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Sterling Engine</span>
             
             <span style={{
               fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: cfg?.use_optimized ? 'var(--t-blue)' : 'var(--t-text)', whiteSpace: 'nowrap',
@@ -2317,39 +2247,50 @@ export function ScalpingTab() {
               </div>
             )}
             {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
-            {data && displaySignals.length === 0 && (
-              <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>
-                {statusFilter === 'ready' ? 'No ready signals — clear the filter to see all.' : 'No signals on this data source.'}
+            <div style={card}>
+              <div style={cardHead}>
+                <span>SPOT · INDEX </span>
+                <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0 }}>
+                  underlying directional algorithms
+                  {stratFilter !== 'all' ? ` · ${stratFilter}` : ''}
+                </span>
+                <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--t-dim)' }}>
+                  {displaySignals.length} active
+                </span>
               </div>
-            )}
-            
-            {displaySignals.length > 0 && (
-              <>
-                <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
-                
-                {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                {executedSignals.length > 0 && (
-                  <ConsolidatedRow count={executedSignals.length} {...consolidated} />
-                )}
-                
-                {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                
-                {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
-              </>
-            )}
-            {data && displaySignals.length > 0 && (
-              <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4 }}>
-                <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
-              </div>
-            )}
+              
+              {data && displaySignals.length === 0 ? (
+                <div style={{ padding: 24, fontSize: 10, color: 'var(--t-dim)', textAlign: 'center' }}>
+                  {statusFilter === 'ready' ? 'No ready signals — clear the filter to see all.' : 'No spot signals on this data source.'}
+                </div>
+              ) : (
+                <div style={{ ...cardBody, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
+                  
+                  {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                  {executedSignals.length > 0 && (
+                    <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+                  )}
+                  
+                  {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                  
+                  {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
+                  {data && displaySignals.length > 0 && (
+                    <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4, marginTop: 4 }}>
+                      <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Phase 4 + auto-exec: two parallel derivatives tables (futures
                 + options) populated by the background scanner. EXECUTE
                 is manual when algo is OFF; the scanner auto-fires per
                 strategy profile when algo is ON. */}
             <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-              <FuturesCandidatesTable />
-              <OptionsCandidatesTable />
+              <FuturesCandidatesTable strategy={stratFilter !== 'all' ? stratFilter : undefined} />
+              <OptionsCandidatesTable strategy={stratFilter !== 'all' ? stratFilter : undefined} />
             </div>
           </div>
       }
@@ -2394,11 +2335,7 @@ export function ScalpingTab() {
               onSave={(c) => setCfg.mutate(c)}
             />
           )}
-          {cfg && (
-            <OptimizePanel
-              cfg={cfg}
-            />
-          )}
+
           <StrategyCatalogPanel />
           <EdgeGatePanel />
           <ScalpBacktestPanel initialUnderlying={btUnderlying} />

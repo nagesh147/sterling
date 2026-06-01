@@ -210,6 +210,7 @@ or directly against the `derivatives_audit` SQLite table.
 
 ## See also
 
+- `DERIVATIVES_FAQ.md` — engine FAQ & behind-the-scenes mathematical logic.
 - `RUNBOOK_DERIVATIVES.md` — operator manual intervention paths.
 - `.claude/plans/nifty-honking-pudding.md` — the full implementation
   plan (Phases 0–6).

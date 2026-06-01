@@ -1,6 +1,6 @@
 """Trailing-stop engine — active for every monitored position (scalping included).
 
-`TrailingStopEngine.update` implements an ATR / percentage / supertrend trailing
+`TrailingStopEngine.update` implements an ATR / percentage / supertrend / hybrid trailing
 stop with a breakeven lock and a monotonic ratchet (the stop only ever moves in
 the trade's favour). It is wired in three places:
   • `add_position` attaches a `TrailState` at entry (scalping positions use the
@@ -66,6 +66,7 @@ class TrailState:
     # lock profit by R-multiple. 0 ⇒ unknown (legacy snapshot): fall back to the
     # distance-based breakeven.
     initial_risk: float = 0.0
+    timeframe: str = "intraday"
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -75,7 +76,11 @@ class TrailState:
     @classmethod
     def from_json(cls, s: str) -> "TrailState":
         d = json.loads(s)
-        d["mode"] = TrailMode(d["mode"])
+        try:
+            d["mode"] = TrailMode(d.get("mode", "atr"))
+        except ValueError:
+            d["mode"] = TrailMode.ATR
+            
         # Back-compat: older snapshots may lack newer fields
         d.setdefault("partial_25_pct", 0.10)
         d.setdefault("partial_50_pct", 0.20)
@@ -83,6 +88,7 @@ class TrailState:
         d.setdefault("structure_dte", None)
         d.setdefault("tp1_triggered", False)
         d.setdefault("initial_risk", 0.0)
+        d.setdefault("timeframe", "intraday")
         return cls(**d)
 
 
@@ -104,7 +110,7 @@ class TrailUpdate:
 
 
 class TrailingStopEngine:
-    """ATR/%/supertrend trailing stop with breakeven and a monotonic ratchet."""
+    """ATR/%/supertrend/hybrid trailing stop with breakeven and a monotonic ratchet."""
 
     def update(
         self,
@@ -115,22 +121,14 @@ class TrailingStopEngine:
         entry_price: float,
         mode: TradingModeConfig,
         initial_tp: Optional[float] = None,
+        is_options: bool = False,
+        iv_change: float = 0.0,
+        theta_burn_high: bool = False,
+        total_gex: Optional[float] = None,
     ) -> TrailUpdate:
         """ATR (or %/supertrend) trailing stop with a monotonic ratchet plus
         R-multiple profit locking — the stop only ever moves in the trade's
         favour, never loosens.
-
-        • Track the best price seen (highest for longs, lowest for shorts) and
-          trail `trail_mult × ATR` (or %·price) behind it.
-        • Progressive tightening: once the trade is up ≥ 1R the trail narrows to
-          0.75×, and ≥ 2R to 0.5×, so paper profit is given less room to bleed
-          back the further the move runs.
-        • Stepped profit locks (needs `state.initial_risk`): pull the stop to
-          breakeven at +1R, lock +1R at +2R, lock +2R at +3R — a winner can't
-          round-trip to a loss, and a big winner banks guaranteed R. Falls back
-          to the legacy "breakeven after one trail distance" when initial_risk
-          is unknown (old snapshots).
-        • `stopped_out` when the live price has reached the (ratcheted) stop.
 
         Active for every monitored position (scalping included): `add_position`
         attaches a TrailState and the background monitor calls this each poll.
@@ -152,10 +150,20 @@ class TrailingStopEngine:
         atr = sum(trs) / len(trs) if trs else 0.0
 
         mult = state.trail_mult or getattr(mode, "trail_atr_mult", 2.0) or 2.0
+        
+        # Adjust base trail depending on mode
         if state.mode == TrailMode.PERCENTAGE:
             trail_dist = price * (mult / 100.0)
         else:
+            # Default or ATR/Hybrid
             trail_dist = mult * atr if atr > 0 else price * 0.01
+            
+            # Hybrid base-trail enhancement if explicitly set or we assume options need it
+            if is_options and getattr(state.mode, "value", "") == "hybrid":
+                # Wider trail during high IV (IV factor logic placeholder)
+                iv_factor = 0.0 if not iv_change else min(0.3, max(-0.3, iv_change))
+                trail_dist = trail_dist * (1 + iv_factor)
+
         if trail_dist <= 0:
             trail_dist = price * 0.01
 
@@ -164,26 +172,72 @@ class TrailingStopEngine:
         profit = (price - entry_price) if is_long else (entry_price - price)
         r_mult = (profit / risk) if risk > 0 else 0.0
 
-        # Progressive tightening: give a fresh trade room, squeeze a maturing one.
+        # Timeframe Adaptive Logic for Progressive Tightening
+        squeeze_factor = 1.0
         if risk > 0:
-            if r_mult >= 2.0:
-                trail_dist *= 0.5
-            elif r_mult >= 1.0:
-                trail_dist *= 0.75
+            if state.timeframe in ("scalping", "intraday"):
+                if r_mult >= 3.0: squeeze_factor = 0.35
+                elif r_mult >= 2.0: squeeze_factor = 0.5
+                elif r_mult >= 1.0: squeeze_factor = 0.7
+                elif r_mult >= 0.5: squeeze_factor = 0.9
+            elif state.timeframe in ("overnight", "positional"):
+                if r_mult >= 3.0: squeeze_factor = 0.3
+                elif r_mult >= 2.0: squeeze_factor = 0.45
+                elif r_mult >= 1.0: squeeze_factor = 0.65
+                elif r_mult >= 0.5: squeeze_factor = 0.85
+            else: # swing
+                if r_mult >= 3.0: squeeze_factor = 0.25
+                elif r_mult >= 2.0: squeeze_factor = 0.4
+                elif r_mult >= 1.0: squeeze_factor = 0.6
+                elif r_mult >= 0.5: squeeze_factor = 0.8
+                
+        trail_dist *= squeeze_factor
 
-        # Stepped profit lock — the floor the stop is pulled up to (down for shorts).
-        # Uses R when known; else legacy "breakeven once price runs one trail dist".
+        # ── Options specific guards ─────────────────────────────────────────
+        if is_options:
+            if abs(iv_change) > 0.15: # IV crush or explosion implies volatility regime switch, tighten
+                trail_dist *= 0.6
+            if theta_burn_high:
+                trail_dist *= 0.75
+                
+            # GEX Trailing Guard
+            if total_gex is not None:
+                if total_gex > 50_000:
+                    # Positive GEX (pinning regime) -> tighter squeeze
+                    trail_dist *= 0.80
+                elif total_gex < -50_000:
+                    # Negative GEX (momentum regime) -> widen trail to ride
+                    trail_dist *= 1.25
+
+        # ── Stepped profit lock — the floor the stop is pulled up to ────────
         lock: Optional[float] = None
         if risk > 0:
             if r_mult >= 1.0:
                 lock = entry_price                       # breakeven at +1R
                 state.breakeven_set = True
-            if r_mult >= 2.0:
-                step = entry_price + risk if is_long else entry_price - risk
-                lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
-            if r_mult >= 3.0:
-                step = entry_price + 2 * risk if is_long else entry_price - 2 * risk
-                lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+            
+            # Additional locks depending on timeframe to allow intermediate scale-outs
+            if state.timeframe in ("scalping", "intraday"):
+                if r_mult >= 2.0:
+                    step = entry_price + risk if is_long else entry_price - risk
+                    lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+                if r_mult >= 3.0:
+                    step = entry_price + 2.0 * risk if is_long else entry_price - 2.0 * risk
+                    lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+            elif state.timeframe in ("overnight", "positional"):
+                if r_mult >= 2.0:
+                    step = entry_price + 1.25 * risk if is_long else entry_price - 1.25 * risk
+                    lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+                if r_mult >= 3.0:
+                    step = entry_price + 2.0 * risk if is_long else entry_price - 2.0 * risk
+                    lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+            else: # swing
+                if r_mult >= 2.0:
+                    step = entry_price + 1.5 * risk if is_long else entry_price - 1.5 * risk
+                    lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
+                if r_mult >= 3.0:
+                    step = entry_price + 2.5 * risk if is_long else entry_price - 2.5 * risk
+                    lock = (max(lock, step) if is_long else min(lock, step)) if lock is not None else step
         else:
             ran_one_dist = (price >= entry_price + trail_dist) if is_long else (price <= entry_price - trail_dist)
             if not state.breakeven_set and ran_one_dist:
@@ -218,9 +272,24 @@ class TrailingStopEngine:
             stopped = price >= new_stop
 
         state.current_stop = round(float(new_stop), 6)
+        
+        # Evaluate partial scale-out
+        partial_exit = None
+        if r_mult >= 2.0 and not state.partial_50_done:
+            partial_exit = PartialExitSignal(
+                close_pct=30, 
+                new_trail_mult=None, 
+                reason="2R Scale Out", 
+                partial_ratio=0.30
+            )
+            state.partial_50_done = True
+        elif r_mult >= 1.5 and not state.tp1_triggered:
+            # 1.5R intermediate lock without closing
+            state.tp1_triggered = True
+
         return TrailUpdate(
             new_stop=state.current_stop,
-            partial=None,
+            partial=partial_exit,
             stopped_out=bool(stopped),
             stop_moved=moved,
             current_tp=initial_tp,

@@ -93,19 +93,41 @@ def solve_futures(
 def solve_options(
     *, direction: str, entry_spot: float, stop_spot: float, target_spot: float,
     premium_now: float, premium_at_tp: float, premium_at_sl: float,
-    premium_floor_pct: float = 0.50,
+    premium_floor_pct: float = 0.50, expected_hold_days: float = 0.0,
+    current_iv: float = 0.0, entry_iv: float = 0.0,
 ) -> SLTPResolution:
     """Spot SL/TP pass through unchanged; option SL/TP premium derives
     from BSM (caller already computed via time_shifted_revaluation)
     with a floor at `premium_floor_pct × premium_now` so noise can't
     trigger.
+    
+    Hybrid Approach:
+    Monitors both option premium and underlying. Trigger SL if either:
+    - Option mark drops to SL_premium.
+    - Underlying hits invalidation (stop_spot).
     """
     if premium_now <= 0:
         return SLTPResolution(ok=False, stop_loss=None, take_profit=None,
                                reason="bsm_no_premium")
 
-    sl_premium = max(premium_at_sl, premium_floor_pct * premium_now)
+    # Add a 10-20% buffer for slippage/theta over the BSM SL
+    buffer = 1.10
+    
+    # Dynamic IV bump: pad the SL if in high vol regime
+    if current_iv > 0.60:
+        buffer = 1.20 # assume a harsher crush
+        
+    sl_premium = max(premium_at_sl * buffer, premium_floor_pct * premium_now)
     tp_premium = premium_at_tp
+
+    # Extra Guards: IV Crush & Theta
+    if entry_iv > 0 and current_iv > 0:
+        iv_drop_pct = (entry_iv - current_iv) / entry_iv
+        if iv_drop_pct > 0.15: # IV drops > 15%
+            sl_premium = max(sl_premium * 1.20, premium_floor_pct * premium_now)
+            
+    if expected_hold_days > 1.0: # > 24h holds
+        sl_premium = max(sl_premium * 1.15, premium_floor_pct * premium_now)
 
     risk_pct = abs(entry_spot - stop_spot) / entry_spot * 100 if entry_spot else 0.0
     rr = (premium_at_tp - premium_now) / max(1e-9, premium_now - sl_premium)
@@ -113,6 +135,6 @@ def solve_options(
     return SLTPResolution(
         ok=True, stop_loss=stop_spot, take_profit=target_spot,
         sl_premium=round(sl_premium, 4), tp_premium=round(tp_premium, 4),
-        tp_source="bsm_at_exit_T", rr=round(rr, 3), risk_pct=risk_pct,
+        tp_source="bsm_at_exit_T_hybrid", rr=round(rr, 3), risk_pct=risk_pct,
         reason="ok",
     )

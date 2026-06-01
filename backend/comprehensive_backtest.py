@@ -25,19 +25,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Single source of truth — the live edge feed imports the same functions.
 from app.engines.edge.strategies import SIGNAL_FNS, resample  # noqa: E402
+from app.engines.edge.registry import PROFILE_ATR as PROFILES # noqa: E402
 
 warnings.filterwarnings("ignore")
 
 STARTING_CAPITAL = 500.0
 FEE_ROUND_TRIP = 0.001  # 0.1% (Delta India taker ~0.05% per side)
 MAX_HOLD_BARS = 200      # time-stop if no SL/TP hit
-
-# --- Profiles: SL/TP risk style (decoupled from TF so we can mix & match)
-PROFILES = {
-    "Scalping":   {"atr_sl": 1.0, "atr_tp": 2.0},   # tight, quick scalps
-    "Intraday":   {"atr_sl": 2.0, "atr_tp": 3.5},   # balanced
-    "Aggressive": {"atr_sl": 1.5, "atr_tp": 4.5},   # let winners run
-}
 
 TIMEFRAMES = [("1min", "1m"), ("5min", "5m"), ("15min", "15m"),
               ("30min", "30m"), ("1h", "1h"), ("4h", "4h")]
@@ -48,7 +42,7 @@ BARS_PER_YEAR = {
     "30m": 17_520, "1h": 8_760,   "4h": 2_190,
 }
 
-STRATEGIES = ["ma_crossover", "mean_reversion", "breakout", "price_action", "smc"]
+STRATEGIES = list(SIGNAL_FNS.keys())
 
 
 # Signal generators + resample now live in app/engines/edge/strategies.py
