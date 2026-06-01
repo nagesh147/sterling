@@ -129,6 +129,47 @@ class LiquidityScore(BaseModel):
     floor_breach_reason: str = ""
 
 
+# ── Multi-leg structures (Phase 2b defined-risk) ──────────────────────
+
+
+class StructureLeg(BaseModel):
+    """One leg of a multi-leg options structure."""
+    option_symbol: Optional[str] = None
+    option_type: str                                # "call" | "put"
+    side: str                                       # "buy" | "sell"
+    strike: float
+    expiry: Optional[str] = None
+    dte: Optional[int] = None
+    ratio: int = 1                                  # contracts for this leg (relative)
+    premium: float = 0.0                            # per-contract entry premium (mark/mid)
+    delta: float = 0.0
+    gamma: float = 0.0
+    vega: float = 0.0
+    theta: float = 0.0
+
+
+class DerivativesStructure(BaseModel):
+    """A multi-leg defined-risk structure (vertical / iron condor).
+
+    Economics are computed by `derivatives_native.structures.compute_economics`
+    and stored here; `net_premium_usd` > 0 = net debit paid, < 0 = net credit
+    received. `max_loss_usd` / `max_profit_usd` are positive magnitudes."""
+    structure_type: str                             # "debit_vertical"|"credit_vertical"|"iron_condor"
+    underlying: str
+    direction: str                                  # "long"|"short"|"neutral"
+    legs: list[StructureLeg] = Field(default_factory=list)
+    contracts: float = 1.0
+    net_premium_usd: float = 0.0
+    max_loss_usd: float = 0.0
+    max_profit_usd: float = 0.0
+    breakevens: list[float] = Field(default_factory=list)
+
+    def summary(self) -> str:
+        parts = [f"{l.side} {l.ratio}x {l.option_type} {l.strike:g}" for l in self.legs]
+        return (f"{self.structure_type} [{' / '.join(parts)}] "
+                f"maxLoss=${self.max_loss_usd:,.0f} maxProfit=${self.max_profit_usd:,.0f}")
+
+
 # ── Output ────────────────────────────────────────────────────────────
 
 
@@ -149,6 +190,7 @@ class DerivativesCandidate(BaseModel):
     underlying: str
     option_symbol: Optional[str] = None             # set when options
     option_type: Optional[str] = None               # "call" | "put"
+    structure: Optional[DerivativesStructure] = None  # set for multi-leg defined-risk (2b)
     strike: Optional[float] = None
     expiry: Optional[str] = None                    # DDMMYY when options
     dte: Optional[int] = None

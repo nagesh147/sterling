@@ -195,6 +195,35 @@ def engine_client(monkeypatch):
     return TestClient(api)
 
 
+from app.engines.derivatives.schemas import (
+    DerivativesCandidate, DerivativesStructure, StructureLeg,
+)
+
+
+class TestStructureSchema:
+    def test_structure_holds_legs_and_economics(self):
+        legs = [
+            StructureLeg(option_type="call", side="buy", strike=50000, premium=1200, ratio=1),
+            StructureLeg(option_type="call", side="sell", strike=52000, premium=600, ratio=1),
+        ]
+        s = DerivativesStructure(
+            structure_type="debit_vertical", underlying="BTC", direction="long",
+            legs=legs, contracts=2.0, net_premium_usd=1200.0,
+            max_loss_usd=1200.0, max_profit_usd=2800.0, breakevens=[50600.0])
+        assert len(s.legs) == 2
+        assert s.max_loss_usd == 1200.0
+        assert "debit_vertical" in s.summary()
+
+    def test_candidate_accepts_structure(self):
+        s = DerivativesStructure(
+            structure_type="iron_condor", underlying="BTC", direction="neutral", legs=[])
+        cand = DerivativesCandidate(
+            instrument_type="options", underlying="BTC", entry_price=50000,
+            direction="neutral", contracts=1.0, structure=s)
+        assert cand.structure is not None
+        assert cand.structure.structure_type == "iron_condor"
+
+
 class TestEngineConfigEndpoints:
     def test_get_and_post_engine_config(self, engine_client):
         r = engine_client.get("/api/v1/derivatives/config/engine")
