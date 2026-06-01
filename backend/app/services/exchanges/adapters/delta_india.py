@@ -854,27 +854,22 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         seen: set = set()
         items: List[dict] = []
 
-        # Fetch call and put tickers using singular contract_type param (array form → 500)
-        for ct in ("call_options", "put_options"):
-            try:
-                data = await self._public_get("/v2/tickers",
-                                              params={"contract_type": ct, "page_size": 500})
-                rows = (data or {}).get("result") or []
-                if not isinstance(rows, list):
-                    continue
+        try:
+            params = {
+                "contract_types": "call_options,put_options",
+                "underlying_asset_symbols": ul
+            }
+            data = await self._public_get("/v2/tickers", params=params)
+            rows = (data or {}).get("result") or []
+            if isinstance(rows, list):
                 for row in rows:
                     sym = str(row.get("symbol") or "")
                     if sym in seen:
                         continue
-                    ua_sym = str(row.get("underlying_asset_symbol") or "")
-                    # Filter to this underlying — Delta symbol format: C-BTC-79400-050526
-                    if (ua_sym.upper() == ul.upper()
-                            or sym.startswith(f"C-{ul.upper()}-")
-                            or sym.startswith(f"P-{ul.upper()}-")):
-                        seen.add(sym)
-                        items.append(row)
-            except Exception as exc:
-                log.debug("Delta option tickers fetch (%s, %s): %s", ul, ct, exc)
+                    seen.add(sym)
+                    items.append(row)
+        except Exception as exc:
+            log.debug("Delta option tickers fetch (%s): %s", ul, exc)
 
         if not items:
             log.info("Delta option chain: no items for %s (options may not be live)", ul)
