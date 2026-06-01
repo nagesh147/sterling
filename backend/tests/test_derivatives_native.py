@@ -27,7 +27,8 @@ class TestEngineConfig:
 
     def test_alpha_sources_constant(self):
         assert ALPHA_SOURCES == {
-            "directional_futures", "vrp_voltiming", "skew_put", "gex_pinning"}
+            "directional_futures", "directional_options",
+            "vrp_voltiming", "skew_put", "gex_pinning"}
 
 
 from app.engines.derivatives_native.config import get_engine_config, set_engine_config
@@ -451,6 +452,41 @@ class TestNativeLongOptionsLive:
         assert c.structure is None
         assert c.option_type == "put"
         assert c.option_symbol and c.option_symbol.startswith("P-")
+
+
+class TestDirectionalOptionsSource:
+    def test_directional_options_is_known_source(self):
+        from app.engines.derivatives_native.config import ALPHA_SOURCES
+        assert "directional_options" in ALPHA_SOURCES
+
+    def test_long_only_buys_call(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["directional_options"],
+            risk_posture=RiskPosture.LONG_ONLY)
+        dual = native_engine.decide_both(
+            signal=_signal(direction="long"), market=_market(ivr=20.0),
+            chain=_chain_btc(), config=cfg)
+        assert dual.options is not None and dual.options.status == DecisionStatus.OK
+        c = dual.options.chosen
+        assert c.structure is None and c.option_type == "call"
+
+    def test_long_only_short_signal_buys_put(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["directional_options"],
+            risk_posture=RiskPosture.LONG_ONLY)
+        dual = native_engine.decide_both(
+            signal=_short_signal(), market=_market(ivr=20.0),
+            chain=_chain_btc(), config=cfg)
+        assert dual.options.chosen.option_type == "put"
+
+    def test_defined_risk_builds_debit_vertical(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["directional_options"],
+            risk_posture=RiskPosture.DEFINED_RISK)
+        dual = native_engine.decide_both(
+            signal=_signal(direction="long"), market=_market(ivr=20.0),
+            chain=_chain_btc(), config=cfg)
+        assert dual.options.chosen.structure.structure_type == "debit_vertical"
 
 
 class TestStructureRow:

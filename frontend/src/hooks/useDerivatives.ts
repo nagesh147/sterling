@@ -290,6 +290,7 @@ export type EngineMode = 'routing_gate' | 'native';
 export type RiskPosture = 'long_only' | 'defined_risk' | 'naked';
 export type AlphaSource =
   | 'directional_futures'
+  | 'directional_options'
   | 'vrp_voltiming'
   | 'skew_put'
   | 'gex_pinning';

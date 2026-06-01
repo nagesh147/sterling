@@ -94,6 +94,7 @@ const SelectRow: React.FC<{ label: string; value: string; defaultVal?: string; o
 
 const ALPHA_SOURCE_LABELS: Record<AlphaSource, string> = {
   directional_futures: 'Directional (futures)',
+  directional_options: 'Directional (long options)',
   vrp_voltiming: 'VRP / vol-timing',
   skew_put: 'Skew (put-side)',
   gex_pinning: 'GEX / pinning',

@@ -20,7 +20,13 @@ class RiskPosture(str, Enum):
     NAKED = "naked"                 # + short options (Phase 2d, opt-in)
 
 
-ALPHA_SOURCES = {"directional_futures", "vrp_voltiming", "skew_put", "gex_pinning"}
+ALPHA_SOURCES = {
+    "directional_futures",   # express direction in futures (default)
+    "directional_options",   # express direction by BUYING calls/puts (single-leg long)
+    "vrp_voltiming",         # sell/buy vol vs realized (defined-risk in 2b)
+    "skew_put",              # harvest put-side skew
+    "gex_pinning",           # dealer-gamma/pinning overlay
+}
 
 
 class DerivativesEngineConfig(BaseModel):

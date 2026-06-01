@@ -125,7 +125,7 @@ def decide_both(
             )
 
     # ── Options leg (long premium only in 2a) ─────────────────────────────
-    if (sources & {"vrp_voltiming", "skew_put"}) and chain:
+    if (sources & {"vrp_voltiming", "skew_put", "directional_options"}) and chain:
         if cfg.risk_posture == RiskPosture.NAKED:
             # Naked is gated on a RICH vol regime (high IV-rank). Otherwise we do
             # NOT sell cheap vol naked — fall back to defined-risk.
