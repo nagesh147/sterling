@@ -34,6 +34,16 @@ from app.engines.scalping.schemas import (
 router = APIRouter(prefix="/scalping", tags=["scalping"])
 
 
+def _contracts_from_units(size_units: float, contract_value: float) -> int:
+    """Convert a coin-denominated position (size_units, in whole coins) into the
+    number of whole EXCHANGE lots. `contract_value` is the size of one lot in the
+    underlying (Delta India perps: BTC=0.001, ETH=0.01, SOL=1). A 0.42 ETH target
+    is 0.42 / 0.01 = 42 lots — the old `int(round(size_units))` floored it to 0 and
+    rejected the trade. Returns 0 when the position is below one whole lot."""
+    cv = contract_value if contract_value and contract_value > 0 else 1.0
+    return max(0, int(round(size_units / cv)))
+
+
 # ─── config ────────────────────────────────────────────────────────────────
 
 
@@ -510,23 +520,39 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
                 timestamp_ms=int(time.time() * 1000),
             )
 
+    # Exchange lot size for this perp — converts the coin-sized target into whole
+    # exchange lots (Delta India: ETH=0.01, BTC=0.001, SOL=1). Falls back to 1.0
+    # (coin == lot) when the adapter can't supply it, so sizing never mis-fires.
+    contract_value = 1.0
+    try:
+        _ad = getattr(request.app.state, "adapter", None)
+        _get_cv = getattr(_ad, "get_contract_value", None)
+        if _get_cv is not None:
+            _inst = registry.get_instrument(sym)
+            _delta_sym = (_inst.delta_perp_symbol if _inst else None) or f"{sym}USD"
+            contract_value = float(await _get_cv(_delta_sym)) or 1.0
+    except Exception as _cv_exc:
+        logger.debug("scalp-exec %s: contract_value lookup failed (%s) — using 1.0", sym, _cv_exc)
+
     risk_dist = abs(sig.entry - sig.stop_loss)
     if risk_dist <= 0:
         risk_dist = sig.entry * 0.02
     risk_usd = strat_cfg.account_equity * (strat_cfg.risk_percent / 100)
-    size_units = risk_usd / risk_dist if risk_dist > 0 else 0
-    contracts = max(0, int(round(size_units)))
+    size_units = risk_usd / risk_dist if risk_dist > 0 else 0   # target coin quantity
+    contracts = _contracts_from_units(size_units, contract_value)  # whole exchange lots
+    qty = contracts * contract_value                              # coins actually placed
     if contracts < 1:
-        logger.info("scalp-exec %s/%s -> size_too_small (%.4f units, equity=%s risk%%=%s)",
-                    sym, strategy, size_units, strat_cfg.account_equity, strat_cfg.risk_percent)
+        logger.info("scalp-exec %s/%s -> size_too_small (%.4f coins / cv=%s = %.3f lots, equity=%s risk%%=%s)",
+                    sym, strategy, size_units, contract_value, size_units / (contract_value or 1.0),
+                    strat_cfg.account_equity, strat_cfg.risk_percent)
         return ScalpingExecuteResponse(
             accepted=False, mode="paper", underlying=sym, strategy=strategy,
             direction=sig.direction, size_units=size_units, notional_usd=size_units * sig.entry,
-            status="size_too_small", reason="sized below 1 contract",
+            status="size_too_small", reason="sized below one exchange lot",
             timestamp_ms=int(time.time() * 1000),
         )
 
-    leverage = max(1.0, min((size_units * sig.entry) / max(1, strat_cfg.account_equity * (strat_cfg.max_position_pct / 100)), 25))
+    leverage = max(1.0, min((qty * sig.entry) / max(1, strat_cfg.account_equity * (strat_cfg.max_position_pct / 100)), 25))
 
     # Tag the placer (algo auto-exec vs manual click) into the notes so the UI can
     # consistently show "AUTO · <MODE>" on every reconstructed row, not just the
@@ -603,9 +629,17 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     if selector_audit_id:
         notes += f" [DERIV-aid={selector_audit_id[:8]}]"
 
+    # Legacy futures path sizes in exchange lots, so carry the lot size through to
+    # the paper/live valuation. The selector path returns its OWN contract count
+    # (options/futures with its own semantics) — keep cv=1.0 there, unchanged.
+    order_contract_value = 1.0 if selector_route_used else contract_value
+    # Coin quantity actually being placed = order size (lots) × lot size. Used for
+    # honest notional reporting on both the legacy-futures and selector paths.
+    report_qty = float(selector_size) * order_contract_value
+
     order = LiveOrderRequest(
         underlying=sym, direction=sig.direction, instrument_type=selector_inst_type,
-        size=selector_size, leverage=selector_leverage,
+        size=selector_size, contract_value=order_contract_value, leverage=selector_leverage,
         order_type="market", stop_loss=selector_sl, take_profit=selector_tp,
         option_symbol=selector_option_symbol,
         notes=notes,
@@ -641,7 +675,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
                     "stop_loss": sig.stop_loss,
                     "take_profit": sig.take_profit,
                     "status": resp.status,
-                    "notional_usd": round(contracts * sig.entry, 2),
+                    "notional_usd": round(report_qty * sig.entry, 2),
                 }
             )
         )
@@ -649,8 +683,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     return ScalpingExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
         mode=resp.mode, underlying=sym, strategy=strategy,
-        direction=sig.direction, size_units=float(contracts),
-        notional_usd=round(contracts * sig.entry, 2),
+        direction=sig.direction, size_units=round(report_qty, 6),
+        notional_usd=round(report_qty * sig.entry, 2),
         entry_price=resp.entry_price, stop_loss=sig.stop_loss,
         take_profit=sig.take_profit,
         tp_source=getattr(sig, 'tp_source', ''),

@@ -513,15 +513,23 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
 
 class _ConfigResponse(BaseModel):
     profiles: dict[str, StrategyDerivativesProfile]
+    defaults: dict[str, StrategyDerivativesProfile]
 
 
 class _ConfigPatchRequest(BaseModel):
     profile: StrategyDerivativesProfile
 
 
+class _ConfigPatchGlobalRequest(BaseModel):
+    enabled: Optional[bool] = None
+    auto_execute_futures: Optional[bool] = None
+    auto_execute_options: Optional[bool] = None
+
+
 @router.get("/config", response_model=_ConfigResponse)
 async def get_config(request: Request) -> _ConfigResponse:
-    return _ConfigResponse(profiles=_profile_overrides(request.app))
+    from app.engines.derivatives.profiles import DEFAULT_PROFILES
+    return _ConfigResponse(profiles=_profile_overrides(request.app), defaults=DEFAULT_PROFILES)
 
 
 @router.post("/config", response_model=_ConfigResponse)
@@ -540,7 +548,32 @@ async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigRe
     except Exception as e:
         log.warning(f"Failed to persist derivatives_profiles: {e}")
         
-    return _ConfigResponse(profiles=overrides)
+    from app.engines.derivatives.profiles import DEFAULT_PROFILES
+    return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
+
+
+@router.post("/config/global", response_model=_ConfigResponse)
+async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request) -> _ConfigResponse:
+    from app.services.db import set_config
+    import json
+
+    overrides = _profile_overrides(request.app)
+    for p in overrides.values():
+        if body.enabled is not None:
+            p.enabled = body.enabled
+        if body.auto_execute_futures is not None:
+            p.auto_execute_futures = body.auto_execute_futures
+        if body.auto_execute_options is not None:
+            p.auto_execute_options = body.auto_execute_options
+
+    try:
+        dict_overrides = {k: v.model_dump() for k, v in overrides.items()}
+        set_config("derivatives_profiles", json.dumps(dict_overrides))
+    except Exception as e:
+        log.warning(f"Failed to persist derivatives_profiles: {e}")
+        
+    from app.engines.derivatives.profiles import DEFAULT_PROFILES
+    return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
 
 
 # ─── /greeks-budget ────────────────────────────────────────────────────
@@ -588,7 +621,7 @@ async def greeks_budget_state(request: Request) -> dict:
         except Exception:
             spot = float(pos.entry_spot_price or 0.0)
         g = _agg.refresh_position_greeks(pos, current_spot=spot)
-        notional = spot * float(pos.sized_trade.contracts or 0)
+        notional = spot * float(pos.sized_trade.qty or 0)   # qty = lots × lot size (cv)
         per_position.append({
             "id": pos.id, "underlying": ul,
             "instrument_type": pos.sized_trade.structure.structure_type,

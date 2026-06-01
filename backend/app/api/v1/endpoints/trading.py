@@ -21,7 +21,10 @@ class LiveOrderRequest(BaseModel):
     underlying: str
     direction: str              # "long" or "short"
     instrument_type: str        # "futures" or "options"
-    size: float = 1.0           # number of contracts (integer lots)
+    size: float = 1.0           # number of contracts (integer exchange lots)
+    contract_value: float = 1.0 # size of one lot in the underlying (Delta perps:
+                                # BTC=0.001, ETH=0.01, SOL=1). Coin qty = size*cv.
+                                # Defaults to 1.0 → legacy coin-based behavior.
     leverage: float = 5.0       # set via separate leverage API before order
     order_type: str = "market"  # "market" | "limit" | "maker" (limit+post_only)
     limit_price: Optional[float] = None
@@ -498,14 +501,16 @@ def _create_paper_tracking(
         is_live_order = bool(order_id)
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         contracts = max(1, int(body.size))
-        position_value = contracts * entry_price
+        cv = body.contract_value or 1.0
+        qty = contracts * cv              # coin quantity (lots × lot size)
+        position_value = qty * entry_price
         # Real risk = distance to the stop × size — what you actually lose if
         # stopped out — NOT a flat % of notional. The old notional-% formula
         # reported absurd "capital at risk" (e.g. 54% for a 0.5%-risk trade
         # whose only sin was a tight stop). Fall back to the notional estimate
-        # only when no stop is set.
+        # only when no stop is set. `qty` (not raw lots) is what moves with price.
         if body.stop_loss and entry_price > 0:
-            max_risk = abs(entry_price - body.stop_loss) * contracts
+            max_risk = abs(entry_price - body.stop_loss) * qty
         else:
             max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
         capital_at_risk = (max_risk / 100_000.0) * 100.0 if entry_price > 0 else 0.0
@@ -532,6 +537,7 @@ def _create_paper_tracking(
         sized = SizedTrade(
             structure=structure,
             contracts=contracts,
+            contract_value=cv,
             position_value=round(position_value, 2),
             max_risk_usd=round(max_risk, 2),
             capital_at_risk_pct=round(capital_at_risk, 2),
@@ -599,11 +605,13 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
 
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         contracts = max(1, int(body.size))
-        position_value = contracts * spot_price if spot_price > 0 else 0.0
+        cv = body.contract_value or 1.0
+        qty = contracts * cv              # coin quantity (lots × lot size)
+        position_value = qty * spot_price if spot_price > 0 else 0.0
         # Real risk = stop distance × size, not a flat % of notional (see
         # _create_paper_tracking). Fall back to notional estimate only without a stop.
         if body.stop_loss and spot_price > 0:
-            max_risk = abs(spot_price - body.stop_loss) * contracts
+            max_risk = abs(spot_price - body.stop_loss) * qty
         else:
             max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
         capital_at_risk = (max_risk / 100_000.0) * 100.0 if spot_price > 0 else 0.0
@@ -629,6 +637,7 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         sized = SizedTrade(
             structure=structure,
             contracts=contracts,
+            contract_value=cv,
             position_value=round(position_value, 2),
             max_risk_usd=round(max_risk, 2),
             capital_at_risk_pct=round(capital_at_risk, 2),

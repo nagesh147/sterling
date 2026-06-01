@@ -62,12 +62,15 @@ def _estimate_pnl(
     max_gain_usd: Optional[float],
 ) -> float:
     """Net-delta-approximated P&L capped by defined risk bounds."""
-    contracts = sized_trade.contracts
+    # qty = coin quantity = lots × lot size (cv defaults to 1.0, so legacy
+    # coin-based positions are unchanged). Exposure scales with qty, never the
+    # raw exchange lot count — a Delta ETH position of 42 lots × 0.01 is 0.42 ETH.
+    qty = sized_trade.qty
     net_delta = _net_delta(sized_trade)
-    raw = spot_move * direction_sign * contracts * net_delta
+    raw = spot_move * direction_sign * qty * net_delta
     bounded = max(-max_risk_usd, raw)
     if max_gain_usd is not None:
-        bounded = min(max_gain_usd * contracts, bounded)
+        bounded = min(max_gain_usd * qty, bounded)
     return round(bounded, 2)
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
@@ -278,11 +281,11 @@ async def paper_portfolio_greeks():
 
     for pos in open_pos:
         direction_sign = 1 if pos.sized_trade.structure.direction.value == "long" else -1
-        contracts = pos.sized_trade.contracts
+        qty = pos.sized_trade.qty   # coin quantity (cv=1.0 → unchanged for options)
         pos_delta = pos_gamma = pos_vega = pos_theta = 0.0
 
         for leg in pos.sized_trade.structure.legs:
-            n = contracts * direction_sign
+            n = qty * direction_sign
             spot = pos.entry_spot_price
             strike = leg.strike
             dte = max(1, _dte_from_expiry(leg.expiry_date) if _dte_from_expiry(leg.expiry_date) >= 0 else leg.dte)

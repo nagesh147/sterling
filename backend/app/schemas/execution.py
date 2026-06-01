@@ -45,9 +45,22 @@ class SizedTrade(BaseModel):
     position_value: float
     max_risk_usd: float
     capital_at_risk_pct: float
+    # Size of ONE exchange contract in the underlying (Delta India perps:
+    # BTC=0.001, ETH=0.01, SOL=1). `contracts` counts whole exchange lots;
+    # the actual coin quantity is contracts * contract_value. Defaults to 1.0
+    # so every legacy path (options, directional, manual) — where `contracts`
+    # has always meant whole coins — keeps its exact prior value/risk/PnL math.
+    contract_value: float = 1.0
     # TTACE Phase 3: populated when the sizer fails closed (cold-start /
     # unknown edge / kelly<=0). Defaults to None when sized normally.
     blocked_reason: Optional[str] = None
+
+    @property
+    def qty(self) -> float:
+        """Coin quantity this position represents = lots * lot size. Use this
+        (never raw `contracts`) for value / risk / PnL; `contracts` alone is the
+        exchange order size (lot count)."""
+        return self.contracts * self.contract_value
 
 
 class RunOnceResponse(BaseModel):

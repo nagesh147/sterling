@@ -481,7 +481,7 @@ function SignalsScanner({ selected, onSelect, onOpenSettings }: {
         <button onClick={onOpenSettings} title="Strategy settings & backtest" style={{
           fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', padding: '5px 12px', borderRadius: 6, fontFamily: 'inherit',
           cursor: 'pointer', border: '1px solid var(--t-blue)', background: 'var(--t-bg3)', color: 'var(--t-blue)',
-        }}>⚙ SETTINGS</button>
+        }}>⚙ GLOBAL STRATEGY CONFIG</button>
         <DerivativesSettingsButton onClick={onOpenSettings} />
       </div>
 

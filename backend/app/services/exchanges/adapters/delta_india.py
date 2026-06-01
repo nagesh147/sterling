@@ -92,6 +92,9 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
         self._product_id_cache: dict[str, int] = {}
+        # Per-symbol exchange lot size in the underlying (e.g. ETHUSD → 0.01).
+        # Populated lazily from /v2/products alongside the product-id scan.
+        self._contract_value_cache: dict[str, float] = {}
 
         # WebSocket live price cache — populated by _ws_loop, read by get_index_price
         self._ws_prices: dict[str, float] = {}
@@ -374,7 +377,14 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
 
         def _scan(result):
             for p in (result or []):
-                if str(p.get("symbol") or "") == symbol:
+                sym = str(p.get("symbol") or "")
+                cv = p.get("contract_value")
+                if cv is not None:
+                    try:
+                        self._contract_value_cache[sym] = float(cv)
+                    except (TypeError, ValueError):
+                        pass
+                if sym == symbol:
                     return int(p["id"])
             return None
 
@@ -399,6 +409,36 @@ class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
                 return pid
 
         raise RuntimeError(f"Delta product not found for symbol: {symbol}")
+
+    async def get_contract_value(self, symbol: str) -> float:
+        """Exchange lot size for `symbol` in the underlying (ETHUSD → 0.01).
+
+        Returns 1.0 when unknown so callers fall back to coin-based sizing rather
+        than mis-size a trade.
+
+        NOTE: we do NOT defer to get_product_id to warm the cache — in a live
+        process the product_id is usually already cached, so get_product_id
+        early-returns WITHOUT scanning /v2/products and the lot size never lands
+        in the cache (regression: ETH would size_too_small forever). Scan the
+        perps list directly here; one call fills every symbol's lot size."""
+        if symbol in self._contract_value_cache:
+            return self._contract_value_cache[symbol]
+        try:
+            data = await self._public_get(
+                "/v2/products",
+                params={"contract_types": "perpetual_futures", "page_size": 500},
+            )
+            for p in (data or {}).get("result") or []:
+                sym = str(p.get("symbol") or "")
+                cv = p.get("contract_value")
+                if sym and cv is not None:
+                    try:
+                        self._contract_value_cache[sym] = float(cv)
+                    except (TypeError, ValueError):
+                        pass
+        except Exception as exc:
+            log.debug("get_contract_value scan failed for %s: %s", symbol, exc)
+        return self._contract_value_cache.get(symbol, 1.0)
 
     async def set_leverage(self, product_id: int, leverage: float) -> dict:
         """

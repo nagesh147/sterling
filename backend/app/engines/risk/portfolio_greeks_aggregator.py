@@ -350,7 +350,7 @@ async def check_against_budget(
             if chain is not None:
                 iv_override = _live_iv_for_position(pos, chain)
         g = refresh_position_greeks(pos, current_spot=spot_for_pos, iv_override=iv_override)
-        notional = spot_for_pos * float(pos.sized_trade.contracts or 0)
+        notional = spot_for_pos * float(pos.sized_trade.qty or 0)   # qty = lots × lot size (cv)
         # Wrap into the duck-typed shape GreeksBudgetChecker.check reads.
         refreshed.append(_GreeksAndNotional(greeks=g, notional=notional))
 

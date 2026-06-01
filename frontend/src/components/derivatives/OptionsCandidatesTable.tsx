@@ -62,6 +62,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
   const pnl = useDerivativesPositionPnl('options');
   const [toast, setToast] = useState<string>('');
   const [expanded, setExpanded] = useState<string>('');
+  const [tableExpanded, setTableExpanded] = useState<boolean>(true);
 
   const rows = (data?.candidates ?? []).filter((r) => r.instrument_type === 'options');
 
@@ -107,7 +108,11 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
 
   return (
     <div style={card}>
-      <div style={cardHead}>
+      <div 
+        style={{ ...cardHead, cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setTableExpanded(!tableExpanded)}
+      >
+        <span style={{ marginRight: 6, fontSize: 10, color: c.dim }}>{tableExpanded ? '▾' : '▸'}</span>
         <span>DERIVATIVES · OPTIONS</span>
         <span style={{ marginLeft: 8, fontSize: 9, color: c.dim, letterSpacing: 0 }}>
           leveraged execution candidates
@@ -118,6 +123,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
           {isLoading ? 'loading…' : `${rows.length} row${rows.length === 1 ? '' : 's'}`}
         </span>
       </div>
+      {tableExpanded && (
       <div style={{ ...cardBody, padding: 0, overflowX: 'auto' }}>
         {rows.length === 0 ? (
           <div style={{ padding: 24, fontSize: 10, color: c.dim, textAlign: 'center' }}>
@@ -281,6 +287,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
           </table>
         )}
       </div>
+      )}
       {toast && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24, zIndex: 9999,

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
 import { useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
+import { useScalpingConfig, useSetScalpingConfig } from '../hooks/useScalping';
 import { api } from '../utils/api';
 import { useDailyLossConfig, useUpdateDailyLossConfig } from '../hooks/useRiskConfig';
 import { FontPicker } from './FontPicker';
@@ -1078,6 +1079,44 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
         </div>
       )}
     </>
+  );
+}
+
+// ── AI Gatekeeper Toggle (Header) ─────────────────────────────────────────────
+export function AIGatekeeperToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = {}) {
+  const { data, isLoading } = useScalpingConfig();
+  const setConfig = useSetScalpingConfig();
+
+  const enabled = data?.config.use_optimized ?? false;
+  const pending = setConfig.isPending;
+
+  const handleClick = () => {
+    if (!data?.config) return;
+    setConfig.mutate({
+      ...data.config,
+      use_optimized: !enabled,
+    });
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={pending || isLoading}
+      title={enabled ? 'AI Gatekeeper ON — Institutional WFO Active' : 'AI Gatekeeper OFF — Retail Mode Active'}
+      style={{
+        ...chipStyle,
+        background: enabled ? 'var(--t-blue)11' : (chipStyle?.background ?? 'var(--t-bg2)'),
+        color: enabled ? 'var(--t-blue)' : (chipStyle?.color ?? 'var(--t-dim)'),
+        border: enabled
+          ? '1px solid var(--t-blue)44'
+          : `1px solid ${(chipStyle as any)?.borderColor ?? 'var(--t-border)'}`,
+        cursor: pending ? 'wait' : 'pointer',
+        opacity: pending ? 0.6 : 1,
+        transition: 'all 0.15s',
+      }}
+    >
+      {pending ? '…' : enabled ? '● AI Gatekeeper ON' : '○ AI Gatekeeper OFF'}
+    </button>
   );
 }
 

@@ -231,7 +231,7 @@ export function useDerivativesPreview(args: PreviewArgs | null) {
 }
 
 export function useDerivativesConfig() {
-  return useQuery<{ profiles: Record<string, StrategyDerivativesProfile> }>({
+  return useQuery<{ profiles: Record<string, StrategyDerivativesProfile>; defaults: Record<string, StrategyDerivativesProfile> }>({
     queryKey: ['derivatives', 'config'],
     queryFn: () => api.get('/api/v1/derivatives/config'),
   });
@@ -241,9 +241,24 @@ export function usePatchDerivativesProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ strategy, profile }: { strategy: string; profile: StrategyDerivativesProfile }) =>
-      api.post<{ profiles: Record<string, StrategyDerivativesProfile> }>(
+      api.post<{ profiles: Record<string, StrategyDerivativesProfile>; defaults: Record<string, StrategyDerivativesProfile> }>(
         '/api/v1/derivatives/config',
         { profile: { ...profile, strategy } }
+      ),
+    onSuccess: (data) => {
+      qc.setQueryData(['derivatives', 'config'], data);
+      qc.invalidateQueries({ queryKey: ['derivatives', 'candidates'] });
+    },
+  });
+}
+
+export function usePatchDerivativesGlobal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { enabled?: boolean; auto_execute_futures?: boolean; auto_execute_options?: boolean }) =>
+      api.post<{ profiles: Record<string, StrategyDerivativesProfile>; defaults: Record<string, StrategyDerivativesProfile> }>(
+        '/api/v1/derivatives/config/global',
+        patch
       ),
     onSuccess: (data) => {
       qc.setQueryData(['derivatives', 'config'], data);

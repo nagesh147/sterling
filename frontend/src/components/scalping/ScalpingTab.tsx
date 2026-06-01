@@ -6,6 +6,7 @@ import { DerivativesPanel } from '../derivatives/DerivativesPanel';
 import { EdgeGatePanel } from '../derivatives/EdgeGatePanel';
 import { StrategyCatalogPanel } from '../derivatives/StrategyCatalogPanel';
 import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
+import { useDerivativesConfig, usePatchDerivativesGlobal } from '../../hooks/useDerivatives';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
@@ -274,9 +275,6 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
         }}>{saving ? 'SAVING…' : dirty ? 'APPLY' : 'SAVED'}</button>
       </span>
     }>
-      <div style={{ ...dim, marginBottom: 12, lineHeight: 1.6 }}>
-        <b style={{ color: 'var(--t-bright)' }}>Active Tracks:</b> Toggle which profiles the scanner should run concurrently. Then select a tab below to tune its individual constraints (timeframes, risk, strategies).
-      </div>
       <div style={{ 
         background: draft.use_optimized ? 'var(--t-blue)14' : 'var(--t-amber)14', 
         border: `1px solid ${draft.use_optimized ? 'var(--t-blue)44' : 'var(--t-amber)44'}`, 
@@ -323,7 +321,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
             border: `1px solid ${activeTab === p ? 'var(--t-blue)' : 'var(--t-border)'}`,
             background: activeTab === p ? 'var(--t-bg3)' : 'transparent',
             color: activeTab === p ? 'var(--t-blue)' : 'var(--t-dim)',
-          }}>{p.toUpperCase()} SETTINGS</button>
+          }}>{p.toUpperCase()}</button>
         ))}
       </div>
 
@@ -416,86 +414,88 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                       </div>
                     </>
                   )}
-                  <div style={grpBox}>
-                    <div style={grpTitle}>DIRECTION & RISK</div>
-                    {draft.use_optimized && !activeProfile.macro_trend_filter && (
-                      <div style={{
-                        padding: '8px 10px', marginBottom: 8, borderRadius: 6,
-                        background: 'var(--t-amber)14', border: '1px solid var(--t-amber)44',
-                        fontSize: 10, color: 'var(--t-amber)', lineHeight: 1.4
-                      }}>
-                        <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, gridColumn: '1 / -1' }}>
+                    <div style={grpBox}>
+                      <div style={grpTitle}>DIRECTION & RISK</div>
+                      {draft.use_optimized && !activeProfile.macro_trend_filter && (
+                        <div style={{
+                          padding: '8px 10px', marginBottom: 8, borderRadius: 6,
+                          background: 'var(--t-amber)14', border: '1px solid var(--t-amber)44',
+                          fontSize: 10, color: 'var(--t-amber)', lineHeight: 1.4
+                        }}>
+                          <strong>⚠️ Trend Filter is OFF:</strong> It is highly recommended to leave the Trend Filter ON when the AI Gatekeeper is active. Walk-Forward Optimization generally assumes you are trading with the broader structural trend.
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
+                        <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
+                        <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
+                        <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
                       </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
-                      <ChipToggle label="Long" on={activeProfile.allow_long} onChange={(v) => setProfileField('allow_long', v)} />
-                      <ChipToggle label="Short" on={activeProfile.allow_short} onChange={(v) => setProfileField('allow_short', v)} />
-                      <ChipToggle label="Trend filter" on={activeProfile.macro_trend_filter} onChange={(v) => setProfileField('macro_trend_filter', v)} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} defaultVal={defP?.risk_percent} onChange={(v) => setProfileField('risk_percent', v)} />
+                        <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} defaultVal={defP?.max_position_pct} onChange={(v) => setProfileField('max_position_pct', v)} />
+                        <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} defaultVal={defP?.min_rr} onChange={(v) => setProfileField('min_rr', v)} />
+                        <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} defaultVal={defP?.max_stop_atr} onChange={(v) => setProfileField('max_stop_atr', v)} />
+                        <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} defaultVal={defP?.account_equity} onChange={(v) => setProfileField('account_equity', v)} />
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <NumField label="Risk % / trade" value={activeProfile.risk_percent} step={0.05} min={0.05} max={5} defaultVal={defP?.risk_percent} onChange={(v) => setProfileField('risk_percent', v)} />
-                      <NumField label="Max position %" value={activeProfile.max_position_pct} step={1} min={1} max={100} defaultVal={defP?.max_position_pct} onChange={(v) => setProfileField('max_position_pct', v)} />
-                      <NumField label="Min R:R" value={activeProfile.min_rr} step={0.1} min={0.5} max={10.0} defaultVal={defP?.min_rr} onChange={(v) => setProfileField('min_rr', v)} />
-                      <NumField label="Max Stop ATR" value={activeProfile.max_stop_atr} step={0.5} min={1.0} max={20.0} defaultVal={defP?.max_stop_atr} onChange={(v) => setProfileField('max_stop_atr', v)} />
-                      <NumField label="Equity $" value={activeProfile.account_equity} step={1000} min={100} defaultVal={defP?.account_equity} onChange={(v) => setProfileField('account_equity', v)} />
+                    
+                    <div style={grpBox}>
+                      <div style={grpTitle}>SYMBOLS (Global)</div>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 160, overflowY: 'auto', paddingRight: 4, flexShrink: 0, marginTop: 4 }}>
+                      {draft.symbols.length === 0 ? (
+                        <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Scanning ALL symbols. Add a symbol to restrict scanning.</span>
+                      ) : (
+                        draft.symbols.map((s) => {
+                          const isLocked = ['BTC', 'ETH', 'SOL'].includes(s);
+                          return (
+                            <button 
+                              key={s} 
+                              onClick={() => !isLocked && toggleSym(s)} 
+                              style={{ 
+                                ...chipStyle(true), 
+                                background: 'var(--t-blue)15', 
+                                borderColor: 'var(--t-blue)44',
+                                cursor: isLocked ? 'default' : 'pointer',
+                              }}
+                              title={isLocked ? "Core symbols cannot be removed" : "Click to remove"}
+                            >
+                              {s} 
+                              {!isLocked && <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>}
+                              {isLocked && <span style={{ marginLeft: 4, opacity: 0.4 }}>🔒</span>}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) toggleSym(e.target.value);
+                        }}
+                        style={{
+                          width: '100%', background: 'var(--t-bg)', border: '1px solid var(--t-border)',
+                          borderRadius: 4, color: 'var(--t-dim)', padding: '6px 8px',
+                          fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', outline: 'none'
+                        }}
+                      >
+                        <option value="" disabled>+ Search & Add optional symbols...</option>
+                        {universe.filter(s => !selSet.has(s)).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
+                </div>
                 </div>
               </>
             );
           })()}
         </>
       )}
-
-      <div style={{ ...grpBox, marginTop: 12 }}>
-        <div style={grpTitle}>SYMBOLS (Global)</div>
-        
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 160, overflowY: 'auto', paddingRight: 4, flexShrink: 0, marginTop: 4 }}>
-          {draft.symbols.length === 0 ? (
-            <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Scanning ALL symbols. Add a symbol to restrict scanning.</span>
-          ) : (
-            draft.symbols.map((s) => {
-              const isLocked = ['BTC', 'ETH', 'SOL'].includes(s);
-              return (
-                <button 
-                  key={s} 
-                  onClick={() => !isLocked && toggleSym(s)} 
-                  style={{ 
-                    ...chipStyle(true), 
-                    background: 'var(--t-blue)15', 
-                    borderColor: 'var(--t-blue)44',
-                    cursor: isLocked ? 'default' : 'pointer',
-                  }}
-                  title={isLocked ? "Core symbols cannot be removed" : "Click to remove"}
-                >
-                  {s} 
-                  {!isLocked && <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>}
-                  {isLocked && <span style={{ marginLeft: 4, opacity: 0.4 }}>🔒</span>}
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <select
-            value=""
-            onChange={(e) => {
-              if (e.target.value) toggleSym(e.target.value);
-            }}
-            style={{
-              width: '100%', background: 'var(--t-bg)', border: '1px solid var(--t-border)',
-              borderRadius: 4, color: 'var(--t-dim)', padding: '6px 8px',
-              fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', outline: 'none'
-            }}
-          >
-            <option value="" disabled>+ Search & Add optional symbols...</option>
-            {universe.filter(s => !selSet.has(s)).map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-      </div>
     </SectionCard>
   );
 }
@@ -1606,7 +1606,7 @@ function SettingsTrigger({ onClick }: { onClick: () => void }) {
       }}
     >
       <span style={{ fontSize: 13 }}>⚙</span>
-      <span style={{ fontSize: 12, fontWeight: 700 }}>Settings &amp; Backtest</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>Global Strategy Config</span>
     </button>
   );
 }
@@ -1627,7 +1627,7 @@ function DerivativesTrigger({ onClick }: { onClick: () => void }) {
       }}
     >
       <span style={{ fontSize: 13 }}>⚡</span>
-      <span style={{ fontSize: 12, fontWeight: 700 }}>Derivatives Config</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>Global Derivatives Config</span>
     </button>
   );
 }
@@ -1648,7 +1648,7 @@ function StrategyCatalogTrigger({ onClick }: { onClick: () => void }) {
       }}
     >
       <span style={{ fontSize: 13 }}>📚</span>
-      <span style={{ fontSize: 12, fontWeight: 700 }}>Strategy Catalog</span>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>WHAT'S RUNNING</span>
     </button>
   );
 }
@@ -1678,10 +1678,38 @@ export function ScalpingTab() {
   const setSelected = useSetSelectedUnderlying();
   const cfgQ = useScalpingConfig();
   const cfg = cfgQ.data?.config;
+  const derivConfig = useDerivativesConfig();
+  const derivPatchGlobal = usePatchDerivativesGlobal();
+
+  const globalDerivEnabled = useMemo(() => {
+    if (!derivConfig.data?.profiles) return false;
+    return Object.values(derivConfig.data.profiles).every(p => p.enabled);
+  }, [derivConfig.data]);
+  const globalDerivFutAuto = useMemo(() => {
+    if (!derivConfig.data?.profiles) return false;
+    return Object.values(derivConfig.data.profiles).every(p => p.auto_execute_futures);
+  }, [derivConfig.data]);
+  const globalDerivOptAuto = useMemo(() => {
+    if (!derivConfig.data?.profiles) return false;
+    return Object.values(derivConfig.data.profiles).every(p => p.auto_execute_options);
+  }, [derivConfig.data]);
   const anyWfoActive = cfg ? cfg.use_optimized : false;
   const setCfg = useSetScalpingConfig();
   const [drawer, setDrawer] = useState(false);
   const [derivDrawer, setDerivDrawer] = useState(false);
+  
+  const [globalDraft, setGlobalDraft] = useState<{enabled: boolean, fut: boolean, opt: boolean} | null>(null);
+  useEffect(() => {
+    if (derivDrawer) {
+      setGlobalDraft({ enabled: globalDerivEnabled, fut: globalDerivFutAuto, opt: globalDerivOptAuto });
+    }
+  }, [derivDrawer, globalDerivEnabled, globalDerivFutAuto, globalDerivOptAuto]);
+
+  const globalDirty = globalDraft && (
+    globalDraft.enabled !== globalDerivEnabled ||
+    globalDraft.fut !== globalDerivFutAuto ||
+    globalDraft.opt !== globalDerivOptAuto
+  );
   const [catalogDrawer, setCatalogDrawer] = useState(false);
   const [edgeGateDrawer, setEdgeGateDrawer] = useState(false);
   const [derivStrategy, setDerivStrategy] = useState<string>('scalping/price_action');
@@ -1698,6 +1726,7 @@ export function ScalpingTab() {
   });
   const [expandedKey, setExpandedKey] = useState<string | null>(null);  // which executed row shows full metrics
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null); // which row is highlighted
+  const [spotExpanded, setSpotExpanded] = useState<boolean>(true);
   const [liveConfirm, setLiveConfirm] = useState(false);                 // gate the paper/shadow→live switch behind a modal
   // Visible execution log — every execute attempt (accepted OR rejected/errored)
   // with the mode it ran in and the backend reason. Makes "is live actually
@@ -1708,6 +1737,7 @@ export function ScalpingTab() {
   });
   const logExec = (e: ExecLogEntry) => setExecLog((l) => [e, ...l].slice(0, 40));
   const algoOn = useAlgoMode().data?.enabled ?? false;
+  const autoExecRef = useRef<Set<string>>(new Set());   // auto-attempted this algo session
   const acceptedRef = useRef<Set<string>>(new Set());   // ever accepted — never re-execute
 
   // Authoritative trading mode (paper / shadow / live). Drives the AUTO · <MODE>
@@ -1845,9 +1875,14 @@ export function ScalpingTab() {
     const key = `${sym}-${strategy}`;
     setExecKeys((s) => new Set(s).add(key));
     exec.mutateAsync({ underlying: sym, strategy, auto, override_entry, override_stop })
-      // Tie the record to the mode the backend ACTUALLY ran in (r.mode), not the
-      // mode picker — so a live order is stored as LIVE, shadow as SHADOW, etc.
-      .then((r) => { const ranMode = (r.mode || tradeMode).toUpperCase(); setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: ranMode } })); if (r.accepted) acceptedRef.current.add(key); logExec({ ts: Date.now(), key, mode: ranMode, ok: !!r.accepted, status: r.status, reason: r.reason, auto }); })
+      // Tie an ACCEPTED record to the book it actually landed in (r.mode) — a live
+      // order stores as LIVE, shadow/paper as their own book. A REJECTION never ran
+      // in any book: the backend hardcodes mode="paper" on its early-return rejects,
+      // so trusting r.mode here files a shadow/live rejection under "PAPER", which
+      // modeExecStates then filters out of the current view — leaving the card stuck
+      // on "⚡ Auto-executing…" with the real reason (e.g. size_too_small) hidden.
+      // Tag rejections with the mode the user actually attempted in (tradeMode).
+      .then((r) => { const ranMode = (r.accepted ? (r.mode || tradeMode) : tradeMode).toUpperCase(); setExecStates((m) => ({ ...m, [key]: { resp: r, auto, mode: ranMode } })); if (r.accepted) acceptedRef.current.add(key); logExec({ ts: Date.now(), key, mode: ranMode, ok: !!r.accepted, status: r.status, reason: r.reason, auto }); })
       .catch((e: Error) => { setExecStates((m) => ({ ...m, [key]: { error: e.message, auto, mode: tradeMode } })); logExec({ ts: Date.now(), key, mode: tradeMode, ok: false, status: 'error', reason: e.message, auto }); })
       .finally(() => { setExecKeys((s) => { const n = new Set(s); n.delete(key); return n; }); });
   };
@@ -2047,6 +2082,27 @@ export function ScalpingTab() {
     try { localStorage.setItem('scalp.execLog', JSON.stringify(execLog)); } catch { /* quota */ }
   }, [execLog]);
 
+  // Algo auto-execution: while Algo is ON, EVERY ready (executable) signal is
+  // fired immediately. The /scalping/execute endpoint routes through the active
+  // Paper/Shadow/Live mode. Runaway is prevented at the source — the backend
+  // refuses to open a second position on the same symbol+strategy — so no
+  // frontend position cap is needed; every distinct ready setup executes.
+  // De-duped per symbol+strategy so the 30s rescan never re-fires the same setup.
+  useEffect(() => {
+    if (!algoOn) return;
+    for (const s of data?.signals ?? []) {
+      if (!s.executable) continue;
+      const key = `${s.underlying}-${s.strategy}`;
+      if (acceptedRef.current.has(key)) continue;  // never re-execute a filled trade
+      if (autoExecRef.current.has(key)) continue;  // already attempted this session
+      autoExecRef.current.add(key);
+      onExecute(s.underlying, s.strategy, true, s.entry ?? null, s.stop_loss ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [algoOn, data, tradeMode]);
+
+  // Forget de-dupe keys once Algo is switched off, so re-enabling starts fresh.
+  useEffect(() => { if (!algoOn) autoExecRef.current.clear(); }, [algoOn]);
 
   // On mode change (and on mount/reload), re-scope the de-dup refs to the current
   // mode WITHOUT deleting executions — every mode keeps its own trades. Only trades
@@ -2057,6 +2113,7 @@ export function ScalpingTab() {
         .filter(([, es]) => (es.mode || 'PAPER') === tradeMode && es.resp?.accepted)
         .map(([k]) => k),
     );
+    autoExecRef.current.clear();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tradeMode]);
 
@@ -2068,6 +2125,7 @@ export function ScalpingTab() {
     for (const [k, es] of Object.entries(execStates)) {
       if (es.resp?.accepted && pnlFor(es.resp).realized) {
         acceptedRef.current.delete(k);
+        autoExecRef.current.delete(k);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2331,7 +2389,11 @@ export function ScalpingTab() {
             )}
             {scanQ.isLoading && <div style={{ ...dim, padding: '40px 0', textAlign: 'center' }}>scanning…</div>}
             <div style={card}>
-              <div style={cardHead}>
+              <div 
+                style={{ ...cardHead, cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setSpotExpanded(!spotExpanded)}
+              >
+                <span style={{ marginRight: 6, fontSize: 10, color: 'var(--t-dim)' }}>{spotExpanded ? '▾' : '▸'}</span>
                 <span>SPOT · INDEX </span>
                 <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0 }}>
                   underlying directional algorithms
@@ -2342,28 +2404,30 @@ export function ScalpingTab() {
                 </span>
               </div>
               
-              {data && displaySignals.length === 0 ? (
-                <div style={{ padding: 24, fontSize: 10, color: 'var(--t-dim)', textAlign: 'center' }}>
-                  {statusFilter === 'ready' ? 'No ready signals — clear the filter to see all.' : 'No spot signals on this data source.'}
-                </div>
-              ) : (
-                <div style={{ ...cardBody, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
-                  
-                  {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                  {executedSignals.length > 0 && (
-                    <ConsolidatedRow count={executedSignals.length} {...consolidated} />
-                  )}
-                  
-                  {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                  
-                  {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
-                  {data && displaySignals.length > 0 && (
-                    <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4, marginTop: 4 }}>
-                      <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
-                    </div>
-                  )}
-                </div>
+              {spotExpanded && (
+                data && displaySignals.length === 0 ? (
+                  <div style={{ padding: 24, fontSize: 10, color: 'var(--t-dim)', textAlign: 'center' }}>
+                    {statusFilter === 'ready' ? 'No ready signals — clear the filter to see all.' : 'No spot signals on this data source.'}
+                  </div>
+                ) : (
+                  <div style={{ ...cardBody, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
+                    
+                    {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                    {executedSignals.length > 0 && (
+                      <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+                    )}
+                    
+                    {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                    
+                    {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
+                    {data && displaySignals.length > 0 && (
+                      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4, marginTop: 4 }}>
+                        <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
+                      </div>
+                    )}
+                  </div>
+                )
               )}
             </div>
 
@@ -2403,7 +2467,7 @@ export function ScalpingTab() {
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Settings</span>
+            <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Global Strategy Config</span>
             <button onClick={() => setDrawer(false)} title="Close (Esc)" style={{
               marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
               border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',
@@ -2446,23 +2510,67 @@ export function ScalpingTab() {
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.04em' }}>
                   DERIVATIVES ROUTING CONFIG
                 </span>
-                <span style={{ fontSize: 11, color: 'var(--t-dim)', marginLeft: 'auto' }}>Configure strategy:</span>
-                <select 
-                  value={derivStrategy} 
-                  onChange={e => setDerivStrategy(e.target.value)} 
-                  style={{
-                    background: 'var(--t-bg)', border: '1px solid var(--t-border)',
-                    borderRadius: 4, color: 'var(--t-bright)', padding: '4px 8px',
-                    fontFamily: 'inherit', fontSize: 11, cursor: 'pointer'
-                  }}
-                >
-                  <option value="scalping/price_action">Price Action</option>
-                  <option value="scalping/smc">SMC</option>
-                  <option value="scalping/ma_crossover">MA Crossover</option>
-                  <option value="scalping/mean_reversion">Mean Reversion</option>
-                  <option value="scalping/breakout">Breakout</option>
-                  <option value="scalping/delta_gamma">Delta Gamma</option>
-                </select>
+              </div>
+
+              {/* GLOBAL Auto Execute Controls */}
+              <div style={{ ...grpBox, gap: 12, marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={grpTitle}>GLOBAL SETTINGS</div>
+                  <button
+                    disabled={!globalDirty || derivPatchGlobal.isPending}
+                    onClick={() => {
+                      if (globalDraft) {
+                        derivPatchGlobal.mutate({
+                          enabled: globalDraft.enabled,
+                          auto_execute_futures: globalDraft.fut,
+                          auto_execute_options: globalDraft.opt
+                        });
+                      }
+                    }}
+                    style={{
+                      padding: '4px 10px', borderRadius: 5,
+                      background: globalDirty ? alpha('var(--t-blue)', 0.15) : 'transparent',
+                      border: `1px solid ${globalDirty ? alpha('var(--t-blue)', 0.4) : 'var(--t-border)'}`,
+                      color: globalDirty ? 'var(--t-blue)' : 'var(--t-dim)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', cursor: globalDirty ? 'pointer' : 'default',
+                      fontFamily: 'inherit',
+                    }}>
+                    {derivPatchGlobal.isPending ? 'SAVING…' : globalDirty ? 'APPLY' : 'SAVED'}
+                  </button>
+                </div>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 10 }}>
+                  <ChipToggle 
+                    label="Auto - Futures" 
+                    color="var(--t-amber)"
+                    on={globalDraft?.fut ?? false} 
+                    onChange={(v) => setGlobalDraft(prev => prev ? { ...prev, fut: v, enabled: v || prev.opt } : null)} 
+                  />
+                  <ChipToggle 
+                    label="Auto - Options" 
+                    color="var(--t-amber)"
+                    on={globalDraft?.opt ?? false} 
+                    onChange={(v) => setGlobalDraft(prev => prev ? { ...prev, opt: v, enabled: v || prev.fut } : null)} 
+                  />
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--t-border)', paddingBottom: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'scalping/price_action', label: 'PRICE ACTION' },
+                  { id: 'scalping/smc', label: 'SMC' },
+                  { id: 'scalping/ma_crossover', label: 'MA CROSSOVER' },
+                  { id: 'scalping/mean_reversion', label: 'MEAN REVERSION' },
+                  { id: 'scalping/breakout', label: 'BREAKOUT' },
+                  { id: 'scalping/delta_gamma', label: 'DELTA GAMMA' }
+                ].map(strat => (
+                  <button key={strat.id} onClick={() => setDerivStrategy(strat.id)} style={{
+                    fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+                    border: `1px solid ${derivStrategy === strat.id ? 'var(--t-blue)' : 'var(--t-border)'}`,
+                    background: derivStrategy === strat.id ? 'var(--t-bg3)' : 'transparent',
+                    color: derivStrategy === strat.id ? 'var(--t-blue)' : 'var(--t-dim)',
+                  }}>{strat.label}</button>
+                ))}
               </div>
               <DerivativesPanel strategy={derivStrategy} />
             </div>
@@ -2482,7 +2590,7 @@ export function ScalpingTab() {
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Strategy Catalog</span>
+              <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>WHAT'S RUNNING</span>
               <button onClick={() => setCatalogDrawer(false)} title="Close (Esc)" style={{
                 marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
                 border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',

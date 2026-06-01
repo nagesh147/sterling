@@ -205,12 +205,16 @@ def close_position(
     structure = pos.sized_trade.structure
     direction_sign = 1 if structure.direction.value == "long" else -1
     contracts = pos.sized_trade.contracts
+    # qty = coin quantity = lots × lot size. PnL / value scale with qty, not the
+    # raw lot count (cv defaults to 1.0 so legacy coin-based positions are
+    # unchanged; a Delta ETH position of 42 lots × 0.01 moves as 0.42 ETH).
+    qty = pos.sized_trade.qty
     is_futures = structure.structure_type == "futures"
 
     if is_futures:
         # Futures: linear PnL in spot. Leverage absent.
         spot_move = exit_spot_price - pos.entry_spot_price
-        raw_pnl = spot_move * direction_sign * contracts
+        raw_pnl = spot_move * direction_sign * qty
     else:
         # Options: premium-based PnL. Multiplier = 1 for DEI BTC/ETH index opts.
         entry_premium = (
@@ -232,9 +236,9 @@ def close_position(
                 pos_id, entry_premium, ex_prem, spot_move, leg_delta,
             )
         # Long options only today (place_order_option always side="buy"), so
-        # PnL is unconditionally (exit − entry) × contracts. When short-options
+        # PnL is unconditionally (exit − entry) × qty. When short-options
         # is added the direction_sign multiplier comes in here.
-        raw_pnl = (ex_prem - entry_premium) * contracts
+        raw_pnl = (ex_prem - entry_premium) * qty
 
     # Bound losses by sized max_risk. Apply max_gain cap only for
     # defined-risk option spreads — futures and naked options have unbounded
@@ -249,7 +253,7 @@ def close_position(
         "iron_condor", "iron_butterfly",
     }
     if max_gain is not None and structure.structure_type in DEFINED_RISK_STRUCTURES:
-        bounded = min(max_gain * contracts, bounded)
+        bounded = min(max_gain * qty, bounded)
     estimated_pnl = round(bounded, 2)
 
     # 1% TDS on the gross sell value for Indian crypto — surfaced for
@@ -260,8 +264,8 @@ def close_position(
     tds = 0.0
     if not pos.is_paper and fill_type != "settlement":
         gross_close_usd = (
-            (locals().get("ex_prem") or 0.0) * contracts if not is_futures
-            else exit_spot_price * contracts
+            (locals().get("ex_prem") or 0.0) * qty if not is_futures
+            else exit_spot_price * qty
         )
         tds = round(0.01 * gross_close_usd, 2)
 
@@ -339,10 +343,12 @@ def partial_close_position(
 
     closed_contracts    = max(1, round(pos.sized_trade.contracts * partial_ratio))
     remaining_contracts = max(0, pos.sized_trade.contracts - closed_contracts)
+    # Coin quantity being closed = closed lots × lot size (cv defaults to 1.0).
+    closed_qty = closed_contracts * pos.sized_trade.contract_value
 
     if is_futures:
         spot_move = (exit_spot_price - pos.entry_spot_price) if exit_spot_price > 0 else 0.0
-        raw_pnl = spot_move * direction_sign * closed_contracts
+        raw_pnl = spot_move * direction_sign * closed_qty
     else:
         entry_premium = (
             pos.entry_premium
@@ -360,7 +366,7 @@ def partial_close_position(
                 "Pass exit_premium for correct partial PnL.",
                 pos_id, entry_premium, ex_prem,
             )
-        raw_pnl = (ex_prem - entry_premium) * closed_contracts
+        raw_pnl = (ex_prem - entry_premium) * closed_qty
 
     risk_closed = pos.sized_trade.max_risk_usd * partial_ratio
     partial_pnl = max(-risk_closed, raw_pnl)
@@ -370,7 +376,7 @@ def partial_close_position(
         "iron_condor", "iron_butterfly",
     }
     if structure.max_gain is not None and structure.structure_type in DEFINED_RISK_STRUCTURES:
-        partial_pnl = min(structure.max_gain * closed_contracts, partial_pnl)
+        partial_pnl = min(structure.max_gain * closed_qty, partial_pnl)
     partial_pnl = round(partial_pnl, 2)
 
     scale     = 1.0 - partial_ratio
