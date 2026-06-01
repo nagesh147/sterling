@@ -174,3 +174,41 @@ class TestNativeOptionsLeg:
         dual = native_engine.decide_both(
             signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
         assert any("long_only" in w for w in dual.warnings)
+
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.api.v1.endpoints.derivatives import router as derivatives_router
+
+
+@pytest.fixture
+def engine_client(monkeypatch):
+    """Fresh app with the derivatives router + an in-memory config store so the
+    real DB is never touched (won't flip the live engine config)."""
+    import app.engines.derivatives_native.config as cfgmod
+    store: dict[str, str] = {}
+    monkeypatch.setattr(cfgmod, "get_config", lambda key, default="": store.get(key, default))
+    monkeypatch.setattr(cfgmod, "set_config", lambda key, value: store.__setitem__(key, value))
+    api = FastAPI()
+    api.include_router(derivatives_router, prefix="/api/v1")
+    return TestClient(api)
+
+
+class TestEngineConfigEndpoints:
+    def test_get_and_post_engine_config(self, engine_client):
+        r = engine_client.get("/api/v1/derivatives/config/engine")
+        assert r.status_code == 200
+        assert r.json()["engine_mode"] == "routing_gate"
+
+        r = engine_client.post("/api/v1/derivatives/config/engine", json={
+            "engine_mode": "native",
+            "active_alpha_sources": ["directional_futures", "vrp_voltiming"],
+            "risk_posture": "long_only",
+            "validation_method": 1,
+        })
+        assert r.status_code == 200
+        assert r.json()["engine_mode"] == "native"
+
+        r = engine_client.get("/api/v1/derivatives/config/engine")
+        assert r.json()["engine_mode"] == "native"

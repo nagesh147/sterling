@@ -34,6 +34,10 @@ from app.engines.derivatives.schemas import (
     MarketContext, SignalContext, StrategyDerivativesProfile,
 )
 from app.engines.derivatives.selector import decide_both as _decide_both
+from app.engines.derivatives_native import engine as _native_engine
+from app.engines.derivatives_native.config import (
+    DerivativesEngineConfig, EngineMode, get_engine_config, set_engine_config,
+)
 from app.engines.risk.option_pricing import enrich_chain
 from app.services import derivatives_audit
 from app.services.exchanges import instrument_registry as registry
@@ -258,6 +262,7 @@ async def _both_rows(
     options_rows: list[_CandidateRow] = []
     now_ms = int(time.time() * 1000)
     overrides = _profile_overrides(request.app)
+    engine_cfg = get_engine_config(request.app)
 
     # The collection is synchronous and heavy (~4.6s scalping scan) — run it
     # OFF the event loop so the scanner tick never freezes the server.
@@ -285,10 +290,16 @@ async def _both_rows(
             chain_cache[ul] = await _option_chain_or_none(
                 underlying=ul, app=request.app, spot=market_cache[ul].spot,
             )
-        dual = _decide_both(
-            signal=sig, market=market_cache[ul], chain=chain_cache[ul],
-            profile_overrides=overrides,
-        )
+        if engine_cfg.engine_mode == EngineMode.NATIVE:
+            dual = _native_engine.decide_both(
+                signal=sig, market=market_cache[ul], chain=chain_cache[ul],
+                profile_overrides=overrides, config=engine_cfg,
+            )
+        else:
+            dual = _decide_both(
+                signal=sig, market=market_cache[ul], chain=chain_cache[ul],
+                profile_overrides=overrides,
+            )
         # Audit each leg so the operator's 7-day observation feed sees
         # both arms even before either is enabled for auto-exec.
         try:
@@ -552,6 +563,21 @@ async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigRe
     return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
 
 
+@router.delete("/config", response_model=_ConfigResponse)
+async def reset_all_config(request: Request) -> _ConfigResponse:
+    from app.services.db import set_config
+    import json
+    try:
+        set_config("derivatives_profiles", json.dumps({}))
+        if hasattr(request.app.state, "derivatives_profiles"):
+            request.app.state.derivatives_profiles = {}
+    except Exception as e:
+        log.warning(f"Failed to reset derivatives_profiles: {e}")
+        
+    from app.engines.derivatives.profiles import DEFAULT_PROFILES
+    return _ConfigResponse(profiles={}, defaults=DEFAULT_PROFILES)
+
+
 @router.post("/config/global", response_model=_ConfigResponse)
 async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request) -> _ConfigResponse:
     from app.services.db import set_config
@@ -574,6 +600,18 @@ async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request)
         
     from app.engines.derivatives.profiles import DEFAULT_PROFILES
     return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
+
+
+@router.get("/config/engine", response_model=DerivativesEngineConfig)
+async def get_engine_config_ep(request: Request) -> DerivativesEngineConfig:
+    return get_engine_config(request.app)
+
+
+@router.post("/config/engine", response_model=DerivativesEngineConfig)
+async def set_engine_config_ep(
+    body: DerivativesEngineConfig, request: Request
+) -> DerivativesEngineConfig:
+    return set_engine_config(request.app, body)
 
 
 # ─── /greeks-budget ────────────────────────────────────────────────────
