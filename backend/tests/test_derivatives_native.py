@@ -127,20 +127,23 @@ from app.schemas.market import OptionSummary
 
 
 def _chain_btc(spot=50000.0) -> list[OptionSummary]:
-    """A small tradeable call chain around spot (14 DTE, tight spread, real OI)."""
+    """Tradeable call+put chain around spot (14 DTE, tight spread). Time value
+    decays with distance from spot so spreads have non-zero net premium."""
     out = []
-    for strike in (48000, 49000, 50000, 51000, 52000):
-        intrinsic = max(0.0, spot - strike)
-        mark = intrinsic + 1200.0
-        out.append(OptionSummary(
-            instrument_name=f"C-BTC-{strike}-140625", underlying="BTC",
-            strike=float(strike), expiry_date="140625", dte=14,
-            option_type="call", bid=mark * 0.985, ask=mark * 1.015,
-            mark_price=mark, mid_price=mark, mark_iv=55.0,
-            delta=0.55 if strike <= spot else 0.40,
-            gamma=0.0006, vega=20.0, theta=-15.0, rho=5.0,
-            open_interest=400.0, volume_24h=200.0,
-            last_updated_ms=int(time.time() * 1000), spread_pct=0.03))
+    for strike in (46000, 47000, 48000, 49000, 50000, 51000, 52000, 53000, 54000):
+        for opt_type in ("call", "put"):
+            intrinsic = max(0.0, spot - strike) if opt_type == "call" else max(0.0, strike - spot)
+            tv = max(50.0, 1200.0 - 0.30 * abs(strike - spot))
+            mark = intrinsic + tv
+            out.append(OptionSummary(
+                instrument_name=f"{'C' if opt_type == 'call' else 'P'}-BTC-{strike}-140625",
+                underlying="BTC", strike=float(strike), expiry_date="140625", dte=14,
+                option_type=opt_type, bid=mark * 0.985, ask=mark * 1.015,
+                mark_price=mark, mid_price=mark, mark_iv=55.0,
+                delta=(0.55 if strike <= spot else 0.40) * (1 if opt_type == "call" else -1),
+                gamma=0.0006, vega=20.0, theta=-15.0, rho=5.0,
+                open_interest=400.0, volume_24h=200.0,
+                last_updated_ms=int(time.time() * 1000), spread_pct=0.03))
     return out
 
 
@@ -241,3 +244,77 @@ class TestEngineConfigEndpoints:
 
         r = engine_client.get("/api/v1/derivatives/config/engine")
         assert r.json()["engine_mode"] == "native"
+
+
+from app.engines.derivatives_native import structures as st
+
+
+class TestStructureEconomics:
+    def test_debit_call_spread_math(self):
+        legs = [
+            StructureLeg(option_type="call", side="buy", strike=50000, premium=1200),
+            StructureLeg(option_type="call", side="sell", strike=52000, premium=600),
+        ]
+        net, max_loss, max_profit, bes = st.compute_economics(legs, contracts=1.0)
+        assert round(net, 2) == 600.0          # debit paid = 1200 - 600
+        assert round(max_loss, 2) == 600.0     # = net debit
+        assert round(max_profit, 2) == 1400.0  # width 2000 - debit 600
+        assert bes == [50600.0]                 # K1 + debit
+
+    def test_credit_put_spread_math(self):
+        legs = [
+            StructureLeg(option_type="put", side="sell", strike=49000, premium=800),
+            StructureLeg(option_type="put", side="buy", strike=47000, premium=300),
+        ]
+        net, max_loss, max_profit, bes = st.compute_economics(legs, contracts=1.0)
+        assert round(net, 2) == -500.0         # net credit received
+        assert round(max_profit, 2) == 500.0   # = credit
+        assert round(max_loss, 2) == 1500.0    # width 2000 - credit 500
+        assert bes == [48500.0]                 # K_short - credit
+
+    def test_contracts_scale_linearly(self):
+        legs = [
+            StructureLeg(option_type="call", side="buy", strike=50000, premium=1200),
+            StructureLeg(option_type="call", side="sell", strike=52000, premium=600),
+        ]
+        _, ml1, _, _ = st.compute_economics(legs, contracts=1.0)
+        _, ml3, _, _ = st.compute_economics(legs, contracts=3.0)
+        assert round(ml3, 2) == round(ml1 * 3, 2)
+
+
+class TestStructureBuilders:
+    def test_build_debit_vertical_long(self):
+        s = st.build_debit_vertical(
+            chain=_chain_btc(), spot=50000.0, direction="long",
+            width_pct=0.04, nav_usd=100_000.0, max_loss_pct=0.02)
+        assert s is not None
+        assert s.structure_type == "debit_vertical"
+        assert len(s.legs) == 2
+        assert s.legs[0].side == "buy" and s.legs[1].side == "sell"
+        assert s.legs[1].strike > s.legs[0].strike    # call spread: long lower, short higher
+        assert 0 < s.max_loss_usd <= 0.02 * 100_000.0 + 1e-6
+
+    def test_build_returns_none_when_strikes_missing(self):
+        thin = [o for o in _chain_btc() if o.strike == 50000]
+        s = st.build_debit_vertical(
+            chain=thin, spot=50000.0, direction="long",
+            width_pct=0.04, nav_usd=100_000.0, max_loss_pct=0.02)
+        assert s is None
+
+    def test_build_credit_vertical_long(self):
+        s = st.build_credit_vertical(
+            chain=_chain_btc(), spot=50000.0, direction="long",
+            width_pct=0.04, nav_usd=100_000.0, max_loss_pct=0.02)
+        assert s is not None and s.structure_type == "credit_vertical"
+        assert s.legs[0].side == "sell" and s.legs[0].option_type == "put"
+        assert s.net_premium_usd < 0      # credit received
+        assert 0 < s.max_loss_usd <= 0.02 * 100_000.0 + 1e-6
+
+    def test_build_iron_condor(self):
+        s = st.build_iron_condor(
+            chain=_chain_btc(), spot=50000.0,
+            width_pct=0.04, nav_usd=100_000.0, max_loss_pct=0.02)
+        assert s is not None and s.structure_type == "iron_condor"
+        assert len(s.legs) == 4
+        assert s.net_premium_usd < 0      # net credit
+        assert s.max_loss_usd > 0
