@@ -416,6 +416,43 @@ class TestRegime:
         assert r.iv_percentile is not None and 0 <= r.iv_percentile <= 100
 
 
+def _short_signal(entry=50000.0, atr=500.0) -> SignalContext:
+    # Bearish: stop ABOVE entry, target BELOW entry.
+    return SignalContext(
+        strategy="edge/ma_crossover", underlying="BTC", direction="short",
+        entry=entry, stop_loss=entry + 2 * atr, take_profit=entry - 4 * atr,
+        atr=atr, rr_target=2.0, signal_score=85.0, presized=True)
+
+
+class TestNativeLongOptionsLive:
+    """Single-leg long options must be live-ready via the buy-only path:
+    long signal -> buy CALL, short signal -> buy PUT (both are BUYS)."""
+
+    def test_long_signal_emits_buyable_call(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.LONG_ONLY)
+        dual = native_engine.decide_both(
+            signal=_signal(direction="long"), market=_market(ivr=20.0),
+            chain=_chain_btc(), config=cfg)
+        c = dual.options.chosen
+        assert c.structure is None                      # single-leg, not a structure
+        assert c.option_type == "call"
+        assert c.option_symbol and c.option_symbol.startswith("C-")
+
+    def test_short_signal_emits_buyable_put(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_posture=RiskPosture.LONG_ONLY)
+        dual = native_engine.decide_both(
+            signal=_short_signal(), market=_market(ivr=20.0),
+            chain=_chain_btc(), config=cfg)
+        c = dual.options.chosen
+        assert c.structure is None
+        assert c.option_type == "put"
+        assert c.option_symbol and c.option_symbol.startswith("P-")
+
+
 class TestStructureRow:
     def test_row_carries_structure_summary(self):
         from app.api.v1.endpoints.derivatives import _row_from_decision
