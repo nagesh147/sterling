@@ -10,8 +10,6 @@ Profile keys match the strategy slug passed in `SignalContext.strategy`:
     "scalping/ma_crossover" — futures-bias, near-ATM, short hold.
   • "scalping/breakout", "scalping/delta_gamma" — options-bias for
     asymmetric payoff in low-IV regimes.
-  • "triple_st" — Triple-ST RSI(2) daily mean-reversion. Swing hold.
-  • "statarb" — futures-only, per-leg leverage cap, basis-aware.
   • "directional" — placeholder for when directional engines return.
 """
 from __future__ import annotations
@@ -104,38 +102,6 @@ DEFAULT_PROFILES: dict[str, StrategyDerivativesProfile] = {
     "scalping/ma_crossover":   _scalping_grind("scalping/ma_crossover"),
     "scalping/breakout":       _scalping_breakout("scalping/breakout"),
     "scalping/delta_gamma":    _scalping_breakout("scalping/delta_gamma"),
-
-    # Triple-ST RSI(2)
-    "triple_st": StrategyDerivativesProfile(
-        strategy="triple_st",
-        instrument_bias=InstrumentBias.AUTO,
-        target_delta=0.575,                # 0.55-0.60 band ITM
-        target_delta_tolerance=0.075,
-        dte_min=10,
-        dte_preferred=14,
-        dte_max=21,
-        expected_hold_minutes=5 * 24 * 60, # 5 days
-        expiry_close_minutes_before=120,
-        leverage_cap=10.0,
-        max_premium_pct_of_account=0.015,
-        funding_cost_max_pct_of_R=0.25,
-        min_oi=1.0,                        # Delta India options are thin — venue-realistic floor
-        min_volume_24h_x_contract=1.0,
-        max_spread_pct=0.04,
-        ivr_pct_naked_max=40,              # tighter — swing options need cheap IV
-    ),
-
-    # StatArb — futures-only, per-leg leverage capped, basis-aware
-    "statarb": StrategyDerivativesProfile(
-        strategy="statarb",
-        instrument_bias=InstrumentBias.FUTURES,
-        dte_min=0, dte_preferred=0, dte_max=0,
-        expected_hold_minutes=60 * 24,     # 1 day median spread hold
-        leverage_cap=5.0,                  # per leg; basis exposure capped 2× elsewhere
-        max_premium_pct_of_account=0.02,
-        funding_cost_max_pct_of_R=0.25,
-        ivr_pct_naked_max=100,             # n/a for futures-only
-    ),
 
     # Directional / Hybrid VCP — placeholder, lights up when engines return
     "directional": StrategyDerivativesProfile(

@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 class InstrumentBias(str, Enum):
     """How aggressively the strategy prefers options vs futures."""
     AUTO       = "auto"        # selector decides via instrument_chooser
-    FUTURES    = "futures"     # always futures (e.g. StatArb)
+    FUTURES    = "futures"     # always futures
     OPTIONS    = "options"     # always options (asymmetric-payoff strategies)
 
 
@@ -100,7 +100,7 @@ class SignalContext(BaseModel):
     tighter target (e.g. SMC pattern with intra-bar target). Most
     strategies leave it None and the profile default wins.
     """
-    strategy: str                                   # "scalping/price_action", "triple_st", "statarb", ...
+    strategy: str                                   # e.g. "scalping/price_action", "edge/smc", "directional"
     underlying: str
     direction: str                                  # "long" | "short"
     entry: float                                    # spot anchor

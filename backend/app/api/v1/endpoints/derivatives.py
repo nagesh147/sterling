@@ -1162,34 +1162,4 @@ def _collect_armed_signals(
         import traceback
         log.error(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
 
-    # Triple-ST (RSI(2))
-    if strategy_filter is None or strategy_filter == "triple_st":
-        try:
-            from app.api.v1.endpoints import strategy as _strat
-            cfg = getattr(request.app.state, "triple_st_config", None)
-            if cfg is not None:
-                syms = _strat._store_symbols(cfg.warmup_bars * 24)
-                for sym in syms[:10]:
-                    if underlying_filter and sym.upper() != underlying_filter.upper():
-                        continue
-                    candles = _strat._store_candles(sym, "1h", cfg.warmup_bars)
-                    if not candles or len(candles) < cfg.warmup_bars:
-                        continue
-                    from app.engines.triple_st import backtest as _bt
-                    ev = _bt.evaluate_live(sym, candles, cfg)
-                    if ev.trade_plan is None:
-                        continue
-                    signal_id = f"trist:{sym}:{ev.timestamp_ms}"
-                    out.append((signal_id, SignalContext(
-                        strategy="triple_st", underlying=sym, direction=ev.direction,
-                        entry=ev.trade_plan.entry, stop_loss=ev.trade_plan.stop_loss,
-                        take_profit=None,
-                        atr=0.0, rr_target=2.0,
-                        signal_score=50.0 + max(0, ev.rsi_oversold - ev.rsi),
-                        signal_strength="STRONG", expected_hold_minutes=5 * 24 * 60,
-                        mode_name="swing",
-                    )))
-        except Exception:
-            pass
-
     return out
