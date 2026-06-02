@@ -1036,7 +1036,8 @@ async def _background_derivatives_scanner(app: FastAPI, interval: int = 30) -> N
         try:
             await run_scanner_tick(app, interval_s=interval)
         except Exception as exc:
-            log.debug("DERIV scanner outer error: %s", exc)
+            import traceback
+            log.warning("DERIV scanner outer error: %s\n%s", exc, traceback.format_exc())
         await asyncio.sleep(interval)
 
 

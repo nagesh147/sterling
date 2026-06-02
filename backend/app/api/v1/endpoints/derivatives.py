@@ -277,12 +277,14 @@ async def _both_rows(
         _collect_armed_signals, request,
         strategy_filter=strategy_filter, underlying_filter=underlying_filter,
     )
+    log.info("DERIV _both_rows: collected %d armed signals", len(signals))
     market_cache: dict[str, MarketContext] = {}
     chain_cache: dict[str, Any] = {}
 
     for signal_id, sig in signals:
         prof = overrides.get(sig.strategy) or get_profile(sig.strategy)
         if not prof.enabled:
+            log.debug("DERIV _both_rows: skip %s (profile disabled)", sig.strategy)
             continue
         ul = sig.underlying.upper()
         if ul not in market_cache:
@@ -291,22 +293,35 @@ async def _both_rows(
                     underlying=ul, app=request.app,
                     signal_score=sig.signal_score,
                 )
-            except HTTPException:
+            except HTTPException as he:
+                log.warning("DERIV _both_rows: market_context failed for %s: %s", ul, he.detail)
                 continue
         if ul not in chain_cache:
             chain_cache[ul] = await _option_chain_or_none(
                 underlying=ul, app=request.app, spot=market_cache[ul].spot,
             )
-        if engine_cfg.engine_mode == EngineMode.NATIVE:
-            dual = _native_engine.decide_both(
-                signal=sig, market=market_cache[ul], chain=chain_cache[ul],
-                profile_overrides=overrides, config=engine_cfg,
-            )
-        else:
-            dual = _decide_both(
-                signal=sig, market=market_cache[ul], chain=chain_cache[ul],
-                profile_overrides=overrides,
-            )
+        try:
+            if engine_cfg.engine_mode == EngineMode.NATIVE:
+                dual = _native_engine.decide_both(
+                    signal=sig, market=market_cache[ul], chain=chain_cache[ul],
+                    profile_overrides=overrides, config=engine_cfg,
+                )
+            else:
+                dual = _decide_both(
+                    signal=sig, market=market_cache[ul], chain=chain_cache[ul],
+                    profile_overrides=overrides,
+                )
+        except Exception as dec_exc:
+            import traceback
+            log.warning("DERIV _both_rows: decide_both crashed for %s/%s: %s\n%s",
+                        sig.strategy, ul, dec_exc, traceback.format_exc())
+            continue
+
+        fut_status = dual.futures.status if dual.futures else None
+        opt_status = dual.options.status if dual.options else None
+        log.info("DERIV _both_rows: %s/%s → futures=%s options=%s",
+                 sig.strategy, ul, fut_status, opt_status)
+
         # Audit each leg so the operator's 7-day observation feed sees
         # both arms even before either is enabled for auto-exec.
         try:
@@ -324,6 +339,7 @@ async def _both_rows(
             options_rows.append(
                 _row_from_decision(signal_id=signal_id, signal=sig, decision=dual.options)
             )
+    log.info("DERIV _both_rows: produced %d futures + %d options rows", len(futures_rows), len(options_rows))
     return futures_rows, options_rows, now_ms
 
 

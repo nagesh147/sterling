@@ -123,9 +123,14 @@ async def run_scanner_tick(app: Any, interval_s: int = 30) -> dict:
     from app.api.v1.endpoints import derivatives as _deriv_ep
 
     log.info("DERIV scanner tick starting")
-    futures_rows, options_rows, ts_ms = await _deriv_ep._both_rows(
-        _ReqProxy(app), strategy_filter=None, underlying_filter=None,
-    )
+    try:
+        futures_rows, options_rows, ts_ms = await _deriv_ep._both_rows(
+            _ReqProxy(app), strategy_filter=None, underlying_filter=None,
+        )
+    except Exception as exc:
+        import traceback
+        log.warning("DERIV scanner _both_rows crashed: %s\n%s", exc, traceback.format_exc())
+        futures_rows, options_rows, ts_ms = [], [], 0
 
     attempts = 0
     accepted = 0
