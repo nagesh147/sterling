@@ -1179,7 +1179,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
   const isOpen = !!expanded;
   const isClosed = accepted && pnl?.realized;
   const isLive = accepted && !pnl?.realized;
-  const bg = isClosed ? alpha('var(--t-amber)', 0.05) : isLive ? alpha('var(--t-green)', 0.05) : isOpen ? alpha(statusColor, 0.09) : selected ? 'var(--t-bg)' : 'var(--t-bg2)';
+  const bg = isClosed ? alpha('var(--t-amber)', 0.05) : isLive ? alpha('var(--t-green)', 0.05) : isOpen ? alpha(statusColor, 0.09) : selected ? 'var(--t-bg)' : undefined;
   const borderColor = isClosed ? alpha('var(--t-amber)', 0.15) : isLive ? alpha('var(--t-green)', 0.15) : isOpen ? alpha(statusColor, 0.40) : selected ? alpha(statusColor, 0.18) : 'var(--t-border)';
 
   const positionOverlayData = displayEntry != null ? {
