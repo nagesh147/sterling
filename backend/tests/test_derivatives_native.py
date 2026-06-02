@@ -15,7 +15,35 @@ class TestEngineConfig:
         assert c.engine_mode == EngineMode.ROUTING_GATE
         assert c.active_alpha_sources == ["directional_futures"]
         assert c.risk_posture == RiskPosture.LONG_ONLY
+        assert c.risk_postures == ["long_only"]
         assert c.validation_method == 1
+
+    def test_postures_backfill_from_legacy_single(self):
+        # Old payload / persisted config with only the singular field.
+        c = DerivativesEngineConfig(risk_posture=RiskPosture.NAKED)
+        assert c.risk_postures == ["naked"]
+        assert c.risk_posture == RiskPosture.NAKED
+
+    def test_multi_postures_ordered_and_synced(self):
+        c = DerivativesEngineConfig(risk_postures=["long_only", "naked"])
+        # Ordered by POSTURE_PRIORITY (naked first); singular mirrors the top.
+        assert c.risk_postures == ["naked", "long_only"]
+        assert c.risk_posture == RiskPosture.NAKED
+
+    def test_empty_postures_defaults_long_only(self):
+        c = DerivativesEngineConfig(risk_postures=[])
+        assert c.risk_postures == ["long_only"]
+        assert c.risk_posture == RiskPosture.LONG_ONLY
+
+    def test_unknown_postures_filtered(self):
+        c = DerivativesEngineConfig(risk_postures=["bogus", "defined_risk"])
+        assert c.risk_postures == ["defined_risk"]
+
+    def test_postures_round_trip_json(self):
+        raw = DerivativesEngineConfig(risk_postures=["defined_risk", "long_only"]).model_dump_json()
+        c = DerivativesEngineConfig.model_validate_json(raw)
+        assert c.risk_postures == ["defined_risk", "long_only"]
+        assert c.risk_posture == RiskPosture.DEFINED_RISK
 
     def test_rejects_unknown_alpha_source(self):
         with pytest.raises(ValueError):
@@ -502,3 +530,40 @@ class TestStructureRow:
         assert row.structure_summary is not None
         assert "iron_condor" in row.structure_summary
         assert row.structure_max_loss_usd is not None and row.structure_max_loss_usd > 0
+
+
+class TestMultiSelectPosture:
+    """Multi-select risk postures: the engine picks the richest *allowed*
+    structure the regime supports (naked → defined_risk → long_only)."""
+
+    def test_rich_regime_prefers_naked(self):
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_postures=["long_only", "defined_risk", "naked"])
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=85.0), chain=_chain_btc(), config=cfg)
+        assert dual.options.chosen.structure.structure_type == "short_strangle"
+        assert dual.options.chosen.structure.defined is False
+
+    def test_low_regime_uses_defined_risk_when_allowed(self):
+        # naked enabled but regime not rich → step down to defined_risk (allowed).
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["vrp_voltiming"],
+            risk_postures=["long_only", "defined_risk", "naked"])
+        dual = native_engine.decide_both(
+            signal=_signal(), market=_market(ivr=20.0), chain=_chain_btc(), config=cfg)
+        assert dual.options.chosen.structure is not None
+        assert dual.options.chosen.structure.defined is True
+
+    def test_low_regime_without_defined_risk_steps_to_long_only(self):
+        # naked + long_only only (no defined_risk): not rich → buy long premium,
+        # NOT a defined-risk structure (respects the allowed set).
+        cfg = DerivativesEngineConfig(
+            engine_mode=EngineMode.NATIVE, active_alpha_sources=["directional_options"],
+            risk_postures=["long_only", "naked"])
+        dual = native_engine.decide_both(
+            signal=_signal(direction="long"), market=_market(ivr=20.0),
+            chain=_chain_btc(), config=cfg)
+        assert dual.options.status == DecisionStatus.OK
+        assert dual.options.chosen.structure is None        # single-leg long premium
+        assert dual.options.chosen.option_type == "call"

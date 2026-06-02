@@ -18,6 +18,7 @@
   --text-muted:   #94A3B8;
   --text-dim:     #475569;
   --text-faint:   #2D3748;
+  --text-muted-alt: #6a7a8a;
   /* Signal colors — sharp, high-visibility */
   --accent:       #10B981;   /* emerald green — BUY / profit */
   --danger:       #EF4444;   /* crisp crimson — SELL / loss  */
@@ -60,6 +61,7 @@
   --text-muted:   #475569;
   --text-dim:     #94A3B8;
   --text-faint:   #CBD5E1;
+  --text-muted-alt: #9099aa;
   --accent:       #059669;
   --danger:       #DC2626;
   --warning:      #D97706;

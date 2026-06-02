@@ -24,8 +24,8 @@ const ComboTable: React.FC<{ combos: StrategyCatalogCombo[] }> = ({ combos }) =>
     <thead>
       <tr style={{ color: c.dim, textAlign: 'right' }}>
         {['Sym', 'TF', 'Profile', 'Net', 'OOS Sh', 'P(loss)', 'MaxDD', 'Score'].map((h, i) => (
-          <th key={h} style={{ padding: '2px 5px', fontWeight: 700, fontSize: 8.5,
-            letterSpacing: '0.05em', textAlign: i < 3 ? 'left' : 'right', borderBottom: `1px solid ${c.border}` }}>{h}</th>
+          <th key={h} style={{ padding: '2px 5px', fontWeight: 600, fontSize: 9,
+            letterSpacing: '0.05em', textAlign: i < 3 ? 'left' : 'right', borderBottom: `1px solid ${c.border}`, color: c.muted }}>{h}</th>
         ))}
       </tr>
     </thead>

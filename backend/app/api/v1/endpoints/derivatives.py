@@ -97,12 +97,25 @@ async def _market_context(
 
     portfolio_value = float(getattr(dd_cb, "peak", 100_000.0)) if dd_cb else 100_000.0
 
+    # GEX profile — used by the native engine's gex_pinning alpha source
+    gex_profile = None
+    try:
+        inst = registry.get_instrument(underlying.upper())
+        if inst and getattr(inst, "has_options", False):
+            chain = await adapter.get_option_chain(inst)
+            if chain:
+                from app.engines.derivatives.gex_engine import calculate_gex_profile
+                gex_profile = calculate_gex_profile(chain, spot)
+    except Exception:
+        pass
+
     return MarketContext(
         spot=spot, underlying=underlying.upper(),
         funding_8h_pct=funding_8h,
         cb_size_mult=cb_mult,
         win_rate=win_rate, avg_R=avg_r,
         portfolio_value=portfolio_value,
+        gex_profile=gex_profile,
     )
 
 
@@ -503,7 +516,65 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
     if candidate is None:
         raise HTTPException(status_code=400, detail="decision had no chosen candidate")
 
-    # Build the LiveOrderRequest and route through the existing path.
+    # Multi-leg structures (defined-risk spreads/condors) → submit each leg
+    # individually, track them as a group. Single-leg candidates route through
+    # the existing single-order path unchanged.
+    if candidate.structure and len(candidate.structure.legs) > 1:
+        from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
+
+        leg_results: list[dict] = []
+        for leg in candidate.structure.legs:
+            leg_symbol = leg.option_symbol
+            if not leg_symbol:
+                leg_results.append({"error": "missing option_symbol on leg", "strike": leg.strike})
+                continue
+            leg_order = LiveOrderRequest(
+                underlying=candidate.underlying,
+                direction=leg.side if leg.side == "buy" else "short",
+                instrument_type="options",
+                size=float(candidate.contracts * leg.ratio),
+                leverage=1.0,
+                order_type="market",
+                stop_loss=None,
+                take_profit=None,
+                option_symbol=leg_symbol,
+                notes=f"[DERIV-{candidate.structure.structure_type}] freeze={body.freeze_token[:8]} leg={leg.option_type}@{leg.strike}",
+            )
+            try:
+                leg_resp = await place_live_order(leg_order, request)
+                leg_results.append({
+                    "accepted": leg_resp.status not in ("rejected", "error"),
+                    "order_id": leg_resp.order_id,
+                    "paper_position_id": leg_resp.paper_position_id,
+                    "option_symbol": leg_symbol,
+                    "mode": leg_resp.mode,
+                })
+            except Exception as exc:
+                leg_results.append({"error": str(exc), "strike": leg.strike})
+
+        all_ok = all(r.get("accepted", False) for r in leg_results)
+        n_ok = sum(1 for r in leg_results if r.get("accepted"))
+        n_total = len(leg_results)
+        reason_msg = f"{candidate.structure.structure_type}: {n_total} legs {'all OK' if all_ok else f'{n_ok}/{n_total} accepted'}"
+        return _ExecuteResponse(
+            accepted=all_ok,
+            mode=leg_results[0].get("mode", "paper") if leg_results else "paper",
+            underlying=candidate.underlying,
+            instrument_type="options",
+            direction=candidate.direction,
+            size=float(candidate.contracts),
+            leverage=1.0,
+            order_id=",".join(r.get("order_id", "") or "" for r in leg_results) or None,
+            paper_position_id=",".join(r.get("paper_position_id", "") or "" for r in leg_results) or None,
+            entry_price=candidate.entry_price,
+            stop_loss=None,
+            take_profit=None,
+            status="filled" if all_ok else "partial",
+            code="multi_leg" if all_ok else "multi_leg_partial",
+            reason=reason_msg,
+        )
+
+    # ── Single-leg path (futures or single options) ─────────────────────
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
     order = LiveOrderRequest(
         underlying=candidate.underlying,
@@ -637,11 +708,70 @@ async def set_engine_config_ep(
     return set_engine_config(request.app, body)
 
 
+# ─── /study/run, /study/status, /study/report ──────────────────────────
+
+
+@router.post("/study/run")
+async def study_run(body: dict, request: Request) -> dict:
+    """Trigger a derivatives edge study run.
+
+    Only one study runs at a time. Returns 409 if a study is already
+    running. The study runs in the background; poll GET /study/status
+    for progress.
+    """
+    import asyncio
+    from study.run import StudyRunner, StudyRunRequest
+
+    runs = getattr(request.app.state, "study_runs", {})
+    for rid, state in runs.items():
+        if state.status in ("starting", "running"):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Study already running: {rid}",
+            )
+
+    req = StudyRunRequest(
+        symbols=body.get("symbols", ["BTCUSD", "ETHUSD", "SOLUSD"]),
+        timeframes=body.get("timeframes", ["15m", "30m", "1h", "2h", "4h"]),
+        validation_method=body.get("validation_method", 1),
+    )
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, "..", "..", "..", "..", ".."))
+
+    runner = StudyRunner(app=request.app, data_dir=root, output_dir=root)
+    state = runner.init_run(req)
+    asyncio.create_task(runner.run(req))
+
+    return {"run_id": state.run_id, "status": state.status, "n_configs": 0}
+
+
+@router.get("/study/status/{run_id}")
+async def study_status(run_id: str, request: Request) -> dict:
+    """Poll the status of a running/completed study."""
+    runs = getattr(request.app.state, "study_runs", {})
+    state = runs.get(run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"no study run with id {run_id}")
+    return {
+        "run_id": state.run_id,
+        "status": state.status,
+        "progress_pct": state.progress_pct,
+        "current_stage": state.current_stage,
+        "elapsed_seconds": state.elapsed_seconds,
+        "error": state.error,
+        "n_configs": state.n_configs,
+        "n_survivors": state.n_survivors,
+    }
+
+
 @router.get("/study/report")
 async def study_report(request: Request) -> dict:
-    """Return the stored Phase-1 study artifacts for the selected validation
-    method. Running the study is an offline job (heavy); this serves the latest
-    generated reports so the FE selector can display them."""
+    """Return the stored Phase-1 study artifacts.
+
+    Reads generated files first (from last study run). Falls back to
+    static artifacts if no generated files exist. The FE selector can
+    display whichever is available."""
     import os
     cfg = get_engine_config(request.app)
     here = os.path.dirname(os.path.abspath(__file__))
@@ -660,11 +790,16 @@ async def study_report(request: Request) -> dict:
 
     study = _read("DERIVATIVES_EDGE_STUDY.md")
     gate = _read("GATE_OVERFILTER.md")
+
+    # Also try the gate overfilter CSV
+    gate_csv = _read("derivatives_gate_overfilter.csv")
+
     return {
         "validation_method": cfg.validation_method,
         "study": study["text"] if study else None,
         "study_generated_at": study["generated_at"] if study else None,
         "gate_overfilter": gate["text"] if gate else None,
+        "has_csv": gate_csv is not None,
     }
 
 

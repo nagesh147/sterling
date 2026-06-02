@@ -89,6 +89,7 @@ class MarketContext(BaseModel):
     avg_R: Optional[float] = None                   # trailing avg-R when known
     cb_size_mult: float = 1.0                       # DrawdownCircuitBreaker.size_multiplier()
     portfolio_value: float = 100_000.0              # NAV for premium-cap and Greeks budget
+    gex_profile: Optional[dict] = None              # GEX profile from gex_engine (Phase 2e)
 
 
 class SignalContext(BaseModel):

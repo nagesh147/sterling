@@ -18,6 +18,7 @@
   --t-text:   #a8b8c8;
   --t-bright: #dce8f0;
   --t-dim:    #4a5a6a;
+  --t-muted:  #6a7a8a;
   --t-green:  #00c87a;
   --t-red:    #f03050;
   --t-amber:  #f0a020;
@@ -107,6 +108,7 @@
   --t-text:   #A1A1AA;
   --t-bright: #FAFAFA;
   --t-dim:    #71717A;
+  --t-muted:  #90909a;
   --t-green:  #10B981;
   --t-red:    #EF4444;
   --t-amber:  #F59E0B;

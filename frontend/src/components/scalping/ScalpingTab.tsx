@@ -25,7 +25,7 @@ import { useExchanges, useUpdateExchange } from '../../hooks/useExchanges';
 import { useStreamPrices, useStreamStatus, useAppStream } from '../../hooks/useAppStream';
 import { ThreeColumnLayout, LeftSection } from '../ThreeColumnLayout';
 
-import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint, alpha } from '../../styles/terminalUI';
+import { card, cardHead, cardBody, grpBox, grpTitle, chipStyle, gridStyle, tint, alpha, c } from '../../styles/terminalUI';
 
 /* ── executed-trade tracking ───────────────────────────────────────────────── */
 
@@ -66,7 +66,7 @@ function NumField({ label, value, step = 1, min, max, defaultVal, onChange }: {
   const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, fontWeight: 600, color: 'var(--t-muted)' }}>
         <span>{label}</span>
         <input
           type="number" value={value} step={step} min={min} max={max}
@@ -84,7 +84,7 @@ function NumField({ label, value, step = 1, min, max, defaultVal, onChange }: {
         />
       </label>
       {defaultVal !== undefined && !isDefault && (
-        <div style={{ fontSize: 8, color: 'var(--t-dim)', textAlign: 'right', paddingRight: 2, fontStyle: 'italic', opacity: 0.8 }}>
+        <div style={{ fontSize: 9, color: 'var(--t-muted)', textAlign: 'right', paddingRight: 2, fontStyle: 'italic', opacity: 0.8 }}>
           Factory Default: {defaultVal}
         </div>
       )}
@@ -96,7 +96,7 @@ function TfSelect({ label, value, opts, defaultVal, onChange }: { label: string;
   const isDefault = defaultVal !== undefined && value === defaultVal;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, color: 'var(--t-dim)' }}>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 10, fontWeight: 600, color: 'var(--t-muted)' }}>
         <span>{label}</span>
         <select value={value} onChange={(e) => onChange(e.target.value)} style={{
           width: 74, 
@@ -115,7 +115,7 @@ function TfSelect({ label, value, opts, defaultVal, onChange }: { label: string;
         </select>
       </label>
       {defaultVal !== undefined && !isDefault && (
-        <div style={{ fontSize: 8, color: 'var(--t-dim)', textAlign: 'right', paddingRight: 2, fontStyle: 'italic', opacity: 0.8 }}>
+        <div style={{ fontSize: 9, color: 'var(--t-muted)', textAlign: 'right', paddingRight: 2, fontStyle: 'italic', opacity: 0.8 }}>
           Factory Default: {defaultVal}
         </div>
       )}
@@ -123,11 +123,11 @@ function TfSelect({ label, value, opts, defaultVal, onChange }: { label: string;
   );
 }
 
-function Pill({ text, color }: { text: string; color: string }) {
+function Pill({ text, color, size = 9 }: { text: string; color: string; size?: number }) {
   return (
     <span style={{
-      fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 0',
-      borderRadius: 'var(--radius-sm)', background: alpha(color, 0.13), color, border: `1px solid ${alpha(color, 0.27)}`,
+      fontSize: size, letterSpacing: '0.06em', padding: '2px 0',
+      borderRadius: 'var(--radius-sm)', background: alpha(color, 0.13), color, border: `1px solid ${alpha(color, 0.13)}`,
       whiteSpace: 'nowrap', display: 'inline-block', width: '100%', textAlign: 'center',
     }}>{text}</span>
   );
@@ -135,12 +135,10 @@ function Pill({ text, color }: { text: string; color: string }) {
 
 function BadgeColumn({ meta, profile }: { meta: { label: string; color: string }; profile?: string }) {
   return (
-    <div style={{ width: 160, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ width: 82 }}>
-        <Pill text={meta.label} color={meta.color} />
-      </div>
+    <div style={{ width: 90, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>{meta.label}</span>
       {profile && (
-        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--t-muted)', whiteSpace: 'nowrap' }}>
           [{profile.toUpperCase()}]
         </span>
       )}
@@ -344,7 +342,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                   {draft.use_optimized ? (
                     <div style={{ ...grpBox, gridColumn: '1 / -1', textAlign: 'center', padding: '24px 12px', background: 'var(--t-bg2)', border: '1px dashed var(--t-blue)44' }}>
                       <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-blue)', marginBottom: 8, letterSpacing: '0.05em' }}>🔒 STRATEGY LOGIC MANAGED BY AI</div>
-                      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto' }}>
+                      <div style={{ fontSize: 10, color: 'var(--t-muted)', lineHeight: 1.5, maxWidth: 400, margin: '0 auto' }}>
                         The Walk-Forward Optimizer is currently overriding manual thresholds for Timeframes, SMC, MA Crossover, Mean Reversion, Breakout, and Delta-Gamma. 
                         It calculates dynamic expectancy limits in real-time. Turn off the AI Gatekeeper above to unlock manual overrides.
                       </div>
@@ -528,7 +526,7 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width, minWidth: 0, flexShrink: 0, justifyContent: 'center' }}>
       <span style={{
-        fontSize: 13, fontWeight: 700, color: color || 'var(--t-bright)', lineHeight: 1.15,
+        fontSize: 11, fontWeight: 400, color: color || 'var(--t-bright)', lineHeight: 1.15,
         fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         display: 'flex', alignItems: 'center', gap: 4,
       }}>{fmtUsd(shown)}{badges}</span>
@@ -549,13 +547,15 @@ function PlanLevelCell({ initial, current, color, width = 96, favorableUp, badge
  * "Watching-only" list collapses the plan columns in lockstep. */
 type SignalCol = {
   key: string; label: string; width: string;
-  plan?: boolean; action?: boolean; dir?: boolean; pattern?: boolean; align?: 'center' | 'left';
+  plan?: boolean; action?: boolean; dir?: boolean; pattern?: boolean; align?: 'center' | 'left' | 'right';
+  pnl?: boolean; pnlType?: boolean;
 };
 // Flexible columns (minmax + fr) absorb the spare width so the table fills the
 // center column instead of crowding to the left. Fixed columns stay fixed.
 const SIGNAL_COLS: SignalCol[] = [
   { key: 'accent',   label: '',                 width: '4px' },
   { key: 'symbol',   label: 'Symbol',           width: 'minmax(50px, 0.7fr)' },
+  { key: 'id',       label: 'ID',               width: 'minmax(36px, 0.4fr)' },
   { key: 'time',     label: 'Time',             width: 'minmax(56px, 0.8fr)' },
   { key: 'status',   label: 'Status',           width: 'minmax(60px, 0.8fr)' },
   { key: 'dir',      label: 'Direction',        width: 'minmax(70px, 1fr)',  dir: true },
@@ -564,12 +564,30 @@ const SIGNAL_COLS: SignalCol[] = [
   { key: 'stop',     label: 'Stop',             width: 'minmax(70px, 1fr)',  plan: true },
   { key: 'target',   label: 'Target',           width: 'minmax(70px, 1fr)',  plan: true },
   { key: 'risk',     label: 'Risk',             width: 'minmax(46px, 0.6fr)',  plan: true },
-  { key: 'strategy', label: 'Strategy',         width: 'minmax(90px, 1.2fr)' },
-  { key: 'pattern',  label: 'Pattern',          width: 'minmax(100px, 1.4fr)', align: 'center', pattern: true },
-  { key: 'profile',  label: 'Profile',          width: 'minmax(60px, 0.8fr)' },
-  { key: 'action',   label: 'Action',           width: 'minmax(180px, 2fr)', action: true },
+  { key: 'strategy', label: 'Strategy',         width: 'minmax(70px, 0.8fr)' },
+  { key: 'pattern',  label: 'Pattern',          width: 'minmax(90px, 1fr)', align: 'center', pattern: true },
+  { key: 'profile',  label: 'Profile',          width: 'minmax(50px, 0.5fr)' },
+  { key: 'pnl',      label: 'P&L',              width: 'minmax(70px, 0.9fr)', align: 'right', pnl: true },
+  { key: 'type',     label: '',                 width: 'minmax(60px, 0.7fr)', align: 'right', pnlType: true },
+  { key: 'action',   label: 'Action',           width: 'minmax(110px, 1fr)', action: true },
 ];
 const PLAN_COL_SPAN = SIGNAL_COLS.filter((c) => c.plan).length;
+
+// Columns for the rendered signals <table> — drops the thin accent marker (the
+// strategy colour now lives in the Strategy pill). The signals table mirrors the
+// derivatives candidate tables' <thead>/<td> structure so all tables look alike.
+// Profile and pattern are surfaced in the expanded row details, not as their own columns.
+const TABLE_COLS = SIGNAL_COLS.filter((col) => col.key !== 'accent' && col.key !== 'profile' && col.key !== 'pattern');
+const TABLE_COL_COUNT = TABLE_COLS.length;
+
+// Fixed table-layout column widths (percent of table width). With
+// `table-layout: fixed` these freeze the columns, so live value updates
+// (price, P&L, trailed stops) never reflow the table. Keyed by SIGNAL_COLS key.
+const SIGNAL_COL_PCT: Record<string, string> = {
+  symbol: '6%', id: '4%', time: '5%', status: '5%', dir: '5%',
+  entry: '7%', current: '11%', stop: '7%', target: '7%', risk: '4%',
+  strategy: '5%', pnl: '7%', type: '6%', action: '21%',
+};
 
 // Which optional columns are visible. Plan = an armed/executed signal exists;
 // Action = a row can act; Dir = a row has a long/short bias. Each is dropped
@@ -598,13 +616,18 @@ function signalRowGrid(f: ColFlags): React.CSSProperties {
 }
 
 function SignalTableHeader({ flags }: { flags: ColFlags }) {
+  // Matches the derivatives candidate-table <thead>: recessed surface strip,
+  // 9px uppercase dim labels, single bottom border.
   return (
-    <div style={{ ...signalRowGrid(flags), padding: '4px 16px 7px 0', marginBottom: 2 }}>
+    <div style={{
+      ...signalRowGrid(flags), padding: '6px 16px 6px 0',
+      background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)',
+    }}>
       {SIGNAL_COLS.filter((c) => showCol(c, flags)).map((c) => (
         <span key={c.key} style={{
-          fontSize: 10, fontWeight: 800, color: 'var(--t-text)', letterSpacing: '0.05em',
+          fontSize: 9, fontWeight: 700, color: 'var(--t-dim)', letterSpacing: '0.08em',
           textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          textAlign: c.align === 'center' ? 'center' : 'left',
+          textAlign: c.align ?? 'left',
         }}>{c.label}</span>
       ))}
     </div>
@@ -790,13 +813,13 @@ function extractServerIp(raw?: string): string | null {
 function MetricItem({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 60 }}>
-      <span style={{ fontSize: 8, letterSpacing: '0.07em', color: 'var(--t-dim)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
+      <span style={{ fontSize: 9, letterSpacing: '0.07em', color: 'var(--t-dim)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
       <span style={{ fontSize: 11, fontWeight: 700, color: color || 'var(--t-bright)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   );
 }
 
-function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl }) {
+function ExecDetail({ execState, pnl, profile, pattern }: { execState: ExecState; pnl?: SignalPnl; profile?: string; pattern?: string }) {
   const r = execState.resp;
   const err = execState.error;
   const accepted = !!r?.accepted;
@@ -813,7 +836,6 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
 
   const pnlVal = pnl?.value ?? null;
   const pnlColor = pnlVal == null ? 'var(--t-dim)' : pnlVal >= 0 ? 'var(--t-green)' : 'var(--t-red)';
-  const posStatus = pnl?.realized ? 'Closed' : pnl?.status ? pnl.status.replace(/_/g, ' ') : (accepted ? 'Open' : '—');
 
   return (
     <div
@@ -831,12 +853,12 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
       </div>
 
       {/* what happened */}
-      {what && <span style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, wordBreak: 'break-word' }}>{what}</span>}
+      {what && <span style={{ fontSize: 11, color: 'var(--t-dim)', lineHeight: 1.5, wordBreak: 'break-word' }}>{what}</span>}
 
       {/* copyable server IP for ip_not_whitelisted errors */}
       {serverIp && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <code style={{ fontSize: 12, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: 0.5, background: 'var(--t-bg3)', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>{serverIp}</code>
+          <code style={{ fontSize: 11, fontWeight: 800, color: 'var(--t-bright)', letterSpacing: 0.5, background: 'var(--t-bg3)', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>{serverIp}</code>
           <button
             onClick={() => navigator.clipboard.writeText(serverIp)}
             style={{ fontSize: 9, fontWeight: 700, color: 'var(--t-blue)', background: 'var(--t-blue)14', border: '1px solid var(--t-blue)44', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit' }}
@@ -897,8 +919,9 @@ function ExecDetail({ execState, pnl }: { execState: ExecState; pnl?: SignalPnl 
           {pnl?.orderStatus && (
             <MetricItem label="Order" value={pnl.orderStatus} color={pnl.orderStatus === 'filled' ? 'var(--t-green)' : 'var(--t-amber)'} />
           )}
-          <MetricItem label="Status" value={posStatus} color={pnl?.realized ? 'var(--t-dim)' : 'var(--t-green)'} />
           <MetricItem label="Mode" value={mode} color="var(--t-blue)" />
+          {profile && <MetricItem label="Profile" value={profile} color="var(--t-bright)" />}
+          {pattern && <MetricItem label="Pattern" value={pattern.replace(/_/g, ' ')} color="var(--t-amber)" />}
         </div>
       )}
     </div>
@@ -912,7 +935,7 @@ function ConsolidatedRow({ count, totalPnl, openPnl, realizedPnl, notional, wins
   count: number; totalPnl: number; openPnl: number; realizedPnl: number;
   notional: number; wins: number; losses: number;
 }) {
-  const c = totalPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)';
+  const clr = totalPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)';
   const Stat = ({ label, value, color }: { label: string; value: string; color?: string }) => (
     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
       <span style={{ fontSize: 12, fontWeight: 800, color: color || 'var(--t-bright)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
@@ -920,20 +943,20 @@ function ConsolidatedRow({ count, totalPnl, openPnl, realizedPnl, notional, wins
     </div>
   );
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 75, flexWrap: 'wrap',
-      padding: '10px 16px', borderRadius: 'var(--radius-lg)',
-      border: `1px solid ${alpha(c, 0.27)}`, background: alpha(c, 0.05),
-    }}>
-      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: c }}>Σ</span>
-      <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
-        <span style={{ fontSize: 17, fontWeight: 900, color: c, fontVariantNumeric: 'tabular-nums' }}>{fmtSigned(totalPnl)}</span>
-        <span style={{ fontSize: 8, color: 'var(--t-dim)', fontWeight: 700, letterSpacing: '0.07em' }}>TOTAL P&L · {count}</span>
-      </div>
-      <Stat label="OPEN" value={fmtSigned(openPnl)} color={openPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
-      <Stat label="REALIZED" value={fmtSigned(realizedPnl)} color={realizedPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
-      <Stat label="WIN / LOSS" value={`${wins} / ${losses}`} color={wins >= losses ? 'var(--t-green)' : 'var(--t-red)'} />
-    </div>
+    <tr style={{ borderTop: '2px solid var(--t-border)', background: alpha(clr, 0.05) }}>
+      <td colSpan={TABLE_COL_COUNT} style={{ padding: '8px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 60, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: clr }}>Σ</span>
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.05 }}>
+            <span style={{ fontSize: 17, fontWeight: 900, color: clr, fontVariantNumeric: 'tabular-nums' }}>{fmtSigned(totalPnl)}</span>
+            <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--t-muted)', letterSpacing: '0.07em' }}>TOTAL P&L · {count}</span>
+          </div>
+          <Stat label="OPEN" value={fmtSigned(openPnl)} color={openPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
+          <Stat label="REALIZED" value={fmtSigned(realizedPnl)} color={realizedPnl >= 0 ? 'var(--t-green)' : 'var(--t-red)'} />
+          <Stat label="WIN / LOSS" value={`${wins} / ${losses}`} color={wins >= losses ? 'var(--t-green)' : 'var(--t-red)'} />
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -1029,12 +1052,12 @@ function ExecLog({ entries, mode }: {
               onMouseEnter={(ev) => e.reason && (ev.currentTarget.style.background = 'var(--t-bg3)')}
               onMouseLeave={(ev) => e.reason && (ev.currentTarget.style.background = 'transparent')}
             >
-              <span style={{ color: col, fontWeight: 800, fontSize: 9, width: 9, textAlign: 'center', flexShrink: 0 }}>{e.ok ? '✓' : e.status === 'already_open' ? '•' : '✕'}</span>
-              <span style={{ color: 'var(--t-bright)', fontWeight: 800, flexShrink: 0 }}>{sym}</span>
-              <span style={{ color: 'var(--t-dim)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{strat}</span>
-              <span style={{ marginLeft: 'auto', color: col, fontWeight: 700, fontSize: 8.5, letterSpacing: '0.03em', textTransform: 'uppercase', flexShrink: 0 }}>{e.status.replace(/_/g, ' ')}</span>
-              <span style={{ color: mc, fontWeight: 800, fontSize: 8, letterSpacing: '0.04em', flexShrink: 0 }}>{e.auto ? 'A·' : ''}{e.mode}</span>
-              <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', fontSize: 8.5, flexShrink: 0 }}>{new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}</span>
+              <span style={{ color: col, fontWeight: 600, fontSize: 10, width: 9, textAlign: 'center', flexShrink: 0 }}>{e.ok ? '✓' : e.status === 'already_open' ? '•' : '✕'}</span>
+              <span style={{ color: 'var(--t-bright)', fontWeight: 600, flexShrink: 0 }}>{sym}</span>
+              <span style={{ color: 'var(--t-muted)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{strat}</span>
+              <span style={{ marginLeft: 'auto', color: col, fontWeight: 600, fontSize: 10, letterSpacing: '0.03em', textTransform: 'uppercase', flexShrink: 0 }}>{e.status.replace(/_/g, ' ')}</span>
+              <span style={{ color: mc, fontWeight: 600, fontSize: 10, letterSpacing: '0.04em', flexShrink: 0 }}>{e.auto ? 'A·' : ''}{e.mode}</span>
+              <span style={{ color: 'var(--t-muted)', fontVariantNumeric: 'tabular-nums', fontSize: 10, flexShrink: 0 }}>{new Date(e.ts).toLocaleTimeString('en-US', { hour12: false })}</span>
             </div>
             {expandedIndices.has(i) && e.reason && (
               <div style={{
@@ -1141,7 +1164,7 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
       const sign = roundedDiff > 0 ? '+' : roundedDiff < 0 ? '−' : '';
       currentValNode = (
         <span>
-          {fmtUsd(currentPx)} <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 600 }}>({sign}{Math.abs(roundedDiff).toFixed(1)})</span>
+          {fmtUsd(currentPx)} <span style={{ fontSize: 11, opacity: 0.7, fontWeight: 400 }}>({sign}{Math.abs(roundedDiff).toFixed(1)})</span>
         </span>
       );
     } else {
@@ -1165,124 +1188,113 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
     target: initialTp ?? 0,
   } : undefined;
 
+  // Cell styles mirror the derivatives candidate tables' <td>.
+  const td: React.CSSProperties = { padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
+  const tdNum: React.CSSProperties = { ...td, fontVariantNumeric: 'tabular-nums' };
+
+  const tpBadges = (
+    <>
+      {s.tp_source && s.tp_source.includes('fallback') && (
+        <span title="Target determined by fallback Risk-Reward" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[RR]</span>
+      )}
+      {s.tp_source && s.tp_source.includes('swing') && (
+        <span title="Target determined by dynamic swing padding" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[SW]</span>
+      )}
+      {s.tp_source === 'structural_level' && (
+        <span title="Target determined by structural level" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[LVL]</span>
+      )}
+    </>
+  );
+
+  const hintNode = execState && !accepted ? (
+    <div style={{ padding: '4px 8px 8px 8px', fontSize: 11, lineHeight: 1.5, color: 'var(--t-amber)', fontWeight: 600, wordBreak: 'break-word' }}>
+      ✕ {pillMode} — {failureReason(execState)}
+    </div>
+  ) : !execState && algoOn && s.executable ? (
+    <div style={{ padding: '4px 8px 8px 8px', fontSize: 11, lineHeight: 1.5, color: 'var(--t-green)', wordBreak: 'break-word' }}>
+      ⚡ Auto-executing in {pillMode}…
+    </div>
+  ) : null;
+
+  const expandedContent = expanded && ((accepted && execState) || !accepted);
+  const hasDetail = !!hintNode || !!expandedContent;
+
   return (
-    <div onClick={onSelect} style={{
-      display: 'flex', flexDirection: 'column', gap: 7,
-      padding: '12px 16px 12px 0', borderRadius: 'var(--radius-lg)', cursor: 'pointer',
-      border: `1px solid ${borderColor}`,
-      background: bg,
-      transition: 'border-color .12s, background .12s',
-    }}>
-      {/* ── main row: CSS grid from the shared SIGNAL_COLS spec — every value
-          sits under its header because header + rows use the same template ── */}
-      <div style={signalRowGrid({ plan: showPlan !== false, action: showAction !== false, dir: showDirection !== false, pattern: showPattern !== false })}>
-        {/* accent */}
-        <div style={{ width: 4, alignSelf: 'stretch', minHeight: 34, borderRadius: 3, background: meta.color }} />
-        {/* symbol & id */}
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--t-bright)', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{s.underlying}</span>
-          <span style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: 0.5, fontFamily: "'JetBrains Mono', monospace" }}>#{sigId}</span>
-        </div>
-        {/* time — moved to column 2 so the signal moment is the first thing the
-            eye reads after the symbol */}
-        <span style={{
-          fontSize: 11, color: 'var(--t-text)', fontWeight: 600,
-          fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-        }}>{fmtTime(s.timestamp_ms)}</span>
-        {/* status — own column (so it has a header) */}
-        <span style={{
-          justifySelf: 'start', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', color: statusColor, whiteSpace: 'nowrap',
-        }}>{statusLabel}</span>
-        {showDirection !== false && (
-          <span style={{
-            fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.1, whiteSpace: 'nowrap',
-            color: (long || short) ? dirColor : 'var(--t-dim)',
-          }}>{dirLabel}</span>
-        )}
-        {/* trade plan — five grid cells; a single span keeps the columns when
-            this row has no plan. Omitted entirely when plan columns are off. */}
-        {showPlan !== false && (hasPlan ? (
-          <>
-            <PlanCell value={fmtUsd(displayEntry)} width="100%" />
-            <PlanCell value={currentValNode} color={currentColor} width="100%" />
-            <PlanLevelCell initial={initialSl} current={trailSl} color="var(--t-red)" favorableUp={long} width="100%" />
-            <PlanLevelCell
-              initial={initialTp} current={trailTp} color="var(--t-amber)" favorableUp={long} width="100%"
-              badges={
-                <>
-                  {s.tp_source && s.tp_source.includes('fallback') && (
-                    <span title="Target determined by fallback Risk-Reward" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[RR]</span>
-                  )}
-                  {s.tp_source && s.tp_source.includes('swing') && (
-                    <span title="Target determined by dynamic swing padding" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[SW]</span>
-                  )}
-                  {s.tp_source === 'structural_level' && (
-                    <span title="Target determined by structural level" style={{ fontSize: 9, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>[LVL]</span>
-                  )}
-                </>
-              }
-            />
-            <PlanCell value={s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'} width="100%" />
-          </>
-        ) : (
-          <div style={{ gridColumn: `span ${PLAN_COL_SPAN}` }} />
-        ))}
+    <>
+      <tr onClick={onSelect} style={{
+        cursor: 'pointer', background: bg, color: 'var(--t-text)',
+        // Flush table row matching the derivatives candidate tables: a single
+        // bottom divider; open/closed/live/selected state reads from the bg tint.
+        borderBottom: hasDetail ? 'none' : '1px solid var(--t-br2, var(--border-light))',
+        transition: 'background .12s',
+      }}>
+        {/* symbol — direction arrow + underlying, like the futures table */}
+        <td style={{ ...td, fontWeight: 700, color: 'var(--t-bright)' }}>
+          <span style={{ color: long ? 'var(--t-green)' : short ? 'var(--t-red)' : 'var(--t-dim)' }}>
+            {long ? '▲' : short ? '▼' : '–'}
+          </span>{' '}{s.underlying}
+        </td>
+        {/* id — stable hex hash for tracking */}
+        <td style={{ ...tdNum, fontSize: 9, color: 'var(--t-dim)', fontFamily: 'monospace' }}>{sigId}</td>
+        {/* time */}
+        <td style={{ ...tdNum, color: 'var(--t-text)' }}>{fmtTime(s.timestamp_ms)}</td>
+        {/* status */}
+        <td style={td}>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: statusColor }}>{statusLabel}</span>
+        </td>
+        {/* direction */}
+        <td style={td}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.04em', color: (long || short) ? dirColor : 'var(--t-dim)' }}>{dirLabel}</span>
+        </td>
+        {/* entry */}
+        <td style={tdNum}>{hasPlan ? fmtUsd(displayEntry) : '—'}</td>
+        {/* current */}
+        <td style={{ ...tdNum, color: hasPlan ? currentColor : 'var(--t-dim)' }}>{hasPlan ? currentValNode : '—'}</td>
+        {/* stop */}
+        <td style={tdNum}>
+          {hasPlan ? <PlanLevelCell initial={initialSl} current={trailSl} color="var(--t-red)" favorableUp={long} width="auto" /> : '—'}
+        </td>
+        {/* target */}
+        <td style={tdNum}>
+          {hasPlan ? <PlanLevelCell initial={initialTp} current={trailTp} color="var(--t-amber)" favorableUp={long} width="auto" badges={tpBadges} /> : '—'}
+        </td>
+        {/* risk */}
+        <td style={tdNum}>{hasPlan && s.risk_pct != null ? `${fmt(s.risk_pct)}%` : '—'}</td>
         {/* strategy */}
-        <div style={{ minWidth: 0 }}>
-          <Pill text={meta.label} color={meta.color} />
-        </div>
-        {/* pattern — centered (so the em-dash placeholder sits mid-column) */}
-        {showPattern !== false && (
-          <span title={s.pattern ? s.pattern.replace(/_/g, ' ') : ''} style={{ fontSize: 9, fontWeight: 600, color: s.pattern ? meta.color : 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>
-            {s.pattern ? s.pattern.replace(/_/g, ' ') : '—'}
-          </span>
-        )}
-        {/* profile */}
-        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--t-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {s.profile ? `[${s.profile.toUpperCase()}]` : '—'}
-        </span>
-        {/* ── action / executed glance — own column; only rendered when some row
-            has an action, otherwise the empty Action column is dropped ── */}
-        {showAction !== false && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'start' }}>
+        <td style={{ ...td, fontSize: 10, fontWeight: 600, color: c.muted, whiteSpace: 'nowrap' }}>{meta.label}</td>
+        {/* pnl */}
+        <td style={{ ...tdNum, textAlign: 'right' }}>
+          {accepted && !isOpen && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
+              {pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
+            </span>
+          )}
+        </td>
+        {/* type — realized/unrealized label */}
+        <td style={{ ...td, fontSize: 9, fontWeight: 600, color: 'var(--t-dim)', textAlign: 'right' }}>
+          {accepted && !isOpen && (
+            <span>{pnl?.realized ? 'REALIZED' : 'OPEN P&L'}</span>
+          )}
+        </td>
+        {/* action */}
+        <td style={{ ...td, textAlign: 'right' }}>
           {accepted ? (
-            <>
-              <span title={pausedAuto ? 'Opened by Algo, which is now OFF — runs to SL/TP, no re-entry' : undefined} style={{
-                fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: pausedAuto ? 'var(--t-amber)' : modeColor,
-                padding: '4px 9px', borderRadius: 'var(--radius-md)', background: pausedAuto ? tint('var(--t-amber)', 12) : alpha(modeColor, 0.09),
-                border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
-                textAlign: 'center', minWidth: 80,
-              }}>✓ {execState?.auto ? 'AUTO · ' : ''}{pillMode}{pausedAuto ? ' ⏸' : ''}</span>
-              {execState?.auto && execState?.resp?.telegram_alert_sent && (
-                <span title="Signal alert sent to Telegram" style={{
-                  width: 6, height: 6, borderRadius: '50%',
-                  background: 'var(--t-purple)',
-                  flexShrink: 0,
-                }} />
-              )}
-              {!isOpen && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.05 }}>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: pnlColor, fontVariantNumeric: 'tabular-nums' }}>
-                    {pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`}
-                  </span>
-                  <span style={{ fontSize: 8, color: 'var(--t-dim)', letterSpacing: '0.06em', fontWeight: 700 }}>
-                    {pnl?.realized ? 'REALIZED' : 'OPEN P&L'}
-                  </span>
-                </div>
-              )}
-              <span style={{ fontSize: 9, color: 'var(--t-dim)', width: 10, textAlign: 'center', transition: 'transform .15s', transform: expanded ? 'rotate(180deg)' : 'none', display: 'inline-block' }}>▼</span>
-            </>
+            <span title={pausedAuto ? 'Opened by Algo, which is now OFF — runs to SL/TP, no re-entry' : undefined} style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: pausedAuto ? 'var(--t-amber)' : modeColor,
+              padding: '4px 9px', borderRadius: 'var(--radius-md)', background: pausedAuto ? tint('var(--t-amber)', 12) : alpha(modeColor, 0.09),
+              border: `1px solid ${pausedAuto ? 'var(--t-amber)44' : alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
+              textAlign: 'center', minWidth: 80,
+            }}>✓ {execState?.auto ? 'AUTO·' : ''}{pillMode}{pausedAuto ? ' ⏸' : ''}</span>
           ) : s.executable && algoOn ? (
-            // Algo handles execution — manual button is locked out. Pill shows the mode it runs in.
             <span title={`Algo is ON — auto-executes in ${pillMode} mode`} style={{
-              fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: modeColor,
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: modeColor,
               padding: '5px 12px', borderRadius: 'var(--radius-md)', background: alpha(modeColor, 0.08),
               border: `1px solid ${alpha(modeColor, 0.27)}`, whiteSpace: 'nowrap',
               opacity: tried ? 0.7 : 1, minWidth: 80, textAlign: 'center',
-            }}>⚡ {executing ? 'AUTO…' : `AUTO · ${pillMode}`}</span>
+            }}>⚡ {executing ? 'AUTO…' : `AUTO·${pillMode}`}</span>
           ) : s.executable ? (
             <button disabled={executing} onClick={(e) => { e.stopPropagation(); onExecute(); }} style={{
-              fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', padding: '6px 16px', borderRadius: 6,
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', padding: '6px 16px', borderRadius: 6,
               fontFamily: 'inherit', cursor: executing ? 'default' : 'pointer',
               color: '#fff', background: tried ? 'var(--t-amber)' : dirColor, border: 'none', lineHeight: 1,
               opacity: executing ? 0.6 : 1, minWidth: 80, textAlign: 'center',
@@ -1290,35 +1302,33 @@ function ScalpSignalCard({ s, selected, expanded, onSelect, onExecute, executing
               {executing ? '…' : tried ? 'RETRY' : 'EXECUTE'}
             </button>
           ) : null}
-        </div>
-        )}
-      </div>
+          {accepted && (
+            <span style={{ fontSize: 11, color: 'var(--t-dim)', width: 10, textAlign: 'center', display: 'inline-block', marginLeft: 6 }}>{expanded ? '▴' : '▾'}</span>
+          )}
+        </td>
+      </tr>
 
-      {/* ── second line — failure / auto-queued hint (reason is now in the main row) ── */}
-      {execState && !accepted ? (
-        <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-amber)', fontWeight: 600, wordBreak: 'break-word' }}>
-          ✕ {pillMode} — {failureReason(execState)}
-        </div>
-      ) : !execState && algoOn && s.executable ? (
-        <div style={{ paddingLeft: 18, fontSize: 10, lineHeight: 1.5, color: 'var(--t-green)', wordBreak: 'break-word' }}>
-          ⚡ Auto-executing in {pillMode}…
-        </div>
-      ) : null}
-
-      {/* expand-on-click: full execution metrics for an executed trade */}
-      {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} />}
-
-      {/* expand-on-click: full reason/detail for non-executed signals */}
-      {!accepted && expanded && (
-        <div style={{ padding: '12px 18px', fontSize: 11, color: 'var(--t-text)', lineHeight: 1.5, background: 'rgba(0,0,0,0.1)', borderTop: '1px solid var(--t-border)', marginTop: 8, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-          <div style={{ color: 'var(--t-dim)', fontWeight: 600, marginBottom: metaReason ? 4 : 0, display: 'flex', gap: 12 }}>
-            <span>SIGNAL TIME: <span style={{ color: 'var(--t-muted)' }}>{fmtTime(s.timestamp_ms)}</span></span>
-          </div>
-          {metaReason && <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>DETAILS:</span> {formatReason(metaReason)}</div>}
-        </div>
+      {hasDetail && (
+        <tr style={{ background: bg, borderBottom: '1px solid var(--t-br2, var(--border-light))' }}>
+          <td colSpan={TABLE_COL_COUNT} style={{ padding: 0 }}>
+            {hintNode}
+            {accepted && expanded && execState && <ExecDetail execState={execState} pnl={pnl} profile={macroMode} pattern={s.pattern} />}
+            {!accepted && expanded && (
+              <div style={{ padding: '12px 14px', fontSize: 11, color: 'var(--t-text)', lineHeight: 1.5, background: 'rgba(0,0,0,0.1)', borderTop: '1px solid var(--t-border)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                <div style={{ color: 'var(--t-dim)', fontWeight: 600, marginBottom: metaReason ? 4 : 0, display: 'flex', gap: 12 }}>
+                  <span>SIGNAL TIME: <span style={{ color: 'var(--t-muted)' }}>{fmtTime(s.timestamp_ms)}</span></span>
+                </div>
+                <div style={{ display: 'flex', gap: 16, marginBottom: metaReason ? 4 : 0 }}>
+                  {macroMode && <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>PROFILE: <span style={{ color: 'var(--t-bright)', fontWeight: 400 }}>{macroMode}</span></span>}
+                  {s.pattern && <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>PATTERN: <span style={{ color: meta.color, fontWeight: 400 }}>{s.pattern.replace(/_/g, ' ')}</span></span>}
+                </div>
+                {metaReason && <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>DETAILS:</span> {formatReason(metaReason)}</div>}
+              </div>
+            )}
+          </td>
+        </tr>
       )}
-
-    </div>
+    </>
   );
 }
 
@@ -1440,7 +1450,7 @@ function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }
                 <tbody>
                   {res.trades.slice(-30).reverse().map((t, i) => (
                     <tr key={i} style={{ borderTop: '1px solid var(--t-border)' }}>
-                      <td style={{ padding: '2px 6px' }}><Pill text={t.strategy.replace('_', ' ').toUpperCase()} color={STRATEGY_META[t.strategy]?.color || 'var(--t-dim)'} /></td>
+                      <td style={{ padding: '2px 6px', fontSize: 10, fontWeight: 700, color: STRATEGY_META[t.strategy]?.color || 'var(--t-dim)', whiteSpace: 'nowrap' }}>{t.strategy.replace('_', ' ').toUpperCase()}</td>
                       <td style={{ padding: '2px 6px', color: t.direction === 'long' ? 'var(--t-green)' : 'var(--t-red)' }}>{t.direction === 'long' ? 'L' : 'S'}</td>
                       <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{t.regime || '—'}</td>
                       <td style={{ padding: '2px 6px', color: 'var(--t-dim)' }}>{fmtUsd(t.entry_price)}</td>
@@ -1463,7 +1473,7 @@ function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 8, letterSpacing: '0.08em', color: 'var(--t-dim)', fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 9, letterSpacing: '0.06em', color: 'var(--t-muted)', fontWeight: 600 }}>{label}</div>
       <div style={{ fontSize: 13, fontWeight: 700, color: color || 'var(--t-bright)' }}>{value}</div>
     </div>
   );
@@ -1570,10 +1580,10 @@ function TerminalLog({ scanInfo, lastExec }: {
         padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--t-text)', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--t-bright)', textTransform: 'uppercase' }}>
           🖥️ Live Terminal
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: head.c }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 600, color: head.c }}>
           {head.e} {head.t}
         </span>
       </div>
@@ -1585,7 +1595,7 @@ function TerminalLog({ scanInfo, lastExec }: {
           <div style={{ color: 'var(--t-dim)' }}>⏳ Waiting for activity…</div>
         ) : lines.map((ln) => (
           <div key={ln.id} style={{ display: 'flex', gap: 7, alignItems: 'baseline' }}>
-            <span style={{ color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, fontSize: 9.5 }}>
+            <span style={{ color: 'var(--t-muted)', fontVariantNumeric: 'tabular-nums', flexShrink: 0, fontSize: 10 }}>
               {new Date(ln.t).toLocaleTimeString('en-US', { hour12: false })}
             </span>
             <span style={{ flexShrink: 0 }}>{ln.emoji}</span>
@@ -1615,8 +1625,8 @@ function SettingsTrigger({ onClick }: { onClick: () => void }) {
         color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
       }}
     >
-      <span style={{ fontSize: 13 }}>⚙</span>
-      <span style={{ fontSize: 12, fontWeight: 700 }}>Global Strategy Config</span>
+      <span style={{ fontSize: 12 }}>⚙</span>
+      <span style={{ fontSize: 11, fontWeight: 600 }}>Global Strategy Config</span>
     </button>
   );
 }
@@ -1636,8 +1646,8 @@ function DerivativesTrigger({ onClick }: { onClick: () => void }) {
         color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
       }}
     >
-      <span style={{ fontSize: 13 }}>⚡</span>
-      <span style={{ fontSize: 12, fontWeight: 700 }}>Global Derivatives Config</span>
+    <span style={{ fontSize: 12 }}>⚡</span>
+      <span style={{ fontSize: 11, fontWeight: 600 }}>Global Derivatives Config</span>
     </button>
   );
 }
@@ -1678,8 +1688,8 @@ function EdgeGateTrigger({ onClick }: { onClick: () => void }) {
         color: hover ? 'var(--t-bright)' : 'var(--t-dim)', transition: 'all .1s',
       }}
     >
-      <span style={{ fontSize: 13 }}>🛡️</span>
-      <span style={{ fontSize: 12, fontWeight: 700 }}>Edge Gate Admission</span>
+      <span style={{ fontSize: 12 }}>🛡️</span>
+      <span style={{ fontSize: 11, fontWeight: 600 }}>Edge Gate Admission</span>
     </button>
   );
 }
@@ -2189,13 +2199,13 @@ export function ScalpingTab() {
             padding: '10px 12px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
             background: isActive ? `var(--t-bg)` : 'transparent',
             border: isActive ? `1px solid var(--t-border)` : '1px solid transparent',
-            color: isActive ? item.color : 'var(--t-dim)',
+            color: isActive ? item.color : 'var(--t-muted)',
             marginBottom: 4, transition: 'all .2s ease',
             transform: isActive ? 'translateX(2px)' : 'none'
           }}>
-            <div style={{ width: 8, height: 8, borderRadius: 4, background: item.color, flexShrink: 0, opacity: isActive ? 1 : 0.4 }} />
-            <span style={{ fontSize: 12, fontWeight: isActive ? 800 : 500, letterSpacing: '0.02em' }}>{item.label}</span>
-            {item.count != null && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, opacity: 0.8 }}>{item.count}</span>}
+            <div style={{ width: 8, height: 8, borderRadius: 4, background: item.color, flexShrink: 0, opacity: isActive ? 1 : 0.6 }} />
+            <span style={{ fontSize: 11, fontWeight: isActive ? 700 : 600, letterSpacing: '0.02em' }}>{item.label}</span>
+            {item.count != null && <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, opacity: 0.8 }}>{item.count}</span>}
           </button>
         );
       })}
@@ -2255,8 +2265,8 @@ export function ScalpingTab() {
         <LeftSection label={`Execution Log · ${tradeMode}`} collapsible defaultOpen={execLog.length > 0} border={false}>
           {execLog.length > 0 && (
             <button onClick={() => setExecLog([])} style={{
-              background: 'transparent', border: '1px solid var(--t-border)', color: 'var(--t-dim)',
-              fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', cursor: 'pointer', fontFamily: 'inherit',
+              background: 'transparent', border: '1px solid var(--t-border)', color: 'var(--t-muted)',
+              fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', cursor: 'pointer', fontFamily: 'inherit',
               textTransform: 'uppercase', padding: '2px 8px', borderRadius: 4, marginBottom: 8,
             }}>Clear</button>
           )}
@@ -2268,10 +2278,10 @@ export function ScalpingTab() {
       centerHeader={<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Sterling Engine</span>
+            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--t-bright)' }}>Sterling Engine</span>
             
             <span style={{
-              fontSize: 9, fontWeight: 800, letterSpacing: '0.06em', color: cfg?.use_optimized ? 'var(--t-blue)' : 'var(--t-text)', whiteSpace: 'nowrap',
+              fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: cfg?.use_optimized ? 'var(--t-blue)' : 'var(--t-text)', whiteSpace: 'nowrap',
               padding: '2px 7px', borderRadius: 'var(--radius-xs)', border: `1px solid ${cfg?.use_optimized ? 'var(--t-blue)40' : 'var(--t-border)'}`, 
               background: cfg?.use_optimized ? 'var(--t-blue)10' : 'var(--t-bg2)'
             }}>{tfBadge}</span>
@@ -2285,14 +2295,14 @@ export function ScalpingTab() {
             </span>
           </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column', fontSize: 10, lineHeight: 1.4, color: 'var(--t-dim)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', fontSize: 11, lineHeight: 1.4, color: 'var(--t-muted)' }}>
             <div><strong style={{ color: 'var(--t-text)' }}>{stratName}:</strong> {stratLine1}</div>
             <div>{stratLine2}</div>
           </div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+            fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
             padding: '3px 9px', borderRadius: 5, whiteSpace: 'nowrap',
             background: anyWfoActive ? 'var(--t-blue)14' : 'var(--t-border)',
             color: anyWfoActive ? 'var(--t-blue)' : 'var(--t-dim)', 
@@ -2421,19 +2431,38 @@ export function ScalpingTab() {
                     {statusFilter === 'ready' ? 'No ready signals — clear the filter to see all.' : 'No spot signals on this data source.'}
                   </div>
                 ) : (
-                  <div style={{ ...cardBody, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <SignalTableHeader flags={{ plan: true, action: true, dir: true }} />
-                    
-                    {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                    {executedSignals.length > 0 && (
-                      <ConsolidatedRow count={executedSignals.length} {...consolidated} />
-                    )}
-                    
-                    {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
-                    
-                    {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
+                  <div style={{ ...cardBody, padding: 0, overflowX: 'auto' }}>
+                    <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}>
+                      <colgroup>
+                        {TABLE_COLS.map((col) => (
+                          <col key={col.key} style={{ width: SIGNAL_COL_PCT[col.key] }} />
+                        ))}
+                      </colgroup>
+                      <thead>
+                        <tr style={{
+                          background: c.surface, color: c.muted,
+                          fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                        }}>
+                          {TABLE_COLS.map((col) => (
+                            <th key={col.key} style={{
+                              padding: '5px 8px', verticalAlign: 'middle',
+                              textAlign: col.align ?? (col.key === 'action' ? 'right' : 'left'),
+                              borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap',
+                            }}>{col.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {executedSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                        {executedSignals.length > 0 && (
+                          <ConsolidatedRow count={executedSignals.length} {...consolidated} />
+                        )}
+                        {restSignals.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true }))}
+                        {watchingRows.map(r => renderCardWithFlags(r, { plan: true, action: true, dir: true, pattern: false }))}
+                      </tbody>
+                    </table>
                     {data && displaySignals.length > 0 && (
-                      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, paddingTop: 4, marginTop: 4 }}>
+                      <div style={{ fontSize: 10, color: 'var(--t-dim)', lineHeight: 1.5, padding: '10px 12px 8px 12px' }}>
                         <b style={{ color: 'var(--t-amber)' }}>PA</b> pattern breakout · <b style={{ color: 'var(--t-purple)' }}>SMC</b> inducement + imbalance · <b style={{ color: 'var(--t-blue)' }}>MA</b> SMA/EMA cross · <b style={{ color: 'var(--t-dim)' }}>Watching</b> = at a level, no pattern yet · EXECUTE routes through Paper/Live mode
                       </div>
                     )}
@@ -2566,24 +2595,18 @@ export function ScalpingTab() {
                 </div>
               </div>
               
-              <div style={{ display: 'flex', gap: 6, borderBottom: '1px solid var(--t-border)', paddingBottom: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-                {[
+              <DerivativesPanel
+                strategy={derivStrategy}
+                strategies={[
                   { id: 'scalping/price_action', label: 'PRICE ACTION' },
                   { id: 'scalping/smc', label: 'SMC' },
                   { id: 'scalping/ma_crossover', label: 'MA CROSSOVER' },
                   { id: 'scalping/mean_reversion', label: 'MEAN REVERSION' },
                   { id: 'scalping/breakout', label: 'BREAKOUT' },
-                  { id: 'scalping/delta_gamma', label: 'DELTA GAMMA' }
-                ].map(strat => (
-                  <button key={strat.id} onClick={() => setDerivStrategy(strat.id)} style={{
-                    fontSize: 10, fontWeight: 800, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-                    border: `1px solid ${derivStrategy === strat.id ? 'var(--t-blue)' : 'var(--t-border)'}`,
-                    background: derivStrategy === strat.id ? 'var(--t-bg3)' : 'transparent',
-                    color: derivStrategy === strat.id ? 'var(--t-blue)' : 'var(--t-dim)',
-                  }}>{strat.label}</button>
-                ))}
-              </div>
-              <DerivativesPanel strategy={derivStrategy} />
+                  { id: 'scalping/delta_gamma', label: 'DELTA GAMMA' },
+                ]}
+                onStrategyChange={setDerivStrategy}
+              />
             </div>
           </div>
         </div>

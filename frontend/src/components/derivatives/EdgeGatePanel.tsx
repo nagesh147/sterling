@@ -114,7 +114,7 @@ export const EdgeGatePanel: React.FC = () => {
               <thead>
                 <tr style={{ color: c.dim, textAlign: 'left' }}>
                   {['Strategy', 'TF', 'Sym', 'Prof', 'Shrp', 'PF', 'Net', 'Score'].map((h) => (
-                    <th key={h} style={{ padding: '2px 4px', fontWeight: 700, fontSize: 8.5, letterSpacing: '0.06em' }}>{h}</th>
+                    <th key={h} style={{ padding: '2px 4px', fontWeight: 600, fontSize: 9, letterSpacing: '0.06em', color: c.muted }}>{h}</th>
                   ))}
                 </tr>
               </thead>

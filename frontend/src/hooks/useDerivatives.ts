@@ -298,7 +298,12 @@ export type AlphaSource =
 export interface DerivativesEngineConfig {
   engine_mode: EngineMode;
   active_alpha_sources: AlphaSource[];
-  risk_posture: RiskPosture;
+  /** Multi-select: postures the native engine may use; it picks the best
+   *  one for the current regime. */
+  risk_postures: RiskPosture[];
+  /** Legacy single posture — still returned by the backend, kept in sync
+   *  with the highest-priority entry of `risk_postures`. */
+  risk_posture?: RiskPosture;
   validation_method: 1 | 2 | 3;
 }
 
@@ -330,12 +335,65 @@ export interface StudyReportResponse {
   gate_overfilter: string | null;
 }
 
+export interface StudyReportResponse {
+  validation_method: 1 | 2 | 3;
+  study: string | null;
+  study_generated_at: number | null;
+  gate_overfilter: string | null;
+  has_csv: boolean;
+}
+
 export function useStudyReport(enabled = true) {
   return useQuery<StudyReportResponse>({
     queryKey: ['derivatives', 'study-report'],
     queryFn: () => api.get<StudyReportResponse>('/api/v1/derivatives/study/report'),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+// ─── study run / status ──────────────────────────────────────────────────
+
+export interface StudyRunResponse {
+  run_id: string;
+  status: string;
+  n_configs: number;
+}
+
+export interface StudyStatusResponse {
+  run_id: string;
+  status: string;           // starting | running | complete | failed
+  progress_pct: number;     // 0-100
+  current_stage: string;
+  elapsed_seconds: number;
+  error: string | null;
+  n_configs: number;
+  n_survivors: number;
+}
+
+export function useStudyRun() {
+  return useMutation<StudyRunResponse, Error, {
+    symbols?: string[];
+    timeframes?: string[];
+    validation_method?: number;
+  }>({
+    mutationFn: (body) =>
+      api.post<StudyRunResponse>('/api/v1/derivatives/study/run', body),
+  });
+}
+
+export function useStudyStatus(runId: string | null, enabled = true) {
+  return useQuery<StudyStatusResponse>({
+    queryKey: ['derivatives', 'study-status', runId],
+    queryFn: () => api.get<StudyStatusResponse>(`/api/v1/derivatives/study/status/${runId}`),
+    enabled: enabled && !!runId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (data && (data.status === 'complete' || data.status === 'failed')) {
+        return false;
+      }
+      return 3000;
+    },
   });
 }
 

@@ -1499,15 +1499,17 @@ async def lifespan(app: FastAPI):
     deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
     log.info("Derivatives scanner started (every 30s)")
 
-    # Real-time Delta options IV stream (Component ① of realtime-iv-stream).
-    # Off by default — opt in with STERLING_IV_STREAM=1 so tests/CI/backtests
-    # never open a live socket.
-    if os.environ.get("STERLING_IV_STREAM") == "1":
+    # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
+    # Auto-starts with the server so a genuine IV history accrues for vol-timing strategies.
+    # Fails gracefully if the Delta WS is unreachable (ticks stay empty, recorder no-ops).
+    try:
         from app.services.delta_iv_socket import iv_manager
         from app.services.delta_iv_recorder import start_recorder
         iv_manager.start()
         start_recorder()
         log.info("Delta real-time IV stream and recorder started")
+    except Exception:
+        log.warning("Delta IV stream start failed (ws may be unreachable) — retry on next restart")
 
     # ── Telegram bot + signal-detection alerts ────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
@@ -1576,14 +1578,13 @@ async def lifespan(app: FastAPI):
         await retry_worker_task
     except (Exception, BaseException):
         pass
-    if os.environ.get("STERLING_IV_STREAM") == "1":
-        try:
-            from app.services.delta_iv_recorder import stop_recorder
-            from app.services.delta_iv_socket import iv_manager
-            stop_recorder()
-            iv_manager.stop()
-        except Exception as exc:
-            log.warning("Error stopping IV stream/recorder: %s", exc)
+    try:
+        from app.services.delta_iv_recorder import stop_recorder
+        from app.services.delta_iv_socket import iv_manager
+        stop_recorder()
+        iv_manager.stop()
+    except Exception as exc:
+        log.warning("Error stopping IV stream/recorder: %s", exc)
 
     await adapter_manager.close_current()
     log.info("Sterling shutdown complete")

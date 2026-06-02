@@ -16,7 +16,7 @@ import { useExchanges } from '../hooks/useExchanges';
 import { useAccountSummary } from '../hooks/useAccount';
 import { fpPrice, inferModeTag } from '../utils/fmt';
 import { MODE_COLOR, STATE_COLOR, STATE_SHORT } from '../utils/colors';
-import { alpha } from '../styles/terminalUI';
+import { alpha, c } from '../styles/terminalUI';
 import { api } from '../utils/api';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -174,29 +174,29 @@ function BracketPanel({
 
   const inpStyle: React.CSSProperties = {
     flex: 1, background: 'none', border: 'none', outline: 'none',
-    color: 'var(--text-primary)', fontFamily: 'inherit',
+    color: c.bright, fontFamily: 'inherit',
     fontSize: 13, fontWeight: 700, padding: '8px 0', fontVariantNumeric: 'tabular-nums',
   };
   const rowStyle: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', background: 'var(--bg-input)',
-    border: '1px solid var(--border)', borderRadius: 5, padding: '0 10px', marginBottom: 6,
+    display: 'flex', alignItems: 'center', background: c.bg,
+    border: '1px solid c.border', borderRadius: 5, padding: '0 10px', marginBottom: 6,
   };
   const pctBtn = (label: string, onClick: () => void): React.ReactNode => (
     <button key={label} onClick={onClick} style={{
       flex: 1, padding: '4px 0', borderRadius: 4, fontSize: 9, fontWeight: 600,
-      background: 'var(--bg-input)', color: 'var(--text-faint)',
-      border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+      background: c.bg, color: c.dim,
+      border: '1px solid c.border', cursor: 'pointer', fontFamily: 'inherit',
     }}>{label}</button>
   );
 
   return (
-    <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ marginTop: 8, background: c.bg, border: '1px solid c.border', borderRadius: 8, overflow: 'hidden' }}>
 
       {/* Entry / Trigger method */}
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Entry Price</span>
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid c.border', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: c.dim }}>Entry Price</span>
         <select value={triggerMethod} onChange={e => setTriggerMethod(e.target.value as typeof triggerMethod)}
-          style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text-muted)', fontFamily: 'inherit', fontSize: 10, padding: '2px 6px', cursor: 'pointer', outline: 'none' }}>
+          style={{ background: 'none', border: '1px solid c.border', borderRadius: 4, color: c.dim, fontFamily: 'inherit', fontSize: 10, padding: '2px 6px', cursor: 'pointer', outline: 'none' }}>
           <option value="mark_price">Trigger: Mark ({spotPrice.toLocaleString('en-US', { maximumFractionDigits: 1 })})</option>
           <option value="last_traded_price">Trigger: Last Traded</option>
           <option value="spot_price">Trigger: Spot</option>
@@ -215,22 +215,22 @@ function BracketPanel({
 
       {/* Validation error */}
       {validErr && (
-        <div style={{ padding: '6px 12px', background: 'var(--danger)15', borderBottom: '1px solid var(--danger)33', fontSize: 10, color: 'var(--danger)', fontWeight: 600 }}>
+        <div style={{ padding: '6px 12px', background: 'c.red15', borderBottom: '1px solid c.red33', fontSize: 10, color: c.red, fontWeight: 600 }}>
           ⚠ {validErr}
         </div>
       )}
 
       {/* ── Take Profit ── */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid c.border' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 700 }}>Take Profit</span>
-          {tpPct !== null && <span style={{ fontSize: 10, color: tpNum > 0 ? 'var(--accent)' : 'var(--text-faint)' }}>+{tpPct}%</span>}
+          <span style={{ fontSize: 12, color: c.green, fontWeight: 700 }}>Take Profit</span>
+          {tpPct !== null && <span style={{ fontSize: 10, color: tpNum > 0 ? c.green : c.dim }}>+{tpPct}%</span>}
         </div>
         <div style={rowStyle}>
-          <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Trigger</span>
+          <span style={{ fontSize: 10, color: c.dim, marginRight: 6 }}>Trigger</span>
           <input type="number" value={tpValue} onChange={e => setTpValue(e.target.value)}
             placeholder={String(defaultTp)} style={inpStyle} />
-          <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+          <span style={{ fontSize: 10, color: c.dim }}>USD</span>
         </div>
         <div style={{ display: 'flex', gap: 4, marginBottom: tpLimitPrice !== '' ? 6 : 0 }}>
           {['0.25','0.5','1','2'].map(p => pctBtn(`${p}%`, () => setTpValue(String(Math.round(pctToPrice(spotPrice, parseFloat(p), direction, 'tp'))))))}
@@ -239,43 +239,43 @@ function BracketPanel({
       </div>
 
       {/* ── Stop Loss ── */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid c.border' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--danger)', fontWeight: 700 }}>Stop Loss</span>
+          <span style={{ fontSize: 12, color: c.red, fontWeight: 700 }}>Stop Loss</span>
           <div style={{ display: 'flex', gap: 2 }}>
             {(['market','limit','trail'] as const).map(t => (
               <button key={t} onClick={() => setSlType(t)} style={{
                 padding: '2px 8px', borderRadius: 4, fontSize: 9, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
                 background: slType === t ? '#f0730020' : 'transparent',
-                color: slType === t ? '#f07300' : 'var(--text-faint)',
-                border: `1px solid ${slType === t ? '#f0730055' : 'var(--border)'}`,
+                color: slType === t ? '#f07300' : c.dim,
+                border: `1px solid ${slType === t ? '#f0730055' : c.border}`,
               }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
             ))}
           </div>
         </div>
-        {slPct !== null && <div style={{ fontSize: 10, color: slNum > 0 ? 'var(--danger)' : 'var(--text-faint)', marginBottom: 4, textAlign: 'right' }}>−{slPct}%</div>}
+        {slPct !== null && <div style={{ fontSize: 10, color: slNum > 0 ? c.red : c.dim, marginBottom: 4, textAlign: 'right' }}>−{slPct}%</div>}
 
         {slType === 'trail' ? (
           <div style={rowStyle}>
-            <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Trail Amount</span>
+            <span style={{ fontSize: 10, color: c.dim, marginRight: 6 }}>Trail Amount</span>
             <input type="number" value={trailAmount} onChange={e => setTrailAmount(e.target.value)}
               placeholder="e.g. 500" style={inpStyle} />
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+            <span style={{ fontSize: 10, color: c.dim }}>USD</span>
           </div>
         ) : (
           <>
             <div style={rowStyle}>
-              <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Trigger</span>
+              <span style={{ fontSize: 10, color: c.dim, marginRight: 6 }}>Trigger</span>
               <input type="number" value={slValue} onChange={e => setSlValue(e.target.value)}
                 placeholder={String(defaultSl)} style={inpStyle} />
-              <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+              <span style={{ fontSize: 10, color: c.dim }}>USD</span>
             </div>
             {slType === 'limit' && (
               <div style={{ ...rowStyle, marginTop: 4 }}>
-                <span style={{ fontSize: 10, color: 'var(--text-faint)', marginRight: 6 }}>Limit</span>
+                <span style={{ fontSize: 10, color: c.dim, marginRight: 6 }}>Limit</span>
                 <input type="number" value={slLimitPrice} onChange={e => setSlLimitPrice(e.target.value)}
                   placeholder="Limit price" style={inpStyle} />
-                <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>USD</span>
+                <span style={{ fontSize: 10, color: c.dim }}>USD</span>
               </div>
             )}
             <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
@@ -293,9 +293,9 @@ function BracketPanel({
           { label: 'Stop PnL', val: stopPnl, good: false },
         ]).map(({ label, val, good }) => (
           <div key={label} style={{ flex: 1 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-faint)', borderBottom: '1px dashed var(--border)', paddingBottom: 2, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 10, color: c.dim, borderBottom: '1px dashed c.border', paddingBottom: 2, marginBottom: 4 }}>{label}</div>
             <div style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-              color: val === null ? 'var(--text-faint)' : (val >= 0 ? 'var(--accent)' : 'var(--danger)') }}>
+              color: val === null ? c.dim : (val >= 0 ? c.green : c.red) }}>
               {val === null ? '—' : `${val >= 0 ? '+' : ''}$${Math.abs(val).toFixed(2)}`}
             </div>
           </div>
@@ -399,7 +399,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     return Math.max(1, Math.round(n / lotInfo.lotSize));
   }, [qtyValue, qtyUnit, spotPrice, lotInfo.lotSize]);
 
-  const dirColor  = direction === 'long' ? 'var(--accent)' : 'var(--danger)';
+  const dirColor  = direction === 'long' ? c.green : c.red;
   // For options, direction is encoded in CE/PE symbol — always BUY the option.
   // SELL would mean writing naked options, which is a completely different strategy.
   const side      = isFutures ? (direction === 'long' ? 'BUY' : 'SELL') : 'BUY';
@@ -415,7 +415,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     }
     return `${side} FUTURES`;
   })();
-  const stColor   = STATE_COLOR[entry.currentState] ?? 'var(--text-dim)';
+  const stColor   = STATE_COLOR[entry.currentState] ?? c.dim;
   const stLabel   = STATE_SHORT[entry.currentState] ?? '—';
 
   const livePnl = entry.currentPrice && entry.entry
@@ -574,34 +574,34 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
     <div style={{
       display: 'flex', gap: 0, alignItems: 'stretch',
       borderLeft: `3px solid ${dirColor}`,
-      borderBottom: '1px solid var(--border)',
-      background: entry.dismissed ? 'var(--bg)' : 'var(--bg-card)',
+      borderBottom: '1px solid c.border',
+      background: entry.dismissed ? c.bg : c.surface,
       opacity: entry.dismissed ? 0.4 : 1,
       transition: 'opacity 0.3s, background 0.1s',
     }}>
       {/* LEFT — time + symbol */}
-      <div style={{ width: 150, flexShrink: 0, padding: '10px 12px', borderRight: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
-        <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 1 }}>{entry.underlying}</div>
+      <div style={{ width: 150, flexShrink: 0, padding: '10px 12px', borderRight: '1px solid c.border' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: c.dim, marginBottom: 2 }}>{fmtTime(entry.entryAt)}</div>
+        <div style={{ fontSize: 16, fontWeight: 900, color: c.bright, letterSpacing: 1 }}>{entry.underlying}</div>
         <div style={{ fontSize: 11, fontWeight: 800, color: dirColor, marginTop: 2 }}>
           {arrow} {side}
         </div>
         <div style={{ fontSize: 9, color: stColor, marginTop: 4, letterSpacing: 0.5, fontWeight: 700 }}>{stLabel}</div>
-        <div style={{ fontSize: 9, fontWeight: 500, color: 'var(--text-dim)', marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
+        <div style={{ fontSize: 9, fontWeight: 500, color: c.dim, marginTop: 2 }}>{fmtAge(entry.entryAt)}</div>
         <div
           title={`Signal ID: ${entry.signalId} — click to copy`}
           onClick={() => entry.signalId && navigator.clipboard?.writeText(entry.signalId)}
           style={{
             marginTop: 6, display: 'flex', alignItems: 'center', gap: 4,
-            background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-xs)', padding: '3px 6px', cursor: 'pointer',
+            background: c.bg, border: '1px solid c.border',
+            borderRadius: 3, padding: '3px 6px', cursor: 'pointer',
             width: 'fit-content',
           }}
         >
-          <span style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: 0.5, textTransform: 'uppercase', flexShrink: 0 }}>ID</span>
+          <span style={{ fontSize: 9, color: c.dim, letterSpacing: 0.5, textTransform: 'uppercase', flexShrink: 0 }}>ID</span>
           <span style={{
             fontSize: 9, fontFamily: 'monospace', fontWeight: 700,
-            color: 'var(--text-primary)', letterSpacing: 0.5,
+            color: c.bright, letterSpacing: 0.5,
           }}>
             {entry.signalId ?? '—'}
           </span>
@@ -613,18 +613,18 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         {/* instrument */}
         <div style={{ marginBottom: 8 }}>
           {isFutures ? (
-            <span style={{ fontSize: 12, color: 'var(--t-blue)', fontWeight: 700 }}>
+            <span style={{ fontSize: 12, color: c.blue, fontWeight: 700 }}>
               {entry.futuresSymbol} · {entry.leverage}× lev
             </span>
           ) : (
-            <span style={{ fontSize: 12, color: 'var(--warning)', fontWeight: 700 }}>
+            <span style={{ fontSize: 12, color: c.amber, fontWeight: 700 }}>
               {entry.optType === 'CE' ? 'CALL' : 'PUT'} {fp(entry.optStrike)} · {entry.optExpiry} · {entry.optDte} DTE
             </span>
           )}
-          <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--text-faint)' }}>
+          <span style={{ marginLeft: 8, fontSize: 9, color: c.dim }}>
             {entry.regime.replace(/_/g, ' ')} · Score {entry.score}
             {entry.refreshedAt && (
-              <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--accent)', opacity: 0.7 }}>
+              <span style={{ marginLeft: 6, fontSize: 8, color: c.green, opacity: 0.7 }}>
                 · SL/TP live
               </span>
             )}
@@ -633,8 +633,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                 title="STRONG = ≥75% confluence on the 1H signal stack"
                 style={{
                   marginLeft: 6, fontSize: 8, fontWeight: 800, letterSpacing: 0.5,
-                  color: 'var(--warning)', background: alpha('var(--warning)', 0.15),
-                  border: `1px solid ${alpha('var(--warning)', 0.33)}`, borderRadius: 'var(--radius-sm)', padding: '1px 4px',
+                  color: c.amber, background: alpha(c.amber, 0.15),
+                  border: `1px solid ${alpha(c.amber, 0.33)}`, borderRadius: 4, padding: '1px 4px',
                   cursor: 'help',
                 }}
               >
@@ -643,10 +643,10 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             )}
             {showModeTag && entry.mode && (() => {
               const tag = resolveMode(entry);
-              const tagColor = MODE_COLOR[tag] ?? 'var(--text-dim)';
+              const tagColor = MODE_COLOR[tag] ?? c.dim;
               return (
                 <span style={{ marginLeft: 6, fontSize: 8, fontWeight: 700,
-                  color: tagColor, background: alpha(tagColor, 0.10), borderRadius: 'var(--radius-sm)', padding: '1px 4px',
+                  color: tagColor, background: alpha(tagColor, 0.10), borderRadius: 4, padding: '1px 4px',
                 }}>
                   {tag.toUpperCase()}
                 </span>
@@ -672,8 +672,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
                   padding: '1px 6px', borderRadius: 3,
                   background: ok ? 'rgba(29,215,96,0.10)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${ok ? 'var(--accent)55' : 'var(--border)'}`,
-                  color: ok ? 'var(--accent)' : 'var(--text-faint)',
+                  border: `1px solid ${ok ? alpha(c.green, 0.55) : c.border}`,
+                  color: ok ? c.green : c.dim,
                   fontFamily: 'monospace',
                 }}
               >
@@ -684,10 +684,10 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               <span
                 title={entry.vetoReason}
                 style={{
-                  fontSize: 9, padding: '1px 6px', borderRadius: 'var(--radius-xs)',
-                  background: alpha('var(--danger)', 0.10),
-                  border: `1px solid ${alpha('var(--danger)', 0.33)}`,
-                  color: 'var(--danger)', cursor: 'help',
+                  fontSize: 9, padding: '1px 6px', borderRadius: 3,
+                  background: alpha(c.red, 0.10),
+                  border: `1px solid ${alpha(c.red, 0.33)}`,
+                  color: c.red, cursor: 'help',
                   fontFamily: 'monospace', letterSpacing: 0.5,
                 }}
               >
@@ -710,37 +710,37 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                          `${d.toFixed(2)} pts`;
 
             return ([
-              { label: 'ENTRY',       val: isFutures ? fp(entry.entry)      : `~$${optPrem}`,                                   color: 'var(--text-primary)', sub: '',                                                                             glow: false, initSl: null,                                                                                                                                  diff: null },
-              { label: 'STOP LOSS',   val: isFutures ? fp(entry.stopLoss)   : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: 'var(--danger)',        sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%',      glow: !!entry.slImproved, initSl: entry.slImproved && entry.initialStopLoss != null && isFutures ? fp(entry.initialStopLoss) : null, diff: slDiff != null ? fmtPts(slDiff) : null },
-              { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`,   color: 'var(--accent)',        sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%', glow: false, initSl: null,                                                                                                                                  diff: null },
+              { label: 'ENTRY',       val: isFutures ? fp(entry.entry)      : `~$${optPrem}`,                                   color: c.bright, sub: '',                                                                             glow: false, initSl: null,                                                                                                                                  diff: null },
+              { label: 'STOP LOSS',   val: isFutures ? fp(entry.stopLoss)   : `~$${optPrem ? Math.round(optPrem * 0.5) : '—'}`, color: c.red,        sub: entry.stopLoss && isFutures ? pct(entry.entry, entry.stopLoss) : '-50%',      glow: !!entry.slImproved, initSl: entry.slImproved && entry.initialStopLoss != null && isFutures ? fp(entry.initialStopLoss) : null, diff: slDiff != null ? fmtPts(slDiff) : null },
+              { label: 'TAKE PROFIT', val: isFutures ? fp(entry.takeProfit) : `~$${optPrem ? Math.round(optPrem * 2) : '—'}`,   color: c.green,        sub: entry.takeProfit && isFutures ? pct(entry.entry, entry.takeProfit) : '+100%', glow: false, initSl: null,                                                                                                                                  diff: null },
             ] as { label: string; val: string; color: string; sub: string; glow: boolean; initSl: string | null; diff: string | null }[])
             .map(({ label, val, color, sub, glow, initSl, diff }) => (
               <div key={label} style={{
-                background: glow ? alpha('var(--accent)', 0.06) : 'var(--bg)',
-                border: `1px solid ${glow ? alpha('var(--accent)', 0.33) : 'var(--border)'}`,
-                borderRadius: 'var(--radius-sm)', padding: '7px 10px', textAlign: 'center', minWidth: 80,
+                background: glow ? alpha(c.green, 0.06) : c.bg,
+                border: `1px solid ${glow ? alpha(c.green, 0.33) : c.border}`,
+                borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
               }}>
-                <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 0.5, marginBottom: 2 }}>
-                  {label}{glow && <span style={{ marginLeft: 3, color: 'var(--accent)', fontWeight: 900 }}>↑</span>}
+                <div style={{ fontSize: 8, color: c.dim, letterSpacing: 0.5, marginBottom: 2 }}>
+                  {label}{glow && <span style={{ marginLeft: 3, color: c.green, fontWeight: 900 }}>↑</span>}
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{val}</div>
                 {initSl && (
-                  <div style={{ fontSize: 8, color: 'var(--text-faint)', marginTop: 1, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 8, color: c.dim, marginTop: 1, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums' }}>
                     {initSl}
                   </div>
                 )}
                 {diff && (
-                  <div style={{ fontSize: 8, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 8, color: c.green, fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
                     +{diff}
                   </div>
                 )}
-                {!initSl && !diff && sub && <div style={{ fontSize: 8, color: 'var(--text-muted)' }}>{sub}</div>}
+                {!initSl && !diff && sub && <div style={{ fontSize: 8, color: c.dim }}>{sub}</div>}
                 {/* 1-second wire: distance from CURRENT price (updates each price tick) */}
                 {label === 'STOP LOSS' && liveSlDist != null && (
                   <div
                     title="Live distance from current spot to stop. Negative = price already through stop."
                     style={{
-                      fontSize: 8, color: liveSlDist > 0 ? 'var(--text-faint)' : 'var(--danger)',
+                      fontSize: 8, color: liveSlDist > 0 ? c.dim : c.red,
                       fontVariantNumeric: 'tabular-nums', marginTop: 1,
                     }}
                   >
@@ -751,7 +751,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   <div
                     title="Live distance from current spot to target."
                     style={{
-                      fontSize: 8, color: liveTpDist > 0 ? 'var(--text-faint)' : 'var(--accent)',
+                      fontSize: 8, color: liveTpDist > 0 ? c.dim : c.green,
                       fontVariantNumeric: 'tabular-nums', marginTop: 1,
                     }}
                   >
@@ -767,20 +767,20 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             <div
               className={`live-price-cell ${tickClass}`}
               style={{
-                background: 'var(--bg)',
-                border: `1px solid ${livePnl != null && livePnl >= 0 ? alpha('var(--accent)', 0.27) : alpha('var(--danger)', 0.27)}`,
-                borderRadius: 'var(--radius-sm)', padding: '7px 10px', textAlign: 'center', minWidth: 80,
+                background: c.bg,
+                border: `1px solid ${livePnl != null && livePnl >= 0 ? alpha(c.green, 0.27) : alpha(c.red, 0.27)}`,
+                borderRadius: 4, padding: '7px 10px', textAlign: 'center', minWidth: 80,
               }}
               title="NOW = live spot price · updates every 1 s from SSE prices event"
             >
-              <div style={{ fontSize: 8, color: 'var(--text-faint)', letterSpacing: 1.2, marginBottom: 2 }}>NOW</div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ fontSize: 8, color: c.dim, letterSpacing: 1.2, marginBottom: 2 }}>NOW</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: c.bright, fontVariantNumeric: 'tabular-nums' }}>
                 {fp(entry.currentPrice)}
               </div>
               {livePnl != null && (
                 <div style={{
                   fontSize: 8, fontWeight: 700,
-                  color: livePnl >= 0 ? 'var(--accent)' : 'var(--danger)',
+                  color: livePnl >= 0 ? c.green : c.red,
                 }}>
                   {livePnl >= 0 ? '+' : ''}{livePnl.toFixed(2)}%
                 </div>
@@ -793,11 +793,11 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
       {/* RIGHT — action */}
       <div style={{
         width: 130, flexShrink: 0, padding: '10px 12px',
-        borderLeft: '1px solid var(--border)',
+        borderLeft: '1px solid c.border',
         display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center',
       }}>
         {feedback ? (
-          <div style={{ fontSize: 10, color: feedback.startsWith('✅') ? 'var(--accent)' : 'var(--danger)', textAlign: 'center', fontWeight: 700 }}>
+          <div style={{ fontSize: 10, color: feedback.startsWith('✅') ? c.green : c.red, textAlign: 'center', fontWeight: 700 }}>
             {feedback}
           </div>
         ) : (
@@ -805,10 +805,10 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             onClick={handleTrade}
             disabled={hasOpen || placing}
             style={{
-              padding: '9px 12px', borderRadius: 'var(--radius-sm)', cursor: hasOpen ? 'default' : 'pointer',
-              background: hasOpen ? 'var(--bg)' : entry.direction === 'long' ? alpha('var(--accent)', 0.12) : alpha('var(--danger)', 0.12),
-              color: hasOpen ? 'var(--text-faint)' : dirColor,
-              border: `1px solid ${hasOpen ? 'var(--border)' : alpha(dirColor, 0.80)}`,
+              padding: '9px 12px', borderRadius: 4, cursor: hasOpen ? 'default' : 'pointer',
+              background: hasOpen ? c.bg : entry.direction === 'long' ? alpha(c.green, 0.12) : alpha(c.red, 0.12),
+              color: hasOpen ? c.dim : dirColor,
+              border: `1px solid ${hasOpen ? c.border : alpha(dirColor, 0.80)}`,
               fontFamily: 'inherit', fontSize: 11, fontWeight: 900, letterSpacing: 0.5,
               opacity: placing ? 0.6 : 1,
             }}
@@ -831,7 +831,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
         }}
       >
         <div style={{
-          background: 'var(--bg-card)',
+          background: c.surface,
           border: `1px solid ${dirColor}44`,
           borderRadius: 12,
           width: 760, maxWidth: '98vw',
@@ -861,55 +861,55 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
+                <span style={{ fontSize: 15, fontWeight: 900, color: c.bright, letterSpacing: 0.5 }}>
                   {isFutures ? entry.futuresSymbol : `${entry.optType === 'CE' ? 'CALL' : 'PUT'} ${fp(entry.optStrike)}`}
                 </span>
                 <span style={{
                   fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
-                  color: isLive ? 'var(--accent)' : '#88aaff',
-                  background: isLive ? 'var(--accent)15' : '#88aaff15',
-                  border: `1px solid ${isLive ? 'var(--accent)44' : '#88aaff44'}`,
+                  color: isLive ? c.green : '#88aaff',
+                  background: isLive ? 'c.green15' : '#88aaff15',
+                  border: `1px solid ${isLive ? alpha(c.green, 0.44) : '#88aaff44'}`,
                   borderRadius: 4, padding: '2px 7px',
                 }}>{isLive ? '● LIVE' : '◎ PAPER'}</span>
                 {entry.regime && (
-                  <span style={{ fontSize: 9, color: 'var(--text-faint)', background: 'rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 6px' }}>
+                  <span style={{ fontSize: 9, color: c.dim, background: 'rgba(255,255,255,0.06)', borderRadius: 3, padding: '1px 6px' }}>
                     {entry.regime.replace(/_/g, ' ')}
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+              <div style={{ fontSize: 11, color: c.dim }}>
                 {direction === 'long' ? 'BUY LONG' : 'SELL SHORT'} · Score {entry.score} · ADX {entry.adx?.toFixed(0) ?? '—'}
               </div>
             </div>
             {/* Current price */}
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: c.bright, fontVariantNumeric: 'tabular-nums' }}>
                 {fp(spotPrice)}
               </div>
-              <div style={{ fontSize: 9, color: 'var(--text-faint)' }}>SPOT PRICE</div>
+              <div style={{ fontSize: 9, color: c.dim }}>SPOT PRICE</div>
             </div>
             <button onClick={modalStatus.type === 'pending' ? undefined : closeModal} style={{
               background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
-              color: 'var(--text-muted)', cursor: 'pointer', borderRadius: 6,
+              color: c.dim, cursor: 'pointer', borderRadius: 6,
               width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 14, flexShrink: 0,
             }}>✕</button>
           </div>
 
           {/* ══ DIRECTION TABS (full width) ═════════════════════════════ */}
-          <div style={{ display: 'flex', background: 'var(--bg)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', background: c.bg, borderBottom: '1px solid c.border', flexShrink: 0 }}>
             {(['long','short'] as const).map(d => {
               const active = d === direction;
-              const col    = d === 'long' ? 'var(--accent)' : 'var(--danger)';
+              const col    = d === 'long' ? c.green : c.red;
               return (
                 <button key={d} onClick={() => setDirection(d)} style={{
                   flex: 1, padding: '11px 0', textAlign: 'center',
                   background: active ? (d === 'long' ? 'rgba(0,212,170,0.1)' : 'rgba(255,71,87,0.1)') : 'transparent',
-                  color: active ? col : 'var(--text-dim)',
+                  color: active ? col : c.dim,
                   fontWeight: 900, fontSize: 13, letterSpacing: 0.5,
                   border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                   borderBottom: active ? `2px solid ${col}` : '2px solid transparent',
-                  borderRight: d === 'long' ? '1px solid var(--border)' : 'none',
+                  borderRight: d === 'long' ? '1px solid c.border' : 'none',
                   transition: 'all 0.12s',
                 }}>
                   {d === 'long' ? '▲ BUY / LONG' : '▼ SELL / SHORT'}
@@ -923,7 +923,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
             {/* ── LEFT PANEL: Order parameters ── */}
             <div style={{
-              width: '50%', borderRight: '1px solid var(--border)',
+              width: '50%', borderRight: '1px solid c.border',
               overflowY: 'auto', padding: '16px',
               display: 'flex', flexDirection: 'column', gap: 14,
             }}>
@@ -947,7 +947,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               {/* Leverage */}
               {isFutures && (
                 <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>LEVERAGE</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1, marginBottom: 8 }}>LEVERAGE</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <button onClick={levDown} disabled={LOT_LEVERAGES.indexOf(leverage) === 0}
                       style={{ ...sBtn, width: 28, height: 28, opacity: LOT_LEVERAGES.indexOf(leverage) === 0 ? 0.3 : 1 }}>&minus;</button>
@@ -964,9 +964,9 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                       <button key={l} onClick={() => setLeverage(l)} style={{
                         flex: 1, padding: '6px 0', borderRadius: 5, fontFamily: 'inherit',
                         fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                        background: leverage === l ? dirColor + '20' : 'var(--bg)',
-                        color: leverage === l ? dirColor : 'var(--text-faint)',
-                        border: `1px solid ${leverage === l ? dirColor + '66' : 'var(--border)'}`,
+                        background: leverage === l ? dirColor + '20' : c.bg,
+                        color: leverage === l ? dirColor : c.dim,
+                        border: `1px solid ${leverage === l ? dirColor + '66' : c.border}`,
                         transition: 'all 0.1s',
                       }}>{l}×</button>
                     ))}
@@ -981,8 +981,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
               {/* Order type */}
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>ORDER TYPE</div>
-                <div style={{ display: 'flex', background: 'var(--bg)', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1, marginBottom: 8 }}>ORDER TYPE</div>
+                <div style={{ display: 'flex', background: c.bg, borderRadius: 6, overflow: 'hidden', border: '1px solid c.border' }}>
                   {([
                     { id: 'market', label: 'Market' },
                     { id: 'limit',  label: 'Limit'  },
@@ -992,8 +992,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                       flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                       fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
                       background: orderType === t.id ? dirColor + '18' : 'transparent',
-                      color: orderType === t.id ? dirColor : 'var(--text-faint)',
-                      borderRight: i < 2 ? '1px solid var(--border)' : 'none',
+                      color: orderType === t.id ? dirColor : c.dim,
+                      borderRight: i < 2 ? '1px solid c.border' : 'none',
                       transition: 'all 0.1s',
                     }}>{t.label}</button>
                   ))}
@@ -1002,25 +1002,25 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
               {/* Price */}
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1, marginBottom: 8 }}>
                   {orderType === 'market' ? 'MARKET PRICE' : 'LIMIT PRICE'}
                 </div>
                 {orderType === 'limit' || orderType === 'maker' ? (
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: `1px solid ${dirColor}55`, borderRadius: 7, padding: '0 10px 0 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', background: c.bg, border: `1px solid ${dirColor}55`, borderRadius: 7, padding: '0 10px 0 14px' }}>
                     <input type="number" value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
-                      style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 16, fontWeight: 800, padding: '10px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                      style={{ flex: 1, background: 'none', border: 'none', color: c.bright, fontFamily: 'inherit', fontSize: 16, fontWeight: 800, padding: '10px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginRight: 6 }}>
                       <button onClick={() => setLimitPrice(p => String(Math.round((parseFloat(p) || spotPrice) + priceStep)))}
                         style={{ ...sBtn, height: 14, fontSize: 9 }}>▲</button>
                       <button onClick={() => setLimitPrice(p => String(Math.max(0, Math.round((parseFloat(p) || spotPrice) - priceStep))))}
                         style={{ ...sBtn, height: 14, fontSize: 9 }}>▼</button>
                     </div>
-                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>USD</span>
+                    <span style={{ fontSize: 11, color: c.dim }}>USD</span>
                   </div>
                 ) : (
-                  <div style={{ padding: '10px 14px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ padding: '10px 14px', background: c.bg, border: '1px solid c.border', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ color: dirColor, fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fp(spotPrice)}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Best {direction === 'long' ? 'Ask' : 'Bid'}</span>
+                    <span style={{ fontSize: 11, color: c.dim }}>Best {direction === 'long' ? 'Ask' : 'Bid'}</span>
                   </div>
                 )}
               </div>
@@ -1028,13 +1028,13 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               {/* Quantity */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1 }}>QUANTITY</span>
-                  <span style={{ fontSize: 9, color: 'var(--text-faint)' }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1 }}>QUANTITY</span>
+                  <span style={{ fontSize: 9, color: c.dim }}>1 Lot = {lotInfo.lotSize} {lotInfo.unit}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '0 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', background: c.bg, border: '1px solid c.border', borderRadius: 7, padding: '0 12px' }}>
                   <input type="number" min="1" step={qtyUnit === 'lot' ? 1 : undefined} value={qtyValue}
                     onChange={e => setQtyValue(e.target.value)}
-                    style={{ flex: 1, background: 'none', border: 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 16, fontWeight: 800, padding: '10px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
+                    style={{ flex: 1, background: 'none', border: 'none', color: c.bright, fontFamily: 'inherit', fontSize: 16, fontWeight: 800, padding: '10px 0', outline: 'none', fontVariantNumeric: 'tabular-nums' }} />
                   <select value={qtyUnit} onChange={e => { setQtyUnit(e.target.value); setQtyValue('1'); }}
                     style={{ background: 'none', border: 'none', color: '#f0c040', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>
                     <option value="lot">Lot</option>
@@ -1049,7 +1049,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                       : notionalUsd * (pct / 100);
                     return (
                       <button key={pct} onClick={() => { setQtyUnit('usd'); setQtyValue(String(Math.round(usdAtPct))); }}
-                        style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: 'var(--bg)', color: 'var(--text-dim)', border: '1px solid var(--border)', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
+                        style={{ flex: 1, padding: '6px 0', borderRadius: 5, background: c.bg, color: c.dim, border: '1px solid c.border', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
                         {pct}%
                       </button>
                     );
@@ -1059,16 +1059,16 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
               {/* Order options */}
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>ORDER OPTIONS</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1, marginBottom: 8 }}>ORDER OPTIONS</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, alignItems: 'center' }}>
                   {orderType !== 'market' && (
-                    <div style={{ display: 'flex', background: 'var(--bg)', borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', background: c.bg, borderRadius: 5, overflow: 'hidden', border: '1px solid c.border' }}>
                       {(['gtc','ioc'] as const).map(t => (
                         <button key={t} onClick={() => setTimeInForce(t)} style={{
                           padding: '5px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                           fontSize: 10, fontWeight: 700, letterSpacing: 0.5,
-                          background: timeInForce === t ? 'var(--bg-card)' : 'transparent',
-                          color: timeInForce === t ? 'var(--text-primary)' : 'var(--text-faint)',
+                          background: timeInForce === t ? c.surface : 'transparent',
+                          color: timeInForce === t ? c.bright : c.dim,
                         }} title={t === 'gtc' ? 'Good Till Cancel' : 'Immediate Or Cancel'}>
                           {t.toUpperCase()}
                         </button>
@@ -1077,17 +1077,17 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   )}
                   <button onClick={() => setReduceOnly(r => !r)} style={{
                     padding: '5px 10px', borderRadius: 5, fontFamily: 'inherit', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    background: reduceOnly ? 'var(--accent)15' : 'var(--bg)',
-                    color: reduceOnly ? 'var(--accent)' : 'var(--text-faint)',
-                    border: `1px solid ${reduceOnly ? 'var(--accent)44' : 'var(--border)'}`,
+                    background: reduceOnly ? 'c.green15' : c.bg,
+                    color: reduceOnly ? c.green : c.dim,
+                    border: `1px solid ${reduceOnly ? alpha(c.green, 0.44) : c.border}`,
                   }} title="Close-only">
                     {reduceOnly ? '✓ Reduce Only' : 'Reduce Only'}
                   </button>
                   <button onClick={() => setScalperMode(s => !s)} style={{
                     padding: '5px 10px', borderRadius: 5, fontFamily: 'inherit', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    background: scalperMode ? '#f0c04015' : 'var(--bg)',
-                    color: scalperMode ? '#f0c040' : 'var(--text-faint)',
-                    border: `1px solid ${scalperMode ? '#f0c04044' : 'var(--border)'}`,
+                    background: scalperMode ? '#f0c04015' : c.bg,
+                    color: scalperMode ? '#f0c040' : c.dim,
+                    border: `1px solid ${scalperMode ? '#f0c04044' : c.border}`,
                   }}>
                     {scalperMode ? `⚡ ${scalperSecs}s` : '⚡ Scalper'}
                   </button>
@@ -1113,7 +1113,7 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 
               {/* Bracket Order — always visible */}
               <div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 8 }}>BRACKET ORDER (TP / SL)</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1, marginBottom: 8 }}>BRACKET ORDER (TP / SL)</div>
                 <BracketPanel
                   spotPrice={spotPrice} direction={direction}
                   lotSize={lotInfo.lotSize} size={size}
@@ -1127,19 +1127,19 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               {/* Economics */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1 }}>ORDER ECONOMICS</span>
-                  <div style={{ display: 'flex', background: 'var(--bg-input)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                    {(['USD','INR'] as const).map(c => (
-                      <button key={c} onClick={() => setCurrency(c)} style={{
+                  <span style={{ fontSize: 10, fontWeight: 700, color: c.dim, letterSpacing: 1 }}>ORDER ECONOMICS</span>
+                  <div style={{ display: 'flex', background: c.bg, borderRadius: 4, overflow: 'hidden', border: '1px solid c.border' }}>
+                    {(['USD','INR'] as const).map(cur => (
+                      <button key={cur} onClick={() => setCurrency(cur)} style={{
                         padding: '2px 8px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                         fontSize: 9, fontWeight: 700,
-                        background: currency === c ? 'var(--bg-card)' : 'transparent',
-                        color: currency === c ? (c === 'INR' ? '#f0c040' : '#88aaff') : 'var(--text-faint)',
-                      }}>{c}</button>
+                        background: currency === cur ? c.surface : 'transparent',
+                        color: currency === cur ? (cur === 'INR' ? '#f0c040' : '#88aaff') : c.dim,
+                      }}>{cur}</button>
                     ))}
                   </div>
                 </div>
-                <div style={{ background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                <div style={{ background: c.bg, borderRadius: 8, border: '1px solid c.border', overflow: 'hidden' }}>
                   {([
                     { label: 'Notional value', val: fmtCost(notionalUsd), dim: true },
                     { label: `Fee · ${feeRole === 'taker' ? 'Taker 0.05%' : feeRole === 'maker-rebate' ? 'Maker 0% (rebate)' : 'Maker 0.02%'}`,
@@ -1149,26 +1149,26 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                     { label: 'Total required', val: fmtCost(totalCostUsd), bold: true, warn: insufficientFunds },
                   ] as {label:string;val:string;bold?:boolean;warn?:boolean;dim?:boolean}[])
                   .map(({ label, val, bold, warn, dim }) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ fontSize: 11, color: dim ? 'var(--text-dim)' : 'var(--text-faint)' }}>{label}</span>
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px', borderBottom: '1px solid c.border' }}>
+                      <span style={{ fontSize: 11, color: dim ? c.dim : c.dim }}>{label}</span>
                       <span style={{ fontSize: 11, fontWeight: bold ? 800 : 500, fontVariantNumeric: 'tabular-nums',
-                        color: warn ? 'var(--danger)' : bold ? 'var(--text-primary)' : 'var(--text-muted)' }}>{val}</span>
+                        color: warn ? c.red : bold ? c.bright : c.dim }}>{val}</span>
                     </div>
                   ))}
                   {/* Available funds row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px' }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>Available</span>
+                    <span style={{ fontSize: 11, color: c.dim }}>Available</span>
                     <span style={{ fontSize: 12, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-                      color: availFunds === null ? 'var(--text-faint)' : insufficientFunds ? 'var(--danger)' : 'var(--accent)' }}>
+                      color: availFunds === null ? c.dim : insufficientFunds ? c.red : c.green }}>
                       {availFunds !== null ? fmtCost(availFunds) : isLive ? '—' : 'Paper'}
                     </span>
                   </div>
                 </div>
                 {insufficientFunds && (
-                  <div style={{ marginTop: 6, fontSize: 10, color: 'var(--danger)', textAlign: 'right' }}>
+                  <div style={{ marginTop: 6, fontSize: 10, color: c.red, textAlign: 'right' }}>
                     Need {fmtCost(totalCostUsd - (availFunds ?? 0))} more —{' '}
                     <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
-                      style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
+                      style={{ color: c.green, textDecoration: 'none', fontWeight: 700 }}>Deposit ↗</a>
                   </div>
                 )}
               </div>
@@ -1177,8 +1177,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               {modalStatus.type !== 'idle' && (
                 <div style={{
                   padding: '10px 14px', borderRadius: 8,
-                  border: `1px solid ${modalStatus.type === 'success' ? '#1ed76044' : modalStatus.type === 'error' ? '#ff475744' : 'var(--border)'}`,
-                  background: modalStatus.type === 'success' ? '#0a1f12' : modalStatus.type === 'error' ? '#1f0a0a' : 'var(--bg)',
+                  border: `1px solid ${modalStatus.type === 'success' ? '#1ed76044' : modalStatus.type === 'error' ? '#ff475744' : c.border}`,
+                  background: modalStatus.type === 'success' ? '#0a1f12' : modalStatus.type === 'error' ? '#1f0a0a' : c.bg,
                   display: 'flex', alignItems: 'flex-start', gap: 10,
                 }}>
                   <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1.3 }}>
@@ -1186,10 +1186,10 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3,
-                      color: modalStatus.type === 'success' ? '#1ed760' : modalStatus.type === 'error' ? '#ff4757' : 'var(--text-muted)' }}>
+                      color: modalStatus.type === 'success' ? '#1ed760' : modalStatus.type === 'error' ? '#ff4757' : c.dim }}>
                       {modalStatus.type === 'pending' ? 'Placing order…' : modalStatus.type === 'success' ? 'Order placed ✓' : 'Order failed'}
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, wordBreak: 'break-word' }}>{modalStatus.msg}</div>
+                    <div style={{ fontSize: 10, color: c.dim, lineHeight: 1.6, wordBreak: 'break-word' }}>{modalStatus.msg}</div>
                     {modalStatus.type === 'error' && modalStatus.msg.toLowerCase().includes('insufficient margin') && (
                       <a href="https://www.delta.exchange/app/account/deposit" target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 700, color: '#1ed760', textDecoration: 'none', background: '#0a2010', border: '1px solid #1ed76033', borderRadius: 4, padding: '4px 10px' }}>
@@ -1217,14 +1217,14 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
               style={{
                 width: '100%', padding: '17px 0', border: 'none', flexShrink: 0,
                 background: insufficientFunds || modalStatus.type === 'pending'
-                  ? 'var(--bg-input)'
+                  ? c.bg
                   : direction === 'long'
                     ? 'linear-gradient(90deg, #00c87a, #00d4aa)'
                     : 'linear-gradient(90deg, #e02030, #ff4757)',
-                color: insufficientFunds || modalStatus.type === 'pending' ? 'var(--text-faint)' : '#fff',
+                color: insufficientFunds || modalStatus.type === 'pending' ? c.dim : '#fff',
                 fontFamily: 'inherit', fontSize: 15, fontWeight: 900, letterSpacing: 1,
                 cursor: insufficientFunds || modalStatus.type === 'pending' ? 'not-allowed' : 'pointer',
-                borderTop: '1px solid var(--border)',
+                borderTop: '1px solid c.border',
                 transition: 'opacity 0.15s',
                 opacity: modalStatus.type === 'pending' ? 0.7 : 1,
                 textShadow: '0 1px 2px rgba(0,0,0,0.3)',
@@ -1243,8 +1243,8 @@ const FeedRow = memo(function FeedRow({ entry, hasOpen, isLive, availFunds, show
 });
 
 const sBtn: React.CSSProperties = {
-  width: 20, height: 20, borderRadius: 3, border: '1px solid var(--border)',
-  background: 'var(--bg)', color: 'var(--text-muted)',
+  width: 20, height: 20, borderRadius: 3, border: '1px solid c.border',
+  background: c.bg, color: c.dim,
   cursor: 'pointer', fontFamily: 'inherit', fontSize: 13,
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
 };
@@ -1343,7 +1343,7 @@ function SignalsFeedBody({
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* empty state */}
       {visible.length === 0 && (
-        <div style={{ background: 'var(--bg-card)', padding: '20px 16px' }}>
+        <div style={{ background: c.surface, padding: '20px 16px' }}>
           {(() => {
             const fresh = (signals?.signals ?? []).filter((s: any) => s.fresh &&
               (type === 'options' ? s.has_options : true));
@@ -1356,12 +1356,12 @@ function SignalsFeedBody({
             // strategy is implemented.
             let headline = 'No strategy loaded';
             let reason   = `Signals will appear here once a strategy is implemented. Live ${type} market data is still streaming.`;
-            let badge    = { text: 'NO STRATEGY', color: 'var(--text-faint)' };
+            let badge    = { text: 'NO STRATEGY', color: c.dim };
 
             if (fresh.length === 0) {
               headline = 'Fetching live data…';
               reason   = 'Live market data streams every 30s.';
-              badge    = { text: 'LOADING', color: 'var(--text-faint)' };
+              badge    = { text: 'LOADING', color: c.dim };
             }
 
             return (
@@ -1372,17 +1372,17 @@ function SignalsFeedBody({
                     color: badge.color, background: badge.color + '18',
                     border: `1px solid ${badge.color}44`, borderRadius: 3, padding: '2px 6px',
                   }}>{badge.text}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)' }}>{headline}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: c.dim }}>{headline}</span>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 12 }}>{reason}</div>
+                <div style={{ fontSize: 11, color: c.dim, marginBottom: 12 }}>{reason}</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {fresh.map((s: any) => {
                     const stateColor: Record<string, string> = {
                       ENTRY_ARMED_PULLBACK: '#44cc88', ENTRY_ARMED_CONTINUATION: '#66ccff',
                       CONFIRMED_SETUP_ACTIVE: '#f0c040', EARLY_SETUP_ACTIVE: '#f0a500',
-                      FILTERED: 'var(--text-faint)', IDLE: 'var(--border-light)',
+                      FILTERED: c.dim, IDLE: c.border2,
                     };
-                    const c = stateColor[s.state] ?? 'var(--text-faint)';
+                    const clr = stateColor[s.state] ?? c.dim;
                     // STRATEGY RESET: no strategy is loaded, so every instrument
                     // sits IDLE. Show an honest tooltip (live ATR only) instead
                     // of the old regime/ADX/signal-score framing.
@@ -1393,7 +1393,7 @@ function SignalsFeedBody({
                         title={tip}
                         style={{
                           fontSize: 10, padding: '3px 8px', borderRadius: 4,
-                          background: c + '18', border: `1px solid ${c}44`, color: c, fontWeight: 700,
+                          background: clr + '18', border: `1px solid ${clr}44`, color: clr, fontWeight: 700,
                           cursor: 'help',
                         }}
                       >
@@ -1428,9 +1428,9 @@ function SignalsFeedBody({
 
       {/* footer */}
       <div style={{
-        padding: '8px 14px', background: 'var(--bg)',
-        borderTop: '1px solid var(--border)',
-        fontSize: 8, color: 'var(--text-faint)',
+        padding: '8px 14px', background: c.bg,
+        borderTop: '1px solid c.border',
+        fontSize: 8, color: c.dim,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         flexShrink: 0,
       }}>
@@ -1440,7 +1440,7 @@ function SignalsFeedBody({
             : 'Premium estimated · verify on exchange · Strike = nearest round'}
         </span>
         {filter === 'expired' && (
-          <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+          <span style={{ color: c.dim, fontStyle: 'italic' }}>
             Showing dismissed signals
           </span>
         )}
@@ -1453,7 +1453,7 @@ function SignalsFeedBody({
 function SignalsFeedPanel({ type }: { type: 'futures' | 'options' }) {
   const state = useSignalsPanelState();
   return (
-    <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)' }}>
+    <div style={{ borderRadius: 6, overflow: 'hidden', border: '1px solid c.border' }}>
       <SignalsFeedBody type={type} state={state} filter="active" localMode="all" localTrack="all" />
     </div>
   );
@@ -1495,7 +1495,7 @@ export function SignalsTable() {
   const optArmed = countByFilter('options', 'armed');
 
   const INSTRUMENT_TABS: Array<{ id: 'futures' | 'options'; label: string; icon: string; accent: string; armed: number }> = [
-    { id: 'futures', label: 'FUTURES', icon: '▣', accent: 'var(--accent)', armed: futArmed },
+    { id: 'futures', label: 'FUTURES', icon: '▣', accent: c.green, armed: futArmed },
     { id: 'options', label: 'OPTIONS', icon: '◈', accent: '#a78bfa',      armed: optArmed },
   ];
 
@@ -1514,10 +1514,10 @@ export function SignalsTable() {
   ];
 
   const TRACK_PILLS: Array<{ id: TrackFilter; label: string; color: string }> = [
-    { id: 'all',             label: 'ALL',       color: 'var(--text-dim)' },
-    { id: 'vcp',             label: 'VCP',       color: 'var(--amber)' },
-    { id: 'trend_following', label: 'TREND',     color: 'var(--green)' },
-    { id: 'mean_reversion',  label: 'REVERSION', color: 'var(--purple)' },
+    { id: 'all',             label: 'ALL',       color: c.dim },
+    { id: 'vcp',             label: 'VCP',       color: c.amber },
+    { id: 'trend_following', label: 'TREND',     color: c.green },
+    { id: 'mean_reversion',  label: 'REVERSION', color: c.purple },
   ];
 
   const [localTrack, setLocalTrack] = React.useState<TrackFilter>('all');
@@ -1531,37 +1531,37 @@ export function SignalsTable() {
 
   const pillBase = (active: boolean): React.CSSProperties => ({
     padding: '3px 10px',
-    borderRadius: 'var(--radius-sm)',
+    borderRadius: 4,
     fontSize: 9,
     fontWeight: 600,
     letterSpacing: '0.07em',
     cursor: 'pointer',
     fontFamily: 'inherit',
-    border: active ? '1px solid var(--border-light)' : '1px solid transparent',
-    background: active ? 'var(--bg-card)' : 'transparent',
-    color: active ? 'var(--text-primary)' : 'var(--text-dim)',
+    border: active ? '1px solid c.border2' : '1px solid transparent',
+    background: active ? c.surface : 'transparent',
+    color: active ? c.bright : c.dim,
     transition: 'all 0.1s',
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 0, overflow: 'hidden', border: 'none', borderBottom: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRadius: 0, overflow: 'hidden', border: 'none', borderBottom: '1px solid c.border' }}>
 
       {/* ── Header bar ── */}
       <div style={{
-        background: 'var(--bg-card)',
-        borderBottom: '1px solid var(--border)',
+        background: c.surface,
+        borderBottom: '1px solid c.border',
         padding: '10px 14px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-primary)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: c.bright }}>
             SIGNAL FEED
           </span>
           <StreamBadge status={streamStatus} />
           {freshCount > 0 && (
             <span style={{
-              fontSize: 9, fontWeight: 600, color: 'var(--accent)',
-              background: alpha('var(--accent)', 0.08), borderRadius: 'var(--radius-sm)', padding: '2px 7px',
+              fontSize: 9, fontWeight: 600, color: c.green,
+              background: alpha(c.green, 0.08), borderRadius: 4, padding: '2px 7px',
             }}>
               {freshCount} live
             </span>
@@ -1577,10 +1577,10 @@ export function SignalsTable() {
                 onClick={() => setTab(t.id)}
                 style={{
                   padding: '4px 14px',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 6,
                   border: active ? `1px solid ${alpha(t.accent, 0.25)}` : '1px solid transparent',
                   background: active ? alpha(t.accent, 0.07) : 'transparent',
-                  color: active ? t.accent : 'var(--text-dim)',
+                  color: active ? t.accent : c.dim,
                   fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
                   letterSpacing: '0.08em', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -1591,12 +1591,12 @@ export function SignalsTable() {
                 {t.armed > 0 && (
                   <span style={{
                     fontSize: 9, fontWeight: 800,
-                    color: 'var(--warning)', background: alpha('var(--warning)', 0.09),
-                    borderRadius: 'var(--radius-pill)', padding: '1px 6px',
+                    color: c.amber, background: alpha(c.amber, 0.09),
+                    borderRadius: 99, padding: '1px 6px',
                   }}>{t.armed}</span>
                 )}
                 {t.id === 'options' && hasOptAlert && !active && (
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--t-purple)' }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.purple }} />
                 )}
               </button>
             );
@@ -1610,8 +1610,8 @@ export function SignalsTable() {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '8px 14px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--bg)',
+        borderBottom: '1px solid c.border',
+        background: c.bg,
         gap: 8,
       }}>
         {/* LEFT — trading mode */}
@@ -1623,7 +1623,7 @@ export function SignalsTable() {
               <button key={m.id} onClick={() => setLocalMode(m.id)} style={pillBase(active)}>
                 {m.label}
                 {cnt > 0 && (
-                  <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400 }}>{cnt}</span>
+                  <span style={{ marginLeft: 4, color: c.dim, fontWeight: 400 }}>{cnt}</span>
                 )}
               </button>
             );
@@ -1631,7 +1631,7 @@ export function SignalsTable() {
         </div>
 
         {/* Subtle vertical divider */}
-        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+        <div style={{ width: 1, height: 20, background: c.border, flexShrink: 0 }} />
 
         {/* Track filter */}
         <div style={{ display: 'flex', gap: 2 }}>
@@ -1650,13 +1650,13 @@ export function SignalsTable() {
                 onClick={() => setLocalTrack(t.id)}
                 style={{
                   ...pillBase(active),
-                  color: active ? t.color : 'var(--text-dim)',
+                  color: active ? t.color : c.dim,
                   borderColor: active ? alpha(t.color, 0.25) : 'transparent',
                 }}
               >
                 {t.label}
                 {cnt > 0 && (
-                  <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400 }}>{cnt}</span>
+                  <span style={{ marginLeft: 4, color: c.dim, fontWeight: 400 }}>{cnt}</span>
                 )}
               </button>
             );
@@ -1671,7 +1671,7 @@ export function SignalsTable() {
             return (
               <button key={f.id} onClick={() => setFilter(f.id)} style={pillBase(active)}>
                 {f.label}
-                <span style={{ marginLeft: 4, color: 'var(--text-faint)', fontWeight: 400 }}>{cnt}</span>
+                <span style={{ marginLeft: 4, color: c.dim, fontWeight: 400 }}>{cnt}</span>
               </button>
             );
           })}

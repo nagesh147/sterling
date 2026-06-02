@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class EngineMode(str, Enum):
@@ -18,6 +18,12 @@ class RiskPosture(str, Enum):
     LONG_ONLY = "long_only"         # buy premium only (max loss = premium)
     DEFINED_RISK = "defined_risk"   # + spreads/condors (Phase 2b)
     NAKED = "naked"                 # + short options (Phase 2d, opt-in)
+
+
+# Selection priority when several postures are enabled at once: the native
+# engine picks the richest *allowed* structure the regime supports, falling
+# back down this list (naked needs a rich regime; see _select_posture).
+POSTURE_PRIORITY = ["naked", "defined_risk", "long_only"]
 
 
 ALPHA_SOURCES = {
@@ -33,7 +39,12 @@ class DerivativesEngineConfig(BaseModel):
     engine_mode: EngineMode = EngineMode.ROUTING_GATE
     active_alpha_sources: list[str] = Field(
         default_factory=lambda: ["directional_futures"])
-    risk_posture: RiskPosture = RiskPosture.LONG_ONLY
+    # Multi-select: the set of risk postures the native engine may use. The
+    # engine selects the best one for the current regime (see _select_posture).
+    risk_postures: list[str] = Field(default_factory=list)
+    # Legacy single posture — retained for backward-compat reads/writes. Kept
+    # in sync with the highest-priority entry of `risk_postures`.
+    risk_posture: RiskPosture | None = None
     validation_method: int = 1      # 1=calibrate-live, 2=real-only, 3=snapshot
 
     @field_validator("active_alpha_sources")
@@ -50,6 +61,25 @@ class DerivativesEngineConfig(BaseModel):
         if v not in (1, 2, 3):
             raise ValueError("validation_method must be 1, 2 or 3")
         return v
+
+    @model_validator(mode="after")
+    def _sync_postures(self) -> "DerivativesEngineConfig":
+        """Reconcile `risk_postures` (multi) with the legacy `risk_posture`
+        (single), so old persisted configs and old API payloads keep working.
+
+        - If `risk_postures` is empty, backfill it from `risk_posture` (or
+          default to long_only).
+        - Drop unknown entries, dedupe, and order by POSTURE_PRIORITY.
+        - Mirror the highest-priority posture back into `risk_posture`.
+        """
+        valid = {p.value for p in RiskPosture}
+        postures = [p for p in self.risk_postures if p in valid]
+        if not postures:
+            postures = [self.risk_posture.value] if self.risk_posture else ["long_only"]
+        ordered = [p for p in POSTURE_PRIORITY if p in set(postures)]
+        self.risk_postures = ordered or ["long_only"]
+        self.risk_posture = RiskPosture(self.risk_postures[0])
+        return self
 
 
 # Imported at module scope so tests can monkeypatch these symbols.

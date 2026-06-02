@@ -401,6 +401,38 @@ def get_iv_history(underlying: str, limit: int = 252) -> list:
         return []
 
 
+def get_option_iv_ticks(
+    underlying: str, since: float | None = None, limit: int = 200_000
+) -> list[dict]:
+    """Read the forward IV recorder's option-surface ticks for `underlying`,
+    oldest-first. Each row is one option contract captured at one moment.
+
+    Used by study validation method 2 (real-only/forward) to reconstruct
+    genuine historical IV surfaces. Returns [] when the recorder has no data
+    yet (the honest "futures only" case until history accrues)."""
+    if not _available:
+        return []
+    cols = ("underlying, expiry, strike, opt_type, mark_iv, bid_iv, ask_iv, "
+            "delta, gamma, theta, vega, rho, ts")
+    try:
+        with _conn() as c:
+            if since is not None:
+                rows = c.execute(
+                    f"SELECT {cols} FROM option_iv_ticks "
+                    "WHERE underlying=? AND ts>=? ORDER BY ts ASC LIMIT ?",
+                    (underlying, since, limit),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    f"SELECT {cols} FROM option_iv_ticks "
+                    "WHERE underlying=? ORDER BY ts ASC LIMIT ?",
+                    (underlying, limit),
+                ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
 def persist_arrow(
     underlying: str,
     arrow_type: str,

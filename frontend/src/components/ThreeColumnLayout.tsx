@@ -21,10 +21,10 @@ function CollapsibleSection({ label, children, border = true, collapsible, defau
   if (!collapsible) {
     return (
       <div style={{
-        padding: '12px 14px',
+        padding: '10px 14px',
         borderBottom: border ? '1px solid var(--t-border)' : 'none',
       }}>
-        {label && <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-dim)', marginBottom: 8, textTransform: 'uppercase' }}>{label}</div>}
+        {label && <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--t-muted)', marginBottom: 8, textTransform: 'uppercase' }}>{label}</div>}
         {children}
       </div>
     );
@@ -35,8 +35,8 @@ function CollapsibleSection({ label, children, border = true, collapsible, defau
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
         padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
       }}>
-        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--t-dim)', textTransform: 'uppercase' }}>{label}</span>
-        <span style={{ fontSize: 8, color: 'var(--t-dim)', transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>▼</span>
+        <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', color: 'var(--t-muted)', textTransform: 'uppercase' }}>{label}</span>
+        <span style={{ fontSize: 8, color: 'var(--t-muted)', transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>▼</span>
       </button>
       {open && <div style={{ padding: '0 14px 12px' }}>{children}</div>}
     </div>

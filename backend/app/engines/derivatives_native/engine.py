@@ -27,6 +27,26 @@ from app.engines.derivatives_native.config import DerivativesEngineConfig, RiskP
 from app.schemas.market import OptionSummary
 
 
+def _select_posture(allowed: set[str], ivr: Optional[float]) -> RiskPosture:
+    """Pick the effective posture for the current regime from the *allowed* set.
+
+    Multi-select: the user may enable several postures at once. Naked is only
+    chosen when the regime is rich (high IV-rank); otherwise we fall down the
+    priority chain (naked → defined_risk → long_only) to the richest *allowed*
+    structure. Each engine branch keeps its own internal fallbacks (e.g. the
+    naked branch warns and builds a defined-risk structure if a strangle can't
+    be priced)."""
+    if "naked" in allowed and ivr is not None and ivr >= _regime.RICH_IVR:
+        return RiskPosture.NAKED
+    if "defined_risk" in allowed:
+        return RiskPosture.DEFINED_RISK
+    if "long_only" in allowed:
+        return RiskPosture.LONG_ONLY
+    # Only naked is enabled but the regime isn't rich: hand to the naked branch,
+    # which warns and falls back to a defined-risk structure.
+    return RiskPosture.NAKED
+
+
 def _frozen_ok(candidate, *, reason: str, now_ms: int) -> DerivativesDecision:
     dec = DerivativesDecision(
         status=DecisionStatus.OK, chosen=candidate, alternatives=[],
@@ -95,6 +115,81 @@ def _naked_candidate(
     )
 
 
+def _gex_iron_condor(
+    *, chain: list[OptionSummary], signal: SignalContext,
+    market: MarketContext, profile: StrategyDerivativesProfile,
+    flip_level: float,
+) -> Optional[DerivativesCandidate]:
+    """GEX pinning trade: sell an iron condor centered on the zero-gamma-flip.
+
+    Positive total GEX creates a dealer-gamma pinning effect — price tends to
+    gravitate toward the flip level. Selling an iron condor around that level
+    collects theta while the pin holds. Sized to the profile's max premium cap.
+    """
+    width = 0.03  # 3% wings for tight pinning
+    s = _structures.build_iron_condor(
+        chain=chain, spot=flip_level, width_pct=width,
+        nav_usd=market.portfolio_value,
+        max_loss_pct=profile.max_premium_pct_of_account,
+    )
+    if s is None:
+        return None
+    return DerivativesCandidate(
+        rank=0, instrument_type="options", underlying=signal.underlying,
+        entry_price=flip_level, direction="neutral",
+        contracts=s.contracts, leverage=1.0,
+        notional_usd=round(s.contracts * flip_level, 2),
+        premium_usd=round(s.net_premium_usd, 2),
+        expected_r=round(s.max_profit_usd / s.max_loss_usd, 3)
+        if s.max_loss_usd > 0 else 0.0,
+        score=1.0, structure=s,
+        warnings=["GEX pinning trade — dealer gamma mean-reversion"],
+    )
+
+
+def _gex_directional(
+    *, chain: list[OptionSummary], signal: SignalContext,
+    market: MarketContext, profile: StrategyDerivativesProfile,
+    gex_profile: dict, cfg_risk,
+) -> Optional[DerivativesCandidate]:
+    """GEX directional trade when total GEX is negative (trending regime).
+
+    Negative GEX = dealers are short gamma → amplify moves. We trade
+    directionally in the direction of the signal, using a debit vertical.
+    """
+    # Negative GEX acts as confirmation for the directional signal
+    flip = gex_profile.get("zero_gamma_flip", market.spot)
+    call_wall = gex_profile.get("call_wall", flip * 1.10)
+    put_wall = gex_profile.get("put_wall", flip * 0.90)
+
+    if signal.direction == "long":
+        # Long above put wall — buying a debit call spread
+        s = _structures.build_debit_vertical(
+            chain=chain, spot=market.spot, direction="long",
+            width_pct=0.04, nav_usd=market.portfolio_value,
+            max_loss_pct=profile.max_premium_pct_of_account,
+        )
+    else:
+        s = _structures.build_debit_vertical(
+            chain=chain, spot=market.spot, direction="short",
+            width_pct=0.04, nav_usd=market.portfolio_value,
+            max_loss_pct=profile.max_premium_pct_of_account,
+        )
+    if s is None:
+        return None
+    return DerivativesCandidate(
+        rank=0, instrument_type="options", underlying=signal.underlying,
+        entry_price=signal.entry, direction=signal.direction,
+        contracts=s.contracts, leverage=1.0,
+        notional_usd=round(s.contracts * signal.entry, 2),
+        premium_usd=round(s.net_premium_usd, 2),
+        expected_r=round(s.max_profit_usd / s.max_loss_usd, 3)
+        if s.max_loss_usd > 0 else 0.0,
+        score=1.0, structure=s,
+        warnings=[f"GEX directional: negative gamma ({gex_profile.get('total_gex',0):,.0f})"],
+    )
+
+
 def decide_both(
     *,
     signal: SignalContext,
@@ -125,58 +220,102 @@ def decide_both(
             )
 
     # ── Options leg (long premium only in 2a) ─────────────────────────────
-    if (sources & {"vrp_voltiming", "skew_put", "directional_options"}) and chain:
-        if cfg.risk_posture == RiskPosture.NAKED:
-            # Naked is gated on a RICH vol regime (high IV-rank). Otherwise we do
-            # NOT sell cheap vol naked — fall back to defined-risk.
-            ivr = market.ivr_pct
-            if ivr is not None and ivr >= _regime.RICH_IVR:
-                cand = _naked_candidate(
-                    signal=signal, market=market, profile=profile, chain=chain)
-                if cand is not None:
+    if (sources & {"vrp_voltiming", "skew_put", "directional_options", "gex_pinning"}) and chain:
+        # GEX pinning: when active AND we have a GEX profile, build a
+        # non-directional structure (iron condor) around the zero-gamma-flip
+        # level. Falls through to other sources if GEX data isn't available.
+        if "gex_pinning" in sources and market.gex_profile is not None:
+            gex = market.gex_profile
+            total_gex = gex.get("total_gex", 0.0)
+            flip = gex.get("zero_gamma_flip", market.spot)
+            # GEX pinning: sell vol around the flip level when GEX is
+            # strongly positive (mean-reverting regime). Iron condor centered
+            # on the flip level with wide wings.
+            if abs(total_gex) > 50_000:
+                if total_gex > 0:
+                    # Positive GEX → mean-reverting → sell an iron condor
+                    cand = _gex_iron_condor(
+                        chain=chain, signal=signal, market=market,
+                        profile=profile, flip_level=flip)
+                    if cand is not None:
+                        cand.warnings.append(
+                            f"gex_pinning: total_gex={total_gex:,.0f} flip={flip:.0f}")
+                        options_leg = _frozen_ok(
+                            cand, reason="native:gex_pinning", now_ms=now_ms)
+                else:
+                    # Negative GEX → trending → directional options or futures
+                    # Defer to directional_futures or directional_options if active;
+                    # otherwise treat as a gamma-short directional signal.
+                    if sources & {"directional_futures", "directional_options"}:
+                        warnings.append(
+                            f"gex_pinning: negative GEX ({total_gex:,.0f}) — "
+                            f"deferring to directional sources")
+                    else:
+                        # No directional source active: use GEX signal as
+                        # directional trigger (short at call wall, long at put wall)
+                        cand = _gex_directional(
+                            chain=chain, signal=signal, market=market,
+                            profile=profile, gex_profile=gex, cfg_risk=cfg.risk_posture)
+                        if cand is not None:
+                            options_leg = _frozen_ok(
+                                cand, reason="native:gex_pinning:directional", now_ms=now_ms)
+
+        if options_leg is None and (sources & {"vrp_voltiming", "skew_put", "directional_options"}):
+            pass  # Fall through to other option sources if GEX didn't generate a trade
+
+        if options_leg is None:
+            effective_posture = _select_posture(set(cfg.risk_postures), market.ivr_pct)
+            if effective_posture == RiskPosture.NAKED:
+                # Naked is gated on a RICH vol regime (high IV-rank). Otherwise we do
+                # NOT sell cheap vol naked — fall back to defined-risk.
+                ivr = market.ivr_pct
+                if ivr is not None and ivr >= _regime.RICH_IVR:
+                    cand = _naked_candidate(
+                        signal=signal, market=market, profile=profile, chain=chain)
+                    if cand is not None:
+                        warnings.append(
+                            "naked short vol — UNCAPPED TAIL RISK (opt-in; never auto-executed)")
+                        options_leg = _frozen_ok(cand, reason="native:naked_short_vol", now_ms=now_ms)
+                    else:
+                        options_leg = DerivativesDecision(
+                            status=DecisionStatus.DEFER,
+                            reason="no naked structure buildable from chain",
+                            code="no_structure", timestamp_ms=now_ms)
+                else:
                     warnings.append(
-                        "naked short vol — UNCAPPED TAIL RISK (opt-in; never auto-executed)")
-                    options_leg = _frozen_ok(cand, reason="native:naked_short_vol", now_ms=now_ms)
+                        f"naked requested but regime not rich (ivr={ivr}); using defined_risk")
+                    cand = _defined_risk_candidate(
+                        signal=signal, market=market, profile=profile, chain=chain, sources=sources)
+                    options_leg = (
+                        _frozen_ok(cand, reason="native:defined_risk", now_ms=now_ms)
+                        if cand is not None else DerivativesDecision(
+                            status=DecisionStatus.DEFER,
+                            reason="no defined-risk structure buildable from chain",
+                            code="no_structure", timestamp_ms=now_ms))
+            elif effective_posture == RiskPosture.DEFINED_RISK:
+                cand = _defined_risk_candidate(
+                    signal=signal, market=market, profile=profile, chain=chain, sources=sources)
+                if cand is not None:
+                    options_leg = _frozen_ok(cand, reason="native:defined_risk", now_ms=now_ms)
                 else:
                     options_leg = DerivativesDecision(
                         status=DecisionStatus.DEFER,
-                        reason="no naked structure buildable from chain",
+                        reason="no defined-risk structure buildable from chain",
                         code="no_structure", timestamp_ms=now_ms)
             else:
-                warnings.append(
-                    f"naked requested but regime not rich (ivr={ivr}); using defined_risk")
-                cand = _defined_risk_candidate(
-                    signal=signal, market=market, profile=profile, chain=chain, sources=sources)
-                options_leg = (
-                    _frozen_ok(cand, reason="native:defined_risk", now_ms=now_ms)
-                    if cand is not None else DerivativesDecision(
+                # long_only: single long premium via the existing builder.
+                # Native ignores per-strategy instrument_bias so options aren't suppressed.
+                opt_profile = profile.model_copy(update={"instrument_bias": InstrumentBias.AUTO})
+                opts = _sel._build_options_candidates(
+                    signal=signal, market=market, profile=opt_profile, chain=chain)
+                if opts:
+                    options_leg = _frozen_ok(opts[0], reason="native:long_premium", now_ms=now_ms)
+                    options_leg.alternatives = opts[1:4]
+                else:
+                    options_leg = DerivativesDecision(
                         status=DecisionStatus.DEFER,
-                        reason="no defined-risk structure buildable from chain",
-                        code="no_structure", timestamp_ms=now_ms))
-        elif cfg.risk_posture == RiskPosture.DEFINED_RISK:
-            cand = _defined_risk_candidate(
-                signal=signal, market=market, profile=profile, chain=chain, sources=sources)
-            if cand is not None:
-                options_leg = _frozen_ok(cand, reason="native:defined_risk", now_ms=now_ms)
-            else:
-                options_leg = DerivativesDecision(
-                    status=DecisionStatus.DEFER,
-                    reason="no defined-risk structure buildable from chain",
-                    code="no_structure", timestamp_ms=now_ms)
-        else:
-            # long_only: single long premium via the existing builder.
-            # Native ignores per-strategy instrument_bias so options aren't suppressed.
-            opt_profile = profile.model_copy(update={"instrument_bias": InstrumentBias.AUTO})
-            opts = _sel._build_options_candidates(
-                signal=signal, market=market, profile=opt_profile, chain=chain)
-            if opts:
-                options_leg = _frozen_ok(opts[0], reason="native:long_premium", now_ms=now_ms)
-                options_leg.alternatives = opts[1:4]
-            else:
-                options_leg = DerivativesDecision(
-                    status=DecisionStatus.DEFER,
-                    reason="no long-premium strike survived tradeability gates",
-                    code="no_options_candidate", timestamp_ms=now_ms)
+                        reason="no long-premium strike survived tradeability gates",
+                        code="no_options_candidate", timestamp_ms=now_ms)
 
     status = DecisionStatus.OK if (
         (futures_leg and futures_leg.status == DecisionStatus.OK)

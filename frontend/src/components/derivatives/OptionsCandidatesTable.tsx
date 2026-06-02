@@ -130,16 +130,16 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
             No options candidates. Enable a strategy in <strong>DERIVATIVES</strong> settings, or wait for the next chain refresh.
           </div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead>
               <tr style={{
-                background: c.surface, color: c.dim,
-                fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                background: c.surface, color: c.muted,
+                fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
                 textTransform: 'uppercase',
               }}>
                 {['Symbol', 'Strategy', 'Contract', 'Δ', 'Γ', 'Θ', 'ν', 'Premium', 'Liq', 'R', 'θ burn', 'P&L', ''].map((h, i) => (
                   <th key={i} style={{
-                    padding: '6px 8px', textAlign: i >= 11 ? 'right' : 'left',
+                    padding: '5px 8px', textAlign: i >= 11 ? 'right' : 'left',
                     borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap',
                   }}>{h}</th>
                 ))}
@@ -159,29 +159,29 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       borderBottom: isExp ? 'none' : `1px solid ${c.border2}`, color: c.text,
                       cursor: 'pointer', background: isExp ? alpha(c.blue, 0.06) : undefined,
                     }}>
-                    <td style={{ padding: '6px 8px', fontWeight: 700 }}>
-                      <span style={{ color: c.dim, fontSize: 9, marginRight: 3 }}>{isExp ? '▾' : '▸'}</span>
+                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>
+                      <span style={{ color: c.dim, fontSize: 10, marginRight: 3 }}>{isExp ? '▾' : '▸'}</span>
                       <span style={{ color: row.direction === 'long' ? c.green : c.red }}>
                         {row.direction === 'long' ? '▲' : '▼'}
                       </span>{' '}{row.underlying}
                     </td>
-                    <td style={{ padding: '6px 8px', fontSize: 9, color: c.dim, whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '5px 8px', fontSize: 10, fontWeight: 600, color: c.muted, whiteSpace: 'nowrap' }}>
                       <SourceBadge source={row.source} />
                       {cleanStrategy(row.strategy)}
                     </td>
-                    <td style={{ padding: '6px 8px', fontWeight: 600 }}>
+                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>
                       <span style={{ color: type === 'CE' ? c.green : c.red }}>{type}</span>{' '}
                       <span>{strikeK}</span>{' '}
                       <span style={{ color: c.dim, fontSize: 9 }}>{dteTag}</span>
                     </td>
-                    <td style={{ padding: '6px 8px' }}>{fmt(row.delta, 3)}</td>
-                    <td style={{ padding: '6px 8px' }}>{fmt(row.gamma, 5)}</td>
-                    <td style={{ padding: '6px 8px', color: row.theta && row.theta < 0 ? c.red : c.text }}>
+                    <td style={{ padding: '5px 8px' }}>{fmt(row.delta, 3)}</td>
+                    <td style={{ padding: '5px 8px' }}>{fmt(row.gamma, 5)}</td>
+                    <td style={{ padding: '5px 8px', color: row.theta && row.theta < 0 ? c.red : c.text }}>
                       {fmt(row.theta, 2)}
                     </td>
-                    <td style={{ padding: '6px 8px' }}>{fmt(row.vega, 2)}</td>
-                    <td style={{ padding: '6px 8px' }}>{fmtUsd(row.premium)}</td>
-                    <td style={{ padding: '6px 8px' }}>
+                    <td style={{ padding: '5px 8px' }}>{fmt(row.vega, 2)}</td>
+                    <td style={{ padding: '5px 8px' }}>{fmtUsd(row.premium)}</td>
+                    <td style={{ padding: '5px 8px' }}>
                       <span style={{
                         display: 'inline-block', minWidth: 36, textAlign: 'center',
                         padding: '1px 6px', borderRadius: 4, fontSize: 10,
@@ -192,14 +192,14 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                         {row.liquidity_score == null ? '—' : (row.liquidity_score * 100).toFixed(0)}
                       </span>
                     </td>
-                    <td style={{ padding: '6px 8px', fontWeight: 700,
+                    <td style={{ padding: '5px 8px', fontWeight: 700,
                                 color: row.expected_r >= 2 ? c.green : row.expected_r >= 1 ? c.amber : c.red }}>
                       {fmt(row.expected_r, 2)}R
                     </td>
-                    <td style={{ padding: '6px 8px', fontSize: 10, color: c.dim }}>
+                    <td style={{ padding: '5px 8px', fontSize: 10, color: c.muted }}>
                       {fmtUsd(row.theta_burn_usd)}
                     </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700 }}>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>
                       {rp && rp.pnl != null ? (
                         <span style={{ color: rp.pnl >= 0 ? c.green : c.red }}
                               title={`${rp.mode} · ${rp.realized ? 'realized' : 'unrealized'} · ${rp.status}`}>
@@ -207,12 +207,12 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                         </span>
                       ) : <span style={{ color: c.dim }}>—</span>}
                     </td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                    <td style={{ padding: '5px 8px', textAlign: 'right' }}>
                       {auto ? (
                         <span title="Algo is ON — auto-executes via background scanner" style={{
                           display: 'inline-block', padding: '3px 10px', borderRadius: 4,
                           background: alpha(c.amber, 0.16), border: `1px solid ${alpha(c.amber, 0.45)}`,
-                          color: c.amber, fontSize: 9, fontWeight: 800, letterSpacing: '0.08em',
+                          color: c.amber, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
                         }}>
                           AUTO
                         </span>
@@ -224,7 +224,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                             padding: '4px 12px', borderRadius: 5,
                             background: alpha(c.green, 0.14),
                             border: `1px solid ${alpha(c.green, 0.4)}`,
-                            color: c.green, fontSize: 10, fontWeight: 800,
+                            color: c.green, fontSize: 11, fontWeight: 700,
                             letterSpacing: '0.06em', cursor: execute.isPending ? 'wait' : 'pointer',
                             fontFamily: 'inherit',
                           }}>

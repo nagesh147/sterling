@@ -34,9 +34,27 @@
 
 # ui-formatting
 - Format backend reason strings for user-facing display: fix casing (title/sentence case where appropriate), correct grammar, and use readable labels — never show raw-backend underscore_delimited or ALL_CAPS strings directly to users. Confidence: 0.65
+- Use descriptive human-readable labels with parenthetical clarifications in dropdown/select options instead of raw technical identifiers (e.g., "Trend following (futures)" not "directional_futures", "Buy only" not "long_only"). Confidence: 0.70
+
+# naming
+- Use "Sterling's Gate" for the routing gate component and "Claude's Native" for the native engine component in UI labels and user-facing text. Confidence: 0.80
+
+# ui-components
+- Use chip toggles (pill-shaped toggle buttons) instead of checkboxes for boolean/flag options and instead of dropdowns for mode selection — apply this pattern broadly across all option types (alpha sources, engine modes, risk posture, validation options). Confidence: 0.75
+- Avoid duplicate APPLY/RESET buttons in child components when the parent already provides them — child settings should participate in the parent's draft/apply flow instead of having their own save controls. Confidence: 0.70
+- For the strategy column in data tables: use plain text labels with no colors, no background, and no chip/pill styling. Confidence: 0.70
+
+# ui-ux
+- Settings panels should use save-on-apply pattern: show current defaults highlighted, indicate when values differ from defaults, and only persist changes on explicit Apply click — not auto-save. Confidence: 0.70
 
 # engineering-philosophy
 - No MVPs, no band-aids, no shortcuts: build production-grade infrastructure the right way the first time, regardless of time cost. Confidence: 0.80
+
+# ui-typography
+- Normalize UI font weights: use fontWeight 700 for primary headings/emphasis (never 800), fontWeight 600 for secondary labels/badges/buttons (never 700 or 800 for non-headings), and fontWeight 400 for body text. Confidence: 0.65
+- Set minimum font size of 9px for all user-facing UI text (badges, hints, secondary labels); use 10px for table cells and form labels; never use 7-8px for readable text. Confidence: 0.65
+- Use var(--t-muted) (not var(--t-dim)) for secondary/descriptive text across all UI components — descriptions, hints, labels, and non-primary metadata. Confidence: 0.65
+- Relax letter spacing across UI: use 0.04em-0.06em for labels and headers (not 0.08em-0.12em) to reduce visual tension. Confidence: 0.60
 
 # ui-layout
 See [ui-layout/taste.md](ui-layout/taste.md)

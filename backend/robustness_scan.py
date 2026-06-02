@@ -35,6 +35,7 @@ from app.engines.edge.strategies import SIGNAL_FNS, resample
 from app.engines.edge.registry import PROFILE_ATR
 from app.engines.analytics.cpcv import calculate_pbo
 from app.engines.analytics.monte_carlo import monte_carlo_trades
+from study.sim import simulate_idx as _simulate_idx, sharpe as _sharpe, base_metrics as _base_metrics
 
 FEE_RT = 0.001
 MAX_HOLD = 200
@@ -58,42 +59,18 @@ N_MC = 3000
 
 
 def simulate_idx(df, sigs, slm, tpm):
-    close = df["close"].to_numpy(float); high = df["high"].to_numpy(float)
-    low = df["low"].to_numpy(float); atr = df["atr"].to_numpy(float); n = len(close)
-    out = []; idx = np.flatnonzero(sigs); sp = 0
-    while sp < len(idx):
-        i = idx[sp]; sp += 1
-        if i >= n - 2 or not np.isfinite(atr[i]) or atr[i] <= 0:
-            continue
-        e = close[i]; sl = e - slm * atr[i]; tp = e + tpm * atr[i]
-        end = min(i + MAX_HOLD, n - 1); xp = close[end]; xi = end
-        for j in range(i + 1, end + 1):
-            if low[j] <= sl: xp = sl; xi = j; break
-            if high[j] >= tp: xp = tp; xi = j; break
-        out.append({"pnl_pct": (xp / e) - 1.0 - FEE_RT, "entry_bar": int(i), "exit_bar": int(xi)})
-        while sp < len(idx) and idx[sp] <= xi:
-            sp += 1
-    return out
+    """Long-only bar-by-bar first-touch SL/TP (delegates to study.sim)."""
+    return _simulate_idx(df, sigs, slm, tpm, direction="long", fee_rt=FEE_RT, max_hold=MAX_HOLD)
 
 
 def sharpe(pnls):
-    a = np.asarray(pnls, float)
-    return float(np.sqrt(252) * a.mean() / a.std(ddof=1)) if a.size >= 2 and a.std(ddof=1) > 0 else 0.0
+    return _sharpe(pnls)
 
 
 def base_metrics(pnls):
     """win_rate, pf, expectancy, net_return(decimal), pnl_usd, max_dd(decimal)."""
-    a = np.asarray(pnls, float)
-    wins = a[a > 0]; losses = a[a < 0]
-    gp = float(wins.sum()); gl = float(-losses.sum())
-    pf = gp / gl if gl > 0 else (99.99 if gp > 0 else 0.0)
-    win_rate = float((a > 0).mean())
-    expectancy = float(a.mean())
-    eq = np.cumprod(1.0 + a)
-    net_return = float(eq[-1] - 1.0)
-    peak = np.maximum.accumulate(eq)
-    max_dd = float(((eq - peak) / peak).min())
-    return win_rate, pf, expectancy, net_return, 500.0 * net_return, max_dd
+    m = _base_metrics(pnls, starting_capital=500.0)
+    return m["win_rate"], m["pf"], m["expectancy"], m["net_return"], m["pnl_usd"], m["max_dd"]
 
 
 def main():
