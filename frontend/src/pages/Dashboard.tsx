@@ -201,7 +201,7 @@ export function Dashboard() {
           {/* Separator */}
           <div style={{ width: 1, height: 18, background: 'var(--border)' }} />
 
-          {/* Pro mode: status badges (TradingModeSelector lives in SignalsTable filter row) */}
+          {/* Pro mode: status badges */}
           {appMode === 'pro' && <>
             <PanelBoundary><StreamBadge underlying={selectedUnderlying} /></PanelBoundary>
             <PanelBoundary><ExchangeBadge /></PanelBoundary>

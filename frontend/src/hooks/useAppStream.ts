@@ -1,7 +1,7 @@
 /**
  * useAppStream — module-level singleton SSE connection for ALL app data.
  *
- * Replaces the duplicate SSE connections in useLivePrices and useAllSignalsStream.
+ * Replaces the duplicate SSE connections in useLivePrices and useSignalFeed.
  * All components share one EventSource to /api/v1/directional/stream-all.
  *
  * Event types emitted by the backend:

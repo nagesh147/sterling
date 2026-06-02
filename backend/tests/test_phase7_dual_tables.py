@@ -34,8 +34,8 @@ from app.engines.derivatives.selector import decide_both
 from app.services import derivatives_audit
 
 
-# Local sample profile (formerly _SWING_PROFILE,
-# kept here as a test vehicle after that strategy was removed from production).
+# Local sample profile (formerly DEFAULT_PROFILES["triple_st"]),
+# kept here as a test vehicle after that strategy was removed from production.
 _SWING_PROFILE = StrategyDerivativesProfile(
     strategy="swing_demo",
     instrument_bias=InstrumentBias.AUTO,

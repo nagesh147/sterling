@@ -1359,7 +1359,6 @@ async def lifespan(app: FastAPI):
         log.warning("Telegram config restore skipped: %s", _e)
 
     # Restore persisted scalping config (survives server restarts)
-
     from app.engines.scalping.config import ScalpingConfig as _SC, default_config as _default_sc
     _saved_sc = get_config("scalping_config")
     if _saved_sc:
