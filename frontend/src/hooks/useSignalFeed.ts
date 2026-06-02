@@ -11,9 +11,9 @@
  * refresh does NOT re-fire signals that are already in an armed state.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAllSignalsStream } from './useAllSignalsStream';
+import { useAppStream } from './useAppStream';
 import { useLivePrices } from './useLivePrices';
-import type { SignalItem } from './useSignals';
+import type { SignalItem, SignalsResponse } from './useSignals';
 import { useTradingMode } from './useTradingMode';
 import { inferModeTag } from '../utils/fmt';
 
@@ -353,7 +353,31 @@ function buildEntry(sig: SignalItem, type: 'futures' | 'options', now: number, m
 
 // ── main hook ─────────────────────────────────────────────────────────────────
 export function useSignalFeed() {
-  const { data, status: streamStatus } = useAllSignalsStream();
+  // Inline replacement for the removed useAllSignalsStream thin wrapper.
+  const { data: signalPayload, status: streamStatus } = useAppStream<{ signals: SignalItem[]; timestamp_ms: number }>('signals');
+  const { data: streamPriceMap } = useAppStream<Record<string, number>>('prices');
+  const streamDataRef = useRef<SignalsResponse | null>(null);
+  const [data, setStreamData] = useState<SignalsResponse | null>(null);
+  useEffect(() => {
+    if (!signalPayload) return;
+    const next: SignalsResponse = { signals: signalPayload.signals, count: signalPayload.signals.length, timestamp_ms: signalPayload.timestamp_ms };
+    streamDataRef.current = next;
+    setStreamData(next);
+  }, [signalPayload]);
+  useEffect(() => {
+    if (!streamPriceMap || !streamDataRef.current) return;
+    let changed = false;
+    const updated = streamDataRef.current.signals.map(sig => {
+      const p = streamPriceMap[sig.underlying];
+      if (p == null || p === sig.spot_price) return sig;
+      changed = true;
+      return { ...sig, spot_price: p };
+    });
+    if (!changed) return;
+    const next: SignalsResponse = { ...streamDataRef.current, signals: updated, timestamp_ms: Date.now() };
+    streamDataRef.current = next;
+    setStreamData(next);
+  }, [streamPriceMap]);
   const liveP = useLivePrices();  // direct SSE price map — updates every 2s
   const { data: modeData } = useTradingMode();
   const currentMode = modeData?.name ?? 'swing';

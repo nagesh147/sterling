@@ -1,6 +1,6 @@
 import { c as ui } from '../styles/terminalUI';
 
-/** Single source of truth for signal state colors — used by SignalsTable, AlertsPanel, and InstrumentDetailCard */
+/** Single source of truth for signal state colors — used by AlertsPanel and InstrumentDetailCard */
 export const STATE_COLOR: Record<string, string> = {
   ENTRY_ARMED_PULLBACK:     ui.blue,
   ENTRY_ARMED_CONTINUATION: ui.cyan,

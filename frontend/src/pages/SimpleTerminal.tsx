@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import { TickerStrip } from '../components/TickerStrip';
 import { StatusBar } from '../components/StatusBar';
-import { SignalsTable } from '../components/SignalsTable';
 import { PositionsStrip } from '../components/PositionsStrip';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { TradingModeSelector } from '../components/TradingModeSelector';
-import { CalibrationPanel } from '../components/CalibrationPanel';
 import { SimpleSettingsDrawer, AlgoToggle, AIGatekeeperToggle } from '../components/SimpleSettings';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import LiveControlPanel from '../components/LiveControlPanel';
@@ -16,11 +14,9 @@ import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
 import { GreeksBudgetHeaderChip } from '../components/GreeksBudgetHeaderChip';
-import { StrategyTab } from '../components/strategy/StrategyTab';
 import { ScalpingTab } from '../components/scalping/ScalpingTab';
-import { StatArbTab } from '../components/statarb/StatArbTab';
 import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
-import { ThreeColumnLayout, LeftSection, RightSection, StatCard } from '../components/ThreeColumnLayout';
+import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
 
@@ -142,7 +138,7 @@ export function SimpleTerminal() {
   const underlying = useSelectedUnderlying();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
-  const [activeSection, setActiveSection] = useState<'scalping' | 'statarb' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration'>('scalping');
+  const [activeSection, setActiveSection] = useState<'scalping' | 'positions' | 'backtest'>('scalping');
 
   return (
     <div className="term-root">
@@ -206,13 +202,9 @@ export function SimpleTerminal() {
         }}>
           {([
             ['scalping',   'STERLING ENGINE'],
-            ['statarb',    'STAT ARB'],
-            ['strategy',    'RSI MEAN-REV'],
-            ['signals',     'SIGNALS'],
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
-            ['calibration', 'CALIBRATION'],
-          ] as ['scalping' | 'statarb' | 'strategy' | 'signals' | 'positions' | 'backtest' | 'calibration', string][]).map(([id, label]) => (
+          ] as ['scalping' | 'positions' | 'backtest', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -265,33 +257,8 @@ export function SimpleTerminal() {
 
       {/* Main content */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
-        {/* V4 Analytics shown on signals, backtest, and calibration tabs — in the right sidebar of those tabs */}
         {activeSection === 'scalping' && (
           <ScalpingTab />
-        )}
-        {activeSection === 'statarb' && (
-          <StatArbTab />
-        )}
-        {activeSection === 'strategy' && (
-          <StrategyTab />
-        )}
-        {activeSection === 'signals' && (
-          <ThreeColumnLayout
-            leftNav={[{ id: 'all', label: 'All Signals', color: 'var(--t-bright)'}]}
-            activeNav="all"
-            onNavClick={() => {}}
-            centerHeader={<>
-              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Signals</div>
-              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Live signal feed</div>
-            </>}
-            centerContent={<div className="term-signals-wrap" style={{ flex: 1, minHeight: 0 }}><SignalsTable /></div>}
-            centerFullBleed
-            rightSidebar={<>
-              <RightSection label="Analytics">
-                <V4AnalyticsDashboard activeSymbol={underlying} />
-              </RightSection>
-            </>}
-          />
         )}
         {activeSection === 'positions' && <PositionsStrip asPage />}
         {activeSection === 'backtest' && (
@@ -304,23 +271,6 @@ export function SimpleTerminal() {
               <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Historical candle data & signal simulation</div>
             </>}
             centerContent={<BacktestView />}
-            rightSidebar={<>
-              <RightSection label="Analytics">
-                <V4AnalyticsDashboard activeSymbol={underlying} />
-              </RightSection>
-            </>}
-          />
-        )}
-        {activeSection === 'calibration' && (
-          <ThreeColumnLayout
-            leftNav={[{ id: 'calibration', label: 'Calibration', color: 'var(--t-amber)' }]}
-            activeNav="calibration"
-            onNavClick={() => {}}
-            centerHeader={<>
-              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Calibration</div>
-              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Adaptive calibration metrics</div>
-            </>}
-            centerContent={<CalibrationPanel />}
             rightSidebar={<>
               <RightSection label="Analytics">
                 <V4AnalyticsDashboard activeSymbol={underlying} />

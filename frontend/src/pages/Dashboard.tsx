@@ -51,11 +51,8 @@ import { CorrelationHeatmap } from '../components/CorrelationHeatmap';
 import { GreeksBudgetGauge } from '../components/GreeksBudgetGauge';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { CalibrationPanel } from '../components/CalibrationPanel';
-import { SignalsBar } from '../components/SignalsBar';
-import { SignalsList } from '../components/SignalsList';
 import { AlertsPanel } from '../components/AlertsPanel';
 import { GoLivePanel } from '../components/GoLivePanel';
-import { SignalsTable } from '../components/SignalsTable';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSettings';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
@@ -289,7 +286,6 @@ export function Dashboard() {
         <>
           <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
           <PanelBoundary title="MASSIVE VECTORIZED BACKTEST"><MassiveBacktestDashboard underlying={selectedUnderlying} /></PanelBoundary>
-          <PanelBoundary title="LIVE SIGNALS"><SignalsTable /></PanelBoundary>
           <PanelBoundary title="POSITIONS"><PositionsStrip /></PanelBoundary>
         </>
       ) : (
@@ -306,8 +302,6 @@ export function Dashboard() {
               />
             ))}
           </div>
-
-          <SignalsBar />
 
           {activeTab === 'analysis' && (
             <>
