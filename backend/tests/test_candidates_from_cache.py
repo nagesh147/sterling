@@ -79,16 +79,16 @@ def test_endpoint_filters_by_strategy_and_underlying(client):
 
 def test_edge_rows_bypass_strategy_filter(client):
     """Edge is a cross-strategy validated feed — its rows must show on EVERY
-    tab, even one scoped to another strategy (e.g. triple_st), so the operator
+    tab, even one scoped to another strategy (e.g. directional), so the operator
     never misses a proven signal. Engine rows still respect the filter."""
-    r = client.get("/api/v1/derivatives/candidates/futures?strategy=triple_st")
+    r = client.get("/api/v1/derivatives/candidates/futures?strategy=directional")
     ids = {c["signal_id"] for c in r.json()["candidates"]}
     assert ids == {"edge:BTCUSD:4h:smc"}        # edge shown; scalping filtered out
 
 
 def test_edge_rows_still_respect_underlying_filter(client):
     # Bypassing the strategy filter must NOT bypass the underlying filter.
-    r = client.get("/api/v1/derivatives/candidates/futures?strategy=triple_st&underlying=ETHUSD")
+    r = client.get("/api/v1/derivatives/candidates/futures?strategy=directional&underlying=ETHUSD")
     assert r.json()["candidates"] == []          # edge row is BTC, filtered by underlying
 
 

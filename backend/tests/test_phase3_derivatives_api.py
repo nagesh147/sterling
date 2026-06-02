@@ -78,9 +78,6 @@ def app(monkeypatch):
     cal.win_rate.return_value = None
     app.state.calibration_service = cal
 
-    # Triple-ST config stub so /candidates' triple_st branch doesn't NPE
-    app.state.triple_st_config = MagicMock(warmup_bars=210)
-
     # Force the instrument registry to know about BTC for the funding/book tests
     from app.services.exchanges import instrument_registry as _reg
     btc = MagicMock(
@@ -106,22 +103,22 @@ class TestConfigEndpoints:
         r = client.get("/api/v1/derivatives/config")
         assert r.status_code == 200
         data = r.json()
-        assert "triple_st" in data["profiles"]
+        assert "directional" in data["profiles"]
         # All disabled by default — operator opts in per strategy.
-        assert data["profiles"]["triple_st"]["enabled"] is False
+        assert data["profiles"]["directional"]["enabled"] is False
 
     def test_post_patches_profile(self, client):
         payload = StrategyDerivativesProfile(
-            strategy="triple_st", enabled=True, leverage_cap=11.0,
+            strategy="directional", enabled=True, leverage_cap=11.0,
         ).model_dump()
         r = client.post("/api/v1/derivatives/config", json={"profile": payload})
         assert r.status_code == 200
         body = r.json()
-        assert body["profiles"]["triple_st"]["enabled"] is True
-        assert body["profiles"]["triple_st"]["leverage_cap"] == 11.0
+        assert body["profiles"]["directional"]["enabled"] is True
+        assert body["profiles"]["directional"]["leverage_cap"] == 11.0
         # Re-GET should reflect the patch
         r2 = client.get("/api/v1/derivatives/config")
-        assert r2.json()["profiles"]["triple_st"]["leverage_cap"] == 11.0
+        assert r2.json()["profiles"]["directional"]["leverage_cap"] == 11.0
 
 
 # ─── /funding ──────────────────────────────────────────────────────────
@@ -173,7 +170,7 @@ class TestPreviewEndpoint:
         r = client.get(
             "/api/v1/derivatives/preview",
             params={
-                "strategy": "triple_st", "underlying": "BTC",
+                "strategy": "directional", "underlying": "BTC",
                 "direction": "long", "entry": 50_000,
                 "stop_loss": 49_000, "take_profit": 53_000,
                 "atr": 1_000, "signal_score": 75,
@@ -185,13 +182,13 @@ class TestPreviewEndpoint:
         assert body["status"] == "profile_off"
 
     def test_preview_with_enabled_profile_returns_decision(self, client):
-        # Enable triple_st first
-        enabled = DEFAULT_PROFILES["triple_st"].model_copy(update={"enabled": True})
+        # Enable directional first
+        enabled = DEFAULT_PROFILES["directional"].model_copy(update={"enabled": True})
         client.post("/api/v1/derivatives/config", json={"profile": enabled.model_dump()})
         r = client.get(
             "/api/v1/derivatives/preview",
             params={
-                "strategy": "triple_st", "underlying": "BTC",
+                "strategy": "directional", "underlying": "BTC",
                 "direction": "long", "entry": 50_000,
                 "stop_loss": 49_000, "take_profit": 53_000,
                 "atr": 1_000, "signal_score": 75,

@@ -30,7 +30,7 @@ def test_signal_source_helper():
     from app.api.v1.endpoints.derivatives import _signal_source
     assert _signal_source("edge/ma_crossover") == "edge"
     assert _signal_source("scalping/price_action") == "engine"
-    assert _signal_source("triple_st") == "engine"
+    assert _signal_source("directional") == "engine"
 
 
 def test_candidate_row_has_source_field():

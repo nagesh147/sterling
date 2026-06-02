@@ -28,10 +28,32 @@ from app.engines.derivatives.freeze_token import get_store as get_freeze_store
 from app.engines.derivatives.profiles import DEFAULT_PROFILES
 from app.engines.derivatives.schemas import (
     DecisionStatus, DualDerivativesDecision, InstrumentBias,
-    MarketContext, SignalContext,
+    MarketContext, SignalContext, StrategyDerivativesProfile,
 )
 from app.engines.derivatives.selector import decide_both
 from app.services import derivatives_audit
+
+
+# Local sample profile (formerly _SWING_PROFILE,
+# kept here as a test vehicle after that strategy was removed from production).
+_SWING_PROFILE = StrategyDerivativesProfile(
+    strategy="swing_demo",
+    instrument_bias=InstrumentBias.AUTO,
+    target_delta=0.575,
+    target_delta_tolerance=0.075,
+    dte_min=10,
+    dte_preferred=14,
+    dte_max=21,
+    expected_hold_minutes=5 * 24 * 60,
+    expiry_close_minutes_before=120,
+    leverage_cap=10.0,
+    max_premium_pct_of_account=0.015,
+    funding_cost_max_pct_of_R=0.25,
+    min_oi=1.0,
+    min_volume_24h_x_contract=1.0,
+    max_spread_pct=0.04,
+    ivr_pct_naked_max=40,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +97,7 @@ class TestProfileDefaults:
 # ─── decide_both — co-emit ───────────────────────────────────────────────
 
 
-def _good_signal(strategy: str = "triple_st") -> SignalContext:
+def _good_signal(strategy: str = "swing_demo") -> SignalContext:
     return SignalContext(
         strategy=strategy, underlying="BTC", direction="long",
         entry=50_000.0, stop_loss=49_000.0, take_profit=53_000.0,
@@ -103,10 +125,10 @@ class TestDecideBoth:
         assert dual.options is None
 
     def test_enabled_no_chain_emits_only_futures_leg(self):
-        override = DEFAULT_PROFILES["triple_st"].model_copy(update={"enabled": True})
+        override = _SWING_PROFILE.model_copy(update={"enabled": True})
         dual = decide_both(
             signal=_good_signal(), market=_good_market(), chain=None,
-            profile_overrides={"triple_st": override},
+            profile_overrides={"swing_demo": override},
         )
         assert dual.status == DecisionStatus.OK
         assert dual.futures is not None
@@ -121,23 +143,23 @@ class TestDecideBoth:
         assert dual.futures.freeze_token is not None
 
     def test_futures_bias_omits_options_leg(self):
-        override = DEFAULT_PROFILES["triple_st"].model_copy(
+        override = _SWING_PROFILE.model_copy(
             update={"enabled": True, "instrument_bias": InstrumentBias.FUTURES}
         )
         dual = decide_both(
             signal=_good_signal(), market=_good_market(), chain=None,
-            profile_overrides={"triple_st": override},
+            profile_overrides={"swing_demo": override},
         )
         assert dual.futures is not None
         assert dual.options is None  # bias=FUTURES suppresses options leg entirely
 
     def test_options_bias_omits_futures_leg(self):
-        override = DEFAULT_PROFILES["triple_st"].model_copy(
+        override = _SWING_PROFILE.model_copy(
             update={"enabled": True, "instrument_bias": InstrumentBias.OPTIONS}
         )
         dual = decide_both(
             signal=_good_signal(), market=_good_market(), chain=None,
-            profile_overrides={"triple_st": override},
+            profile_overrides={"swing_demo": override},
         )
         assert dual.futures is None  # bias=OPTIONS suppresses futures leg
         # Options leg is DEFER without a chain, but is present
@@ -147,10 +169,10 @@ class TestDecideBoth:
     def test_independent_freeze_tokens(self):
         """The two legs each get their OWN freeze_token. Consuming one
         must NOT invalidate the other."""
-        override = DEFAULT_PROFILES["triple_st"].model_copy(update={"enabled": True})
+        override = _SWING_PROFILE.model_copy(update={"enabled": True})
         dual = decide_both(
             signal=_good_signal(), market=_good_market(), chain=None,
-            profile_overrides={"triple_st": override},
+            profile_overrides={"swing_demo": override},
         )
         store = get_freeze_store()
         # Only futures leg has a token (no chain → no options leg)
@@ -254,7 +276,7 @@ class TestScannerAutoExecGates:
                    new_callable=AsyncMock, return_value=fake_resp):
             ok = await auto_execute_derivative(
                 app, freeze_token=token,
-                row_strategy="triple_st", row_underlying="BTC", leg="options",
+                row_strategy="swing_demo", row_underlying="BTC", leg="options",
             )
         assert ok is False
 

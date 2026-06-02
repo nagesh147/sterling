@@ -38,6 +38,38 @@ from app.schemas.market import OptionSummary
 from app.services import derivatives_audit
 
 
+# Local sample profiles (formerly DEFAULT_PROFILES["triple_st"] / ["statarb"],
+# kept here as test vehicles after those strategies were removed from production).
+_SWING_PROFILE = StrategyDerivativesProfile(
+    strategy="swing_demo",
+    instrument_bias=InstrumentBias.AUTO,
+    target_delta=0.575,
+    target_delta_tolerance=0.075,
+    dte_min=10,
+    dte_preferred=14,
+    dte_max=21,
+    expected_hold_minutes=5 * 24 * 60,
+    expiry_close_minutes_before=120,
+    leverage_cap=10.0,
+    max_premium_pct_of_account=0.015,
+    funding_cost_max_pct_of_R=0.25,
+    min_oi=1.0,
+    min_volume_24h_x_contract=1.0,
+    max_spread_pct=0.04,
+    ivr_pct_naked_max=40,
+)
+_FUTURES_PROFILE = StrategyDerivativesProfile(
+    strategy="futures_demo",
+    instrument_bias=InstrumentBias.FUTURES,
+    dte_min=0, dte_preferred=0, dte_max=0,
+    expected_hold_minutes=60 * 24,
+    leverage_cap=5.0,
+    max_premium_pct_of_account=0.02,
+    funding_cost_max_pct_of_R=0.25,
+    ivr_pct_naked_max=100,
+)
+
+
 @pytest.fixture(autouse=True)
 def _reset_state():
     from app.engines.risk import cooldown
@@ -79,9 +111,9 @@ def _opt(strike=50000, dte=14, oi=400, vol=200, iv=55, opt_type="call",
 
 class TestProfiles:
     def test_exact_match(self):
-        p = profiles_mod.get_profile("triple_st")
-        assert p.strategy == "triple_st"
-        assert p.leverage_cap == 10.0
+        p = profiles_mod.get_profile("directional")
+        assert p.strategy == "directional"
+        assert p.leverage_cap == 8.0
 
     def test_prefix_fallback(self):
         # Unknown scalping subtype → falls back to scalping_grind
@@ -94,8 +126,8 @@ class TestProfiles:
         assert p.enabled is False
 
     def test_overrides_take_precedence(self):
-        override = StrategyDerivativesProfile(strategy="triple_st", enabled=True, leverage_cap=42.0)
-        p = profiles_mod.get_profile("triple_st", overrides={"triple_st": override})
+        override = StrategyDerivativesProfile(strategy="directional", enabled=True, leverage_cap=42.0)
+        p = profiles_mod.get_profile("directional", overrides={"directional": override})
         assert p.leverage_cap == 42.0
         assert p.enabled is True
 
@@ -105,25 +137,25 @@ class TestProfiles:
 
 class TestLiquidityScore:
     def test_healthy_passes(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         s = liquidity_score.score(_opt(spread_pct=0.02, oi=500, vol=300), p)
         assert s.passes_floor
 
     def test_spread_floor_breach(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         s = liquidity_score.score(_opt(spread_pct=0.10), p)
         assert not s.passes_floor
         assert "spread" in s.floor_breach_reason
 
     def test_oi_floor_breach(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         # OI below the venue-realistic floor (min_oi=1.0) must breach.
         s = liquidity_score.score(_opt(oi=0.5), p)
         assert not s.passes_floor
         assert "oi" in s.floor_breach_reason
 
     def test_composite_weighting(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         tight = liquidity_score.score(_opt(spread_pct=0.005, oi=2000, vol=1000), p)
         wide  = liquidity_score.score(_opt(spread_pct=0.039, oi=110, vol=10), p)
         assert tight.composite > wide.composite
@@ -134,7 +166,7 @@ class TestLiquidityScore:
 
 class TestExpiryPicker:
     def test_picks_preferred_dte(self):
-        p = DEFAULT_PROFILES["triple_st"]    # preferred=14
+        p = _SWING_PROFILE    # preferred=14
         chain = [_opt(dte=d, expiry=f"{d:02d}0625") for d in (5, 10, 12, 14, 21, 30)]
         res = expiry_picker.pick_expiry(chain, p, expected_hold_minutes=5 * 24 * 60)
         assert res is not None
@@ -142,14 +174,14 @@ class TestExpiryPicker:
         assert dte == 14
 
     def test_2x_hold_rule_excludes_short_dte(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         # 7-day hold → DTE must be ≥ 14
         chain = [_opt(dte=10, expiry="100625"), _opt(dte=14, expiry="140625")]
         res = expiry_picker.pick_expiry(chain, p, expected_hold_minutes=7 * 24 * 60)
         assert res[0] == 14
 
     def test_no_valid_expiry_returns_none(self):
-        p = DEFAULT_PROFILES["triple_st"]    # max=21
+        p = _SWING_PROFILE    # max=21
         chain = [_opt(dte=30, expiry="300625")]
         res = expiry_picker.pick_expiry(chain, p, expected_hold_minutes=5 * 24 * 60)
         assert res is None
@@ -341,9 +373,9 @@ class TestInstrumentChooser:
         return MarketContext(**d)
 
     def test_hard_override_futures(self):
-        p = DEFAULT_PROFILES["statarb"]      # FUTURES bias
+        p = _FUTURES_PROFILE      # FUTURES bias
         r = instrument_chooser.choose(
-            signal=self._sig(strategy="statarb"), profile=p, market=self._mkt(),
+            signal=self._sig(strategy="futures_demo"), profile=p, market=self._mkt(),
             best_option_expected_r=10.0,     # would normally pick options
         )
         assert r.instrument_type == "futures"
@@ -436,7 +468,7 @@ class TestSLTPSolver:
 
 class TestStrikePicker:
     def test_picks_target_delta_first(self):
-        p = DEFAULT_PROFILES["triple_st"]      # target_delta=0.575
+        p = _SWING_PROFILE      # target_delta=0.575
         candidates = [
             _opt(strike=48_000, dte=14, delta=0.75, iv=55, oi=400, vol=300),
             _opt(strike=49_000, dte=14, delta=0.65, iv=55, oi=400, vol=300),
@@ -453,7 +485,7 @@ class TestStrikePicker:
         assert 0.5 <= abs(kept[0].option.delta) <= 0.65
 
     def test_drops_iv_too_high(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         candidates = [_opt(strike=50_000, dte=14, delta=0.55, iv=85, oi=400, vol=300)]
         ranked = strike_picker.pick(
             candidates=candidates, profile=p, spot=50_000,
@@ -462,7 +494,7 @@ class TestStrikePicker:
         assert ranked[0].drop_reason.startswith("iv_too_high")
 
     def test_drops_low_liquidity(self):
-        p = DEFAULT_PROFILES["triple_st"]
+        p = _SWING_PROFILE
         candidates = [_opt(strike=50_000, dte=14, delta=0.55, iv=55, oi=0.5, vol=100, spread_pct=0.02)]
         ranked = strike_picker.pick(
             candidates=candidates, profile=p, spot=50_000,
@@ -505,7 +537,7 @@ class TestFreezeToken:
 
 class TestDerivativesAudit:
     def test_record_and_list(self):
-        sig = SignalContext(strategy="triple_st", underlying="BTC", direction="long",
+        sig = SignalContext(strategy="swing_demo", underlying="BTC", direction="long",
                             entry=50_000, stop_loss=49_000, take_profit=52_000)
         mkt = MarketContext(spot=50_000, underlying="BTC", portfolio_value=100_000)
 
@@ -516,12 +548,12 @@ class TestDerivativesAudit:
             chosen = None
 
         aid = derivatives_audit.record(decision=_Dec(), signal=sig, market=mkt)
-        rows = derivatives_audit.list_recent(strategy="triple_st")
+        rows = derivatives_audit.list_recent(strategy="swing_demo")
         assert len(rows) >= 1
         assert rows[0]["audit_id"] == aid
 
     def test_record_exit_updates_pnl(self):
-        sig = SignalContext(strategy="triple_st", underlying="BTC", direction="long",
+        sig = SignalContext(strategy="swing_demo", underlying="BTC", direction="long",
                             entry=50_000, stop_loss=49_000, take_profit=52_000)
         mkt = MarketContext(spot=50_000, underlying="BTC", portfolio_value=100_000)
 
@@ -540,7 +572,7 @@ class TestDerivativesAudit:
 
 
 def _make_chain():
-    """A multi-strike multi-expiry chain covering the triple_st DTE window."""
+    """A multi-strike multi-expiry chain covering the swing_demo DTE window."""
     chain = []
     for dte, expiry in [(10, "100625"), (14, "140625"), (21, "210625")]:
         for strike in (48_000, 49_000, 50_000, 51_000, 52_000):
@@ -552,7 +584,7 @@ def _make_chain():
 
 class TestSelectorPipeline:
     def _sig(self, **overrides):
-        d = dict(strategy="triple_st", underlying="BTC", direction="long",
+        d = dict(strategy="swing_demo", underlying="BTC", direction="long",
                  entry=50_000, stop_loss=49_000, take_profit=53_000, atr=1_000,
                  rr_target=2.0, signal_score=75, signal_strength="STRONG",
                  expected_hold_minutes=5 * 24 * 60, mode_name="swing")
@@ -573,9 +605,9 @@ class TestSelectorPipeline:
         assert d.freeze_token is None
 
     def test_profile_enabled_returns_ok(self):
-        override = DEFAULT_PROFILES["triple_st"].model_copy(update={"enabled": True})
+        override = _SWING_PROFILE.model_copy(update={"enabled": True})
         d = decide(signal=self._sig(), market=self._mkt(), chain=_make_chain(),
-                   profile_overrides={"triple_st": override})
+                   profile_overrides={"swing_demo": override})
         assert d.status == DecisionStatus.OK
         assert d.chosen is not None
         assert d.freeze_token is not None
@@ -584,17 +616,17 @@ class TestSelectorPipeline:
         assert get_store().get(d.freeze_token) is d
 
     def test_no_chain_falls_back_to_futures(self):
-        override = DEFAULT_PROFILES["triple_st"].model_copy(update={"enabled": True})
+        override = _SWING_PROFILE.model_copy(update={"enabled": True})
         d = decide(signal=self._sig(), market=self._mkt(), chain=None,
-                   profile_overrides={"triple_st": override})
+                   profile_overrides={"swing_demo": override})
         # No chain → only futures candidate is possible
         assert d.chosen is not None
         assert d.chosen.instrument_type == "futures"
 
     def test_decision_has_alternatives(self):
-        override = DEFAULT_PROFILES["triple_st"].model_copy(update={"enabled": True})
+        override = _SWING_PROFILE.model_copy(update={"enabled": True})
         d = decide(signal=self._sig(), market=self._mkt(), chain=_make_chain(),
-                   profile_overrides={"triple_st": override})
+                   profile_overrides={"swing_demo": override})
         assert isinstance(d.alternatives, list)
         # The selector must surface at least one alternative when chain is rich.
         assert len(d.alternatives) >= 1
