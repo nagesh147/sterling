@@ -97,7 +97,7 @@ def run_v2_book(d: pd.DataFrame, strat: str = V2_STRAT_DEFAULT,
     else:
         w, eq = None, pd.Series(dtype=float)
     return {"metrics": H.compute_metrics(res, weights=w), "returns": r,
-            "weights": w, "equity": eq}
+            "weights": w, "equity": eq, "result": res}
 
 
 def latest_v2_signal(d: pd.DataFrame, strat: str = V2_STRAT_DEFAULT,
