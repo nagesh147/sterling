@@ -4,6 +4,7 @@ import { useSignals, SignalItem } from '../hooks/useSignals';
 import { useAlgoMode, useSetAlgoMode, usePlaceOrder } from '../hooks/useSignalAlerts';
 import { useRouterMode, RouterMode } from '../hooks/useRouterMode';
 import { useLivePnl } from '../hooks/useLivePnl';
+import { usePositions } from '../hooks/usePositions';
 import { FuturesCandidatesTable } from './derivatives/FuturesCandidatesTable';
 import { OptionsCandidatesTable } from './derivatives/OptionsCandidatesTable';
 
@@ -61,8 +62,6 @@ function SectionCard({ title, right, children }: { title: string; right?: React.
   );
 }
 
-import { usePositions } from '../hooks/usePositions';
-
 export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', profileFilter = 'all', logExec }: { trackFilter?: string; statusFilter?: string; profileFilter?: string; logExec?: (e: any) => void }) {
   const { data } = useSignals();
   const execute = usePlaceOrder();
@@ -75,7 +74,8 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
   const livePnl = useLivePnl();
   
   const [expanded, setExpanded] = useState<string>('');
-  
+  const autoExecRef = useRef<Set<string>>(new Set());
+  const acceptedRef = useRef<Set<string>>(new Set());
   const getSignalStatus = (s: any) => {
     if (activePositions.some((p: any) => p.underlying === s.underlying)) return 'open';
     if (s.direction === 'long' || s.direction === 'short') return 'ready';
@@ -87,8 +87,9 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
   if (profileFilter !== 'all') signals = signals.filter(s => (s.profile?.toLowerCase() || 'scalping') === profileFilter);
   if (statusFilter !== 'all') signals = signals.filter(s => getSignalStatus(s) === statusFilter);
 
-  const handleExecute = async (s: SignalItem) => {
+  const handleExecute = async (s: SignalItem, auto: boolean = false) => {
     const key = `${s.underlying}-${s.direction}`;
+
     try {
       const resp = await execute.mutateAsync({
         underlying: s.underlying,
@@ -101,12 +102,43 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
         take_profit: s.target_price,
         notes: `[GROK] ${s.track || s.strategy || 'manual'}`,
       });
-      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: true, status: resp?.status || 'sent', reason: resp?.message || '', auto: false });
+      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: true, status: resp?.status || 'sent', reason: resp?.message || '', auto });
+      acceptedRef.current.add(`${s.underlying}-${s.direction}`);
+
     } catch (e: any) {
       console.error(e);
-      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: false, status: 'error', reason: e.message, auto: false });
+      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: false, status: 'error', reason: e.message, auto });
     }
   };
+
+  useEffect(() => {
+    if (!algoOn) {
+      autoExecRef.current.clear();
+      return;
+    }
+    for (const s of data?.signals ?? []) {
+      if (getSignalStatus(s) !== 'ready') continue;
+      const key = `${s.underlying}-${s.direction}`;
+      if (acceptedRef.current.has(key)) continue;
+      if (autoExecRef.current.has(key)) continue;
+      autoExecRef.current.add(key);
+      handleExecute(s, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [algoOn, data, routerMode]);
+
+  useEffect(() => {
+    // Clear accepted items that are no longer open (or failed previously)
+    for (const key of acceptedRef.current) {
+      const symbol = key.split('-')[0];
+      if (!activePositions.some((p: any) => p.underlying === symbol)) {
+        acceptedRef.current.delete(key);
+        autoExecRef.current.delete(key);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePositions]);
+
 
   const TABLE_COL_COUNT = 11;
 
@@ -136,7 +168,13 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
             </tr>
           </thead>
           <tbody>
-            {signals.filter(s => !['NIFTY', 'BANKNIFTY'].includes(s.underlying.toUpperCase())).map((s) => {
+            {signals.filter(s => {
+              if (['NIFTY', 'BANKNIFTY'].includes(s.underlying.toUpperCase())) return false;
+              if (trackFilter !== 'all' && s.track !== trackFilter) return false;
+              if (statusFilter !== 'all' && getSignalStatus(s) !== statusFilter) return false;
+              if (profileFilter !== 'all' && (s.profile?.toLowerCase() || 'scalping') !== profileFilter) return false;
+              return true;
+            }).map((s) => {
               const sigIdStr = `${s.underlying}-${s.timestamp_ms}`;
               const sigIdHash = Array.from(sigIdStr).reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
               const sigId = Math.abs(sigIdHash).toString(16).substring(0, 5).toUpperCase();
@@ -228,7 +266,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                         <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO·' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
                       ) : hasPlan ? (
                         algoOn ? (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha('var(--t-dim)', 0.1), color: 'var(--t-dim)' }}>AUTO·PENDING</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: alpha(modeColorOf(routerMode), 0.1), color: modeColorOf(routerMode), whiteSpace: 'nowrap' }}>⚡ AUTO·{routerMode.toUpperCase()}</span>
                         ) : (
                           <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
                         )
@@ -286,13 +324,17 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                           </div>
                         ) : (
                           <div style={{ fontSize: 11, color: 'var(--t-text)' }}>
-                            <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK:</span> {s.track || '—'}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px' }}>
+                              <MetricItem label="Profile" value={s.profile?.toUpperCase() || 'SCALPING'} color="var(--t-bright)" />
+                              <MetricItem label="Pattern" value={s.strategy ? s.strategy.replace(/_/g, ' ') : '—'} color="var(--t-amber)" />
+                              <MetricItem label="Track" value={s.track || '—'} />
+                              <MetricItem label="State" value={s.state} />
+                            </div>
                             {s.mtf_breakdown && (
-                              <div style={{ marginTop: 4 }}>
+                              <div style={{ marginTop: 8 }}>
                                 <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>MTF ALIGNMENT:</span> {s.mtf_breakdown.alignment_label}
                               </div>
                             )}
-                            <div style={{ marginTop: 4 }}><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>STATE:</span> {s.state}</div>
                             {s.veto_reason && <div style={{ marginTop: 4, color: 'var(--t-amber)' }}>⚠ {s.veto_reason}</div>}
                           </div>
                         )}

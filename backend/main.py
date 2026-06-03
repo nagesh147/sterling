@@ -998,19 +998,38 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                 ok = sum(1 for r in results if isinstance(r, dict) and r.get('fresh'))
                 log.info("Signal refresh: %d/%d instruments updated", ok, len(instruments))
 
+                from app.api.v1.endpoints.stream import stream_manager
+                import time
+                for r in results:
+                    if isinstance(r, dict) and r.get('fresh'):
+                        s = r.get('signal', {})
+                        dsr = s.get('exec_confidence', 0)
+                        wfa = s.get('signal_score', 0)
+                        strength = s.get('signal_strength', 'NONE')
+                        if dsr > 0.5 or strength == 'STRONG':
+                            sym = s.get('sym', 'UNKNOWN')
+                            strat = s.get('strategy', 'legacy')
+                            msg = f"[PASS] {sym} {strat} (DSR: {dsr:.2f}, WFA: {wfa:.2f})"
+                            color = "var(--t-green)" if strength == 'STRONG' else "var(--t-amber)"
+                            async def _broadcast_log(m=msg, strngth=strength):
+                                try:
+                                    level = "INFO"
+                                    if strngth == "STRONG": level = "INFO"
+                                    elif strngth == "MODERATE": level = "WARNING"
+                                    elif strngth == "WEAK": level = "ERROR"
+                                    await stream_manager.broadcast_to_channel("arbitrator_logs", {
+                                        "type": "log",
+                                        "level": level,
+                                        "message": m
+                                    })
+                                except Exception:
+                                    pass
+                            asyncio.create_task(_broadcast_log())
+
             # Persist tracker state so server restarts don't re-fire existing signals
             _save_signal_tracker_state()
 
-            # Auto-order trigger: when algo_mode is on, auto-place orders for actionable signals
-            if getattr(app.state, "algo_mode", False):
-                for inst in instruments:
-                    snap = _snap_cache.get(inst.underlying)
-                    if not snap:
-                        continue
-                    if snap.current_state in _ALGO_ACTIONABLE and snap.direction != "neutral":
-                        asyncio.create_task(
-                            _auto_place_algo_order(app, inst.underlying, snap, mode)
-                        )
+            # Auto-order trigger removed to allow frontend components (GrokSignalPane/ScalpingTab) to handle their own execution
 
         except Exception as exc:
             log.debug("Signal refresher error: %s", exc)

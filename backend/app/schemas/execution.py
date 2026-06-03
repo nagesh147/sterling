@@ -41,7 +41,7 @@ class TradeStructure(BaseModel):
 
 class SizedTrade(BaseModel):
     structure: TradeStructure
-    contracts: int
+    contracts: float
     position_value: float
     max_risk_usd: float
     capital_at_risk_pct: float

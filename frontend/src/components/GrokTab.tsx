@@ -6,12 +6,14 @@ import { GrokLogsPane } from './GrokLogsPane';
 import { useSignals } from '../hooks/useSignals';
 import { usePositions } from '../hooks/usePositions';
 import { ExecLog } from './scalping/ScalpingTab';
+import { useRouterMode } from '../hooks/useRouterMode';
 import { card, alpha } from '../styles/terminalUI';
 
 export function GrokTab() {
   const { data } = useSignals();
   const { data: positionsData } = usePositions();
   const activePositions = positionsData?.positions || [];
+  const { mode: routerMode } = useRouterMode();
   
   const [trackFilter, setTrackFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -124,7 +126,7 @@ export function GrokTab() {
           </LeftSection>
           <LeftSection label="Exec Log" collapsible defaultOpen>
             <div style={{ marginTop: 8 }}>
-              <ExecLog entries={execLog} mode="PAPER" />
+              <ExecLog entries={execLog} mode={routerMode || 'PAPER'} />
               {execLog.length > 0 && (
                 <button onClick={() => setExecLog([])} style={{
                   fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
