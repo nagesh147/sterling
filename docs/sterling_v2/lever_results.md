@@ -21,3 +21,24 @@ Single combined non-overlapping book; same cost model as baseline. KEEP = improv
 
 **Verdict: KEEP short side as a lever.** Improves test Sharpe in 11/12 (symbol, strategy) cells, with the largest gains on the down-trending assets (ETH/SOL) exactly as the grounding predicted -- consistency across 12 independent cells is evidence it is structural, not small-sample noise. Residual drawdown to be contained by the portfolio DD circuit breaker (lever 5).
 
+## Lever 2 -- Conviction/regime gate (gated vs ungated long-only), TEST slice @ 4h
+
+adx_min selected on the VALIDATION slice (never the test set); EMA(50)-slope + ADX(14) gate, side=1. KEEP = improves test Sharpe. Gating thins the ~25-trade test slice substantially, so per-cell verdicts are indicative; the decisive test is the full combined stack (>=100 trades) in Task 15.
+
+| Symbol | Strategy | adx* | Ungated Sh | Ungated PF | Ungated n | Gated Sh | Gated PF | Gated Net% | Gated DD% | Gated n | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| BTCUSD | ma_crossover | 18 | -0.69 | 0.84 | 34 | +0.51 | 1.14 | +5 | -12 | 29 | **KEEP** |
+| BTCUSD | breakout | 22 | -1.99 | 0.54 | 20 | -1.86 | 0.46 | -11 | -13 | 9 | **KEEP** |
+| BTCUSD | smc | 0 | -1.36 | 0.68 | 29 | -0.95 | 0.74 | -9 | -17 | 17 | **KEEP** |
+| BTCUSD | price_action | 15 | -1.28 | 0.69 | 25 | +0.69 | 1.26 | +5 | -10 | 14 | **KEEP** |
+| ETHUSD | ma_crossover | 25 | -0.50 | 0.86 | 22 | -1.02 | 0.71 | -12 | -17 | 15 | reject |
+| ETHUSD | breakout | 22 | -2.04 | 0.53 | 20 | +0.02 | 1.01 | -0 | -7 | 6 | **KEEP** |
+| ETHUSD | smc | 25 | -0.22 | 0.94 | 26 | +3.15 | 4.52 | +18 | -5 | 5 | **KEEP** |
+| ETHUSD | price_action | 15 | -2.06 | 0.55 | 24 | -2.90 | 0.33 | -21 | -24 | 11 | reject |
+| SOLUSD | ma_crossover | 22 | +0.23 | 1.07 | 25 | -2.28 | 0.51 | -28 | -31 | 19 | reject |
+| SOLUSD | breakout | 22 | -3.33 | 0.39 | 22 | -2.56 | 0.36 | -18 | -23 | 9 | **KEEP** |
+| SOLUSD | smc | 22 | -1.09 | 0.73 | 24 | -3.87 | 0.25 | -25 | -30 | 11 | reject |
+| SOLUSD | price_action | 22 | -2.95 | 0.43 | 24 | -1.78 | 0.46 | -14 | -14 | 8 | **KEEP** |
+
+**Verdict:** gate improves test Sharpe in 8/12 cells overall, but 7/12 cells fell below 12 test trades after gating -- too thin to trust (e.g. ETH smc n=5 Sharpe +3.15 is noise). Among the 5 adequately-sampled cells (>= 12 trades), the gate helps 3: it lifts the BTC long book (ma_crossover -0.69->+0.51 n29, smc -1.36->-0.95 n17, price_action -1.28->+0.69 n14) -- consistent with the grounding's BTC-only long edge -- but does NOT rescue ETH/SOL long (those are fixed by the SHORT side, lever 1, not a long gate). **Provisional KEEP for the long side (esp. BTC); firm decision on the combined stack (>=100 trades) in Task 15.**
+
