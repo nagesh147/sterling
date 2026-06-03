@@ -1,0 +1,187 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { card, cardHead, cardBody, alpha, c } from '../styles/terminalUI';
+import { useSignals, SignalItem } from '../hooks/useSignals';
+import { useScalpingExecute } from '../hooks/useScalping';
+import { useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
+import { useRouterMode, RouterMode } from '../hooks/useRouterMode';
+import { useLivePnl } from '../hooks/useLivePnl';
+import { FuturesCandidatesTable } from './derivatives/FuturesCandidatesTable';
+import { OptionsCandidatesTable } from './derivatives/OptionsCandidatesTable';
+
+// Copy required styles & utilities
+const fmtUsd = (v: number | null | undefined): string => v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const modeColorOf = (m: string) => m.toUpperCase() === 'LIVE' ? 'var(--t-red)' : m.toUpperCase() === 'SHADOW' ? 'var(--t-amber)' : 'var(--t-blue)';
+const fmt = (v: number | null | undefined, d = 2): string => v == null || !isFinite(v) ? '—' : v.toFixed(d);
+
+const MODE_HINT: Record<RouterMode, string> = {
+  paper: 'Paper Trading — fills are simulated using live orderbook prices.',
+  shadow: 'Shadow Execution — orders are placed and immediately cancelled to test API latency.',
+  live: 'Real money — orders execute on the exchange.',
+};
+
+function ModeSelector({ mode, onChange }: { mode: RouterMode; onChange: (m: RouterMode) => void }) {
+  const pick = (m: RouterMode) => { if (m !== mode) onChange(m); };
+  return (
+    <div style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--t-bg2)', border: '1px solid var(--t-border)', borderRadius: 6, padding: 2 }}>
+      {(['paper', 'shadow', 'live'] as RouterMode[]).map((m) => {
+        const active = mode === m;
+        const col = modeColorOf(m.toUpperCase());
+        return (
+          <button
+            key={m} onClick={() => pick(m)} title={MODE_HINT[m]}
+            style={{
+              padding: '3px 10px', borderRadius: 4, cursor: active ? 'default' : 'pointer', fontFamily: 'inherit',
+              fontSize: 9, fontWeight: active ? 700 : 500, letterSpacing: '0.08em', textTransform: 'uppercase',
+              border: `1px solid ${active ? col + '88' : 'transparent'}`, background: active ? col + '20' : 'transparent',
+              color: active ? col : 'var(--t-dim)', transition: 'all .12s',
+            }}>
+            {m === 'paper' ? '◐' : m === 'shadow' ? '◑' : '●'} {m}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SectionCard({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div style={card}>
+      <div style={cardHead}><span>{title}</span>{right && <span style={{ marginLeft: 'auto' }}>{right}</span>}</div>
+      <div style={cardBody}>{children}</div>
+    </div>
+  );
+}
+
+export function GrokSignalPane() {
+  const { data } = useSignals();
+  const execute = useScalpingExecute();
+  const algoMode = useAlgoMode();
+  const algoModeSet = useSetAlgoMode();
+  const algoOn = algoMode.data?.enabled ?? false;
+  const routerModeObj = useRouterMode();
+  const routerMode = routerModeObj.mode || 'paper';
+  const livePnl = useLivePnl();
+  
+  const [expanded, setExpanded] = useState<string>('');
+  
+  const signals = data?.signals || [];
+  
+  const handleExecute = async (s: SignalItem) => {
+    try {
+      await execute.mutateAsync({
+        underlying: s.underlying,
+        strategy: s.strategy || s.track || 'grok',
+        auto: false,
+        override_entry: s.spot_price,
+        override_stop: s.stop_price,
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const TABLE_COL_COUNT = 11;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+      <SectionCard 
+        title="GROK ENGINE · SPOT" 
+        right={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {algoOn && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                padding: '3px 9px', borderRadius: 5, whiteSpace: 'nowrap',
+                background: alpha('var(--t-green)', 0.1), color: 'var(--t-green)', border: '1px solid var(--t-green)44',
+              }}>⚡ ALGO AUTO-EXEC</span>
+            )}
+            <ModeSelector mode={routerMode} onChange={(m) => routerModeObj.setMode(m)} />
+          </div>
+        }
+      >
+        <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead>
+            <tr style={{ background: c.surface, color: c.muted, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Stop', 'Target', 'P&L', ''].map((h, i) => (
+                <th key={i} style={{ padding: '5px 8px', textAlign: i >= 9 ? 'right' : 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {signals.filter(s => !s.futures_symbol && !s.opt_symbol).map((s) => {
+              const sigIdStr = `${s.underlying}-${s.timestamp_ms}`;
+              const sigIdHash = Array.from(sigIdStr).reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
+              const sigId = Math.abs(sigIdHash).toString(16).substring(0, 5).toUpperCase();
+              
+              const isExp = expanded === sigId;
+              const long = s.direction === 'long';
+              const short = s.direction === 'short';
+              const dirColor = long ? 'var(--t-green)' : short ? 'var(--t-red)' : 'var(--t-dim)';
+              
+              const pnlData = livePnl.data?.positions.filter(p => p.underlying === s.underlying && p.mode === routerMode) || [];
+              const isExecuted = pnlData.length > 0;
+              const pnl = pnlData[0] || null;
+              
+              const hasPlan = s.spot_price != null;
+              const statusColor = isExecuted ? 'var(--t-blue)' : hasPlan ? dirColor : 'var(--t-dim)';
+              const statusLabel = isExecuted ? 'OPEN' : hasPlan ? 'READY' : 'IDLE';
+
+              return (
+                <React.Fragment key={sigId}>
+                  <tr onClick={() => setExpanded(isExp ? '' : sigId)} style={{ cursor: 'pointer', borderBottom: isExp ? 'none' : `1px solid ${c.border2}`, background: isExp ? alpha(statusColor, 0.09) : undefined }}>
+                    <td style={{ padding: '5px 8px', fontWeight: 700, color: 'var(--t-bright)' }}>
+                      <span style={{ color: dirColor }}>{long ? '▲' : short ? '▼' : '–'}</span> {s.underlying}
+                    </td>
+                    <td style={{ padding: '5px 8px', fontSize: 9, color: 'var(--t-dim)', fontFamily: 'monospace' }}>{sigId}</td>
+                    <td style={{ padding: '5px 8px' }}>{fmtTime(s.timestamp_ms)}</td>
+                    <td style={{ padding: '5px 8px', fontWeight: 700, color: statusColor, fontSize: 10, letterSpacing: '0.06em' }}>{statusLabel}</td>
+                    <td style={{ padding: '5px 8px', fontWeight: 600, color: dirColor }}>{long ? '▲ LONG' : short ? '▼ SHORT' : '—'}</td>
+                    <td style={{ padding: '5px 8px' }}>{hasPlan ? fmtUsd(s.spot_price) : '—'}</td>
+                    <td style={{ padding: '5px 8px' }}>{s.spot_price ? fmtUsd(s.spot_price) : '—'}</td>
+                    <td style={{ padding: '5px 8px', color: 'var(--t-red)' }}>{hasPlan ? fmtUsd(s.stop_price) : '—'}</td>
+                    <td style={{ padding: '5px 8px', color: 'var(--t-amber)' }}>{hasPlan ? fmtUsd(s.target_price) : '—'}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>
+                      {pnl && pnl.estimated_pnl_usd != null ? <span style={{ color: pnl.estimated_pnl_usd >= 0 ? 'var(--t-green)' : 'var(--t-red)' }}>{pnl.estimated_pnl_usd >= 0 ? '+' : ''}{fmtUsd(pnl.estimated_pnl_usd)}</span> : '—'}
+                    </td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                      {isExecuted ? (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.mode || 'PAPER'), 0.1), color: modeColorOf(pnl.mode || 'PAPER') }}>✓ {(pnl.mode || 'PAPER').toUpperCase()}</span>
+                      ) : hasPlan ? (
+                        <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
+                      ) : null}
+                    </td>
+                  </tr>
+                  {isExp && (
+                    <tr style={{ background: alpha(statusColor, 0.04), borderBottom: `1px solid ${c.border2}` }}>
+                      <td colSpan={TABLE_COL_COUNT} style={{ padding: '12px 14px' }}>
+                        <div style={{ fontSize: 11, color: 'var(--t-text)' }}>
+                          <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK / STRATEGY:</span> {s.track || '—'} / {s.strategy || '—'}</div>
+                          {s.mtf_breakdown && (
+                            <div style={{ marginTop: 4 }}>
+                              <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>MTF ALIGNMENT:</span> {s.mtf_breakdown.alignment_label}
+                            </div>
+                          )}
+                          <div style={{ marginTop: 4 }}><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>STATE:</span> {s.state}</div>
+                          {s.veto_reason && <div style={{ marginTop: 4, color: 'var(--t-amber)' }}>⚠ {s.veto_reason}</div>}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </SectionCard>
+      
+      <div style={{ height: 16 }} />
+      <FuturesCandidatesTable />
+      
+      <div style={{ height: 16 }} />
+      <OptionsCandidatesTable />
+      
+      <div style={{ height: 32 }} />
+    </div>
+  );
+}
