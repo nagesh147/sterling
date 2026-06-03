@@ -162,7 +162,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
         <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr style={{ background: c.surface, color: c.muted, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Stop', 'Target', 'Risk', 'Strategy', 'P&L', 'Type', ''].map((h, i) => (
+              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Dyn SL', 'Target', 'Risk', 'Strategy', 'P&L', 'Type', ''].map((h, i) => (
                 <th key={i} style={{ padding: '5px 8px', textAlign: i >= 11 ? 'right' : 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -203,7 +203,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                       <span style={{ color: dirColor }}>{long ? '▲' : short ? '▼' : '–'}</span> {s.underlying}
                     </td>
                     <td style={{ padding: '5px 8px', fontSize: 9, color: 'var(--t-dim)', fontFamily: 'monospace' }}>{sigId}</td>
-                    <td style={{ padding: '5px 8px' }}>{fmtTime(s.timestamp_ms)}</td>
+                    <td style={{ padding: '5px 8px' }}>{fmtTime((isExecuted && pnl?.entry_timestamp_ms) ? pnl.entry_timestamp_ms : s.timestamp_ms)}</td>
                     <td style={{ padding: '5px 8px', fontWeight: 700, color: statusColor, fontSize: 10, letterSpacing: '0.06em' }}>{statusLabel}</td>
                     <td style={{ padding: '5px 8px', fontWeight: 600, color: dirColor }}>{long ? '▲ LONG' : short ? '▼ SHORT' : '—'}</td>
                     <td style={{ padding: '5px 8px' }}>
@@ -263,12 +263,12 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                     </td>
                     <td style={{ padding: '5px 8px', textAlign: 'right' }}>
                       {isExecuted ? (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO·' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
+                        <span style={{ display: 'inline-block', minWidth: 95, textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO·' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
                       ) : hasPlan ? (
                         algoOn ? (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: alpha(modeColorOf(routerMode), 0.1), color: modeColorOf(routerMode), whiteSpace: 'nowrap' }}>⚡ AUTO·{routerMode.toUpperCase()}</span>
+                          <span style={{ display: 'inline-block', minWidth: 95, textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(routerMode), 0.1), color: modeColorOf(routerMode), whiteSpace: 'nowrap' }}>⚡ AUTO·{routerMode.toUpperCase()}</span>
                         ) : (
-                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
+                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ display: 'inline-block', minWidth: 95, textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
                         )
                       ) : null}
                     </td>
@@ -291,7 +291,26 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                               {pnl.status === 'closed' && (
                                 <MetricItem label="Exit" value={fmtUsd(pnl.current_spot)} />
                               )}
-                              <MetricItem label="Initial SL" value={fmtUsd(pnl.initial_sl ?? s.stop_price)} color="var(--t-red)" />
+                              {(() => {
+                                const initSl = pnl.initial_sl ?? s.stop_price;
+                                const currSl = pnl.current_sl;
+                                if (!currSl || initSl === currSl) {
+                                  return <MetricItem label="Initial SL" value={fmtUsd(initSl)} color="var(--t-red)" />;
+                                }
+                                const diff = long ? (currSl - initSl) : (initSl - currSl);
+                                const sign = diff >= 0 ? '+' : '';
+                                return (
+                                  <MetricItem 
+                                    label="Dyn SL" 
+                                    value={
+                                      <span style={{ color: 'var(--t-red)', whiteSpace: 'nowrap' }}>
+                                        <del style={{ opacity: 0.5 }}>{fmtUsd(initSl)}</del> {fmtUsd(currSl)}{' '}
+                                        <span style={{fontSize: 10, opacity: 0.8}}>({sign}{diff.toFixed(1)})</span>
+                                      </span>
+                                    } 
+                                  />
+                                );
+                              })()}
                               <MetricItem label="Target" value={fmtUsd(pnl.initial_tp ?? s.target_price)} color="var(--t-amber)" />
                               <MetricItem label="Notional" value={fmtUsd((pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) * (pnl.contracts || 1.0))} />
                               
