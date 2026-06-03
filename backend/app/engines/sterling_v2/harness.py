@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Optional
 import numpy as np
 import pandas as pd
@@ -95,8 +95,8 @@ def compute_metrics(res: SimResult, weights: Optional[np.ndarray] = None) -> dic
         tpy = n / (span_days / 365.25)
     else:
         tpy = 0.0
-    sd = r.std(ddof=1)
-    sharpe = float(r.mean() / sd * np.sqrt(tpy)) if sd > 0 and tpy > 0 else 0.0
+    sd = r.std(ddof=1) if n >= 2 else 0.0
+    sharpe = float(r.mean() / sd * np.sqrt(tpy)) if sd > 1e-12 and tpy > 0 else 0.0
     win = wins.size / n
     exp = win * (wins.mean() if wins.size else 0.0) - (1 - win) * (-losses.mean() if losses.size else 0.0)
     return dict(trades=n, win=win, pf=pf, sharpe=sharpe, net=float(eq[-1] - 1.0),
