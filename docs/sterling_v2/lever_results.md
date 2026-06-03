@@ -42,3 +42,24 @@ adx_min selected on the VALIDATION slice (never the test set); EMA(50)-slope + A
 
 **Verdict:** gate improves test Sharpe in 8/12 cells overall, but 7/12 cells fell below 12 test trades after gating -- too thin to trust (e.g. ETH smc n=5 Sharpe +3.15 is noise). Among the 5 adequately-sampled cells (>= 12 trades), the gate helps 3: it lifts the BTC long book (ma_crossover -0.69->+0.51 n29, smc -1.36->-0.95 n17, price_action -1.28->+0.69 n14) -- consistent with the grounding's BTC-only long edge -- but does NOT rescue ETH/SOL long (those are fixed by the SHORT side, lever 1, not a long gate). **Provisional KEEP for the long side (esp. BTC); firm decision on the combined stack (>=100 trades) in Task 15.**
 
+## Lever 3 -- ATR trailing exit vs static SL/TP (long-only), TEST slice @ 4h
+
+trail_mult selected on VALIDATION (never test); be_at_r=1.0. KEEP = improves test Sharpe. Trailing's primary value is drawdown/giveback reduction, so the DD column matters as much as Sharpe.
+
+| Symbol | Strategy | trail* | Static Sh | Static Net% | Static DD% | Trail Sh | Trail Net% | Trail DD% | Trail n | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| BTCUSD | ma_crossover | 1.5 | -0.69 | -13 | -22 | -2.20 | -25 | -27 | 76 | reject |
+| BTCUSD | breakout | 2.5 | -1.99 | -18 | -19 | -3.90 | -21 | -24 | 25 | reject |
+| BTCUSD | smc | 1.5 | -1.36 | -20 | -20 | -1.58 | -14 | -14 | 41 | reject |
+| BTCUSD | price_action | 3 | -1.28 | -18 | -25 | -1.35 | -17 | -22 | 33 | reject |
+| ETHUSD | ma_crossover | 1 | -0.50 | -11 | -24 | -2.69 | -30 | -30 | 103 | reject |
+| ETHUSD | breakout | 1.5 | -2.04 | -22 | -26 | -2.45 | -13 | -15 | 27 | reject |
+| ETHUSD | smc | 1 | -0.22 | -8 | -20 | -1.87 | -15 | -17 | 43 | reject |
+| ETHUSD | price_action | 1.5 | -2.06 | -32 | -36 | -1.75 | -16 | -22 | 32 | **KEEP** |
+| SOLUSD | ma_crossover | 1 | +0.23 | +1 | -24 | -3.07 | -35 | -38 | 108 | reject |
+| SOLUSD | breakout | 2.5 | -3.33 | -34 | -42 | -4.51 | -35 | -40 | 26 | reject |
+| SOLUSD | smc | 1 | -1.09 | -20 | -29 | -0.42 | -5 | -16 | 40 | **KEEP** |
+| SOLUSD | price_action | 1 | -2.95 | -34 | -32 | -2.02 | -15 | -14 | 37 | **KEEP** |
+
+**Verdict: REJECT trailing as a default lever (for these trend edges).** It improves test Sharpe in only 3/12 cells while cutting max-DD in 8/12 -- it trims BOTH tails (smaller losses and smaller wins), which lowers risk-adjusted return on trend-following entries whose edge is letting winners run to the 3.5xATR target. The validation-selected trail_mult also generalizes poorly (e.g. SOL ma_crossover val-best -> test Sharpe +0.23->-3.07; ETH ma_crossover -0.50->-2.69) -- an overfit signature. Static SL/TP is the more robust exit; drawdown is instead contained by the portfolio DD circuit breaker (lever 5), which does not pay this Sharpe penalty. The exit_policy hook is kept (tested, leak-free) but OFF in the default V2 stack; available per-book for future strategies that suit it (only the already-broken ETH/SOL price_action-type books benefited).
+
