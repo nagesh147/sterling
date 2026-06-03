@@ -263,12 +263,12 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                     </td>
                     <td style={{ padding: '5px 8px', textAlign: 'right' }}>
                       {isExecuted ? (
-                        <span style={{ display: 'inline-block', minWidth: 95, textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO·' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
+                        <span style={{ display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), whiteSpace: 'nowrap' }}>✓ {(algoOn ? 'AUTO·' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
                       ) : hasPlan ? (
                         algoOn ? (
-                          <span style={{ display: 'inline-block', minWidth: 95, textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(routerMode), 0.1), color: modeColorOf(routerMode), whiteSpace: 'nowrap' }}>⚡ AUTO·{routerMode.toUpperCase()}</span>
+                          <span style={{ display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(routerMode), 0.1), color: modeColorOf(routerMode), whiteSpace: 'nowrap' }}>⚡ AUTO·{routerMode.toUpperCase()}</span>
                         ) : (
-                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ display: 'inline-block', minWidth: 95, textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
+                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center', fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>EXECUTE</button>
                         )
                       ) : null}
                     </td>

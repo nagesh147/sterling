@@ -48,7 +48,7 @@ export function Terminal() {
           fontWeight: 600,
           letterSpacing: '0.12em',
         }}>
-          TERMINAL — COMING SOON
+          Sterling Pro - Coming Soon
         </h1>
 
         {/* Subtext */}

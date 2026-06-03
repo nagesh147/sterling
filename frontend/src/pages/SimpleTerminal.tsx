@@ -265,7 +265,7 @@ export function SimpleTerminal() {
               title="Switch to 3-pane Terminal"
               style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}
             >
-              TERMINAL
+              Sterling Pro
             </button>
           </div>
         </div>
