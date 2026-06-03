@@ -4,6 +4,7 @@ import pytest
 from app.engines.sterling_v2 import data as v2data
 from app.engines.sterling_v2.config import SimConfig
 from app.engines.sterling_v2 import harness as H
+from app.engines.edge.strategies import SIGNAL_FNS
 
 
 def test_list_symbols_finds_parquets():
@@ -106,3 +107,21 @@ def test_both_touched_resolves_sl_first_long():
                     max_hold_bars=99)
     res = H.simulate(df, sigs, None, cfg)
     assert res.returns[0] < 0  # SL-first => exit at 99, a loss
+
+
+def test_btc_ma_crossover_matches_grounding():
+    """The harness must independently reproduce the independent-grounding result for
+    ma_crossover 4h BTC long-only: ~163 trades, win 42.9%, PF 1.26, DD -27.7%,
+    Sharpe 0.86 (see docs/sterling_v2/2026-06-03-independent-baseline-grounding.md).
+    If this fails, the harness is wrong -- fix the harness, not the test."""
+    df = v2data.load_symbol(v2data.list_symbols()["BTCUSD"])
+    d4 = v2data.resample_tf(df, "4h")
+    sigs = SIGNAL_FNS["ma_crossover"](d4)
+    cfg = SimConfig(sl_mult=2.0, tp_mult=3.5, fee_round_trip=0.001,
+                    slippage=0.0005, max_hold_bars=200)
+    m = H.compute_metrics(H.simulate(d4, sigs, None, cfg))
+    assert 150 <= m["trades"] <= 175
+    assert 0.38 <= m["win"] <= 0.47
+    assert 1.15 <= m["pf"] <= 1.35
+    assert -0.32 <= m["max_dd"] <= -0.24
+    assert 0.70 <= m["sharpe"] <= 1.00
