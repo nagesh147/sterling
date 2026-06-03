@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical performance metrics now live in **[Report 1 — Baseline](./STERLING_TRADING_REPORT_BASELINE.md)**. Kept for provenance/audit only.
+
 # Scalping Engine Performance Report: Before & After Polishes
 
 **Date:** May 28, 2026

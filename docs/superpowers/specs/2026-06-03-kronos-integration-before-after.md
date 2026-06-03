@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical before/after metrics now live in **[Report 3 — Before/After](../../../STERLING_TRADING_REPORT_BEFORE_AFTER.md)**. Kept for provenance/audit only; figures may differ from the consolidated report.
+
 # Sterling + Kronos: Before/After Integration Report
 
 **Date**: June 3, 2026  

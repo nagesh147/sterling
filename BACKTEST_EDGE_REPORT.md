@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical edge-discovery metrics now live in **[Report 1 — Baseline §4–§5](./STERLING_TRADING_REPORT_BASELINE.md)**. Kept for provenance/audit only.
+
 # Sterling Edge-Discovery Backtest
 _Generated 2026-05-30 11:21 UTC_  _Capital: $500  Fees: 0.10% round-trip  Max hold: 200 bars  Data: 2023-12-29 → 2026-05-30_
 

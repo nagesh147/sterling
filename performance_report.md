@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical performance metrics now live in **[Report 1 — Baseline](./STERLING_TRADING_REPORT_BASELINE.md)**. Kept for provenance/audit only.
+
 # Scalping Engine Performance Report: Before & After Polishes
 Evaluated over real historical data (fast simulated dataset) across 3 primary assets (BTC, ETH, SOL).
 The 'Before' metrics reflect fixed SL/TP logic and loose parameters. The 'After' metrics integrate trailing stops and the recent execution constraints (e.g., minimum R:R and mathematical expectancy constraints).

@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical Kronos metrics now live in **[Report 2 — With Kronos](./STERLING_TRADING_REPORT_KRONOS.md)** (see also the [report index in Report 1](./STERLING_TRADING_REPORT_BASELINE.md)). Kept for provenance/audit only; figures may differ from the consolidated reports.
+
 # Kronos Integration Analysis for Sterling Trading System
 ## Comprehensive Report: Can Kronos Improve Sterling's Signals?
 

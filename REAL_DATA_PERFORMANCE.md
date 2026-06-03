@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical metrics now live in **[Report 1 — Baseline](./STERLING_TRADING_REPORT_BASELINE.md)** (§4 spot, §5 futures, §6 options). Kept for provenance/audit only.
+
 # Real-Data Performance — Futures vs Options (separated)
 
 _2026-06-02 · Futures = REAL bar-by-bar on `vector_store_1m_{BTC,ETH,SOL}USD.parquet` (~2024→2026). Options = Black-Scholes MODELED off realized vol, calibrated to the live Delta surface (no historical chain). $500 start, 0.1% futures round-trip._

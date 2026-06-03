@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical metrics now live in **[Report 2 — With Kronos](./STERLING_TRADING_REPORT_KRONOS.md)** and **[Report 3 — Before/After](./STERLING_TRADING_REPORT_BEFORE_AFTER.md)**. Kept for provenance/audit only; figures may differ from the consolidated reports.
+
 # Sterling Validated Edge Combos + Kronos AI Gatekeeper
 ## Final Backtest Report
 

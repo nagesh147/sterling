@@ -1,3 +1,5 @@
+> **⚠️ DEPRECATED — superseded 2026-06-03.** Canonical derivatives/options metrics now live in **[Report 1 — Baseline §6](./STERLING_TRADING_REPORT_BASELINE.md)**. Kept for provenance/audit only.
+
 # Derivatives Edge Study
 
 Generated: 2026-06-02 04:11:28 UTC
