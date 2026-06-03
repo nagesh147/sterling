@@ -118,8 +118,8 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { 
         <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr style={{ background: c.surface, color: c.muted, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Stop', 'Target', 'P&L', ''].map((h, i) => (
-                <th key={i} style={{ padding: '5px 8px', textAlign: i >= 9 ? 'right' : 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Stop', 'Target', 'Risk', 'Strategy', 'P&L', 'Type', ''].map((h, i) => (
+                <th key={i} style={{ padding: '5px 8px', textAlign: i >= 11 ? 'right' : 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -156,19 +156,67 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { 
                     <td style={{ padding: '5px 8px' }}>{fmtTime(s.timestamp_ms)}</td>
                     <td style={{ padding: '5px 8px', fontWeight: 700, color: statusColor, fontSize: 10, letterSpacing: '0.06em' }}>{statusLabel}</td>
                     <td style={{ padding: '5px 8px', fontWeight: 600, color: dirColor }}>{long ? '▲ LONG' : short ? '▼ SHORT' : '—'}</td>
-                    <td style={{ padding: '5px 8px' }}>{hasPlan ? fmtUsd(s.spot_price) : '—'}</td>
-                    <td style={{ padding: '5px 8px' }}>{s.spot_price ? fmtUsd(s.spot_price) : '—'}</td>
-                    <td style={{ padding: '5px 8px', color: 'var(--t-red)' }}>{hasPlan ? fmtUsd(s.stop_price) : '—'}</td>
-                    <td style={{ padding: '5px 8px', color: 'var(--t-amber)' }}>{hasPlan ? fmtUsd(s.target_price) : '—'}</td>
+                    <td style={{ padding: '5px 8px' }}>
+                      {(() => {
+                        const entryPx = isExecuted && pnl ? (pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) : s.spot_price;
+                        return hasPlan ? fmtUsd(entryPx) : '—';
+                      })()}
+                    </td>
+                    <td style={{ padding: '5px 8px' }}>
+                      {(() => {
+                        const entryPx = isExecuted && pnl ? (pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) : s.spot_price;
+                        const currPx = isExecuted && pnl ? (pnl.current_spot ?? s.spot_price) : s.spot_price;
+                        if (!currPx) return '—';
+                        if (!hasPlan || !entryPx) return fmtUsd(currPx);
+                        
+                        const diff = long ? (currPx - entryPx) : (entryPx - currPx);
+                        const roundedDiff = parseFloat(diff.toFixed(1));
+                        if (Math.abs(roundedDiff) === 0) return <span>{fmtUsd(currPx)}</span>;
+                        
+                        const sign = roundedDiff > 0 ? '+' : roundedDiff < 0 ? '−' : '';
+                        const color = roundedDiff > 0 ? 'var(--t-green)' : 'var(--t-red)';
+                        return (
+                          <span style={{ color }}>
+                            {fmtUsd(currPx)} <span style={{ fontSize: 11, opacity: 0.7, fontWeight: 400 }}>({sign}{Math.abs(roundedDiff).toFixed(1)})</span>
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td style={{ padding: '5px 8px', color: 'var(--t-red)' }}>
+                      {hasPlan ? fmtUsd(isExecuted && pnl?.current_sl ? pnl.current_sl : s.stop_price) : '—'}
+                    </td>
+                    <td style={{ padding: '5px 8px', color: 'var(--t-amber)' }}>
+                      {hasPlan ? fmtUsd(isExecuted && pnl?.current_tp ? pnl.current_tp : s.target_price) : '—'}
+                    </td>
+                    <td style={{ padding: '5px 8px', fontFamily: 'monospace', color: 'var(--t-text)' }}>
+                      {(() => {
+                        if (!hasPlan) return '—';
+                        if (pnl?.capital_at_risk_pct != null) return `${fmt(pnl.capital_at_risk_pct)}%`;
+                        if (s.spot_price && s.stop_price) {
+                           const risk = Math.abs(s.spot_price - s.stop_price) / s.spot_price * 100 * (s.rec_leverage || 1);
+                           return `${fmt(risk)}%`;
+                        }
+                        return '—';
+                      })()}
+                    </td>
+                    <td style={{ padding: '5px 8px', textTransform: 'uppercase', fontSize: 9 }}>
+                      {s.strategy ? s.strategy.replace(/_/g, ' ') : '—'}
+                    </td>
                     <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>
-                      {pnl && pnl.estimated_pnl_usd != null ? <span style={{ color: pnl.estimated_pnl_usd >= 0 ? 'var(--t-green)' : 'var(--t-red)' }}>{pnl.estimated_pnl_usd >= 0 ? '+' : ''}{fmtUsd(pnl.estimated_pnl_usd)}</span> : '—'}
+                      {(() => {
+                        const pnlVal = pnl ? (pnl.status === 'closed' ? pnl.realized_pnl_usd : pnl.estimated_pnl_usd) : null;
+                        return pnlVal != null ? <span style={{ color: pnlVal >= 0 ? 'var(--t-green)' : 'var(--t-red)' }}>{pnlVal >= 0 ? '+' : ''}{fmtUsd(pnlVal)}</span> : '—';
+                      })()}
+                    </td>
+                    <td style={{ padding: '5px 8px', textAlign: 'right', fontSize: 9, fontWeight: 600, color: 'var(--t-dim)' }}>
+                      {isExecuted ? (pnl.status === 'closed' ? 'REALIZED' : 'OPEN P&L') : '—'}
                     </td>
                     <td style={{ padding: '5px 8px', textAlign: 'right' }}>
                       {isExecuted ? (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO-' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO·' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
                       ) : hasPlan ? (
                         algoOn ? (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha('var(--t-dim)', 0.1), color: 'var(--t-dim)' }}>AUTO-PENDING</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha('var(--t-dim)', 0.1), color: 'var(--t-dim)' }}>AUTO·PENDING</span>
                         ) : (
                           <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
                         )
@@ -177,9 +225,9 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { 
                   </tr>
                   {isExp && (
                     <tr style={{ background: alpha(statusColor, 0.04), borderBottom: `1px solid ${c.border2}` }}>
-                      <td colSpan={TABLE_COL_COUNT} style={{ padding: '12px 14px' }}>
+                      <td colSpan={14} style={{ padding: '12px 14px' }}>
                         <div style={{ fontSize: 11, color: 'var(--t-text)' }}>
-                          <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK / STRATEGY:</span> {s.track || '—'} / {s.strategy || '—'}</div>
+                          <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK:</span> {s.track || '—'}</div>
                           {s.mtf_breakdown && (
                             <div style={{ marginTop: 4 }}>
                               <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>MTF ALIGNMENT:</span> {s.mtf_breakdown.alignment_label}
