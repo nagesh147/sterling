@@ -109,7 +109,7 @@ export function GrokSignalPane() {
             </tr>
           </thead>
           <tbody>
-            {signals.filter(s => !s.futures_symbol && !s.opt_symbol).map((s) => {
+            {signals.filter(s => !['NIFTY', 'BANKNIFTY'].includes(s.underlying.toUpperCase())).map((s) => {
               const sigIdStr = `${s.underlying}-${s.timestamp_ms}`;
               const sigIdHash = Array.from(sigIdStr).reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
               const sigId = Math.abs(sigIdHash).toString(16).substring(0, 5).toUpperCase();
