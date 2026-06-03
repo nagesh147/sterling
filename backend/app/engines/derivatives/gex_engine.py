@@ -51,14 +51,33 @@ def calculate_gex_profile(
     }
 
 def calculate_max_pain(option_chain: list[OptionSummary]) -> float:
-    """Calculates simplified Max Pain using open interest and current premium."""
-    pain_by_strike = {}
-    for contract in option_chain:
-        strike = contract.strike
-        # Value if expired worthless (simplified proxy)
-        pain = contract.open_interest * contract.premium
-        pain_by_strike[strike] = pain_by_strike.get(strike, 0.0) + pain
-    return max(pain_by_strike, key=pain_by_strike.get) if pain_by_strike else 0.0
+    """Max Pain — the settlement strike that minimizes total intrinsic payout
+    to option holders (where the most open contracts expire worthless).
+
+    For each candidate settlement price (each listed strike), sum the
+    OI-weighted intrinsic value across every contract; the strike with the
+    smallest total payout is Max Pain. Uses open_interest only — no premium
+    field exists on OptionSummary (the prior version referenced a nonexistent
+    `.premium` and crashed at runtime).
+    """
+    strikes = sorted({c.strike for c in option_chain})
+    if not strikes:
+        return 0.0
+
+    best_strike = strikes[0]
+    best_pain: float | None = None
+    for settle in strikes:
+        total_payout = 0.0
+        for c in option_chain:
+            if c.option_type == "call":
+                intrinsic = max(0.0, settle - c.strike)
+            else:
+                intrinsic = max(0.0, c.strike - settle)
+            total_payout += intrinsic * c.open_interest
+        if best_pain is None or total_payout < best_pain:
+            best_pain = total_payout
+            best_strike = settle
+    return best_strike
 
 def get_gex_routing_influence(
     gex_profile: dict[str, float], 

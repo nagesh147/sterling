@@ -389,10 +389,14 @@ class TestInstrumentChooser:
         assert r.instrument_type == "options"
 
     def test_auto_options_when_all_criteria_met(self):
+        # Composite router (ddb21d3): options require routing_score > 55. High
+        # asymmetry (R>=3 -> conviction 100) plus a vol regime that favours
+        # options (IVR ~60 -> vol_regime 100) clears the bar even on this
+        # short-hold scalp (timeframe factor 0). Low IVR alone routes to futures.
         p = DEFAULT_PROFILES["scalping/price_action"]
         r = instrument_chooser.choose(
             signal=self._sig(signal_score=75),
-            profile=p, market=self._mkt(ivr_pct=30),
+            profile=p, market=self._mkt(ivr_pct=60),
             best_option_expected_r=4.0,
         )
         assert r.instrument_type == "options"
@@ -456,11 +460,14 @@ class TestSLTPSolver:
         assert s.sl_premium == 600.0           # 50% × 1200
 
     def test_options_premium_no_floor_when_natural_higher(self):
+        # The 50%-of-premium_now floor (=600) is NOT binding: the natural SL
+        # premium (900) is higher. solve_options pads it by the 10%
+        # slippage/theta buffer (ddb21d3) -> 990; the floor still never applies.
         s = sl_tp_solver.solve_options(
             direction="long", entry_spot=50_000, stop_spot=49_500, target_spot=51_000,
             premium_now=1200, premium_at_tp=1500, premium_at_sl=900,
         )
-        assert s.sl_premium == 900.0
+        assert s.sl_premium == 990.0           # 900 × 1.10 buffer (> 600 floor)
 
 
 # ─── 10. strike_picker ──────────────────────────────────────────────────
