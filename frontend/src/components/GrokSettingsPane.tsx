@@ -88,7 +88,7 @@ const DEFAULT_CONFIG = {
   min_rr: 1.5,
   max_stop_atr: 3.0,
   account_equity: 10000,
-  symbols: [] as string[],
+  symbols: ['BTC', 'ETH', 'SOL', 'XRP'] as string[],
   disabled_symbols: [] as string[],
 };
 
@@ -221,7 +221,6 @@ export function GrokSettingsPane() {
         <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' }}>
           <ChipToggle label="Long" on={draft.direction_allow_long} onChange={(v) => setField('direction_allow_long', v)} />
           <ChipToggle label="Short" on={draft.direction_allow_short} onChange={(v) => setField('direction_allow_short', v)} />
-          <ChipToggle label="Trend filter" on={draft.macro_trend_filter} onChange={(v) => setField('macro_trend_filter', v)} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <NumField label="Risk % / trade" value={draft.risk_percent} step={0.05} min={0.05} max={5} defaultVal={DEFAULT_CONFIG.risk_percent} onChange={(v) => setField('risk_percent', v)} />
