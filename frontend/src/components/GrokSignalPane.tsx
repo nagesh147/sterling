@@ -123,7 +123,7 @@ export function GrokSignalPane() {
               const isExecuted = pnlData.length > 0;
               const pnl = pnlData[0] || null;
               
-              const hasPlan = s.spot_price != null;
+              const hasPlan = s.direction === 'long' || s.direction === 'short';
               const statusColor = isExecuted ? 'var(--t-blue)' : hasPlan ? dirColor : 'var(--t-dim)';
               const statusLabel = isExecuted ? 'OPEN' : hasPlan ? 'READY' : 'IDLE';
 
