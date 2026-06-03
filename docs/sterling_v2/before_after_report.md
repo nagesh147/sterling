@@ -1,63 +1,66 @@
-# SterlingV2 — Before / After (test slice, leak-free harness)
+# SterlingV2 — Before / After + robustness gates (test slice)
 
-All numbers are on the **untouched test slice** (last 20% of each parquet), through the leak-free harness (next-bar fills, 0.10% fee, 5bps slippage, realized-frequency Sharpe). Baseline = long-only ma_crossover. V2 = long+short + vol-targeted sizing + correlation-aware portfolio with a hard -20% drawdown breaker. Same `research.run_v2_book` the live endpoint trades.
+All numbers on the **untouched test slice** (last 20% of each parquet), through the leak-free harness (next-bar fills, 0.10% fee, 5bps slippage, realized-frequency Sharpe). Two stacks are reported: **(A)** the validated ma_crossover stack, and **(B)** the multi-book expansion (+breakout +smc) tested to reach the 100-trade floor.
 
 ## Levers kept / rejected
-- **Lever 1 short side — KEPT.** Improves test Sharpe in 11/12 cells; biggest gains on the down-trending ETH/SOL.
-- **Lever 2 conviction gate — KEPT (long-only) / OFF for combined book.** Redundant with the short side; hurts the combined book on all 3 symbols.
-- **Lever 3 trailing exit — REJECTED.** Improves Sharpe in only 3/12; trims winners; val-selected param generalizes poorly. Static SL/TP kept.
-- **Lever 4 vol-targeted sizing — KEPT.** Improves test Sharpe in 10/12 at equal exposure.
-- **Lever 5 correlation-aware portfolio + DD breaker — KEPT.** Caps portfolio drawdown.
+- **Lever 1 short side — KEPT** (+test Sharpe 11/12).  **Lever 4 vol-sizing — KEPT** (10/12).  **Lever 5 corr-portfolio + -20% DD breaker — KEPT.**
+- **Lever 2 conviction gate — OFF for the combined book** (redundant with the short side).  **Lever 3 trailing exit — REJECTED** (3/12; trims winners; val param overfits).
 
-## Per-symbol (test slice)
-
-### Baseline (long-only ma_crossover)
-| Symbol | Trades | Win% | PF | Sharpe | Net% | MaxDD% |
-|---|---|---|---|---|---|---|
-| BTCUSD | 34 | 32.4 | 0.84 | -0.69 | -12.7 | -22.0 |
-| ETHUSD | 22 | 31.8 | 0.86 | -0.50 | -10.9 | -23.6 |
-| SOLUSD | 25 | 40.0 | 1.07 | +0.23 | +0.5 | -24.3 |
-
-### V2 stack (long+short + vol-sizing)
-| Symbol | Trades | Win% | PF | Sharpe | Net% | MaxDD% |
-|---|---|---|---|---|---|---|
-| BTCUSD | 33 | 39.4 | 1.38 | +1.13 | +18.4 | -19.7 |
-| ETHUSD | 23 | 34.8 | 1.09 | +0.24 | +0.5 | -18.9 |
-| SOLUSD | 26 | 38.5 | 1.45 | +1.26 | +21.5 | -20.0 |
-
-## Portfolio (combined, test slice)
+## Stack A — validated (ma_crossover, 3 symbols)
 
 | Portfolio | Net% | Sharpe | MaxDD% |
 |---|---|---|---|
-| Baseline (inverse-vol, no breaker) | -5.6 | -0.37 | -21.7 |
-| **V2 (corr-weighted, -20% breaker)** | **+12.5** | **+1.12** | **-17.5** |
+| Baseline (long-only) | -5.6 | -0.37 | -21.7 |
+| **V2 stack** | **+12.5** | **+1.12** | **-17.5** |
 
-V2 portfolio weights: BTCUSD 37% · ETHUSD 30% · SOLUSD 32%.
-
-## Robustness (combined V2 trade stream)
-
-- Combined trades: **82**  (median hold 12 bars)
-- **PBO** (prob. of backtest overfitting): **0.47**  (mean OOS path Sharpe +6.88, 15 CPCV paths)
-- **Monte-Carlo p-loss** (bootstrap, 10k): **0.22**  (median path net +43.6%, p05 net -33.0%, p05 maxDD -52.0%)
-- **Deflated Sharpe** (annualized Sh +1.12, n=82 trades): 5 trials → 0.30, 20 trials → 0.00, 144 trials → 0.00.  Probability the Sharpe survives multiple-testing (>0.5 = more likely than not). It clears >0 only at low trial counts and approaches 0 under aggressive correction — borderline, a direct consequence of the thin 82-trade OOS sample.
-
-## Pre-registered gates (fixed before seeing the test set)
+Robustness: 82 trades · PBO 0.47 · MC p-loss 0.22 · DSR(20) 1.6e-08.
 
 | Gate | Threshold | Observed | Status |
 |---|---|---|---|
 | Max drawdown | ≤ 20% | -17.5% | ✅ |
 | OOS Sharpe | > 0 | +1.12 | ✅ |
 | PBO | < 0.5 | 0.47 | ⚠️ |
-| Monte-Carlo p-loss | ≤ 0.35 | 0.22 | ✅ |
+| MC p-loss | ≤ 0.35 | 0.22 | ✅ |
 | Deflated Sharpe (20 trials) | > 0 | 1.6e-08 | ⚠️ |
 | Test trades | ≥ 100 | 82 | ❌ |
 
-✅ clean · ⚠️ marginal (passes but near the threshold) · ❌ not met
+**Stack A verdict: GATES NOT ALL MET** — trades 82 < 100. Economically strong and drawdown-contained; the only miss is the 100-trade floor (single strategy x 3 symbols on a 20% slice).
 
-**Overall: GATES NOT ALL MET.** Clean passes: max-drawdown (within the -20% cap), OOS Sharpe (+1.12), p-loss (0.22).
+## Stack B — multi-book expansion (+breakout +smc, 9 books)
 
-**Caveats / marginal gates.** PBO 0.47 sits just under the 0.50 ceiling, and the deflated Sharpe is positive only at low assumed trial counts (≈0 under aggressive multiple-testing). Both are marginal for the SAME reason as the one clear miss — the single-strategy ma_crossover test slice yields only ~82 combined trades, below the 100-trade floor. The economic before/after is strong and the drawdown is contained, but the statistical power on this thin OOS sample is limited.
+Per-book test-slice metrics:
+| Book | Trades | Win% | PF | Sharpe | Net% | MaxDD% |
+|---|---|---|---|---|---|---|
+| BTC/ma_crossover | 33 | 39 | 1.38 | +1.13 | +18 | -20 |
+| BTC/breakout | 35 | 26 | 0.69 | -1.47 | -21 | -22 |
+| BTC/smc | 32 | 38 | 0.84 | -0.64 | -13 | -20 |
+| ETH/ma_crossover | 23 | 35 | 1.09 | +0.24 | +0 | -19 |
+| ETH/breakout | 30 | 37 | 0.73 | -1.11 | -21 | -21 |
+| ETH/smc | 37 | 46 | 1.28 | +0.96 | +18 | -20 |
+| SOL/ma_crossover | 26 | 38 | 1.45 | +1.26 | +22 | -20 |
+| SOL/breakout | 36 | 28 | 0.80 | -0.92 | -20 | -44 |
+| SOL/smc | 38 | 37 | 1.07 | +0.30 | +1 | -40 |
 
-**Disciplined remedy (next step, not a gate relaxation):** add the other validated edge strategies (breakout / smc) as additional per-symbol books. That ~3x's the trade count past 100, adds genuine diversification (lowering PBO and lifting DSR), and is preferable to borrowing validation data or loosening the pre-registered gates.
+| Portfolio | Net% | Sharpe | MaxDD% |
+|---|---|---|---|
+| Baseline (long-only, 9 books) | -15.7 | -2.39 | -21.6 |
+| V2 (9 books) | -2.0 | -0.19 | -16.1 |
 
-_Gate engine unmet list: trades 82 < 100._
+Robustness: 290 trades · PBO 0.47 · MC p-loss 0.65 · DSR(20) 0.
+
+| Gate | Threshold | Observed | Status |
+|---|---|---|---|
+| Max drawdown | ≤ 20% | -16.1% | ✅ |
+| OOS Sharpe | > 0 | -0.19 | ❌ |
+| PBO | < 0.5 | 0.47 | ⚠️ |
+| MC p-loss | ≤ 0.35 | 0.65 | ❌ |
+| Deflated Sharpe (20 trials) | > 0 | 0 | ❌ |
+| Test trades | ≥ 100 | 290 | ✅ |
+
+**Stack B verdict: GATES NOT ALL MET** — oos_sharpe -0.19 <= 0.0; p_loss 0.65 > 0.35; DSR 0.00 <= 0.0.
+
+## Conclusion
+
+Adding breakout and smc reaches the 100-trade floor (290 trades) but **fails the economic gates**: breakout is a consistent OOS loser (BTC -1.47, ETH -1.11, SOL -0.92 Sharpe) and smc is mixed, dragging the portfolio to a negative Sharpe. The baseline screen rated those strategies net-positive on the full sample, but that did not survive out-of-sample — so padding the trade count with them trades a real edge for a fake one, and the gates correctly reject it.
+
+**The durable result is Stack A (ma_crossover x 3 symbols): +12% net, +1.12 Sharpe, -18% max-DD**, clearing every economic and risk gate and missing only the 100-trade floor (82 trades). The honest way to clear that floor is to **accrue real paper trades over time** (the stack is already wired live, paper-only), not to inflate the count with strategies that lack out-of-sample edge.

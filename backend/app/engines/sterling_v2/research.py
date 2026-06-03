@@ -57,6 +57,13 @@ def check_gates(test_metrics: dict, oos_sharpe: float, pbo: float,
 # book on the test slice for all three symbols (BTC +1.13->+0.05, ETH +0.24->-0.18,
 # SOL +1.26->+0.21 Sharpe). It stays available via adx_min>0 for the long-only path.
 V2_STRAT_DEFAULT = "ma_crossover"   # the grounding's proven 4h edge
+# Multi-book strategy set TESTED for reaching the 100-trade floor (the strategies
+# net-positive in the long-only baseline screen). RESULT: REJECTED -- breakout is a
+# consistent OOS loser (BTC/ETH/SOL Sharpe -1.47/-1.11/-0.92) and smc is mixed, so the
+# 9-book portfolio fails the OOS-Sharpe/p-loss/DSR gates (see before_after_report.md
+# "Stack B"). The LIVE/validated stack is ma_crossover only (V2_STRAT_DEFAULT). This
+# constant is kept only to document/repro the rejected expansion, NOT for deployment.
+V2_STRATS = ["ma_crossover", "breakout", "smc"]
 V2_ADX_MIN_DEFAULT = 0.0            # gate OFF by default for the combined book
 V2_TF_DEFAULT = "4h"
 V2_CFG = SimConfig(sl_mult=2.0, tp_mult=3.5, fee_round_trip=0.001,
