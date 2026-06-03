@@ -3,9 +3,11 @@
 **Design spec** · Date: 2026-06-03 · Branch: `redesignV2`
 Status: **Approved design — pending implementation plan**
 
-> Companion context (real-data baseline this design improves on):
-> [`STERLING_TRADING_REPORT_BASELINE.md`](../../../STERLING_TRADING_REPORT_BASELINE.md) ·
-> [`STERLING_TRADING_REPORT_BEFORE_AFTER.md`](../../../STERLING_TRADING_REPORT_BEFORE_AFTER.md)
+> **Source of truth:** the independent, self-computed real-data grounding in
+> [`docs/sterling_v2/2026-06-03-independent-baseline-grounding.md`](../../sterling_v2/2026-06-03-independent-baseline-grounding.md)
+> (reproducible via `backend/scratch/v2_grounding.py`). Pre-existing `.md` reports
+> (`STERLING_TRADING_REPORT_*.md`) are treated as **untrusted** — they were built on a harness
+> with the measurement bugs catalogued in §1 — and are **not** used as a baseline here.
 
 ---
 
@@ -47,8 +49,9 @@ Verified against the real code:
   trigger (EMA 9/21 cross, 20-bar Donchian, RSI cross-up, bullish engulfing, FVG). No
   individual edge; fired on every occurrence over a mostly-up market.
 - **No conviction/regime gate** sits between signal and router → the system fires every
-  signal. This is the structural flaw the real-data reports identify: median config PF < 1.0
-  at every timeframe; the 10 in-sample "winners" bleed **−$674** out-of-sample.
+  signal. **Independently confirmed** (grounding report §2): the EMA 9/21 "fresh cross" fires
+  on ~53% of 4h bars (2,738 / 5,128) — it is near-noise, and the non-overlap filter means the
+  system effectively trades "the first whipsaw cross after the last trade closed."
 
 **Measurement bugs (why current numbers are not yet trustworthy)** — `comprehensive_backtest.py`:
 - **Sharpe mis-annualized:** `√252 × mean/std` on per-trade returns for *every* timeframe
@@ -63,6 +66,20 @@ Verified against the real code:
   bar (`:106-132`); entries fill at signal-bar `close[i]`.
 - **No portfolio:** "$5,000" is 10 independent $500 sleeves, not a correlation-aware book,
   even though `correlation_tracker` and `dd_circuit_breaker` exist on the engine.
+
+### 1.1 Independently confirmed on real data (not from any report)
+
+From `backend/scratch/v2_grounding.py` (grounding report §1–§3):
+
+- **Window is not uniformly up:** BTC +72%, **ETH −13.6%, SOL −54.5%** buy-and-hold → long-only
+  fights the trend on 2 of 3 assets ⇒ **short side is mandatory.**
+- **Sharpe was inflated ~1.9×:** corrected (realized-frequency) Sharpe for the headline config
+  (`ma_crossover 4h BTC`, long-only) is **0.86**, vs the legacy **1.83**. `√252 / √67.5 = 1.93`
+  explains the gap exactly.
+- **BTC long edge is real but modest:** PF 1.26, win 42.9%, DD −27.7%, net +78.6% under honest
+  next-bar-open fills + 5 bps slippage (vs legacy +95.3%).
+- **ETH/SOL long-only destroys capital:** net −36.6% / −73.9%, DD −68% / −80% — their legacy
+  "validated" profit was selection, not edge.
 
 ---
 
@@ -127,9 +144,11 @@ arbiter** of every later change. It fixes the Section 1 measurement bugs:
 **Outputs:** one reproducible artifact per experiment — a results CSV plus a markdown report
 carrying test-set Sharpe / PF / win / net / max-DD + p-loss + PBO + DSR + trade count.
 
-**Correctness gate (Phase 2):** the harness must **reproduce the existing baseline numbers**
-(within tolerance) before any lever is trusted — proving the simulator is right, not just
-different.
+**Correctness gate (Phase 2):** the harness establishes the **authoritative baseline
+independently** (its own report), and must agree with the hand-computed single-config replay
+in `scratch/v2_grounding.py` (e.g. `ma_crossover 4h BTC` long-only ≈ PF 1.26, win 42.9%,
+DD −27.7%, corrected Sharpe ≈ 0.86) — proving the simulator is right. It is **not** validated
+against the legacy `.md` reports, which are untrusted.
 
 ---
 
@@ -206,7 +225,8 @@ the harness — a CI guard against accidental leakage.
 
 1. **Skeleton + isolation** — new package, new router (additive), FE chip toggle (default OFF),
    empty V2 tab. Verify existing engines untouched.
-2. **Harness + baseline reproduction** — leak-free simulator; reproduce existing numbers.
+2. **Harness + independent baseline** — leak-free simulator; generate the authoritative
+   baseline report from real data and agree with `scratch/v2_grounding.py` (not the legacy reports).
 3. **Levers one-by-one** — short side → conviction gate → exits → sizing, each with test-set
    evidence and gate compliance.
 4. **Portfolio assembly** — correlation-aware book + DD circuit breaker.
@@ -228,5 +248,8 @@ the harness — a CI guard against accidental leakage.
 
 - Data: `vector_store_1m_{BTC,ETH,SOL}USD.parquet`, ~Dec 2023 → May 2026.
 - Harness, configs, and per-experiment CSV/markdown artifacts committed under the V2 package /
-  a `docs/` results path.
-- Baseline for comparison: `STERLING_TRADING_REPORT_BASELINE.md` and the before/after report.
+  `docs/sterling_v2/`.
+- Baseline for comparison: the **independently-generated**
+  `docs/sterling_v2/2026-06-03-independent-baseline-grounding.md` (+ `scratch/v2_grounding.py`),
+  superseded by the harness's own baseline report in Phase 2. Legacy `.md` reports are **not**
+  used as a comparison baseline.
