@@ -101,7 +101,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
         take_profit: s.target_price,
         notes: `[GROK] ${s.track || s.strategy || 'manual'}`,
       });
-      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: !!resp?.accepted, status: resp?.status || 'sent', reason: resp?.reason || '', auto: false });
+      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: true, status: resp?.status || 'sent', reason: resp?.message || '', auto: false });
     } catch (e: any) {
       console.error(e);
       if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: false, status: 'error', reason: e.message, auto: false });
@@ -244,18 +244,18 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                               <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--t-green)', letterSpacing: '0.02em' }}>
                                 ✓ {algoOn ? 'Auto-executed' : 'Manual-executed'} on {pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'}
                               </span>
-                              <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums' }}>{fmtTime(pnl.timestamp_ms || s.timestamp_ms)}</span>
+                              <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums' }}>{fmtTime(pnl.entry_timestamp_ms || s.timestamp_ms)}</span>
                               <span style={{ fontSize: 11, color: 'var(--t-dim)', marginLeft: 4 }}>{pnl.status === 'closed' ? 'closed' : 'open'}</span>
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', paddingTop: 4 }}>
-                              <MetricItem label="Qty" value={fmt(pnl.size || 1.0000, 4)} />
+                              <MetricItem label="Qty" value={fmt(pnl.contracts || 1.0000, 4)} />
                               <MetricItem label="Entry" value={fmtUsd(pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price)} />
                               {pnl.status === 'closed' && (
-                                <MetricItem label="Exit" value={fmtUsd(pnl.exit_price_real ?? pnl.current_spot)} />
+                                <MetricItem label="Exit" value={fmtUsd(pnl.current_spot)} />
                               )}
                               <MetricItem label="Initial SL" value={fmtUsd(pnl.initial_sl ?? s.stop_price)} color="var(--t-red)" />
                               <MetricItem label="Target" value={fmtUsd(pnl.initial_tp ?? s.target_price)} color="var(--t-amber)" />
-                              <MetricItem label="Notional" value={fmtUsd((pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) * (pnl.size || 1.0))} />
+                              <MetricItem label="Notional" value={fmtUsd((pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) * (pnl.contracts || 1.0))} />
                               
                               {(() => {
                                 const pnlVal = pnl.status === 'closed' ? pnl.realized_pnl_usd : pnl.estimated_pnl_usd;

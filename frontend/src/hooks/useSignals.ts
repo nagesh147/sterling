@@ -29,6 +29,7 @@ export interface SignalItem {
   signal_strength?: 'STRONG' | 'SIGNAL' | 'NONE';
   track?: string;
   strategy?: 'latest' | 'legacy';
+  profile?: string;
   exec_mode: string | null;
   exec_confidence?: number;
   exec_score?: number;

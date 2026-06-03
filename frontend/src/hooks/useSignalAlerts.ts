@@ -56,11 +56,29 @@ export interface LiveOrderRequest {
   notes: string;
 }
 
+// Mirrors backend LiveOrderResponse (trading.py). Note: backend reports success
+// via `status`/`message` — there is no `accepted` or `reason` field.
+export interface LiveOrderResponse {
+  mode: string;
+  order_id?: string | null;
+  paper_position_id?: string | null;
+  symbol: string;
+  side: string;
+  size: number;
+  entry_price?: number | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
+  leverage?: number | null;
+  status: string;
+  message: string;
+  timestamp_ms: number;
+}
+
 export function usePlaceOrder() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (req: LiveOrderRequest) =>
-      api.post('/api/v1/trading/place-order', req),
+      api.post<LiveOrderResponse>('/api/v1/trading/place-order', req),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['positions'] });
       qc.invalidateQueries({ queryKey: ['live-pnl'] });

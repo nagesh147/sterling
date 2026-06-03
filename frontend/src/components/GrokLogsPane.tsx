@@ -21,7 +21,7 @@ export function GrokLogsPane() {
 
   useEffect(() => {
     let ws: WebSocket;
-    let reconnectTimer: NodeJS.Timeout;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
 
     const connect = () => {
       ws = new WebSocket(`ws://${window.location.hostname}:8000/api/v1/stream/ws`);
@@ -35,7 +35,7 @@ export function GrokLogsPane() {
         try {
           const data = JSON.parse(event.data);
           if (data && data.type === "log" && data.message) {
-            let color = c.bright;
+            let color: string = c.bright;
             if (data.level === "ERROR" || data.level === "CRITICAL") color = c.red;
             else if (data.level === "WARNING") color = c.amber;
             else if (data.level === "DEBUG") color = c.dim;
