@@ -26,6 +26,7 @@ export interface LivePnlEntry {
   order_status: string | null;
   mode: string | null;
   structure_type: string;
+  is_paper: boolean;
 }
 
 export interface TrailState {

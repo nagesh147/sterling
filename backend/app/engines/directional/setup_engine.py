@@ -20,11 +20,34 @@ from app.schemas.directional import (
 def evaluate_setup(
     regime: RegimeResult, signal: SignalResult, profile_label: str | None = None
 ) -> SetupResult:
-    """Neutral setup: always IDLE / NEUTRAL (no strategy loaded)."""
+    """Evaluates setup based on regime and signal alignment."""
+    if not regime or not signal:
+        return SetupResult(
+            state=TradeState.IDLE,
+            direction=Direction.NEUTRAL,
+            reason="missing regime or signal",
+            macro_regime=MacroRegime.IDLE,
+            signal_trend=0,
+        )
+
+    state = TradeState.IDLE
+    direction = Direction.NEUTRAL
+    reason = "no alignment"
+
+    if regime.macro_regime == MacroRegime.BULL_TREND and signal.trend == 1:
+        state = TradeState.ENTRY_ARMED_PULLBACK
+        direction = Direction.LONG
+        reason = "bullish alignment"
+    elif regime.macro_regime == MacroRegime.BEAR_TREND and signal.trend == -1:
+        state = TradeState.ENTRY_ARMED_CONTINUATION
+        direction = Direction.SHORT
+        reason = "bearish alignment"
+
     return SetupResult(
-        state=TradeState.IDLE,
-        direction=Direction.NEUTRAL,
-        reason="strategy removed — no setup",
-        macro_regime=regime.macro_regime if regime is not None else MacroRegime.IDLE,
-        signal_trend=0,
+        state=state,
+        direction=direction,
+        reason=reason,
+        macro_regime=regime.macro_regime,
+        signal_trend=signal.trend,
     )
+

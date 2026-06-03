@@ -1,0 +1,3 @@
+=== STERLING V1 NAIVE BACKTESTER ===
+Found 3 symbols. Running V1 Naive Engine...
+

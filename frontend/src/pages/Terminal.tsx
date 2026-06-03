@@ -11,7 +11,10 @@ import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
-import { useSelectedUnderlying, useAppMode, useSetAppMode, useTheme, useToggleTheme } from '../store/useStore';
+import { GrokSettingsPane } from '../components/GrokSettingsPane';
+import { GrokSignalPane } from '../components/GrokSignalPane';
+import { GrokLogsPane } from '../components/GrokLogsPane';
+import { useSelectedUnderlying, useAppMode, useSetAppMode, useTheme, useToggleTheme, useEngineMode, useSetEngineMode } from '../store/useStore';
 
 import '../styles/terminal.css';
 
@@ -40,6 +43,8 @@ export function Terminal() {
   const setAppMode = useSetAppMode();
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
+  const engineMode = useEngineMode();
+  const setEngineMode = useSetEngineMode();
 
   /* Keep panel sizes in localStorage */
   const handlePanelResize = (sizes: number[]) => {
@@ -77,13 +82,40 @@ export function Terminal() {
         flexShrink: 0,
         paddingLeft: 12,
       }}>
-        {/* Brand */}
-        <span style={{
-          color: 'var(--t-bright)', fontWeight: 700, letterSpacing: 2, fontSize: 13,
-          marginRight: 16, fontFamily: 'JetBrains Mono, monospace',
-        }}>
-          STERLING ◆
-        </span>
+        {/* Brand & Engine Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: 16, background: 'var(--t-bg)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--t-border)' }}>
+          <button
+            onClick={() => setEngineMode('sterling')}
+            style={{
+              padding: '4px 12px',
+              border: 'none',
+              background: engineMode === 'sterling' ? 'var(--t-blue)' : 'transparent',
+              color: engineMode === 'sterling' ? '#fff' : 'var(--t-dim)',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 1,
+              cursor: 'pointer',
+            }}
+          >
+            STERLING ENGINE
+          </button>
+          <button
+            onClick={() => setEngineMode('grok')}
+            style={{
+              padding: '4px 12px',
+              border: 'none',
+              background: engineMode === 'grok' ? 'var(--t-green)' : 'transparent',
+              color: engineMode === 'grok' ? '#fff' : 'var(--t-dim)',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 1,
+              cursor: 'pointer',
+              borderLeft: '1px solid var(--t-border)',
+            }}
+          >
+            GROK ENGINE
+          </button>
+        </div>
 
         {/* Nav tabs */}
         {NAV_TABS.map((tab) => (
@@ -151,28 +183,28 @@ export function Terminal() {
             onLayout={handlePanelResize}
             style={{ height: '100%' }}
           >
-            {/* Left: Signal pane */}
+            {/* Left: Signal pane or Grok Settings */}
             <Panel defaultSize={22} minSize={15} style={{ overflow: 'hidden' }}>
               <div style={{ height: '100%', borderRight: '1px solid var(--t-border)', background: 'var(--t-bg)' }}>
-                <SignalPane underlying={underlying} />
+                {engineMode === 'sterling' ? <SignalPane underlying={underlying} /> : <GrokSettingsPane />}
               </div>
             </Panel>
 
             <PanelResizeHandle className="t-resize-handle" />
 
-            {/* Center: Chart pane */}
+            {/* Center: Chart pane or Grok Signals */}
             <Panel defaultSize={55} minSize={30} style={{ overflow: 'hidden' }}>
               <div style={{ height: '100%', background: 'var(--t-bg)' }}>
-                <ChartPane underlying={underlying} />
+                {engineMode === 'sterling' ? <ChartPane underlying={underlying} /> : <GrokSignalPane />}
               </div>
             </Panel>
 
             <PanelResizeHandle className="t-resize-handle" />
 
-            {/* Right: Risk pane */}
+            {/* Right: Risk pane or Grok Logs */}
             <Panel defaultSize={23} minSize={15} style={{ overflow: 'hidden' }}>
               <div style={{ height: '100%', borderLeft: '1px solid var(--t-border)', background: 'var(--t-bg)' }}>
-                <RiskPane />
+                {engineMode === 'sterling' ? <RiskPane /> : <GrokLogsPane />}
               </div>
             </Panel>
           </PanelGroup>

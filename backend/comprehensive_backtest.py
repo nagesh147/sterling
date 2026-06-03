@@ -25,7 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Single source of truth — the live edge feed imports the same functions.
 from app.engines.edge.strategies import SIGNAL_FNS, resample  # noqa: E402
-from app.engines.edge.registry import PROFILE_ATR as PROFILES # noqa: E402
+from app.engines.edge.registry import PROFILE_CONFIG as PROFILES # noqa: E402
+from app.engines.edge.robustness import run_robustness_gate # noqa: E402
 
 warnings.filterwarnings("ignore")
 
@@ -54,9 +55,11 @@ STRATEGIES = list(SIGNAL_FNS.keys())
 # ---------------------------------------------------------------------------
 
 def simulate(df: pd.DataFrame, signals: np.ndarray,
-             sl_mult: float, tp_mult: float) -> np.ndarray:
+             risk_config: dict, 
+             profile_name: str = "Intraday",
+             max_hold: int = MAX_HOLD_BARS) -> dict:
     """
-    Return array of per-trade net returns (after fees) in decimals.
+    Return dictionary with rich trade metadata. Supports Trailing and Scale-Out.
     Long-only. Skips signals that fire while a position is open.
     """
     close = df["close"].to_numpy(dtype=np.float64)
@@ -64,51 +67,118 @@ def simulate(df: pd.DataFrame, signals: np.ndarray,
     low = df["low"].to_numpy(dtype=np.float64)
     atr = df["atr"].to_numpy(dtype=np.float64)
     n = len(close)
-    trades: list[float] = []
+    
+    trades = []
+    equity_curve = np.zeros(n)
+    position = 0
+    entry_idx = -1
+    
+    sl_mult = risk_config.get("sl_mult", 2.0)
+    tp_mult = risk_config.get("tp_mult", 3.5)
+    
+    trailing_sl = None
+    partial_closed = False
+    partial_ret = 0.0
+    
+    # We iterate only where ATR is valid
+    # To optimize, we can jump to the next signal instead of scanning every bar when flat
     i = 0
-    sig_idx = np.flatnonzero(signals)
-    sp = 0
-    while sp < len(sig_idx):
-        i = sig_idx[sp]
-        sp += 1
-        if i >= n - 2 or not np.isfinite(atr[i]) or atr[i] <= 0:
+    while i < n:
+        if not np.isfinite(atr[i]) or atr[i] <= 0:
+            i += 1
             continue
-        entry = close[i]
-        sl = entry - sl_mult * atr[i]
-        tp = entry + tp_mult * atr[i]
-        end = min(i + MAX_HOLD_BARS, n - 1)
-        exit_price = close[end]   # time-stop fallback
-        exit_idx = end
-        # First-touch scan
-        for j in range(i + 1, end + 1):
-            if low[j] <= sl:
+            
+        if position == 0 and signals[i]:
+            # New entry
+            entry_price = close[i]
+            atr_val = atr[i]
+            sl = entry_price - sl_mult * atr_val
+            tp = entry_price + tp_mult * atr_val
+            trailing_sl = sl
+            entry_idx = i
+            position = 1
+            partial_closed = False
+            i += 1
+            continue
+            
+        if position == 1:
+            # === TRAILING LOGIC ===
+            if "Trailing" in profile_name:
+                trail_mult = risk_config.get("trail_mult", 1.5)
+                new_trail = high[i] - trail_mult * atr[i]
+                trailing_sl = max(trailing_sl, new_trail)
+                sl = trailing_sl
+                
+            # === SCALE OUT LOGIC ===
+            scale_out_enabled = "Scale_Out" in profile_name
+            scale_target_r = risk_config.get("scale_target_r", 1.0)
+            
+            if scale_out_enabled and not partial_closed:
+                scale_level = entry_price + scale_target_r * atr[entry_idx]
+                if high[i] >= scale_level:
+                    # Close 50% at this level
+                    partial_ret = (scale_level / entry_price) - 1.0 - 0.001
+                    # Move SL to breakeven for remainder
+                    sl = entry_price
+                    partial_closed = True
+            
+            # === EXIT CHECKS ===
+            exit_price = None
+            if low[i] <= sl:
                 exit_price = sl
-                exit_idx = j
-                break
-            if high[j] >= tp:
+            elif high[i] >= tp:
                 exit_price = tp
-                exit_idx = j
-                break
-        ret = (exit_price / entry) - 1.0 - FEE_ROUND_TRIP
-        trades.append(ret)
-        # Skip any signals that fired while we were in the trade
-        while sp < len(sig_idx) and sig_idx[sp] <= exit_idx:
-            sp += 1
-    return np.asarray(trades, dtype=np.float64)
+            elif (i - entry_idx) >= max_hold:
+                exit_price = close[i]
+                
+            if exit_price is not None:
+                final_ret = (exit_price / entry_price) - 1.0 - 0.001
+                if partial_closed:
+                    total_ret = 0.5 * partial_ret + 0.5 * final_ret
+                else:
+                    total_ret = final_ret
+                    
+                trades.append({
+                    'entry_idx': entry_idx,
+                    'exit_idx': i,
+                    'entry': entry_price,
+                    'exit': exit_price,
+                    'return': float(total_ret),
+                    'bars_held': i - entry_idx,
+                    'partial_exit': partial_closed,
+                    'profile': profile_name
+                })
+                position = 0
+                partial_closed = False
+                trailing_sl = None
+                equity_curve[i] = total_ret
+            
+            i += 1
+            
+    return {
+        'trades': trades,
+        'returns': np.array([t['return'] for t in trades], dtype=np.float64),
+        'return_stream': equity_curve,
+        'cumulative_equity': np.cumsum(equity_curve)
+    }
 
 
 # ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
 
-def metrics(returns: np.ndarray, tf_label: str,
+def metrics(sim_result: dict, tf_label: str,
             starting_capital: float = STARTING_CAPITAL) -> dict:
+    returns = sim_result['returns']
+    trades_meta = sim_result['trades']
     n = len(returns)
+    
     if n == 0:
         return dict(trades=0, win_rate=0.0, pf=0.0, sharpe=0.0,
                     expectancy=0.0, gross_profit=0.0, gross_loss=0.0,
                     net_return=0.0, end_capital=starting_capital,
-                    pnl_usd=0.0, max_dd=0.0)
+                    pnl_usd=0.0, max_dd=0.0, avg_bars_held=0.0)
+                    
     wins = returns[returns > 0]
     losses = returns[returns < 0]
     gp_pct = float(wins.sum()) if wins.size else 0.0
@@ -120,19 +190,19 @@ def metrics(returns: np.ndarray, tf_label: str,
     expectancy = win_rate * avg_win - (1 - win_rate) * avg_loss
     cum = float(np.prod(1 + returns))
     end_cap = starting_capital * cum
-    # Annualised Sharpe from per-trade returns: scale by sqrt(trades per year)
+    
     if returns.std(ddof=1) > 0 and n > 1:
-        # rough trades-per-year using bars-per-year / (n bars consumed)
-        # but we only know n trades; use sqrt(n)/sqrt(elapsed_yrs) approx.
-        # Simpler: report Sharpe per trade scaled by sqrt(252) for comparability.
         sharpe = float(np.sqrt(252) * returns.mean() / returns.std(ddof=1))
     else:
         sharpe = 0.0
-    # Max drawdown on equity curve
+        
     equity = starting_capital * np.cumprod(1 + returns)
     peak = np.maximum.accumulate(equity)
     dd = (equity - peak) / peak
     max_dd = float(dd.min())
+    
+    avg_bars_held = float(np.mean([t['bars_held'] for t in trades_meta]))
+    
     return dict(
         trades=n, win_rate=win_rate, pf=pf, sharpe=sharpe,
         expectancy=expectancy,
@@ -142,6 +212,7 @@ def metrics(returns: np.ndarray, tf_label: str,
         end_capital=end_cap,
         pnl_usd=end_cap - starting_capital,
         max_dd=max_dd,
+        avg_bars_held=avg_bars_held
     )
 
 
@@ -179,12 +250,20 @@ def main() -> None:
             for strat in STRATEGIES:
                 sigs = SIGNAL_FNS[strat](df_tf)
                 for prof_name, prof_cfg in PROFILES.items():
-                    rets = simulate(df_tf, sigs,
-                                    prof_cfg["atr_sl"], prof_cfg["atr_tp"])
-                    m = metrics(rets, tf_label)
+                    sim_result = simulate(df_tf, sigs,
+                                          prof_cfg,
+                                          profile_name=prof_name)
+                    m = metrics(sim_result, tf_label)
+                    
+                    robust_metrics = run_robustness_gate(
+                        sim_result['trades'], 
+                        sim_result['return_stream'], 
+                        num_trials=len(STRATEGIES) * len(PROFILES)
+                    )
+                    
                     rows.append({
                         "symbol": symbol, "tf": tf_label, "strategy": strat,
-                        "profile": prof_name, **m,
+                        "profile": prof_name, **m, **robust_metrics,
                     })
             print(f"  {tf_label} done")
 
@@ -218,22 +297,25 @@ def fmt_strat(s: str) -> str:
         "breakout":      "Breakout",
         "price_action":  "Price Action",
         "smc":           "SMC FVG",
+        "vwap_cross":    "VWAP Cross",
+        "bb_rsi_mean_reversion": "BB RSI Mean Reversion",
     }[s]
 
 
 def section(df: pd.DataFrame, title: str, n: int = 20) -> str:
     head = (
         "| # | Strategy (Timeframe Configuration) | Symbol | Strategy Profile | "
-        "Trades | Win Rate | Profit Factor | Expectancy | Sharpe | Max DD | "
-        "Gross Profit | Gross Loss | Net Return | Bottom-Line Portfolio Impact (USD Value) |\n"
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+        "Trades | Win Rate | Profit Factor | Expectancy | Sharpe | OOS Sharpe | P(Loss) | P(Sup) | DSR | Max DD | "
+        "Gross Profit | Gross Loss | Net Return | Portfolio Impact (USD) |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
     )
     body = []
     for i, r in enumerate(df.head(n).itertuples(), 1):
+        oos_str = f"{r.oos_sharpe:.2f}" if r.oos_sharpe > -100 else "-∞"
         body.append(
             f"| {i} | {fmt_strat(r.strategy)} ({r.tf}) | {r.symbol} | {r.profile} | "
             f"{r.trades} | {r.win_rate*100:.1f}% | {r.pf:.2f} | "
-            f"{r.expectancy*100:.3f}% | {r.sharpe:.2f} | {r.max_dd*100:.1f}% | "
+            f"{r.expectancy*100:.3f}% | {r.sharpe:.2f} | {oos_str} | {r.p_loss*100:.1f}% | {r.p_sup*100:.1f}% | {r.dsr:.2f} | {r.max_dd*100:.1f}% | "
             f"${r.gross_profit:.2f} | ${r.gross_loss:.2f} | {r.net_return*100:+.1f}% | "
             f"${r.pnl_usd:+.2f} |"
         )

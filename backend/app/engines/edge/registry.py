@@ -15,10 +15,12 @@ from dataclasses import dataclass, field
 
 # Profiles map to the SL/TP ATR multiples used by both the backtest and the
 # live feed. Kept here so signals.py can size stops without re-reading the CSV.
-PROFILE_ATR = {
-    "Scalping": {"atr_sl": 1.0, "atr_tp": 2.0},
-    "Intraday": {"atr_sl": 2.0, "atr_tp": 3.5},
-    "Aggressive": {"atr_sl": 1.5, "atr_tp": 4.5},
+PROFILE_CONFIG = {
+    "Scalping": {"sl_mult": 1.0, "tp_mult": 2.0},
+    "Intraday": {"sl_mult": 2.0, "tp_mult": 3.5},
+    "Aggressive": {"sl_mult": 1.5, "tp_mult": 4.5},
+    "Intraday_Trailing": {"sl_mult": 2.0, "tp_mult": 3.5, "trail_mult": 1.5},
+    "Scale_Out_2R": {"sl_mult": 2.0, "tp_mult": 4.0, "scale_target_r": 2.0},
 }
 
 

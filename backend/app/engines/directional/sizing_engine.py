@@ -66,8 +66,8 @@ def size_trade(
     if early_entry and risk_params.enable_early_entry:
         contracts *= 0.5
         
-    # Cap to integer for simplicity if needed, or keep float
-    contracts = float(round(contracts, 2))
+    # Cap to integer for SizedTrade schema compatibility
+    contracts = int(round(contracts))
     
     pos_value = contracts * entry_price / leverage
     

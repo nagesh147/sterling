@@ -31,6 +31,36 @@ def signals_mean_reversion(df: pd.DataFrame) -> np.ndarray:
     return cross_up.fillna(False).to_numpy()
 
 
+def signals_bb_rsi_mean_reversion(df: pd.DataFrame) -> np.ndarray:
+    # Bollinger Band + RSI Mean Reversion
+    delta = df["close"].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = 100 - 100 / (1 + rs)
+    
+    sma = df["close"].rolling(20).mean()
+    std = df["close"].rolling(20).std()
+    lower_band = sma - (2 * std)
+    
+    # Buy when price crosses above lower band and RSI is oversold
+    cross_up_band = (df["close"] > lower_band) & (df["close"].shift(1) <= lower_band.shift(1))
+    return (cross_up_band & (rsi < 40)).fillna(False).to_numpy()
+
+
+def signals_vwap_cross(df: pd.DataFrame) -> np.ndarray:
+    # Basic VWAP approximation using cumulative volume weighting
+    # Reset VWAP daily based on index
+    typical_price = (df["high"] + df["low"] + df["close"]) / 3
+    
+    # We approximate VWAP across a 50-bar rolling window for generic timeframes
+    vol_price = typical_price * df["volume"]
+    vwap = vol_price.rolling(50).sum() / df["volume"].rolling(50).sum()
+    
+    cross_up = (df["close"] > vwap) & (df["close"].shift(1) <= vwap.shift(1))
+    return cross_up.fillna(False).to_numpy()
+
+
 def signals_breakout(df: pd.DataFrame) -> np.ndarray:
     hh = df["high"].rolling(20).max().shift(1)
     cross = df["close"] > hh
@@ -55,6 +85,8 @@ def signals_smc(df: pd.DataFrame) -> np.ndarray:
 SIGNAL_FNS = {
     "ma_crossover": signals_ma_crossover,
     "mean_reversion": signals_mean_reversion,
+    "bb_rsi_reversion": signals_bb_rsi_mean_reversion,
+    "vwap_cross": signals_vwap_cross,
     "breakout": signals_breakout,
     "price_action": signals_price_action,
     "smc": signals_smc,

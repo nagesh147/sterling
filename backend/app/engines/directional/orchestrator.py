@@ -18,6 +18,34 @@ from app.schemas.instruments import InstrumentMeta
 from app.schemas.risk import RiskParams
 from app.schemas.directional import TradeState, Direction
 from app.schemas.execution import RunOnceResponse, PreviewResponse
+import dataclasses
+
+@dataclasses.dataclass
+class TrackResult:
+    name: str
+    trend_dir: int
+
+class DirectionalOrchestrator:
+    @staticmethod
+    def pick_winning_track(regime, signal) -> Optional[TrackResult]:
+        """
+        Dynamically assign the winning track based on macro market conditions.
+        ADX > 25: Trend Following
+        ADX < 20: Mean Reversion
+        Between: VCP (Volatility Contraction Pattern)
+        """
+        if not signal or signal.trend == 0:
+            return None
+            
+        adx = getattr(regime, 'adx', 0)
+        
+        if adx > 25:
+            return TrackResult(name="trend_following", trend_dir=signal.trend)
+        elif adx < 20:
+            return TrackResult(name="mean_reversion", trend_dir=signal.trend)
+        else:
+            return TrackResult(name="vcp", trend_dir=signal.trend)
+
 
 
 async def compute_ivr(

@@ -951,7 +951,8 @@ async def _compute_signal_item(
             )
         regime      = compute_regime(c4h, macro_filter=macro_filter)
         signal      = compute_signal(c1h, st_threshold=st_threshold)
-        best_track  = None  # legacy path; orchestrator path computes a real track
+        from app.engines.directional.orchestrator import DirectionalOrchestrator
+        best_track  = DirectionalOrchestrator.pick_winning_track(regime, signal)
         setup       = evaluate_setup(regime, signal, profile_label=mode.name if mode else None)
         ivr         = await compute_ivr(adapter, inst, c1h)
         exec_timing = assess_timing(c15m, signal, atr_pct=regime.atr_percentile)
@@ -1642,6 +1643,7 @@ def _build_pnl_event(now_ms: int) -> str:
             "order_status": pos.order_status,
             "mode": pos.mode,
             "structure_type": getattr(pos.sized_trade.structure, "structure_type", ""),
+            "is_paper": getattr(pos, "is_paper", True),
         })
 
     for pos in closed:

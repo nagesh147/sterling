@@ -29,21 +29,56 @@ def compute_signal(
     thresholds: Optional[SignalThresholds] = None,
     regime_label: str = "",
 ) -> SignalResult:
-    """Neutral signal: no trend, no arrows, zero scores (no strategy loaded)."""
-    close = float(candles_1h[-1].close) if candles_1h else 0.0
+    """Computes a basic EMA crossover signal."""
+    if not candles_1h:
+        return SignalResult(
+            trend=0,
+            all_green=False,
+            all_red=False,
+            green_arrow=False,
+            red_arrow=False,
+            st_trends=[0, 0, 0],
+            st_values=[0.0, 0.0, 0.0],
+            close_1h=0.0,
+            score_long=0.0,
+            score_short=0.0,
+            signal_strength="NONE",
+            signal_score=0.0,
+        )
+
+    closes = [float(c.close) for c in candles_1h]
+    ema_period = 20
+    alpha = 2 / (ema_period + 1)
+    ema = closes[0]
+    for c in closes[1:]:
+        ema = (c - ema) * alpha + ema
+
+    close = closes[-1]
+    
+    if close > ema:
+        trend = 1
+        score_long = 85.0
+        score_short = 0.0
+        signal_strength = "STRONG"
+    else:
+        trend = -1
+        score_long = 0.0
+        score_short = 85.0
+        signal_strength = "STRONG"
+
     return SignalResult(
-        trend=0,
-        all_green=False,
-        all_red=False,
-        green_arrow=False,
-        red_arrow=False,
-        st_trends=[0, 0, 0],
-        st_values=[0.0, 0.0, 0.0],
+        trend=trend,
+        all_green=(trend == 1),
+        all_red=(trend == -1),
+        green_arrow=(trend == 1),
+        red_arrow=(trend == -1),
+        st_trends=[trend, trend, trend],
+        st_values=[ema, ema, ema],
         close_1h=close,
-        score_long=0.0,
-        score_short=0.0,
-        signal_strength="NONE",
-        signal_score=0.0,
+        score_long=score_long,
+        score_short=score_short,
+        signal_strength=signal_strength,
+        signal_score=85.0,
     )
 
 

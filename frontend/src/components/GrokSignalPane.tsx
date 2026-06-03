@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { card, cardHead, cardBody, alpha, c } from '../styles/terminalUI';
 import { useSignals, SignalItem } from '../hooks/useSignals';
-import { useScalpingExecute } from '../hooks/useScalping';
-import { useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
+import { useAlgoMode, useSetAlgoMode, usePlaceOrder } from '../hooks/useSignalAlerts';
 import { useRouterMode, RouterMode } from '../hooks/useRouterMode';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { FuturesCandidatesTable } from './derivatives/FuturesCandidatesTable';
@@ -53,10 +52,14 @@ function SectionCard({ title, right, children }: { title: string; right?: React.
   );
 }
 
-export function GrokSignalPane() {
+import { usePositions } from '../hooks/usePositions';
+
+export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { trackFilter?: string; statusFilter?: string }) {
   const { data } = useSignals();
-  const execute = useScalpingExecute();
+  const execute = usePlaceOrder();
   const algoMode = useAlgoMode();
+  const { data: positionsData } = usePositions();
+  const activePositions = positionsData?.positions || [];
   const algoModeSet = useSetAlgoMode();
   const algoOn = algoMode.data?.enabled ?? false;
   const routerModeObj = useRouterMode();
@@ -65,16 +68,28 @@ export function GrokSignalPane() {
   
   const [expanded, setExpanded] = useState<string>('');
   
-  const signals = data?.signals || [];
-  
+  const getSignalStatus = (s: any) => {
+    if (activePositions.some((p: any) => p.underlying === s.underlying)) return 'open';
+    if (s.direction === 'long' || s.direction === 'short') return 'ready';
+    return 'idle';
+  };
+
+  let signals = data?.signals || [];
+  if (trackFilter !== 'all') signals = signals.filter(s => s.track === trackFilter);
+  if (statusFilter !== 'all') signals = signals.filter(s => getSignalStatus(s) === statusFilter);
+
   const handleExecute = async (s: SignalItem) => {
     try {
       await execute.mutateAsync({
         underlying: s.underlying,
-        strategy: s.strategy || s.track || 'grok',
-        auto: false,
-        override_entry: s.spot_price,
-        override_stop: s.stop_price,
+        direction: s.direction,
+        instrument_type: "futures",
+        size: 1.0,
+        leverage: s.rec_leverage || 5.0,
+        order_type: "market",
+        stop_loss: s.stop_price,
+        take_profit: s.target_price,
+        notes: `[GROK] ${s.track || s.strategy || 'manual'}`,
       });
     } catch (e) {
       console.error(e);
@@ -119,7 +134,11 @@ export function GrokSignalPane() {
               const short = s.direction === 'short';
               const dirColor = long ? 'var(--t-green)' : short ? 'var(--t-red)' : 'var(--t-dim)';
               
-              const pnlData = livePnl.data?.positions.filter(p => p.underlying === s.underlying && p.mode === routerMode) || [];
+              const pnlData = livePnl.data?.positions.filter(p => {
+                if (p.underlying !== s.underlying) return false;
+                if (routerMode === 'live') return !p.is_paper;
+                return p.is_paper;
+              }) || [];
               const isExecuted = pnlData.length > 0;
               const pnl = pnlData[0] || null;
               
@@ -146,9 +165,13 @@ export function GrokSignalPane() {
                     </td>
                     <td style={{ padding: '5px 8px', textAlign: 'right' }}>
                       {isExecuted ? (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.mode || 'PAPER'), 0.1), color: modeColorOf(pnl.mode || 'PAPER') }}>✓ {(pnl.mode || 'PAPER').toUpperCase()}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha(modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'), 0.1), color: modeColorOf(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE') }}>✓ {(algoOn ? 'AUTO-' : '')}{(pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE').toUpperCase()}</span>
                       ) : hasPlan ? (
-                        <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
+                        algoOn ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4, background: alpha('var(--t-dim)', 0.1), color: 'var(--t-dim)' }}>AUTO-PENDING</span>
+                        ) : (
+                          <button disabled={execute.isPending} onClick={(e) => { e.stopPropagation(); handleExecute(s); }} style={{ fontSize: 10, fontWeight: 700, padding: '4px 12px', borderRadius: 4, background: dirColor, color: '#fff', border: 'none', cursor: 'pointer' }}>EXECUTE</button>
+                        )
                       ) : null}
                     </td>
                   </tr>

@@ -16,6 +16,7 @@ import { BacktestPanel } from '../components/BacktestPanel';
 import { GreeksBudgetHeaderChip } from '../components/GreeksBudgetHeaderChip';
 import { ScalpingTab } from '../components/scalping/ScalpingTab';
 import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
+import { GrokTab } from '../components/GrokTab';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
@@ -138,7 +139,7 @@ export function SimpleTerminal() {
   const underlying = useSelectedUnderlying();
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
-  const [activeSection, setActiveSection] = useState<'scalping' | 'positions' | 'backtest'>('scalping');
+  const [activeSection, setActiveSection] = useState<'scalping' | 'grok' | 'positions' | 'backtest'>('scalping');
 
   return (
     <div className="term-root">
@@ -202,9 +203,10 @@ export function SimpleTerminal() {
         }}>
           {([
             ['scalping',   'STERLING ENGINE'],
+            ['grok',       'GROK ENGINE'],
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
-          ] as ['scalping' | 'positions' | 'backtest', string][]).map(([id, label]) => (
+          ] as ['scalping' | 'grok' | 'positions' | 'backtest', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -259,6 +261,9 @@ export function SimpleTerminal() {
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
         {activeSection === 'scalping' && (
           <ScalpingTab />
+        )}
+        {activeSection === 'grok' && (
+          <GrokTab />
         )}
         {activeSection === 'positions' && <PositionsStrip asPage />}
         {activeSection === 'backtest' && (

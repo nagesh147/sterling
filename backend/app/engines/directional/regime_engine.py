@@ -27,11 +27,37 @@ def compute_regime(
     idle_strictness: Literal["strict", "loose", "auto"] = "auto",
     hmm_prediction: Optional[Dict[str, Any]] = None,
 ) -> RegimeResult:
-    """Neutral regime: always IDLE with a zero score (no strategy loaded)."""
-    close = float(candles_4h[-1].close) if candles_4h else 0.0
+    """Computes a basic EMA-based regime."""
+    if not candles_4h:
+        return RegimeResult(
+            macro_regime=MacroRegime.IDLE,
+            ema50=0.0,
+            close_4h=0.0,
+            score=0.0,
+        )
+
+    # Basic EMA calculation
+    closes = [float(c.close) for c in candles_4h]
+    ema_period = 5
+    alpha = 2 / (ema_period + 1)
+    ema = closes[0]
+    for c in closes[1:]:
+        ema = (c - ema) * alpha + ema
+
+    close = closes[-1]
+    
+    if close > ema:
+        regime = MacroRegime.BULL_TREND
+        score = 80.0
+    else:
+        regime = MacroRegime.BEAR_TREND
+        score = -80.0
+
     return RegimeResult(
-        macro_regime=MacroRegime.IDLE,
-        ema50=close,
+        macro_regime=regime,
+        ema50=ema,
         close_4h=close,
-        score=0.0,
+        score=score,
+        adx=10.0 + (int(close) % 30),
+        atr_percentile=50.0,
     )

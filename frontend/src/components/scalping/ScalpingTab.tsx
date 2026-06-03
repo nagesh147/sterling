@@ -235,6 +235,8 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   const allMode = draft.symbols.length === 0;
   const selSet = new Set(draft.symbols);
   const disabledSet = new Set(draft.disabled_symbols ?? []);
+  // Core symbols: always shown as non-deletable toggles, on/off via disabled_symbols.
+  const CORE_SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP'];
   const toggleSym = (s: string) => setDraft((d) => {
     const cur = new Set(d.symbols);
     if (cur.has(s)) cur.delete(s); else cur.add(s);
@@ -242,8 +244,15 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   });
   const toggleCore = (s: string) => setDraft((d) => {
     const dis = new Set(d.disabled_symbols ?? []);
-    if (dis.has(s)) dis.delete(s); else dis.add(s);
-    return { ...d, disabled_symbols: [...dis] };
+    const syms = new Set(d.symbols);
+    const active = syms.has(s) && !dis.has(s);
+    if (active) {
+      dis.add(s);                              // turn off: stays in scope but scanner skips it
+    } else {
+      dis.delete(s);                           // turn on
+      if (d.symbols.length > 0) syms.add(s);   // ensure it's in the restricted scan scope
+    }
+    return { ...d, symbols: [...syms], disabled_symbols: [...dis] };
   });
 
   return (
@@ -452,37 +461,35 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                       {draft.symbols.length === 0 ? (
                         <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Scanning ALL symbols. Add a symbol to restrict scanning.</span>
                       ) : (
-                        draft.symbols.map((s) => {
-                          const isCore = ['BTC', 'ETH', 'SOL'].includes(s);
-                          const isDisabled = disabledSet.has(s);
-                          if (isCore) {
-                            return (
-                              <ChipToggle
-                                key={s}
-                                label={s}
-                                on={!isDisabled}
-                                color="var(--t-blue)"
-                                onChange={() => toggleCore(s)}
-                              />
-                            );
-                          }
-                          return (
-                            <button 
-                              key={s} 
-                              onClick={() => toggleSym(s)} 
-                              style={{ 
-                                ...chipStyle(true), 
-                                background: 'var(--t-blue)15', 
+                        <>
+                          {/* Core symbols: always shown, not deletable, toggle on/off */}
+                          {CORE_SYMBOLS.map((s) => (
+                            <ChipToggle
+                              key={s}
+                              label={s}
+                              on={selSet.has(s) && !disabledSet.has(s)}
+                              color="var(--t-blue)"
+                              onChange={() => toggleCore(s)}
+                            />
+                          ))}
+                          {/* Optional symbols: click × to remove */}
+                          {draft.symbols.filter((s) => !CORE_SYMBOLS.includes(s)).map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => toggleSym(s)}
+                              style={{
+                                ...chipStyle(true),
+                                background: 'var(--t-blue)15',
                                 borderColor: 'var(--t-blue)44',
                                 cursor: 'pointer',
                               }}
                               title="Click to remove"
                             >
-                              {s} 
+                              {s}
                               <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>
                             </button>
-                          );
-                        })
+                          ))}
+                        </>
                       )}
                     </div>
 
@@ -499,7 +506,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                         }}
                       >
                         <option value="" disabled>+ Search & Add optional symbols...</option>
-                        {universe.filter(s => !selSet.has(s)).map(s => (
+                        {universe.filter(s => !selSet.has(s) && !CORE_SYMBOLS.includes(s)).map(s => (
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>

@@ -31,6 +31,12 @@ function loadMode(): 'basic' | 'pro' {
   catch { return 'basic'; }
 }
 
+const ENGINE_KEY = 'sterling_engine_mode';
+function loadEngineMode(): 'sterling' | 'grok' {
+  try { return (localStorage.getItem(ENGINE_KEY) as 'sterling' | 'grok') || 'sterling'; }
+  catch { return 'sterling'; }
+}
+
 const ZOOM_KEY = 'sterling_zoom';
 function loadZoom(): number {
   try { return parseFloat(localStorage.getItem(ZOOM_KEY) || '1') || 1; }
@@ -49,6 +55,8 @@ interface StoreState {
   setTheme: (t: Theme) => void;
   appMode: 'basic' | 'pro';
   setAppMode: (m: 'basic' | 'pro') => void;
+  engineMode: 'sterling' | 'grok';
+  setEngineMode: (m: 'sterling' | 'grok') => void;
   zoomLevel: number;
   setZoomLevel: (z: number) => void;
   resetUI: () => void;
@@ -81,6 +89,11 @@ export const useStore = create<StoreState>((set) => ({
   setAppMode: (m) => {
     try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
     set({ appMode: m });
+  },
+  engineMode: loadEngineMode(),
+  setEngineMode: (m) => {
+    try { localStorage.setItem(ENGINE_KEY, m); } catch { /* ignore */ }
+    set({ engineMode: m });
   },
   zoomLevel: loadZoom(),
   setZoomLevel: (z) => {
@@ -128,3 +141,6 @@ export const useSetAppMode = () => useStore((s) => s.setAppMode);
 export const useZoomLevel = () => useStore((s) => s.zoomLevel);
 export const useSetZoomLevel = () => useStore((s) => s.setZoomLevel);
 export const useResetUI = () => useStore((s) => s.resetUI);
+
+export const useEngineMode = () => useStore((s) => s.engineMode);
+export const useSetEngineMode = () => useStore((s) => s.setEngineMode);
