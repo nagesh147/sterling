@@ -25,6 +25,25 @@ export interface V2Signal {
   regime_ok: boolean;
   conviction: number;
   bar_time: string;
+  profile?: string;
+  underlying?: string;
+  direction?: string;
+  spot_price?: number;
+  current_price?: number;
+  target_price?: number | null;
+  stop_price?: number | null;
+  timestamp_ms?: number;
+  instrument_type?: string;
+  recommended?: boolean;
+  leverage?: number;
+  margin?: number;
+  risk_pct?: number;
+  option_type?: 'call' | 'put';
+  expiry_days?: number;
+  strike?: number;
+  premium?: number;
+  max_loss?: number;
+  breakeven_pct?: number;
 }
 
 export interface V2SignalsResponse {

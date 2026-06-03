@@ -206,11 +206,12 @@ export function SimpleTerminal() {
           borderTop: '1px solid var(--t-border)',
         }}>
           {([
-            ['scalping',   'STERLING ENGINE'],
-            ['grok',       'GROK ENGINE'],
+            ['scalping',    'STERLING ENGINE'],
+            ['grok',        'GROK ENGINE'],
+            ['sterling_v2', 'STERLING V2'],
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
-          ] as ['scalping' | 'grok' | 'positions' | 'backtest', string][]).map(([id, label]) => (
+          ] as ['scalping' | 'grok' | 'sterling_v2' | 'positions' | 'backtest', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -248,19 +249,6 @@ export function SimpleTerminal() {
               {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
             </button>
             <button
-              onClick={() => { const on = !sterlingV2; setSterlingV2(on); if (on) setActiveSection('sterling_v2'); }}
-              title="Toggle SterlingV2 (experimental)"
-              style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
-                padding: '3px 8px', borderRadius: 0, cursor: 'pointer',
-                border: `1px solid ${sterlingV2 ? 'var(--t-amber)' : 'var(--t-border)'}`,
-                background: sterlingV2 ? 'var(--t-amber)' : 'transparent',
-                color: sterlingV2 ? 'var(--t-bg)' : 'var(--t-dim)',
-              }}
-            >
-              STERLING V2
-            </button>
-            <button
               onClick={() => setAppMode('pro')}
               title="Switch to 3-pane Terminal"
               style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}
@@ -282,7 +270,7 @@ export function SimpleTerminal() {
         {activeSection === 'grok' && (
           <GrokTab />
         )}
-        {sterlingV2 && activeSection === 'sterling_v2' && (
+        {activeSection === 'sterling_v2' && (
           <SterlingV2Tab />
         )}
         {activeSection === 'positions' && <PositionsStrip asPage />}

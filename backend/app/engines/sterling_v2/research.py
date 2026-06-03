@@ -109,28 +109,41 @@ def run_v2_book(d: pd.DataFrame, strat: str = V2_STRAT_DEFAULT,
 
 def latest_v2_signal(d: pd.DataFrame, strat: str = V2_STRAT_DEFAULT,
                      adx_min: float = V2_ADX_MIN_DEFAULT, cfg: SimConfig = V2_CFG) -> dict:
-    """Evaluate the kept-lever stack on the LATEST completed bar and return the
-    actionable signal (side, entry/stop/target, regime_ok, conviction). side 0 =
-    no fresh signal. Levels use ATR at the latest bar; entry ~ latest close."""
+    """Evaluate the kept-lever stack to find the most recent signal (even if historical)
+    and return the actionable signal (side, entry/stop/target, regime_ok, conviction).
+    Levels use ATR at the signal bar; entry ~ signal close."""
     longs = S.long_signal(strat, d)
     shorts = S.short_signal(strat, d)
     arr = np.asarray(_adx(d["high"].to_numpy(float), d["low"].to_numpy(float),
                           d["close"].to_numpy(float), 14), float)
     n = len(d)
-    i = n - 1
-    a = float(arr[i - 1]) if i >= 1 and np.isfinite(arr[i - 1]) else 0.0
-    gate_ok = a >= adx_min
-    long_fire = bool(longs[i]) and gate_ok
-    short_fire = bool(shorts[i]) and gate_ok and cfg.allow_short
-    side = 1 if long_fire else (-1 if short_fire else 0)
-    close = float(d["close"].iloc[-1])
-    atr0 = float(d["atr"].iloc[-1])
-    if side == 1:
-        stop, target = close - cfg.sl_mult * atr0, close + cfg.tp_mult * atr0
-    elif side == -1:
-        stop, target = close + cfg.sl_mult * atr0, close - cfg.tp_mult * atr0
-    else:
-        stop = target = None
-    return {"side": side, "entry": close, "stop": stop, "target": target,
-            "regime_ok": bool(gate_ok), "conviction": round(a, 2),
-            "bar_time": str(d.index[-1])}
+    
+    # Scan backwards to find the most recent signal so the UI always has data
+    for i in range(n - 1, 0, -1):
+        a = float(arr[i - 1]) if i >= 1 and np.isfinite(arr[i - 1]) else 0.0
+        gate_ok = a >= adx_min
+        long_fire = bool(longs[i]) and gate_ok
+        short_fire = bool(shorts[i]) and gate_ok and cfg.allow_short
+        side = 1 if long_fire else (-1 if short_fire else 0)
+        
+        if side != 0:
+            close = float(d["close"].iloc[i])
+            atr0 = float(d["atr"].iloc[i])
+            latest_close = float(d["close"].iloc[-1])
+            if side == 1:
+                stop, target = close - cfg.sl_mult * atr0, close + cfg.tp_mult * atr0
+            elif side == -1:
+                stop, target = close + cfg.sl_mult * atr0, close - cfg.tp_mult * atr0
+            else:
+                stop = target = None
+                
+            return {"side": side, "entry": close, "stop": stop, "target": target,
+                    "regime_ok": bool(gate_ok), "conviction": round(a, 2),
+                    "bar_time": str(d.index[i]), "current_price": latest_close, "atr": atr0}
+                    
+    # Fallback if no signal found in history
+    close_val = float(d["close"].iloc[-1]) if not d.empty else 0.0
+    bar_time_val = str(d.index[-1]) if not d.empty else ""
+    return {"side": 0, "entry": close_val, "stop": None, "target": None,
+            "regime_ok": False, "conviction": 0.0,
+            "bar_time": bar_time_val, "current_price": close_val, "atr": 0.0}
