@@ -656,6 +656,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         order_type="market", stop_loss=selector_sl, take_profit=selector_tp,
         option_symbol=selector_option_symbol,
         notes=notes,
+        # Real account NAV so capital-at-risk reports a true % (not /$100k default).
+        account_equity=strat_cfg.account_equity,
     )
     resp = await place_live_order(order, request)
     if selector_route_used and selector_audit_id and resp.status not in ("rejected", "error"):

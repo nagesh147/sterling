@@ -44,6 +44,9 @@ class LiveOrderRequest(BaseModel):
     option_symbol: Optional[str] = None
     option_premium: Optional[float] = None
     notes: str = ""
+    # Account NAV used to report capital-at-risk as a real %. When omitted the
+    # reporter falls back to the legacy $100k denominator (see _capital_at_risk_pct).
+    account_equity: Optional[float] = None
     # Idempotency: caller supplies a stable key per logical order. Duplicate
     # submissions within the live_safety TTL window are rejected and the
     # prior order_id is returned. Optional — auto-generated when omitted.
@@ -489,6 +492,27 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
         )
 
 
+def _capital_at_risk_pct(
+    *, entry_price: float, stop_loss: Optional[float], qty: float,
+    position_value: float, instrument_type: str, account_equity: Optional[float],
+) -> tuple[float, float]:
+    """Return (max_risk_usd, capital_at_risk_pct).
+
+    Real risk = stop distance × coin qty — what you actually lose if stopped out —
+    expressed as a % of the REAL account NAV. The old formula divided by a
+    hardcoded $100k, so a correct 0.25%-risk scalp on a $500 book reported 0.00%.
+    Falls back to a notional estimate when no stop is set, and to the legacy $100k
+    NAV when the caller doesn't supply equity (keeps older callers unchanged).
+    """
+    if stop_loss and entry_price > 0:
+        max_risk = abs(entry_price - stop_loss) * qty
+    else:
+        max_risk = position_value * (0.02 if instrument_type == "futures" else 0.05)
+    nav = account_equity if (account_equity and account_equity > 0) else 100_000.0
+    pct = (max_risk / nav) * 100.0 if entry_price > 0 else 0.0
+    return max_risk, pct
+
+
 def _create_paper_tracking(
     body: LiveOrderRequest, sym: str, entry_price: float,
     order_id: str = "", order_status: str = "filled",
@@ -505,15 +529,14 @@ def _create_paper_tracking(
         qty = contracts * cv              # coin quantity (lots × lot size)
         position_value = qty * entry_price
         # Real risk = distance to the stop × size — what you actually lose if
-        # stopped out — NOT a flat % of notional. The old notional-% formula
-        # reported absurd "capital at risk" (e.g. 54% for a 0.5%-risk trade
-        # whose only sin was a tight stop). Fall back to the notional estimate
-        # only when no stop is set. `qty` (not raw lots) is what moves with price.
-        if body.stop_loss and entry_price > 0:
-            max_risk = abs(entry_price - body.stop_loss) * qty
-        else:
-            max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
-        capital_at_risk = (max_risk / 100_000.0) * 100.0 if entry_price > 0 else 0.0
+        # stopped out — as a % of the REAL account NAV (body.account_equity).
+        # The old formula divided by a hardcoded $100k, so a correct 0.25%-risk
+        # scalp on a $500 book reported 0.00%. `qty` (not raw lots) moves with price.
+        max_risk, capital_at_risk = _capital_at_risk_pct(
+            entry_price=entry_price, stop_loss=body.stop_loss, qty=qty,
+            position_value=position_value, instrument_type=body.instrument_type,
+            account_equity=body.account_equity,
+        )
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
             underlying=sym,
@@ -608,13 +631,13 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
         cv = body.contract_value or 1.0
         qty = contracts * cv              # coin quantity (lots × lot size)
         position_value = qty * spot_price if spot_price > 0 else 0.0
-        # Real risk = stop distance × size, not a flat % of notional (see
-        # _create_paper_tracking). Fall back to notional estimate only without a stop.
-        if body.stop_loss and spot_price > 0:
-            max_risk = abs(spot_price - body.stop_loss) * qty
-        else:
-            max_risk = position_value * 0.02 if body.instrument_type == "futures" else position_value * 0.05
-        capital_at_risk = (max_risk / 100_000.0) * 100.0 if spot_price > 0 else 0.0
+        # Real risk = stop distance × size as a % of the real NAV (see
+        # _capital_at_risk_pct). Fall back to notional estimate only without a stop.
+        max_risk, capital_at_risk = _capital_at_risk_pct(
+            entry_price=spot_price, stop_loss=body.stop_loss, qty=qty,
+            position_value=position_value, instrument_type=body.instrument_type,
+            account_equity=body.account_equity,
+        )
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
             underlying=sym,
