@@ -35,6 +35,7 @@ from app.api.v1.endpoints.derivatives import router as derivatives_router
 from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.api.v1.endpoints.wfo import router as wfo_router
 from app.api.v1.endpoints.vectorized_backtest import router as vectorized_backtest_router
+from app.api.v1.endpoints.sterling_v2 import router as sterling_v2_router
 from app.services import alert_store as _alert_store_svc
 from app.services.db_postgres import init_db_schema
 
@@ -1622,6 +1623,7 @@ def create_app() -> FastAPI:
     app.include_router(risk_dashboard_router, prefix="/api/v1")
     app.include_router(trading_router, prefix="/api/v1")
     app.include_router(derivatives_router, prefix="/api/v1")
+    app.include_router(sterling_v2_router, prefix="/api/v1")
 
     # Scalping strategies (Price Action / SMC / MA Crossover)
     from app.api.v1.endpoints.scalping import router as scalping_router
