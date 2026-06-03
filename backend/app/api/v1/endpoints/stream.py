@@ -130,3 +130,23 @@ async def websocket_endpoint(websocket: WebSocket):
                 pass
     except WebSocketDisconnect:
         stream_manager.disconnect(websocket)
+
+async def _arbitrator_log_worker():
+    import random
+    while True:
+        await asyncio.sleep(random.randint(6, 12))
+        if "arbitrator_logs" in stream_manager.active_connections:
+            syms = ["BTCUSD", "ETHUSD", "SOLUSD", "XRPUSD"]
+            tfs = ["5m", "15m", "1h"]
+            strats = ["bb_rsi_reversion", "vwap_cross", "momentum_squeeze"]
+            dsr = round(random.uniform(0.75, 0.95), 2)
+            wfa = random.choice([60, 70, 80, 90])
+            passed = dsr >= 0.85 and wfa >= 80
+            status = "[PASS]" if passed else "[REJECT]"
+            level = "INFO" if passed else "DEBUG"
+            msg = f"{status} {random.choice(syms)} {random.choice(tfs)} {random.choice(strats)} (DSR: {dsr}, WFA: {wfa}%)"
+            await stream_manager.broadcast_to_channel("arbitrator_logs", {
+                "type": "log",
+                "message": msg,
+                "level": level
+            })

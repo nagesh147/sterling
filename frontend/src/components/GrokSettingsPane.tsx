@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { card, cardHead, cardBody, c, alpha } from '../styles/terminalUI';
 
 /* ── UI Helpers ──────────────────────────────────────────────────────────── */
@@ -105,19 +105,38 @@ export function GrokSettingsPane() {
     return `{${Object.keys(obj).sort().map(k => `"${k}":${stableStringify(obj[k])}`).join(',')}}`;
   };
 
-  // We are dirty if draft does not equal the "saved" configuration.
-  // For UI parity, we compare draft directly to DEFAULT_CONFIG since we are just mocking the save.
-  // Ideally this would compare against a loaded `cfg` prop.
-  const dirty = stableStringify(draft) !== stableStringify(DEFAULT_CONFIG);
+  useEffect(() => {
+    fetch('http://localhost:8000/api/v1/grok/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data && !data.detail) {
+          setDraft(data);
+          // To track original state and dirty checks
+          (window as any).__GROK_SAVED_CONFIG = stableStringify(data);
+        }
+      })
+      .catch(err => console.error("Failed to load grok config:", err));
+  }, []);
+
+  const savedConfigStr = (window as any).__GROK_SAVED_CONFIG || stableStringify(DEFAULT_CONFIG);
+  const dirty = stableStringify(draft) !== savedConfigStr;
 
   const onSave = () => {
     setSaving(true);
-    setTimeout(() => {
-      // Typically this would save to the backend. We'll just reset the dirty state for now by updating the "saved" config.
-      // Since DEFAULT_CONFIG is static here, the UI will always show dirty if you change from defaults.
-      // But we simulate the loading state to match ScalpingTab parity.
-      setSaving(false);
-    }, 500);
+    fetch('http://localhost:8000/api/v1/grok/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(draft)
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data && !data.detail) {
+          setDraft(data);
+          (window as any).__GROK_SAVED_CONFIG = stableStringify(data);
+        }
+      })
+      .catch(err => console.error("Failed to save grok config:", err))
+      .finally(() => setSaving(false));
   };
 
   const setField = <K extends keyof typeof DEFAULT_CONFIG>(k: K, v: typeof DEFAULT_CONFIG[K]) => {

@@ -4,15 +4,15 @@ import { GrokSignalPane } from './GrokSignalPane';
 import { GrokSettingsPane } from './GrokSettingsPane';
 import { GrokLogsPane } from './GrokLogsPane';
 import { useSignals } from '../hooks/useSignals';
-import { usePositions } from '../hooks/usePositions';
+import { useLivePnl } from '../hooks/useLivePnl';
 import { ExecLog } from './scalping/ScalpingTab';
 import { useRouterMode } from '../hooks/useRouterMode';
 import { card, alpha } from '../styles/terminalUI';
 
 export function GrokTab() {
   const { data } = useSignals();
-  const { data: positionsData } = usePositions();
-  const activePositions = positionsData?.positions || [];
+  const livePnl = useLivePnl();
+  const activePositions = livePnl.data?.positions || [];
   const { mode: routerMode } = useRouterMode();
   
   const [trackFilter, setTrackFilter] = useState('all');
@@ -24,7 +24,7 @@ export function GrokTab() {
   const signals = data?.signals || [];
   
   const getSignalStatus = (s: any) => {
-    if (activePositions.some((p: any) => p.underlying === s.underlying)) return 'open';
+    if (activePositions.some((p: any) => p.underlying === s.underlying && p.direction === s.direction)) return 'open';
     if (s.direction === 'long' || s.direction === 'short') return 'ready';
     return 'idle';
   };
@@ -124,15 +124,15 @@ export function GrokTab() {
           <LeftSection label="Status" collapsible defaultOpen>
             {renderNavGroup(statusNavItems, statusFilter, setStatusFilter)}
           </LeftSection>
-          <LeftSection label="Exec Log" collapsible defaultOpen>
-            <div style={{ marginTop: 8 }}>
+          <LeftSection label={`Execution Log · ${routerMode ? routerMode.toUpperCase() : 'PAPER'}`} collapsible defaultOpen={execLog.length > 0} border={false}>
+            <div style={{ marginTop: 0 }}>
               <ExecLog entries={execLog} mode={routerMode || 'PAPER'} />
               {execLog.length > 0 && (
                 <button onClick={() => setExecLog([])} style={{
                   fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
                   background: 'transparent', border: '1px solid var(--t-border)',
                   color: 'var(--t-dim)', cursor: 'pointer', marginTop: 8, width: '100%'
-                }}>CLEAR EXEC LOG</button>
+                }}>CLEAR LOG</button>
               )}
             </div>
           </LeftSection>

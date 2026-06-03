@@ -65,9 +65,8 @@ function SectionCard({ title, right, children }: { title: string; right?: React.
 export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', profileFilter = 'all', logExec }: { trackFilter?: string; statusFilter?: string; profileFilter?: string; logExec?: (e: any) => void }) {
   const { data } = useSignals();
   const execute = usePlaceOrder();
-  const { data: positionsData } = usePositions();
-  const activePositions = positionsData?.positions || [];
   const algoMode = useAlgoMode();
+
   const algoOn = algoMode.data?.enabled ?? false;
   const routerModeObj = useRouterMode();
   const routerMode = routerModeObj.mode || 'paper';
@@ -76,8 +75,9 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
   const [expanded, setExpanded] = useState<string>('');
   const autoExecRef = useRef<Set<string>>(new Set());
   const acceptedRef = useRef<Set<string>>(new Set());
+  const activePositions = livePnl.data?.positions || [];
   const getSignalStatus = (s: any) => {
-    if (activePositions.some((p: any) => p.underlying === s.underlying)) return 'open';
+    if (activePositions.some((p: any) => p.underlying === s.underlying && p.direction === s.direction)) return 'open';
     if (s.direction === 'long' || s.direction === 'short') return 'ready';
     return 'idle';
   };
@@ -131,7 +131,8 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
     // Clear accepted items that are no longer open (or failed previously)
     for (const key of acceptedRef.current) {
       const symbol = key.split('-')[0];
-      if (!activePositions.some((p: any) => p.underlying === symbol)) {
+      const direction = key.split('-')[1];
+      if (!activePositions.some((p: any) => p.underlying === symbol && p.direction === direction)) {
         acceptedRef.current.delete(key);
         autoExecRef.current.delete(key);
       }
@@ -162,8 +163,8 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
         <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 11 }}>
           <thead>
             <tr style={{ background: c.surface, color: c.muted, fontSize: 9, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Dyn SL', 'Target', 'Risk', 'Strategy', 'P&L', 'Type', ''].map((h, i) => (
-                <th key={i} style={{ padding: '5px 8px', textAlign: i >= 11 ? 'right' : 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>{h}</th>
+              {['Symbol', 'ID', 'Time', 'Status', 'Direction', 'Entry', 'Current', 'Dyn SL', 'Target', 'Spent', 'Risk', 'Strategy', 'P&L', 'Type', ''].map((h, i) => (
+                <th key={i} style={{ padding: '5px 8px', textAlign: i >= 12 ? 'right' : 'left', borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -186,6 +187,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
               
               const pnlData = livePnl.data?.positions.filter(p => {
                 if (p.underlying !== s.underlying) return false;
+                if (p.direction !== s.direction) return false;
                 if (routerMode === 'live') return !p.is_paper;
                 return p.is_paper;
               }) || [];
@@ -233,10 +235,35 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                       })()}
                     </td>
                     <td style={{ padding: '5px 8px', color: 'var(--t-red)' }}>
-                      {hasPlan ? fmtUsd(isExecuted && pnl?.current_sl ? pnl.current_sl : s.stop_price) : '—'}
+                      {(() => {
+                        if (!hasPlan) return '—';
+                        const initSl = isExecuted ? (pnl?.initial_sl ?? s.stop_price ?? 0) : (s.stop_price ?? 0);
+                        const currSl = isExecuted ? pnl?.current_sl : null;
+                        if (!currSl || currSl === initSl) {
+                           return fmtUsd(initSl);
+                        }
+                        const diff = long ? (currSl - initSl) : (initSl - currSl);
+                        const sign = diff >= 0 ? '+' : '';
+                        return (
+                          <span style={{ whiteSpace: 'nowrap' }}>
+                            <del style={{ opacity: 0.5 }}>{fmtUsd(initSl)}</del>
+                            <span style={{ fontSize: 11, marginLeft: 4, opacity: 0.8 }}>({sign}{diff.toFixed(1)})</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '5px 8px', color: 'var(--t-amber)' }}>
                       {hasPlan ? fmtUsd(isExecuted && pnl?.current_tp ? pnl.current_tp : s.target_price) : '—'}
+                    </td>
+                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>
+                      {(() => {
+                        if (!hasPlan) return '—';
+                        const entryPx = isExecuted && pnl ? (pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) : s.spot_price;
+                        if (!entryPx) return '—';
+                        const qty = pnl?.contracts || 1.0;
+                        const lev = s.rec_leverage || 1.0;
+                        return fmtUsd((entryPx * qty) / lev);
+                      })()}
                     </td>
                     <td style={{ padding: '5px 8px', fontFamily: 'monospace', color: 'var(--t-text)' }}>
                       {(() => {
@@ -275,7 +302,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                   </tr>
                   {isExp && (
                     <tr style={{ background: alpha(statusColor, 0.04), borderBottom: `1px solid ${c.border2}` }}>
-                      <td colSpan={14} style={{ padding: '12px 14px' }}>
+                      <td colSpan={15} style={{ padding: '12px 14px' }}>
                         {isExecuted && pnl ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
@@ -291,26 +318,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
                               {pnl.status === 'closed' && (
                                 <MetricItem label="Exit" value={fmtUsd(pnl.current_spot)} />
                               )}
-                              {(() => {
-                                const initSl = pnl.initial_sl ?? s.stop_price;
-                                const currSl = pnl.current_sl;
-                                if (!currSl || initSl === currSl) {
-                                  return <MetricItem label="Initial SL" value={fmtUsd(initSl)} color="var(--t-red)" />;
-                                }
-                                const diff = long ? (currSl - initSl) : (initSl - currSl);
-                                const sign = diff >= 0 ? '+' : '';
-                                return (
-                                  <MetricItem 
-                                    label="Dyn SL" 
-                                    value={
-                                      <span style={{ color: 'var(--t-red)', whiteSpace: 'nowrap' }}>
-                                        <del style={{ opacity: 0.5 }}>{fmtUsd(initSl)}</del> {fmtUsd(currSl)}{' '}
-                                        <span style={{fontSize: 10, opacity: 0.8}}>({sign}{diff.toFixed(1)})</span>
-                                      </span>
-                                    } 
-                                  />
-                                );
-                              })()}
+                              <MetricItem label="Initial SL" value={fmtUsd(pnl.initial_sl ?? s.stop_price ?? 0)} color="var(--t-red)" />
                               <MetricItem label="Target" value={fmtUsd(pnl.initial_tp ?? s.target_price)} color="var(--t-amber)" />
                               <MetricItem label="Notional" value={fmtUsd((pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) * (pnl.contracts || 1.0))} />
                               

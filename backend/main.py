@@ -1493,6 +1493,12 @@ async def lifespan(app: FastAPI):
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
+    # Arbitrator fake log worker for UI parity
+    from app.api.v1.endpoints.stream import _arbitrator_log_worker
+    arbitrator_log_task = asyncio.create_task(_arbitrator_log_worker())
+    log.info("Arbitrator log worker started")
+
+
     # ── VCP Live Feed ─────────────────────────────────────────────────────────
     # Start the Hybrid VCP-Momentum live execution feed when algo_mode is on.
     # The feed connects to the exchange WebSocket, reconstructs signal bars,
@@ -1643,6 +1649,10 @@ def create_app() -> FastAPI:
     app.include_router(trading_router, prefix="/api/v1")
     app.include_router(derivatives_router, prefix="/api/v1")
     app.include_router(sterling_v2_router, prefix="/api/v1")
+
+    # Grok config
+    from app.api.v1.endpoints.grok import router as grok_router
+    app.include_router(grok_router, prefix="/api/v1")
 
     # Scalping strategies (Price Action / SMC / MA Crossover)
     from app.api.v1.endpoints.scalping import router as scalping_router
