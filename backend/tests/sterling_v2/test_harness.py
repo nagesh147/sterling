@@ -109,6 +109,35 @@ def test_both_touched_resolves_sl_first_long():
     assert res.returns[0] < 0  # SL-first => exit at 99, a loss
 
 
+def test_exit_policy_trailing_locks_in_more_than_static():
+    # Rising-then-falling: the static SL (98) never triggers, so without trailing
+    # the trade rides to the time-stop near 100 (~0%). The ATR trail ratchets up
+    # behind the run-up and stops out ~113.6, locking a much bigger gain -- and
+    # exits earlier (fewer bars held).
+    from app.engines.sterling_v2.exits import TrailingExit
+    df = _synth([100, 102, 105, 110, 115, 112, 108, 104, 100])
+    sigs = np.array([True] + [False] * 8)
+    cfg = SimConfig(sl_mult=2.0, tp_mult=99, slippage=0.0, fee_round_trip=0.0,
+                    max_hold_bars=7)
+    static = H.simulate(df, sigs, None, cfg)
+    trailed = H.simulate(df, sigs, None, cfg, exit_policy=TrailingExit(1.5, 1.0))
+    assert len(static.returns) == 1 and len(trailed.returns) == 1
+    assert trailed.returns[0] > static.returns[0]
+    assert trailed.bars_held[0] < static.bars_held[0]  # trail exited earlier
+
+
+def test_exit_policy_does_not_fire_on_entry_bar():
+    # The entry bar keeps the STATIC stop (no trailing update at i == ein), so a
+    # trail that would only arm after one bar cannot retro-stop the entry bar.
+    from app.engines.sterling_v2.exits import TrailingExit
+    df = _synth([100, 101, 102, 103])
+    sigs = np.array([True, False, False, False])
+    cfg = SimConfig(sl_mult=2.0, tp_mult=99, slippage=0.0, fee_round_trip=0.0,
+                    max_hold_bars=2)
+    res = H.simulate(df, sigs, None, cfg, exit_policy=TrailingExit(1.5, 1.0))
+    assert len(res.returns) == 1 and res.bars_held[0] >= 1
+
+
 def test_btc_ma_crossover_matches_grounding():
     """The harness must independently reproduce the independent-grounding result for
     ma_crossover 4h BTC long-only: ~163 trades, win 42.9%, PF 1.26, DD -27.7%,

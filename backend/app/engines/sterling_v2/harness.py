@@ -8,6 +8,12 @@ from .config import SimConfig
 # Entry filter: (df, i) -> bool (allow entry at bar i). Uses only bars <= i-1.
 EntryFilter = Callable[[pd.DataFrame, int], bool]
 
+# Exit policy (optional): an object with
+#   init_state(initial_stop) -> state          (called once at each entry), and
+#   __call__(prev_high, prev_low, entry, atr0, side, state) -> new_stop
+# It updates the working stop using ONLY the previous bar's extremes, so the stop
+# applied during bar i depends only on bars <= i-1 (no intrabar lookahead).
+
 
 @dataclass
 class SimResult:
@@ -22,10 +28,13 @@ def simulate(df: pd.DataFrame,
              long_sigs: np.ndarray,
              short_sigs: Optional[np.ndarray],
              cfg: SimConfig,
-             entry_filter: Optional[EntryFilter] = None) -> SimResult:
+             entry_filter: Optional[EntryFilter] = None,
+             exit_policy: Optional[object] = None) -> SimResult:
     """Sequential, non-overlapping. Entry fills at NEXT bar open (+/- slippage).
     First-touch SL/TP with slippage on stops; funding drag per bar held.
-    Short side mirrored when cfg.allow_short and short_sigs provided."""
+    Short side mirrored when cfg.allow_short and short_sigs provided.
+    When exit_policy is given, the working stop is trailed each in-position bar
+    using only the PREVIOUS bar's high/low (leak-free); TP and time-stop unchanged."""
     o = df["open"].to_numpy(float); h = df["high"].to_numpy(float)
     l = df["low"].to_numpy(float);  c = df["close"].to_numpy(float)
     atr = df["atr"].to_numpy(float)
@@ -34,7 +43,7 @@ def simulate(df: pd.DataFrame,
     short_sigs = short_sigs if short_sigs is not None else np.zeros(n, bool)
 
     rets: list[float] = []; etimes = []; held = []; sides = []
-    pos = 0; ein = -1; entry = sl = tp = 0.0; side = 0
+    pos = 0; ein = -1; entry = sl = tp = atr0 = 0.0; side = 0; exit_state = None
     fee = cfg.fee_round_trip; slip = cfg.slippage; fund = cfg.funding_per_bar
     i = 0
     while i < n:
@@ -53,9 +62,15 @@ def simulate(df: pd.DataFrame,
                 else:
                     entry = o[i + 1] * (1 - slip)
                     sl = entry + cfg.sl_mult * atr[i]; tp = entry - cfg.tp_mult * atr[i]
+                atr0 = atr[i]
+                exit_state = (exit_policy.init_state(sl)
+                              if exit_policy is not None else None)
                 pos = side; ein = i + 1; i += 1; continue
             i += 1; continue
-        # in position
+        # in position -- trail the stop using only the PREVIOUS bar (i-1), then
+        # check first-touch against the CURRENT bar (no intrabar lookahead).
+        if exit_policy is not None and i > ein:
+            sl = exit_policy(h[i - 1], l[i - 1], entry, atr0, pos, exit_state)
         exit_px = None
         if pos == 1:
             if l[i] <= sl: exit_px = sl * (1 - slip)
