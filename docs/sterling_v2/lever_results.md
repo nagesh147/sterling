@@ -63,3 +63,24 @@ trail_mult selected on VALIDATION (never test); be_at_r=1.0. KEEP = improves tes
 
 **Verdict: REJECT trailing as a default lever (for these trend edges).** It improves test Sharpe in only 3/12 cells while cutting max-DD in 8/12 -- it trims BOTH tails (smaller losses and smaller wins), which lowers risk-adjusted return on trend-following entries whose edge is letting winners run to the 3.5xATR target. The validation-selected trail_mult also generalizes poorly (e.g. SOL ma_crossover val-best -> test Sharpe +0.23->-3.07; ETH ma_crossover -0.50->-2.69) -- an overfit signature. Static SL/TP is the more robust exit; drawdown is instead contained by the portfolio DD circuit breaker (lever 5), which does not pay this Sharpe penalty. The exit_policy hook is kept (tested, leak-free) but OFF in the default V2 stack; available per-book for future strategies that suit it (only the already-broken ETH/SOL price_action-type books benefited).
 
+## Lever 4 -- Vol-targeted sizing vs equal sizing (long-only, mean-normalized), TEST slice @ 4h
+
+Weights mean-normalized to 1.0 so both books carry equal average exposure -- any delta is the sizing SHAPE alone (independent of target_vol). KEEP = improves test Sharpe.
+
+| Symbol | Strategy | Equal Sh | Equal DD% | Vol-sized Sh | Vol-sized DD% | Vol-sized Net% | n | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| BTCUSD | ma_crossover | -0.69 | -22 | -0.77 | -24 | -15 | 34 | reject |
+| BTCUSD | breakout | -1.99 | -19 | -1.85 | -19 | -16 | 20 | **KEEP** |
+| BTCUSD | smc | -1.36 | -20 | -1.38 | -18 | -22 | 29 | reject |
+| BTCUSD | price_action | -1.28 | -25 | -1.11 | -25 | -17 | 25 | **KEEP** |
+| ETHUSD | ma_crossover | -0.50 | -24 | +0.09 | -21 | -2 | 22 | **KEEP** |
+| ETHUSD | breakout | -2.04 | -26 | -1.54 | -22 | -17 | 20 | **KEEP** |
+| ETHUSD | smc | -0.22 | -20 | -0.12 | -20 | -7 | 26 | **KEEP** |
+| ETHUSD | price_action | -2.06 | -36 | -0.95 | -29 | -20 | 24 | **KEEP** |
+| SOLUSD | ma_crossover | +0.23 | -24 | +1.40 | -20 | +24 | 25 | **KEEP** |
+| SOLUSD | breakout | -3.33 | -42 | -1.88 | -39 | -24 | 22 | **KEEP** |
+| SOLUSD | smc | -1.09 | -29 | -0.22 | -27 | -7 | 24 | **KEEP** |
+| SOLUSD | price_action | -2.95 | -32 | -1.97 | -47 | -41 | 24 | **KEEP** |
+
+**Verdict: KEEP vol-targeted sizing.** Improves test Sharpe in 10/12 cells and max-DD in 9/12 at EQUAL average exposure -- so the gain is the redistribution (down-weighting trades that follow high-vol bars), not added leverage. It is computed on the full trade set (no thinning) and helps consistently across 12 independent cells, which is structural rather than small-sample noise. It never adds entries so it cannot hurt the trade count, and its leverage/DD benefit compounds further at the portfolio layer (lever 5). Firm confirmation on the combined stack in Task 15.
+
