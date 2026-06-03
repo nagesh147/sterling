@@ -58,23 +58,36 @@ def size_trade(
         max_pos_usd = risk_params.capital * risk_params.max_position_pct
         contracts = max_pos_usd * leverage / entry_price
         
-    # Floor to 1 if it makes sense, but respect max_contracts
-    contracts = max(1.0, contracts)
-    contracts = min(contracts, float(risk_params.max_contracts))
+    # Determine contract_value (lot size) based on underlying symbol
+    contract_value = 1.0
+    if underlying:
+        sym = underlying.upper().replace('USD', '')
+        if sym == 'BTC': contract_value = 0.001
+        elif sym == 'ETH': contract_value = 0.01
+        elif sym == 'SOL': contract_value = 1.0
+        elif sym == 'XRP': contract_value = 100.0
+
+    # `contracts` here is currently number of COINS. Convert to number of LOTS.
+    lots = contracts / contract_value
+
+    # Floor to 1 lot if it makes sense, but respect max_contracts (which we'll assume is in lots)
+    lots = max(1.0, lots)
+    lots = min(lots, float(risk_params.max_contracts))
     
     # Early entry haircut
     if early_entry and risk_params.enable_early_entry:
-        contracts *= 0.5
+        lots *= 0.5
         
     # Cap to integer for SizedTrade schema compatibility
-    contracts = int(round(contracts))
+    contracts_int = int(round(lots))
     
-    pos_value = contracts * entry_price / leverage
+    pos_value = (contracts_int * contract_value) * entry_price / leverage
     
     return SizedTrade(
         structure=structure,
-        contracts=contracts,
+        contracts=contracts_int,
+        contract_value=contract_value,
         position_value=pos_value,
-        max_risk_usd=contracts * structure.max_loss,
+        max_risk_usd=(contracts_int * contract_value) * structure.max_loss,
         capital_at_risk_pct=risk_pct,
     )

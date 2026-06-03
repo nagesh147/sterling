@@ -1020,7 +1020,7 @@ function ListGroupHeader({ label, count, color, collapsible, defaultOpen, onTogg
 
 // Visible execution log — proves whether ready signals are firing in the current
 // mode (and, when they don't, why the backend rejected them).
-function ExecLog({ entries, mode }: {
+export function ExecLog({ entries, mode }: {
   entries: { ts: number; key: string; mode: string; ok: boolean; status: string; reason: string; auto: boolean }[];
   mode: string;
 }) {

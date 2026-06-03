@@ -19,6 +19,15 @@ const MODE_HINT: Record<RouterMode, string> = {
   live: 'Real money — orders execute on the exchange.',
 };
 
+function MetricItem({ label, value, color }: { label: string; value: React.ReactNode; color?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 60 }}>
+      <span style={{ fontSize: 9, letterSpacing: '0.07em', color: 'var(--t-dim)', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: color || 'var(--t-bright)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
+    </div>
+  );
+}
+
 function ModeSelector({ mode, onChange }: { mode: RouterMode; onChange: (m: RouterMode) => void }) {
   const pick = (m: RouterMode) => { if (m !== mode) onChange(m); };
   return (
@@ -54,13 +63,12 @@ function SectionCard({ title, right, children }: { title: string; right?: React.
 
 import { usePositions } from '../hooks/usePositions';
 
-export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { trackFilter?: string; statusFilter?: string }) {
+export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', profileFilter = 'all', logExec }: { trackFilter?: string; statusFilter?: string; profileFilter?: string; logExec?: (e: any) => void }) {
   const { data } = useSignals();
   const execute = usePlaceOrder();
-  const algoMode = useAlgoMode();
   const { data: positionsData } = usePositions();
   const activePositions = positionsData?.positions || [];
-  const algoModeSet = useSetAlgoMode();
+  const algoMode = useAlgoMode();
   const algoOn = algoMode.data?.enabled ?? false;
   const routerModeObj = useRouterMode();
   const routerMode = routerModeObj.mode || 'paper';
@@ -76,13 +84,15 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { 
 
   let signals = data?.signals || [];
   if (trackFilter !== 'all') signals = signals.filter(s => s.track === trackFilter);
+  if (profileFilter !== 'all') signals = signals.filter(s => (s.profile?.toLowerCase() || 'scalping') === profileFilter);
   if (statusFilter !== 'all') signals = signals.filter(s => getSignalStatus(s) === statusFilter);
 
   const handleExecute = async (s: SignalItem) => {
+    const key = `${s.underlying}-${s.direction}`;
     try {
-      await execute.mutateAsync({
+      const resp = await execute.mutateAsync({
         underlying: s.underlying,
-        direction: s.direction,
+        direction: s.direction as any,
         instrument_type: "futures",
         size: 1.0,
         leverage: s.rec_leverage || 5.0,
@@ -91,8 +101,10 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { 
         take_profit: s.target_price,
         notes: `[GROK] ${s.track || s.strategy || 'manual'}`,
       });
-    } catch (e) {
+      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: !!resp?.accepted, status: resp?.status || 'sent', reason: resp?.reason || '', auto: false });
+    } catch (e: any) {
       console.error(e);
+      if (logExec) logExec({ ts: Date.now(), key, mode: routerMode.toUpperCase(), ok: false, status: 'error', reason: e.message, auto: false });
     }
   };
 
@@ -226,16 +238,64 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all' }: { 
                   {isExp && (
                     <tr style={{ background: alpha(statusColor, 0.04), borderBottom: `1px solid ${c.border2}` }}>
                       <td colSpan={14} style={{ padding: '12px 14px' }}>
-                        <div style={{ fontSize: 11, color: 'var(--t-text)' }}>
-                          <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK:</span> {s.track || '—'}</div>
-                          {s.mtf_breakdown && (
-                            <div style={{ marginTop: 4 }}>
-                              <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>MTF ALIGNMENT:</span> {s.mtf_breakdown.alignment_label}
+                        {isExecuted && pnl ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--t-green)', letterSpacing: '0.02em' }}>
+                                ✓ {algoOn ? 'Auto-executed' : 'Manual-executed'} on {pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'}
+                              </span>
+                              <span style={{ fontSize: 9, color: 'var(--t-dim)', fontVariantNumeric: 'tabular-nums' }}>{fmtTime(pnl.timestamp_ms || s.timestamp_ms)}</span>
+                              <span style={{ fontSize: 11, color: 'var(--t-dim)', marginLeft: 4 }}>{pnl.status === 'closed' ? 'closed' : 'open'}</span>
                             </div>
-                          )}
-                          <div style={{ marginTop: 4 }}><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>STATE:</span> {s.state}</div>
-                          {s.veto_reason && <div style={{ marginTop: 4, color: 'var(--t-amber)' }}>⚠ {s.veto_reason}</div>}
-                        </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', paddingTop: 4 }}>
+                              <MetricItem label="Qty" value={fmt(pnl.size || 1.0000, 4)} />
+                              <MetricItem label="Entry" value={fmtUsd(pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price)} />
+                              {pnl.status === 'closed' && (
+                                <MetricItem label="Exit" value={fmtUsd(pnl.exit_price_real ?? pnl.current_spot)} />
+                              )}
+                              <MetricItem label="Initial SL" value={fmtUsd(pnl.initial_sl ?? s.stop_price)} color="var(--t-red)" />
+                              <MetricItem label="Target" value={fmtUsd(pnl.initial_tp ?? s.target_price)} color="var(--t-amber)" />
+                              <MetricItem label="Notional" value={fmtUsd((pnl.entry_price_real ?? pnl.entry_spot ?? s.spot_price) * (pnl.size || 1.0))} />
+                              
+                              {(() => {
+                                const pnlVal = pnl.status === 'closed' ? pnl.realized_pnl_usd : pnl.estimated_pnl_usd;
+                                const pnlColor = pnlVal == null ? 'var(--t-dim)' : pnlVal >= 0 ? 'var(--t-green)' : 'var(--t-red)';
+                                return (
+                                  <MetricItem 
+                                    label={pnl.status === 'closed' ? 'Realized P&L' : 'Open P&L'} 
+                                    value={pnlVal == null ? '—' : `${pnlVal >= 0 ? '+' : '−'}${fmtUsd(Math.abs(pnlVal))}`} 
+                                    color={pnlColor} 
+                                  />
+                                );
+                              })()}
+                              
+                              <MetricItem label="Trail" value={pnl.trail_mode || 'percentage'} color="var(--t-blue)" />
+                              <MetricItem label="Order" value={pnl.status === 'closed' ? 'closed' : 'filled'} color={pnl.status === 'closed' ? 'var(--t-dim)' : 'var(--t-green)'} />
+                              <MetricItem label="Mode" value={pnl.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE'} color="var(--t-blue)" />
+                              <MetricItem label="Profile" value={s.profile || 'SCALPING'} color="var(--t-bright)" />
+                              <MetricItem label="Pattern" value={s.strategy ? s.strategy.replace(/_/g, ' ') : '—'} color="var(--t-amber)" />
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--t-text)', marginTop: 8, display: 'flex', gap: 16 }}>
+                              <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK:</span> {s.track || '—'}</div>
+                              <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>STATE:</span> {s.state}</div>
+                              {s.mtf_breakdown && (
+                                <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>MTF ALIGNMENT:</span> {s.mtf_breakdown.alignment_label}</div>
+                              )}
+                              {s.veto_reason && <div style={{ color: 'var(--t-amber)' }}>⚠ {s.veto_reason}</div>}
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 11, color: 'var(--t-text)' }}>
+                            <div><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>TRACK:</span> {s.track || '—'}</div>
+                            {s.mtf_breakdown && (
+                              <div style={{ marginTop: 4 }}>
+                                <span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>MTF ALIGNMENT:</span> {s.mtf_breakdown.alignment_label}
+                              </div>
+                            )}
+                            <div style={{ marginTop: 4 }}><span style={{ color: 'var(--t-dim)', fontWeight: 600 }}>STATE:</span> {s.state}</div>
+                            {s.veto_reason && <div style={{ marginTop: 4, color: 'var(--t-amber)' }}>⚠ {s.veto_reason}</div>}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}

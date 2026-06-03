@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { card, cardHead, cardBody, c, alpha } from '../styles/terminalUI';
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
@@ -11,6 +11,64 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 export function GrokLogsPane() {
+  const [logs, setLogs] = useState<{msg: string, time: string, color: string}[]>([
+    {msg: "Engine initialized. Loading edge configurations...", time: "10:45:02", color: c.dim},
+    {msg: "[PASS] BTCUSD 15m bb_rsi_reversion (DSR: 0.88, WFA: 80%)", time: "10:45:03", color: c.green},
+    {msg: "[PASS] SOLUSD 15m vwap_cross (DSR: 0.84, WFA: 60%)", time: "10:45:03", color: c.green},
+    {msg: "Arbitrator active. Awaiting signals.", time: "10:45:06", color: c.amber}
+  ]);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    let ws: WebSocket;
+    let reconnectTimer: NodeJS.Timeout;
+
+    const connect = () => {
+      ws = new WebSocket(`ws://${window.location.hostname}:8000/api/v1/stream/ws`);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ action: "subscribe", channel: "arbitrator_logs" }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.type === "log" && data.message) {
+            let color = c.bright;
+            if (data.level === "ERROR" || data.level === "CRITICAL") color = c.red;
+            else if (data.level === "WARNING") color = c.amber;
+            else if (data.level === "DEBUG") color = c.dim;
+
+            const timeMatch = data.message.match(/^(\d{2}:\d{2}:\d{2})/);
+            const timeStr = timeMatch ? timeMatch[1] : new Date().toLocaleTimeString('en-US', {hour12: false});
+            let cleanMsg = data.message;
+            if (timeMatch) {
+              cleanMsg = cleanMsg.substring(timeMatch[0].length).trim();
+            }
+
+            setLogs(prev => {
+              const newLogs = [...prev, { msg: cleanMsg, time: timeStr, color }];
+              if (newLogs.length > 50) return newLogs.slice(newLogs.length - 50);
+              return newLogs;
+            });
+          }
+        } catch (e) { }
+      };
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (ws) ws.close();
+    };
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
       <SectionCard title="ARBITRATOR LOGS">
@@ -20,20 +78,18 @@ export function GrokLogsPane() {
           display: 'flex', 
           flexDirection: 'column', 
           gap: 6,
-          lineHeight: 1.4
+          lineHeight: 1.4,
+          maxHeight: '400px',
+          overflowY: 'auto'
         }}>
-          <div style={{ color: c.dim }}>[10:45:02] Engine initialized. Loading edge configurations...</div>
-          <div style={{ color: c.bright }}>[10:45:03] <span style={{ color: c.green, fontWeight: 700 }}>[PASS]</span> BTCUSD 15m bb_rsi_reversion (DSR: 0.88, WFA: 80%)</div>
-          <div style={{ color: c.bright }}>[10:45:03] <span style={{ color: c.green, fontWeight: 700 }}>[PASS]</span> SOLUSD 15m vwap_cross (DSR: 0.84, WFA: 60%)</div>
-          <div style={{ color: c.dim }}>[10:45:04] <span style={{ color: c.red, fontWeight: 700 }}>[REJECT]</span> ETHUSD 5m vwap_cross (WFA Failure: 40%)</div>
-          <div style={{ color: c.dim }}>[10:45:04] <span style={{ color: c.red, fontWeight: 700 }}>[REJECT]</span> SOLUSD 5m bb_rsi_reversion (DSR &lt; 0.85)</div>
-          <div style={{ color: c.bright }}>[10:45:05] Running Pearson correlation scan across surviving edges...</div>
-          <div style={{ color: c.bright }}>[10:45:05] <span style={{ color: c.green, fontWeight: 700 }}>[CLEAR]</span> Correlation scan passed. No edges exceed 0.50 overlap.</div>
-          <div style={{ color: c.amber, marginTop: 8, padding: '4px 8px', background: alpha(c.amber, 0.1), borderRadius: 4, border: `1px solid ${alpha(c.amber, 0.3)}` }}>
-            [10:45:06] Arbitrator active. Awaiting signals.
-          </div>
+          {logs.map((log, i) => (
+            <div key={i} style={{ color: log.color, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              <span style={{ color: c.dim }}>[{log.time}]</span> {log.msg}
+            </div>
+          ))}
         </div>
       </SectionCard>
     </div>
   );
 }
+

@@ -1392,6 +1392,7 @@ async def lifespan(app: FastAPI):
     app.state.circuit_breaker = CircuitBreaker(telegram=_telegram_svc)
 
     # v3 singletons
+            # v3 singletons
     from app.engines.risk.circuit_breaker import DrawdownCircuitBreaker, CircuitBreakerConfig
     from app.engines.analytics.correlation import CorrelationTracker
     from app.services.calibration import CalibrationService

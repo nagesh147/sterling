@@ -5,6 +5,7 @@ import { GrokSettingsPane } from './GrokSettingsPane';
 import { GrokLogsPane } from './GrokLogsPane';
 import { useSignals } from '../hooks/useSignals';
 import { usePositions } from '../hooks/usePositions';
+import { ExecLog } from './scalping/ScalpingTab';
 import { card, alpha } from '../styles/terminalUI';
 
 export function GrokTab() {
@@ -14,6 +15,8 @@ export function GrokTab() {
   
   const [trackFilter, setTrackFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [profileFilter, setProfileFilter] = useState('all');
+  const [execLog, setExecLog] = useState<any[]>([]);
   const [settingsDrawer, setSettingsDrawer] = useState(false);
 
   const signals = data?.signals || [];
@@ -40,6 +43,13 @@ export function GrokTab() {
     { id: 'idle', label: 'Idle', color: 'var(--t-dim)' },
   ];
 
+  const profileNavItems = [
+    { id: 'all', label: 'All Profiles', color: 'var(--t-bright)' },
+    { id: 'intraday', label: 'Intraday', color: 'var(--t-cyan)' },
+    { id: 'scalping', label: 'Scalping', color: 'var(--t-orange)' },
+    { id: 'aggressive', label: 'Aggressive', color: 'var(--t-red)' },
+  ];
+
   const renderNavGroup = (items: {id: string, label: string, color: string, count?: number}[], active: string, onClick: (id: string) => void) => (
     <>
       {items.map((item) => {
@@ -48,7 +58,9 @@ export function GrokTab() {
             ? signals.length 
             : items === trackNavItems
               ? signals.filter(s => s.track === item.id).length
-              : signals.filter(s => getSignalStatus(s) === item.id).length;
+              : items === statusNavItems
+                ? signals.filter(s => getSignalStatus(s) === item.id).length
+                : signals.filter(s => (s.profile?.toLowerCase() || 'scalping') === item.id).length;
 
         return (
           <button key={item.id} onClick={() => onClick(item.id)} style={{
@@ -104,8 +116,23 @@ export function GrokTab() {
           <LeftSection label="Tracks" collapsible defaultOpen>
             {renderNavGroup(trackNavItems, trackFilter, setTrackFilter)}
           </LeftSection>
+          <LeftSection label="Profiles" collapsible defaultOpen>
+            {renderNavGroup(profileNavItems, profileFilter, setProfileFilter)}
+          </LeftSection>
           <LeftSection label="Status" collapsible defaultOpen>
             {renderNavGroup(statusNavItems, statusFilter, setStatusFilter)}
+          </LeftSection>
+          <LeftSection label="Exec Log" collapsible defaultOpen>
+            <div style={{ marginTop: 8 }}>
+              <ExecLog entries={execLog} mode="PAPER" />
+              {execLog.length > 0 && (
+                <button onClick={() => setExecLog([])} style={{
+                  fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
+                  background: 'transparent', border: '1px solid var(--t-border)',
+                  color: 'var(--t-dim)', cursor: 'pointer', marginTop: 8, width: '100%'
+                }}>CLEAR EXEC LOG</button>
+              )}
+            </div>
           </LeftSection>
         </>}
         centerHeader={<>
@@ -115,7 +142,12 @@ export function GrokTab() {
         centerContent={
           <div style={{ padding: 16 }}>
             <div style={{ ...card, height: '100%' }}>
-              <GrokSignalPane trackFilter={trackFilter} statusFilter={statusFilter} />
+              <GrokSignalPane 
+                trackFilter={trackFilter} 
+                statusFilter={statusFilter} 
+                profileFilter={profileFilter} 
+                logExec={(e) => setExecLog(l => [e, ...l].slice(0, 40))} 
+              />
             </div>
           </div>
         }
@@ -125,6 +157,7 @@ export function GrokTab() {
           </RightSection>
         </>}
       />
+
 
       {settingsDrawer && (
         <div style={{

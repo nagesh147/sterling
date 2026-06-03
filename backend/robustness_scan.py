@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from app.engines.edge.strategies import SIGNAL_FNS, resample
-from app.engines.edge.registry import PROFILE_ATR
+from app.engines.edge.registry import PROFILE_CONFIG
 from app.engines.analytics.cpcv import calculate_pbo
 from app.engines.analytics.monte_carlo import monte_carlo_trades
 from study.sim import simulate_idx as _simulate_idx, sharpe as _sharpe, base_metrics as _base_metrics
@@ -50,7 +50,7 @@ if not SYMBOLS:
 TIMEFRAMES = [("15min", "15m"), ("30min", "30m"), ("1h", "1h"),
               ("2h", "2h"), ("4h", "4h")]
 STRATEGIES = list(SIGNAL_FNS.keys())
-PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_ATR.items()}
+PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_CONFIG.items()}
 
 # Survival gate
 MIN_TRADES = 20

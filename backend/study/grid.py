@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.engines.edge.strategies import SIGNAL_FNS
-from app.engines.edge.registry import PROFILE_ATR
+from app.engines.edge.registry import PROFILE_CONFIG
 from study.surface_snapshot import SurfaceSnapshot
 
 # ── Grid dimensions ────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ _TIMEFRAMES = [
 
 _STRATEGIES = list(SIGNAL_FNS.keys())  # ~5
 
-_PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_ATR.items()}
+_PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_CONFIG.items()}
 
 _DIRECTIONS = ["long", "short"]
 

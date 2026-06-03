@@ -18,7 +18,7 @@ import pandas as pd
 
 from app.engines.derivatives.schemas import SignalContext
 from app.engines.edge import strategies as S
-from app.engines.edge.registry import PROFILE_ATR, EdgeRegistry
+from app.engines.edge.registry import PROFILE_CONFIG, EdgeRegistry
 
 # Minimum bars to evaluate: EMA(21) + Donchian(20) + ATR(14) all need warmup.
 _MIN_BARS = 40
@@ -44,7 +44,7 @@ def generate_edge_signals(
     out: list[tuple[str, SignalContext]] = []
 
     for combo in registry.all():
-        atr_cfg = PROFILE_ATR.get(combo.profile)
+        atr_cfg = PROFILE_CONFIG.get(combo.profile)
         signal_fn = S.SIGNAL_FNS.get(combo.strategy)
         if atr_cfg is None or signal_fn is None:
             continue
