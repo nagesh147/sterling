@@ -45,6 +45,7 @@ export interface ScalpingConfig {
   profiles: Record<string, ScalpingProfile>;
   active_profiles: string[];
   symbols: string[];
+  disabled_symbols: string[];
   use_optimized: boolean;
 }
 

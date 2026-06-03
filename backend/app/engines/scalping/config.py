@@ -160,6 +160,7 @@ class EngineConfig(BaseModel):
 
     # ── Scanner scope ──
     symbols: List[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT"], description="Empty = scan all stored coins")
+    disabled_symbols: List[str] = Field(default_factory=list, description="Core symbols (BTC/ETH/SOL) toggled off — they stay in the list but are skipped by the scanner")
 
     # ── Warmup ──
     warmup_bars_4h: int = Field(default=50, ge=20, le=200, description="Min 4H bars before first signal")

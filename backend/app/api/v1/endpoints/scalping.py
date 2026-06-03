@@ -257,6 +257,10 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
         min_bars_hours=max(cfg.warmup_bars_4h, cfg.warmup_bars_15m // 4 + 20)
     )
 
+    # Skip disabled symbols (core toggle on/off without removing)
+    disabled = {s.upper() for s in (cfg.disabled_symbols or [])}
+    syms = [s for s in syms if s not in disabled]
+
     now_ms = int(time.time() * 1000)
     all_signals: List[ScalpingSignal] = []
     tradeable_set: set = set()

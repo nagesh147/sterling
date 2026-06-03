@@ -58,3 +58,6 @@
 
 # ui-layout
 See [ui-layout/taste.md](ui-layout/taste.md)
+
+# ui-symbols
+- Core symbols (BTC, ETH, SOL) in Global Strategy Config > SYMBOLS must stay always present but be individually toggleable (enable/disable) — never deletable and never permanently locked. Use a checkbox or similar on/off control, not a remove (×) button. Confidence: 0.75

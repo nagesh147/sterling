@@ -234,10 +234,16 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   const defaultCfg = useScalpingDefaultConfig().data?.config;
   const allMode = draft.symbols.length === 0;
   const selSet = new Set(draft.symbols);
+  const disabledSet = new Set(draft.disabled_symbols ?? []);
   const toggleSym = (s: string) => setDraft((d) => {
     const cur = new Set(d.symbols);
     if (cur.has(s)) cur.delete(s); else cur.add(s);
     return { ...d, symbols: [...cur] };
+  });
+  const toggleCore = (s: string) => setDraft((d) => {
+    const dis = new Set(d.disabled_symbols ?? []);
+    if (dis.has(s)) dis.delete(s); else dis.add(s);
+    return { ...d, disabled_symbols: [...dis] };
   });
 
   return (
@@ -252,6 +258,7 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                 ...defaultCfg,
                 active_profiles: defaultCfg.active_profiles, // Overwrite with new optimized profile list
                 symbols: draft.symbols,
+                disabled_symbols: draft.disabled_symbols ?? [],
               });
               // Reset the active tab to the first newly loaded profile
               if (defaultCfg.active_profiles?.length > 0) {
@@ -446,22 +453,33 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
                         <span style={{ fontSize: 10, color: 'var(--t-dim)' }}>Scanning ALL symbols. Add a symbol to restrict scanning.</span>
                       ) : (
                         draft.symbols.map((s) => {
-                          const isLocked = ['BTC', 'ETH', 'SOL'].includes(s);
+                          const isCore = ['BTC', 'ETH', 'SOL'].includes(s);
+                          const isDisabled = disabledSet.has(s);
+                          if (isCore) {
+                            return (
+                              <ChipToggle
+                                key={s}
+                                label={s}
+                                on={!isDisabled}
+                                color="var(--t-blue)"
+                                onChange={() => toggleCore(s)}
+                              />
+                            );
+                          }
                           return (
                             <button 
                               key={s} 
-                              onClick={() => !isLocked && toggleSym(s)} 
+                              onClick={() => toggleSym(s)} 
                               style={{ 
                                 ...chipStyle(true), 
                                 background: 'var(--t-blue)15', 
                                 borderColor: 'var(--t-blue)44',
-                                cursor: isLocked ? 'default' : 'pointer',
+                                cursor: 'pointer',
                               }}
-                              title={isLocked ? "Core symbols cannot be removed" : "Click to remove"}
+                              title="Click to remove"
                             >
                               {s} 
-                              {!isLocked && <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>}
-                              {isLocked && <span style={{ marginLeft: 4, opacity: 0.4 }}>🔒</span>}
+                              <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>
                             </button>
                           );
                         })
