@@ -71,24 +71,22 @@ export function GrokLogsPane() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
-      <SectionCard title="ARBITRATOR LOGS">
-        <div style={{ 
-          fontFamily: 'JetBrains Mono, monospace', 
-          fontSize: 9, 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: 6,
-          lineHeight: 1.4,
-          maxHeight: '400px',
-          overflowY: 'auto'
-        }}>
-          {logs.map((log, i) => (
-            <div key={i} style={{ color: log.color, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              <span style={{ color: c.dim }}>[{log.time}]</span> {log.msg}
-            </div>
-          ))}
-        </div>
-      </SectionCard>
+      <div style={{ 
+        fontFamily: 'JetBrains Mono, monospace', 
+        fontSize: 9, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        gap: 6,
+        lineHeight: 1.4,
+        maxHeight: '400px',
+        overflowY: 'auto'
+      }}>
+        {logs.map((log, i) => (
+          <div key={i} style={{ color: log.color, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <span style={{ color: c.dim }}>[{log.time}]</span> {log.msg}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -154,7 +154,7 @@ export function GrokTab() {
           </div>
         }
         rightSidebar={<>
-          <RightSection label="Execution Logs">
+          <RightSection label="Arbitrator Logs">
             <GrokLogsPane />
           </RightSection>
         </>}

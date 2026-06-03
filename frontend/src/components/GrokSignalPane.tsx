@@ -175,7 +175,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
               if (profileFilter !== 'all' && (s.profile?.toLowerCase() || 'scalping') !== profileFilter) return false;
               return true;
             }).map((s) => {
-              const sigIdStr = `${s.underlying}-${s.timestamp_ms}`;
+              const sigIdStr = `${s.underlying}-${s.direction}`;
               const sigIdHash = Array.from(sigIdStr).reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
               const sigId = Math.abs(sigIdHash).toString(16).substring(0, 5).toUpperCase();
               
