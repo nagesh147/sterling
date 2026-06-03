@@ -4,6 +4,9 @@ __pycache__/
 
 # Databases
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite3
 
 # Vector Store Parquet Files
