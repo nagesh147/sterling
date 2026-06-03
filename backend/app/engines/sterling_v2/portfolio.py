@@ -47,6 +47,17 @@ def correlation_penalized_weights(per_book_returns: dict[str, np.ndarray],
     return {k: x / tot for k, x in adj.items()}
 
 
+def align_book_returns(per_book_curves: dict[str, pd.Series]) -> dict[str, np.ndarray]:
+    """Project per-book equity curves onto a shared time index and return their
+    equal-length period returns -- the correct input for the weight functions
+    (per-trade returns of different books are not comparable element-wise)."""
+    idx = sorted(set().union(*[c.index for c in per_book_curves.values()]))
+    aligned = pd.DataFrame({k: c.reindex(idx).ffill().fillna(1.0)
+                            for k, c in per_book_curves.items()})
+    rets = aligned.pct_change().fillna(0.0)
+    return {k: rets[k].to_numpy() for k in rets.columns}
+
+
 def combine_equity(per_book_curves: dict[str, pd.Series],
                    weights: dict[str, float],
                    dd_halt: float = 0.20) -> pd.Series:
