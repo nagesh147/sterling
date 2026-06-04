@@ -72,6 +72,13 @@ def mirror_position_remove(pos_id: str) -> None:
             s.delete(row)
 
 
+def mirror_equity_snapshot(portfolio_value: float, drawdown: Optional[float] = None,
+                           circuit_breaker_state: Optional[str] = None) -> None:
+    from app.persistence.repositories import EquitySnapshotRepository
+    with session_scope(_factory()) as s:
+        EquitySnapshotRepository(s).add(portfolio_value, drawdown, circuit_breaker_state)
+
+
 def reconcile_positions(sqlite_positions: List[dict]) -> Dict[str, Dict[str, Optional[str]]]:
     """Compare the raw-sqlite positions (list of dicts) against the ORM mirror.
 

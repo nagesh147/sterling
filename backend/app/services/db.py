@@ -291,6 +291,18 @@ def _mirror_position_remove(pos_id: str) -> None:
         log.warning("ORM mirror remove failed (non-fatal): %s", exc)
 
 
+def _mirror_equity_snapshot(portfolio_value, drawdown, cb_state) -> None:
+    """Phase 5c-prep dual-write for equity snapshots. Guarded + fail-safe."""
+    try:
+        from app.core.config import settings
+        if not getattr(settings, "use_sqlalchemy", False):
+            return
+        from app.persistence.sync import mirror_equity_snapshot
+        mirror_equity_snapshot(portfolio_value, drawdown, cb_state)
+    except Exception as exc:
+        log.warning("ORM mirror equity snapshot failed (non-fatal): %s", exc)
+
+
 def upsert(pos_dict: dict) -> None:
     if not _available:
         return
@@ -547,6 +559,7 @@ def record_equity_snapshot(portfolio_value: float, drawdown: float | None = None
             )
     except Exception as exc:
         log.warning("record_equity_snapshot failed: %s", exc)
+    _mirror_equity_snapshot(portfolio_value, drawdown, cb_state)
 
 
 def save_wf_result(underlying: str, config_json: str, result_json: str, rec_threshold: float, oos_sharpe: float) -> None:
