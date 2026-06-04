@@ -1,4 +1,4 @@
-.PHONY: backend frontend test test-v lint docker-up docker-down docker-logs clean
+.PHONY: backend frontend test test-v verify lint docker-up docker-down docker-logs clean
 
 backend:
 	cd backend && .venv/bin/uvicorn main:app --reload --port 8000
@@ -11,6 +11,11 @@ test:
 
 test-v:
 	cd backend && .venv/bin/pytest tests/ -v
+
+verify:
+	cd backend && .venv/bin/pytest tests/ -q
+	cd frontend && npx tsc --noEmit
+	@echo "VERIFY OK"
 
 lint:
 	cd backend && .venv/bin/python -m py_compile app/**/*.py && echo "OK"
