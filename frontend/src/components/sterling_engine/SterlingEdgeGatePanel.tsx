@@ -1,5 +1,5 @@
 /**
- * EdgeGatePanel — operator control for the edge-feed admission gate.
+ * SterlingEdgeGatePanel — operator control for the edge-feed admission gate.
  *
  * The edge feed only emits live signals for backtest combos that clear a
  * threshold on net return, Sharpe and trade count (see BACKTEST_EDGE_REPORT).
@@ -35,7 +35,7 @@ const NumRow: React.FC<{
   </label>
 );
 
-export const EdgeGatePanel: React.FC = () => {
+export const SterlingEdgeGatePanel: React.FC = () => {
   const q = useEdgeGate();
   const patch = usePatchEdgeGate();
   const persisted = q.data?.gate;

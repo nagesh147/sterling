@@ -1,5 +1,5 @@
 /**
- * DetailGrid — the label/value grid used in the expandable detail row of the
+ * CommonDetailGrid — the label/value grid used in the expandable detail row of the
  * futures & options candidate tables (mirrors the signal table's execution-row
  * detail). The optional `pnlVal` tints the P&L value green/red.
  */
@@ -31,7 +31,7 @@ const TOOLTIPS: Record<string, string> = {
   'Funding Rate': 'Current funding rate'
 };
 
-export const DetailGrid: React.FC<{
+export const CommonDetailGrid: React.FC<{
   items: [string, string][];
   pnlVal?: number | null;
 }> = ({ items, pnlVal }) => (

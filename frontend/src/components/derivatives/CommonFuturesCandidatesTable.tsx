@@ -1,5 +1,5 @@
 /**
- * FuturesCandidatesTable — futures-only sibling of the signals table.
+ * CommonFuturesCandidatesTable — futures-only sibling of the signals table.
  *
  * Rendered after the signals SectionCard in every strategy tab. Each
  * row is one selector-decided futures candidate (with leverage, SL/TP,
@@ -23,9 +23,9 @@ import {
   useDerivativesConfig,
   DerivativesCandidateRow,
 } from '../../hooks/useDerivatives';
-import { SourceBadge, cleanStrategy } from './SourceBadge';
+import { CommonSourceBadge, cleanStrategy } from './CommonSourceBadge';
 import { useDerivativesPositionPnl } from '../../hooks/useDerivativesPositionPnl';
-import { DetailGrid } from './DetailGrid';
+import { CommonDetailGrid } from './CommonDetailGrid';
 
 const fmt = (v: number | null | undefined, d = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toFixed(d);
@@ -37,11 +37,12 @@ const fmtSigned = (v: number | null | undefined): string =>
   v == null || !isFinite(v) ? '—' : (v < 0 ? '-' : '+') + '$' + Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 2 });
 
 interface Props {
+  engine?: 'sterling' | 'grok';
   strategy?: string;
   underlying?: string;
 }
 
-export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }) => {
+export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy, underlying }) => {
   const { data, isLoading, refetch } = useDerivativesFuturesCandidates(strategy, underlying);
   const cfg = useDerivativesConfig();
   const algoOn = useAlgoMode().data?.enabled ?? false;
@@ -54,9 +55,24 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
 
   let rows = [...(data?.candidates ?? []).filter((r) => r.instrument_type === 'futures')];
 
+  if (engine === 'grok') {
+    rows = rows.filter(r => r.strategy === 'directional');
+  } else if (engine === 'sterling') {
+    rows = rows.filter(r => 
+      r.strategy.startsWith('scalping') || 
+      r.strategy.startsWith('edge') || 
+      r.strategy.startsWith('conservative') || 
+      r.strategy.startsWith('balanced') || 
+      r.strategy.startsWith('aggressive')
+    );
+  }
+
   pnl.positions.filter(p => p.status === 'open' || p.status === 'partially_closed').forEach(p => {
+    if (engine === 'grok' && !p.notes?.includes('[GROK]')) return;
+    if (engine === 'sterling' && p.notes?.includes('[GROK]')) return;
+
     const dir = p.sized_trade?.structure?.direction || '';
-    const match = (p.notes || '').match(/(?:scalping|edge|triple_st)\/[a-z_]+/);
+    const match = (p.notes || '').match(/(?:scalping|edge|conservative|balanced|aggressive)\/[a-z_]+/);
     rows.push({
       freeze_token: `pos-${p.id}`,
       instrument_type: 'futures',
@@ -198,7 +214,7 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       </span>{' '}{row.underlying}
                     </td>
                     <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 10, fontWeight: 600, color: c.muted }}>
-                      <SourceBadge source={row.source} />
+                      <CommonSourceBadge source={row.source} />
                       {cleanStrategy(row.strategy)}
                     </td>
                     <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 700, color: c.amber }}>
@@ -293,7 +309,7 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                   {isExp && (
                     <tr style={{ borderBottom: `1px solid ${c.border2}`, background: alpha(c.blue, 0.04) }}>
                       <td colSpan={11} style={{ padding: '8px 14px' }}>
-                        <DetailGrid items={[
+                        <CommonDetailGrid items={[
                           ['Direction', row.direction.toUpperCase()],
                           ['Leverage', `${row.leverage.toFixed(0)}×`],
                           ['Contracts', fmt(row.contracts, 4)],

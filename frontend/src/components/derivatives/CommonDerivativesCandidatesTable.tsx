@@ -1,5 +1,5 @@
 /**
- * DerivativesCandidatesTable — sibling SectionCard rendered after the
+ * CommonDerivativesCandidatesTable — sibling SectionCard rendered after the
  * existing signals table in every strategy tab. Each row is one selector
  * decision; the EXECUTE button submits the row's freeze_token to
  * /derivatives/execute. On stale_candidate (409) the table refetches and
@@ -16,7 +16,7 @@ import {
   useDerivativesExecute,
   DerivativesCandidateRow,
 } from '../../hooks/useDerivatives';
-import { SourceBadge, cleanStrategy } from './SourceBadge';
+import { CommonSourceBadge, cleanStrategy } from './CommonSourceBadge';
 
 const fmt = (v: number | null | undefined, d = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toFixed(d);
@@ -48,7 +48,7 @@ interface Props {
   underlying?: string;
 }
 
-export const DerivativesCandidatesTable: React.FC<Props> = ({ strategy, underlying }) => {
+export const CommonDerivativesCandidatesTable: React.FC<Props> = ({ strategy, underlying }) => {
   const { data, isLoading, refetch } = useDerivativesCandidates(strategy, underlying);
   const execute = useDerivativesExecute();
   const [toast, setToast] = useState<string>('');
@@ -127,7 +127,7 @@ export const DerivativesCandidatesTable: React.FC<Props> = ({ strategy, underlyi
                     {row.underlying}
                   </td>
                   <td style={{ padding: '6px 8px', fontSize: 9, color: c.dim, whiteSpace: 'nowrap' }}>
-                    <SourceBadge source={row.source} />
+                    <CommonSourceBadge source={row.source} />
                     {cleanStrategy(row.strategy)}
                   </td>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>

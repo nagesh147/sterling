@@ -1131,8 +1131,9 @@ def _collect_armed_signals(
     """
     out: list[tuple[str, SignalContext]] = []
 
-    # Scalping multi-strategy
-    if strategy_filter is None or strategy_filter.startswith("scalping"):
+    # Sterling Engine (Conservative/Balanced/Aggressive)
+    is_sterling = strategy_filter is None or any(strategy_filter.startswith(p) for p in ["conservative", "balanced", "aggressive", "scalping"])
+    if is_sterling:
         try:
             from app.api.v1.endpoints import sterling_engine as _scalp
             from app.services import adapter_manager
@@ -1141,12 +1142,13 @@ def _collect_armed_signals(
             for sig in (getattr(scan, "signals", None) or []):
                 if not sig.entry_ok:
                     continue
-                strat = f"scalping/{sig.strategy}"
+                prof = getattr(sig, "profile", "scalping")
+                strat = f"{prof}/{sig.strategy}"
                 if strategy_filter and strat != strategy_filter:
                     continue
                 if underlying_filter and sig.underlying.upper() != underlying_filter.upper():
                     continue
-                signal_id = f"scalp:{sig.underlying}:{sig.strategy}:{sig.timestamp_ms}"
+                signal_id = f"scalp:{sig.underlying}:{strat}:{sig.timestamp_ms}"
                 entry = sig.entry or 0.0
                 stop = sig.stop_loss or 0.0
                 # Real stop distance feeds the SL/TP solver — a 0.0 atr starved

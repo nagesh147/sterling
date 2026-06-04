@@ -650,11 +650,11 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         chain = await ad.get_option_chain(inst) if (inst and getattr(inst, "has_options", False)) else None
 
         sig_ctx = _SigCtx(
-            strategy=f"scalping/{strategy}", underlying=sym, direction=sig.direction,
+            strategy=f"{profile_id}/{strategy}", underlying=sym, direction=sig.direction,
             entry=float(sig.entry), stop_loss=float(sig.stop_loss),
             take_profit=sig.take_profit, atr=0.0, rr_target=2.0,
             signal_score=50.0, signal_strength="STRONG",
-            expected_hold_minutes=75, mode_name="scalping",
+            expected_hold_minutes=75, mode_name="sterling",
         )
         mkt_ctx = _MktCtx(
             spot=spot, underlying=sym, funding_8h_pct=funding_8h,

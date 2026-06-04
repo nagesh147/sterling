@@ -149,7 +149,7 @@ class ScalpingProfile(BaseModel):
 
 class EngineConfig(BaseModel):
     """The root configuration for the scalping module, managing multiple profiles."""
-    active_profiles: List[str] = Field(default_factory=lambda: ["intraday"])
+    active_profiles: List[str] = Field(default_factory=lambda: ["conservative"])
     profiles: Dict[str, ScalpingProfile] = Field(default_factory=dict)
     
     # Global settings
@@ -224,12 +224,12 @@ class TimeframePreset(BaseModel):
 # overfit-prone edge, NOT a guarantee. Ordered intraday → scalping → aggressive.
 TIMEFRAME_PRESETS: Dict[str, TimeframePreset] = {
     "CONSERVATIVE_DEFAULT": TimeframePreset(
-        label="Intraday", macro_tf="4h", exec_tf="30m", confirm_bars=3, suggested_risk_pct=1.0,
+        label="Conservative", macro_tf="4h", exec_tf="30m", confirm_bars=3, suggested_risk_pct=1.0,
         oos_win_pct=48.5, oos_pf=1.42, oos_max_dd_r=7.4,
         description="Default. Fewest, cleanest trades; lowest drawdown & best win-rate; least fee drag. Hold hours.",
     ),
     "STRUCTURAL_SCALP": TimeframePreset(
-        label="Scalping", macro_tf="2h", exec_tf="15m", confirm_bars=3, suggested_risk_pct=0.5,
+        label="Balanced", macro_tf="2h", exec_tf="15m", confirm_bars=3, suggested_risk_pct=0.5,
         oos_win_pct=44.4, oos_pf=1.44, oos_max_dd_r=16.6,
         description="More frequent entries; balanced edge but ~2x the drawdown — size smaller.",
     ),

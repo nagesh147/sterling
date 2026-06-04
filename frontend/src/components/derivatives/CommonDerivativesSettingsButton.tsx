@@ -1,8 +1,8 @@
 /**
- * DerivativesSettingsButton — sibling to the existing SETTINGS / BACKTEST
+ * CommonDerivativesSettingsButton — sibling to the existing SETTINGS / BACKTEST
  * triggers in every strategy tab. Opens the same drawer the SETTINGS
  * button uses (so the operator sees one drawer, not three), with the
- * DerivativesPanel section auto-scrolled into view.
+ * CommonDerivativesPanel section auto-scrolled into view.
  */
 import React from 'react';
 import { c, alpha } from '../../styles/terminalUI';
@@ -12,7 +12,7 @@ interface Props {
   active?: boolean;
 }
 
-export const DerivativesSettingsButton: React.FC<Props> = ({ onClick, active }) => {
+export const CommonDerivativesSettingsButton: React.FC<Props> = ({ onClick, active }) => {
   return (
     <button
       onClick={onClick}

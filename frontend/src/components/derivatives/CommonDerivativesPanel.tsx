@@ -1,5 +1,5 @@
 /**
- * DerivativesPanel — per-strategy profile editor surfaced inside the
+ * CommonDerivativesPanel — per-strategy profile editor surfaced inside the
  * SETTINGS drawer. Scoped to a single strategy slug; renders the knobs
  * that change selector behaviour AND the master `enabled` toggle that
  * flips the strategy from legacy futures path → DerivativesSelector.
@@ -426,7 +426,7 @@ interface Props {
   onStrategyChange?: (id: string) => void;
 }
 
-export const DerivativesPanel: React.FC<Props> = ({ strategy, strategies, onStrategyChange }) => {
+export const CommonDerivativesPanel: React.FC<Props> = ({ strategy, strategies, onStrategyChange }) => {
   const cfg = useDerivativesConfig();
   const patch = usePatchDerivativesProfile();
   const ec = useDerivativesEngineConfig();

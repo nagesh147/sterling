@@ -5,8 +5,8 @@ import { useAlgoMode, useSetAlgoMode, usePlaceOrder } from '../hooks/useSignalAl
 import { useRouterMode, RouterMode } from '../hooks/useRouterMode';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { usePositions } from '../hooks/usePositions';
-import { FuturesCandidatesTable } from './derivatives/FuturesCandidatesTable';
-import { OptionsCandidatesTable } from './derivatives/OptionsCandidatesTable';
+import { CommonFuturesCandidatesTable } from './derivatives/CommonFuturesCandidatesTable';
+import { CommonOptionsCandidatesTable } from './derivatives/CommonOptionsCandidatesTable';
 
 // Copy required styles & utilities
 const fmtUsd = (v: number | null | undefined): string => v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
@@ -172,7 +172,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
     const direction = p.sized_trade?.structure?.direction || 'long';
     const key = `${p.underlying}-${direction}`;
     if (!signalKeys.has(key)) {
-      const match = (p.notes || '').match(/(?:scalping|edge|triple_st)\/[a-z_]+/);
+      const match = (p.notes || '').match(/(?:scalping|edge)\/[a-z_]+/);
       finalSignals.push({
         id: `pos-${p.id}`,
         source: 'GROK',
@@ -452,10 +452,9 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
       </SectionCard>
       
       <div style={{ height: 16 }} />
-      <FuturesCandidatesTable engine="grok" />
-
-      <div style={{ height: 16 }} />
-      <OptionsCandidatesTable engine="grok" />
+      <CommonFuturesCandidatesTable engine="grok" />
+      <div style={{ height: 12 }} />
+      <CommonOptionsCandidatesTable engine="grok" />
       
       <div style={{ height: 32 }} />
     </div>

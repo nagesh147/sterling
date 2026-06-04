@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { FuturesCandidatesTable } from '../derivatives/FuturesCandidatesTable';
-import { OptionsCandidatesTable } from '../derivatives/OptionsCandidatesTable';
-import { DerivativesPanel } from '../derivatives/DerivativesPanel';
-import { EdgeGatePanel } from '../derivatives/EdgeGatePanel';
-import { StrategyCatalogPanel } from '../derivatives/StrategyCatalogPanel';
-import { DerivativesSettingsButton } from '../derivatives/DerivativesSettingsButton';
+import { CommonFuturesCandidatesTable } from '../derivatives/CommonFuturesCandidatesTable';
+import { CommonOptionsCandidatesTable } from '../derivatives/CommonOptionsCandidatesTable';
+import { CommonDerivativesPanel } from '../derivatives/CommonDerivativesPanel';
+import { SterlingEdgeGatePanel } from './SterlingEdgeGatePanel';
+import { SterlingStrategyCatalogPanel } from './SterlingStrategyCatalogPanel';
+import { CommonDerivativesSettingsButton } from '../derivatives/CommonDerivativesSettingsButton';
 import { useDerivativesConfig, usePatchDerivativesGlobal, useResetDerivativesConfig } from '../../hooks/useDerivatives';
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
@@ -1758,10 +1758,19 @@ export function SterlingEngineTab() {
   );
   const [catalogDrawer, setCatalogDrawer] = useState(false);
   const [edgeGateDrawer, setEdgeGateDrawer] = useState(false);
-  const [derivStrategy, setDerivStrategy] = useState<string>('scalping/price_action');
+  const [derivStrategy, setDerivStrategy] = useState<string>('conservative/price_action');
+  
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
   const [profileFilter, setProfileFilter] = useState<string>(() => localStorage.getItem('scalp.profileFilter') || 'all');
   const [statusFilter, setStatusFilter] = useState<string>(() => localStorage.getItem('scalp.statusFilter') || 'all');
+  
+  useEffect(() => {
+    const prefix = profileFilter === 'all' ? 'conservative' : profileFilter;
+    if (!derivStrategy.startsWith(prefix + '/')) {
+      const suffix = derivStrategy.split('/')[1] || 'price_action';
+      setDerivStrategy(`${prefix}/${suffix}`);
+    }
+  }, [profileFilter, derivStrategy]);
   const scanQ = useSterlingEngineSignals(false);
   const exec = useSterlingEngineExecute();
   const [execKeys, setExecKeys] = useState<Set<string>>(new Set());  // in-flight (supports concurrent auto-exec)
@@ -2202,8 +2211,8 @@ export function SterlingEngineTab() {
 
   const profileNavItems = [
     { id: 'all', label: 'All Profiles', color: 'var(--t-bright)', count: baseSignals.filter((s) => (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
-    { id: 'intraday', label: 'Intraday', color: 'var(--t-cyan)', count: baseSignals.filter((s) => s.profile === 'intraday' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
-    { id: 'scalping', label: 'Scalping', color: 'var(--t-orange)', count: baseSignals.filter((s) => s.profile === 'scalping' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'conservative', label: 'Conservative', color: 'var(--t-cyan)', count: baseSignals.filter((s) => s.profile === 'conservative' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
+    { id: 'balanced', label: 'Balanced', color: 'var(--t-orange)', count: baseSignals.filter((s) => s.profile === 'balanced' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
     { id: 'aggressive', label: 'Aggressive', color: 'var(--t-red)', count: baseSignals.filter((s) => s.profile === 'aggressive' && (stratFilter === 'all' || s.strategy === stratFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },
   ];
 
@@ -2501,8 +2510,8 @@ export function SterlingEngineTab() {
                 is manual when algo is OFF; the scanner auto-fires per
                 strategy profile when algo is ON. */}
             <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-              <FuturesCandidatesTable strategy={stratFilter !== 'all' ? stratFilter : undefined} />
-              <OptionsCandidatesTable strategy={stratFilter !== 'all' ? stratFilter : undefined} />
+              <CommonFuturesCandidatesTable engine="sterling" strategy={stratFilter !== 'all' ? stratFilter : undefined} />
+              <CommonOptionsCandidatesTable engine="sterling" strategy={stratFilter !== 'all' ? stratFilter : undefined} />
             </div>
           </div>
       }
@@ -2563,6 +2572,10 @@ export function SterlingEngineTab() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Derivatives Config</span>
+              <CommonDerivativesSettingsButton active={catalogDrawer || edgeGateDrawer} onClick={() => {
+                setCatalogDrawer(!catalogDrawer);
+                setEdgeGateDrawer(false);
+              }} />
               <button onClick={() => setDerivDrawer(false)} title="Close (Esc)" style={{
                 marginLeft: 'auto', fontSize: 16, lineHeight: 1, background: 'none',
                 border: '1px solid var(--t-border)', borderRadius: 6, color: 'var(--t-dim)',
@@ -2620,15 +2633,15 @@ export function SterlingEngineTab() {
                 </div>
               </div>
               
-              <DerivativesPanel
+              <CommonDerivativesPanel
                 strategy={derivStrategy}
                 strategies={[
-                  { id: 'scalping/price_action', label: 'PRICE ACTION' },
-                  { id: 'scalping/smc', label: 'SMC' },
-                  { id: 'scalping/ma_crossover', label: 'MA CROSSOVER' },
-                  { id: 'scalping/mean_reversion', label: 'MEAN REVERSION' },
-                  { id: 'scalping/breakout', label: 'BREAKOUT' },
-                  { id: 'scalping/delta_gamma', label: 'DELTA GAMMA' },
+                  { id: `${profileFilter === 'all' ? 'conservative' : profileFilter}/price_action`, label: 'PRICE ACTION' },
+                  { id: `${profileFilter === 'all' ? 'conservative' : profileFilter}/smc`, label: 'SMC' },
+                  { id: `${profileFilter === 'all' ? 'conservative' : profileFilter}/ma_crossover`, label: 'MA CROSSOVER' },
+                  { id: `${profileFilter === 'all' ? 'conservative' : profileFilter}/mean_reversion`, label: 'MEAN REVERSION' },
+                  { id: `${profileFilter === 'all' ? 'conservative' : profileFilter}/breakout`, label: 'BREAKOUT' },
+                  { id: `${profileFilter === 'all' ? 'conservative' : profileFilter}/delta_gamma`, label: 'DELTA GAMMA' },
                 ]}
                 onStrategyChange={setDerivStrategy}
               />
@@ -2656,7 +2669,7 @@ export function SterlingEngineTab() {
                 width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
               }}>×</button>
             </div>
-            <StrategyCatalogPanel />
+            <SterlingStrategyCatalogPanel />
           </div>
         </div>
       </div>
@@ -2680,7 +2693,7 @@ export function SterlingEngineTab() {
                 width: 30, height: 30, cursor: 'pointer', fontFamily: 'inherit',
               }}>×</button>
             </div>
-            <EdgeGatePanel />
+            <SterlingEdgeGatePanel />
           </div>
         </div>
       </div>

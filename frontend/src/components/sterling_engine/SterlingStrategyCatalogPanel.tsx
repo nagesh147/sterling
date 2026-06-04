@@ -1,5 +1,5 @@
 /**
- * StrategyCatalogPanel — "what is this strategy, really?"
+ * SterlingStrategyCatalogPanel — "what is this strategy, really?"
  *
  * The candidate tables show terse ids (ma_crossover, smc, …) that don't tell a
  * user what's running: which logic, what timeframe, long or short, which engine,
@@ -86,7 +86,7 @@ const SimpleStrategyCard: React.FC<{ s: StrategyCatalogEntry }> = ({ s }) => {
   );
 };
 
-export const StrategyCatalogPanel: React.FC = () => {
+export const SterlingStrategyCatalogPanel: React.FC = () => {
   const q = useStrategyCatalog();
   const d = q.data;
 

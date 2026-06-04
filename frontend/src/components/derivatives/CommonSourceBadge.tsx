@@ -1,5 +1,5 @@
 /**
- * SourceBadge — labels which feed a derivatives candidate came from.
+ * CommonSourceBadge — labels which feed a derivatives candidate came from.
  *
  *  • "edge"   → the backtest-validated 4h winner feed (BACKTEST_EDGE_REPORT).
  *  • "engine" → the live scalping / triple-ST strategy engine.
@@ -10,7 +10,7 @@
 import React from 'react';
 import { alpha, c } from '../../styles/terminalUI';
 
-export const SourceBadge: React.FC<{ source?: string }> = ({ source }) => {
+export const CommonSourceBadge: React.FC<{ source?: string }> = ({ source }) => {
   const isEdge = source === 'edge';
   const color = isEdge ? c.green : c.dim;
   return (

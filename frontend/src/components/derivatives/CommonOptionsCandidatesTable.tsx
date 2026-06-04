@@ -1,7 +1,7 @@
 /**
- * OptionsCandidatesTable — options-only sibling of the signals table.
+ * CommonOptionsCandidatesTable — options-only sibling of the signals table.
  *
- * Mounted after the signals SectionCard alongside FuturesCandidatesTable.
+ * Mounted after the signals SectionCard alongside CommonFuturesCandidatesTable.
  * Each row is one selector-decided options candidate (strike, DTE, full
  * Greeks, premium, liquidity, expected R, projected theta-burn).
  *
@@ -22,9 +22,9 @@ import {
   useDerivativesConfig,
   DerivativesCandidateRow,
 } from '../../hooks/useDerivatives';
-import { SourceBadge, cleanStrategy } from './SourceBadge';
+import { CommonSourceBadge, cleanStrategy } from './CommonSourceBadge';
 import { useDerivativesPositionPnl } from '../../hooks/useDerivativesPositionPnl';
-import { DetailGrid } from './DetailGrid';
+import { CommonDetailGrid } from './CommonDetailGrid';
 
 const fmt = (v: number | null | undefined, d = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toFixed(d);
@@ -51,11 +51,12 @@ const liquidityColor = (s: number | null): string => {
 };
 
 interface Props {
+  engine?: 'sterling' | 'grok';
   strategy?: string;
   underlying?: string;
 }
 
-export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }) => {
+export const CommonOptionsCandidatesTable: React.FC<Props> = ({ engine, strategy, underlying }) => {
   const { data, isLoading, refetch } = useDerivativesOptionsCandidates(strategy, underlying);
   const cfg = useDerivativesConfig();
   const algoOn = useAlgoMode().data?.enabled ?? false;
@@ -68,9 +69,24 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
 
   let rows = [...(data?.candidates ?? []).filter((r) => r.instrument_type === 'options')];
   
+  if (engine === 'grok') {
+    rows = rows.filter(r => r.strategy === 'directional');
+  } else if (engine === 'sterling') {
+    rows = rows.filter(r => 
+      r.strategy.startsWith('scalping') || 
+      r.strategy.startsWith('edge') || 
+      r.strategy.startsWith('conservative') || 
+      r.strategy.startsWith('balanced') || 
+      r.strategy.startsWith('aggressive')
+    );
+  }
+  
   pnl.positions.filter(p => p.status === 'open' || p.status === 'partially_closed').forEach(p => {
+    if (engine === 'grok' && !p.notes?.includes('[GROK]')) return;
+    if (engine === 'sterling' && p.notes?.includes('[GROK]')) return;
+
     const dir = p.sized_trade?.structure?.direction || '';
-    const match = (p.notes || '').match(/(?:scalping|edge|triple_st)\/[a-z_]+/);
+    const match = (p.notes || '').match(/(?:scalping|edge|conservative|balanced|aggressive)\/[a-z_]+/);
       const leg = p.sized_trade?.structure?.legs?.[0];
       rows.push({
         freeze_token: `pos-${p.id}`,
@@ -203,14 +219,13 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
               {rows.map((row) => {
                 const auto = isAutoExec(row);
                 const { type, strikeK, dteTag } = optionLabel(row);
-                // @ts-ignore
-                const rp = row.source === 'position' && row._rawPos 
-                  // @ts-ignore
+                const raw = (row as any)._rawPos;
+                const rp = row.source === 'position' && raw
                   ? { 
-                      pnl: (row._rawPos.status === 'open' || row._rawPos.status === 'partially_closed') ? (row._rawPos.estimated_pnl_usd ?? 0) : (row._rawPos.realized_pnl_usd ?? 0), 
-                      realized: !(row._rawPos.status === 'open' || row._rawPos.status === 'partially_closed'), 
-                      mode: (row._rawPos.notes || '').includes('[LIVE]') ? 'LIVE' : 'PAPER', 
-                      status: row._rawPos.status 
+                      pnl: (raw.status === 'open' || raw.status === 'partially_closed') ? (raw.estimated_pnl_usd ?? 0) : (raw.realized_pnl_usd ?? 0), 
+                      realized: !(raw.status === 'open' || raw.status === 'partially_closed'), 
+                      mode: (raw.notes || '').includes('[LIVE]') ? 'LIVE' : 'PAPER', 
+                      status: raw.status 
                     } 
                   : pnl.pnlForRow(row.underlying, row.direction, row.strategy);
                 const isExp = expanded === row.freeze_token;
@@ -229,7 +244,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       </span>{' '}{row.underlying}
                     </td>
                     <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 10, fontWeight: 600, color: c.muted }}>
-                      <SourceBadge source={row.source} />
+                      <CommonSourceBadge source={row.source} />
                       {cleanStrategy(row.strategy)}
                     </td>
                     <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
@@ -340,7 +355,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                   {isExp && (
                     <tr style={{ borderBottom: `1px solid ${c.border2}`, background: alpha(c.blue, 0.04) }}>
                       <td colSpan={13} style={{ padding: '8px 14px' }}>
-                        <DetailGrid items={[
+                        <CommonDetailGrid items={[
                           ['Contract', `${type} ${strikeK} ${dteTag}`],
                           ['Option', row.option_symbol ?? '—'],
                           ['Direction', row.direction.toUpperCase()],

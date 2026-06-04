@@ -6,9 +6,8 @@ profile by `signal.strategy` via `get_profile()`, with /derivatives/config
 overrides applied on top.
 
 Profile keys match the strategy slug passed in `SignalContext.strategy`:
-  • "scalping/price_action", "scalping/smc", "scalping/mean_reversion",
-    "scalping/ma_crossover" — futures-bias, near-ATM, short hold.
-  • "scalping/breakout", "scalping/delta_gamma" — options-bias for
+  • "conservative/price_action", "balanced/smc", "aggressive/mean_reversion" — futures-bias, near-ATM, short hold.
+  • "conservative/breakout", "balanced/delta_gamma" — options-bias for
     asymmetric payoff in low-IV regimes.
   • "directional" — placeholder for when directional engines return.
 """
@@ -95,13 +94,29 @@ DEFAULT_PROFILES: dict[str, StrategyDerivativesProfile] = {
     # Edge-validated feed — one profile per shared strategy, display-only
     **{f"edge/{s}": _edge(f"edge/{s}") for s in _EDGE_STRATEGIES},
 
-    # Scalping
-    "scalping/price_action":   _scalping_grind("scalping/price_action"),
-    "scalping/smc":            _scalping_grind("scalping/smc"),
-    "scalping/mean_reversion": _scalping_grind("scalping/mean_reversion"),
-    "scalping/ma_crossover":   _scalping_grind("scalping/ma_crossover"),
-    "scalping/breakout":       _scalping_breakout("scalping/breakout"),
-    "scalping/delta_gamma":    _scalping_breakout("scalping/delta_gamma"),
+    # Conservative
+    "conservative/price_action":   _scalping_grind("conservative/price_action"),
+    "conservative/smc":            _scalping_grind("conservative/smc"),
+    "conservative/mean_reversion": _scalping_grind("conservative/mean_reversion"),
+    "conservative/ma_crossover":   _scalping_grind("conservative/ma_crossover"),
+    "conservative/breakout":       _scalping_breakout("conservative/breakout"),
+    "conservative/delta_gamma":    _scalping_breakout("conservative/delta_gamma"),
+
+    # Balanced
+    "balanced/price_action":   _scalping_grind("balanced/price_action"),
+    "balanced/smc":            _scalping_grind("balanced/smc"),
+    "balanced/mean_reversion": _scalping_grind("balanced/mean_reversion"),
+    "balanced/ma_crossover":   _scalping_grind("balanced/ma_crossover"),
+    "balanced/breakout":       _scalping_breakout("balanced/breakout"),
+    "balanced/delta_gamma":    _scalping_breakout("balanced/delta_gamma"),
+
+    # Aggressive
+    "aggressive/price_action":   _scalping_grind("aggressive/price_action"),
+    "aggressive/smc":            _scalping_grind("aggressive/smc"),
+    "aggressive/mean_reversion": _scalping_grind("aggressive/mean_reversion"),
+    "aggressive/ma_crossover":   _scalping_grind("aggressive/ma_crossover"),
+    "aggressive/breakout":       _scalping_breakout("aggressive/breakout"),
+    "aggressive/delta_gamma":    _scalping_breakout("aggressive/delta_gamma"),
 
     # Directional / Hybrid VCP — placeholder, lights up when engines return
     "directional": StrategyDerivativesProfile(
@@ -137,7 +152,7 @@ def get_profile(strategy: str, overrides: dict[str, StrategyDerivativesProfile] 
         return overrides[strategy]
     if strategy in DEFAULT_PROFILES:
         return DEFAULT_PROFILES[strategy]
-    # Prefix match — "scalping/<x>" → scalping_grind
+    # Prefix match — e.g. "balanced/<x>" → balanced_grind
     if "/" in strategy:
         prefix = strategy.split("/", 1)[0]
         for k, p in DEFAULT_PROFILES.items():
