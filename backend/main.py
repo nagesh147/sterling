@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
+from app.core.observability import (
+    configure_json_logging, new_correlation_id, set_correlation_id, reset_correlation_id,
+)
 from app.services import paper_store
 from app.services import exchange_account_store
 from app.services import adapter_manager
@@ -1288,6 +1291,7 @@ async def _background_scalping_alerts(interval: int = 45) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    configure_json_logging()  # no-op unless settings.log_json (Phase 2 observability)
     paper_store.bootstrap()
     exchange_account_store.bootstrap()
     _webhook_store_svc.bootstrap()
@@ -1616,7 +1620,15 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _security_headers(request, call_next):
-        response = await call_next(request)
+        # Correlation id: honor an inbound one or mint a fresh id, bind it for
+        # the request's logging context, and echo it back. (Phase 2 observability)
+        cid = request.headers.get("X-Correlation-ID") or new_correlation_id()
+        _cid_token = set_correlation_id(cid)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_correlation_id(_cid_token)
+        response.headers["X-Correlation-ID"] = cid
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
