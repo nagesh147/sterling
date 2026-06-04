@@ -53,6 +53,28 @@ class EventBus:
                             "EventBus handler error for %s: %s", event.event_type, exc
                         )
 
+    def publish_sync(self, event: TradeEvent) -> None:
+        """Dispatch from a synchronous context. Sync handlers run inline; async
+        handlers are scheduled on the running loop if one exists (else skipped).
+        Used to emit from sync code paths (e.g. paper_store.close_position)."""
+        import asyncio
+        self.last_errors = []
+        for etype, handlers in list(self._subs.items()):
+            if isinstance(event, etype):
+                for handler in list(handlers):
+                    try:
+                        result = handler(event)
+                        if inspect.isawaitable(result):
+                            try:
+                                asyncio.get_running_loop().create_task(result)
+                            except RuntimeError:
+                                result.close()  # no loop — drop coroutine cleanly
+                    except Exception as exc:
+                        self.last_errors.append(exc)
+                        log.warning(
+                            "EventBus sync handler error for %s: %s", event.event_type, exc
+                        )
+
     def clear(self) -> None:
         self._subs.clear()
         self.last_errors = []

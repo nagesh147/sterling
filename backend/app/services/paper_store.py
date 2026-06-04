@@ -307,7 +307,7 @@ def close_position(
     except Exception:
         pass
 
-    return update_position(
+    closed = update_position(
         pos_id,
         status=PositionStatus.CLOSED,
         exit_timestamp_ms=int(time.time() * 1000),
@@ -321,6 +321,14 @@ def close_position(
         notes=notes or pos.notes,
         run_once_state=TradeState.EXITED,
     )
+    # Live event emission — no-op unless settings.enable_event_bus configured a
+    # bus at startup. Fail-safe: never let event wiring affect a close.
+    try:
+        from app.services import event_emit
+        event_emit.emit_position_closed(pos.underlying, float(estimated_pnl))
+    except Exception:
+        pass
+    return closed
 
 
 def partial_close_position(

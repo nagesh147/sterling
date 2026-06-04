@@ -1534,7 +1534,39 @@ async def lifespan(app: FastAPI):
     tg_alert_task = asyncio.create_task(_background_scalping_alerts(interval=45))
     log.info("Telegram bot + signal alerts started")
 
+    # ── Live event bus + agents (Phase 3) — only when enable_event_bus is set ──
+    from app.core.config import settings as _settings
+    if getattr(_settings, "enable_event_bus", False):
+        try:
+            from app.bus.event_bus import EventBus
+            from app.agents import PNLAgent, ReconciliationAgent, Orchestrator
+            from app.services import event_emit
+            _bus = EventBus()
+            _pnl_agent = PNLAgent(bus=_bus)
+            _recon_agent = ReconciliationAgent(bus=_bus)
+            _orchestrator = Orchestrator(bus=_bus, heartbeat_interval=60.0)
+            event_emit.configure(_bus, {
+                "pnl": _pnl_agent, "reconciliation": _recon_agent,
+                "orchestrator": _orchestrator,
+            })
+            app.state.event_bus = _bus
+            app.state.pnl_agent = _pnl_agent
+            app.state.orchestrator = _orchestrator
+            await _orchestrator.start()
+            log.info("Live event bus + agents started (PNL/Reconciliation, heartbeat 60s)")
+        except Exception as exc:
+            log.warning("event bus startup failed (non-fatal): %s", exc)
+
     yield
+
+    try:
+        _orch = getattr(app.state, "orchestrator", None)
+        if _orch is not None:
+            await _orch.stop()
+        from app.services import event_emit as _ee
+        _ee.reset()
+    except Exception:
+        pass
 
     for _t in (tg_bot_task, tg_alert_task):
         _t.cancel()

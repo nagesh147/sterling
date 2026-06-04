@@ -67,7 +67,17 @@ await orch.start()               # starts agents + heartbeat loop
 await orch.stop()                # graceful, idempotent
 ```
 
-> **Status:** agents and the bus are additive and fully tested
-> (`tests/test_agents.py`, `test_event_bus.py`, `test_orchestrator.py`). The live
-> FastAPI startup does not yet route production flows through them — adoption is
-> incremental and opt-in (see [MIGRATION.md](../MIGRATION.md)).
+## Going live
+
+The bus + agents can be activated in the running app by setting
+`enable_event_bus=true` (default **OFF**). When on, the lifespan startup creates
+an `EventBus`, a `PNLAgent` + `ReconciliationAgent`, and an `Orchestrator`
+(heartbeat 60s), and `paper_store.close_position` emits a `PositionClosed` via
+`app/services/event_emit.py` (a flag-gated, fail-safe emitter). With the flag off
+every emit is a cheap no-op, so default behavior is unchanged. Emitting from sync
+code uses `EventBus.publish_sync`.
+
+> **Status:** additive and fully tested (`tests/test_agents.py`,
+> `test_event_bus.py`, `test_orchestrator.py`, `test_live_event_wiring.py`). Live
+> wiring is opt-in via `enable_event_bus`; broader production flows are adopted
+> incrementally (see [MIGRATION.md](../MIGRATION.md)).
