@@ -25,17 +25,21 @@ additive modules alongside the working system, no big-bang rewrite, and a
 | **2** | Observability: JSON logging, correlation ids, metrics (opt-in) | ✅ done |
 | **3** | Event bus + 8 agent facades + Orchestrator + Fill→PNL reference flow | ✅ done |
 | **4** | Separated `RiskEngine` + rule registry (shadow-compare) | ✅ done |
-| **5** | SQLAlchemy parallel store (dual-write/verify, flag default-OFF, Postgres-ready) | ⏳ planned |
+| **5** | SQLAlchemy parallel store (Postgres-ready) — **5a scaffolding done**; 5b/5c dual-write planned | 🔶 partial |
 | **6** | Canonical docs + report archival + market seam | ✅ done |
 
-## Phase 5 plan (SQLAlchemy — not yet implemented)
+## Phase 5 plan (SQLAlchemy)
 
 Persistence today is raw `sqlite3` (`app/services/db.py`, `paper_store`,
 `calibration`, `ohlcv_store`, `derivatives_audit`). The migration is **parallel
 and reversible**:
 
-1. **5a** — Add `app/persistence/` (SQLAlchemy 2.0 models mirroring the sqlite
-   schema, session, repositories). Read-only mirror; verified by dual-read tests.
+1. **5a — DONE.** `app/persistence/` exists: `Base` + engine factory
+   (Postgres-ready; default URL is a *dedicated* sqlite file, never the 3.2GB
+   live `sterling_paper.db`), `session_scope`, ORM models for `positions` and
+   `equity_snapshots`, and the repository pattern. Flags `database_url` +
+   `use_sqlalchemy` (default OFF). Tested in-memory (`test_orm_persistence.py`).
+   The remaining ~18 tables follow the same model/repository pattern.
 2. **5b** — Dual-write behind `USE_SQLALCHEMY` (default **OFF**). A reconciliation
    check asserts sqlite and SQLAlchemy agree on every write.
 3. **5c** — Flip the flag ON after a verification window. Keep the raw-sqlite path
