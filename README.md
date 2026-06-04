@@ -2,6 +2,31 @@
 
 Live crypto futures + options trading platform. Auto-trades based on VCP (Volume Concentration Profile) patterns + multi-timeframe momentum confluence. Supports paper simulation, shadow audit, and live execution via Delta Exchange India.
 
+A modular, broker-agnostic trading platform: brokers, markets, strategies, and
+risk rules are plug-and-play, with a hard zero-regression discipline.
+
+## Documentation
+
+| Doc | What |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Layered design, module map, design rules |
+| [BROKERS.md](BROKERS.md) | Adding/replacing exchanges (the adapter contract + registry) |
+| [MARKETS.md](MARKETS.md) | Supported markets + how to add one |
+| [STRATEGIES.md](STRATEGIES.md) | Writing broker/market-agnostic strategies |
+| [docs/AGENTS.md](docs/AGENTS.md) | Agents, event bus, orchestrator (trading agents) |
+| [EXECUTION.md](EXECUTION.md) | Signal → order flow (the OrderRouter pipeline) |
+| [RISK_MANAGEMENT.md](RISK_MANAGEMENT.md) | Safety pipeline + RiskEngine |
+| [OBSERVABILITY.md](OBSERVABILITY.md) | JSON logging, correlation ids, metrics |
+| [SECURITY.md](SECURITY.md) | Secrets, audit, HTTP hardening |
+| [CONFIGURATION.md](CONFIGURATION.md) | Settings, registry, credentials |
+| [TESTING.md](TESTING.md) | Test types + the fast zero-regression diff workflow |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Local + Docker |
+| [MIGRATION.md](MIGRATION.md) | The phased hardening program (status + rollback) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Standards, workflow, where things go |
+
+> Quick start: `make setup && make verify && make backend`. Performance/backtest
+> reports live in [`docs/reports/`](docs/reports/).
+
 ---
 
 ## Architecture
