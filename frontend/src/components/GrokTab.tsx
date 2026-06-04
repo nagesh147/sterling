@@ -5,7 +5,7 @@ import { GrokSettingsPane } from './GrokSettingsPane';
 import { GrokLogsPane } from './GrokLogsPane';
 import { useSignals } from '../hooks/useSignals';
 import { useLivePnl } from '../hooks/useLivePnl';
-import { ExecLog } from './scalping/ScalpingTab';
+import { ExecLog } from './sterling_engine/SterlingEngineTab';
 import { useRouterMode } from '../hooks/useRouterMode';
 import { card, alpha } from '../styles/terminalUI';
 

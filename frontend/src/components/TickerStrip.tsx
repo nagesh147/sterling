@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useLivePrices } from '../hooks/useLivePrices';
-import { useScalpingConfig } from '../hooks/useScalping';
+import { useSterlingEngineConfig } from '../hooks/useSterlingEngine';
 
 // ── Module-level price history (survives re-renders) ─────────────────────────
 const _history: Map<string, number[]> = new Map();
@@ -211,7 +211,7 @@ function TickerCard({ item, price, prevPrice }: {
 export function TickerStrip() {
   const { data }  = useWatchlist();
   const liveP     = useLivePrices();
-  const cfgQ      = useScalpingConfig();
+  const cfgQ      = useSterlingEngineConfig();
   const prevPriceRef = useRef<Record<string, number>>({});
   const outerRef  = useRef<HTMLDivElement>(null);
   const copyRef   = useRef<HTMLDivElement>(null);

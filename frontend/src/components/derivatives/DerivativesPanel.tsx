@@ -132,7 +132,7 @@ const VALIDATION_LABELS: Record<number, string> = {
   1: '1 · calibrate-to-live', 2: '2 · real-only/forward', 3: '3 · live snapshot',
 };
 
-// ── Chip toggle (reused from ScalpingTab) ────────────────────────────
+// ── Chip toggle (reused from SterlingEngineTab) ────────────────────────────
 
 function ChipToggle({ label, on, onChange, color }: { label: string; on: boolean; onChange: (v: boolean) => void; color?: string }) {
   const clr = on ? (color || c.green) : c.dim;

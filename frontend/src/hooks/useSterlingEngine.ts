@@ -222,26 +222,26 @@ export interface OptimizeResponse {
 
 // ── Hooks ───────────────────────────────────────────────────────────────────
 
-export function useScalpingConfig() {
+export function useSterlingEngineConfig() {
   return useQuery<ScalpingConfigResponse>({
     queryKey: ['scalping', 'config'],
-    queryFn: () => api.get<ScalpingConfigResponse>('/api/v1/scalping/config'),
+    queryFn: () => api.get<ScalpingConfigResponse>('/api/v1/sterling-engine/config'),
     staleTime: 60_000,
   });
 }
 
-export function useScalpingDefaultConfig() {
+export function useSterlingEngineDefaultConfig() {
   return useQuery<ScalpingConfigResponse>({
     queryKey: ['scalping', 'config', 'default'],
-    queryFn: () => api.get<ScalpingConfigResponse>('/api/v1/scalping/config/default'),
+    queryFn: () => api.get<ScalpingConfigResponse>('/api/v1/sterling-engine/config/default'),
     staleTime: Infinity,
   });
 }
 
-export function useSetScalpingConfig() {
+export function useSetSterlingEngineConfig() {
   const qc = useQueryClient();
   return useMutation<ScalpingConfigResponse, Error, ScalpingConfig>({
-    mutationFn: (cfg) => api.post<ScalpingConfigResponse>('/api/v1/scalping/config', cfg),
+    mutationFn: (cfg) => api.post<ScalpingConfigResponse>('/api/v1/sterling-engine/config', cfg),
     onSuccess: (data) => {
       qc.setQueryData(['scalping', 'config'], data);
       qc.invalidateQueries({ queryKey: ['scalping', 'signals'] });
@@ -261,57 +261,57 @@ export interface TimeframePreset {
   description: string;
 }
 
-export function useScalpingPresets() {
+export function useSterlingEnginePresets() {
   return useQuery<Record<string, TimeframePreset>>({
     queryKey: ['scalping', 'presets'],
-    queryFn: () => api.get<Record<string, TimeframePreset>>('/api/v1/scalping/presets'),
+    queryFn: () => api.get<Record<string, TimeframePreset>>('/api/v1/sterling-engine/presets'),
     staleTime: 600_000,
   });
 }
 
-export function useScalpingUniverse() {
+export function useSterlingEngineUniverse() {
   return useQuery<ScalpingUniverseResponse>({
     queryKey: ['scalping', 'universe'],
-    queryFn: () => api.get<ScalpingUniverseResponse>('/api/v1/scalping/universe'),
+    queryFn: () => api.get<ScalpingUniverseResponse>('/api/v1/sterling-engine/universe'),
     staleTime: 300_000,
   });
 }
 
-export function useScalpingSignals(armedOnly = false) {
+export function useSterlingEngineSignals(armedOnly = false) {
   return useQuery<ScalpingScanResponse>({
     queryKey: ['scalping', 'signals', armedOnly],
-    queryFn: () => api.get<ScalpingScanResponse>(`/api/v1/scalping/signals?armed_only=${armedOnly}`),
+    queryFn: () => api.get<ScalpingScanResponse>(`/api/v1/sterling-engine/signals?armed_only=${armedOnly}`),
     refetchInterval: 30_000,
     retry: 1,
   });
 }
 
-export function useScalpingBacktest() {
+export function useSterlingEngineBacktest() {
   return useMutation<ScalpingBacktestResult, Error, { underlying: string; lookback_days: number; strategies?: string[]; config?: ScalpingConfig }>({
-    mutationFn: (req) => api.post<ScalpingBacktestResult>('/api/v1/scalping/backtest', req),
+    mutationFn: (req) => api.post<ScalpingBacktestResult>('/api/v1/sterling-engine/backtest', req),
   });
 }
 
-export function useScalpingExecute() {
+export function useSterlingEngineExecute() {
   return useMutation<ScalpingExecuteResponse, Error, { underlying: string; strategy: string; auto?: boolean; override_entry?: number | null; override_stop?: number | null }>({
-    mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/scalping/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true, auto: req.auto ?? false, ...(req.override_entry != null ? { override_entry: req.override_entry } : {}), ...(req.override_stop != null ? { override_stop: req.override_stop } : {}) }),
+    mutationFn: (req) => api.post<ScalpingExecuteResponse>('/api/v1/sterling-engine/execute', { underlying: req.underlying, strategy: req.strategy, confirm: true, auto: req.auto ?? false, ...(req.override_entry != null ? { override_entry: req.override_entry } : {}), ...(req.override_stop != null ? { override_stop: req.override_stop } : {}) }),
   });
 }
 
 // Optimizer: poll while a sweep is running so the UI shows live progress + results.
-export function useScalpingOptimize() {
+export function useSterlingEngineOptimize() {
   return useQuery<OptimizeResponse>({
     queryKey: ['scalping', 'optimize'],
-    queryFn: () => api.get<OptimizeResponse>('/api/v1/scalping/optimize'),
+    queryFn: () => api.get<OptimizeResponse>('/api/v1/sterling-engine/optimize'),
     refetchInterval: (q) => (q.state.data?.status.running ? 3_000 : false),
   });
 }
 
-export function useRunScalpingOptimize() {
+export function useRunSterlingEngineOptimize() {
   const qc = useQueryClient();
   return useMutation<{ status: string }, Error, { days?: number; max_symbols?: number }>({
     mutationFn: (req) => api.post<{ status: string }>(
-      `/api/v1/scalping/optimize?days=${req.days ?? 90}&max_symbols=${req.max_symbols ?? 5}`, {}),
+      `/api/v1/sterling-engine/optimize?days=${req.days ?? 90}&max_symbols=${req.max_symbols ?? 5}`, {}),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['scalping', 'optimize'] }); },
   });
 }

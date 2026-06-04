@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
 import { useAlgoMode, useSetAlgoMode } from '../hooks/useSignalAlerts';
-import { useScalpingConfig, useSetScalpingConfig } from '../hooks/useScalping';
+import { useSterlingEngineConfig, useSetSterlingEngineConfig } from '../hooks/useSterlingEngine';
 import { api } from '../utils/api';
 import { useDailyLossConfig, useUpdateDailyLossConfig } from '../hooks/useRiskConfig';
 import { FontPicker } from './FontPicker';
@@ -1084,8 +1084,8 @@ export function AlgoToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = 
 
 // ── AI Gatekeeper Toggle (Header) ─────────────────────────────────────────────
 export function AIGatekeeperToggle({ chipStyle }: { chipStyle?: React.CSSProperties } = {}) {
-  const { data, isLoading } = useScalpingConfig();
-  const setConfig = useSetScalpingConfig();
+  const { data, isLoading } = useSterlingEngineConfig();
+  const setConfig = useSetSterlingEngineConfig();
 
   const enabled = data?.config.use_optimized ?? false;
   const pending = setConfig.isPending;

@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 /* ─────────────────────────────────────────────────────────────────────────
  * Sterling shared UI tokens — the single source of truth for the
  * "card / group-box / responsive-grid / chip" design language first
- * established in ScalpingTab. Every panel imports from here so the whole
+ * established in SterlingEngineTab. Every panel imports from here so the whole
  * app renders identically; tweak a value here and it propagates everywhere.
  *
  * Color tokens use a CSS fallback chain: the Bloomberg terminal palette

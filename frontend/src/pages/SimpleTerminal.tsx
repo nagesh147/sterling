@@ -14,7 +14,7 @@ import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
 import { GreeksBudgetHeaderChip } from '../components/GreeksBudgetHeaderChip';
-import { ScalpingTab } from '../components/scalping/ScalpingTab';
+import { SterlingEngineTab } from '../components/sterling_engine/SterlingEngineTab';
 import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
 import { GrokTab } from '../components/GrokTab';
 import { SterlingV2Tab } from '../components/SterlingV2Tab';
@@ -143,7 +143,7 @@ export function SimpleTerminal() {
   const [showLive, setShowLive] = useState(false);
   const sterlingV2 = useSterlingV2();
   const setSterlingV2 = useSetSterlingV2();
-  const [activeSection, setActiveSection] = useState<'scalping' | 'grok' | 'positions' | 'backtest' | 'sterling_v2'>('scalping');
+  const [activeSection, setActiveSection] = useState<'sterlingEngine' | 'grok' | 'positions' | 'backtest' | 'sterling_v2'>('sterlingEngine');
 
   return (
     <div className="term-root">
@@ -206,12 +206,12 @@ export function SimpleTerminal() {
           borderTop: '1px solid var(--t-border)',
         }}>
           {([
-            ['scalping',    'STERLING ENGINE'],
+            ['sterlingEngine',    'STERLING ENGINE'],
             ['grok',        'GROK ENGINE'],
             ['sterling_v2', 'STERLING V2'],
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
-          ] as ['scalping' | 'grok' | 'sterling_v2' | 'positions' | 'backtest', string][]).map(([id, label]) => (
+          ] as ['sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -264,8 +264,8 @@ export function SimpleTerminal() {
 
       {/* Main content */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
-        {activeSection === 'scalping' && (
-          <ScalpingTab />
+        {activeSection === 'sterlingEngine' && (
+          <SterlingEngineTab />
         )}
         {activeSection === 'grok' && (
           <GrokTab />

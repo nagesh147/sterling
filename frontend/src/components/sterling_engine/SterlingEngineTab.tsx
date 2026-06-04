@@ -10,12 +10,12 @@ import { useDerivativesConfig, usePatchDerivativesGlobal, useResetDerivativesCon
 import { useSelectedUnderlying, useSetSelectedUnderlying } from '../../store/useStore';
 import { useAlgoMode, useSetAlgoMode } from '../../hooks/useSignalAlerts';
 import {
-  useScalpingConfig, useSetScalpingConfig, useScalpingUniverse,
-  useScalpingBacktest, useScalpingExecute, useScalpingSignals,
-  useScalpingOptimize, useRunScalpingOptimize, useScalpingPresets, useScalpingDefaultConfig,
+  useSterlingEngineConfig, useSetSterlingEngineConfig, useSterlingEngineUniverse,
+  useSterlingEngineBacktest, useSterlingEngineExecute, useSterlingEngineSignals,
+  useSterlingEngineOptimize, useRunSterlingEngineOptimize, useSterlingEnginePresets, useSterlingEngineDefaultConfig,
   type ScalpingConfig, type ScalpingSignal, type ScalpingProfile,
   type ScalpingExecuteResponse,
-} from '../../hooks/useScalping';
+} from '../../hooks/useSterlingEngine';
 import { usePositions, useClosePosition } from '../../hooks/usePositions';
 import { useLivePnl } from '../../hooks/useLivePnl';
 import type { PaperPosition } from '../../types';
@@ -228,10 +228,10 @@ function ScalpingConfigPanel({ cfg, onSave, saving }: { cfg: ScalpingConfig; onS
   };
   const dirty = stableStringify(draft) !== stableStringify(cfg);
 
-  const universeQ = useScalpingUniverse();
+  const universeQ = useSterlingEngineUniverse();
   const universe = universeQ.data?.symbols ?? [];
-  const presets = useScalpingPresets().data;
-  const defaultCfg = useScalpingDefaultConfig().data?.config;
+  const presets = useSterlingEnginePresets().data;
+  const defaultCfg = useSterlingEngineDefaultConfig().data?.config;
   const allMode = draft.symbols.length === 0;
   const selSet = new Set(draft.symbols);
   const disabledSet = new Set(draft.disabled_symbols ?? []);
@@ -1364,9 +1364,9 @@ const LOOKBACK_PRESETS_BT: [string, number][] = [['1M', 30], ['3M', 90], ['6M', 
 function ScalpBacktestPanel({ initialUnderlying }: { initialUnderlying: string }) {
   const [lookback, setLookback] = useState(90);
   const [localUnderlying, setLocalUnderlying] = useState(initialUnderlying);
-  const universeQ = useScalpingUniverse();
+  const universeQ = useSterlingEngineUniverse();
   const universe = universeQ.data?.symbols ?? [];
-  const bt = useScalpingBacktest();
+  const bt = useSterlingEngineBacktest();
   const res = bt.data;
 
   const hdrBtn = (active: boolean): React.CSSProperties => ({
@@ -1718,10 +1718,10 @@ function EdgeGateTrigger({ onClick }: { onClick: () => void }) {
     </button>
   );
 }
-export function ScalpingTab() {
+export function SterlingEngineTab() {
   const selected = useSelectedUnderlying();
   const setSelected = useSetSelectedUnderlying();
-  const cfgQ = useScalpingConfig();
+  const cfgQ = useSterlingEngineConfig();
   const cfg = cfgQ.data?.config;
   const derivConfig = useDerivativesConfig();
   const derivPatchGlobal = usePatchDerivativesGlobal();
@@ -1740,7 +1740,7 @@ export function ScalpingTab() {
     return Object.values(derivConfig.data.profiles).every(p => p.auto_execute_options);
   }, [derivConfig.data]);
   const anyWfoActive = cfg ? cfg.use_optimized : false;
-  const setCfg = useSetScalpingConfig();
+  const setCfg = useSetSterlingEngineConfig();
   const [drawer, setDrawer] = useState(false);
   const [derivDrawer, setDerivDrawer] = useState(false);
   
@@ -1762,8 +1762,8 @@ export function ScalpingTab() {
   const [stratFilter, setStratFilter] = useState<string>(() => localStorage.getItem('scalp.stratFilter') || 'all');
   const [profileFilter, setProfileFilter] = useState<string>(() => localStorage.getItem('scalp.profileFilter') || 'all');
   const [statusFilter, setStatusFilter] = useState<string>(() => localStorage.getItem('scalp.statusFilter') || 'all');
-  const scanQ = useScalpingSignals(false);
-  const exec = useScalpingExecute();
+  const scanQ = useSterlingEngineSignals(false);
+  const exec = useSterlingEngineExecute();
   const [execKeys, setExecKeys] = useState<Set<string>>(new Set());  // in-flight (supports concurrent auto-exec)
   // Executions persist across reloads and across mode switches; each entry carries
   // the mode it actually ran in (es.mode), so the view can stay segregated per mode.
@@ -2129,7 +2129,7 @@ export function ScalpingTab() {
   }, [execLog]);
 
   // Algo auto-execution: while Algo is ON, EVERY ready (executable) signal is
-  // fired immediately. The /scalping/execute endpoint routes through the active
+  // fired immediately. The /sterling-engine/execute endpoint routes through the active
   // Paper/Shadow/Live mode. Runaway is prevented at the source — the backend
   // refuses to open a second position on the same symbol+strategy — so no
   // frontend position cap is needed; every distinct ready setup executes.
@@ -2689,4 +2689,4 @@ export function ScalpingTab() {
   );
 }
 
-export default ScalpingTab;
+export default SterlingEngineTab;
