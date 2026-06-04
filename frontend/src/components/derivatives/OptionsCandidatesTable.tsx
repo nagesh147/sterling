@@ -91,7 +91,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
       option_symbol: p.sized_trade?.structure?.legs?.[0]?.symbol || '',
       strike: p.sized_trade?.structure?.legs?.[0]?.strike || 0,
       dte: 0,
-      premium: p.sized_trade?.structure?.legs?.[0]?.limit_price || 0,
+      premium: p.entry_premium ?? p.sized_trade?.structure?.legs?.[0]?.limit_price ?? 0,
       // @ts-ignore
       _rawPos: p,
       // @ts-ignore

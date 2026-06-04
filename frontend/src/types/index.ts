@@ -160,6 +160,8 @@ export interface PaperPosition {
   entry_spot_price: number;
   exit_timestamp_ms?: number;
   exit_spot_price?: number;
+  entry_price_real?: number;
+  entry_premium?: number;
   realized_pnl_usd?: number;
   notes: string;
   run_once_state: TradeState;
