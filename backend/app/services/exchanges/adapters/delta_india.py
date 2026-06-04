@@ -23,6 +23,7 @@ from typing import List, Optional, Union
 import httpx
 
 from app.services.exchanges.authenticated_base import AuthenticatedExchangeAdapter
+from app.services.exchanges.trading_base import TradingExchangeAdapter
 from app.schemas.market import Candle, OptionSummary
 from app.schemas.instruments import InstrumentMeta
 from app.schemas.account import (
@@ -82,7 +83,7 @@ def _delta_dte(expiry_str: str) -> int:
         return -1
 
 
-class DeltaIndiaAdapter(AuthenticatedExchangeAdapter):
+class DeltaIndiaAdapter(TradingExchangeAdapter):
     def __init__(self, api_key="", api_secret="", is_paper=True,
                  base_url=_BASE, timeout=10.0):
         self._api_key = api_key
