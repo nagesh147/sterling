@@ -354,7 +354,7 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
     Replays each enabled strategy with real SL/TP exits and real costs (fee +
     slippage + funding), then reports sample-size adequacy, regime coverage,
     and a 70/30 in-sample/out-of-sample split so a single run shows whether the
-    edge is real or curve-fit. See `engines.scalping.backtest`.
+    edge is real or curve-fit. See `engines.sterling_engine.backtest`.
     """
     from app.engines.sterling_engine.backtest import run_scalping_backtest
     from app.engines.sterling_engine.schemas import (

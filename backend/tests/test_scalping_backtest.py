@@ -1,4 +1,4 @@
-"""Tests for the honest scalping replay engine (engines.scalping.backtest).
+"""Tests for the honest scalping replay engine (engines.sterling_engine.backtest).
 
 Covers the building blocks deterministically (exit simulation, sample-size
 tiers, PF/expectancy) and the full orchestration via a stubbed strategy
