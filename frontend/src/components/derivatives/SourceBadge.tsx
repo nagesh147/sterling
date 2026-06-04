@@ -33,3 +33,36 @@ export const SourceBadge: React.FC<{ source?: string }> = ({ source }) => {
 /** Strip feed prefixes for a clean strategy label. */
 export const cleanStrategy = (s: string): string =>
   s.replace('scalping/', '').replace('edge/', '').toUpperCase();
+
+/** The engine a derivatives row belongs to. Each dashboard tab is scoped to
+ *  exactly one engine so the Grok and Sterling candidate tables never show the
+ *  same rows:
+ *   • 'sterling' — the live Sterling (scalping) strategy engine ("scalping/…")
+ *   • 'grok'     — the Grok / Arbitrator directional engine ("directional")
+ *   • 'edge'     — the backtest-validated edge overlay feed ("edge/…")           */
+export type EngineId = 'sterling' | 'grok' | 'edge';
+
+/** Classify a candidate row by its strategy slug + source. The strategy slug is
+ *  the single source of truth: scalping rows are "scalping/<name>", directional
+ *  rows are "directional", edge rows are "edge/<name>" (source === 'edge'). */
+export const candidateEngine = (strategy: string, source?: string): EngineId => {
+  if (source === 'edge' || strategy.startsWith('edge')) return 'edge';
+  if (strategy.startsWith('directional')) return 'grok';
+  return 'sterling';
+};
+
+/** Classify an executed derivatives position by the strategy slug stamped into
+ *  its notes at execute time (auto-exec and manual both tag it). Returns null
+ *  for legacy/untagged positions — those are visible in the POSITIONS tab but
+ *  are not attributed to either engine's candidate table. */
+export const positionEngine = (notes?: string | null): EngineId | null => {
+  const n = notes || '';
+  if (/edge\//.test(n)) return 'edge';
+  if (/\bdirectional\b/.test(n)) return 'grok';
+  if (/scalping\//.test(n)) return 'sterling';
+  return null;
+};
+
+/** Human label for the engine, used in the candidate-table subtitle. */
+export const engineLabel = (e?: EngineId): string =>
+  e === 'grok' ? 'Grok' : e === 'edge' ? 'Edge' : 'Sterling';

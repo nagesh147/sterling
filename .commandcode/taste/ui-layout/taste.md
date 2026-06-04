@@ -8,5 +8,5 @@
 - Drive both table headers and rows from a single shared column spec, using CSS grid rather than independent header/row markup. Confidence: 0.70
 - Use "IBM Plex Sans", system-ui, sans-serif as the font stack for terminal log components. Confidence: 0.65
 - Use emojis in terminal log output for user-friendly, colorful display. Confidence: 0.65
-- All table components (spot index, derivatives futures, derivatives options, etc.) should share consistent CSS/UI/UX styling — uniform visual design across all data tables in the application. Use the shared `c` token object and `alpha()` helper from terminalUI.ts for all colors/borders/backgrounds, not raw CSS variables. Confidence: 0.80
+- All table components (spot index, derivatives futures, derivatives options, etc.) should share consistent CSS/UI/UX styling — uniform visual design across all data tables in the application. Use the shared `c` token object and `alpha()` helper from terminalUI.ts for all colors/borders/backgrounds, not raw CSS variables. This includes AUTO/position badges, EXECUTE buttons, row padding, and expanded detail padding. Confidence: 0.85
 - Data table columns should use stable fixed widths defined by the shared column spec — column widths must not shift or resize when cell values update (e.g., number changes in spot index table). Confidence: 0.70

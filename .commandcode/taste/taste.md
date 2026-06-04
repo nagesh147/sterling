@@ -38,6 +38,10 @@
 
 # naming
 - Use "Sterling's Gate" for the routing gate component and "Claude's Native" for the native engine component in UI labels and user-facing text. Confidence: 0.80
+- When a tab or component is renamed, propagate the rename throughout the entire codebase — update all references, imports, labels, and related identifiers consistently. Confidence: 0.70
+
+# ui-ux
+- Strategy profiles must be user-selectable in the UI, not hardcoded or fixed — users should be able to change/choose which profile is active for a signal or strategy. Confidence: 0.70
 
 # ui-components
 - Use chip toggles (pill-shaped toggle buttons) instead of checkboxes for boolean/flag options and instead of dropdowns for mode selection — apply this pattern broadly across all option types (alpha sources, engine modes, risk posture, validation options). Confidence: 0.75
@@ -61,3 +65,6 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 
 # ui-symbols
 - Core symbols (BTC, ETH, SOL) in Global Strategy Config > SYMBOLS must stay always present but be individually toggleable (enable/disable) — never deletable and never permanently locked. Use a checkbox or similar on/off control, not a remove (×) button. Confidence: 0.75
+
+# ui-tables
+- Avoid browser-native `title` attribute hover tooltips on table headers — show descriptions inline as a second descriptive line below the header label using `fontSize: 8`, `fontWeight: 400`, muted color, no letter-spacing, no text-transform. Confidence: 0.70

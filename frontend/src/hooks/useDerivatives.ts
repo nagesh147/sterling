@@ -161,6 +161,10 @@ export interface GreeksBudgetState {
 export interface DerivativesExecuteRequest {
   freeze_token: string;
   candidate_idx?: number;
+  // Originating strategy slug (e.g. "scalping/price_action", "directional").
+  // Stamped into the position notes so the executed row can be attributed back
+  // to the engine that produced it — keeps the Grok/Sterling tables separate.
+  strategy?: string;
 }
 
 export interface DerivativesExecuteResponse {

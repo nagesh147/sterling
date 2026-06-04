@@ -469,6 +469,11 @@ async def preview(
 class _ExecuteRequest(BaseModel):
     freeze_token: str
     candidate_idx: int = 0          # 0 = chosen; 1-3 = alternatives
+    # Originating strategy slug ("scalping/price_action", "directional", …).
+    # Stamped into the position notes so the FE can attribute the executed
+    # position back to its engine (matches the auto-exec note format), keeping
+    # the Grok and Sterling candidate tables strictly engine-specific.
+    strategy: Optional[str] = None
 
 
 class _ExecuteResponse(BaseModel):
@@ -519,6 +524,10 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
     # Multi-leg structures (defined-risk spreads/condors) → submit each leg
     # individually, track them as a group. Single-leg candidates route through
     # the existing single-order path unchanged.
+    # Engine-attribution tag — mirrors the auto-exec note format
+    # ("… {strategy} freeze=…") so the FE can scope positions per engine.
+    strat_tag = f"{body.strategy} " if body.strategy else ""
+
     if candidate.structure and len(candidate.structure.legs) > 1:
         from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
 
@@ -538,7 +547,7 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
                 stop_loss=None,
                 take_profit=None,
                 option_symbol=leg_symbol,
-                notes=f"[DERIV-{candidate.structure.structure_type}] freeze={body.freeze_token[:8]} leg={leg.option_type}@{leg.strike}",
+                notes=f"[DERIV-{candidate.structure.structure_type}] {strat_tag}freeze={body.freeze_token[:8]} leg={leg.option_type}@{leg.strike}",
             )
             try:
                 leg_resp = await place_live_order(leg_order, request)
@@ -594,7 +603,7 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
         liquidity=candidate.liquidity,
         expected_r=candidate.expected_r,
         dte=candidate.dte,
-        notes=f"[DERIV-{candidate.instrument_type.upper()}] freeze={body.freeze_token[:8]} R={candidate.expected_r:.2f}",
+        notes=f"[DERIV-{candidate.instrument_type.upper()}] {strat_tag}freeze={body.freeze_token[:8]} R={candidate.expected_r:.2f}",
     )
     try:
         resp = await place_live_order(order, request)

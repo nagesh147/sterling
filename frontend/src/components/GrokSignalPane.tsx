@@ -452,10 +452,10 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
       </SectionCard>
       
       <div style={{ height: 16 }} />
-      <FuturesCandidatesTable />
-      
+      <FuturesCandidatesTable engine="grok" />
+
       <div style={{ height: 16 }} />
-      <OptionsCandidatesTable />
+      <OptionsCandidatesTable engine="grok" />
       
       <div style={{ height: 32 }} />
     </div>
