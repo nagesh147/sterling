@@ -25,7 +25,7 @@ additive modules alongside the working system, no big-bang rewrite, and a
 | **2** | Observability: JSON logging, correlation ids, metrics (opt-in) | ✅ done |
 | **3** | Event bus + 8 agent facades + Orchestrator + Fill→PNL reference flow | ✅ done |
 | **4** | Separated `RiskEngine` + rule registry (shadow-compare) | ✅ done |
-| **5** | SQLAlchemy parallel store (Postgres-ready) — **5a scaffolding done**; 5b/5c dual-write planned | 🔶 partial |
+| **5** | SQLAlchemy parallel store (Postgres-ready) — **5a scaffolding + 5b dual-write done**; 5c flip planned | 🔶 partial |
 | **6** | Canonical docs + report archival + market seam | ✅ done |
 
 ## Phase 5 plan (SQLAlchemy)
@@ -40,10 +40,15 @@ and reversible**:
    `equity_snapshots`, and the repository pattern. Flags `database_url` +
    `use_sqlalchemy` (default OFF). Tested in-memory (`test_orm_persistence.py`).
    The remaining ~18 tables follow the same model/repository pattern.
-2. **5b** — Dual-write behind `USE_SQLALCHEMY` (default **OFF**). A reconciliation
-   check asserts sqlite and SQLAlchemy agree on every write.
-3. **5c** — Flip the flag ON after a verification window. Keep the raw-sqlite path
-   as fallback for one release. Engine URL from config → PostgreSQL-ready.
+2. **5b — DONE.** Position dual-write behind `use_sqlalchemy` (default **OFF**):
+   `app/persistence/sync.py` mirrors `db.upsert`/`db.remove` into the ORM via
+   lazy, fail-safe hooks (no sqlalchemy import unless the flag is on; a mirror
+   error never affects the primary sqlite write). `reconcile_positions()` asserts
+   parity. Tested in `test_orm_dualwrite.py`. Extend the same mirror pattern to
+   the remaining stores (paper fills, calibration, equity snapshots).
+3. **5c — planned.** Flip the flag ON after a verification window (run dual-write
+   in production, monitor `reconcile_positions()` for drift). Keep the raw-sqlite
+   path as fallback for one release. Engine URL from config → PostgreSQL-ready.
 
 No SQLite-specific SQL leaks into the ORM layer so Postgres is a config change.
 
