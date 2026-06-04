@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
-from app.engines.scalping.config import ScalpingConfig
+from app.engines.sterling_engine.config import ScalpingConfig
 
 
 class SupportResistanceLevel(BaseModel):

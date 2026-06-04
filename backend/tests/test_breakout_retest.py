@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import types
 
-from app.engines.scalping.breakout import evaluate_breakout
-from app.engines.scalping.config import ScalpingProfile
-from app.engines.scalping.levels import Level
+from app.engines.sterling_engine.breakout import evaluate_breakout
+from app.engines.sterling_engine.config import ScalpingProfile
+from app.engines.sterling_engine.levels import Level
 
 
 def _c(ts, o, h, l, cl, v=100.0):

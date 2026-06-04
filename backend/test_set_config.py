@@ -1,7 +1,7 @@
 import asyncio
 from main import app
-from app.api.v1.endpoints.scalping import get_config, set_config
-from app.engines.scalping.config import default_config
+from app.api.v1.endpoints.sterling_engine import get_config, set_config
+from app.engines.sterling_engine.config import default_config
 
 class MockRequest:
     def __init__(self, app):

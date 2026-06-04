@@ -39,17 +39,17 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from app.engines.scalping.config import ScalpingProfile
-from app.engines.scalping.levels import detect_levels
-from app.engines.scalping.price_action import evaluate_price_action
-from app.engines.scalping.smc import evaluate_smc
-from app.engines.scalping.ma_crossover import evaluate_ma_crossover
-from app.engines.scalping.mean_reversion import evaluate_mean_reversion
-from app.engines.scalping.breakout import evaluate_breakout
-from app.engines.scalping.scanner import _macro_regime, _is_counter_trend
+from app.engines.sterling_engine.config import ScalpingProfile
+from app.engines.sterling_engine.levels import detect_levels
+from app.engines.sterling_engine.price_action import evaluate_price_action
+from app.engines.sterling_engine.smc import evaluate_smc
+from app.engines.sterling_engine.ma_crossover import evaluate_ma_crossover
+from app.engines.sterling_engine.mean_reversion import evaluate_mean_reversion
+from app.engines.sterling_engine.breakout import evaluate_breakout
+from app.engines.sterling_engine.scanner import _macro_regime, _is_counter_trend
 # Reuse the optimizer's validated replay windows / cadence so the single-symbol
 # backtest and the OOS sweep observe the strategy under identical conditions.
-from app.engines.scalping.optimizer import W_EXEC, W_MACRO, EXEC_STEP, EXEC_MAXH, OOS_FRAC
+from app.engines.sterling_engine.optimizer import W_EXEC, W_MACRO, EXEC_STEP, EXEC_MAXH, OOS_FRAC
 from app.engines.backtest.costs import compute_trade_costs
 
 # Default round-trip taker fee (matches engines.backtest.costs futures default).

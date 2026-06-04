@@ -26,10 +26,10 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from app.engines.scalping.config import ScalpingConfig
-from app.engines.scalping.levels import detect_levels
-from app.engines.scalping.price_action import evaluate_price_action
-from app.engines.scalping.scanner import _macro_regime, _is_counter_trend
+from app.engines.sterling_engine.config import ScalpingConfig
+from app.engines.sterling_engine.levels import detect_levels
+from app.engines.sterling_engine.price_action import evaluate_price_action
+from app.engines.sterling_engine.scanner import _macro_regime, _is_counter_trend
 
 # (structure, entry) pairs to sweep — the new 4h/30m default, the 30m-focused
 # alternatives that generalised best, and the old 4h/15m as a reference (it was

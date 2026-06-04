@@ -267,9 +267,9 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                         if (badgeProps) {
                           return (
                             <span title={auto ? "Algo is ON — auto-executes via background scanner" : undefined} style={{
-                              display: 'inline-block', padding: '3px 10px', borderRadius: 4,
-                              background: alpha(badgeProps.color, 0.16), border: `1px solid ${alpha(badgeProps.color, 0.45)}`,
-                              color: badgeProps.color, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                              display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center',
+                              fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
+                              background: alpha(badgeProps.color, 0.1), color: badgeProps.color,
                               whiteSpace: 'nowrap'
                             }}>
                               {badgeProps.text}
@@ -282,12 +282,12 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                             disabled={execute.isPending}
                             onClick={(e) => { e.stopPropagation(); handleExecute(row); }}
                             style={{
-                              padding: '4px 12px', borderRadius: 5,
-                              background: alpha(c.green, 0.14),
-                              border: `1px solid ${alpha(c.green, 0.4)}`,
-                              color: c.green, fontSize: 11, fontWeight: 700,
-                              letterSpacing: '0.06em', cursor: execute.isPending ? 'wait' : 'pointer',
-                              fontFamily: 'inherit',
+                              display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center',
+                              fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
+                              background: row.direction === 'long' ? c.green : c.red,
+                              color: '#fff', border: 'none',
+                              cursor: execute.isPending ? 'wait' : 'pointer',
+                              whiteSpace: 'nowrap'
                             }}>
                             {execute.isPending ? '…' : 'EXECUTE'}
                           </button>

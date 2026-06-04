@@ -11,8 +11,8 @@ against the SAME stored candles the live scanner uses, and reports, per symbol+T
 import numpy as np
 from app.services import ohlcv_store
 from app.schemas.market import Candle
-from app.engines.scalping.config import ScalpingProfile
-from app.engines.scalping.levels import detect_levels, price_near_level
+from app.engines.sterling_engine.config import ScalpingProfile
+from app.engines.sterling_engine.levels import detect_levels, price_near_level
 
 
 def load(sym, res, n=400):

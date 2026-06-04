@@ -21,6 +21,6 @@ Public surface
 - `delta_gamma`    : Strategy 6 detector
 - `scanner`        : multi-symbol scan orchestrator
 """
-from app.engines.scalping.config import ScalpingConfig, TieredTPConfig, default_config
+from app.engines.sterling_engine.config import ScalpingConfig, TieredTPConfig, default_config
 
 __all__ = ["ScalpingConfig", "TieredTPConfig", "default_config"]

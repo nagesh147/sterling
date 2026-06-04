@@ -12,11 +12,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 try:
-    from app.engines.scalping.price_action import detect_double_bottom
-    from app.engines.scalping.ma_crossover import rolling_sma, rolling_ema, current_atr, evaluate_ma_crossover
-    from app.engines.scalping.smc import evaluate_smc, SMCESignal
-    from app.engines.scalping.levels import Level
-    from app.engines.scalping.config import ScalpingConfig
+    from app.engines.sterling_engine.price_action import detect_double_bottom
+    from app.engines.sterling_engine.ma_crossover import rolling_sma, rolling_ema, current_atr, evaluate_ma_crossover
+    from app.engines.sterling_engine.smc import evaluate_smc, SMCESignal
+    from app.engines.sterling_engine.levels import Level
+    from app.engines.sterling_engine.config import ScalpingConfig
     from app.schemas.market import Candle
 except ImportError as e:
     print(f"ERROR: {e}"); sys.exit(1)

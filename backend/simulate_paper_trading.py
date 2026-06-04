@@ -8,8 +8,8 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.engines.scalping.scanner import scan_symbol
-from app.engines.scalping.config import default_config
+from app.engines.sterling_engine.scanner import scan_symbol
+from app.engines.sterling_engine.config import default_config
 from app.schemas.market import Candle
 
 def simulate_paper_trades(symbol="AAVEUSD"):

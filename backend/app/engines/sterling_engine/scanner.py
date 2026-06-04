@@ -16,16 +16,16 @@ from typing import List
 
 import numpy as np
 
-from app.engines.scalping.config import EngineConfig as ScalpingConfig, ScalpingProfile
-from app.engines.scalping.levels import detect_levels
-from app.engines.scalping.schemas import ScalpingSignal, ScalpingScanResponse, SupportResistanceLevel
-from app.engines.scalping.price_action import evaluate_price_action
-from app.engines.scalping.smc import evaluate_smc
-from app.engines.scalping.ma_crossover import evaluate_ma_crossover
-from app.engines.scalping.mean_reversion import evaluate_mean_reversion
-from app.engines.scalping.breakout import evaluate_breakout
-from app.engines.scalping.delta_gamma import evaluate_delta_gamma
-from app.engines.scalping.whitelist_manager import is_whitelisted
+from app.engines.sterling_engine.config import EngineConfig as ScalpingConfig, ScalpingProfile
+from app.engines.sterling_engine.levels import detect_levels
+from app.engines.sterling_engine.schemas import ScalpingSignal, ScalpingScanResponse, SupportResistanceLevel
+from app.engines.sterling_engine.price_action import evaluate_price_action
+from app.engines.sterling_engine.smc import evaluate_smc
+from app.engines.sterling_engine.ma_crossover import evaluate_ma_crossover
+from app.engines.sterling_engine.mean_reversion import evaluate_mean_reversion
+from app.engines.sterling_engine.breakout import evaluate_breakout
+from app.engines.sterling_engine.delta_gamma import evaluate_delta_gamma
+from app.engines.sterling_engine.whitelist_manager import is_whitelisted
 
 
 def _level_to_schema(l, underlying: str = "") -> SupportResistanceLevel:

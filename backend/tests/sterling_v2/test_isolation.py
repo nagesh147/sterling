@@ -13,4 +13,4 @@ def test_existing_engines_still_import():
     # Untouched engines must still load.
     importlib.import_module("app.engines.edge.strategies")
     importlib.import_module("app.engines.directional.orchestrator")
-    importlib.import_module("app.engines.scalping.price_action")
+    importlib.import_module("app.engines.sterling_engine.price_action")

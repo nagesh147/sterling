@@ -6,7 +6,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.engines.scalping.check_bias_distribution import run_bias_diagnostic
+from app.engines.sterling_engine.check_bias_distribution import run_bias_diagnostic
 
 def run():
     conn = sqlite3.connect('sterling_paper.db')

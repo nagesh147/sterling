@@ -20,9 +20,9 @@ import numpy as np
 
 from app.services import ohlcv_store
 from app.schemas.market import Candle
-from app.engines.scalping.config import default_config
-from app.engines.scalping.levels import detect_levels
-from app.engines.scalping.price_action import evaluate_price_action
+from app.engines.sterling_engine.config import default_config
+from app.engines.sterling_engine.levels import detect_levels
+from app.engines.sterling_engine.price_action import evaluate_price_action
 
 SYMS = ["AAVE", "BTC", "ETH", "SOL", "XRP", "DOGE"]
 DAYS = 540

@@ -1,8 +1,8 @@
 import sys
 from collections import defaultdict
 import numpy as np
-from app.engines.scalping.config import EngineConfig, ScalpingProfile
-from app.engines.scalping.optimizer import _pf_exp
+from app.engines.sterling_engine.config import EngineConfig, ScalpingProfile
+from app.engines.sterling_engine.optimizer import _pf_exp
 from app.services.ohlcv_store import get_candles, get_status
 from app.schemas.market import Candle
 
@@ -76,9 +76,9 @@ def main():
             # we need to override it locally to use scan_symbol
             def patched_replay_symbol(sym, cM, cE, cfg, tsM, step, maxh):
                 import bisect
-                from app.engines.scalping.levels import detect_levels
-                from app.engines.scalping.optimizer import W_EXEC, W_MACRO, _exit_fixed
-                from app.engines.scalping.scanner import scan_symbol
+                from app.engines.sterling_engine.levels import detect_levels
+                from app.engines.sterling_engine.optimizer import W_EXEC, W_MACRO, _exit_fixed
+                from app.engines.sterling_engine.scanner import scan_symbol
                 
                 out = []
                 cooldown, cj, levels = -1, -1, []

@@ -25,13 +25,13 @@ from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
 from app.api.v1.endpoints.directional import _adapter_can_serve
 
-from app.engines.scalping.config import ScalpingConfig, default_config
-from app.engines.scalping.schemas import (
+from app.engines.sterling_engine.config import ScalpingConfig, default_config
+from app.engines.sterling_engine.schemas import (
     ScalpingScanResponse, ScalpingConfigResponse, ScalpingUniverseResponse,
     ScalpingSignal, ScalpingBacktestRequest, ScalpingBacktestResult,
     ScalpingBacktestTrade, ScalpingExecuteRequest, ScalpingExecuteResponse,
 )
-router = APIRouter(prefix="/scalping", tags=["scalping"])
+router = APIRouter(prefix="/sterling-engine", tags=["sterling_engine"])
 
 
 def _contracts_from_units(size_units: float, contract_value: float) -> int:
@@ -174,7 +174,7 @@ async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigRe
 async def presets() -> dict:
     """Named timeframe bundles (2y-OOS-grounded). The UI applies one by setting
     macro/execution TF + confirm bars on the config draft, then Save."""
-    from app.engines.scalping.config import TIMEFRAME_PRESETS
+    from app.engines.sterling_engine.config import TIMEFRAME_PRESETS
     return {k: v.model_dump() for k, v in TIMEFRAME_PRESETS.items()}
 
 
@@ -249,9 +249,9 @@ _scan_lock = asyncio.Lock()
 
 def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     """Evaluate the full universe across all enabled strategies."""
-    from app.engines.scalping.scanner import scan_universe
+    from app.engines.sterling_engine.scanner import scan_universe
     import numpy as np
-    from app.engines.scalping.levels import detect_levels
+    from app.engines.sterling_engine.levels import detect_levels
 
     syms = [s.upper() for s in cfg.symbols] if cfg.symbols else _store_symbols(
         min_bars_hours=max(cfg.warmup_bars_4h, cfg.warmup_bars_15m // 4 + 20)
@@ -322,8 +322,8 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
     and a 70/30 in-sample/out-of-sample split so a single run shows whether the
     edge is real or curve-fit. See `engines.scalping.backtest`.
     """
-    from app.engines.scalping.backtest import run_scalping_backtest
-    from app.engines.scalping.schemas import (
+    from app.engines.sterling_engine.backtest import run_scalping_backtest
+    from app.engines.sterling_engine.schemas import (
         SampleQuality, RegimeCoverage, OOSSplit,
     )
 
@@ -474,7 +474,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
                 resolutions.add(p.macro_timeframe or "4h")
                 resolutions.add(p.execution_timeframe or "15m")
         candles_by_res = _load_candles_by_res([sym], resolutions, days=30)
-        from app.engines.scalping.scanner import scan_universe
+        from app.engines.sterling_engine.scanner import scan_universe
         scan_resp = scan_universe([sym], candles_by_res, cfg, tradeable_set={sym})
         sigs = scan_resp.signals
         matched = [s for s in sigs if s.strategy == strategy and (s.entry_ok or body.confirm)]
@@ -727,7 +727,7 @@ _optimize_state: dict = {
 async def _run_optimize(base_cfg: ScalpingConfig, days: int, max_symbols: int) -> None:
     """Background worker: load candles per resolution, run the TF×param sweep
     off-thread, persist results."""
-    from app.engines.scalping.optimizer import optimize as _optimize, DEFAULT_TF_PAIRS
+    from app.engines.sterling_engine.optimizer import optimize as _optimize, DEFAULT_TF_PAIRS
     from app.services.db import set_config as _sc
 
     _optimize_state.update(running=True, progress="loading", started_ms=int(time.time() * 1000),

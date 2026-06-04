@@ -14,8 +14,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-from app.engines.scalping.config import ScalpingProfile
-from app.engines.scalping.schemas import ScalpingSignal
+from app.engines.sterling_engine.config import ScalpingProfile
+from app.engines.sterling_engine.schemas import ScalpingSignal
 
 
 def _get_major_strike_interval(price: float) -> float:

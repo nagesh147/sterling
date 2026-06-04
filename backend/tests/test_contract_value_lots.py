@@ -137,18 +137,18 @@ def test_paper_tracking_value_and_risk_use_contract_value():
 
 def test_contracts_from_units_eth_lot():
     """0.42 ETH / 0.01 lot = 42 contracts (was floored to 0 by the old coin math)."""
-    from app.api.v1.endpoints.scalping import _contracts_from_units
+    from app.api.v1.endpoints.sterling_engine import _contracts_from_units
     assert _contracts_from_units(0.4217, 0.01) == 42
 
 
 def test_contracts_from_units_sol_lot_one():
-    from app.api.v1.endpoints.scalping import _contracts_from_units
+    from app.api.v1.endpoints.sterling_engine import _contracts_from_units
     assert _contracts_from_units(26.0, 1.0) == 26
 
 
 def test_contracts_from_units_rejects_sub_lot():
     """A position smaller than one whole lot rounds to 0 (caller treats as too small)."""
-    from app.api.v1.endpoints.scalping import _contracts_from_units
+    from app.api.v1.endpoints.sterling_engine import _contracts_from_units
     assert _contracts_from_units(0.42, 1.0) == 0      # 0.42 of a 1-coin lot
     assert _contracts_from_units(0.0003, 0.001) == 0  # 0.3 of a BTC lot
 

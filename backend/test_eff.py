@@ -1,4 +1,4 @@
-from app.engines.scalping.config import ScalpingConfig, default_config
+from app.engines.sterling_engine.config import ScalpingConfig, default_config
 
 cfg = ScalpingConfig(use_optimized=True, active_profiles=[], profiles={})
 wfo = default_config()

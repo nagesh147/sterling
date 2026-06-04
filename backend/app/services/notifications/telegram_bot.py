@@ -95,8 +95,8 @@ def _positions_kb(status: str) -> dict:
 
 # ── Data builders (reuse REST logic) ──────────────────────────────────────────
 def _load_cfg():
-    from app.engines.scalping.config import default_config
-    from app.engines.scalping.config import ScalpingConfig
+    from app.engines.sterling_engine.config import default_config
+    from app.engines.sterling_engine.config import ScalpingConfig
     from app.services.db import get_config
     raw = get_config("scalping_config")
     if raw:
@@ -108,7 +108,7 @@ def _load_cfg():
 
 
 async def _scan():
-    from app.api.v1.endpoints.scalping import _scan_all
+    from app.api.v1.endpoints.sterling_engine import _scan_all
     from app.services import adapter_manager as _adm
     cfg = _load_cfg()
     try:

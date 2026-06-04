@@ -7,7 +7,7 @@ import os
 # Ensure the app module is in path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.engines.scalping.check_bias_distribution import run_bias_diagnostic
+from app.engines.sterling_engine.check_bias_distribution import run_bias_diagnostic
 
 def evaluate_bias_from_db(db_path="sterling_paper.db"):
     if not os.path.exists(db_path):

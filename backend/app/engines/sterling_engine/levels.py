@@ -12,7 +12,7 @@ from typing import List, Tuple
 import numpy as np
 from numpy.typing import NDArray
 
-from app.engines.scalping.config import ScalpingProfile as ScalpingConfig
+from app.engines.sterling_engine.config import ScalpingProfile as ScalpingConfig
 
 
 @dataclass

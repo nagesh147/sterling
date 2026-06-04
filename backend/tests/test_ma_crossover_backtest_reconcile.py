@@ -11,8 +11,8 @@ from __future__ import annotations
 import numpy as np
 
 from app.schemas.market import Candle
-from app.engines.scalping.config import ScalpingProfile
-from app.engines.scalping.backtest import (
+from app.engines.sterling_engine.config import ScalpingProfile
+from app.engines.sterling_engine.backtest import (
     run_scalping_backtest, _resample_15m_to_1h, EVALUATORS,
 )
 

@@ -15,9 +15,9 @@ from typing import List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-from app.engines.scalping.config import ScalpingProfile as ScalpingConfig
-from app.engines.scalping.levels import Level, price_near_level, nearest_level
-from app.engines.scalping.risk import resolve_trade_risk
+from app.engines.sterling_engine.config import ScalpingProfile as ScalpingConfig
+from app.engines.sterling_engine.levels import Level, price_near_level, nearest_level
+from app.engines.sterling_engine.risk import resolve_trade_risk
 
 
 def current_atr(closes: NDArray[np.float64], highs: NDArray[np.float64], lows: NDArray[np.float64], period: int = 14) -> float:

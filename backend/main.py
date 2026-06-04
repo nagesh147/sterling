@@ -1379,7 +1379,7 @@ async def lifespan(app: FastAPI):
         log.warning("Telegram config restore skipped: %s", _e)
 
     # Restore persisted scalping config (survives server restarts)
-    from app.engines.scalping.config import ScalpingConfig as _SC, default_config as _default_sc
+    from app.engines.sterling_engine.config import ScalpingConfig as _SC, default_config as _default_sc
     _saved_sc = get_config("scalping_config")
     if _saved_sc:
         try:
@@ -1655,8 +1655,8 @@ def create_app() -> FastAPI:
     app.include_router(grok_router, prefix="/api/v1")
 
     # Scalping strategies (Price Action / SMC / MA Crossover)
-    from app.api.v1.endpoints.scalping import router as scalping_router
-    app.include_router(scalping_router, prefix="/api/v1")
+    from app.api.v1.endpoints.sterling_engine import router as sterling_engine_router
+    app.include_router(sterling_engine_router, prefix="/api/v1")
     
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream

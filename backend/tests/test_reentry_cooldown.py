@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import types
 
-from app.api.v1.endpoints.scalping import _reentry_cooldown_remaining_min
+from app.api.v1.endpoints.sterling_engine import _reentry_cooldown_remaining_min
 
 TAG = "[SCALP-MEAN_REVERSION]"
 MIN = 60_000

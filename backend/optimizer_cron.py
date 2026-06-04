@@ -8,8 +8,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.engines.scalping.config import default_config
-from app.engines.scalping.optimizer import _pf_exp
+from app.engines.sterling_engine.config import default_config
+from app.engines.sterling_engine.optimizer import _pf_exp
 from report_metrics_aggressive import get_candles_paper, replay_strategy
 
 WHITELIST_PATH = os.path.join(os.path.dirname(__file__), "app", "engines", "scalping", "whitelist.json")

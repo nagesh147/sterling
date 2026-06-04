@@ -11,8 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.schemas.market import Candle
-from app.engines.scalping.config import ScalpingProfile
-from app.engines.scalping import backtest as bt
+from app.engines.sterling_engine.config import ScalpingProfile
+from app.engines.sterling_engine import backtest as bt
 
 
 def _mk(n: int, interval_ms: int, *, start: int = 1_700_000_000_000,

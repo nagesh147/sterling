@@ -1117,7 +1117,7 @@ def _collect_armed_signals(
     # Scalping multi-strategy
     if strategy_filter is None or strategy_filter.startswith("scalping"):
         try:
-            from app.api.v1.endpoints import scalping as _scalp
+            from app.api.v1.endpoints import sterling_engine as _scalp
             from app.services import adapter_manager
             cfg = _scalp._effective_config(request)
             scan = _scalp._scan_all(cfg, adapter_manager.get_data_source())

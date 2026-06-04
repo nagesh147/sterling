@@ -1,8 +1,8 @@
 import time
 from app.services import ohlcv_store
 from app.schemas.market import Candle
-from app.engines.scalping.config import default_config
-from app.engines.scalping.optimizer import optimize, DEFAULT_TF_PAIRS
+from app.engines.sterling_engine.config import default_config
+from app.engines.sterling_engine.optimizer import optimize, DEFAULT_TF_PAIRS
 def load(s,res,d):
     rows=ohlcv_store.get_candles(f"{s}USD",res,limit=500000,since=int(time.time())-d*86400)
     return [Candle(timestamp_ms=int(x["time"])*1000,open=x["open"],high=x["high"],low=x["low"],close=x["close"],volume=x["volume"]) for x in rows]

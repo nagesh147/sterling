@@ -7,9 +7,9 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.engines.scalping.config import default_config, ScalpingProfile
-from app.engines.scalping.optimizer import _pf_exp, W_EXEC, W_MACRO, _exit_fixed
-from app.engines.scalping.scanner import scan_symbol
+from app.engines.sterling_engine.config import default_config, ScalpingProfile
+from app.engines.sterling_engine.optimizer import _pf_exp, W_EXEC, W_MACRO, _exit_fixed
+from app.engines.sterling_engine.scanner import scan_symbol
 from app.schemas.market import Candle
 
 def get_candles_paper(symbol, resolution, limit=10000):
