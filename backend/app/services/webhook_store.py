@@ -42,6 +42,11 @@ def _persist(wh: WebhookConfig) -> None:
             ))
     except Exception as exc:
         log.warning("webhook persist failed: %s", exc)
+    from app.services import orm_mirror
+    orm_mirror.record("webhooks", wh.id, {
+        "id": wh.id, "name": wh.name, "webhook_type": wh.webhook_type.value,
+        "active": wh.active, "trigger_count": wh.trigger_count,
+    })  # redacted: no url/extra (may hold secrets)
 
 
 def _delete_db(wh_id: str) -> None:
@@ -53,6 +58,8 @@ def _delete_db(wh_id: str) -> None:
             c.execute("DELETE FROM webhooks WHERE id = ?", (wh_id,))
     except Exception as exc:
         log.warning("webhook delete failed: %s", exc)
+    from app.services import orm_mirror
+    orm_mirror.delete("webhooks", wh_id)
 
 
 def _load_from_db() -> List[WebhookConfig]:

@@ -21,7 +21,7 @@ from sqlalchemy import select
 
 from app.persistence.base import Base, make_engine
 from app.persistence.session import make_session_factory, session_scope
-from app.persistence.models import PositionRow
+from app.persistence.models import PositionRow, MirroredRecord
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +77,36 @@ def mirror_equity_snapshot(portfolio_value: float, drawdown: Optional[float] = N
     from app.persistence.repositories import EquitySnapshotRepository
     with session_scope(_factory()) as s:
         EquitySnapshotRepository(s).add(portfolio_value, drawdown, circuit_breaker_state)
+
+
+def mirror_record(store: str, key: str, payload: dict) -> None:
+    """Generic (store, key) → JSON upsert into the mirror table."""
+    with session_scope(_factory()) as s:
+        s.merge(MirroredRecord(
+            store=store, key=str(key),
+            payload=json.dumps(payload, default=str),
+            updated_ts=int(time.time() * 1000),
+        ))
+
+
+def mirror_record_delete(store: str, key: str) -> None:
+    with session_scope(_factory()) as s:
+        row = s.get(MirroredRecord, {"store": store, "key": str(key)})
+        if row is not None:
+            s.delete(row)
+
+
+def reconcile_store(store: str, sqlite_keys) -> Dict[str, List[str]]:
+    """Compare a store's sqlite keys against the ORM mirror's keys."""
+    sqlite_set = {str(k) for k in sqlite_keys}
+    with session_scope(_factory()) as s:
+        orm_set = {
+            r.key for r in s.scalars(select(MirroredRecord).where(MirroredRecord.store == store))
+        }
+    return {
+        "only_sqlite": sorted(sqlite_set - orm_set),
+        "only_orm": sorted(orm_set - sqlite_set),
+    }
 
 
 def reconcile_positions(sqlite_positions: List[dict]) -> Dict[str, Dict[str, Optional[str]]]:

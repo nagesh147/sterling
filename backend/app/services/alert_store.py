@@ -42,6 +42,8 @@ def _persist(alert: Alert) -> None:
             ))
     except Exception as exc:
         log.warning("alert persist failed: %s", exc)
+    from app.services import orm_mirror
+    orm_mirror.record("alerts", alert.id, alert.model_dump())
 
 
 def _delete_db(alert_id: str) -> None:
@@ -53,6 +55,8 @@ def _delete_db(alert_id: str) -> None:
             c.execute("DELETE FROM alerts WHERE id = ?", (alert_id,))
     except Exception as exc:
         log.warning("alert delete failed: %s", exc)
+    from app.services import orm_mirror
+    orm_mirror.delete("alerts", alert_id)
 
 
 def _load_from_db() -> List[Alert]:

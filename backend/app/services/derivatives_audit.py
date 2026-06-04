@@ -210,3 +210,8 @@ def _persist(entry: AuditEntry) -> None:
         con.close()
     except Exception as exc:
         log.debug("derivatives_audit persist failed (in-memory only): %s", exc)
+    from app.services import orm_mirror
+    orm_mirror.record("derivatives_audit", entry.audit_id, {
+        "audit_id": entry.audit_id, "ts_ms": entry.ts_ms, "strategy": entry.strategy,
+        "underlying": entry.underlying, "status": entry.status, "instrument": entry.instrument,
+    })

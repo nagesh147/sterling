@@ -39,3 +39,19 @@ class EquitySnapshotRow(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     drawdown: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     circuit_breaker_state: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class MirroredRecord(Base):
+    """Generic (store, key) → JSON mirror for the low-volume trading-state stores.
+
+    A uniform parity/audit mirror so every store can dual-write with a one-line
+    hook (see app/services/orm_mirror.py). First-class entities (positions,
+    equity_snapshots) keep their own typed tables; any store here can be promoted
+    to a typed model when it becomes authoritative.
+    """
+    __tablename__ = "mirrored_records"
+
+    store: Mapped[str] = mapped_column(String, primary_key=True)
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_ts: Mapped[int] = mapped_column(Integer, nullable=False)

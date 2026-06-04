@@ -100,6 +100,8 @@ class CalibrationService:
                 )
         except Exception as exc:
             log.warning("calibration_state persist failed: %s", exc)
+        from app.services import orm_mirror
+        orm_mirror.record("calibration_state", underlying, {"ivr_history": hist})
 
     def _persist_trade(self, pnl_pct: float, regime: str) -> None:
         try:

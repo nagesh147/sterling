@@ -59,6 +59,8 @@ def _persist_pos(pos_id: str) -> None:
             )
     except Exception as exc:
         log.warning("pnl_history persist failed for %s: %s", pos_id, exc)
+    from app.services import orm_mirror
+    orm_mirror.record("pnl_history", pos_id, {"snapshots": snaps})
 
 
 def _load_all() -> None:

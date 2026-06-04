@@ -67,6 +67,12 @@ def _persist(cfg: ExchangeConfig) -> None:
         log.debug("exchange_config persisted: %s (%s)", cfg.id, cfg.name)
     except Exception as exc:
         log.warning("exchange_config persist failed for %s: %s", cfg.id, exc)
+    from app.services import orm_mirror
+    orm_mirror.record("exchange_configs", cfg.id, {
+        "id": cfg.id, "name": cfg.name, "display_name": cfg.display_name,
+        "is_paper": cfg.is_paper, "is_active": cfg.is_active,
+        "has_credentials": bool(cfg.api_key and cfg.api_secret),
+    })  # redacted: never mirror api_key/api_secret
 
 
 def _delete_db(config_id: str) -> None:
@@ -78,6 +84,8 @@ def _delete_db(config_id: str) -> None:
             c.execute("DELETE FROM exchange_configs WHERE id = ?", (config_id,))
     except Exception as exc:
         log.warning("exchange_config delete failed: %s", exc)
+    from app.services import orm_mirror
+    orm_mirror.delete("exchange_configs", config_id)
 
 
 def _load_from_db() -> List[ExchangeConfig]:
