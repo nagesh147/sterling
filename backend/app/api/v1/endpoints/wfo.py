@@ -7,8 +7,8 @@ from typing import Optional, Dict, Any
 
 router = APIRouter(prefix="/wfo", tags=["wfo"])
 
-WHITELIST_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "engines", "scalping", "whitelist.json")
-IMPACT_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "engines", "scalping", "impact.json")
+WHITELIST_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "engines", "sterling_engine", "whitelist.json")
+IMPACT_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "engines", "sterling_engine", "impact.json")
 LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "..", "optimizer_cron.log")
 
 @router.get("/state")

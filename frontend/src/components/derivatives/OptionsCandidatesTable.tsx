@@ -356,11 +356,11 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                 );
               })}
             </tbody>
-            {pnl.count > 0 && (
+            {pnl.positions.length > 0 && (
               <tfoot>
                 <tr style={{ borderTop: `2px solid ${c.border}`, color: c.text }}>
                   <td colSpan={11} style={{ padding: '7px 8px', fontSize: 10, color: c.dim, letterSpacing: '0.04em', fontWeight: 700 }}>
-                    CONSOLIDATED · {pnl.count} position{pnl.count === 1 ? '' : 's'}
+                    CONSOLIDATED · {pnl.count} open position{pnl.count === 1 ? '' : 's'}
                     <span style={{ marginLeft: 10, fontWeight: 400 }}>
                       unrealized <b style={{ color: pnl.totalUnrealized >= 0 ? c.green : c.red }}>{fmtSigned(pnl.totalUnrealized)}</b>
                       {' · '}realized <b style={{ color: pnl.totalRealized >= 0 ? c.green : c.red }}>{fmtSigned(pnl.totalRealized)}</b>

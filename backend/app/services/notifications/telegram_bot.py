@@ -98,7 +98,8 @@ def _load_cfg():
     from app.engines.sterling_engine.config import default_config
     from app.engines.sterling_engine.config import ScalpingConfig
     from app.services.db import get_config
-    raw = get_config("scalping_config")
+    # New key, falling back to the legacy "scalping_config" for pre-rename installs.
+    raw = get_config("sterling_engine_config") or get_config("scalping_config")
     if raw:
         try:
             return ScalpingConfig.model_validate_json(raw)

@@ -431,11 +431,11 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
               );
             })}
           </tbody>
-          {spotPnlStats.count > 0 && (
+          {spotPositions.length > 0 && (
             <tfoot>
               <tr style={{ borderTop: `2px solid ${c.border}`, color: c.text }}>
                 <td colSpan={12} style={{ padding: '7px 8px', fontSize: 10, color: c.dim, letterSpacing: '0.04em', fontWeight: 700 }}>
-                  CONSOLIDATED · {spotPnlStats.count} position{spotPnlStats.count === 1 ? '' : 's'}
+                  CONSOLIDATED · {spotPnlStats.count} open position{spotPnlStats.count === 1 ? '' : 's'}
                   <span style={{ marginLeft: 10, fontWeight: 400 }}>
                     unrealized <b style={{ color: spotPnlStats.totalUnrealized >= 0 ? c.green : c.red }}>{fmtSigned(spotPnlStats.totalUnrealized)}</b>
                     {' · '}realized <b style={{ color: spotPnlStats.totalRealized >= 0 ? c.green : c.red }}>{fmtSigned(spotPnlStats.totalRealized)}</b>

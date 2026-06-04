@@ -36,7 +36,7 @@ def solve_futures(
     atr_val: float, take_profit: Optional[float], rr: float = 2.0,
     validated: bool = False,
 ) -> SLTPResolution:
-    """Wrap app/engines/scalping/risk.resolve_trade_risk for futures.
+    """Wrap app/engines/sterling_engine/risk.resolve_trade_risk for futures.
 
     For the integration path we have a direct stop/target so we synthesize
     a degenerate "levels" list with just the target and ask the solver to
