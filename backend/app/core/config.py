@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     deribit_base_url: str = "https://www.deribit.com/api/v2"
     log_level: str = "INFO"
     log_json: bool = False  # opt-in structured JSON logging (Phase 2 observability)
+    database_url: str = ""       # SQLAlchemy URL; empty → dedicated sqlite file (Postgres-ready)
+    use_sqlalchemy: bool = False  # Phase 5 dual-write flag (default OFF)
     cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
     exchange_adapter: str = "delta_india"  # "delta_india" | "deribit" | "okx" | "binance"
 
