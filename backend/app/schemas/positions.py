@@ -52,6 +52,7 @@ class PaperPosition(BaseModel):
     entry_iv: Optional[float] = None           # IV at entry (decimal, e.g. 0.65)
     entry_dte: Optional[int] = None            # DTE at entry — used by force-close-before-expiry
     entry_greeks_snapshot: Optional[GreeksSnapshot] = None
+    expected_theta_burn_usd: Optional[float] = None
     # Indian crypto 1% TDS — accumulates as positions close. Not used in
     # trade decisions; surfaced in UI for after-tax PnL.
     tds_withheld_usd: float = 0.0

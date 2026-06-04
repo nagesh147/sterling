@@ -88,6 +88,14 @@ async def auto_execute_derivative(
         order_type="market",
         stop_loss=cand.stop_loss, take_profit=cand.take_profit,
         option_symbol=cand.option_symbol,
+        delta=cand.delta,
+        gamma=cand.gamma,
+        theta=cand.theta,
+        vega=cand.vega,
+        projected_theta_burn_usd=cand.projected_theta_burn_usd,
+        liquidity=cand.liquidity.composite if cand.liquidity else None,
+        expected_r=cand.expected_r,
+        dte=cand.dte,
         notes=(
             f"[AUTO][DERIV-{leg.upper()}] {row_strategy} "
             f"freeze={freeze_token[:8]} R={cand.expected_r:.2f}"

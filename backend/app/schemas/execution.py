@@ -16,6 +16,9 @@ class CandidateContract(BaseModel):
     mid_price: float
     mark_iv: float
     delta: float
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
     open_interest: float
     volume_24h: float
     spread_pct: float

@@ -58,6 +58,7 @@ def add_position(
     entry_iv: float | None = None,
     entry_dte: int | None = None,
     entry_greeks_snapshot: GreeksSnapshot | None = None,
+    expected_theta_burn_usd: float | None = None,
 ) -> PaperPosition:
     # Issue 17 — refuse to record a position with a corrupt entry price.
     # Pre-TTACE seed data has rows where entry_spot_price == 0; tightening at
@@ -122,6 +123,7 @@ def add_position(
         entry_iv=entry_iv if entry_iv is not None else _default_entry_iv(sized_trade),
         entry_dte=entry_dte if entry_dte is not None else _default_entry_dte(sized_trade),
         entry_greeks_snapshot=entry_greeks_snapshot,
+        expected_theta_burn_usd=expected_theta_burn_usd,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())

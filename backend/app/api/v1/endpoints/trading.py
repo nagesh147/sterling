@@ -43,6 +43,14 @@ class LiveOrderRequest(BaseModel):
     # For options
     option_symbol: Optional[str] = None
     option_premium: Optional[float] = None
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    projected_theta_burn_usd: Optional[float] = None
+    liquidity: Optional[float] = None
+    expected_r: Optional[float] = None
+    dte: Optional[int] = None
     notes: str = ""
     # Account NAV used to report capital-at-risk as a real %. When omitted the
     # reporter falls back to the legacy $100k denominator (see _capital_at_risk_pct).
@@ -540,20 +548,29 @@ def _create_paper_tracking(
         leg = CandidateContract(
             instrument_name=body.option_symbol or f"{sym}-PERP",
             underlying=sym,
-            strike=entry_price, expiry_date="", dte=0,
+            strike=entry_price, expiry_date="", dte=body.dte or 0,
             option_type=body.instrument_type,
             bid=0.0, ask=0.0,
             mark_price=entry_price, mid_price=entry_price,
             mark_iv=0.0,
-            delta=1.0 if body.direction == "long" else -1.0,
+            delta=body.delta if body.delta is not None else (1.0 if body.direction == "long" else -1.0),
+            gamma=body.gamma, theta=body.theta, vega=body.vega,
             open_interest=0.0, volume_24h=0.0,
-            spread_pct=0.0, health_score=0.0, healthy=True,
+            spread_pct=0.0, health_score=body.liquidity or 0.0, healthy=True,
         )
+        rr = body.expected_r
+        if not rr:
+            rr = 2.0
+            if body.stop_loss and body.take_profit:
+                risk = abs(entry_price - body.stop_loss)
+                reward = abs(body.take_profit - entry_price)
+                if risk > 0:
+                    rr = round(reward / risk, 2)
         structure = TradeStructure(
             structure_type=body.instrument_type,
             direction=direction, legs=[leg],
             net_premium=entry_price, max_loss=entry_price * 0.03,
-            max_gain=None, risk_reward=2.0,
+            max_gain=None, risk_reward=rr,
             score=0.0, score_breakdown={},
             leverage=int(body.leverage),
         )
@@ -565,6 +582,20 @@ def _create_paper_tracking(
             max_risk_usd=round(max_risk, 2),
             capital_at_risk_pct=round(capital_at_risk, 2),
         )
+        from app.schemas.greeks import GreeksSnapshot
+        import time
+        greeks = None
+        if body.instrument_type == "options":
+            greeks = GreeksSnapshot(
+                delta=body.delta if body.delta is not None else (1.0 if body.direction == "long" else -1.0),
+                gamma=body.gamma or 0.0,
+                theta=body.theta or 0.0,
+                vega=body.vega or 0.0,
+                spot=entry_price,
+                dte=body.dte or 0,
+                timestamp_ms=int(time.time() * 1000)
+            )
+
         mode_tag = body.notes.split(" ")[0] if body.notes else ""
         is_scalp = mode_tag.startswith("[SCALP-")
         pos = paper_store.add_position(
@@ -577,6 +608,8 @@ def _create_paper_tracking(
             order_status=order_status,
             initial_sl=body.stop_loss,
             initial_tp=body.take_profit,
+            entry_greeks_snapshot=greeks,
+            expected_theta_burn_usd=body.projected_theta_burn_usd,
         )
         return pos.id
     except Exception as exc:

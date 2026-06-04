@@ -586,6 +586,14 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
         stop_loss=candidate.stop_loss,
         take_profit=candidate.take_profit,
         option_symbol=candidate.option_symbol,
+        delta=candidate.delta,
+        gamma=candidate.gamma,
+        theta=candidate.theta,
+        vega=candidate.vega,
+        projected_theta_burn_usd=candidate.projected_theta_burn_usd,
+        liquidity=candidate.liquidity,
+        expected_r=candidate.expected_r,
+        dte=candidate.dte,
         notes=f"[DERIV-{candidate.instrument_type.upper()}] freeze={body.freeze_token[:8]} R={candidate.expected_r:.2f}",
     )
     try:

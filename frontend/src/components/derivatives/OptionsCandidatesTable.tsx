@@ -86,14 +86,18 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
         take_profit: p.initial_tp || 0,
         expected_r: p.sized_trade?.structure?.risk_reward || 0,
         funding_cost_usd: 0,
+        theta_burn_usd: p.expected_theta_burn_usd || 0,
         liquidity_score: leg?.health_score || null,
         reason: 'Active position',
         warnings: [],
         option_symbol: leg?.instrument_name || '',
         strike: leg?.strike || 0,
-        dte: leg?.dte || 0,
+        dte: p.entry_dte ?? leg?.dte ?? 0,
         premium: p.entry_premium ?? p.entry_price_real ?? 0,
-        delta: leg?.delta,
+        delta: p.entry_greeks_snapshot?.delta ?? leg?.delta,
+        gamma: p.entry_greeks_snapshot?.gamma ?? leg?.gamma,
+        theta: p.entry_greeks_snapshot?.theta ?? leg?.theta,
+        vega: p.entry_greeks_snapshot?.vega ?? leg?.vega,
         // @ts-ignore
         _rawPos: p,
         // @ts-ignore
@@ -188,7 +192,7 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                   { name: '', tooltip: '' }
                 ].map((h, i) => (
                   <th key={i} title={h.tooltip} style={{
-                    padding: '5px 8px', textAlign: i >= 11 ? 'right' : 'left',
+                    padding: '5px 8px', verticalAlign: 'middle', textAlign: i >= 11 ? 'right' : 'left',
                     borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap',
                     cursor: h.tooltip ? 'help' : 'default'
                   }}>{h.name}</th>
@@ -202,7 +206,12 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                 // @ts-ignore
                 const rp = row.source === 'position' && row._rawPos 
                   // @ts-ignore
-                  ? { pnl: row._rawPos.estimated_pnl_usd || 0, realized: false, mode: row._rawPos.is_paper ? 'paper' : 'live', status: row._rawPos.status } 
+                  ? { 
+                      pnl: (row._rawPos.status === 'open' || row._rawPos.status === 'partially_closed') ? (row._rawPos.estimated_pnl_usd ?? 0) : (row._rawPos.realized_pnl_usd ?? 0), 
+                      realized: !(row._rawPos.status === 'open' || row._rawPos.status === 'partially_closed'), 
+                      mode: (row._rawPos.notes || '').includes('[LIVE]') ? 'LIVE' : 'PAPER', 
+                      status: row._rawPos.status 
+                    } 
                   : pnl.pnlForRow(row.underlying, row.direction, row.strategy);
                 const isExp = expanded === row.freeze_token;
                 return (
@@ -213,29 +222,29 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       borderBottom: isExp ? 'none' : `1px solid ${c.border2}`, color: c.text,
                       cursor: 'pointer', background: isExp ? alpha(c.blue, 0.06) : undefined,
                     }}>
-                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
                       <span style={{ color: c.dim, fontSize: 10, marginRight: 3 }}>{isExp ? '▾' : '▸'}</span>
                       <span style={{ color: row.direction === 'long' ? c.green : c.red }}>
                         {row.direction === 'long' ? '▲' : '▼'}
                       </span>{' '}{row.underlying}
                     </td>
-                    <td style={{ padding: '5px 8px', fontSize: 10, fontWeight: 600, color: c.muted, whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 10, fontWeight: 600, color: c.muted }}>
                       <SourceBadge source={row.source} />
                       {cleanStrategy(row.strategy)}
                     </td>
-                    <td style={{ padding: '5px 8px', fontWeight: 600 }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>
                       <span style={{ color: type === 'CE' ? c.green : c.red }}>{type}</span>{' '}
                       <span>{strikeK}</span>{' '}
                       <span style={{ color: c.dim, fontSize: 9 }}>{dteTag}</span>
                     </td>
-                    <td style={{ padding: '5px 8px' }}>{fmt(row.delta, 3)}</td>
-                    <td style={{ padding: '5px 8px' }}>{fmt(row.gamma, 5)}</td>
-                    <td style={{ padding: '5px 8px', color: row.theta && row.theta < 0 ? c.red : c.text }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{fmt(row.delta, 3)}</td>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{fmt(row.gamma, 5)}</td>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', color: row.theta && row.theta < 0 ? c.red : c.text }}>
                       {fmt(row.theta, 2)}
                     </td>
-                    <td style={{ padding: '5px 8px' }}>{fmt(row.vega, 2)}</td>
-                    <td style={{ padding: '5px 8px' }}>{fmtUsd(row.premium)}</td>
-                    <td style={{ padding: '5px 8px' }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{fmt(row.vega, 2)}</td>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}>{fmtUsd(row.premium)}</td>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <span style={{
                         display: 'inline-block', minWidth: 36, textAlign: 'center',
                         padding: '1px 6px', borderRadius: 4, fontSize: 10,
@@ -246,14 +255,14 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                         {row.liquidity_score == null ? '—' : (row.liquidity_score * 100).toFixed(0)}
                       </span>
                     </td>
-                    <td style={{ padding: '5px 8px', fontWeight: 700,
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 700,
                                 color: row.expected_r >= 2 ? c.green : row.expected_r >= 1 ? c.amber : c.red }}>
                       {fmt(row.expected_r, 2)}R
                     </td>
-                    <td style={{ padding: '5px 8px', fontSize: 10, color: c.muted }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 10, color: c.muted }}>
                       {fmtUsd(row.theta_burn_usd)}
                     </td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700 }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right', fontWeight: 700 }}>
                       {rp && rp.pnl != null ? (
                         <span style={{ color: rp.pnl >= 0 ? c.green : c.red }}
                               title={`${rp.mode} · ${rp.realized ? 'realized' : 'unrealized'} · ${rp.status}`}>
@@ -261,35 +270,51 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                         </span>
                       ) : <span style={{ color: c.dim }}>—</span>}
                     </td>
-                    <td style={{ padding: '5px 8px', textAlign: 'right' }}>
+                    <td style={{ padding: '4px 6px', verticalAlign: 'middle', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
                       {(() => {
-                        let badgeProps: { text: string; color: string } | null = null;
-                        
-                        if (row.source === 'position') {
-                          const pos = (row as any)._rawPos;
-                          let modeStr = 'PAPER';
-                          if (pos && pos.is_paper !== undefined) {
-                             modeStr = pos.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE';
-                          }
-                          const isAuto = algoOn;
-                          const prefix = isAuto ? 'AUTO·' : '';
-                          const color = modeStr === 'LIVE' ? c.red : (modeStr === 'SHADOW' ? c.amber : c.blue);
-                          badgeProps = { text: `✓ ${prefix}${modeStr}`, color };
-                        } else if (algoOn) {
-                          const modeStr = routerMode.toUpperCase();
-                          const color = modeStr === 'LIVE' ? c.red : (modeStr === 'SHADOW' ? c.amber : c.blue);
-                          badgeProps = { text: `⚡ AUTO·${modeStr}`, color };
-                        }
+                        if (rp) {
+                          let isAuto = false;
+                          let pausedAuto = false;
+                          let posModeStr = 'PAPER';
 
-                        if (badgeProps) {
+                          if (row.source === 'position') {
+                            const pos = (row as any)._rawPos;
+                            isAuto = /\[AUTO\]/.test(pos?.notes || '');
+                            pausedAuto = isAuto && !algoOn && (pos?.status === 'open' || pos?.status === 'partially_closed');
+                            if (pos && pos.is_paper !== undefined) {
+                               posModeStr = pos.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE';
+                            }
+                          } else {
+                            isAuto = rp.mode.includes('AUTO');
+                            pausedAuto = isAuto && !algoOn && !rp.realized;
+                            posModeStr = rp.mode.replace('·AUTO', '');
+                          }
+
+                          const color = posModeStr === 'LIVE' ? c.red : (posModeStr === 'SHADOW' ? c.amber : c.blue);
                           return (
-                            <span title={auto ? "Algo is ON — auto-executes via background scanner" : undefined} style={{
+                            <span title={pausedAuto ? 'Opened by Algo, which is now OFF — runs to SL/TP, no re-entry' : undefined} style={{
                               display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center',
                               fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
-                              background: alpha(badgeProps.color, 0.1), color: badgeProps.color,
+                              background: pausedAuto ? alpha(c.amber, 0.12) : alpha(color, 0.09),
+                              color: pausedAuto ? c.amber : color,
+                              border: `1px solid ${pausedAuto ? alpha(c.amber, 0.44) : alpha(color, 0.27)}`,
                               whiteSpace: 'nowrap'
                             }}>
-                              {badgeProps.text}
+                              {rp.realized ? '✓ CLOSED' : `✓ ${isAuto ? 'AUTO·' : ''}${posModeStr}${pausedAuto ? ' ⏸' : ''}`}
+                            </span>
+                          );
+                        } else if (auto && algoOn) {
+                          const modeStr = routerMode.toUpperCase();
+                          const color = modeStr === 'LIVE' ? c.red : (modeStr === 'SHADOW' ? c.amber : c.blue);
+                          return (
+                            <span title={`Algo is ON — auto-executes in ${modeStr} mode`} style={{
+                              display: 'inline-block', width: 105, boxSizing: 'border-box', textAlign: 'center',
+                              fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 4,
+                              background: alpha(color, 0.08), color: color,
+                              border: `1px solid ${alpha(color, 0.27)}`,
+                              whiteSpace: 'nowrap'
+                            }}>
+                              ⚡ AUTO·{modeStr}
                             </span>
                           );
                         }
@@ -356,23 +381,6 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                 );
               })}
             </tbody>
-            {pnl.positions.length > 0 && (
-              <tfoot>
-                <tr style={{ borderTop: `2px solid ${c.border}`, color: c.text }}>
-                  <td colSpan={11} style={{ padding: '7px 8px', fontSize: 10, color: c.dim, letterSpacing: '0.04em', fontWeight: 700 }}>
-                    CONSOLIDATED · {pnl.count} open position{pnl.count === 1 ? '' : 's'}
-                    <span style={{ marginLeft: 10, fontWeight: 400 }}>
-                      unrealized <b style={{ color: pnl.totalUnrealized >= 0 ? c.green : c.red }}>{fmtSigned(pnl.totalUnrealized)}</b>
-                      {' · '}realized <b style={{ color: pnl.totalRealized >= 0 ? c.green : c.red }}>{fmtSigned(pnl.totalRealized)}</b>
-                    </span>
-                  </td>
-                  <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 800, color: pnl.total >= 0 ? c.green : c.red }}>
-                    {fmtSigned(pnl.total)}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            )}
           </table>
         )}
       </div>
