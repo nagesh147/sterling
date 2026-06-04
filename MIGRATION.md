@@ -25,7 +25,7 @@ additive modules alongside the working system, no big-bang rewrite, and a
 | **2** | Observability: JSON logging, correlation ids, metrics (opt-in) | ✅ done |
 | **3** | Event bus + 8 agent facades + Orchestrator + Fill→PNL reference flow | ✅ done |
 | **4** | Separated `RiskEngine` + rule registry (shadow-compare) | ✅ done |
-| **5** | SQLAlchemy parallel store (Postgres-ready) — **5a scaffolding + 5b dual-write done**; 5c flip planned | 🔶 partial |
+| **5** | SQLAlchemy parallel store (Postgres-ready) — **5a scaffolding + 5b/5c dual-write across all trading-state stores done**; production flip planned | 🔶 partial |
 | **6** | Canonical docs + report archival + market seam | ✅ done |
 
 ## Phase 5 plan (SQLAlchemy)
@@ -44,11 +44,21 @@ and reversible**:
    `app/persistence/sync.py` mirrors `db.upsert`/`db.remove` into the ORM via
    lazy, fail-safe hooks (no sqlalchemy import unless the flag is on; a mirror
    error never affects the primary sqlite write). `reconcile_positions()` asserts
-   parity. Tested in `test_orm_dualwrite.py`. Extend the same mirror pattern to
-   the remaining stores (paper fills, calibration, equity snapshots).
-3. **5c — planned.** Flip the flag ON after a verification window (run dual-write
-   in production, monitor `reconcile_positions()` for drift). Keep the raw-sqlite
-   path as fallback for one release. Engine URL from config → PostgreSQL-ready.
+   parity. Tested in `test_orm_dualwrite.py`.
+3. **5c — dual-write coverage DONE; production flip planned.** A generic
+   `MirroredRecord(store, key, payload)` + `app/services/orm_mirror.py` (guarded,
+   fail-safe) mirrors all durability-critical trading-state stores via a one-line
+   hook each: `equity_snapshots`, `pnl_history`, `alerts`, `webhooks`,
+   `exchange_configs` (redacted — never api keys), `calibration_state`,
+   `derivatives_audit`. `reconcile_store()` checks per-store key parity.
+   **Intentionally excluded:** high-volume reproducible market-data caches
+   (`candles`, `ohlcv`, `iv_history`, `option_iv_ticks`, `iv_surface_params`,
+   `arrows`, `hmm_regimes`) and append-only stats (`calibration_trades`,
+   `wf_results`, `parameter_sensitivity`).
+   **The flip (remaining):** turn `use_sqlalchemy` ON in production, monitor
+   `reconcile_positions()` / `reconcile_store()` for drift over a verification
+   window, then make the ORM authoritative; keep raw-sqlite as fallback for one
+   release. Engine URL from config → PostgreSQL-ready.
 
 No SQLite-specific SQL leaks into the ORM layer so Postgres is a config change.
 
