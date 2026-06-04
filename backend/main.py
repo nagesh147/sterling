@@ -308,7 +308,7 @@ async def _background_position_monitor(app: FastAPI) -> None:
                         if is_scalp and pos.trail_stop_json and pos.status.value == "open":
                             try:
                                 _ts = TrailState.from_json(pos.trail_stop_json)
-                                _scalp_cfg = getattr(app.state, "scalping_config", None)
+                                _scalp_cfg = getattr(app.state, "sterling_engine_config", None)
                                 _tp_cfg = getattr(_scalp_cfg, "tiered_tp", None) if _scalp_cfg else None
                                 if _tp_cfg and _tp_cfg.enabled and not _ts.tp1_triggered:
                                     _entry = pos.entry_price_real or pos.entry_spot_price
@@ -1380,18 +1380,19 @@ async def lifespan(app: FastAPI):
 
     # Restore persisted scalping config (survives server restarts)
     from app.engines.sterling_engine.config import ScalpingConfig as _SC, default_config as _default_sc
-    _saved_sc = get_config("scalping_config")
+    # New key, falling back to the legacy "scalping_config" for pre-rename installs.
+    _saved_sc = get_config("sterling_engine_config") or get_config("scalping_config")
     if _saved_sc:
         try:
             cfg = _SC.model_validate_json(_saved_sc)
             if not cfg.profiles:
                 cfg.profiles = _default_sc().profiles
-            app.state.scalping_config = cfg
+            app.state.sterling_engine_config = cfg
             log.info("Restored scalping config from DB")
         except Exception:
-            app.state.scalping_config = _default_sc()
+            app.state.sterling_engine_config = _default_sc()
     else:
-        app.state.scalping_config = _default_sc()
+        app.state.sterling_engine_config = _default_sc()
 
     # Restore persisted Telegram config (survives server restarts)
     from app.services.notifications import telegram as _telegram_svc

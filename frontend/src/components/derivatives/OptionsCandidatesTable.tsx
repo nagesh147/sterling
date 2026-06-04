@@ -71,33 +71,35 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
   pnl.positions.filter(p => p.status === 'open' || p.status === 'partially_closed').forEach(p => {
     const dir = p.sized_trade?.structure?.direction || '';
     const match = (p.notes || '').match(/(?:scalping|edge|triple_st)\/[a-z_]+/);
-    rows.push({
-      freeze_token: `pos-${p.id}`,
-      instrument_type: 'options',
-      underlying: p.underlying,
-      direction: dir,
-      strategy: match ? match[0] : 'manual',
-      source: 'position',
-      timestamp_ms: p.entry_timestamp_ms || 0,
-      contracts: p.sized_trade?.contracts || 0,
-      notional_usd: (p.entry_price_real || 0) * (p.sized_trade?.contracts || 0),
-      stop_loss: p.initial_sl || 0,
-      take_profit: p.initial_tp || 0,
-      expected_r: 0,
-      funding_cost_usd: 0,
-      liquidity_score: null,
-      reason: 'Active position',
-      warnings: [],
-      option_symbol: p.sized_trade?.structure?.legs?.[0]?.symbol || '',
-      strike: p.sized_trade?.structure?.legs?.[0]?.strike || 0,
-      dte: 0,
-      premium: p.entry_premium ?? p.sized_trade?.structure?.legs?.[0]?.limit_price ?? 0,
-      // @ts-ignore
-      _rawPos: p,
-      // @ts-ignore
-      estimated_pnl_usd: p.estimated_pnl_usd,
-    } as unknown as DerivativesCandidateRow);
-  });
+      const leg = p.sized_trade?.structure?.legs?.[0];
+      rows.push({
+        freeze_token: `pos-${p.id}`,
+        instrument_type: 'options',
+        underlying: p.underlying,
+        direction: dir,
+        strategy: match ? match[0] : 'manual',
+        source: 'position',
+        timestamp_ms: p.entry_timestamp_ms || 0,
+        contracts: p.sized_trade?.contracts || 0,
+        notional_usd: (p.entry_price_real || 0) * (p.sized_trade?.contracts || 0),
+        stop_loss: p.initial_sl || 0,
+        take_profit: p.initial_tp || 0,
+        expected_r: p.sized_trade?.structure?.risk_reward || 0,
+        funding_cost_usd: 0,
+        liquidity_score: leg?.health_score || null,
+        reason: 'Active position',
+        warnings: [],
+        option_symbol: leg?.instrument_name || '',
+        strike: leg?.strike || 0,
+        dte: leg?.dte || 0,
+        premium: p.entry_premium ?? p.entry_price_real ?? 0,
+        delta: leg?.delta,
+        // @ts-ignore
+        _rawPos: p,
+        // @ts-ignore
+        estimated_pnl_usd: p.estimated_pnl_usd,
+      } as unknown as DerivativesCandidateRow);
+    });
 
   const isAutoExec = (row: DerivativesCandidateRow): boolean => {
     if (!algoOn) return false;
@@ -170,11 +172,26 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                 fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
                 textTransform: 'uppercase',
               }}>
-                {['Symbol', 'Strategy', 'Contract', 'Δ', 'Γ', 'Θ', 'ν', 'Premium', 'Liq', 'R', 'θ burn', 'P&L', ''].map((h, i) => (
-                  <th key={i} style={{
+                {[
+                  { name: 'Symbol', tooltip: 'Underlying asset' },
+                  { name: 'Strategy', tooltip: 'Originating strategy' },
+                  { name: 'Contract', tooltip: 'Option contract details (Type, Strike, DTE)' },
+                  { name: 'Δ', tooltip: 'Delta: Price sensitivity to $1 underlying move' },
+                  { name: 'Γ', tooltip: 'Gamma: Rate of change of Delta' },
+                  { name: 'Θ', tooltip: 'Theta: Daily time decay' },
+                  { name: 'ν', tooltip: 'Vega: Sensitivity to 1% implied volatility change' },
+                  { name: 'Premium', tooltip: 'Option price / Entry premium paid' },
+                  { name: 'Liq', tooltip: 'Liquidity health score (0-100)' },
+                  { name: 'R', tooltip: 'Expected Risk-Reward Ratio at take-profit' },
+                  { name: 'θ burn', tooltip: 'Projected total theta burn over expected hold time' },
+                  { name: 'P&L', tooltip: 'Estimated Live Profit/Loss' },
+                  { name: '', tooltip: '' }
+                ].map((h, i) => (
+                  <th key={i} title={h.tooltip} style={{
                     padding: '5px 8px', textAlign: i >= 11 ? 'right' : 'left',
                     borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap',
-                  }}>{h}</th>
+                    cursor: h.tooltip ? 'help' : 'default'
+                  }}>{h.name}</th>
                 ))}
               </tr>
             </thead>

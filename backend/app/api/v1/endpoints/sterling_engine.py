@@ -48,10 +48,11 @@ def _contracts_from_units(size_units: float, contract_value: float) -> int:
 
 
 def _get_config(request: Request) -> ScalpingConfig:
-    cfg = getattr(request.app.state, "scalping_config", None)
+    cfg = getattr(request.app.state, "sterling_engine_config", None)
     if cfg is None:
         from app.services.db import get_config as _gc
-        saved = _gc("scalping_config")
+        # New key, falling back to the legacy "scalping_config" for pre-rename installs.
+        saved = _gc("sterling_engine_config") or _gc("scalping_config")
         if saved:
             try:
                 cfg = ScalpingConfig.model_validate_json(saved)
@@ -62,7 +63,7 @@ def _get_config(request: Request) -> ScalpingConfig:
                 cfg = default_config()
         else:
             cfg = default_config()
-        request.app.state.scalping_config = cfg
+        request.app.state.sterling_engine_config = cfg
     return cfg
 
 
@@ -165,8 +166,8 @@ async def get_default_config() -> ScalpingConfigResponse:
 @router.post("/config", response_model=ScalpingConfigResponse)
 async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigResponse:
     from app.services.db import set_config as _sc
-    request.app.state.scalping_config = body
-    _sc("scalping_config", body.model_dump_json())
+    request.app.state.sterling_engine_config = body
+    _sc("sterling_engine_config", body.model_dump_json())
     return ScalpingConfigResponse(config=_effective_config(request))
 
 

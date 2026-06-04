@@ -70,7 +70,7 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
       notional_usd: (p.entry_price_real || 0) * (p.sized_trade?.contracts || 0),
       stop_loss: p.initial_sl || 0,
       take_profit: p.initial_tp || 0,
-      expected_r: 0,
+      expected_r: p.sized_trade?.structure?.risk_reward || 0,
       funding_cost_usd: 0,
       liquidity_score: null,
       reason: 'Active position',
@@ -153,11 +153,24 @@ export const FuturesCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                 fontSize: 9, fontWeight: 600, letterSpacing: '0.06em',
                 textTransform: 'uppercase',
               }}>
-                {['Symbol', 'Strategy', 'Lev', 'Contracts', 'Notional', 'SL', 'TP', 'R', 'Funding', 'P&L', ''].map((h, i) => (
-                  <th key={i} style={{
+                {[
+                  { name: 'Symbol', tooltip: 'Underlying asset' },
+                  { name: 'Strategy', tooltip: 'Originating strategy' },
+                  { name: 'Lev', tooltip: 'Calculated optimal leverage' },
+                  { name: 'Contracts', tooltip: 'Position size in coins/contracts' },
+                  { name: 'Notional', tooltip: 'Total notional value USD' },
+                  { name: 'SL', tooltip: 'Stop Loss price level' },
+                  { name: 'TP', tooltip: 'Take Profit price level' },
+                  { name: 'R', tooltip: 'Expected Risk-Reward Ratio at take-profit' },
+                  { name: 'Funding', tooltip: 'Estimated funding rate cost' },
+                  { name: 'P&L', tooltip: 'Estimated Live Profit/Loss' },
+                  { name: '', tooltip: '' }
+                ].map((h, i) => (
+                  <th key={i} title={h.tooltip} style={{
                     padding: '5px 8px', textAlign: i >= 9 ? 'right' : 'left',
                     borderBottom: `1px solid ${c.border}`, whiteSpace: 'nowrap',
-                  }}>{h}</th>
+                    cursor: h.tooltip ? 'help' : 'default'
+                  }}>{h.name}</th>
                 ))}
               </tr>
             </thead>
