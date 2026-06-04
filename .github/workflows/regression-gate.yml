@@ -1,0 +1,38 @@
+name: Regression Gate
+
+# Fails only on NEW test failures vs the merge-base (real regressions), so the
+# suite's pre-existing/flaky failures don't make every PR red. Complements the
+# existing ci.yml. See backend/scripts/regression_gate.sh and TESTING.md.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  regression-gate:
+    name: Zero-regression gate (diff vs merge-base)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # history needed for merge-base + worktree
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run zero-regression gate
+        working-directory: backend
+        run: bash scripts/regression_gate.sh origin/main
+        env:
+          ENVIRONMENT: test
+          PAPER_TRADING: "true"
+          REAL_PUBLIC_DATA: "false"
+          DEFAULT_UNDERLYING: BTC
+          LOG_LEVEL: WARNING

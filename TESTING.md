@@ -51,6 +51,22 @@ warning capture).
 4. Confirm `import main` loads (whole-app import health) and the **golden smoke**
    passes.
 
+## Continuous integration
+
+Two workflows:
+
+- **`.github/workflows/ci.yml`** (existing) — runs the full suite + frontend
+  typecheck/build. Note: because the suite has pre-existing failures, the raw
+  `pytest tests/` job is red even on `main`.
+- **`.github/workflows/regression-gate.yml`** (the meaningful gate) — runs
+  `backend/scripts/regression_gate.sh`, which executes the suite on the PR head
+  and at the merge-base, and **fails only on a NEW failure** (a test that fails
+  on the branch but passes at base). Pre-existing/flaky failures are ignored, so
+  the gate is actionable. The script hard-fails (exit 2) if pytest doesn't
+  actually run, so it can never silently no-op into a false pass.
+
+Run it locally: `bash backend/scripts/regression_gate.sh main`.
+
 ## Frontend
 
 `cd frontend && npx tsc --noEmit` (type-check) is part of `make verify`.
