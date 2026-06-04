@@ -1162,4 +1162,46 @@ def _collect_armed_signals(
         import traceback
         log.error(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
 
+    # Directional / Grok feed
+    if strategy_filter is None or strategy_filter.startswith("directional"):
+        try:
+            import time
+            from app.services import snapshot_cache
+            now_ms = int(time.time() * 1000)
+            for sym, snap in list(snapshot_cache._cache.items()):
+                if now_ms - snap.computed_at_ms > snapshot_cache._TTL_MS:
+                    continue
+                if snap.direction in ("long", "short") and snap.current_state in {
+                    "ENTRY_ARMED_PULLBACK", "ENTRY_ARMED_CONTINUATION",
+                    "CONFIRMED_SETUP_ACTIVE", "EARLY_SETUP_ACTIVE"
+                }:
+                    strat = "directional"
+                    if strategy_filter and strat != strategy_filter:
+                        continue
+                    if underlying_filter and snap.sym.upper() != underlying_filter.upper():
+                        continue
+                    
+                    signal_id = f"dir:{snap.sym}:{snap.computed_at_ms}"
+                    entry = snap.spot_price or 0.0
+                    stop = snap.stop_price or entry
+                    atr = snap.atr or abs(entry - stop)
+                    out.append((signal_id, SignalContext(
+                        strategy=strat,
+                        underlying=snap.sym,
+                        direction=snap.direction,
+                        entry=entry,
+                        stop_loss=stop,
+                        take_profit=snap.target_price,
+                        atr=atr,
+                        rr_target=2.0,
+                        signal_score=snap.signal_score or 50.0,
+                        signal_strength=snap.signal_strength or "SIGNAL",
+                        expected_hold_minutes=75,
+                        mode_name=snap.regime or "swing",
+                        presized=False,
+                    )))
+        except Exception as e:
+            import traceback
+            log.error(f"Error collecting directional signals for derivatives: {e}\n{traceback.format_exc()}")
+
     return out

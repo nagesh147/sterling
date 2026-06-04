@@ -44,9 +44,10 @@ def _net_delta(sized_trade) -> float:
     """
     legs = sized_trade.structure.legs
     if not legs:
-        # Futures (or any deltla-1 instrument). Use the leverage so the
-        # P&L approximation reflects the actual notional exposure.
-        if getattr(sized_trade.structure, "structure_type", "") == "futures":
+        # Futures, spot, or any delta-1 instrument. Use the leverage (1 for spot)
+        # so the P&L approximation reflects the actual notional exposure.
+        stype = getattr(sized_trade.structure, "structure_type", "").lower()
+        if stype in ("futures", "spot", "perp"):
             return float(getattr(sized_trade.structure, "leverage", 1) or 1)
         return 0.0
     if len(legs) == 1:

@@ -13,6 +13,10 @@ const fmtUsd = (v: number | null | undefined): string => v == null || !isFinite(
 const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const modeColorOf = (m: string) => m.toUpperCase() === 'LIVE' ? 'var(--t-red)' : m.toUpperCase() === 'SHADOW' ? 'var(--t-amber)' : 'var(--t-blue)';
 const fmt = (v: number | null | undefined, d = 2): string => v == null || !isFinite(v) ? '—' : v.toFixed(d);
+const fmtSigned = (v: number | null | undefined): string => {
+  if (v == null || !isFinite(v)) return '—';
+  return v >= 0 ? `+${fmtUsd(v)}` : `−${fmtUsd(Math.abs(v))}`;
+};
 
 const MODE_HINT: Record<RouterMode, string> = {
   paper: 'Paper Trading — fills are simulated using live orderbook prices.',
@@ -71,6 +75,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
   const routerModeObj = useRouterMode();
   const routerMode = routerModeObj.mode || 'paper';
   const livePnl = useLivePnl();
+  const { data: posData } = usePositions();
   
   const [expanded, setExpanded] = useState<string>('');
   const autoExecRef = useRef<Set<string>>(new Set());
@@ -141,7 +146,67 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
   }, [activePositions]);
 
 
-  const TABLE_COL_COUNT = 11;
+  const TABLE_COL_COUNT = 15;
+
+  const filteredSignals = signals.filter(s => {
+    if (['NIFTY', 'BANKNIFTY'].includes(s.underlying.toUpperCase())) return false;
+    if (trackFilter !== 'all' && s.track !== trackFilter) return false;
+    if (statusFilter !== 'all' && getSignalStatus(s) !== statusFilter) return false;
+    if (profileFilter !== 'all' && (s.profile?.toLowerCase() || 'scalping') !== profileFilter) return false;
+    return true;
+  });
+
+  let finalSignals = [...filteredSignals];
+  const signalKeys = new Set(finalSignals.map(s => `${s.underlying}-${s.direction}`));
+
+  const spotPositions = (posData?.positions || []).filter(p => {
+    const st = livePnl.data?.positions.find(x => x.position_id === p.id)?.structure_type || p.sized_trade?.structure?.structure_type || '';
+    if (st && st !== 'spot') return false;
+    if (!p.notes?.includes('[GROK]')) return false;
+    if (routerMode === 'live' && p.is_paper) return false;
+    if (routerMode !== 'live' && !p.is_paper) return false;
+    return true;
+  });
+
+  spotPositions.forEach(p => {
+    const direction = p.sized_trade?.structure?.direction || 'long';
+    const key = `${p.underlying}-${direction}`;
+    if (!signalKeys.has(key)) {
+      const match = (p.notes || '').match(/(?:scalping|edge|triple_st)\/[a-z_]+/);
+      finalSignals.push({
+        id: `pos-${p.id}`,
+        source: 'GROK',
+        strategy: (match ? match[0] : 'manual') as 'legacy' | 'latest' | undefined,
+        track: 'unknown',
+        profile: 'scalping',
+        underlying: p.underlying,
+        direction: direction.toUpperCase() as 'LONG' | 'SHORT',
+        timestamp_ms: p.entry_timestamp_ms || Date.now(),
+        entry_price: p.entry_spot_price || 0,
+        target_price: p.initial_tp || 0,
+        stop_loss: p.initial_sl || 0,
+        expected_r: 0,
+        reason: 'Restored from position history',
+        status: p.status === 'closed' ? 'CLOSED' : 'OPEN'
+      } as unknown as SignalItem);
+      signalKeys.add(key);
+    }
+  });
+
+  // Calculate stats strictly from the tracked spot positions
+  const spotPnlStats = spotPositions.reduce((acc, p) => {
+    if (p.status !== 'closed') {
+      acc.count++;
+    }
+    const lp = livePnl.data?.positions.find(x => x.position_id === p.id);
+    const val = p.status === 'closed' ? p.realized_pnl_usd : lp?.estimated_pnl_usd;
+    if (val != null) {
+      acc.total += val;
+      if (p.status === 'closed') acc.totalRealized += val;
+      else acc.totalUnrealized += val;
+    }
+    return acc;
+  }, { count: 0, total: 0, totalUnrealized: 0, totalRealized: 0 });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
@@ -169,13 +234,7 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
             </tr>
           </thead>
           <tbody>
-            {signals.filter(s => {
-              if (['NIFTY', 'BANKNIFTY'].includes(s.underlying.toUpperCase())) return false;
-              if (trackFilter !== 'all' && s.track !== trackFilter) return false;
-              if (statusFilter !== 'all' && getSignalStatus(s) !== statusFilter) return false;
-              if (profileFilter !== 'all' && (s.profile?.toLowerCase() || 'scalping') !== profileFilter) return false;
-              return true;
-            }).map((s) => {
+            {finalSignals.map((s) => {
               const sigIdStr = `${s.underlying}-${s.direction}`;
               const sigIdHash = Array.from(sigIdStr).reduce((h, ch) => Math.imul(31, h) + ch.charCodeAt(0) | 0, 0);
               const sigId = Math.abs(sigIdHash).toString(16).substring(0, 5).toUpperCase();
@@ -372,6 +431,23 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
               );
             })}
           </tbody>
+          {spotPnlStats.count > 0 && (
+            <tfoot>
+              <tr style={{ borderTop: `2px solid ${c.border}`, color: c.text }}>
+                <td colSpan={12} style={{ padding: '7px 8px', fontSize: 10, color: c.dim, letterSpacing: '0.04em', fontWeight: 700 }}>
+                  CONSOLIDATED · {spotPnlStats.count} position{spotPnlStats.count === 1 ? '' : 's'}
+                  <span style={{ marginLeft: 10, fontWeight: 400 }}>
+                    unrealized <b style={{ color: spotPnlStats.totalUnrealized >= 0 ? c.green : c.red }}>{fmtSigned(spotPnlStats.totalUnrealized)}</b>
+                    {' · '}realized <b style={{ color: spotPnlStats.totalRealized >= 0 ? c.green : c.red }}>{fmtSigned(spotPnlStats.totalRealized)}</b>
+                  </span>
+                </td>
+                <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 800, color: spotPnlStats.total >= 0 ? c.green : c.red }}>
+                  {fmtSigned(spotPnlStats.total)}
+                </td>
+                <td colSpan={2} />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </SectionCard>
       

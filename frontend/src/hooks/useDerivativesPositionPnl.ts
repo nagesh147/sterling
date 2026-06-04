@@ -24,6 +24,7 @@ export interface DerivativesPnl {
   totalRealized: number;
   total: number;
   count: number;
+  positions: any[];
 }
 
 const STRAT_RE = /(?:scalping|edge|triple_st)\/[a-z_]+/;
@@ -67,20 +68,26 @@ export function useDerivativesPositionPnl(instrumentType: 'futures' | 'options')
   };
 
   let totalUnrealized = 0, totalRealized = 0;
-  for (const p of positions) {
-    if (isOpen(p.status)) {
-      const v = liveById.get(p.id)?.estimated_pnl_usd;
-      if (v != null) totalUnrealized += v;
+  const mappedPositions = positions.map(p => {
+    const lp = liveById.get(p.id);
+    const est = lp?.estimated_pnl_usd ?? null;
+    if (isOpen(p.status) && est != null) {
+      totalUnrealized += est;
     } else if (p.realized_pnl_usd != null) {
       totalRealized += p.realized_pnl_usd;
     }
-  }
+    return {
+      ...p,
+      estimated_pnl_usd: est,
+    };
+  });
 
   return {
     pnlForRow,
     totalUnrealized,
     totalRealized,
     total: totalUnrealized + totalRealized,
-    count: positions.length,
+    count: positions.filter(p => isOpen(p.status)).length,
+    positions: mappedPositions,
   };
 }

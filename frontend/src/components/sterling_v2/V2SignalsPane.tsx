@@ -67,7 +67,7 @@ function V2SignalTable({ title, signals, instrumentType }: { title: string, sign
                 <tr onClick={() => setExpanded(isExp ? '' : sigId)} style={{ cursor: 'pointer', borderBottom: isExp ? 'none' : `1px solid ${c.border2}`, background: isExp ? alpha(statusColor, 0.09) : undefined }}>
                   <td style={{ padding: '5px 8px', fontWeight: 700, color: 'var(--t-bright)' }}>
                     <span style={{ color: dirColor }}>{long ? '▲' : short ? '▼' : '–'}</span> {s.underlying || s.symbol}
-                    {s.recommended && <span style={{ marginLeft: 6, fontSize: 8, background: alpha('var(--t-amber)', 0.15), border: '1px solid ' + alpha('var(--t-amber)', 0.4), color: 'var(--t-amber)', padding: '2px 4px', borderRadius: 3, verticalAlign: 'middle' }}>★ BEST</span>}
+                    {s.recommended && hasPlan && <span style={{ marginLeft: 6, fontSize: 8, background: alpha('var(--t-amber)', 0.15), border: '1px solid ' + alpha('var(--t-amber)', 0.4), color: 'var(--t-amber)', padding: '2px 4px', borderRadius: 3, verticalAlign: 'middle' }}>★ BEST</span>}
                   </td>
                   <td style={{ padding: '5px 8px', fontSize: 9, color: 'var(--t-dim)', fontFamily: 'monospace' }}>{sigId}</td>
                   <td style={{ padding: '5px 8px' }}>{fmtTime(s.timestamp_ms)}</td>
@@ -123,7 +123,7 @@ function V2SignalTable({ title, signals, instrumentType }: { title: string, sign
                 </tr>
                 {isExp && (
                   <tr style={{ background: alpha(statusColor, 0.04), borderBottom: `1px solid ${c.border2}` }}>
-                    <td colSpan={14} style={{ padding: '12px 14px' }}>
+                    <td colSpan={headers.length} style={{ padding: '12px 14px' }}>
                       <div style={{ fontSize: 11, color: 'var(--t-text)' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 60 }}>
@@ -154,12 +154,25 @@ function V2SignalTable({ title, signals, instrumentType }: { title: string, sign
 
 export function V2SignalsPane({ active }: { active: boolean }) {
   const { data, isLoading, error } = useV2Signals(active);
+  const [profile, setProfile] = useState<string>('ALL');
 
-  let signals = data?.signals || [];
-  
-  const spotSignals = signals.filter(s => s.instrument_type === 'spot');
-  const futuresSignals = signals.filter(s => s.instrument_type === 'futures');
-  const optionsSignals = signals.filter(s => s.instrument_type === 'options');
+  const signals = data?.signals || [];
+
+  // Distinct profiles present in the feed, for the user-facing selector.
+  const profiles = React.useMemo(
+    () => Array.from(new Set(signals.map(s => s.profile).filter(Boolean) as string[])).sort(),
+    [signals]
+  );
+
+  // Reset to ALL if a previously-selected profile is no longer in the feed.
+  React.useEffect(() => {
+    if (profile !== 'ALL' && profiles.length && !profiles.includes(profile)) setProfile('ALL');
+  }, [profile, profiles]);
+
+  const shown = profile === 'ALL' ? signals : signals.filter(s => s.profile === profile);
+  const spotSignals = shown.filter(s => s.instrument_type === 'spot');
+  const futuresSignals = shown.filter(s => s.instrument_type === 'futures');
+  const optionsSignals = shown.filter(s => s.instrument_type === 'options');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
@@ -167,6 +180,25 @@ export function V2SignalsPane({ active }: { active: boolean }) {
       {error && <div style={{ color: c.red, fontSize: 12, padding: 16 }}>{String((error as Error).message)}</div>}
       {data && (
         <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 2px 12px' }}>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.06em', color: c.muted, textTransform: 'uppercase' }}>Profile</span>
+            <select
+              value={profile}
+              onChange={(e) => setProfile(e.target.value)}
+              style={{
+                fontSize: 11, fontWeight: 600, color: c.text, background: c.surface,
+                border: `1px solid ${c.border}`, borderRadius: 4, padding: '4px 10px',
+                cursor: 'pointer', outline: 'none', letterSpacing: '0.03em',
+              }}
+            >
+              <option value="ALL">All Profiles</option>
+              {profiles.map(p => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}
+            </select>
+            <span style={{ fontSize: 9, color: c.dim, marginLeft: 'auto' }}>
+              {spotSignals.length} setup{spotSignals.length === 1 ? '' : 's'}
+              {profile !== 'ALL' ? ` · ${profile.replace(/_/g, ' ')}` : ''}
+            </span>
+          </div>
           <V2SignalTable title="V2 ENGINE · SPOT" signals={spotSignals} instrumentType="spot" />
           <div style={{ height: 16 }} />
           <V2SignalTable title="V2 ENGINE · FUTURES" signals={futuresSignals} instrumentType="futures" />

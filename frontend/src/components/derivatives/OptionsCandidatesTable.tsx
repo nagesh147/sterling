@@ -15,6 +15,7 @@
 import React, { useState } from 'react';
 import { card, cardHead, cardBody, alpha, c } from '../../styles/terminalUI';
 import { useAlgoMode } from '../../hooks/useSignalAlerts';
+import { useRouterMode } from '../../hooks/useRouterMode';
 import {
   useDerivativesOptionsCandidates,
   useDerivativesExecute,
@@ -58,13 +59,45 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
   const { data, isLoading, refetch } = useDerivativesOptionsCandidates(strategy, underlying);
   const cfg = useDerivativesConfig();
   const algoOn = useAlgoMode().data?.enabled ?? false;
+  const { mode: routerMode } = useRouterMode();
   const execute = useDerivativesExecute();
   const pnl = useDerivativesPositionPnl('options');
   const [toast, setToast] = useState<string>('');
   const [expanded, setExpanded] = useState<string>('');
   const [tableExpanded, setTableExpanded] = useState<boolean>(true);
 
-  const rows = (data?.candidates ?? []).filter((r) => r.instrument_type === 'options');
+  let rows = [...(data?.candidates ?? []).filter((r) => r.instrument_type === 'options')];
+  
+  pnl.positions.filter(p => p.status === 'open' || p.status === 'partially_closed').forEach(p => {
+    const dir = p.sized_trade?.structure?.direction || '';
+    const match = (p.notes || '').match(/(?:scalping|edge|triple_st)\/[a-z_]+/);
+    rows.push({
+      freeze_token: `pos-${p.id}`,
+      instrument_type: 'options',
+      underlying: p.underlying,
+      direction: dir,
+      strategy: match ? match[0] : 'manual',
+      source: 'position',
+      timestamp_ms: p.entry_timestamp_ms || 0,
+      contracts: p.sized_trade?.contracts || 0,
+      notional_usd: (p.entry_price_real || 0) * (p.sized_trade?.contracts || 0),
+      stop_loss: p.initial_sl || 0,
+      take_profit: p.initial_tp || 0,
+      expected_r: 0,
+      funding_cost_usd: 0,
+      liquidity_score: null,
+      reason: 'Active position',
+      warnings: [],
+      option_symbol: p.sized_trade?.structure?.legs?.[0]?.symbol || '',
+      strike: p.sized_trade?.structure?.legs?.[0]?.strike || 0,
+      dte: 0,
+      premium: p.sized_trade?.structure?.legs?.[0]?.limit_price || 0,
+      // @ts-ignore
+      _rawPos: p,
+      // @ts-ignore
+      estimated_pnl_usd: p.estimated_pnl_usd,
+    } as unknown as DerivativesCandidateRow);
+  });
 
   const isAutoExec = (row: DerivativesCandidateRow): boolean => {
     if (!algoOn) return false;
@@ -149,7 +182,11 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
               {rows.map((row) => {
                 const auto = isAutoExec(row);
                 const { type, strikeK, dteTag } = optionLabel(row);
-                const rp = pnl.pnlForRow(row.underlying, row.direction, row.strategy);
+                // @ts-ignore
+                const rp = row.source === 'position' && row._rawPos 
+                  // @ts-ignore
+                  ? { pnl: row._rawPos.estimated_pnl_usd || 0, realized: false, mode: row._rawPos.is_paper ? 'paper' : 'live', status: row._rawPos.status } 
+                  : pnl.pnlForRow(row.underlying, row.direction, row.strategy);
                 const isExp = expanded === row.freeze_token;
                 return (
                   <React.Fragment key={row.freeze_token}>
@@ -208,29 +245,54 @@ export const OptionsCandidatesTable: React.FC<Props> = ({ strategy, underlying }
                       ) : <span style={{ color: c.dim }}>—</span>}
                     </td>
                     <td style={{ padding: '5px 8px', textAlign: 'right' }}>
-                      {auto ? (
-                        <span title="Algo is ON — auto-executes via background scanner" style={{
-                          display: 'inline-block', padding: '3px 10px', borderRadius: 4,
-                          background: alpha(c.amber, 0.16), border: `1px solid ${alpha(c.amber, 0.45)}`,
-                          color: c.amber, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
-                        }}>
-                          AUTO
-                        </span>
-                      ) : (
-                        <button
-                          disabled={execute.isPending}
-                          onClick={(e) => { e.stopPropagation(); handleExecute(row); }}
-                          style={{
-                            padding: '4px 12px', borderRadius: 5,
-                            background: alpha(c.green, 0.14),
-                            border: `1px solid ${alpha(c.green, 0.4)}`,
-                            color: c.green, fontSize: 11, fontWeight: 700,
-                            letterSpacing: '0.06em', cursor: execute.isPending ? 'wait' : 'pointer',
-                            fontFamily: 'inherit',
-                          }}>
-                          {execute.isPending ? '…' : 'EXECUTE'}
-                        </button>
-                      )}
+                      {(() => {
+                        let badgeProps: { text: string; color: string } | null = null;
+                        
+                        if (row.source === 'position') {
+                          const pos = (row as any)._rawPos;
+                          let modeStr = 'PAPER';
+                          if (pos && pos.is_paper !== undefined) {
+                             modeStr = pos.is_paper ? (routerMode === 'shadow' ? 'SHADOW' : 'PAPER') : 'LIVE';
+                          }
+                          const isAuto = algoOn;
+                          const prefix = isAuto ? 'AUTO·' : '';
+                          const color = modeStr === 'LIVE' ? c.red : (modeStr === 'SHADOW' ? c.amber : c.blue);
+                          badgeProps = { text: `✓ ${prefix}${modeStr}`, color };
+                        } else if (algoOn) {
+                          const modeStr = routerMode.toUpperCase();
+                          const color = modeStr === 'LIVE' ? c.red : (modeStr === 'SHADOW' ? c.amber : c.blue);
+                          badgeProps = { text: `⚡ AUTO·${modeStr}`, color };
+                        }
+
+                        if (badgeProps) {
+                          return (
+                            <span title={auto ? "Algo is ON — auto-executes via background scanner" : undefined} style={{
+                              display: 'inline-block', padding: '3px 10px', borderRadius: 4,
+                              background: alpha(badgeProps.color, 0.16), border: `1px solid ${alpha(badgeProps.color, 0.45)}`,
+                              color: badgeProps.color, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {badgeProps.text}
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <button
+                            disabled={execute.isPending}
+                            onClick={(e) => { e.stopPropagation(); handleExecute(row); }}
+                            style={{
+                              padding: '4px 12px', borderRadius: 5,
+                              background: alpha(c.green, 0.14),
+                              border: `1px solid ${alpha(c.green, 0.4)}`,
+                              color: c.green, fontSize: 11, fontWeight: 700,
+                              letterSpacing: '0.06em', cursor: execute.isPending ? 'wait' : 'pointer',
+                              fontFamily: 'inherit',
+                            }}>
+                            {execute.isPending ? '…' : 'EXECUTE'}
+                          </button>
+                        );
+                      })()}
                     </td>
                   </tr>
                   {isExp && (

@@ -106,6 +106,7 @@ DEFAULT_PROFILES: dict[str, StrategyDerivativesProfile] = {
     # Directional / Hybrid VCP — placeholder, lights up when engines return
     "directional": StrategyDerivativesProfile(
         strategy="directional",
+        enabled=True,
         instrument_bias=InstrumentBias.AUTO,
         target_delta=0.60,
         target_delta_tolerance=0.05,

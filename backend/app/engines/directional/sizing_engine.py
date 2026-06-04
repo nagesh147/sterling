@@ -59,6 +59,9 @@ def size_trade(
         contracts = max_pos_usd * leverage / entry_price
         
     # Determine contract_value (lot size) based on underlying symbol
+    if not underlying and structure.legs:
+        underlying = structure.legs[0].underlying
+
     contract_value = 1.0
     if underlying:
         sym = underlying.upper().replace('USD', '')
