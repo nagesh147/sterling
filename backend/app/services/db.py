@@ -265,6 +265,32 @@ def _conn():
         c.close()
 
 
+def _mirror_position_upsert(pos_dict: dict) -> None:
+    """Phase 5b dual-write: mirror into the SQLAlchemy store when enabled.
+    No-op (and no sqlalchemy import) unless settings.use_sqlalchemy is on.
+    Fail-safe: a mirror error never affects the primary sqlite write."""
+    try:
+        from app.core.config import settings
+        if not getattr(settings, "use_sqlalchemy", False):
+            return
+        from app.persistence.sync import mirror_position_upsert
+        mirror_position_upsert(pos_dict)
+    except Exception as exc:
+        log.warning("ORM mirror upsert failed (non-fatal): %s", exc)
+
+
+def _mirror_position_remove(pos_id: str) -> None:
+    """Phase 5b dual-write counterpart for deletes. Guarded + fail-safe."""
+    try:
+        from app.core.config import settings
+        if not getattr(settings, "use_sqlalchemy", False):
+            return
+        from app.persistence.sync import mirror_position_remove
+        mirror_position_remove(pos_id)
+    except Exception as exc:
+        log.warning("ORM mirror remove failed (non-fatal): %s", exc)
+
+
 def upsert(pos_dict: dict) -> None:
     if not _available:
         return
@@ -284,6 +310,7 @@ def upsert(pos_dict: dict) -> None:
             ))
     except Exception as exc:
         log.warning("DB upsert failed: %s", exc)
+    _mirror_position_upsert(pos_dict)
 
 
 def remove(pos_id: str) -> None:
@@ -294,6 +321,7 @@ def remove(pos_id: str) -> None:
             c.execute("DELETE FROM positions WHERE id = ?", (pos_id,))
     except Exception as exc:
         log.warning("DB delete failed: %s", exc)
+    _mirror_position_remove(pos_id)
 
 
 def get_trading_mode() -> str:
