@@ -203,11 +203,38 @@ def _store_symbols(min_bars_hours: int = 200) -> List[str]:
     return sorted(syms)
 
 
-_BARS_PER_DAY = {"5m": 288, "15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}
+_BARS_PER_DAY = {"5m": 288, "15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6, "1d": 1}
+
+# Macro TFs the candle fetcher doesn't store natively are rebuilt by resampling
+# the nearest finer resolution that IS stored. The swing_4h profile uses a 1d
+# macro, but the fetcher only keeps {5m..4h}; without this the profile is silently
+# dead (no daily candles → no levels → no signals). Maps target -> (source, bucket_secs).
+_RESAMPLE_FROM = {"1d": ("4h", 86_400)}
 
 
 def _bpd(tf: str) -> int:
     return _BARS_PER_DAY.get(tf, 24)
+
+
+def _resample_candles(candles: list, bucket_secs: int) -> list:
+    """Aggregate finer candles into fixed UTC-aligned OHLCV buckets.
+    `candles` must be ascending by timestamp; the epoch grid keeps daily buckets
+    aligned to 00:00 UTC, matching exchange daily bars."""
+    from app.schemas.market import Candle
+    out: list = []
+    cur = None
+    o = h = l = c = v = 0.0
+    for cd in candles:
+        b = (cd.timestamp_ms // 1000) // bucket_secs * bucket_secs
+        if cur is None or b != cur:
+            if cur is not None:
+                out.append(Candle(timestamp_ms=cur * 1000, open=o, high=h, low=l, close=c, volume=v))
+            cur, o, h, l, c, v = b, cd.open, cd.high, cd.low, cd.close, cd.volume
+        else:
+            h = max(h, cd.high); l = min(l, cd.low); c = cd.close; v += cd.volume
+    if cur is not None:
+        out.append(Candle(timestamp_ms=cur * 1000, open=o, high=h, low=l, close=c, volume=v))
+    return out
 
 
 def _load_candles_by_res(syms: List[str], resolutions: set, days: int = 30) -> dict:
@@ -223,14 +250,16 @@ def _load_candles_by_res(syms: List[str], resolutions: set, days: int = 30) -> d
 
 
 def _store_candles(sym: str, resolution: str, lookback_days: int):
-    """Load candles from the local OHLCV store."""
+    """Load candles from the local OHLCV store. Macro resolutions the fetcher does
+    not keep natively (e.g. 1d for the swing_4h profile) are resampled from a stored
+    finer resolution so the profile isn't silently starved of data."""
     from app.services import ohlcv_store
     from app.schemas.market import Candle
     per_day = _BARS_PER_DAY.get(resolution, 24)
     limit = min(lookback_days * per_day + 300, 40_000)
     since = int(time.time()) - lookback_days * 86_400
     rows = ohlcv_store.get_candles(f"{sym}USD", resolution, limit=limit, since=since)
-    return [
+    candles = [
         Candle(
             timestamp_ms=int(r["time"]) * 1000,
             open=r["open"], high=r["high"], low=r["low"],
@@ -238,6 +267,10 @@ def _store_candles(sym: str, resolution: str, lookback_days: int):
         )
         for r in rows
     ]
+    if len(candles) < 2 and resolution in _RESAMPLE_FROM:
+        src_res, bucket = _RESAMPLE_FROM[resolution]
+        candles = _resample_candles(_store_candles(sym, src_res, lookback_days), bucket)
+    return candles
 
 
 # ─── signals (multi-symbol scan) ──────────────────────────────────────────

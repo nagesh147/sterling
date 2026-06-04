@@ -11,6 +11,7 @@ Direction values:
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import List
 
@@ -78,6 +79,19 @@ def _normalize_direction(d: str) -> str:
     return d
 
 
+_MACRO_4H_RE = re.compile(r"\b4H\b")
+
+
+def _relabel_macro_tf(reason: str, macro_tf: str) -> str:
+    """Per-strategy reason strings hardcode "4H" as the macro-structure timeframe
+    (legacy: macro was always 4h). Relabel to the profile's ACTUAL macro TF so the
+    displayed reason matches where levels were really detected (e.g. 1H / 15M / 1D)."""
+    label = (macro_tf or "4h").upper()
+    if label == "4H" or not reason:
+        return reason
+    return _MACRO_4H_RE.sub(label, reason)
+
+
 def scan_symbol(
     underlying: str,
     candles_4h: list,
@@ -123,7 +137,7 @@ def scan_symbol(
             near_level=sig.near_level,
             level_type=sig.level_type,
             pattern=sig.pattern,
-            reason=sig.reason,
+            reason=_relabel_macro_tf(sig.reason, cfg.macro_timeframe),
             entry=sig.entry,
             stop_loss=sig.stop_loss,
             take_profit=sig.take_profit,
