@@ -209,19 +209,17 @@ class TestDeltaAdapterDataFlow:
 
     @pytest.mark.asyncio
     async def test_option_chain_fallback_to_tickers(self):
-        """Option chain uses /v2/tickers with contract_type=call_options/put_options."""
+        """Option chain uses a single /v2/tickers call with
+        contract_types=call_options,put_options (both legs in one request)."""
         from unittest.mock import AsyncMock
         from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter
         from app.services.exchanges.instrument_registry import get_instrument
 
         adapter = DeltaIndiaAdapter()
-        call_count = [0]
+        calls = []
 
         async def mock_get(path, params=None):
-            call_count[0] += 1
-            ct = (params or {}).get("contract_type", "")
-            if "put" in ct:
-                return {"success": True, "result": []}
+            calls.append((path, params or {}))
             return {
                 "success": True,
                 "result": [{
@@ -236,7 +234,12 @@ class TestDeltaAdapterDataFlow:
         adapter._public_get = AsyncMock(side_effect=mock_get)
         chain = await adapter.get_option_chain(get_instrument("BTC"))
         assert len(chain) == 1
-        assert call_count[0] >= 2  # call_options + put_options calls
+        # One combined request to /v2/tickers covering both call + put legs.
+        assert len(calls) == 1
+        path, params = calls[0]
+        assert path == "/v2/tickers"
+        assert "call_options" in params["contract_types"]
+        assert "put_options" in params["contract_types"]
 
     @pytest.mark.asyncio
     async def test_ping_uses_time_endpoint(self):

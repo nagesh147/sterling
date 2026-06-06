@@ -86,7 +86,7 @@ class TestProfileDefaults:
 
     def test_master_enabled_and_auto_exec_independent(self):
         """Flipping `enabled` alone must NOT arm the auto-fire path."""
-        prof = DEFAULT_PROFILES["scalping/price_action"].model_copy(
+        prof = DEFAULT_PROFILES["conservative/price_action"].model_copy(
             update={"enabled": True}
         )
         assert prof.enabled is True
@@ -205,7 +205,7 @@ class TestScannerAutoExecGates:
         app = MagicMock()
         result = await auto_execute_derivative(
             app, freeze_token="nonexistent-token",
-            row_strategy="scalping/price_action", row_underlying="BTC", leg="futures",
+            row_strategy="conservative/price_action", row_underlying="BTC", leg="futures",
         )
         assert result is False
 
@@ -238,14 +238,14 @@ class TestScannerAutoExecGates:
                    new_callable=AsyncMock, return_value=fake_resp):
             ok = await auto_execute_derivative(
                 app, freeze_token=token,
-                row_strategy="scalping/price_action",
+                row_strategy="conservative/price_action",
                 row_underlying="BTC", leg="futures",
             )
         assert ok is True
         # Token was single-fire — second attempt returns False
         ok2 = await auto_execute_derivative(
             app, freeze_token=token,
-            row_strategy="scalping/price_action",
+            row_strategy="conservative/price_action",
             row_underlying="BTC", leg="futures",
         )
         assert ok2 is False
@@ -295,9 +295,9 @@ class TestScannerCooldown:
         clear_cooldowns_for_tests()
         now_ms = int(time.time() * 1000)
         # Manually stamp futures key
-        _deriv_last_ordered["scalping/price_action|BTC|futures"] = now_ms
+        _deriv_last_ordered["conservative/price_action|BTC|futures"] = now_ms
         # Options key for the SAME (strategy, sym) is NOT blocked
-        assert "scalping/price_action|BTC|options" not in _deriv_last_ordered
+        assert "conservative/price_action|BTC|options" not in _deriv_last_ordered
         # Cooldown is positive
         assert deriv_cooldown_ms() >= 60_000
 
@@ -340,7 +340,7 @@ class TestRunScannerTick:
         # eligible: profile enabled + auto_execute_futures True.
         from app.api.v1.endpoints.derivatives import _CandidateRow
         row = _CandidateRow(
-            signal_id="x", strategy="scalping/price_action", underlying="BTC",
+            signal_id="x", strategy="conservative/price_action", underlying="BTC",
             direction="long", instrument_type="futures",
             contracts=1.0, leverage=5.0, notional_usd=50_000.0,
             stop_loss=49_000.0, take_profit=52_000.0, expected_r=2.0,
@@ -353,11 +353,11 @@ class TestRunScannerTick:
         app.state = MagicMock()
         app.state.algo_mode = True
         # Profile overrides: enabled + auto_execute_futures
-        prof = DEFAULT_PROFILES["scalping/price_action"].model_copy(
+        prof = DEFAULT_PROFILES["conservative/price_action"].model_copy(
             update={"enabled": True, "auto_execute_futures": True}
         )
         # Mark this as the active overrides dict so _profile_overrides returns it
-        app.state.derivatives_profile_overrides = {"scalping/price_action": prof}
+        app.state.derivatives_profile_overrides = {"conservative/price_action": prof}
 
         # Patch _both_rows to return our row + _profile_overrides + auto_execute
         with patch("app.api.v1.endpoints.derivatives._both_rows",
@@ -382,7 +382,7 @@ class TestRunScannerTick:
         from app.api.v1.endpoints.derivatives import _CandidateRow
 
         row = _CandidateRow(
-            signal_id="x", strategy="scalping/price_action", underlying="BTC",
+            signal_id="x", strategy="conservative/price_action", underlying="BTC",
             direction="long", instrument_type="futures",
             contracts=1.0, leverage=5.0, notional_usd=50_000.0,
             stop_loss=49_000.0, take_profit=52_000.0, expected_r=2.0,
@@ -394,10 +394,10 @@ class TestRunScannerTick:
         app = MagicMock()
         app.state = MagicMock()
         app.state.algo_mode = True
-        prof = DEFAULT_PROFILES["scalping/price_action"].model_copy(
+        prof = DEFAULT_PROFILES["conservative/price_action"].model_copy(
             update={"enabled": True}  # auto_execute_futures left False
         )
-        app.state.derivatives_profile_overrides = {"scalping/price_action": prof}
+        app.state.derivatives_profile_overrides = {"conservative/price_action": prof}
 
         with patch("app.api.v1.endpoints.derivatives._both_rows",
                    new_callable=AsyncMock, return_value=([row], [], 22222)):

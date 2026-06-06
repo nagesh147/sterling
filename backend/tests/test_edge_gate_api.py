@@ -24,12 +24,16 @@ def test_get_returns_default_gate_and_admitted(client):
     r = client.get("/api/v1/derivatives/edge-gate")
     assert r.status_code == 200
     body = r.json()
-    assert body["gate"]["min_sharpe"] == 0.8
-    assert body["gate"]["min_trades"] == 50
+    # Robustness-first default gate: raw in-sample Sharpe relaxed to 0 (OOS
+    # Sharpe is the real filter), min_trades floored at 20 (matches
+    # robustness_scan.py). See derivatives._edge_gate.
+    assert body["gate"]["min_sharpe"] == 0.0
+    assert body["gate"]["min_trades"] == 20
     assert body["gate"]["min_net_return"] == 0.0
-    # Real CSV at repo root → some 4h combos admitted by default.
+    # Real CSV at repo root → at least one combo admitted; the robustness gate
+    # admits survivors across timeframes (not just 4h).
     assert body["admitted_count"] >= 1
-    assert all(c["tf"] == "4h" for c in body["admitted"])
+    assert all(c["tf"] in {"15m", "30m", "1h", "2h", "4h"} for c in body["admitted"])
     assert body["admitted_count"] == len(body["admitted"])
 
 

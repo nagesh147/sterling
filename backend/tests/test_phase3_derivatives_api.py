@@ -104,8 +104,12 @@ class TestConfigEndpoints:
         assert r.status_code == 200
         data = r.json()
         assert "directional" in data["profiles"]
-        # All disabled by default — operator opts in per strategy.
-        assert data["profiles"]["directional"]["enabled"] is False
+        # Directional + edge feeds default enabled=True so their candidates SHOW
+        # in the tables. The safety invariant is that AUTO-EXECUTION stays off
+        # until the operator opts in per strategy.
+        assert data["profiles"]["directional"]["enabled"] is True
+        assert data["profiles"]["directional"]["auto_execute_futures"] is False
+        assert data["profiles"]["directional"]["auto_execute_options"] is False
 
     def test_post_patches_profile(self, client):
         payload = StrategyDerivativesProfile(
@@ -170,7 +174,10 @@ class TestPreviewEndpoint:
         r = client.get(
             "/api/v1/derivatives/preview",
             params={
-                "strategy": "directional", "underlying": "BTC",
+                # Scalping-tier profiles default enabled=False (operator opts
+                # in), so this exercises the PROFILE_OFF gate. (directional and
+                # edge/* feeds default enabled=True for display.)
+                "strategy": "conservative/price_action", "underlying": "BTC",
                 "direction": "long", "entry": 50_000,
                 "stop_loss": 49_000, "take_profit": 53_000,
                 "atr": 1_000, "signal_score": 75,

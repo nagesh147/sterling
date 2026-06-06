@@ -72,9 +72,9 @@ def generate_edge_signals(
             continue
 
         entry = float(df["close"].iloc[-1])
-        sl = entry - atr_cfg["atr_sl"] * atr_val
-        tp = entry + atr_cfg["atr_tp"] * atr_val
-        rr_target = atr_cfg["atr_tp"] / atr_cfg["atr_sl"]
+        sl = entry - atr_cfg["sl_mult"] * atr_val
+        tp = entry + atr_cfg["tp_mult"] * atr_val
+        rr_target = atr_cfg["tp_mult"] / atr_cfg["sl_mult"]
 
         last_ts = int(getattr(candles[-1], "timestamp_ms", 0))
         signal_id = (f"edge:{combo.symbol}:{combo.tf}:{combo.strategy}:"

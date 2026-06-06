@@ -72,9 +72,32 @@ def _ref_smc(df):
     return ((gap > 0) & curr_bull).fillna(False).to_numpy()
 
 
+def _ref_bb_rsi_reversion(df):
+    delta = df["close"].diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = 100 - 100 / (1 + rs)
+    sma = df["close"].rolling(20).mean()
+    std = df["close"].rolling(20).std()
+    lower_band = sma - (2 * std)
+    cross_up_band = (df["close"] > lower_band) & (df["close"].shift(1) <= lower_band.shift(1))
+    return (cross_up_band & (rsi < 40)).fillna(False).to_numpy()
+
+
+def _ref_vwap_cross(df):
+    typical_price = (df["high"] + df["low"] + df["close"]) / 3
+    vol_price = typical_price * df["volume"]
+    vwap = vol_price.rolling(50).sum() / df["volume"].rolling(50).sum()
+    cross_up = (df["close"] > vwap) & (df["close"].shift(1) <= vwap.shift(1))
+    return cross_up.fillna(False).to_numpy()
+
+
 _REFS = {
     "ma_crossover": _ref_ma_crossover,
     "mean_reversion": _ref_mean_reversion,
+    "bb_rsi_reversion": _ref_bb_rsi_reversion,
+    "vwap_cross": _ref_vwap_cross,
     "breakout": _ref_breakout,
     "price_action": _ref_price_action,
     "smc": _ref_smc,

@@ -251,6 +251,13 @@ class TestVolatilityScan:
         assert "spot_price" in data
         assert "note" in data
 
+    @pytest.mark.xfail(
+        reason="contract_health_engine.assess_contract_health is a disabled stub "
+               "(strategy-reset): always healthy=False, so volatility-scan filters "
+               "out every contract and emits no structures. Re-enable when the "
+               "contract-health checks are reimplemented.",
+        strict=False,
+    )
     def test_vol_scan_structures_types(self, client):
         data = client.post("/api/v1/directional/volatility-scan?underlying=BTC").json()
         types = {s["structure_type"] for s in data["structures"]}

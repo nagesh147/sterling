@@ -26,7 +26,7 @@ _TIMEFRAMES = [
 
 _STRATEGIES = list(SIGNAL_FNS.keys())  # ~5
 
-_PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_CONFIG.items()}
+_PROFILES = {k: (v["sl_mult"], v["tp_mult"]) for k, v in PROFILE_CONFIG.items()}
 
 _DIRECTIONS = ["long", "short"]
 

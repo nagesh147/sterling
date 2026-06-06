@@ -116,10 +116,11 @@ class TestProfiles:
         assert p.leverage_cap == 8.0
 
     def test_prefix_fallback(self):
-        # Unknown scalping subtype → falls back to scalping_grind
-        p = profiles_mod.get_profile("scalping/wildcard_x")
-        assert p.strategy == "scalping/wildcard_x"
-        assert p.leverage_cap == 25.0    # matches scalping/price_action
+        # Unknown subtype under a known tier prefix → falls back to that
+        # tier's grind profile.
+        p = profiles_mod.get_profile("conservative/wildcard_x")
+        assert p.strategy == "conservative/wildcard_x"
+        assert p.leverage_cap == 25.0    # matches conservative/price_action grind
 
     def test_unknown_strategy_returns_disabled(self):
         p = profiles_mod.get_profile("nonexistent_strategy")
@@ -310,7 +311,7 @@ class TestLeverageEngine:
         )
 
     def test_options_returns_one(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         d = leverage_engine.decide(
             instrument_type="options", underlying="BTC",
             profile=p, market=self._market(), funding_result=self._funding_ok(),
@@ -318,7 +319,7 @@ class TestLeverageEngine:
         assert d.leverage == 1.0
 
     def test_cold_start_caps_at_2x(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         d = leverage_engine.decide(
             instrument_type="futures", underlying="BTC",
             profile=p, market=self._market(), funding_result=self._funding_ok(),
@@ -327,7 +328,7 @@ class TestLeverageEngine:
         assert "cold_start_kelly" in d.warnings
 
     def test_warm_kelly_no_cold_start_warning(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         m = self._market(win_rate=0.6, avg_R=1.5)
         d = leverage_engine.decide(
             instrument_type="futures", underlying="BTC",
@@ -336,7 +337,7 @@ class TestLeverageEngine:
         assert "cold_start_kelly" not in d.warnings
 
     def test_cb_halt_zeros_leverage(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         m = self._market(win_rate=0.6, avg_R=1.5, cb_size_mult=0.0)
         d = leverage_engine.decide(
             instrument_type="futures", underlying="BTC",
@@ -346,7 +347,7 @@ class TestLeverageEngine:
         assert d.leverage == 1.0
 
     def test_product_cap_enforced(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         m = self._market(win_rate=0.8, avg_R=3.0, cb_size_mult=1.0)
         d = leverage_engine.decide(
             instrument_type="futures", underlying="XRP",         # cap = 25
@@ -360,7 +361,7 @@ class TestLeverageEngine:
 
 class TestInstrumentChooser:
     def _sig(self, **overrides):
-        d = dict(strategy="scalping/price_action", underlying="BTC", direction="long",
+        d = dict(strategy="conservative/price_action", underlying="BTC", direction="long",
                  entry=50_000, stop_loss=49_500, take_profit=51_000, atr=500,
                  signal_score=60, signal_strength="STRONG")
         d.update(overrides)
@@ -381,9 +382,9 @@ class TestInstrumentChooser:
         assert r.instrument_type == "futures"
 
     def test_hard_override_options(self):
-        p = DEFAULT_PROFILES["scalping/breakout"]
+        p = DEFAULT_PROFILES["conservative/breakout"]
         r = instrument_chooser.choose(
-            signal=self._sig(strategy="scalping/breakout"), profile=p, market=self._mkt(),
+            signal=self._sig(strategy="conservative/breakout"), profile=p, market=self._mkt(),
             best_option_expected_r=0.5,
         )
         assert r.instrument_type == "options"
@@ -393,7 +394,7 @@ class TestInstrumentChooser:
         # asymmetry (R>=3 -> conviction 100) plus a vol regime that favours
         # options (IVR ~60 -> vol_regime 100) clears the bar even on this
         # short-hold scalp (timeframe factor 0). Low IVR alone routes to futures.
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         r = instrument_chooser.choose(
             signal=self._sig(signal_score=75),
             profile=p, market=self._mkt(ivr_pct=60),
@@ -402,7 +403,7 @@ class TestInstrumentChooser:
         assert r.instrument_type == "options"
 
     def test_auto_futures_on_high_ivr(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         r = instrument_chooser.choose(
             signal=self._sig(signal_score=80),
             profile=p, market=self._mkt(ivr_pct=95),     # > 85 cap
@@ -411,7 +412,7 @@ class TestInstrumentChooser:
         assert r.instrument_type == "futures"
 
     def test_auto_futures_on_low_conviction(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         r = instrument_chooser.choose(
             signal=self._sig(signal_score=30), profile=p, market=self._mkt(),
             best_option_expected_r=5.0,
@@ -419,7 +420,7 @@ class TestInstrumentChooser:
         assert r.instrument_type == "futures"
 
     def test_auto_futures_on_low_asymmetry(self):
-        p = DEFAULT_PROFILES["scalping/price_action"]
+        p = DEFAULT_PROFILES["conservative/price_action"]
         r = instrument_chooser.choose(
             signal=self._sig(signal_score=80), profile=p, market=self._mkt(),
             best_option_expected_r=1.5,
