@@ -1512,8 +1512,7 @@ const getSignalStatus = (s: ScalpingSignal) => {
   if (s.direction === 'long' || s.direction === 'short') {
     return s.entry_ok ? 'ready' : 'pending';
   }
-  if (s.near_level != null) return 'watching';
-  return 'other';
+  return 'watching';
 };
 
 /* Live, console-styled activity feed for the right rail — replaces the static
@@ -1947,7 +1946,7 @@ export function SterlingEngineTab() {
   const statusScoped = (data?.signals ?? []).filter((s) => 
     (stratFilter === 'all' || s.strategy === stratFilter) &&
     (profileFilter === 'all' || s.profile === profileFilter) &&
-    (statusFilter === 'all' ? getSignalStatus(s) !== 'other' : getSignalStatus(s) === statusFilter)
+    (statusFilter === 'all' || getSignalStatus(s) === statusFilter)
   );
 
   // Actionable rows have a direction (READY = executable, WATCH = armed-not-tradeable,
@@ -1959,7 +1958,7 @@ export function SterlingEngineTab() {
   // brewing — sorted by proximity to the level (closest to triggering first). The
   // pure-noise "none" rows (no nearby level / insufficient data) are excluded.
   const watchingSignals = statusScoped
-    .filter((s) => s.direction === 'none' && s.near_level != null)
+    .filter((s) => s.direction !== 'long' && s.direction !== 'short')
     .sort((a, b) => {
       const pa = a.close && a.near_level ? Math.abs(a.close - a.near_level) / a.close : 1;
       const pb = b.close && b.near_level ? Math.abs(b.close - b.near_level) / b.close : 1;
@@ -2198,7 +2197,7 @@ export function SterlingEngineTab() {
     return true;
   };
 
-  const baseSignals = (data?.signals ?? []).filter(s => getSignalStatus(s) !== 'other' && isStrategyEnabled(s));
+  const baseSignals = (data?.signals ?? []).filter(s => isStrategyEnabled(s));
 
   const stratNavItems = [
     { id: 'all', label: 'All Strategies', color: 'var(--t-bright)', count: baseSignals.filter((s) => (profileFilter === 'all' || s.profile === profileFilter) && (statusFilter === 'all' || getSignalStatus(s) === statusFilter)).length },

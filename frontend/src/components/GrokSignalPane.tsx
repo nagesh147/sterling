@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { card, cardHead, cardBody, alpha, c } from '../styles/terminalUI';
-import { useSignals, SignalItem } from '../hooks/useSignals';
+import { useSignals, SignalItem, getSignalStatus, visibleGrokSignals, GrokSignalStatus } from '../hooks/useSignals';
 import { useAlgoMode, useSetAlgoMode, usePlaceOrder } from '../hooks/useSignalAlerts';
 import { useRouterMode, RouterMode } from '../hooks/useRouterMode';
 import { useLivePnl } from '../hooks/useLivePnl';
@@ -12,6 +12,14 @@ import { CommonOptionsCandidatesTable } from './derivatives/CommonOptionsCandida
 const fmtUsd = (v: number | null | undefined): string => v == null || !isFinite(v) ? '—' : '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
 const fmtTime = (ms: number) => new Date(ms).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const modeColorOf = (m: string) => m.toUpperCase() === 'LIVE' ? 'var(--t-red)' : m.toUpperCase() === 'SHADOW' ? 'var(--t-amber)' : 'var(--t-blue)';
+
+// Per-row status badge — labels/colors mirror the GrokTab status filter chips.
+const GROK_STATUS_META: Record<GrokSignalStatus, { label: string; color: string }> = {
+  open:     { label: 'OPEN',     color: 'var(--t-blue)' },
+  ready:    { label: 'READY',    color: 'var(--t-green)' },
+  pending:  { label: 'PENDING',  color: 'var(--t-amber)' },
+  watching: { label: 'WATCHING', color: 'var(--t-cyan)' },
+};
 const fmt = (v: number | null | undefined, d = 2): string => v == null || !isFinite(v) ? '—' : v.toFixed(d);
 const fmtSigned = (v: number | null | undefined): string => {
   if (v == null || !isFinite(v)) return '—';
@@ -81,16 +89,11 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
   const autoExecRef = useRef<Set<string>>(new Set());
   const acceptedRef = useRef<Set<string>>(new Set());
   const activePositions = livePnl.data?.positions || [];
-  const getSignalStatus = (s: any) => {
-    if (activePositions.some((p: any) => p.underlying === s.underlying && p.direction === s.direction)) return 'open';
-    if (s.direction === 'long' || s.direction === 'short') return 'ready';
-    return 'idle';
-  };
 
-  let signals = data?.signals || [];
+  let signals = visibleGrokSignals(data?.signals);
   if (trackFilter !== 'all') signals = signals.filter(s => s.track === trackFilter);
   if (profileFilter !== 'all') signals = signals.filter(s => (s.profile?.toLowerCase() || 'scalping') === profileFilter);
-  if (statusFilter !== 'all') signals = signals.filter(s => getSignalStatus(s) === statusFilter);
+  if (statusFilter !== 'all') signals = signals.filter(s => getSignalStatus(s, activePositions) === statusFilter);
 
   const handleExecute = async (s: SignalItem, auto: boolean = false) => {
     const key = `${s.underlying}-${s.direction}`;
@@ -121,8 +124,8 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
       autoExecRef.current.clear();
       return;
     }
-    for (const s of data?.signals ?? []) {
-      if (getSignalStatus(s) !== 'ready') continue;
+    for (const s of visibleGrokSignals(data?.signals)) {
+      if (getSignalStatus(s, activePositions) !== 'ready') continue;
       const key = `${s.underlying}-${s.direction}`;
       if (acceptedRef.current.has(key)) continue;
       if (autoExecRef.current.has(key)) continue;
@@ -148,13 +151,8 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
 
   const TABLE_COL_COUNT = 15;
 
-  const filteredSignals = signals.filter(s => {
-    if (['NIFTY', 'BANKNIFTY'].includes(s.underlying.toUpperCase())) return false;
-    if (trackFilter !== 'all' && s.track !== trackFilter) return false;
-    if (statusFilter !== 'all' && getSignalStatus(s) !== statusFilter) return false;
-    if (profileFilter !== 'all' && (s.profile?.toLowerCase() || 'scalping') !== profileFilter) return false;
-    return true;
-  });
+  // `signals` is already filtered by track/status/profile (and index-excluded) above.
+  const filteredSignals = signals;
 
   let finalSignals = [...filteredSignals];
   const signalKeys = new Set(finalSignals.map(s => `${s.underlying}-${s.direction}`));
@@ -254,8 +252,13 @@ export function GrokSignalPane({ trackFilter = 'all', statusFilter = 'all', prof
               const pnl = pnlData[0] || null;
               
               const hasPlan = s.direction === 'long' || s.direction === 'short';
-              const statusColor = isExecuted ? 'var(--t-blue)' : hasPlan ? dirColor : 'var(--t-dim)';
-              const statusLabel = isExecuted ? 'OPEN' : hasPlan ? 'READY' : 'IDLE';
+              // Mode-aware open check (isExecuted / restored-position rows) wins;
+              // otherwise fall back to the shared state-based status.
+              const rowStatus: GrokSignalStatus = (isExecuted || (s as any).status === 'OPEN')
+                ? 'open'
+                : getSignalStatus(s, []);
+              const statusColor = GROK_STATUS_META[rowStatus].color;
+              const statusLabel = GROK_STATUS_META[rowStatus].label;
 
               return (
                 <React.Fragment key={sigId}>

@@ -1194,7 +1194,8 @@ def _collect_armed_signals(
                     "ENTRY_ARMED_PULLBACK", "ENTRY_ARMED_CONTINUATION",
                     "CONFIRMED_SETUP_ACTIVE", "EARLY_SETUP_ACTIVE"
                 }:
-                    strat = "directional"
+                    track = getattr(snap, "track", None)
+                    strat = f"directional/{track}" if track else "directional"
                     if strategy_filter and strat != strategy_filter:
                         continue
                     if underlying_filter and snap.sym.upper() != underlying_filter.upper():

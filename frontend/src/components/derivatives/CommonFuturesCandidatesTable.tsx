@@ -56,7 +56,14 @@ export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy
   let rows = [...(data?.candidates ?? []).filter((r) => r.instrument_type === 'futures')];
 
   if (engine === 'grok') {
-    rows = rows.filter(r => r.strategy === 'directional');
+    rows = rows.filter(r => 
+      r.strategy.startsWith('directional') ||
+      r.strategy.startsWith('edge') || 
+      r.strategy.startsWith('scalping') ||
+      r.strategy.startsWith('conservative') ||
+      r.strategy.startsWith('balanced') ||
+      r.strategy.startsWith('aggressive')
+    );
   } else if (engine === 'sterling') {
     rows = rows.filter(r => 
       r.strategy.startsWith('scalping') || 

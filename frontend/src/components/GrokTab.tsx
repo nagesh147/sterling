@@ -3,7 +3,7 @@ import { ThreeColumnLayout, LeftSection, RightSection } from './ThreeColumnLayou
 import { GrokSignalPane } from './GrokSignalPane';
 import { GrokSettingsPane } from './GrokSettingsPane';
 import { GrokLogsPane } from './GrokLogsPane';
-import { useSignals } from '../hooks/useSignals';
+import { useSignals, getSignalStatus, visibleGrokSignals } from '../hooks/useSignals';
 import { useLivePnl } from '../hooks/useLivePnl';
 import { ExecLog } from './sterling_engine/SterlingEngineTab';
 import { useRouterMode } from '../hooks/useRouterMode';
@@ -21,14 +21,7 @@ export function GrokTab() {
   const [execLog, setExecLog] = useState<any[]>([]);
   const [settingsDrawer, setSettingsDrawer] = useState(false);
 
-  const signals = data?.signals || [];
-  
-  const getSignalStatus = (s: any) => {
-    if (activePositions.some((p: any) => p.underlying === s.underlying && p.direction === s.direction)) return 'open';
-    if (s.direction === 'long' || s.direction === 'short') return 'ready';
-    return 'idle';
-  };
-  
+  const signals = visibleGrokSignals(data?.signals);
 
 
   const trackNavItems = [
@@ -42,7 +35,8 @@ export function GrokTab() {
     { id: 'all', label: 'All Statuses', color: 'var(--t-bright)' },
     { id: 'open', label: 'Open', color: 'var(--t-blue)' },
     { id: 'ready', label: 'Ready (Armed)', color: 'var(--t-green)' },
-    { id: 'idle', label: 'Idle', color: 'var(--t-dim)' },
+    { id: 'pending', label: 'Pending (Setup)', color: 'var(--t-amber)' },
+    { id: 'watching', label: 'Watching (Levels)', color: 'var(--t-cyan)' },
   ];
 
   const profileNavItems = [
@@ -61,7 +55,7 @@ export function GrokTab() {
             : items === trackNavItems
               ? signals.filter(s => s.track === item.id).length
               : items === statusNavItems
-                ? signals.filter(s => getSignalStatus(s) === item.id).length
+                ? signals.filter(s => getSignalStatus(s, activePositions) === item.id).length
                 : signals.filter(s => (s.profile?.toLowerCase() || 'scalping') === item.id).length;
 
         return (

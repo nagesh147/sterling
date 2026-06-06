@@ -65,6 +65,36 @@ export interface SignalsResponse {
   timestamp_ms: number;
 }
 
+export type GrokSignalStatus = 'open' | 'ready' | 'pending' | 'watching';
+
+/**
+ * Single source of truth for Grok/directional signal status, shared by the
+ * GrokTab status-filter counts and the GrokSignalPane rows so the two can
+ * never drift apart.
+ *
+ * Directional signals carry a `state` (TradeState) — not the `entry_ok` flag
+ * the Sterling engine emits — so the ready/pending split keys off that:
+ *   ENTRY_ARMED_*   -> ready    (armed, actionable now; auto-exec eligible)
+ *   *_SETUP_ACTIVE  -> pending  (setup forming, not yet armed)
+ *   anything else   -> watching (IDLE / FILTERED / NONE)
+ * A live position on the same underlying+direction takes precedence -> open.
+ */
+export function getSignalStatus(s: SignalItem, activePositions: any[] = []): GrokSignalStatus {
+  if (activePositions.some((p: any) => p.underlying === s.underlying && p.direction === s.direction)) return 'open';
+  const st = String(s.state || '').toUpperCase();
+  if (st.startsWith('ENTRY_ARMED')) return 'ready';
+  if (st.endsWith('SETUP_ACTIVE')) return 'pending';
+  return 'watching';
+}
+
+// Index underlyings parked out of the Grok tab for now (crypto-only view).
+const GROK_HIDDEN_UNDERLYINGS = new Set(['NIFTY', 'BANKNIFTY']);
+
+/** Grok-tab visible signal set — applied identically to counts and rows. */
+export function visibleGrokSignals(signals: SignalItem[] = []): SignalItem[] {
+  return signals.filter((s) => !GROK_HIDDEN_UNDERLYINGS.has((s.underlying || '').toUpperCase()));
+}
+
 export function useSignals() {
   return useQuery<SignalsResponse>({
     queryKey: ['signals-all'],
