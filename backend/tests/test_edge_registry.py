@@ -147,6 +147,77 @@ def test_robust_survivor_with_low_raw_sharpe_admitted(tmp_path):
     assert c.p_loss == pytest.approx(0.24)
 
 
+# --- deflation gate (DSR) + buy-and-hold requirement ---------------------
+
+_DHEADER = ("symbol,tf,strategy,profile,trades,win_rate,pf,sharpe,expectancy,"
+            "net_return,pnl_usd,max_dd,oos_sharpe,p_loss,dsr,beats_hold\n")
+
+
+def _drow(sym, tf, strat, prof, trades, sharpe, net, oos, ploss, dsr,
+          beats_hold, pf=1.2, exp=0.003):
+    return (f"{sym},{tf},{strat},{prof},{trades},0.42,{pf},{sharpe},{exp},"
+            f"{net},300,-0.3,{oos},{ploss},{dsr},{beats_hold}\n")
+
+
+def _write_dcsv(tmp_path, rows):
+    p = tmp_path / "deflated.csv"
+    p.write_text(_DHEADER + "".join(rows))
+    return str(p)
+
+
+def test_low_dsr_rejected_by_deflation_gate(tmp_path):
+    """The real #1 config: huge in-sample return, positive OOS, beats hold —
+    but DSR 0.35 means it fails multiple-testing deflation. A min_dsr=0.5 gate
+    must reject it; a min_dsr=0.0 gate (no-op) must admit it."""
+    csv = _write_dcsv(tmp_path, [
+        _drow("BTCUSD", "4h", "bb_rsi_reversion", "Aggressive", 91, 2.63, 0.991,
+              oos=0.02, ploss=0.20, dsr=0.35, beats_hold=True),
+    ])
+    strict = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                   min_dsr=0.5))
+    loose = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                  min_dsr=0.0))
+    assert not strict.allowed("BTCUSD", "4h", "bb_rsi_reversion", "Aggressive")
+    assert loose.allowed("BTCUSD", "4h", "bb_rsi_reversion", "Aggressive")
+
+
+def test_loser_to_buy_and_hold_rejected_when_required(tmp_path):
+    """A config that clears every stat gate but underperforms buy-and-hold has
+    no reason to trade. require_beats_hold=True must reject it."""
+    csv = _write_dcsv(tmp_path, [
+        _drow("BTCUSD", "4h", "vwap_cross", "Intraday", 94, 1.5, 0.476,
+              oos=0.5, ploss=0.20, dsr=0.9, beats_hold=False),
+    ])
+    req = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                require_beats_hold=True))
+    off = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                require_beats_hold=False))
+    assert not req.allowed("BTCUSD", "4h", "vwap_cross", "Intraday")
+    assert off.allowed("BTCUSD", "4h", "vwap_cross", "Intraday")
+
+
+def test_dsr_and_beats_hold_columns_backward_compatible(tmp_path):
+    """Legacy CSV with no dsr/beats_hold columns still loads under a strict
+    gate — missing columns behave as pass, matching the oos/p_loss convention."""
+    csv = _write_csv(tmp_path, [
+        _row("BTCUSD", "4h", "ma_crossover", "Intraday", 166, 1.83, 0.953),
+    ])
+    reg = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20,
+                                                min_dsr=0.5, require_beats_hold=True))
+    assert reg.allowed("BTCUSD", "4h", "ma_crossover", "Intraday")
+
+
+def test_combo_carries_dsr_and_beats_hold(tmp_path):
+    csv = _write_dcsv(tmp_path, [
+        _drow("BTCUSD", "4h", "bb_rsi_reversion", "Aggressive", 91, 2.63, 0.991,
+              oos=0.02, ploss=0.20, dsr=0.353, beats_hold=True),
+    ])
+    reg = load_edge_registry(csv, gate=EdgeGate(min_sharpe=0.0, min_trades=20))
+    c = reg.get("BTCUSD", "4h", "bb_rsi_reversion", "Aggressive")
+    assert c.dsr == pytest.approx(0.353)
+    assert c.beats_hold is True
+
+
 # --- scoring -------------------------------------------------------------
 
 def test_score_monotonic_in_sharpe():

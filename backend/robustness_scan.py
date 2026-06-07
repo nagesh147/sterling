@@ -35,6 +35,8 @@ from app.engines.edge.strategies import SIGNAL_FNS, resample
 from app.engines.edge.registry import PROFILE_CONFIG
 from app.engines.analytics.cpcv import calculate_pbo
 from app.engines.analytics.monte_carlo import monte_carlo_trades
+from app.engines.edge.robustness import deflated_sharpe_ratio
+from app.engines.analytics.performance import hodl_benchmark, beats_buy_and_hold
 from study.sim import simulate_idx as _simulate_idx, sharpe as _sharpe, base_metrics as _base_metrics
 
 FEE_RT = 0.001
@@ -50,12 +52,18 @@ if not SYMBOLS:
 TIMEFRAMES = [("15min", "15m"), ("30min", "30m"), ("1h", "1h"),
               ("2h", "2h"), ("4h", "4h")]
 STRATEGIES = list(SIGNAL_FNS.keys())
-PROFILES = {k: (v["atr_sl"], v["atr_tp"]) for k, v in PROFILE_CONFIG.items()}
+PROFILES = {k: (v["sl_mult"], v["tp_mult"]) for k, v in PROFILE_CONFIG.items()}
 
 # Survival gate
 MIN_TRADES = 20
 MAX_P_LOSS = 0.35          # reject configs that lose >35% of bootstrap paths
+MIN_DSR = 0.5              # deflated Sharpe floor (multiple-testing corrected)
 N_MC = 3000
+
+# Multiple-testing trial count for the deflated Sharpe = the FULL grid this scan
+# mines (symbols × timeframes × strategies × profiles). Deflating by the whole
+# search space is the honest, conservative choice.
+TOTAL_TRIALS = len(SYMBOLS) * len(TIMEFRAMES) * len(STRATEGIES) * len(PROFILES)
 
 
 def simulate_idx(df, sigs, slm, tpm):
@@ -84,6 +92,10 @@ def main():
         df1 = df1.set_index("time").sort_index()
         for rule, tf in TIMEFRAMES:
             dft = resample(df1, rule)
+            # Buy-and-hold benchmark for this (symbol, tf) — identical for every
+            # (strategy, profile), so compute it once.
+            hodl = hodl_benchmark(dft["close"].to_numpy(dtype=np.float64),
+                                  fee_rt_pct=FEE_RT)
             for strat in STRATEGIES:
                 sigs = SIGNAL_FNS[strat](dft)
                 for prof, (sl, tp) in PROFILES.items():
@@ -100,6 +112,11 @@ def main():
                     mc = monte_carlo_trades(pnls, n_sims=N_MC, seed=42, method="bootstrap")
                     oos_keep = (cp["mean_test_sharpe"] / cp["mean_train_sharpe"]
                                 if cp["mean_train_sharpe"] else 0.0)
+                    # Deflated Sharpe (multiple-testing corrected over the full
+                    # grid) + buy-and-hold comparison — the two gates the live
+                    # EdgeGate now enforces.
+                    dsr = deflated_sharpe_ratio(pnls, num_trials=TOTAL_TRIALS)
+                    rel = beats_buy_and_hold(net_return, max_dd, hodl)
                     rows.append({
                         # registry schema (load_edge_registry reads these) ──────
                         "symbol": sym, "tf": tf, "strategy": strat, "profile": prof,
@@ -109,8 +126,11 @@ def main():
                         "max_dd": round(max_dd, 4),
                         "oos_sharpe": round(cp["mean_test_sharpe"], 4),
                         "p_loss": round(mc.prob_loss, 4),
+                        "dsr": round(dsr, 4),
+                        "beats_hold": rel["beats_hold"],
                         # display-only extras ──────────────────────────────────
                         "ret%": round(net_return * 100, 1), "oos_keep": round(oos_keep, 2),
+                        "excess_vs_hold": round(rel["excess_return"], 4),
                         "mc_ret_p05": round(mc.return_pct_p05, 1),
                         "mc_dd_p05": round(mc.max_dd_pct_p05, 1),
                         "P_loss%": round(mc.prob_loss * 100, 0),
@@ -125,14 +145,15 @@ def main():
     res.to_csv("robustness_scan_results.csv", index=False)
 
     res["config"] = res["strategy"] + " " + res["tf"] + " " + res["symbol"].str[:3] + " " + res["profile"]
-    # Survival gate: net-positive AND positive OOS Sharpe AND P(loss) under gate.
-    # Use the exact p_loss (not the rounded %) so this count matches what the
-    # live EdgeGate admits from the CSV.
-    surv = res[(res["ret%"] > 0) & (res["oos_sharpe"] > 0) & (res["p_loss"] <= MAX_P_LOSS)]
-    surv = surv.sort_values("oos_sharpe", ascending=False)
+    # Survival gate: net-positive AND positive OOS Sharpe AND P(loss) under gate
+    # AND deflated Sharpe >= floor AND beats buy-and-hold. Use the exact values
+    # (not rounded display %) so this count matches what the live EdgeGate admits.
+    surv = res[(res["ret%"] > 0) & (res["oos_sharpe"] > 0) & (res["p_loss"] <= MAX_P_LOSS)
+               & (res["dsr"] >= MIN_DSR) & (res["beats_hold"])]
+    surv = surv.sort_values("dsr", ascending=False)
 
     print(f"\n=== {len(res)} configs evaluated · {len(surv)} survive the robustness gate ===")
-    print("(gate: net>0, OOS Sharpe>0, P(loss)<=35%) · ranked by OOS Sharpe\n")
+    print(f"(gate: net>0, OOS Sharpe>0, P(loss)<=35%, DSR>={MIN_DSR}, beats buy-and-hold) · ranked by DSR\n")
     hdr = f"{'config':<34}{'trd':>5}{'ret%':>8}{'full_Sh':>8}{'oos_Sh':>8}{'keep':>6}{'mc_ret_p05':>11}{'mc_dd_p05':>10}{'P_loss':>8}"
     print(hdr); print("-" * len(hdr))
     for _, r in surv.head(25).iterrows():

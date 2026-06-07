@@ -12,6 +12,8 @@ Key components:
 import math
 import numpy as np
 
+from app.engines.analytics.performance import _inverse_normal_cdf, _phi
+
 
 def monte_carlo_p_loss(trade_returns: list[float], iterations: int = 1000, max_drawdown_limit: float = -0.2) -> tuple[float, float]:
     """
@@ -99,32 +101,41 @@ def deflated_sharpe_ratio(trade_returns: list[float], num_trials: int = 100) -> 
     t = len(returns)
     mean_ret = np.mean(returns)
     std_ret = np.std(returns) + 1e-9
-    sharpe = mean_ret / std_ret
-    
+    sharpe = mean_ret / std_ret  # per-trade (per-observation) Sharpe
+
     # Calculate Skewness and Kurtosis
     diffs = returns - mean_ret
     variance = np.mean(diffs**2) + 1e-9
     skewness = np.mean(diffs**3) / (variance**1.5)
     kurtosis = np.mean(diffs**4) / (variance**2)  # Non-excess kurtosis
-    
-    # Expected maximum Sharpe of independent trials under the null
-    euler_mascheroni = 0.57721
-    if num_trials > 1:
-        expected_max = np.sqrt(2 * np.log(num_trials)) + (euler_mascheroni / np.sqrt(2 * np.log(num_trials)))
-    else:
-        expected_max = 0
-        
+
+    # Expected maximum Sharpe of `num_trials` independent strategies under the
+    # null, expressed in standard-error (t-stat) units — i.e. the max of
+    # num_trials standard normals (Bailey & Lopez de Prado, 2014). The
+    # inverse-normal form is more accurate for small num_trials than the
+    # asymptotic sqrt(2 ln N) approximation, which over-estimates the hurdle.
+    euler_mascheroni = 0.5772156649015329
+    n_trials = max(int(num_trials), 2)
+    inv_phi_first  = _inverse_normal_cdf(1.0 - 1.0 / n_trials)
+    inv_phi_second = _inverse_normal_cdf(1.0 - 1.0 / (n_trials * math.e))
+    expected_max = (
+        (1.0 - euler_mascheroni) * inv_phi_first
+        + euler_mascheroni       * inv_phi_second
+    )
+
     # Variance of the Sharpe ratio estimate (Lo, 2002 / Lopez de Prado, 2014)
     var_sr = 1 - skewness * sharpe + ((kurtosis - 1) / 4.0) * (sharpe ** 2)
     var_sr = max(var_sr, 1e-9)
-    
-    # DSR Z-score
-    z_score = (sharpe - expected_max) * np.sqrt(t - 1) / np.sqrt(var_sr)
-    
-    def norm_cdf(x):
-        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
-        
-    return norm_cdf(z_score)
+
+    # DSR Z-score: convert the observed per-trade Sharpe to its t-stat
+    # (standard-error units) FIRST, THEN deflate by the expected max under the
+    # null. The prior version multiplied (sharpe - expected_max) together by
+    # sqrt(t-1)/sqrt(var_sr), scaling the standard-normal benchmark (~2.9) by
+    # the sample size as well — which pitted a per-trade Sharpe (~0.2) against
+    # an inflated hurdle and saturated DSR to ~0 for every config.
+    z_score = sharpe * np.sqrt(t - 1) / np.sqrt(var_sr) - expected_max
+
+    return float(_phi(z_score))
 
 
 def walk_forward_analysis(trades: list[dict], equity_curve: np.ndarray) -> dict:

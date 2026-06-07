@@ -949,13 +949,19 @@ def _edge_gate(app):
     from app.engines.edge.registry import EdgeGate
     gate = getattr(getattr(app, "state", None), "edge_gate", None)
     if gate is None:
-        # Robustness-first default: admit only combos that survive CPCV (OOS
-        # Sharpe > 0) and Monte-Carlo P(loss) ≤ 35%. Raw in-sample Sharpe is
-        # relaxed (min_sharpe=0) because OOS Sharpe is the better filter — some
-        # survivors (e.g. price_action 1h) have raw Sharpe < 0.8 but hold OOS.
-        # min_trades=20 matches robustness_scan.py's floor.
+        # Deflation-first default: admit only combos that (a) survive CPCV
+        # (OOS Sharpe > 0), (b) have Monte-Carlo P(loss) ≤ 35%, (c) clear the
+        # deflated Sharpe at ≥ 0.5 (more-likely-than-not a real edge AFTER
+        # correcting for the full search grid), and (d) actually beat
+        # buy-and-hold on return AND drawdown. Raw in-sample Sharpe is relaxed
+        # (min_sharpe=0) because deflation/OOS are the real filters.
+        # NOTE: with the current strategy zoo this admits ZERO combos — nothing
+        # survives honest deflation (best DSR ≈ 0.09 at full-grid trials). That
+        # is the correct, disciplined outcome; relax min_dsr/require_beats_hold
+        # via POST /derivatives/edge-gate for research/exploration.
         gate = EdgeGate(min_sharpe=0.0, min_trades=20,
-                        min_oos_sharpe=0.0, max_p_loss=0.35)
+                        min_oos_sharpe=0.0, max_p_loss=0.35,
+                        min_dsr=0.5, require_beats_hold=True)
         if hasattr(app, "state"):
             app.state.edge_gate = gate
     return gate
@@ -1022,10 +1028,13 @@ class _EdgeGateModel(BaseModel):
     min_net_return: float = Field(0.0, ge=-1.0, le=100.0)
     min_sharpe: float = Field(0.0, ge=-100.0, le=100.0)
     min_trades: int = Field(20, ge=0)
-    # Robustness gate (reads robustness_scan_results.csv columns). Defaults match
-    # the live survivor gate: OOS Sharpe > 0 and Monte-Carlo P(loss) ≤ 35%.
+    # Robustness gate (reads robustness columns). Defaults match the live
+    # survivor gate: OOS Sharpe > 0, Monte-Carlo P(loss) ≤ 35%, deflated Sharpe
+    # ≥ 0.5, and must beat buy-and-hold.
     min_oos_sharpe: float = Field(0.0, ge=-100.0, le=100.0)
     max_p_loss: float = Field(0.35, ge=0.0, le=1.0)
+    min_dsr: float = Field(0.5, ge=0.0, le=1.0)
+    require_beats_hold: bool = Field(True)
 
 
 class _EdgeComboSummary(BaseModel):
@@ -1038,6 +1047,8 @@ class _EdgeComboSummary(BaseModel):
     pf: float
     net_return: float
     signal_score: float
+    dsr: float = 1.0
+    beats_hold: bool = True
 
 
 class _EdgeGateResponse(BaseModel):
@@ -1053,12 +1064,15 @@ def _edge_gate_response(app) -> _EdgeGateResponse:
     return _EdgeGateResponse(
         gate=_EdgeGateModel(min_net_return=gate.min_net_return,
                             min_sharpe=gate.min_sharpe, min_trades=gate.min_trades,
-                            min_oos_sharpe=gate.min_oos_sharpe, max_p_loss=gate.max_p_loss),
+                            min_oos_sharpe=gate.min_oos_sharpe, max_p_loss=gate.max_p_loss,
+                            min_dsr=gate.min_dsr,
+                            require_beats_hold=gate.require_beats_hold),
         admitted_count=len(admitted),
         admitted=[_EdgeComboSummary(
             symbol=c.symbol, tf=c.tf, strategy=c.strategy, profile=c.profile,
             trades=c.trades, sharpe=c.sharpe, pf=c.pf,
             net_return=c.net_return, signal_score=c.signal_score,
+            dsr=c.dsr, beats_hold=c.beats_hold,
         ) for c in admitted],
     )
 
@@ -1079,6 +1093,8 @@ async def set_edge_gate(body: _EdgeGateModel, request: Request) -> _EdgeGateResp
         min_trades=body.min_trades,
         min_oos_sharpe=body.min_oos_sharpe,
         max_p_loss=body.max_p_loss,
+        min_dsr=body.min_dsr,
+        require_beats_hold=body.require_beats_hold,
     )
     request.app.state.edge_registry = None       # force rebuild with new gate
     return _edge_gate_response(request.app)
@@ -1096,9 +1112,13 @@ async def strategy_catalog(request: Request) -> dict:
         "strategies": build_catalog(reg),
         "engines": {
             "edge_feed": ("Backtest-validated, long-only signals (the functions in "
-                          "edge/strategies.py). Only combos that survive the robustness "
-                          "gate — out-of-sample Sharpe > 0 and Monte-Carlo P(loss) ≤ "
-                          "35% — are admitted. These feed both candidate tables."),
+                          "edge/strategies.py). Only combos that survive the full gate — "
+                          "out-of-sample Sharpe > 0, Monte-Carlo P(loss) ≤ 35%, deflated "
+                          "Sharpe ≥ 0.5 (multiple-testing corrected over the whole search "
+                          "grid), and beating buy-and-hold on return AND drawdown — are "
+                          "admitted. With the current strategy set that is ZERO combos: "
+                          "nothing survives honest deflation. These feed both candidate "
+                          "tables."),
             "scalping_scanner": ("Intraday near-4H-level setups (some bidirectional). "
                                  "Same strategy NAMES but different logic from the edge "
                                  "feed — always check the engine label."),

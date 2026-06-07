@@ -41,16 +41,27 @@ class EdgeGate:
     # -inf floor; p_loss ≤ 1.0 is vacuous for a probability).
     min_oos_sharpe: float = -1e18
     max_p_loss: float = 1.0
+    # Deflation gate — additive. `min_dsr` requires the deflated Sharpe (which
+    # corrects for multiple-testing across the whole search grid) to clear a
+    # probability floor; 0.5 = "more likely than not a real edge". Default 0.0
+    # is vacuous. `require_beats_hold` rejects any config that does not beat
+    # buy-and-hold on BOTH return and drawdown. Both default to no-ops so CSVs
+    # without `dsr`/`beats_hold` columns behave exactly as before.
+    min_dsr: float = 0.0
+    require_beats_hold: bool = False
 
     def passes(
         self, *, net_return: float, sharpe: float, trades: int,
         oos_sharpe: float = float("inf"), p_loss: float = 0.0,
+        dsr: float = 1.0, beats_hold: bool = True,
     ) -> bool:
         return (net_return > self.min_net_return
                 and sharpe >= self.min_sharpe
                 and trades >= self.min_trades
                 and oos_sharpe > self.min_oos_sharpe
-                and p_loss <= self.max_p_loss)
+                and p_loss <= self.max_p_loss
+                and dsr >= self.min_dsr
+                and (beats_hold or not self.require_beats_hold))
 
 
 def signal_score_from_metrics(*, sharpe: float, expectancy: float, pf: float) -> float:
@@ -80,6 +91,8 @@ class EdgeCombo:
     signal_score: float
     oos_sharpe: float = float("inf")   # CPCV out-of-sample Sharpe (∞ = not measured)
     p_loss: float = 0.0                # Monte-Carlo probability of loss (0 = not measured)
+    dsr: float = 1.0                   # deflated Sharpe probability (1.0 = not measured)
+    beats_hold: bool = True            # beat buy-and-hold on return AND drawdown
 
     @property
     def key(self) -> tuple[str, str, str, str]:
@@ -107,6 +120,15 @@ def _f(row: dict, key: str, default: float = 0.0) -> float:
         return default
 
 
+def _b(row: dict, key: str, default: bool = True) -> bool:
+    """Parse a CSV truthy cell. Missing/blank → default (pass), matching the
+    optional-column convention used for the robustness gate."""
+    raw = row.get(key)
+    if raw is None or raw == "":
+        return default
+    return str(raw).strip().lower() in ("true", "1", "yes")
+
+
 def load_edge_registry(csv_path: str, gate: EdgeGate | None = None) -> EdgeRegistry:
     gate = gate or EdgeGate()
     reg = EdgeRegistry()
@@ -119,8 +141,13 @@ def load_edge_registry(csv_path: str, gate: EdgeGate | None = None) -> EdgeRegis
             # legacy CSVs (no oos_sharpe/p_loss) behave exactly as before.
             oos_sharpe = _f(row, "oos_sharpe", float("inf"))
             p_loss = _f(row, "p_loss", 0.0)
+            # Deflation columns are optional too — default to pass values so
+            # legacy CSVs (no dsr/beats_hold) behave exactly as before.
+            dsr = _f(row, "dsr", 1.0)
+            beats_hold = _b(row, "beats_hold", True)
             if not gate.passes(net_return=net_return, sharpe=sharpe, trades=trades,
-                               oos_sharpe=oos_sharpe, p_loss=p_loss):
+                               oos_sharpe=oos_sharpe, p_loss=p_loss,
+                               dsr=dsr, beats_hold=beats_hold):
                 continue
             pf = _f(row, "pf")
             expectancy = _f(row, "expectancy")
@@ -141,6 +168,8 @@ def load_edge_registry(csv_path: str, gate: EdgeGate | None = None) -> EdgeRegis
                     sharpe=sharpe, expectancy=expectancy, pf=pf),
                 oos_sharpe=oos_sharpe,
                 p_loss=p_loss,
+                dsr=dsr,
+                beats_hold=beats_hold,
             )
             reg.combos[combo.key] = combo
     return reg

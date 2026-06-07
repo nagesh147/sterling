@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.engines.edge.strategies import SIGNAL_FNS, resample  # noqa: E402
 from app.engines.edge.registry import PROFILE_CONFIG as PROFILES # noqa: E402
 from app.engines.edge.robustness import run_robustness_gate # noqa: E402
+from app.engines.analytics.performance import hodl_benchmark, beats_buy_and_hold # noqa: E402
 
 warnings.filterwarnings("ignore")
 
@@ -88,19 +89,22 @@ def simulate(df: pd.DataFrame, signals: np.ndarray,
             i += 1
             continue
             
-        if position == 0 and signals[i]:
-            # New entry
-            entry_price = close[i]
-            atr_val = atr[i]
-            sl = entry_price - sl_mult * atr_val
-            tp = entry_price + tp_mult * atr_val
-            trailing_sl = sl
-            entry_idx = i
-            position = 1
-            partial_closed = False
+        if position == 0:
+            if signals[i]:
+                # New entry
+                entry_price = close[i]
+                atr_val = atr[i]
+                sl = entry_price - sl_mult * atr_val
+                tp = entry_price + tp_mult * atr_val
+                trailing_sl = sl
+                entry_idx = i
+                position = 1
+                partial_closed = False
+            # Always advance when flat — a no-signal bar must not stall the loop
+            # (previously fell through both branches → infinite loop).
             i += 1
             continue
-            
+
         if position == 1:
             # === TRAILING LOGIC ===
             if "Trailing" in profile_name:
@@ -236,6 +240,11 @@ def main() -> None:
     print(f"[load] {len(files)} symbols")
 
     rows = []
+    # Multiple-testing trial count for the deflated Sharpe = the ENTIRE search
+    # grid we mined to pick winners (symbols × timeframes × strategies ×
+    # profiles), not just strategy×profile. Deflating by the full grid is the
+    # honest (conservative) choice — you tested every one of these hypotheses.
+    total_trials = len(files) * len(TIMEFRAMES) * len(STRATEGIES) * len(PROFILES)
     for f in files:
         symbol = os.path.basename(f).split("_")[-1].replace(".parquet", "")
         print(f"[{symbol}] loading {f}")
@@ -247,6 +256,12 @@ def main() -> None:
             print(f"  {label}: {len(tf_data[label]):>10,} bars")
         for tf_label in [t[1] for t in TIMEFRAMES]:
             df_tf = tf_data[tf_label]
+            # Passive buy-and-hold over the SAME window — the benchmark every
+            # config must beat to have earned its complexity + fee drag. It is
+            # identical for all (strategy, profile) on this (symbol, tf), so
+            # compute it once here.
+            hodl = hodl_benchmark(df_tf["close"].to_numpy(dtype=np.float64),
+                                  fee_rt_pct=FEE_ROUND_TRIP)
             for strat in STRATEGIES:
                 sigs = SIGNAL_FNS[strat](df_tf)
                 for prof_name, prof_cfg in PROFILES.items():
@@ -254,16 +269,21 @@ def main() -> None:
                                           prof_cfg,
                                           profile_name=prof_name)
                     m = metrics(sim_result, tf_label)
-                    
+
                     robust_metrics = run_robustness_gate(
-                        sim_result['trades'], 
-                        sim_result['return_stream'], 
-                        num_trials=len(STRATEGIES) * len(PROFILES)
+                        sim_result['trades'],
+                        sim_result['return_stream'],
+                        num_trials=total_trials
                     )
-                    
+                    rel = beats_buy_and_hold(m["net_return"], m["max_dd"], hodl)
+
                     rows.append({
                         "symbol": symbol, "tf": tf_label, "strategy": strat,
                         "profile": prof_name, **m, **robust_metrics,
+                        "hodl_net_return": hodl["net_return"],
+                        "hodl_max_dd": hodl["max_drawdown"],
+                        "excess_vs_hold": rel["excess_return"],
+                        "beats_hold": rel["beats_hold"],
                     })
             print(f"  {tf_label} done")
 
@@ -298,8 +318,40 @@ def fmt_strat(s: str) -> str:
         "price_action":  "Price Action",
         "smc":           "SMC FVG",
         "vwap_cross":    "VWAP Cross",
-        "bb_rsi_mean_reversion": "BB RSI Mean Reversion",
-    }[s]
+        "bb_rsi_reversion": "BB RSI Mean Reversion",
+    }.get(s, s.replace("_", " ").title())
+
+
+def hold_section(valid: pd.DataFrame) -> str:
+    """Strategy-vs-buy-and-hold: the benchmark the original study omitted.
+
+    A config 'beats hold' only if it returned MORE than passively holding the
+    same asset over the same window AND drew down LESS. Holding is fully
+    invested; strategies are in-market only part of the time — this is the
+    honest opportunity-cost comparison.
+    """
+    if "beats_hold" not in valid.columns or valid.empty:
+        return ""
+    n = len(valid)
+    winners = valid[valid["beats_hold"]].sort_values("excess_vs_hold", ascending=False)
+    out = ["## 🪙 Strategy vs. Buy-and-Hold (the missing benchmark)\n\n",
+           f"**{len(winners)} of {n}** configs (≥30 trades) beat buy-and-hold on "
+           "BOTH return and drawdown. Everything else is a worse way to hold the asset.\n\n"]
+    if winners.empty:
+        out.append("> No configuration beat buy-and-hold on a risk-adjusted basis — "
+                   "the apparent 'edge' is long-only beta.\n\n")
+        return "".join(out)
+    head = ("| # | Strategy (TF) | Symbol | Profile | Strat Net | HODL Net | Excess | "
+            "Strat MaxDD | HODL MaxDD |\n"
+            "|---|---|---|---|---|---|---|---|---|\n")
+    body = []
+    for i, r in enumerate(winners.head(20).itertuples(), 1):
+        body.append(
+            f"| {i} | {fmt_strat(r.strategy)} ({r.tf}) | {r.symbol} | {r.profile} | "
+            f"{r.net_return*100:+.1f}% | {r.hodl_net_return*100:+.1f}% | "
+            f"{r.excess_vs_hold*100:+.1f}% | {r.max_dd*100:.1f}% | {r.hodl_max_dd*100:.1f}% |")
+    out.append(head + "\n".join(body) + "\n\n")
+    return "".join(out)
 
 
 def section(df: pd.DataFrame, title: str, n: int = 20) -> str:
@@ -374,6 +426,9 @@ def write_report(res: pd.DataFrame) -> None:
                                     + merged["rank_pf"]) / 3
         winner = merged.sort_values("composite_rank").head(10)
         out.append(section(winner, "🥇 Composite Winner (avg rank of PnL + Sharpe + PF)", 10))
+
+        # The benchmark the original study omitted.
+        out.append(hold_section(valid))
 
         # Per-symbol best
         for sym in sorted(valid["symbol"].unique()):

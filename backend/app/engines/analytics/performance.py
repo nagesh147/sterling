@@ -487,3 +487,57 @@ def full_report(
         sharpe_method = method,
         regime_breakdown = regime_breakdown(trades),
     )
+
+
+# ── buy-and-hold benchmark ────────────────────────────────────────────────────
+
+
+def hodl_benchmark(prices: Sequence[float], fee_rt_pct: float = 0.0) -> dict:
+    """Passive buy-and-hold over the same window — the benchmark every strategy
+    must beat to have earned its complexity and fee drag.
+
+    Buy at the first price, hold to the last, pay one round-trip fee. Returns the
+    two numbers a fair comparison needs:
+
+      * ``net_return``   — final/initial − 1 − fee (a fraction; matches the
+                           backtest's ``net_return`` convention);
+      * ``max_drawdown`` — worst peak-to-trough on the price path (≤ 0; ``0.0``
+                           in a monotonic-up market).
+
+    Degenerate input (< 2 prices, or a non-positive first price) returns zeros
+    rather than raising, so callers can benchmark every config unconditionally.
+    """
+    p = np.asarray(prices, dtype=np.float64)
+    if p.size < 2 or p[0] <= 0:
+        return {"net_return": 0.0, "max_drawdown": 0.0,
+                "final_equity": 1.0, "n_bars": int(p.size)}
+    equity = p / p[0]
+    net_return = float(equity[-1] - 1.0 - fee_rt_pct)
+    peak = np.maximum.accumulate(equity)
+    max_dd = float(np.min((equity - peak) / peak))
+    return {"net_return": net_return, "max_drawdown": max_dd,
+            "final_equity": float(equity[-1]), "n_bars": int(p.size)}
+
+
+def beats_buy_and_hold(
+    strategy_net_return: float,
+    strategy_max_dd: float,
+    hodl: dict,
+) -> dict:
+    """Benchmark-relative gate: a strategy only *beats* passive holding when it
+    earns MORE return AND suffers LESS drawdown. Earning more while drawing down
+    deeper is leverage, not edge; this gate refuses to call that a win.
+
+    ``hodl`` is a :func:`hodl_benchmark` result. Drawdowns are compared by
+    magnitude, so a strategy can never beat a monotonic-up market on drawdown
+    (its ``max_drawdown`` is 0) — which is exactly the honest verdict for a
+    long-only book in a one-way bull run.
+    """
+    beats_return = strategy_net_return > hodl["net_return"]
+    beats_dd = abs(strategy_max_dd) < abs(hodl["max_drawdown"])
+    return {
+        "excess_return": float(strategy_net_return - hodl["net_return"]),
+        "beats_hold_return": bool(beats_return),
+        "beats_hold_dd": bool(beats_dd),
+        "beats_hold": bool(beats_return and beats_dd),
+    }
