@@ -23,6 +23,7 @@ def simulate_idx(
     direction: str = "long",
     fee_rt: float = 0.001,
     max_hold: int = 200,
+    trail_mult: float | None = None,
 ) -> list[dict]:
     """Bar-by-bar first-touch SL/TP simulator.
 
@@ -66,17 +67,27 @@ def simulate_idx(
         xp = close[end]
         xi = end
 
+        # Optional ATR-trailing stop: ratchets toward price, never away. The
+        # stop in force during bar j is set from highs/lows up to bar j-1, so we
+        # test it against bar j BEFORE ratcheting on bar j — no intrabar lookahead.
+        trail = sl if trail_mult is not None else None
         for j in range(i + 1, end + 1):
             if direction == "short":
-                if high[j] >= sl:
-                    xp = sl; xi = j; break
+                stop = trail if trail is not None else sl
+                if high[j] >= stop:
+                    xp = stop; xi = j; break
                 if low[j] <= tp:
                     xp = tp; xi = j; break
+                if trail is not None:
+                    trail = min(trail, low[j] + trail_mult * atr[i])
             else:
-                if low[j] <= sl:
-                    xp = sl; xi = j; break
+                stop = trail if trail is not None else sl
+                if low[j] <= stop:
+                    xp = stop; xi = j; break
                 if high[j] >= tp:
                     xp = tp; xi = j; break
+                if trail is not None:
+                    trail = max(trail, high[j] - trail_mult * atr[i])
 
         out.append({
             "pnl_pct": (xp / e) - 1.0 - fee_rt if direction == "long"

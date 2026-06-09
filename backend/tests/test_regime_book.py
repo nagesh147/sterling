@@ -84,3 +84,34 @@ def test_router_emits_shorts_in_downtrend():
     df = _frame(np.r_[np.linspace(100, 160, 150), np.linspace(160, 80, 150)])
     longs, shorts = route_signals(df, adx_threshold=20.0)
     assert shorts.sum() >= 1            # the decline must produce shorts
+
+
+# --- Task 4: ATR-trailing exit ------------------------------------------
+from study.sim import simulate_idx as _sim
+
+
+def test_trailing_locks_gains_vs_fixed_bracket():
+    # Long runs 100->130 then reverses to 110. TP=20 ATR (=140) is unreachable
+    # and SL=96 never hits, so the FIXED book rides to the end (+9.8%). The
+    # TRAILING stop ratchets up to ~4 below the 130 peak and exits the pullback
+    # near 126 (+25%) — strictly better, which is the whole point.
+    closes = np.r_[np.linspace(100, 130, 30), np.linspace(130, 110, 30)]
+    idx = pd.date_range("2024-01-01", periods=len(closes), freq="4h")
+    df = pd.DataFrame({"close": closes, "high": closes * 1.002,
+                       "low": closes * 0.998}, index=idx)
+    df["atr"] = 2.0
+    sig = np.zeros(len(df), bool); sig[0] = True
+    fixed = _sim(df, sig, slm=2.0, tpm=20.0, direction="long")
+    trail = _sim(df, sig, slm=2.0, tpm=20.0, direction="long", trail_mult=2.0)
+    assert trail and fixed
+    assert trail[0]["pnl_pct"] > fixed[0]["pnl_pct"]
+
+
+def test_trail_mult_none_is_unchanged():
+    closes = np.linspace(100, 90, 40)
+    idx = pd.date_range("2024-01-01", periods=40, freq="4h")
+    df = pd.DataFrame({"close": closes, "high": closes * 1.002,
+                       "low": closes * 0.998}, index=idx)
+    df["atr"] = 1.0
+    sig = np.zeros(40, bool); sig[0] = True
+    assert _sim(df, sig, 2.0, 3.0) == _sim(df, sig, 2.0, 3.0, trail_mult=None)
