@@ -179,6 +179,25 @@ def portfolio_equity(trades: list[dict], cap: float = 500.0,
             "n": len(pnls), "weighted_pnls": wpnls}
 
 
+def _basket_hodl(frames: dict, oos_start: float, fee_rt: float = FEE_RT) -> dict:
+    """Equal-weight buy-and-hold of all symbols over the OOS span — the honest
+    benchmark for a pooled book. Each symbol's OOS closes are normalised to 1.0
+    at the span start, aligned on a common time grid, and averaged into one
+    basket equity curve; net_return + max_drawdown are read off that curve.
+    (Concatenating raw prices would inject fake jumps at symbol boundaries.)"""
+    cols = []
+    for sym, df in frames.items():
+        t0, t1 = df.index[0], df.index[-1]
+        cut = t0 + (t1 - t0) * oos_start
+        sub = df["close"][df.index >= cut]
+        if len(sub) > 1:
+            cols.append((sub / sub.iloc[0]).rename(sym))
+    if not cols:
+        return {"net_return": 0.0, "max_drawdown": 0.0, "final_equity": 1.0, "n_bars": 0}
+    basket = pd.concat(cols, axis=1).ffill().dropna().mean(axis=1)
+    return hodl_benchmark(basket.to_numpy(), fee_rt_pct=fee_rt)
+
+
 def walk_forward_book(frames: dict, adx_threshold: float = 25.0,
                       ma_window: int = 50, use_regime: bool = True,
                       trail_mult: float | None = None, n_folds: int = 5,
@@ -190,21 +209,68 @@ def walk_forward_book(frames: dict, adx_threshold: float = 25.0,
     across adx_threshold is done by the caller comparing whole-book OOS results,
     never per-fold on test data.) Returns OOS book stats + DSR + hold-beat."""
     all_trades: list[dict] = []
-    hodl_prices: list[float] = []
     for sym, df in frames.items():
         t0, t1 = df.index[0], df.index[-1]
         cut = t0 + (t1 - t0) * oos_start
         trades = build_symbol_trades(sym, df, adx_threshold, ma_window,
                                      use_regime, trail_mult)
         all_trades += [t for t in trades if t["entry_time"] >= cut]
-        sub = df["close"][df.index >= cut]
-        if len(sub) > 1:
-            hodl_prices += list(sub.to_numpy())
     eq = portfolio_equity(all_trades, cap, max_concurrent)
-    hodl = hodl_benchmark(hodl_prices, fee_rt_pct=FEE_RT)
+    hodl = _basket_hodl(frames, oos_start)
     rel = beats_buy_and_hold(eq["ret"], eq["max_dd"], hodl)
     dsr = deflated_sharpe_ratio(eq["weighted_pnls"], num_trials=525) \
         if eq["weighted_pnls"] else 0.0
     return {"oos": eq, "dsr": round(dsr, 4),
             "beats_hold": rel["beats_hold"], "excess_vs_hold": rel["excess_return"],
             "n": eq["n"], "hodl": hodl}
+
+
+def load_frames(rule: str = "4h") -> dict:
+    """Load BTC/ETH/SOL 1m parquet → resampled OHLCV+ATR frames. Run from backend/."""
+    frames = {}
+    for f in sorted(glob.glob("vector_store_1m_*.parquet")):
+        sym = os.path.basename(f).replace("vector_store_1m_", "").replace(".parquet", "")
+        d = pd.read_parquet(f, columns=["time", "open", "high", "low", "close", "volume"])
+        d["time"] = pd.to_datetime(d["time"], unit="s")
+        d = d.set_index("time").sort_index()
+        frames[sym] = resample(d, rule)
+    return frames
+
+
+def _row(label, r):
+    o = r["oos"]
+    return (f"{label:>34} {o['end']:>8,.0f} {o['ret']*100:>7.1f}% {o['sharpe']:>7.2f}"
+            f" {o['max_dd']*100:>7.1f}% {o['n']:>5} {r['dsr']:>7.4f}"
+            f"  {'YES' if r['beats_hold'] else 'no':>4}")
+
+
+def main():
+    frames = load_frames("4h")
+    if not frames:
+        print("No vector_store_1m_*.parquet found (run from backend/).")
+        return
+    print(f"Regime book · {len(frames)} symbols pooled · $500 · OOS tail (last 50%)\n")
+    print(f"{'config':>34} {'$end':>8} {'ret':>8} {'Sharpe':>7} {'maxDD':>8}"
+          f" {'n':>5} {'DSR':>7}  beatsHODL")
+    print("-" * 92)
+    # Baseline: long-only-style single-book (no gate, no pooling -> cap1) = 'before'.
+    base = walk_forward_book(frames, use_regime=False, max_concurrent=1)
+    print(_row("BEFORE ungated cap1", base))
+    # Spine: shorts + pooling, no gate.
+    spine = walk_forward_book(frames, use_regime=False, max_concurrent=3)
+    print(_row("SPINE shorts+pool cap3", spine))
+    # +Regime gate (sweep the one knob; report each, honestly flagged).
+    for adx in (20.0, 25.0, 30.0):
+        r = walk_forward_book(frames, use_regime=True, adx_threshold=adx, max_concurrent=3)
+        print(_row(f"+REGIME gate adx={adx:.0f} cap3", r))
+    # +Trailing on the mid knob.
+    rt = walk_forward_book(frames, use_regime=True, adx_threshold=25.0,
+                           max_concurrent=3, trail_mult=2.0)
+    print(_row("+REGIME+TRAIL adx25 cap3", rt))
+    print(f"\nOOS equal-weight basket HODL ref: {base['hodl']['net_return']*100:+.1f}% "
+          f"(maxDD {base['hodl']['max_drawdown']*100:.1f}%)")
+    print("DSR >= 0.5 = deflation-provable. Anything less = forward signal only.")
+
+
+if __name__ == "__main__":
+    main()

@@ -182,3 +182,18 @@ def test_walk_forward_book_runs_and_is_leakfree_shape():
     res = walk_forward_book(frames, adx_threshold=20.0, use_regime=True)
     assert {"oos", "dsr", "beats_hold", "n"} <= res.keys()
     assert res["n"] >= 0
+
+
+def test_basket_hodl_is_not_cross_symbol_concat_artifact():
+    """Equal-weight basket HODL: 3 symbols each falling ~50% over the OOS span
+    must give a basket net_return near -50% — NOT the absurd value you'd get by
+    concatenating raw prices ($70k→$3k→$150 boundary jumps)."""
+    from study.regime_book import _basket_hodl
+    frames = {}
+    for sym, lvl in (("BTC", 70000.0), ("ETH", 3000.0), ("SOL", 150.0)):
+        c = np.linspace(lvl, lvl * 0.5, 400)   # each halves over the window
+        idx = pd.date_range("2024-01-01", periods=400, freq="4h")
+        frames[sym] = pd.DataFrame({"close": c}, index=idx)
+    h = _basket_hodl(frames, oos_start=0.0)   # full window: each halves
+    assert h["net_return"] == pytest.approx(-0.5, abs=0.01)   # ~ -50% (minus fee)
+    assert -0.55 < h["max_drawdown"] <= 0.0
