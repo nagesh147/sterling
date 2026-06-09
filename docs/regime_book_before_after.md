@@ -128,6 +128,37 @@ the only thing standing between "forward edge" and "provable edge" is breadth:
 more symbols. Tested and rejected along the way: naive leverage (ruin past 2×),
 Donchian/TSMOM trend (worse than the EMA cross), uniform trailing stops.
 
+## Breadth experiment — the 24-coin pipeline (honest negative)
+
+Built `study/ohlcv_pipeline.py` (Binance public klines → 6-col parquet →
+`load_universe`) and downloaded **24 liquid coins, 5,362×4h bars each
+(2023-12-29 → 2026-06-09)** to test whether breadth buys a deflation-provable
+(DSR ≥ 0.5) edge. The OOS span was a brutal alt bear market — **basket HODL
+−55.3% / −70% maxDD**. Three routes tested, all honest, all read out-of-sample:
+
+| Route | best OOS | Sharpe | DSR | IS→OOS corr | verdict |
+|---|--:|--:|--:|--:|---|
+| Directional pool (conviction, cap 3) | +24.4% | 0.69 | 0.082 | +0.45 | beats HODL, Sharpe *fell* vs 3-coin |
+| Directional pool (cap 15, more n) | +66.7% | 0.44 | 0.132 | +0.69 | only via −85% maxDD — not real |
+| Cross-sectional **momentum** (long winners / short losers) | −73.2% | −1.28 | 0.000 | +0.74 | loses OOS (whole grid mean −1.38) |
+| Cross-sectional **reversal** (long losers / short winners) | −80.7% | −1.84 | 0.000 | +0.20 | loses worse (whole grid all negative) |
+
+**Why breadth didn't help — the correlation wall.** 24 crypto coins are
+~0.8-correlated: stacking more *directional* books adds trade *count* but not
+independent *information*, so n rises while the effective t-stat (and DSR)
+barely moves — and concurrency just piles correlated risk until drawdown
+explodes. The market-neutral routes that *should* diversify (cross-sectional)
+**lose outright** here: in a correlated alt crash the dispersion alpha is swamped
+and both long-short legs bleed. Crypto's cross-sectional factors did not hold up
+in this window.
+
+**What survives:** the focused, *directional*, regime-gated conviction book —
+which is long/short and not forced to hold, so it sidesteps the alt bleeding the
+cross-sectional books walked into. Breadth is a real, reusable capability (the
+pipeline extends to any coin/interval in one command), but on this universe and
+window it did **not** clear the deflation bar. The honest best book remains the
+conviction regime book (Sharpe ~1.15, DSR 0.166) — not provable, but real.
+
 ## Verdict
 
 A **real, validated, out-of-sample edge** — the strongest this project has
