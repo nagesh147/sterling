@@ -114,3 +114,23 @@ def route_signals(df: pd.DataFrame, adx_threshold: float = 25.0,
     longs = (mom_long & (reg == 1)) | (mr_long & (reg == 0))
     shorts = (mom_short & (reg == -1)) | (mr_short & (reg == 0))
     return longs, shorts
+
+
+def merge_portfolio(trades: list[dict], max_concurrent: int = 3) -> list[dict]:
+    """Greedy interval scheduler: accept trades in entry-time order while fewer
+    than max_concurrent are open; emit the accepted set ordered by exit_time.
+
+    Each trade is {'symbol','entry_time','exit_time','pnl_pct'}. Models a single
+    book that can hold at most max_concurrent positions at once (one per name in
+    the default 3-symbol case). Dropped trades are capital we did not have free.
+    """
+    by_entry = sorted(trades, key=lambda t: t["entry_time"])
+    open_exits: list = []
+    kept: list[dict] = []
+    for t in by_entry:
+        open_exits = [x for x in open_exits if x > t["entry_time"]]
+        if len(open_exits) >= max_concurrent:
+            continue
+        open_exits.append(t["exit_time"])
+        kept.append(t)
+    return sorted(kept, key=lambda t: t["exit_time"])

@@ -115,3 +115,33 @@ def test_trail_mult_none_is_unchanged():
     df["atr"] = 1.0
     sig = np.zeros(40, bool); sig[0] = True
     assert _sim(df, sig, 2.0, 3.0) == _sim(df, sig, 2.0, 3.0, trail_mult=None)
+
+
+# --- Task 5: capped-concurrency portfolio merge -------------------------
+from study.regime_book import merge_portfolio
+
+
+def _trade(sym, e, x, pnl):
+    return {"symbol": sym, "entry_time": pd.Timestamp(e),
+            "exit_time": pd.Timestamp(x), "pnl_pct": pnl}
+
+
+def test_merge_respects_concurrency_cap():
+    # 3 fully-overlapping trades, cap=2 -> the 3rd (latest entry) is dropped.
+    trades = [
+        _trade("BTC", "2024-01-01", "2024-01-10", 0.05),
+        _trade("ETH", "2024-01-02", "2024-01-09", 0.03),
+        _trade("SOL", "2024-01-03", "2024-01-08", 0.02),
+    ]
+    kept = merge_portfolio(trades, max_concurrent=2)
+    assert len(kept) == 2
+    assert {t["symbol"] for t in kept} == {"BTC", "ETH"}
+
+
+def test_merge_orders_by_exit_and_is_full_when_uncapped():
+    trades = [
+        _trade("BTC", "2024-01-05", "2024-01-06", 0.01),
+        _trade("ETH", "2024-01-01", "2024-01-02", -0.02),
+    ]
+    kept = merge_portfolio(trades, max_concurrent=3)
+    assert [t["symbol"] for t in kept] == ["ETH", "BTC"]   # exit-ordered
