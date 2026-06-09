@@ -38,3 +38,30 @@ def test_classifier_has_no_lookahead():
     full = classify_regime(df, adx_threshold=20.0, ma_window=50)
     trunc = classify_regime(df.iloc[:250], adx_threshold=20.0, ma_window=50)
     assert np.array_equal(full[:250], trunc)
+
+
+# --- Task 2: short sleeve signals ---------------------------------------
+from study.regime_book import short_momentum, short_mean_reversion
+
+
+def test_short_momentum_fires_on_bearish_cross():
+    # rise then fall: a bearish 9/21 EMA cross must appear on the way down.
+    df = _frame(np.r_[np.linspace(100, 160, 120), np.linspace(160, 90, 120)])
+    sig = short_momentum(df)
+    assert sig.dtype == bool and len(sig) == len(df)
+    assert sig[120:].any()          # fires during the decline
+    assert not sig[:60].any()       # not during the clean rise
+
+
+def test_short_mean_reversion_fires_on_upper_band_fade():
+    # Noisy mean-reverting series, then an overbought rally that rejects the
+    # upper band and reverts. Noise keeps RSI finite (a pure monotonic leg makes
+    # RSI undefined/zero — a fixture artifact, not what real bars look like).
+    rng = np.random.default_rng(1)
+    base = 100 + np.cumsum(rng.normal(0, 0.5, 120))
+    rally = base[-1] + np.cumsum(np.abs(rng.normal(0.9, 0.4, 25)))   # strong up
+    revert = rally[-1] - np.cumsum(np.abs(rng.normal(0.9, 0.4, 25)))  # fade down
+    df = _frame(np.r_[base, rally, revert])
+    sig = short_mean_reversion(df)
+    assert sig.dtype == bool and len(sig) == len(df)
+    assert sig[120:].any()

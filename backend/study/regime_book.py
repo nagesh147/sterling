@@ -64,3 +64,26 @@ def classify_regime(df: pd.DataFrame, adx_threshold: float = 25.0,
     reg[trend & ~up] = -1
     reg[~np.isfinite(adx.to_numpy())] = 0
     return reg
+
+
+def short_momentum(df: pd.DataFrame) -> np.ndarray:
+    """Mirror of signals_ma_crossover: fire on a fresh bearish 9/21 EMA cross."""
+    fast = df["close"].ewm(span=9, adjust=False).mean()
+    slow = df["close"].ewm(span=21, adjust=False).mean()
+    bear = fast < slow
+    return (bear & ~bear.shift(1).fillna(False)).to_numpy()
+
+
+def short_mean_reversion(df: pd.DataFrame) -> np.ndarray:
+    """Mirror of signals_bb_rsi_mean_reversion: fade the upper Bollinger band
+    (close drops back below upper) while RSI(14) is hot (> 60)."""
+    c = df["close"]
+    d = c.diff()
+    gain = d.clip(lower=0).rolling(14).mean()
+    loss = (-d.clip(upper=0)).rolling(14).mean()
+    rsi = 100 - 100 / (1 + gain / loss.replace(0, np.nan))
+    sma = c.rolling(20).mean()
+    std = c.rolling(20).std()
+    upper = sma + 2 * std
+    fade = (c < upper) & (c.shift(1) >= upper.shift(1))
+    return (fade & (rsi > 60)).fillna(False).to_numpy()
