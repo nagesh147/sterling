@@ -48,3 +48,6 @@ __pycache__/
 backend/scratch.py
 backend/test_crash.sh
 backend/test_statarb.py
+
+# Multi-symbol OHLCV universe (regenerate via study.ohlcv_pipeline; immutable historical klines)
+backend/data/ohlcv/
