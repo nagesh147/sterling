@@ -65,3 +65,22 @@ def test_short_mean_reversion_fires_on_upper_band_fade():
     sig = short_mean_reversion(df)
     assert sig.dtype == bool and len(sig) == len(df)
     assert sig[120:].any()
+
+
+# --- Task 3: regime router ----------------------------------------------
+from study.regime_book import route_signals
+
+
+def test_router_gates_momentum_long_to_uptrend_only():
+    df = _frame(np.linspace(100, 220, 300))
+    longs, shorts = route_signals(df, adx_threshold=20.0)
+    reg = classify_regime(df, adx_threshold=20.0)
+    # Every long entry sits in a non-downtrend bar; no shorts in a clean uptrend.
+    assert all(reg[i] != -1 for i in np.flatnonzero(longs))
+    assert shorts.sum() == 0 or all(reg[i] != 1 for i in np.flatnonzero(shorts))
+
+
+def test_router_emits_shorts_in_downtrend():
+    df = _frame(np.r_[np.linspace(100, 160, 150), np.linspace(160, 80, 150)])
+    longs, shorts = route_signals(df, adx_threshold=20.0)
+    assert shorts.sum() >= 1            # the decline must produce shorts

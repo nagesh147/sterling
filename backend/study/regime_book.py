@@ -87,3 +87,30 @@ def short_mean_reversion(df: pd.DataFrame) -> np.ndarray:
     upper = sma + 2 * std
     fade = (c < upper) & (c.shift(1) >= upper.shift(1))
     return (fade & (rsi > 60)).fillna(False).to_numpy()
+
+
+def route_signals(df: pd.DataFrame, adx_threshold: float = 25.0,
+                  ma_window: int = 50, use_regime: bool = True):
+    """Route raw sleeve signals through the regime gate.
+
+    Returns (long_sigs, short_sigs) boolean arrays, same length as df:
+      regime +1 (uptrend)   -> momentum long
+      regime -1 (downtrend) -> momentum short
+      regime  0 (range)     -> mean-reversion long + short
+
+    use_regime=False is the spine baseline (no gate): momentum long+short and
+    MR long+short fire everywhere — lets us measure whether the gate earns its
+    degree of freedom.
+    """
+    reg = classify_regime(df, adx_threshold, ma_window)
+    mom_long = signals_ma_crossover(df)
+    mom_short = short_momentum(df)
+    mr_long = signals_bb_rsi_mean_reversion(df)
+    mr_short = short_mean_reversion(df)
+    if not use_regime:
+        longs = mom_long | mr_long
+        shorts = mom_short | mr_short
+        return longs, shorts
+    longs = (mom_long & (reg == 1)) | (mr_long & (reg == 0))
+    shorts = (mom_short & (reg == -1)) | (mr_short & (reg == 0))
+    return longs, shorts
