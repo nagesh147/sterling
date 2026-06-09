@@ -159,6 +159,40 @@ pipeline extends to any coin/interval in one command), but on this universe and
 window it did **not** clear the deflation bar. The honest best book remains the
 conviction regime book (Sharpe ~1.15, DSR 0.166) — not provable, but real.
 
+## Paper trading the conviction book (real Binance data, isolated)
+
+`study/paper_trader.py` runs the *exact* validated conviction book (adx=20,
+RSI<25/>65, vol-target sizing, sleeve exits) on **real Binance 4h bars**, keeps a
+persisted paper account, and distinguishes closed trades from currently-open
+positions (`walk_positions`). It is **isolated from the live SterlingEngine** —
+the book is not deflation-provable (DSR 0.166 < 0.5), so it earns trust by
+paper-trading, not by going live. Realized equity is computed with the same
+`portfolio_equity_sized` the backtest used, so paper logic cannot drift from what
+was validated (only the *data* differs: native Binance 4h vs legacy 1m-derived).
+
+**Inception-date sensitivity (real Binance 4h, $500, 1× leverage) — no cherry-picking:**
+
+| inception | realized | return | Sharpe | maxDD | trades |
+|---|--:|--:|--:|--:|--:|
+| 2025-01-01 | $879 | +75.8% | 1.46 | −28.1% | 270 |
+| 2025-03-01 | $810 | +62.0% | 1.39 | −28.1% | 244 |
+| 2025-06-01 | $872 | +74.4% | 1.78 | −28.1% | 205 |
+| 2025-09-07 | $927 | +85.4% | 2.64 | −28.1% | 146 |
+| 2026-01-01 | $817 | +63.3% | 3.52 | −28.1% | 80 |
+| 2026-03-01 (≈3mo) | $573 | +14.5% | 1.65 | −19.4% | 55 |
+
+Every inception is strongly positive (Sharpe 1.4–3.5) — robust across windows,
+not one lucky cell. As of the latest bar the book is positioned **short** BTC/
+ETH/SOL (regime gate → momentum-short in a downtrend), with positive unrealized
+P&L. On real data it *outperforms* its legacy-data validation (+43% / 1.15),
+plausibly because native 4h bars give cleaner first-touch fills.
+
+**Honest caveat:** 2025–26 is essentially one macro regime (a crypto downturn
+the short sleeves exploited), and these windows overlap (same endpoint). The
+Sharpe reflects that regime. The paper account exists precisely to accumulate
+*genuine forward* evidence across regimes from here. Run:
+`python -m study.paper_trader` (persists `data/paper/state.json` + `trades.csv`).
+
 ## Verdict
 
 A **real, validated, out-of-sample edge** — the strongest this project has

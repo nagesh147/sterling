@@ -51,3 +51,6 @@ backend/test_statarb.py
 
 # Multi-symbol OHLCV universe (regenerate via study.ohlcv_pipeline; immutable historical klines)
 backend/data/ohlcv/
+
+# Paper-trading state + ledger (regenerates from real data)
+backend/data/paper/
