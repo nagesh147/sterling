@@ -145,6 +145,53 @@ def load_universe(tf: str, data_dir: str = DATA_DIR) -> dict:
     return frames
 
 
+def _utc_naive(now=None) -> pd.Timestamp:
+    """Current (or given) UTC time as a tz-naive Timestamp, matching the
+    tz-naive bar index produced by load_universe."""
+    if now is not None:
+        ts = pd.Timestamp(now)
+    else:
+        ts = pd.Timestamp.now(tz="UTC")
+    return ts.tz_localize(None) if ts.tzinfo is not None else ts
+
+
+def drop_forming_bar(df: pd.DataFrame, interval: str, now=None) -> pd.DataFrame:
+    """Drop trailing bars whose interval has NOT fully closed as of `now`.
+
+    A bar opened at T for interval Δ closes at T+Δ; until then it is still
+    forming and acting on it is repaint/lookahead. This is the single most
+    important guard for trading on live data."""
+    if df.empty:
+        return df
+    delta = pd.Timedelta(seconds=_INTERVAL_MS[interval] // 1000)
+    cutoff = _utc_naive(now)
+    return df[(df.index + delta) <= cutoff]
+
+
+def validate_universe(frames: dict, interval: str, now=None,
+                      max_staleness_bars: int = 2, min_bars: int = 200) -> list:
+    """Return a list of human-readable data-integrity issues (empty = clean):
+    stale feed (last closed bar too old), gaps (missing bars), or too few bars.
+    Callers should refuse to trade when this is non-empty."""
+    issues: list[str] = []
+    sec = _INTERVAL_MS[interval] // 1000
+    cutoff = _utc_naive(now)
+    for sym, df in frames.items():
+        if len(df) < min_bars:
+            issues.append(f"{sym}: only {len(df)} bars (< {min_bars})")
+        if df.empty:
+            continue
+        age = (cutoff - df.index[-1]).total_seconds()
+        if age > max_staleness_bars * sec:
+            issues.append(f"{sym}: stale — last bar {df.index[-1]} "
+                          f"({age / 3600:.1f}h old)")
+        deltas = df.index.to_series().diff().dt.total_seconds().dropna()
+        n_gaps = int((deltas > 1.5 * sec).sum())
+        if n_gaps:
+            issues.append(f"{sym}: {n_gaps} gap(s) in the bar series")
+    return issues
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Download a multi-symbol OHLCV universe.")
     ap.add_argument("--interval", default="4h", choices=list(_INTERVAL_MS))

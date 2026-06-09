@@ -71,6 +71,50 @@ def test_write_and_load_universe_round_trip(tmp_path):
         assert df["atr"].notna().any()                # ATR computed on 4h bars
 
 
+# --- production hardening: forming-bar guard + data integrity -----------
+from study.ohlcv_pipeline import drop_forming_bar, validate_universe
+
+
+def _hourly_frame(start, n, freq="4h"):
+    idx = pd.date_range(start, periods=n, freq=freq)
+    return pd.DataFrame({"open": 1.0, "high": 1.0, "low": 1.0,
+                         "close": 1.0, "volume": 1.0, "atr": 0.1}, index=idx)
+
+
+def test_drop_forming_bar_removes_unclosed_tail():
+    # bars open 00,04,08,12; at 13:00 the 12:00 bar (closes 16:00) is forming.
+    df = _hourly_frame("2026-06-09 00:00", 4)
+    out = drop_forming_bar(df, "4h", now="2026-06-09 13:00")
+    assert len(out) == 3
+    assert out.index[-1] == pd.Timestamp("2026-06-09 08:00")   # last CLOSED bar
+
+
+def test_drop_forming_bar_keeps_all_when_fully_closed():
+    df = _hourly_frame("2026-06-09 00:00", 3)                  # 00,04,08
+    out = drop_forming_bar(df, "4h", now="2026-06-09 13:00")   # 08 closed at 12:00
+    assert len(out) == 3
+
+
+def test_validate_universe_flags_stale_gappy_and_short():
+    good = _hourly_frame("2026-06-01 00:00", 60)
+    stale = _hourly_frame("2026-05-01 00:00", 60)             # last bar way old
+    gappy = _hourly_frame("2026-06-01 00:00", 60)
+    gappy = gappy.drop(gappy.index[20:25])                    # punch a gap
+    frames = {"BTCUSD": good, "ETHUSD": stale, "SOLUSD": gappy}
+    issues = validate_universe(frames, "4h", now="2026-06-10 12:00",
+                               min_bars=50)
+    joined = " ".join(issues)
+    assert "ETHUSD" in joined and "stale" in joined
+    assert "SOLUSD" in joined and "gap" in joined
+    assert "BTCUSD" not in joined                              # the clean one passes
+
+
+def test_validate_universe_flags_too_few_bars():
+    frames = {"BTCUSD": _hourly_frame("2026-06-08 00:00", 5)}
+    issues = validate_universe(frames, "4h", now="2026-06-09 04:00", min_bars=50)
+    assert any("BTCUSD" in i and "bars" in i for i in issues)
+
+
 @pytest.mark.skipif(os.environ.get("STERLING_NET_TESTS") != "1",
                     reason="network test (set STERLING_NET_TESTS=1)")
 def test_fetch_klines_live_smoke():

@@ -36,8 +36,20 @@ PAPER_CONFIG = {
     "adx": 20.0, "rsi_lo": 25, "rsi_hi": 65,
     "risk_per_trade": 0.015, "max_leverage": 3.0, "max_concurrent": 3,
     "leverage": 1.0,
+    # Conservative flat perp-funding drag applied to every position by hold
+    # duration (real per-venue funding needs the funding-rate API — see the
+    # production-readiness doc). 1bp / 8h ≈ 3bp/day, charged regardless of side.
+    "funding_rate_8h": 0.0001, "bar_hours": 4,
 }
 PAPER_SYMBOLS = ["BTCUSD", "ETHUSD", "SOLUSD"]
+
+
+def _funding_cost(entry_bar: int, exit_bar: int, bar_hours: float,
+                  rate_8h: float) -> float:
+    """Flat funding drag for a position held (exit-entry) bars: rate per 8h ×
+    hold-hours / 8. Always a cost (conservative)."""
+    hold_hours = max(0, (exit_bar - entry_bar)) * bar_hours
+    return rate_8h * hold_hours / 8.0
 
 
 def walk_positions(df, sigs, slm, tpm, direction="long", trail_mult=None,
@@ -139,6 +151,9 @@ def build_paper_sleeves(symbol: str, df, config: dict):
     close = df["close"].to_numpy(float)
     atr = df["atr"].to_numpy(float)
     mr_long, mr_short = _mr_signals(df, lo, hi)
+    rate_8h = config.get("funding_rate_8h", 0.0)
+    bar_hours = config.get("bar_hours", 4)
+    n = len(df)
     sleeves = {
         "trend": {"long": signals_ma_crossover(df) & (reg == 1),
                   "short": short_momentum(df) & (reg == -1), **_TREND_EXIT},
@@ -153,20 +168,22 @@ def build_paper_sleeves(symbol: str, df, config: dict):
                                    fee_rt=FEE_RT)
             for t in c:
                 e, a = close[t["entry_bar"]], atr[t["entry_bar"]]
+                fund = _funding_cost(t["entry_bar"], t["exit_bar"], bar_hours, rate_8h)
                 closed.append({
                     "symbol": symbol, "sleeve": name, "direction": d,
                     "entry_time": df.index[t["entry_bar"]],
                     "exit_time": df.index[t["exit_bar"]],
-                    "pnl_pct": t["pnl_pct"], "status": t["status"],
+                    "pnl_pct": t["pnl_pct"] - fund, "status": t["status"],
                     "stop_dist_pct": (cfg["sl"] * a / e) if e > 0 else 0.0})
             if op is not None:
                 e, a = op["entry_price"], atr[op["entry_bar"]]
+                fund = _funding_cost(op["entry_bar"], n - 1, bar_hours, rate_8h)
                 opens.append({
                     "symbol": symbol, "sleeve": name, "direction": d,
                     "entry_time": df.index[op["entry_bar"]],
                     "entry_price": e, "sl": op["sl"], "tp": op["tp"],
                     "mtm_price": float(close[-1]),
-                    "unrealized_pnl": op["unrealized_pnl"],
+                    "unrealized_pnl": op["unrealized_pnl"] - fund,
                     "stop_dist_pct": (cfg["sl"] * a / e) if e > 0 else 0.0})
     return closed, opens
 
@@ -221,11 +238,16 @@ def _jsonable(o):
 
 
 def save_state(book: dict, path: str) -> str:
-    """Persist a JSON snapshot of the paper account (timestamps → ISO strings)."""
+    """Atomically persist a JSON snapshot (write temp + os.replace) so a crash
+    mid-write can never corrupt the account state. Timestamps → ISO strings."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    snap = _jsonable({**book, "updated_at": pd.Timestamp.utcnow().isoformat()})
-    with open(path, "w") as f:
+    snap = _jsonable({**book, "updated_at": pd.Timestamp.now(tz="UTC").isoformat()})
+    tmp = f"{path}.tmp"
+    with open(tmp, "w") as f:
         json.dump(snap, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)                 # atomic on POSIX
     return path
 
 
@@ -285,6 +307,7 @@ def main(argv=None):
     ap.add_argument("--capital", type=float, default=500.0)
     ap.add_argument("--no-refresh", action="store_true", help="skip re-downloading bars")
     ap.add_argument("--start", default="2024-06-01", help="history start for the data fetch")
+    ap.add_argument("--force", action="store_true", help="trade despite data-integrity issues")
     args = ap.parse_args(argv)
 
     inception = pd.Timestamp(args.inception)
@@ -300,6 +323,23 @@ def main(argv=None):
     if not frames:
         print("No paper data — run without --no-refresh first.")
         return
+
+    # PRODUCTION GUARD 1 — never act on a still-forming bar (repaint/lookahead).
+    from study.ohlcv_pipeline import drop_forming_bar, validate_universe
+    frames = {s: drop_forming_bar(df, "4h") for s, df in frames.items()}
+    # PRODUCTION GUARD 2 — refuse to trade on stale / gappy / missing data.
+    missing = [s for s in PAPER_SYMBOLS if s not in frames or frames[s].empty]
+    issues = validate_universe(frames, "4h", min_bars=300)
+    if missing:
+        issues.append(f"missing symbols: {', '.join(missing)}")
+    if issues:
+        print("\n!! DATA INTEGRITY ISSUES:")
+        for i in issues:
+            print(f"   - {i}")
+        if not args.force:
+            print("Refusing to trade on bad data (use --force to override). Aborting.")
+            return
+        print("--force set: proceeding despite issues.")
 
     book = paper_book(frames, config, inception, args.capital)
     r = book["realized"]

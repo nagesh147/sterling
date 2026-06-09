@@ -131,3 +131,33 @@ def test_state_round_trip(tmp_path):
     assert st["realized"]["end"] == pytest.approx(612.0)
     assert st["open_positions"][0]["symbol"] == "BTCUSD"
     assert load_state(str(tmp_path / "absent.json")) is None
+
+
+# --- production hardening: funding realism + atomic state ----------------
+def test_funding_cost_scales_with_hold():
+    from study.paper_trader import _funding_cost
+    # 1bp / 8h. 2 bars × 4h = 8h → 1bp ; 4 bars × 4h = 16h → 2bp.
+    assert _funding_cost(0, 2, bar_hours=4, rate_8h=0.0001) == pytest.approx(0.0001)
+    assert _funding_cost(0, 4, bar_hours=4, rate_8h=0.0001) == pytest.approx(0.0002)
+    assert _funding_cost(5, 5, bar_hours=4, rate_8h=0.0001) == 0.0
+
+
+def test_funding_drag_lowers_realized():
+    frames = {s: _trending_frame(seed=i) for i, s in
+              enumerate(("BTCUSD", "ETHUSD", "SOLUSD"))}
+    inc = pd.Timestamp("2024-06-01")
+    b0 = paper_book(frames, {**PAPER_CONFIG, "funding_rate_8h": 0.0}, inc)
+    b1 = paper_book(frames, {**PAPER_CONFIG, "funding_rate_8h": 0.002}, inc)
+    assert b1["realized"]["end"] <= b0["realized"]["end"]   # funding is a drag
+
+
+def test_save_state_is_atomic(tmp_path):
+    from study.paper_trader import save_state, load_state
+    book = {"realized": {"end": 500.0}, "open_positions": [],
+            "total_equity": 500.0, "n_closed": 0,
+            "inception": pd.Timestamp("2025-09-07"), "capital": 500.0}
+    p = tmp_path / "state.json"
+    save_state(book, str(p))
+    assert p.exists()
+    assert not (tmp_path / "state.json.tmp").exists()       # no temp left behind
+    assert load_state(str(p))["total_equity"] == pytest.approx(500.0)
