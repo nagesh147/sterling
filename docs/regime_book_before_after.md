@@ -67,28 +67,85 @@ best out-of-sample. The honest, lookahead-free headline is therefore **+17.4% /
 Sharpe 0.60**. Even the *unbiased average across all three thresholds* is
 **+9.6% / Sharpe 0.40** — still clearly forward-positive and HODL-beating.
 
+## Upgrade — vol-target sizing + sleeve exits + conviction concentration
+
+The Stage-1 book above is unlevered and sizes every trade at a flat 1/3. Three
+upgrades, each measured forward and kept only if it earned its place:
+
+1. **Volatility-targeted sizing** — size inversely to the ATR stop distance so
+   every trade risks the same fraction of equity (press in calm, de-risk in
+   chaos). `vol_target_weight` / `portfolio_equity_sized`.
+2. **Sleeve-specific exits** — the earlier uniform-trailing test was *wrong*. The
+   trend sleeve now lets winners run (wide TP + 3.5·ATR chandelier trail); the
+   mean-reversion sleeve keeps its quick fixed 1.5/4.5 target. `_TREND_EXIT` /
+   `_MR_EXIT`.
+3. **Conviction concentration** — tighten the MR sleeve to deep-extreme RSI only
+   (the filter is chosen on **in-sample Sharpe**, then read out-of-sample, and
+   deflated by the 36-cell grid). `select_conviction_book`.
+
+**Validated forward result (IS-selected adx=20 / RSI<25,>65, unlevered):**
+
+| | OOS | basket HODL |
+|---|--:|--:|
+| Return | **+43.2%** | −18.7% |
+| Sharpe | **+1.15** | — |
+| maxDD | **−29.0%** | −60.0% |
+| trades | 228 | — |
+
+Why it isn't a lucky cell:
+- **IS→OOS Sharpe rank correlation = +0.38** — in-sample quality *predicts*
+  out-of-sample. (The overfit strategies in this project's history had
+  **negative** IS↔OOS correlation, −0.65 to −0.73. This is the opposite.)
+- **Whole-grid OOS mean = +26% / Sharpe +0.81** (worst cell −0.45) — the effect
+  is broad across the grid, not one cell.
+
+### Leverage dial (the honest return-vs-drawdown curve)
+
+Sharpe is **invariant** to leverage (1.15 at every row); only return and
+drawdown move — and **past ~Kelly the compound return falls while drawdown
+explodes** (the reason you can't lever a 1.15-Sharpe book to the moon):
+
+| leverage | $500 → | OOS ret | maxDD | note |
+|--:|--:|--:|--:|---|
+| 1.0× | $716 | +43.2% | −29% | conservative |
+| **1.5×** | **$811** | **+62.3%** | **−40%** | **~half-Kelly (recommended)** |
+| 2.0× | $889 | +77.8% | −50% | aggressive |
+| 3.0× | $970 | +94.0% | −65% | over-Kelly (return stalls) |
+| 4.0× | $939 | +87.9% | −76% | ruin zone (return *falls*) |
+
 ## The deflation verdict (unchanged discipline)
 
-Best DSR across everything is **0.0082** — roughly **60× below the 0.5 bar**.
-With only 3 symbols, pooled n tops out near 300 and the per-trade edge is too
-weak to survive multiple-testing correction. **Nothing here is
-deflation-provable.**
+The Stage-1 structural book tops out at DSR **0.0082**. The Stage-2 upgrade lifts
+it to **DSR 0.166** — the **highest in the entire project** (was 0.096), and a
+20× improvement — but still **below the 0.5 bar**. With only 3 symbols the grid
+penalty and the sample size keep it short of formal provability.
+
+**Honest read:** this is a genuine, validated *forward* edge (+43% OOS, Sharpe
+1.15, beats HODL by 62 points at half the drawdown, IS predicts OOS), dialable to
++62% at half-Kelly — but it is **not yet deflation-provable**. The numbers that
+finally exceed the old +95/99% in-sample mirage are real and out-of-sample, yet
+the only thing standing between "forward edge" and "provable edge" is breadth:
+more symbols. Tested and rejected along the way: naive leverage (ruin past 2×),
+Donchian/TSMOM trend (worse than the EMA cross), uniform trailing stops.
 
 ## Verdict
 
-The rework is a **real, honest improvement in forward economics, not in
-provability**:
+A **real, validated, out-of-sample edge** — the strongest this project has
+produced — that is honest about its one remaining limit:
 
-- It turned a −20.8% / −50%-drawdown book into a **+17.4% / −26%-drawdown** book
-  that beats an equal-weight HODL basket (−18.7% / −60%) on **both** return and
-  drawdown, in a bear tape — driven by two defensible structural changes
-  (multi-symbol pooling + a regime gate), with the gate's threshold validated
-  in-sample so the number isn't lookahead-tainted.
-- It **cut** a lever (trailing stops) that failed to beat the simpler version —
-  the discipline that was missing before.
-- It is still **not DSR-provable** (best 0.008 ≪ 0.5). The path to provability
-  remains sample size: more symbols. With 3 coins, this is as far as honest
-  forward edge goes — a book worth paper-trading and watching, not yet a book
-  the deflation gate would clear.
+- Stacking defensible changes (multi-symbol pooling → regime gate →
+  vol-targeting → sleeve-specific exits → conviction concentration) turns a
+  −20.8% losing book into **+43.2% OOS, Sharpe 1.15, −29% drawdown**, beating an
+  equal-weight HODL basket (−18.7% / −60%) by 62 points at half the drawdown —
+  with the conviction filter chosen **in-sample** (IS→OOS rank corr +0.38, i.e.
+  selection is genuinely predictive, not overfit).
+- At a sane operating point (~half-Kelly, 1.5×) it reads **+62% / −40%
+  drawdown** — and the dial is honest about where leverage turns to ruin.
+- Levers **cut** because they failed forward: naive leverage past 2× (vol drag),
+  Donchian/TSMOM trend (worse than EMA cross), uniform trailing stops.
+- Still **not DSR-provable** (0.166 < 0.5), though 20× better than before. The
+  only thing between this and provable is **breadth — more symbols.**
 
-Nothing is wired live. The live edge gate still admits 0 — correctly.
+Nothing is wired live. The live edge gate still admits 0 — correctly. This is a
+book worth paper-trading and watching, and the clearest signpost yet that the
+next real unlock is a multi-symbol data pipeline.

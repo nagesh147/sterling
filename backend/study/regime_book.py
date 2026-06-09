@@ -225,6 +225,170 @@ def walk_forward_book(frames: dict, adx_threshold: float = 25.0,
             "n": eq["n"], "hodl": hodl}
 
 
+# --- Upgrade: volatility-targeted sizing + sleeve-specific exits ---------
+# Trend trades let winners run (wide TP + chandelier trail); mean-reversion
+# trades take a fixed target. This is the fix for the earlier mistake of
+# applying one exit to both sleeves.
+_TREND_EXIT = {"sl": 2.0, "tp": 12.0, "trail": 3.5}
+_MR_EXIT = {"sl": 1.5, "tp": 4.5, "trail": None}
+
+
+def _weight_from_stop(stop_dist_pct: float, risk_per_trade: float,
+                      max_leverage: float) -> float:
+    """Notional weight so a stop-out costs ~risk_per_trade of equity, capped."""
+    if stop_dist_pct <= 0:
+        return 0.0
+    return min(risk_per_trade / stop_dist_pct, max_leverage)
+
+
+def vol_target_weight(entry: float, atr: float, slm: float,
+                      risk_per_trade: float = 0.01,
+                      max_leverage: float = 3.0) -> float:
+    """Position weight (fraction of equity) that equalises per-trade risk:
+    tighter stops (lower ATR) → larger size, so each trade risks the same
+    fraction if stopped. Capped at max_leverage."""
+    stop_dist = (slm * atr / entry) if entry > 0 else 0.0
+    return _weight_from_stop(stop_dist, risk_per_trade, max_leverage)
+
+
+def _mr_signals(df: pd.DataFrame, rsi_lo: float = 40.0, rsi_hi: float = 60.0,
+                bb_lk: int = 20, bb_std: float = 2.0):
+    """Parameterised Bollinger+RSI mean-reversion long/short signals. Tighter
+    RSI thresholds (lower rsi_lo / higher rsi_hi) = conviction concentration:
+    fewer, deeper-extreme setups. Defaults reproduce the loose sleeve."""
+    c = df["close"]
+    d = c.diff()
+    gain = d.clip(lower=0).rolling(14).mean()
+    loss = (-d.clip(upper=0)).rolling(14).mean()
+    r = 100 - 100 / (1 + gain / loss.replace(0, np.nan))
+    sma = c.rolling(bb_lk).mean()
+    sd = c.rolling(bb_lk).std()
+    lower, upper = sma - bb_std * sd, sma + bb_std * sd
+    long = ((c > lower) & (c.shift(1) <= lower.shift(1)) & (r < rsi_lo)).fillna(False).to_numpy()
+    short = ((c < upper) & (c.shift(1) >= upper.shift(1)) & (r > rsi_hi)).fillna(False).to_numpy()
+    return long, short
+
+
+def build_symbol_trades_sleeved(symbol: str, df: pd.DataFrame,
+                                adx_threshold: float = 25.0, ma_window: int = 50,
+                                use_regime: bool = True,
+                                rsi_lo: float = 40.0, rsi_hi: float = 60.0) -> list[dict]:
+    """Like build_symbol_trades but keeps the two sleeves separate so each gets
+    its own exit: trend = let-it-run (wide TP + 3.5·ATR trail), MR = fixed
+    1.5/4.5 bracket. Tags sleeve + stop_dist_pct (for vol-target sizing).
+    rsi_lo/rsi_hi tighten the MR sleeve into conviction-only setups."""
+    reg = classify_regime(df, adx_threshold, ma_window)
+    close = df["close"].to_numpy(float)
+    atr = df["atr"].to_numpy(float)
+    mr_long, mr_short = _mr_signals(df, rsi_lo, rsi_hi)
+    sleeves = {
+        "trend": {"long": signals_ma_crossover(df), "short": short_momentum(df), **_TREND_EXIT},
+        "mr": {"long": mr_long, "short": mr_short, **_MR_EXIT},
+    }
+    if use_regime:
+        sleeves["trend"]["long"] = sleeves["trend"]["long"] & (reg == 1)
+        sleeves["trend"]["short"] = sleeves["trend"]["short"] & (reg == -1)
+        sleeves["mr"]["long"] = sleeves["mr"]["long"] & (reg == 0)
+        sleeves["mr"]["short"] = sleeves["mr"]["short"] & (reg == 0)
+    out: list[dict] = []
+    for name, cfg in sleeves.items():
+        for direction in ("long", "short"):
+            raw = simulate_idx(df, cfg[direction], cfg["sl"], cfg["tp"],
+                               direction=direction, fee_rt=FEE_RT,
+                               max_hold=MAX_HOLD, trail_mult=cfg["trail"])
+            for t in raw:
+                e = close[t["entry_bar"]]
+                a = atr[t["entry_bar"]]
+                out.append({
+                    "symbol": symbol, "sleeve": name, "direction": direction,
+                    "entry_time": df.index[t["entry_bar"]],
+                    "exit_time": df.index[t["exit_bar"]],
+                    "pnl_pct": t["pnl_pct"],
+                    "stop_dist_pct": (cfg["sl"] * a / e) if e > 0 else 0.0,
+                })
+    return out
+
+
+def portfolio_equity_sized(trades: list[dict], cap: float = 500.0,
+                           risk_per_trade: float = 0.01, max_leverage: float = 3.0,
+                           max_concurrent: int = 3, leverage: float = 1.0) -> dict:
+    """Vol-targeted, leverage-dialled book. Cap concurrency, weight each trade by
+    risk_per_trade/stop_dist (× global leverage), compound exit-time ordered."""
+    kept = merge_portfolio(trades, max_concurrent)
+    if not kept:
+        return {"end": cap, "ret": 0.0, "sharpe": 0.0, "max_dd": 0.0,
+                "n": 0, "weighted_pnls": [], "avg_lev": 0.0}
+    contribs, weights = [], []
+    for t in kept:
+        w = _weight_from_stop(t["stop_dist_pct"], risk_per_trade, max_leverage) * leverage
+        weights.append(w)
+        contribs.append(w * t["pnl_pct"])
+    a = np.asarray(contribs, float)
+    eq = cap * np.cumprod(1 + a)
+    peak = np.maximum.accumulate(eq)
+    return {"end": float(eq[-1]), "ret": float(eq[-1] / cap - 1.0),
+            "sharpe": _sharpe(contribs), "max_dd": float(((eq - peak) / peak).min()),
+            "n": len(kept), "weighted_pnls": contribs,
+            "avg_lev": float(np.mean(weights))}
+
+
+def conviction_grid():
+    """(adx_threshold, rsi_lo, rsi_hi) search grid for the conviction sleeve."""
+    import itertools
+    return list(itertools.product([20.0, 25.0, 30.0, 35.0], [25, 30, 35], [65, 70, 75]))
+
+
+def split_sleeved_book(frames: dict, adx_threshold: float, rsi_lo: float,
+                       rsi_hi: float, oos_start: float = 0.5):
+    """Build the sleeved, conviction-filtered book and split each symbol's trades
+    at oos_start into (in_sample, out_of_sample) by entry time."""
+    is_t, oos_t = [], []
+    for sym, df in frames.items():
+        t0, t1 = df.index[0], df.index[-1]
+        cut = t0 + (t1 - t0) * oos_start
+        for t in build_symbol_trades_sleeved(sym, df, adx_threshold, 50, True,
+                                             rsi_lo, rsi_hi):
+            (oos_t if t["entry_time"] >= cut else is_t).append(t)
+    return is_t, oos_t
+
+
+def select_conviction_book(frames: dict, grid=None, oos_start: float = 0.5,
+                           risk_per_trade: float = 0.015, max_leverage: float = 3.0,
+                           max_concurrent: int = 3) -> dict:
+    """Honest, no-lookahead selection: score every grid config by IN-SAMPLE
+    Sharpe, pick the best, then report its OUT-OF-SAMPLE result deflated by the
+    grid size. The OOS numbers never influence which config is chosen."""
+    grid = grid or conviction_grid()
+    scored = []
+    for adx, lo, hi in grid:
+        is_t, oos_t = split_sleeved_book(frames, adx, lo, hi, oos_start)
+        ie = portfolio_equity_sized(is_t, 500.0, risk_per_trade, max_leverage,
+                                    max_concurrent, 1.0)
+        oe = portfolio_equity_sized(oos_t, 500.0, risk_per_trade, max_leverage,
+                                    max_concurrent, 1.0)
+        scored.append({"params": (adx, lo, hi), "is_sharpe": ie["sharpe"],
+                       "oos": oe, "oos_trades": oos_t})
+    chosen = max(scored, key=lambda s: s["is_sharpe"])
+    wp = chosen["oos"]["weighted_pnls"]
+    dsr = deflated_sharpe_ratio(wp, num_trials=len(grid)) if wp else 0.0
+    return {"chosen": chosen, "scored": scored, "dsr": round(dsr, 4),
+            "n_grid": len(grid)}
+
+
+def leverage_dial(trades: list[dict], levels=(1.0, 1.5, 2.0, 3.0, 4.0),
+                  risk_per_trade: float = 0.015, max_leverage: float = 3.0,
+                  max_concurrent: int = 3, cap: float = 500.0) -> list[dict]:
+    """Sweep global leverage on a fixed trade set — the honest return-vs-drawdown
+    operating curve. Sharpe is invariant to leverage; only return and drawdown
+    move (and past ~Kelly, compound return falls while drawdown explodes)."""
+    rows = []
+    for L in levels:
+        e = portfolio_equity_sized(trades, cap, risk_per_trade, max_leverage,
+                                   max_concurrent, float(L))
+        rows.append({"leverage": float(L), **e})
+    return rows
+
+
 def load_frames(rule: str = "4h") -> dict:
     """Load BTC/ETH/SOL 1m parquet → resampled OHLCV+ATR frames. Run from backend/."""
     frames = {}
@@ -244,32 +408,56 @@ def _row(label, r):
             f"  {'YES' if r['beats_hold'] else 'no':>4}")
 
 
+def _spearman(x, y) -> float:
+    """Rank correlation — does in-sample quality predict out-of-sample?"""
+    rx = np.argsort(np.argsort(np.asarray(x, float)))
+    ry = np.argsort(np.argsort(np.asarray(y, float)))
+    return float(np.corrcoef(rx, ry)[0, 1]) if len(rx) > 1 else 0.0
+
+
 def main():
     frames = load_frames("4h")
     if not frames:
         print("No vector_store_1m_*.parquet found (run from backend/).")
         return
-    print(f"Regime book · {len(frames)} symbols pooled · $500 · OOS tail (last 50%)\n")
+    hodl = _basket_hodl(frames, 0.5)
+    print(f"Regime book · {len(frames)} symbols pooled · $500 · OOS tail (last 50%)")
+    print(f"Equal-weight basket HODL ref: {hodl['net_return']*100:+.1f}% "
+          f"(maxDD {hodl['max_drawdown']*100:.1f}%)\n")
+
+    # --- Stage 1: structural progression (unsized 1/3 book) ----------------
+    print("STAGE 1 — structure (fixed 1/3 sizing):")
     print(f"{'config':>34} {'$end':>8} {'ret':>8} {'Sharpe':>7} {'maxDD':>8}"
           f" {'n':>5} {'DSR':>7}  beatsHODL")
-    print("-" * 92)
-    # Baseline: long-only-style single-book (no gate, no pooling -> cap1) = 'before'.
     base = walk_forward_book(frames, use_regime=False, max_concurrent=1)
     print(_row("BEFORE ungated cap1", base))
-    # Spine: shorts + pooling, no gate.
     spine = walk_forward_book(frames, use_regime=False, max_concurrent=3)
     print(_row("SPINE shorts+pool cap3", spine))
-    # +Regime gate (sweep the one knob; report each, honestly flagged).
-    for adx in (20.0, 25.0, 30.0):
-        r = walk_forward_book(frames, use_regime=True, adx_threshold=adx, max_concurrent=3)
-        print(_row(f"+REGIME gate adx={adx:.0f} cap3", r))
-    # +Trailing on the mid knob.
-    rt = walk_forward_book(frames, use_regime=True, adx_threshold=25.0,
-                           max_concurrent=3, trail_mult=2.0)
-    print(_row("+REGIME+TRAIL adx25 cap3", rt))
-    print(f"\nOOS equal-weight basket HODL ref: {base['hodl']['net_return']*100:+.1f}% "
-          f"(maxDD {base['hodl']['max_drawdown']*100:.1f}%)")
-    print("DSR >= 0.5 = deflation-provable. Anything less = forward signal only.")
+    gate = walk_forward_book(frames, use_regime=True, adx_threshold=20.0, max_concurrent=3)
+    print(_row("+REGIME gate adx=20 cap3", gate))
+
+    # --- Stage 2: vol-target sizing + sleeve exits + conviction (IS-select) -
+    print("\nSTAGE 2 — vol-target sizing + sleeve exits + conviction "
+          "(filter chosen IN-SAMPLE; grid deflated):")
+    sel = select_conviction_book(frames)
+    ch = sel["chosen"]
+    adx, lo, hi = ch["params"]
+    o = ch["oos"]
+    corr = _spearman([s["is_sharpe"] for s in sel["scored"]],
+                     [s["oos"]["sharpe"] for s in sel["scored"]])
+    print(f"  IS-selected config: adx={adx:.0f}  RSI<{lo}/>{hi}  "
+          f"(grid {sel['n_grid']}, IS->OOS rank corr {corr:+.2f})")
+    print(f"  OOS (L=1): ${o['end']:,.0f}  {o['ret']*100:+.1f}%  Sharpe {o['sharpe']:+.2f}"
+          f"  maxDD {o['max_dd']*100:.1f}%  n={o['n']}  DSR(grid) {sel['dsr']:.4f}")
+
+    # --- Stage 3: honest leverage dial on the validated config -------------
+    print("\nSTAGE 3 — leverage dial on the validated config (Sharpe is invariant):")
+    print(f"{'lev':>5} {'$end':>9} {'ret':>9} {'Sharpe':>7} {'maxDD':>8} {'avgLev':>7}")
+    for d in leverage_dial(ch["oos_trades"]):
+        print(f"{d['leverage']:>5.1f} {d['end']:>9,.0f} {d['ret']*100:>+8.1f}%"
+              f" {d['sharpe']:>+7.2f} {d['max_dd']*100:>7.1f}% {d['avg_lev']:>7.2f}")
+    print("\nDSR >= 0.5 = deflation-provable. Best here is still < 0.5 (3 symbols);"
+          " honest forward edge, not yet provable. Past ~Kelly leverage, return falls.")
 
 
 if __name__ == "__main__":
