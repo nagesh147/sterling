@@ -134,3 +134,77 @@ def merge_portfolio(trades: list[dict], max_concurrent: int = 3) -> list[dict]:
         open_exits.append(t["exit_time"])
         kept.append(t)
     return sorted(kept, key=lambda t: t["exit_time"])
+
+
+# (sl, tp) bracket used for both directions; Aggressive profile from the study.
+_SL, _TP = 1.5, 4.5
+
+
+def build_symbol_trades(symbol: str, df: pd.DataFrame, adx_threshold: float = 25.0,
+                        ma_window: int = 50, use_regime: bool = True,
+                        trail_mult: float | None = None) -> list[dict]:
+    """Route, simulate long+short, return trades tagged with symbol + timestamps."""
+    longs, shorts = route_signals(df, adx_threshold, ma_window, use_regime)
+    out: list[dict] = []
+    for sigs, direction in ((longs, "long"), (shorts, "short")):
+        raw = simulate_idx(df, sigs, _SL, _TP, direction=direction,
+                           fee_rt=FEE_RT, max_hold=MAX_HOLD, trail_mult=trail_mult)
+        for t in raw:
+            out.append({
+                "symbol": symbol,
+                "direction": direction,
+                "entry_time": df.index[t["entry_bar"]],
+                "exit_time": df.index[t["exit_bar"]],
+                "pnl_pct": t["pnl_pct"],
+            })
+    return out
+
+
+def portfolio_equity(trades: list[dict], cap: float = 500.0,
+                     max_concurrent: int = 3) -> dict:
+    """Cap concurrency, then compound a single book where each trade risks a
+    1/max_concurrent slice of equity (equal-risk allocation). Exit-time ordered."""
+    kept = merge_portfolio(trades, max_concurrent)
+    w = 1.0 / max_concurrent
+    pnls = [t["pnl_pct"] for t in kept]
+    if not pnls:
+        return {"end": cap, "ret": 0.0, "sharpe": 0.0, "max_dd": 0.0,
+                "n": 0, "weighted_pnls": []}
+    wpnls = [p * w for p in pnls]
+    a = np.asarray(wpnls, float)
+    eq = cap * np.cumprod(1 + a)
+    peak = np.maximum.accumulate(eq)
+    return {"end": float(eq[-1]), "ret": float(eq[-1] / cap - 1.0),
+            "sharpe": _sharpe(wpnls), "max_dd": float(((eq - peak) / peak).min()),
+            "n": len(pnls), "weighted_pnls": wpnls}
+
+
+def walk_forward_book(frames: dict, adx_threshold: float = 25.0,
+                      ma_window: int = 50, use_regime: bool = True,
+                      trail_mult: float | None = None, n_folds: int = 5,
+                      oos_start: float = 0.5, cap: float = 500.0,
+                      max_concurrent: int = 3) -> dict:
+    """Pool all symbols, take the OOS tail [oos_start, 1.0] of calendar time as
+    the forward book. The regime/short/MR logic uses only past bars per signal,
+    so a fixed-parameter forward evaluation is leak-free. (Parameter SELECTION
+    across adx_threshold is done by the caller comparing whole-book OOS results,
+    never per-fold on test data.) Returns OOS book stats + DSR + hold-beat."""
+    all_trades: list[dict] = []
+    hodl_prices: list[float] = []
+    for sym, df in frames.items():
+        t0, t1 = df.index[0], df.index[-1]
+        cut = t0 + (t1 - t0) * oos_start
+        trades = build_symbol_trades(sym, df, adx_threshold, ma_window,
+                                     use_regime, trail_mult)
+        all_trades += [t for t in trades if t["entry_time"] >= cut]
+        sub = df["close"][df.index >= cut]
+        if len(sub) > 1:
+            hodl_prices += list(sub.to_numpy())
+    eq = portfolio_equity(all_trades, cap, max_concurrent)
+    hodl = hodl_benchmark(hodl_prices, fee_rt_pct=FEE_RT)
+    rel = beats_buy_and_hold(eq["ret"], eq["max_dd"], hodl)
+    dsr = deflated_sharpe_ratio(eq["weighted_pnls"], num_trials=525) \
+        if eq["weighted_pnls"] else 0.0
+    return {"oos": eq, "dsr": round(dsr, 4),
+            "beats_hold": rel["beats_hold"], "excess_vs_hold": rel["excess_return"],
+            "n": eq["n"], "hodl": hodl}

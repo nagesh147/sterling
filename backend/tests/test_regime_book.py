@@ -145,3 +145,40 @@ def test_merge_orders_by_exit_and_is_full_when_uncapped():
     ]
     kept = merge_portfolio(trades, max_concurrent=3)
     assert [t["symbol"] for t in kept] == ["ETH", "BTC"]   # exit-ordered
+
+
+# --- Task 6: pooled book builder + walk-forward -------------------------
+from study.regime_book import build_symbol_trades, portfolio_equity, walk_forward_book
+
+
+def test_build_symbol_trades_tags_symbol_and_times():
+    df = _frame(np.r_[np.linspace(100, 160, 150), np.linspace(160, 80, 150)])
+    df["atr"] = 2.0
+    trades = build_symbol_trades("BTC", df, adx_threshold=20.0)
+    assert trades, "expected at least one routed trade"
+    assert all(t["symbol"] == "BTC" for t in trades)
+    assert all({"entry_time", "exit_time", "pnl_pct"} <= t.keys() for t in trades)
+
+
+def test_portfolio_equity_weights_by_cap():
+    # one +10% trade, cap=2 -> book grows by ~ (1 + 0.10/2).
+    trades = [{"symbol": "BTC", "entry_time": pd.Timestamp("2024-01-01"),
+               "exit_time": pd.Timestamp("2024-01-02"), "pnl_pct": 0.10}]
+    eq = portfolio_equity(trades, cap=500.0, max_concurrent=2)
+    assert eq["end"] == pytest.approx(500.0 * (1 + 0.10 / 2), rel=1e-6)
+
+
+def test_walk_forward_book_runs_and_is_leakfree_shape():
+    frames = {}
+    rng = np.random.default_rng(0)
+    for sym in ("BTC", "ETH", "SOL"):
+        c = 100 + np.cumsum(rng.normal(0, 1, 800))
+        c = np.clip(c, 10, None)
+        idx = pd.date_range("2024-01-01", periods=800, freq="4h")
+        d = pd.DataFrame({"open": c, "high": c * 1.01, "low": c * 0.99,
+                          "close": c, "volume": 1.0}, index=idx)
+        d["atr"] = (d["high"] - d["low"]).rolling(14).mean().bfill()
+        frames[sym] = d
+    res = walk_forward_book(frames, adx_threshold=20.0, use_regime=True)
+    assert {"oos", "dsr", "beats_hold", "n"} <= res.keys()
+    assert res["n"] >= 0
