@@ -121,3 +121,33 @@ def test_hold_to_flip_short_direction_and_fee():
     assert t["entry_bar"] == 2 and t["exit_bar"] == 4
     # short 100 -> 96 = +0.04 price, minus 0.001 fee:
     assert t["pnl_pct"] == pytest.approx(0.039)
+
+
+from study.funding_sleeve import funding_grid, select_funding_sleeve
+
+
+def test_funding_grid_is_eight_cells():
+    g = funding_grid()
+    assert len(g) == 8
+    assert all(len(cell) == 3 for cell in g)          # (window, thr, exit_mode)
+    assert {c[2] for c in g} == {"bracket", "flip"}
+
+
+def test_select_funding_sleeve_is_lookahead_free_and_shaped():
+    # Two synthetic symbols with sustained funding regimes so trades exist.
+    frames, fundings = {}, {}
+    for coin, base in (("BTC", 100.0), ("ETH", 50.0)):
+        bars = _bars(start="2024-01-01", n=400)
+        bars["close"] = base * (1 + 0.0005 * np.arange(400))
+        bars["high"] = bars["close"] * 1.01
+        bars["low"] = bars["close"] * 0.99
+        bars["atr"] = bars["close"] * 0.02
+        frames[f"{coin}USD"] = bars
+        rates = ([0.0] * 100 + [0.03] * 100 + [0.0] * 100 + [-0.03] * 100)
+        fundings[coin] = _funding(start="2024-01-01", n=200,
+                                  rates=[rates[i] for i in range(0, 400, 2)])
+    res = select_funding_sleeve(frames, fundings, oos_start=0.5)
+    assert set(res) >= {"chosen", "scored", "dsr", "n_grid", "is_oos_corr"}
+    assert res["n_grid"] == 8
+    assert 0.0 <= res["dsr"] <= 1.0
+    assert "oos_trades" in res["chosen"]

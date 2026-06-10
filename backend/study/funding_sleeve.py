@@ -18,6 +18,10 @@ import numpy as np
 import pandas as pd
 
 from study.sim import simulate_idx, sharpe as _sharpe
+from study.regime_book import (
+    merge_portfolio, portfolio_equity_sized, _spearman,
+)
+from app.engines.edge.robustness import deflated_sharpe_ratio
 
 FEE_RT = 0.001
 MAX_HOLD = 200
@@ -130,3 +134,56 @@ def simulate_hold_to_flip(df: pd.DataFrame, sig, target: int,
                     "exit_bar": int(xi)})
         i = xi + 1                            # no overlapping positions
     return out
+
+
+def funding_grid():
+    """(window, thr, exit_mode) pre-registered 8-cell search grid. window is in
+    funding EVENTS (8h): 30≈10d, 90≈30d. Frozen — the DSR penalty assumes this
+    fixed trial count."""
+    import itertools
+    return list(itertools.product([30, 90], [1.0, 2.0], ["bracket", "flip"]))
+
+
+def split_funding_book(frames: dict, fundings: dict, window: int, thr: float,
+                       exit_mode: str, oos_start: float = 0.5):
+    """Build the funding sleeve across all symbols and split each symbol's trades
+    at oos_start into (in_sample, out_of_sample) by entry time. `frames` keyed by
+    `{COIN}USD`; `fundings` keyed by `{COIN}`."""
+    is_t, oos_t = [], []
+    for sym, df in frames.items():
+        coin = sym.replace("USD", "")
+        funding = fundings.get(coin)
+        if funding is None:
+            continue
+        t0, t1 = df.index[0], df.index[-1]
+        cut = t0 + (t1 - t0) * oos_start
+        for t in build_funding_trades(coin, df, funding, window, thr, exit_mode):
+            (oos_t if t["entry_time"] >= cut else is_t).append(t)
+    return is_t, oos_t
+
+
+def select_funding_sleeve(frames: dict, fundings: dict, grid=None,
+                          oos_start: float = 0.5, risk_per_trade: float = 0.015,
+                          max_leverage: float = 3.0, max_concurrent: int = 3) -> dict:
+    """No-lookahead selection: score every grid cell by IN-SAMPLE Sharpe, pick the
+    best, report its OUT-OF-SAMPLE result deflated by the grid size. Also returns
+    the grid-wide Spearman IS→OOS Sharpe rank correlation (the overfit detector:
+    the project's cut strategies had it negative)."""
+    grid = grid or funding_grid()
+    scored = []
+    for window, thr, exit_mode in grid:
+        is_t, oos_t = split_funding_book(frames, fundings, window, thr,
+                                         exit_mode, oos_start)
+        ie = portfolio_equity_sized(is_t, 500.0, risk_per_trade, max_leverage,
+                                    max_concurrent, 1.0)
+        oe = portfolio_equity_sized(oos_t, 500.0, risk_per_trade, max_leverage,
+                                    max_concurrent, 1.0)
+        scored.append({"params": (window, thr, exit_mode),
+                       "is_sharpe": ie["sharpe"], "oos": oe, "oos_trades": oos_t})
+    chosen = max(scored, key=lambda s: s["is_sharpe"])
+    wp = chosen["oos"]["weighted_pnls"]
+    dsr = deflated_sharpe_ratio(wp, num_trials=len(grid)) if wp else 0.0
+    is_oos_corr = _spearman([s["is_sharpe"] for s in scored],
+                            [s["oos"]["sharpe"] for s in scored])
+    return {"chosen": chosen, "scored": scored, "dsr": round(dsr, 4),
+            "n_grid": len(grid), "is_oos_corr": round(is_oos_corr, 4)}
