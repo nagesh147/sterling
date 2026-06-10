@@ -58,10 +58,18 @@ def test_state_returns_derived_fields(client, tmp_path):
     assert len(b["open_positions"]) == 1
 
 
-def test_paper_module_does_not_import_study(client):
-    # Isolation invariant: the endpoint reads files, never imports study code.
-    assert not any(m == "study" or m.startswith("study.") for m in sys.modules), \
-        "paper endpoint must not import any study.* module"
+def test_paper_module_does_not_import_study():
+    # Isolation invariant: importing the endpoint pulls in NO study.* module.
+    # Checked in a FRESH interpreter — process-global sys.modules in the pytest
+    # process is polluted by sibling tests that legitimately import study.
+    import subprocess
+    code = (
+        "import sys, app.api.v1.endpoints.paper; "
+        "leak=[m for m in sys.modules if m=='study' or m.startswith('study.')]; "
+        "assert not leak, leak; print('OK')"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, f"isolation breach: {r.stdout}{r.stderr}"
 
 
 def _write_trades(tmp_path):
