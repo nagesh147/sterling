@@ -308,12 +308,32 @@ def main(argv=None):
     ap.add_argument("--no-refresh", action="store_true", help="skip re-downloading bars")
     ap.add_argument("--start", default="2024-06-01", help="history start for the data fetch")
     ap.add_argument("--force", action="store_true", help="trade despite data-integrity issues")
+    ap.add_argument("--dd-threshold", type=float, default=0.25,
+                    help="drawdown that trips the kill-switch (flat, no new risk)")
+    ap.add_argument("--dd-recover", type=float, default=0.10,
+                    help="drawdown the breaker must recover within to re-arm")
+    ap.add_argument("--reset-breaker", action="store_true",
+                    help="clear a latched kill-switch before this run")
     args = ap.parse_args(argv)
 
+    from study.paper_safety import (run_lock, should_run, update_kill_switch,
+                                    apply_kill_switch)
     inception = pd.Timestamp(args.inception)
     config = {**PAPER_CONFIG, "leverage": args.leverage}
     state_path = os.path.join(PAPER_DIR, "state.json")
     log_path = os.path.join(PAPER_DIR, "trades.csv")
+    lock_path = os.path.join(PAPER_DIR, "run.lock")
+
+    with run_lock(lock_path) as acquired:
+        if not acquired:
+            print("Another paper-trader run holds the lock — skipping this firing.")
+            return
+        _run(args, config, inception, state_path, log_path,
+             should_run, update_kill_switch, apply_kill_switch)
+
+
+def _run(args, config, inception, state_path, log_path,
+         should_run, update_kill_switch, apply_kill_switch):
     prior = load_state(state_path)
 
     if not args.no_refresh:
@@ -341,9 +361,26 @@ def main(argv=None):
             return
         print("--force set: proceeding despite issues.")
 
-    book = paper_book(frames, config, inception, args.capital)
-    r = book["realized"]
+    # GUARD 3 — exactly-once per bar: a cron firing every few minutes must not
+    # redo work (or re-alert) until a new 4h bar has actually closed.
     asof = max(df.index[-1] for df in frames.values())
+    if not should_run(prior, asof, force=args.force):
+        print(f"No new closed bar since last run (as-of {asof:%Y-%m-%d %H:%M}) "
+              f"— nothing to do.")
+        return
+
+    book = paper_book(frames, config, inception, args.capital)
+
+    # GUARD 4 — drawdown kill-switch: trip flat (no new risk) when the forward
+    # equity falls --dd-threshold below its high-water-mark. Latches with
+    # hysteresis; --reset-breaker clears it manually.
+    prior_breaker = {} if args.reset_breaker else (prior or {}).get("breaker", {})
+    breaker = update_kill_switch(prior_breaker, book["total_equity"],
+                                 threshold=args.dd_threshold,
+                                 recover=args.dd_recover, capital=args.capital)
+    book = apply_kill_switch(book, breaker)
+    book["asof"] = asof
+    r = book["realized"]
     cap = args.capital
 
     print(f"\n=== Conviction book · PAPER (real Binance 4h) · {len(frames)} symbols ===")
@@ -354,6 +391,12 @@ def main(argv=None):
           f"  maxDD {r['max_dd']*100:.1f}%  trades {r['n']}  avgLev {r['avg_lev']:.2f}")
     print(f"Total incl. open MTM: ${book['total_equity']:,.2f} "
           f"({(book['total_equity']/cap-1)*100:+.1f}%)")
+
+    b = book["breaker"]
+    state = "!! TRIPPED — FLAT (no new risk)" if b["tripped"] else "armed"
+    print(f"Kill-switch: {state} · drawdown {b['drawdown']*100:+.1f}% from peak "
+          f"${b['peak']:,.2f} (trips at -{b['threshold']*100:.0f}%, "
+          f"re-arms at -{b['recover']*100:.0f}%)")
 
     ops = book["open_positions"]
     print(f"\nOpen positions ({len(ops)}):")
