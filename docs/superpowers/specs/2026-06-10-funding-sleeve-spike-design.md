@@ -112,12 +112,19 @@ out-of-sample on the held-out last 50% of calendar time:
 1. **Standalone:** sleeve alone through `simulate_idx` (cap-3 pooled, one per name)
    → `robustness` DSR + anchored walk-forward. Report OOS ret / Sharpe / maxDD /
    DSR / IS→OOS rank-corr / whole-grid OOS mean.
-2. **Combined:** equal-weight (rebalanced) combination of the two sleeves' net
-   per-period **return streams** (conviction book + funding sleeve). Report:
-   - combined Sharpe and **combined DSR**, penalized by the **funding grid size
-     (8 trials)** — the book is already fixed/paid-for, so only the new search is
-     charged;
-   - **pairwise return correlation ρ** between the two sleeves.
+2. **Combined:** pool the chosen book's OOS trades (`select_conviction_book`'s
+   `chosen["oos_trades"]`) with the chosen funding sleeve's OOS trades into one
+   list and run it through the existing `merge_portfolio(max_concurrent=6)` +
+   `portfolio_equity_sized` — book names (`BTCUSD/…`) and funding names
+   (`BTC_FUND/…`) are distinct, so cap 6 lets both 3-name books run in parallel
+   and the combined book *contains all the book's trades plus funding's*. Report,
+   in the per-trade convention so they are directly comparable to the book's
+   1.15 / 0.166:
+   - **combined Sharpe** (`_sharpe` on the pooled contributions);
+   - **combined DSR**, penalized by the **total trials** `len(book_grid) +
+     len(funding_grid) = 36 + 8 = 44` (conservative; funding-only=8 also reported);
+   - **pairwise ρ** = correlation of the two sleeves' per-bar exit-bucketed
+     realized pnl over the OOS span.
 
 ## Pre-registered grid & pass/kill bar (frozen BEFORE running)
 
