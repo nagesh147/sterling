@@ -229,3 +229,59 @@ def combine_books(book_trades: list[dict], funding_trades: list[dict],
             "dsr_total": round(dsr_total, 4),
             "dsr_funding_only": round(dsr_funding_only, 4),
             "n": combined["n"]}
+
+
+def load_frames_and_funding(coins=("BTC", "ETH", "SOL"), tf: str = "4h"):
+    """Load the 3-coin 4h OHLCV+ATR frames (data/ohlcv) and their funding Series
+    (data/funding). Returns (frames keyed {COIN}USD, fundings keyed {COIN})."""
+    from study.ohlcv_pipeline import load_universe
+    from study.funding_pipeline import load_funding
+    universe = load_universe(tf, data_dir="data/ohlcv")
+    frames = {f"{c}USD": universe[f"{c}USD"] for c in coins if f"{c}USD" in universe}
+    fundings = {c: s for c in coins if (s := load_funding(c)) is not None}
+    return frames, fundings
+
+
+def main():
+    from study.regime_book import select_conviction_book
+    frames, fundings = load_frames_and_funding()
+    print(f"frames: {list(frames)}  funding: {list(fundings)}")
+
+    common_index = sorted(set().union(*[df.index for df in frames.values()]))
+    idx = pd.DatetimeIndex(common_index)
+
+    # 1) Baseline conviction book (in-experiment, on the same data/ohlcv 4h frames)
+    book = select_conviction_book(frames)
+    bc = book["chosen"]
+    book_oos = bc["oos_trades"]
+    print(f"\nBOOK  IS-best {bc['params']}  OOS ret {bc['oos']['ret']*100:.1f}% "
+          f"Sharpe {bc['oos']['sharpe']:.2f}  n={bc['oos']['n']}  DSR(36) {book['dsr']:.4f}")
+
+    # 2) Funding sleeve standalone
+    fund = select_funding_sleeve(frames, fundings)
+    fc = fund["chosen"]
+    fund_oos = fc["oos_trades"]
+    print(f"FUND  IS-best {fc['params']}  OOS ret {fc['oos']['ret']*100:.1f}% "
+          f"Sharpe {fc['oos']['sharpe']:.2f}  n={fc['oos']['n']}  DSR(8) {fund['dsr']:.4f} "
+          f"IS->OOS corr {fund['is_oos_corr']}")
+
+    # 3) Combined
+    comb = combine_books(book_oos, fund_oos, idx,
+                         book_trials=book["n_grid"], funding_trials=fund["n_grid"])
+    print(f"COMB  Sharpe {comb['combined']['sharpe']:.2f}  ret {comb['combined']['ret']*100:.1f}% "
+          f"n={comb['n']}  DSR(44) {comb['dsr_total']:.4f}  "
+          f"DSR(8) {comb['dsr_funding_only']:.4f}  rho {comb['rho']}")
+
+    # 4) Pre-registered disposition
+    kill = (fc["oos"]["sharpe"] <= 0) or (fund["is_oos_corr"] < 0)
+    fold = (comb["dsr_total"] > book["dsr"]) and \
+           (comb["combined"]["sharpe"] >= 1.15) and (abs(comb["rho"]) < 0.5)
+    verdict = "KILL (no standalone edge)" if kill else \
+              ("FOLD IN" if fold else "HONEST NEGATIVE (no independent edge)")
+    print(f"\nVERDICT: {verdict}")
+    return {"book": book, "fund": fund, "comb": comb,
+            "kill": kill, "fold": fold, "verdict": verdict}
+
+
+if __name__ == "__main__":
+    main()
