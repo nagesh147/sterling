@@ -16,7 +16,9 @@ export function PaperEquityCurve({ points, height = 220 }: {
       },
       grid: { vertLines: { visible: false }, horzLines: { color: 'var(--border)' } },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: false, secondsVisible: false },
+      // x is trade sequence, not calendar time → hide the axis entirely so
+      // synthetic timestamps never render as misleading month labels.
+      timeScale: { visible: false },
       width: containerRef.current.clientWidth,
       height,
     });
