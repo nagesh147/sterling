@@ -28,6 +28,7 @@ import { AlertBadge } from '../components/AlertBadge';
 import { PositionSizingCalc } from '../components/PositionSizingCalc';
 import { GreeksPanel } from '../components/GreeksPanel';
 import { OptionChainViewer } from '../components/OptionChainViewer';
+import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { VolatilityScanPanel } from '../components/VolatilityScanPanel';
 import { WebhookManager } from '../components/WebhookManager';
 import { SessionExport } from '../components/SessionExport';
@@ -57,7 +58,7 @@ import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSettings';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 
-type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
+type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config' | 'paper';
 
 const page: React.CSSProperties = { maxWidth: 1280, margin: '0 auto', padding: '0 24px 48px' };
 
@@ -126,11 +127,13 @@ const TABS: [Tab, string, string][] = [
   ['positions', 'POSITIONS',    '7'],
   ['watchlist', 'WATCHLIST',    '8'],
   ['config',    'CONFIG',       '9'],
+  ['paper',     'PAPER RESEARCH', '0'],
 ];
 
 const TAB_KEYS: Record<string, Tab> = {
   '1': 'analysis', '2': 'charts', '3': 'chain', '4': 'account',
   '5': 'alerts', '6': 'backtest', '7': 'positions', '8': 'watchlist', '9': 'config',
+  '0': 'paper',
 };
 
 export function Dashboard() {
@@ -375,6 +378,9 @@ export function Dashboard() {
               <PanelBoundary title="WEBHOOKS"><WebhookManager /></PanelBoundary>
               <SessionExport />
             </>
+          )}
+          {activeTab === 'paper' && (
+            <PanelBoundary title="PAPER RESEARCH"><PaperResearchTab /></PanelBoundary>
           )}
         </>
       )}
