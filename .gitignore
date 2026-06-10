@@ -57,3 +57,4 @@ backend/data/funding/
 
 # Paper-trading state + ledger (regenerates from real data)
 backend/data/paper/
+backend/data/ohlcv_full/

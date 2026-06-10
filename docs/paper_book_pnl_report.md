@@ -84,5 +84,8 @@ compound return *falls* while drawdown explodes (volatility drag):
 On $500 real Binance paper data: **+$357 realized / +$372 total (+71.6% / +74.5%),
 Sharpe 2.35, −30% worst drawdown** — the strongest, most honest result this project
 has produced. But it is **paper-only**, **not deflation-provable (DSR 0.327 < 0.5)**,
-and earned in **one short-friendly regime**. The single biggest open risk: it has not
-been tested through a full bull+bear cycle. No real capital is deployed.
+and earned in **one short-friendly regime**. **Update:** the full bull+bear+bull+bear
+cycle (2020→now) has since been stress-tested — see `docs/fullcycle_stress_test.md`:
+the book **survives and beats HODL on both axes** (OOS +150.7% vs +92.8%, −30% vs
+−68% drawdown), DSR rises to **0.394**, and it is positive in every bull year (one
+losing year, 2025). Still DSR < 0.5 (not provable). No real capital is deployed.
