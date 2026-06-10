@@ -58,3 +58,6 @@ backend/data/funding/
 # Paper-trading state + ledger (regenerates from real data)
 backend/data/paper/
 backend/data/ohlcv_full/
+
+# Equity-index history (regenerate via study.equity_pipeline)
+backend/data/equity/
