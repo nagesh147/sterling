@@ -181,3 +181,16 @@ def test_combine_books_pools_and_reports_corr_and_dsr():
     assert res["combined"]["n"] == len(book) + len(fund)
     assert -1.0 <= res["rho"] <= 1.0
     assert 0.0 <= res["dsr_total"] <= 1.0
+
+
+def test_combine_with_no_funding_equals_book_alone():
+    # With zero funding trades, the combined book must equal the book alone
+    # (cap 6 vs the book's own concurrency does not change a <=3-name book).
+    idx = pd.date_range("2024-01-01", periods=20, freq="4h")
+    book = [{"symbol": "BTCUSD", "entry_time": idx[i], "exit_time": idx[i + 1],
+             "pnl_pct": 0.01, "stop_dist_pct": 0.03} for i in range(0, 10, 2)]
+    res = combine_books(book, [], idx, book_trials=36, funding_trials=8)
+    from study.regime_book import portfolio_equity_sized
+    book_only = portfolio_equity_sized(book, 500.0, 0.015, 3.0, 6, 1.0)
+    assert res["combined"]["weighted_pnls"] == book_only["weighted_pnls"]
+    assert res["rho"] == 0.0
