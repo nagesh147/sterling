@@ -98,3 +98,35 @@ def build_funding_trades(coin: str, df: pd.DataFrame, funding: pd.Series,
                 "stop_dist_pct": (_SL * a / e) if e > 0 else 0.0,
             })
     return out
+
+
+def simulate_hold_to_flip(df: pd.DataFrame, sig, target: int,
+                          fee_rt: float = FEE_RT, max_hold: int = MAX_HOLD
+                          ) -> list[dict]:
+    """Signal-driven exit (NOT a simulate_idx bracket): enter at close on each bar
+    where sig == target with no open position; exit at close of the first later
+    bar where sig != target (or after max_hold / at the series end). Same fee
+    model as simulate_idx. Returns {pnl_pct, entry_bar, exit_bar}."""
+    close = df["close"].to_numpy(float)
+    sig = np.asarray(sig)
+    n = len(close)
+    direction = "long" if target > 0 else "short"
+    out: list[dict] = []
+    i = 0
+    while i < n - 1:
+        if sig[i] != target:
+            i += 1
+            continue
+        e = close[i]
+        end = min(i + max_hold, n - 1)
+        xi = end
+        for j in range(i + 1, end + 1):
+            if sig[j] != target:
+                xi = j
+                break
+        xp = close[xi]
+        pnl = (xp / e - 1.0) if direction == "long" else (1.0 - xp / e)
+        out.append({"pnl_pct": pnl - fee_rt, "entry_bar": int(i),
+                    "exit_bar": int(xi)})
+        i = xi + 1                            # no overlapping positions
+    return out

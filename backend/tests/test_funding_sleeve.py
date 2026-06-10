@@ -89,3 +89,35 @@ def test_build_funding_trades_tags_and_adds_cashflow():
     assert t["direction"] in ("long", "short")
     assert {"entry_time", "exit_time", "pnl_pct", "stop_dist_pct"} <= set(t)
     assert t["stop_dist_pct"] > 0
+
+
+from study.funding_sleeve import simulate_hold_to_flip
+
+
+def test_hold_to_flip_exits_when_signal_leaves_target():
+    # sig holds target=+1 for bars 2..5 then drops to 0 → exit at bar 6.
+    idx = pd.date_range("2024-01-01", periods=10, freq="4h")
+    px = np.array([100, 100, 100, 101, 102, 103, 104, 104, 104, 104], float)
+    df = pd.DataFrame({"open": px, "high": px, "low": px, "close": px,
+                       "volume": 1.0, "atr": 2.0}, index=idx)
+    sig = np.array([0, 0, 1, 1, 1, 1, 0, 0, 0, 0])
+    raw = simulate_hold_to_flip(df, sig, target=1, fee_rt=0.0, max_hold=200)
+    assert len(raw) == 1
+    t = raw[0]
+    assert t["entry_bar"] == 2 and t["exit_bar"] == 6
+    # long pnl over 100 -> 104, no fee:
+    assert t["pnl_pct"] == pytest.approx(0.04)
+
+
+def test_hold_to_flip_short_direction_and_fee():
+    idx = pd.date_range("2024-01-01", periods=8, freq="4h")
+    px = np.array([100, 100, 100, 98, 96, 96, 96, 96], float)
+    df = pd.DataFrame({"open": px, "high": px, "low": px, "close": px,
+                       "volume": 1.0, "atr": 2.0}, index=idx)
+    sig = np.array([0, 0, -1, -1, 0, 0, 0, 0])
+    raw = simulate_hold_to_flip(df, sig, target=-1, fee_rt=0.001, max_hold=200)
+    assert len(raw) == 1
+    t = raw[0]
+    assert t["entry_bar"] == 2 and t["exit_bar"] == 4
+    # short 100 -> 96 = +0.04 price, minus 0.001 fee:
+    assert t["pnl_pct"] == pytest.approx(0.039)
