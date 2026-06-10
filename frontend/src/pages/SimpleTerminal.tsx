@@ -18,6 +18,7 @@ import { SterlingEngineTab } from '../components/sterling_engine/SterlingEngineT
 import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
 import { GrokTab } from '../components/GrokTab';
 import { SterlingV2Tab } from '../components/SterlingV2Tab';
+import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
@@ -143,7 +144,7 @@ export function SimpleTerminal() {
   const [showLive, setShowLive] = useState(false);
   const sterlingV2 = useSterlingV2();
   const setSterlingV2 = useSetSterlingV2();
-  const [activeSection, setActiveSection] = useState<'sterlingEngine' | 'grok' | 'positions' | 'backtest' | 'sterling_v2'>('sterlingEngine');
+  const [activeSection, setActiveSection] = useState<'sterlingEngine' | 'grok' | 'positions' | 'backtest' | 'sterling_v2' | 'paper'>('sterlingEngine');
 
   return (
     <div className="term-root">
@@ -211,7 +212,8 @@ export function SimpleTerminal() {
             ['sterling_v2', 'STERLING V2'],
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
-          ] as ['sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest', string][]).map(([id, label]) => (
+            ['paper',       'PAPER RESEARCH'],
+          ] as ['sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -290,6 +292,11 @@ export function SimpleTerminal() {
               </RightSection>
             </>}
           />
+        )}
+        {activeSection === 'paper' && (
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 20 }}>
+            <PaperResearchTab />
+          </div>
         )}
       </div>
 
