@@ -51,3 +51,50 @@ def funding_signal(funding: pd.Series, index: pd.DatetimeIndex,
         np.where(z > thr, -1, np.where(z < -thr, 1, 0)), index=f.index
     ).fillna(0).astype(int)
     return sig_event.reindex(index, method="ffill").fillna(0).astype(int)
+
+
+def funding_cashflow(f_bar: pd.Series, entry_bar: int, exit_bar: int,
+                     direction: str) -> float:
+    """Funding cash-flow (as a fraction of notional) accrued holding from
+    entry_bar to exit_bar. Entry is at the entry bar's close (after that bar's
+    settlement), so settlements strictly after entry up to and including exit
+    count: bars [entry_bar+1 .. exit_bar]. A SHORT collects positive funding; a
+    LONG pays it."""
+    if exit_bar <= entry_bar:
+        return 0.0
+    accrued = float(f_bar.iloc[entry_bar + 1: exit_bar + 1].sum())
+    return accrued if direction == "short" else -accrued
+
+
+def build_funding_trades(coin: str, df: pd.DataFrame, funding: pd.Series,
+                         window: int, thr: float, exit_mode: str = "bracket"
+                         ) -> list[dict]:
+    """Build funding-sleeve trades for one symbol. The contrarian z-signal enters
+    longs/shorts through the existing simulate_idx (bracket) fill engine; the real
+    funding cash-flow is added to each trade's pnl. Trades are tagged with a
+    distinct `{coin}_FUND` name + stop_dist_pct (for vol-target sizing)."""
+    sig = funding_signal(funding, df.index, window, thr).to_numpy()
+    f_bar = align_funding(funding, df.index)
+    close = df["close"].to_numpy(float)
+    atr = df["atr"].to_numpy(float)
+    out: list[dict] = []
+    for target, direction in ((1, "long"), (-1, "short")):
+        sigs = (sig == target)
+        if exit_mode == "bracket":
+            raw = simulate_idx(df, sigs, _SL, _TP, direction=direction,
+                               fee_rt=FEE_RT, max_hold=MAX_HOLD)
+        else:                                # hold-to-flip
+            raw = simulate_hold_to_flip(df, sig, target, fee_rt=FEE_RT,
+                                        max_hold=MAX_HOLD)
+        for t in raw:
+            e = close[t["entry_bar"]]
+            a = atr[t["entry_bar"]]
+            fpnl = funding_cashflow(f_bar, t["entry_bar"], t["exit_bar"], direction)
+            out.append({
+                "symbol": f"{coin}_FUND", "sleeve": "funding", "direction": direction,
+                "entry_time": df.index[t["entry_bar"]],
+                "exit_time": df.index[t["exit_bar"]],
+                "pnl_pct": t["pnl_pct"] + fpnl,
+                "stop_dist_pct": (_SL * a / e) if e > 0 else 0.0,
+            })
+    return out

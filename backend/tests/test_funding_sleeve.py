@@ -60,3 +60,32 @@ def test_funding_signal_sign_convention():
     f2 = _funding(n=8, rates=[0.0] * 4 + [-0.02] * 4)
     sig2 = funding_signal(f2, bars.index, window=3, thr=1.0)
     assert sig2.max() == 1
+
+
+from study.funding_sleeve import funding_cashflow, build_funding_trades
+
+
+def test_funding_cashflow_sign_and_magnitude():
+    # held from bar 1 to bar 4; settlements on bars 2 and 4 are 0.01 each.
+    f_bar = pd.Series([0.0, 0.0, 0.01, 0.0, 0.01, 0.0])
+    # SHORT collects positive funding: +0.02 over the two settlements after entry.
+    assert funding_cashflow(f_bar, 1, 4, "short") == pytest.approx(0.02)
+    # LONG pays it: -0.02.
+    assert funding_cashflow(f_bar, 1, 4, "long") == pytest.approx(-0.02)
+    # The entry bar's own settlement (bar 1) is excluded; exit bar (4) included.
+    assert funding_cashflow(f_bar, 0, 2, "short") == pytest.approx(0.01)
+
+
+def test_build_funding_trades_tags_and_adds_cashflow():
+    bars = _bars(n=40)
+    rates = [0.0] * 4 + [0.02] * 16         # sustained rich funding => shorts
+    f = _funding(start="2024-01-01 00:00", n=20, rates=rates)
+    trades = build_funding_trades("BTC", bars, f, window=3, thr=1.0,
+                                  exit_mode="bracket")
+    assert trades, "expected at least one funding trade"
+    t = trades[0]
+    assert t["symbol"] == "BTC_FUND"
+    assert t["sleeve"] == "funding"
+    assert t["direction"] in ("long", "short")
+    assert {"entry_time", "exit_time", "pnl_pct", "stop_dist_pct"} <= set(t)
+    assert t["stop_dist_pct"] > 0
