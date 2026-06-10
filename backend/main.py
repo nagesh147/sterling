@@ -39,6 +39,7 @@ from app.api.v1.endpoints.ohlcv import router as ohlcv_router
 from app.api.v1.endpoints.wfo import router as wfo_router
 from app.api.v1.endpoints.vectorized_backtest import router as vectorized_backtest_router
 from app.api.v1.endpoints.sterling_v2 import router as sterling_v2_router
+from app.api.v1.endpoints.paper import router as paper_router
 from app.services import alert_store as _alert_store_svc
 from app.services.db_postgres import init_db_schema
 
@@ -1672,6 +1673,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(instruments_router, prefix="/api/v1")
+    app.include_router(paper_router, prefix="/api/v1")
     app.include_router(directional_router, prefix="/api/v1")
     app.include_router(positions_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
