@@ -187,3 +187,45 @@ def select_funding_sleeve(frames: dict, fundings: dict, grid=None,
                             [s["oos"]["sharpe"] for s in scored])
     return {"chosen": chosen, "scored": scored, "dsr": round(dsr, 4),
             "n_grid": len(grid), "is_oos_corr": round(is_oos_corr, 4)}
+
+
+def returns_by_bar(trades: list[dict], index: pd.DatetimeIndex) -> pd.Series:
+    """Per-bar realized pnl: each trade's pnl_pct bucketed onto its exit bar
+    (summed when several exit the same bar); 0.0 elsewhere. The independent-info
+    diagnostic basis for the sleeve-vs-book correlation."""
+    s = pd.Series(0.0, index=index)
+    for t in trades:
+        if t["exit_time"] in s.index:
+            s.loc[t["exit_time"]] += t["pnl_pct"]
+    return s
+
+
+def combine_books(book_trades: list[dict], funding_trades: list[dict],
+                  index: pd.DatetimeIndex, book_trials: int = 36,
+                  funding_trials: int = 8, risk_per_trade: float = 0.015,
+                  max_leverage: float = 3.0) -> dict:
+    """Pool the book's OOS trades with the funding sleeve's OOS trades into the
+    existing per-trade book machinery at cap 6 (both 3-name books run in
+    parallel), so the combined book contains all the book's trades plus
+    funding's. Returns the combined equity stats, the combined DSR penalized by
+    the TOTAL trial count (conservative), the funding-only DSR, and the per-bar
+    correlation ρ between the two sleeves."""
+    pooled = list(book_trades) + list(funding_trades)
+    combined = portfolio_equity_sized(pooled, 500.0, risk_per_trade,
+                                      max_leverage, max_concurrent=6, leverage=1.0)
+    wp = combined["weighted_pnls"]
+    dsr_total = deflated_sharpe_ratio(wp, num_trials=book_trials + funding_trials) \
+        if wp else 0.0
+    dsr_funding_only = deflated_sharpe_ratio(wp, num_trials=funding_trials) \
+        if wp else 0.0
+    rb = returns_by_bar(book_trades, index)
+    rf = returns_by_bar(funding_trades, index)
+    mask = (rb != 0.0) | (rf != 0.0)
+    if mask.sum() >= 3 and rb[mask].std() > 0 and rf[mask].std() > 0:
+        rho = float(np.corrcoef(rb[mask], rf[mask])[0, 1])
+    else:
+        rho = 0.0
+    return {"combined": combined, "rho": round(rho, 4),
+            "dsr_total": round(dsr_total, 4),
+            "dsr_funding_only": round(dsr_funding_only, 4),
+            "n": combined["n"]}

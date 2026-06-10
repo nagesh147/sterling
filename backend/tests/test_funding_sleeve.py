@@ -151,3 +151,33 @@ def test_select_funding_sleeve_is_lookahead_free_and_shaped():
     assert res["n_grid"] == 8
     assert 0.0 <= res["dsr"] <= 1.0
     assert "oos_trades" in res["chosen"]
+
+
+from study.funding_sleeve import returns_by_bar, combine_books
+
+
+def test_returns_by_bar_buckets_pnl_on_exit():
+    idx = pd.date_range("2024-01-01", periods=5, freq="4h")
+    trades = [
+        {"exit_time": idx[1], "pnl_pct": 0.02},
+        {"exit_time": idx[1], "pnl_pct": -0.01},   # two exits same bar → summed
+        {"exit_time": idx[3], "pnl_pct": 0.05},
+    ]
+    s = returns_by_bar(trades, idx)
+    assert len(s) == 5
+    assert s.iloc[1] == pytest.approx(0.01)
+    assert s.iloc[3] == pytest.approx(0.05)
+    assert s.iloc[0] == 0.0
+
+
+def test_combine_books_pools_and_reports_corr_and_dsr():
+    idx = pd.date_range("2024-01-01", periods=20, freq="4h")
+    book = [{"symbol": "BTCUSD", "entry_time": idx[i], "exit_time": idx[i + 1],
+             "pnl_pct": 0.01, "stop_dist_pct": 0.03} for i in range(0, 10, 2)]
+    fund = [{"symbol": "BTC_FUND", "entry_time": idx[i], "exit_time": idx[i + 1],
+             "pnl_pct": 0.008, "stop_dist_pct": 0.03} for i in range(1, 11, 2)]
+    res = combine_books(book, fund, idx, book_trials=36, funding_trials=8)
+    assert set(res) >= {"combined", "rho", "dsr_total", "dsr_funding_only", "n"}
+    assert res["combined"]["n"] == len(book) + len(fund)
+    assert -1.0 <= res["rho"] <= 1.0
+    assert 0.0 <= res["dsr_total"] <= 1.0
