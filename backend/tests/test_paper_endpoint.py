@@ -62,3 +62,45 @@ def test_paper_module_does_not_import_study(client):
     # Isolation invariant: the endpoint reads files, never imports study code.
     assert not any(m == "study" or m.startswith("study.") for m in sys.modules), \
         "paper endpoint must not import any study.* module"
+
+
+def _write_trades(tmp_path):
+    rows = [
+        {"entry_time": "2026-06-01T00:00:00", "exit_time": "2026-06-02T00:00:00",
+         "symbol": "BTCUSD", "sleeve": "trend", "direction": "short",
+         "status": "closed", "pnl_pct": "0.031", "stop_dist_pct": "0.05"},
+        {"entry_time": "2026-06-03T00:00:00", "exit_time": "2026-06-04T00:00:00",
+         "symbol": "ETHUSD", "sleeve": "mr", "direction": "long",
+         "status": "closed", "pnl_pct": "-0.012", "stop_dist_pct": "0.04"},
+    ]
+    with open(tmp_path / "trades.csv", "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+
+
+def test_trades_returns_ledger_with_numeric_pnl(client, tmp_path):
+    _write_trades(tmp_path)
+    r = client.get("/api/v1/paper/trades")
+    assert r.status_code == 200
+    b = r.json()
+    assert b["available"] is True and b["n"] == 2
+    assert b["trades"][0]["pnl_pct"] == pytest.approx(0.031)   # coerced to float
+    assert b["trades"][0]["symbol"] == "BTCUSD"
+
+
+def test_trades_missing_is_available_false(client):
+    r = client.get("/api/v1/paper/trades")
+    assert r.status_code == 200
+    assert r.json()["available"] is False
+    assert r.json()["trades"] == []
+
+
+def test_summary_is_static_validation_not_provable(client):
+    r = client.get("/api/v1/paper/summary")
+    assert r.status_code == 200
+    b = r.json()
+    assert b["dsr"] == 0.327
+    assert b["provable"] is False
+    assert "not deflation-provable" in b["verdict"]
+    assert "docs/" in b["provenance"]

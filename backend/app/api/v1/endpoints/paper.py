@@ -76,3 +76,30 @@ def paper_state():
         "n_closed": d.get("n_closed", 0),
         "capital": capital,
     }
+
+
+@router.get("/trades")
+def paper_trades():
+    """Closed-trade ledger (read from data/paper/trades.csv). pnl_pct and
+    stop_dist_pct coerced to float; missing file → {available: false, trades: []}."""
+    path = os.path.join(PAPER_DIR, "trades.csv")
+    if not os.path.exists(path):
+        return {"available": False, "trades": [], "n": 0}
+    try:
+        with open(path, newline="") as f:
+            rows = list(csv.DictReader(f))
+    except OSError as e:
+        return {"available": False, "trades": [], "n": 0, "reason": str(e)}
+    for r in rows:
+        for k in ("pnl_pct", "stop_dist_pct"):
+            try:
+                r[k] = float(r[k])
+            except (TypeError, ValueError, KeyError):
+                pass
+    return {"available": True, "trades": rows, "n": len(rows)}
+
+
+@router.get("/summary")
+def paper_summary():
+    """Static backtest-validation block (provenance-labeled; NOT a live recompute)."""
+    return {"available": True, **_VALIDATION}
