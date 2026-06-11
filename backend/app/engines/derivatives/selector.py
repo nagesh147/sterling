@@ -87,11 +87,16 @@ def _futures_candidate(
                      signal.underlying, signal.atr or 0.0)
             return None
 
+    # The futures TP is RR-based. A non-validated signal's snapshot target_price
+    # was computed for the directional/spot trade and may sit < 2R from the
+    # futures stop ("cramped"), which would make solve_futures reject the trade.
+    # Pass None so the solver derives a clean ≥2R TP itself; validated (edge)
+    # signals keep their proven target geometry.
     sl_plan = sl_tp_solver.solve_futures(
         direction=signal.direction, entry=signal.entry,
         structure_stop=stop, atr_val=signal.atr,
-        take_profit=signal.take_profit, rr=signal.rr_target,
-        validated=signal.presized,
+        take_profit=(signal.take_profit if signal.presized else None),
+        rr=signal.rr_target, validated=signal.presized,
     )
     if not sl_plan.ok:
         log.info("futures sl_tp rejected for %s: %s", signal.underlying, sl_plan.reason)

@@ -126,3 +126,13 @@ def test_defined_risk_uses_delta_targeting_for_directional():
     assert cand.instrument_type == "options"
     assert cand.structure is not None and cand.structure.structure_type == "debit_vertical"
     assert cand.direction == "short"
+
+
+def test_futures_candidate_ignores_cramped_target_for_non_validated():
+    # valid stop below entry, but a cramped TP (~0.16R away) that would make
+    # solve_futures reject ("target < 2.0R away"). Non-validated signals should
+    # ignore the snapshot target and let solve_futures derive a clean >=2R TP.
+    sig = _sig(direction="long", entry=62000.0, stop=61000.0, atr=600.0, tp=62100.0)
+    cand = _futures_candidate(signal=sig, market=_mkt(), profile=get_profile("directional"))
+    assert cand is not None
+    assert cand.direction == "long"
