@@ -60,19 +60,54 @@ def _profile_overrides(app) -> dict[str, StrategyDerivativesProfile]:
     return cur
 
 
+def _spot_from_store(underlying: str):
+    """Last stored close as a spot fallback when the live feed is cold, so a
+    transient WS gap doesn't empty the candidate tables. Tries a few symbol forms."""
+    try:
+        from app.services import ohlcv_store
+    except Exception:
+        return None
+    u = underlying.upper()
+    for sym in (u, f"{u}USD", u.replace("USD", "")):
+        for res in ("1h", "15m", "5m"):
+            try:
+                rows = ohlcv_store.get_candles(sym, res)
+            except Exception:
+                rows = None
+            if rows:
+                last = rows[-1]
+                c = last.get("close") if isinstance(last, dict) else getattr(last, "close", None)
+                if c:
+                    return float(c)
+    return None
+
+
 async def _market_context(
     *, underlying: str, app, signal_score: float = 0.0,
 ) -> MarketContext:
-    """Build a MarketContext from live adapter calls + calibration + CB."""
-    adapter = _adm.get_adapter() or getattr(app.state, "adapter", None)
-    inst = registry.get_instrument(underlying.upper())
-    if adapter is None or inst is None:
-        raise HTTPException(status_code=503, detail="adapter or instrument unavailable")
+    """Build a MarketContext from live adapter calls + calibration + CB.
 
-    try:
-        spot = float(await adapter.get_index_price(inst))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"spot fetch failed: {exc}")
+    Spot is resilient: if the live adapter is cold / the WS feed has a gap, it
+    falls back to the last stored candle close so the candidate tables don't
+    silently empty on a transient feed hiccup."""
+    adapter = _adm.get_adapter() or getattr(app.state, "adapter", None)
+    inst = registry.get_instrument(underlying.upper()) or \
+        registry.get_instrument(underlying.upper().replace("USD", ""))   # "BTCUSD" → "BTC"
+    if inst is None:
+        raise HTTPException(status_code=503, detail="instrument unavailable")
+
+    spot = None
+    if adapter is not None:
+        try:
+            spot = float(await adapter.get_index_price(inst))
+        except Exception as exc:
+            log.warning("DERIV spot fetch failed for %s: %s — falling back to candle store",
+                        underlying, exc)
+    if not spot or spot <= 0:
+        spot = _spot_from_store(underlying)
+    if not spot or spot <= 0:
+        raise HTTPException(status_code=503,
+                            detail="no spot available (adapter cold + no stored candles)")
 
     # Funding rate via the new adapter method
     funding_8h = 0.0001
@@ -121,7 +156,8 @@ async def _market_context(
 
 async def _option_chain_or_none(*, underlying: str, app, spot: float):
     adapter = _adm.get_adapter() or getattr(app.state, "adapter", None)
-    inst = registry.get_instrument(underlying.upper())
+    inst = registry.get_instrument(underlying.upper()) or \
+        registry.get_instrument(underlying.upper().replace("USD", ""))   # "BTCUSD" → "BTC"
     if adapter is None or inst is None or not getattr(inst, "has_options", False):
         return None
     try:
@@ -1214,8 +1250,10 @@ def _collect_armed_signals(
                     "ENTRY_ARMED_PULLBACK", "ENTRY_ARMED_CONTINUATION",
                     "CONFIRMED_SETUP_ACTIVE", "EARLY_SETUP_ACTIVE"
                 }:
-                    track = getattr(snap, "track", None)
-                    strat = f"directional/{track}" if track else "directional"
+                    # Use the bare `directional` strategy for the profile lookup:
+                    # per-track profiles (`directional/swing`, …) default disabled,
+                    # which silently dropped every armed directional signal here.
+                    strat = "directional"
                     if strategy_filter and strat != strategy_filter:
                         continue
                     if underlying_filter and snap.sym.upper() != underlying_filter.upper():
