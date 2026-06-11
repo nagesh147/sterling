@@ -94,7 +94,7 @@ export const CommonFuturesCandidatesTable: React.FC<Props> = ({ engine, strategy
       stop_loss: p.initial_sl || 0,
       take_profit: p.initial_tp || 0,
       expected_r: p.sized_trade?.structure?.risk_reward || 0,
-      funding_cost_usd: 0,
+      funding_cost_usd: (p as any).funding_cost_usd ?? 0,
       liquidity_score: null,
       reason: 'Active position',
       warnings: [],

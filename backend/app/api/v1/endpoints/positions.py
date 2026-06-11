@@ -79,6 +79,29 @@ def _estimate_pnl(
     if max_gain_usd is not None:
         bounded = min(max_gain_usd * qty, bounded)
     return round(bounded, 2)
+
+
+def _funding_cost_usd(funding_8h_pct: float, notional_usd: float,
+                      hours_held: float) -> float:
+    """Funding cost accrued on a perp/futures position since entry:
+    |rate| × notional × settlements_elapsed (one settlement per 8h). Returns
+    0 for a just-entered position or when no funding rate is available — these
+    are the cases that left the futures "Funding" column showing 0."""
+    if not funding_8h_pct or notional_usd <= 0 or hours_held <= 0:
+        return 0.0
+    settlements = hours_held / 8.0
+    return round(abs(funding_8h_pct) * notional_usd * settlements, 2)
+
+
+def _theta_burn_usd(legs, contracts: float, hold_days: float) -> float:
+    """Projected net theta decay over the remaining hold for an option
+    structure: |sum(leg.theta)| × contracts × hold_days. Returns 0 for futures
+    (no legs / no option theta) — the candidate never computed this for the
+    native engine, so the options "θ burn" column was stored/shown as 0."""
+    if not legs or contracts <= 0 or hold_days <= 0:
+        return 0.0
+    net_theta = sum((getattr(l, "theta", 0.0) or 0.0) for l in legs)
+    return round(abs(net_theta) * contracts * hold_days, 2)
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
@@ -369,6 +392,25 @@ async def live_pnl(request: Request):
         if inst is not None
     ])
 
+    # Funding rate per underlying (for the futures "Funding" column). Parallel,
+    # graceful — a fetch failure leaves funding at 0, never breaks pnl-live.
+    fundings: dict = {}
+
+    async def _fetch_funding(sym: str, inst):
+        try:
+            pid = await adapter.get_product_id(
+                getattr(inst, "delta_perp_symbol", None) or f"{sym}USD")
+            fr = await adapter.get_funding_rate(pid)
+            fundings[sym] = float(fr.get("funding_rate_8h_pct") or 0.0)
+        except Exception:
+            fundings[sym] = 0.0
+
+    await _asyncio.gather(*[
+        _fetch_funding(sym, inst)
+        for sym, inst in insts.items()
+        if inst is not None
+    ])
+
     for pos in active:
         spot = spots.get(pos.underlying)
         leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
@@ -397,6 +439,23 @@ async def live_pnl(request: Request):
                 trail_state = _json.loads(pos.trail_stop_json)
             except Exception:
                 pass
+
+        # Live funding (futures) + theta-burn (options) — recomputed here so the
+        # FE columns aren't stuck at 0. Futures pay funding (no option theta);
+        # options decay theta (no perp funding).
+        struct = pos.sized_trade.structure
+        stype = (getattr(struct, "structure_type", "") or "").lower()
+        notional = pos.sized_trade.qty * (pos.entry_spot_price or 0.0)
+        hours_held = max(0.0, (now_ms - pos.entry_timestamp_ms) / 3_600_000.0)
+        if stype in ("futures", "spot", "perp"):
+            funding_cost = _funding_cost_usd(
+                fundings.get(pos.underlying, 0.0), notional, hours_held)
+            theta_burn = 0.0
+        else:
+            funding_cost = 0.0
+            theta_burn = _theta_burn_usd(
+                struct.legs, pos.sized_trade.contracts, current_dte)
+
         results.append({
             "position_id": pos.id,
             "underlying": pos.underlying,
@@ -404,6 +463,8 @@ async def live_pnl(request: Request):
             "current_spot": spot,
             "entry_spot": pos.entry_spot_price,
             "estimated_pnl_usd": pnl,
+            "funding_cost_usd": funding_cost,
+            "expected_theta_burn_usd": theta_burn,
             "current_dte": current_dte,
             "max_risk_usd": pos.sized_trade.max_risk_usd,
             "capital_at_risk_pct": pos.sized_trade.capital_at_risk_pct,

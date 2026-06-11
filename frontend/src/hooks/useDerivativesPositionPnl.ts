@@ -79,6 +79,10 @@ export function useDerivativesPositionPnl(instrumentType: 'futures' | 'options')
     return {
       ...p,
       estimated_pnl_usd: est,
+      // Live-recomputed (pnl-live) — overlay so the futures Funding / options
+      // θ-burn columns reflect current values, not the stored 0 at entry.
+      funding_cost_usd: lp?.funding_cost_usd ?? null,
+      expected_theta_burn_usd: lp?.expected_theta_burn_usd ?? (p as any).expected_theta_burn_usd ?? null,
     };
   });
 

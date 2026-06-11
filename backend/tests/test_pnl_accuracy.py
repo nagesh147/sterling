@@ -352,3 +352,26 @@ def test_options_single_leg_net_delta_unchanged():
     # regression: a real single-leg option still uses its own delta
     trade = _make_sized("naked_call", Direction.LONG, [_cc(95000, delta=0.45)], max_loss=100.0)
     assert _net_delta(trade) == pytest.approx(0.45)
+
+
+# ── Funding (futures) + theta-burn (options) for OPEN positions ───────────
+from app.api.v1.endpoints.positions import _funding_cost_usd, _theta_burn_usd
+
+
+def test_funding_cost_accrued_since_entry():
+    # rate 0.0001/8h, $126k notional, held 24h = 3 settlements → 0.0001*126000*3
+    assert _funding_cost_usd(0.0001, 126000.0, 24.0) == pytest.approx(37.8)
+    assert _funding_cost_usd(0.0001, 126000.0, 0.0) == 0.0     # just entered
+    assert _funding_cost_usd(0.0, 126000.0, 24.0) == 0.0        # no funding rate
+
+
+class _Leg:
+    def __init__(self, theta): self.theta = theta
+
+
+def test_theta_burn_from_net_leg_theta():
+    # debit spread: long theta -8, short theta +3 → net -5; ×2 contracts ×7 days
+    legs = [_Leg(-8.0), _Leg(3.0)]
+    assert _theta_burn_usd(legs, contracts=2.0, hold_days=7) == pytest.approx(70.0)
+    assert _theta_burn_usd([], 2.0, 7) == 0.0                   # futures (no legs)
+    assert _theta_burn_usd(legs, 2.0, 0) == 0.0                 # at expiry

@@ -8,6 +8,8 @@ export interface LivePnlEntry {
   entry_spot: number;
   estimated_pnl_usd: number | null;
   realized_pnl_usd: number | null;
+  funding_cost_usd?: number | null;
+  expected_theta_burn_usd?: number | null;
   current_dte: number;
   max_risk_usd: number;
   capital_at_risk_pct: number;
