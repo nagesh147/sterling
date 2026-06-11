@@ -73,9 +73,23 @@ def _futures_candidate(
     """Build a futures candidate: solve SL/TP via the existing solver,
     run funding gate to size leverage, run leverage_engine for the final
     leverage."""
+    # Non-validated (directional/scalping) signals may carry a missing / zero-
+    # distance / wrong-side stop (e.g. the directional collector sets stop=entry
+    # when the snapshot lacks one). Sanitize via ATR so a real armed signal isn't
+    # spuriously rejected. Validated (edge) signals keep their proven geometry.
+    if signal.presized:
+        stop = signal.stop_loss
+    else:
+        stop = _sane_futures_stop(signal.direction, entry=signal.entry,
+                                  stop=signal.stop_loss, atr=signal.atr)
+        if stop is None:
+            log.info("futures: no derivable stop for %s (atr=%.4f)",
+                     signal.underlying, signal.atr or 0.0)
+            return None
+
     sl_plan = sl_tp_solver.solve_futures(
         direction=signal.direction, entry=signal.entry,
-        structure_stop=signal.stop_loss, atr_val=signal.atr,
+        structure_stop=stop, atr_val=signal.atr,
         take_profit=signal.take_profit, rr=signal.rr_target,
         validated=signal.presized,
     )
