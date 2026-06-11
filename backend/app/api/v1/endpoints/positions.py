@@ -43,13 +43,19 @@ def _net_delta(sized_trade) -> float:
       bear_call_spread  → legs[0]=short lower call (Δ≈0.40), legs[1]=long higher call (Δ≈0.20)
     """
     legs = sized_trade.structure.legs
+    stype = getattr(sized_trade.structure, "structure_type", "").lower()
     if not legs:
-        # Futures, spot, or any delta-1 instrument. Use the leverage (1 for spot)
-        # so the P&L approximation reflects the actual notional exposure.
-        stype = getattr(sized_trade.structure, "structure_type", "").lower()
+        # Legacy futures/spot with no legs — leverage = effective linear delta.
         if stype in ("futures", "spot", "perp"):
             return float(getattr(sized_trade.structure, "leverage", 1) or 1)
         return 0.0
+    if stype in ("futures", "spot", "perp"):
+        # Derivatives-engine futures carry a SINGLE placeholder leg whose
+        # option-delta is 0. It's a delta-1 LINEAR instrument and qty already
+        # holds the full coin quantity, so net delta is 1.0 — NOT the leg's 0
+        # (which made _estimate_pnl return 0 and stuck the futures "Open P/L"
+        # at zero for every futures position).
+        return 1.0
     if len(legs) == 1:
         return abs(legs[0].delta)
     return max(0.0, abs(legs[0].delta) - abs(legs[1].delta))

@@ -332,3 +332,23 @@ class TestPaperStoreFuturesPnl:
         result = ps.partial_close_position(pos.id, exit_spot_price=99000.0, partial_ratio=0.5)
         assert result is not None
         assert result.realized_pnl_usd is not None and result.realized_pnl_usd > 0
+
+
+# ── Futures with a placeholder leg (the empty-PnL bug) ────────────────────
+def test_futures_single_leg_net_delta_is_one():
+    # Derivatives-engine futures carry ONE placeholder leg with delta=0 (no
+    # option greeks). The bug: _net_delta took len==1 → abs(0)=0 → PnL stuck 0.
+    trade = _make_sized("futures", Direction.LONG, [_cc(95000, delta=0.0)], max_loss=100.0)
+    assert _net_delta(trade) == pytest.approx(1.0)
+
+
+def test_futures_pnl_nonzero_on_spot_move():
+    trade = _make_sized("futures", Direction.LONG, [_cc(95000, delta=0.0)], max_loss=1000.0)
+    # spot +1000, qty=1, net_delta=1 → +1000 (upside uncapped: max_gain None)
+    assert _estimate_pnl(trade, 1000.0, 1, 1000.0, None) == pytest.approx(1000.0)
+
+
+def test_options_single_leg_net_delta_unchanged():
+    # regression: a real single-leg option still uses its own delta
+    trade = _make_sized("naked_call", Direction.LONG, [_cc(95000, delta=0.45)], max_loss=100.0)
+    assert _net_delta(trade) == pytest.approx(0.45)
