@@ -70,6 +70,23 @@ class CachingAdapter(BaseExchangeAdapter):
             return hit  # type: ignore[return-value]
         return self._put(key, await self._inner.get_perp_price(instrument))
 
+    async def get_product_id(self, symbol: str) -> int:
+        # Product ids are stable; cache hard. Missing passthrough here made every
+        # funding fetch (pnl-live, _market_context, /funding) throw and fall back
+        # to a default rate — leaving the futures "Funding" column at 0.
+        key = f"product_id:{symbol}"
+        hit = self._hit(key, 3_600.0)
+        if hit is not _SENTINEL:
+            return hit  # type: ignore[return-value]
+        return self._put(key, await self._inner.get_product_id(symbol))
+
+    async def get_funding_rate(self, product_id: int) -> dict:
+        key = f"funding:{product_id}"
+        hit = self._hit(key, 60.0)
+        if hit is not _SENTINEL:
+            return hit  # type: ignore[return-value]
+        return self._put(key, await self._inner.get_funding_rate(product_id))
+
     # Canonical fetch sizes per resolution — callers that request fewer bars reuse
     # the larger cached result rather than issuing a separate exchange call.
     _CANON_LIMIT: Dict[str, int] = {

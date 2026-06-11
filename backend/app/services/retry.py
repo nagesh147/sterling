@@ -28,6 +28,15 @@ class RetryingAdapter(BaseExchangeAdapter):
         self._delay = base_delay
         self._timeout = call_timeout
 
+    def __getattr__(self, name: str):
+        # Delegate any method not explicitly wrapped here (e.g. get_product_id,
+        # get_funding_rate) straight to the inner adapter. Without this, funding
+        # fetches threw AttributeError through the wrapper stack and every
+        # "Funding" value fell back to 0 / a default rate.
+        if name == "_inner":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
     async def _retry(self, fn: Callable):
         """Call fn() with timeout, retry on exception with exponential backoff."""
         last_exc: Exception = RuntimeError("no attempts")
