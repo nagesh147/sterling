@@ -28,6 +28,8 @@ from app.schemas.directional import (
 )
 
 _TREND_DIR = {MacroRegime.BULL_TREND: 1, MacroRegime.BEAR_TREND: -1}
+_MR_OVERSOLD = 35.0      # RSI ≤ this in a range → mean-reversion long (buy the dip)
+_MR_OVERBOUGHT = 65.0    # RSI ≥ this in a range → mean-reversion short (fade the rip)
 
 
 def evaluate_setup(
@@ -43,9 +45,26 @@ def evaluate_setup(
 
     trend_dir = _TREND_DIR.get(regime.macro_regime, 0)
     if trend_dir == 0:
+        # No 4h trend. In a RANGING regime, fade RSI extremes — the validated
+        # conviction book's mean-reversion sleeve (oversold → long, overbought →
+        # short). Other no-trend regimes (IDLE/insufficient data) stay IDLE.
+        if regime.macro_regime == MacroRegime.RANGING:
+            rsi = float(getattr(signal, "rsi", 50.0) or 50.0)
+            if rsi <= _MR_OVERSOLD:
+                return SetupResult(
+                    state=TradeState.ENTRY_ARMED_PULLBACK, direction=Direction.LONG,
+                    reason=f"range — RSI {rsi:.0f} oversold, mean-reversion long",
+                    macro_regime=regime.macro_regime, signal_trend=signal.trend,
+                )
+            if rsi >= _MR_OVERBOUGHT:
+                return SetupResult(
+                    state=TradeState.ENTRY_ARMED_PULLBACK, direction=Direction.SHORT,
+                    reason=f"range — RSI {rsi:.0f} overbought, mean-reversion short",
+                    macro_regime=regime.macro_regime, signal_trend=signal.trend,
+                )
         return SetupResult(
             state=TradeState.IDLE, direction=Direction.NEUTRAL,
-            reason="no 4h trend (range/idle)", macro_regime=regime.macro_regime,
+            reason="no setup (range/idle, RSI neutral)", macro_regime=regime.macro_regime,
             signal_trend=signal.trend,
         )
 

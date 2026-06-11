@@ -136,3 +136,32 @@ def test_ranging_regime_is_idle():
 
 def test_missing_inputs_idle():
     assert evaluate_setup(None, None).state == TradeState.IDLE
+
+
+# ── Range mean-reversion arming (the book's MR sleeve) ────────────────────
+def _sig_rsi(rsi, trend=0):
+    return SignalResult(
+        trend=trend, all_green=False, all_red=False, green_arrow=False, red_arrow=False,
+        st_trends=[0, 0, 0], st_values=[0.0, 0.0, 0.0], close_1h=100.0,
+        score_long=0.0, score_short=0.0, signal_strength="SIGNAL", signal_score=60.0,
+        rsi=rsi)
+
+
+def test_ranging_oversold_arms_mr_long():
+    s = evaluate_setup(_reg(MacroRegime.RANGING), _sig_rsi(28))
+    assert s.state == TradeState.ENTRY_ARMED_PULLBACK and s.direction == Direction.LONG
+
+
+def test_ranging_overbought_arms_mr_short():
+    s = evaluate_setup(_reg(MacroRegime.RANGING), _sig_rsi(72))
+    assert s.state == TradeState.ENTRY_ARMED_PULLBACK and s.direction == Direction.SHORT
+
+
+def test_ranging_neutral_rsi_is_idle():
+    s = evaluate_setup(_reg(MacroRegime.RANGING), _sig_rsi(50))
+    assert s.state == TradeState.IDLE and s.direction == Direction.NEUTRAL
+
+
+def test_trend_regime_unaffected_by_mr():     # MR branch must not touch trend regimes
+    s = evaluate_setup(_reg(MacroRegime.BEAR_TREND), _sig_rsi(72, trend=0))
+    assert s.state == TradeState.ENTRY_ARMED_PULLBACK and s.direction == Direction.SHORT
