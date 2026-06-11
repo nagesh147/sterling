@@ -56,3 +56,56 @@ def test_futures_candidate_none_when_no_atr_and_bad_stop():
     cand = _futures_candidate(signal=_sig(atr=0.0), market=_mkt(),
                               profile=get_profile("directional"))
     assert cand is None
+
+
+from app.schemas.market import OptionSummary
+from app.engines.derivatives_native.structures import build_delta_debit_vertical
+
+
+def _opt(strike, otype, delta, dte=21, bid=100.0, ask=104.0, oi=50.0, vol=20.0):
+    mid = (bid + ask) / 2
+    return OptionSummary(
+        instrument_name=f"BTC-{otype}-{int(strike)}", underlying="BTC",
+        strike=strike, expiry_date="2026-07-01", dte=dte, option_type=otype,
+        bid=bid, ask=ask, mark_price=mid, mid_price=mid, mark_iv=0.5,
+        delta=delta, open_interest=oi, volume_24h=vol, last_updated_ms=0,
+        gamma=0.0001, vega=10.0, theta=-5.0)
+
+
+def _put_chain():
+    return [_opt(60000, "put", -0.30), _opt(58000, "put", -0.55),
+            _opt(56000, "put", -0.70), _opt(54000, "put", -0.20)]
+
+
+def test_delta_debit_vertical_short_picks_target_delta_long_leg():
+    s = build_delta_debit_vertical(
+        chain=_put_chain(), spot=58000.0, direction="short",
+        target_delta=0.55, width_delta=0.25, dte_min=7, dte_max=45,
+        nav_usd=500.0, max_loss_pct=0.02,
+        max_spread_pct=0.10, min_oi=1.0, min_volume=1.0)
+    assert s is not None
+    assert s.structure_type == "debit_vertical"
+    long_leg = next(l for l in s.legs if l.side == "buy")
+    short_leg = next(l for l in s.legs if l.side == "sell")
+    assert long_leg.strike == 58000
+    assert abs(short_leg.delta) < abs(long_leg.delta)
+    assert s.contracts > 0
+
+
+def test_delta_debit_vertical_defers_on_wide_spread():
+    wide = [_opt(58000, "put", -0.55, bid=50.0, ask=150.0),
+            _opt(56000, "put", -0.30, bid=50.0, ask=150.0)]
+    s = build_delta_debit_vertical(
+        chain=wide, spot=58000.0, direction="short", target_delta=0.55,
+        width_delta=0.25, dte_min=7, dte_max=45, nav_usd=500.0, max_loss_pct=0.02,
+        max_spread_pct=0.10, min_oi=1.0, min_volume=1.0)
+    assert s is None
+
+
+def test_delta_debit_vertical_defers_on_low_oi():
+    thin = [_opt(58000, "put", -0.55, oi=0.0), _opt(56000, "put", -0.30, oi=0.0)]
+    s = build_delta_debit_vertical(
+        chain=thin, spot=58000.0, direction="short", target_delta=0.55,
+        width_delta=0.25, dte_min=7, dte_max=45, nav_usd=500.0, max_loss_pct=0.02,
+        max_spread_pct=0.10, min_oi=1.0, min_volume=1.0)
+    assert s is None

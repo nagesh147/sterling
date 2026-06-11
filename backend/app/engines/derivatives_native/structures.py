@@ -71,6 +71,59 @@ def _nearest(chain: Sequence[OptionSummary], opt_type: str, target: float) -> Op
     return min(cands, key=lambda o: abs(o.strike - target))
 
 
+def _spread_pct(o: OptionSummary) -> float:
+    mid = o.mid_price if o.mid_price > 0 else (o.bid + o.ask) / 2
+    return ((o.ask - o.bid) / mid) if mid > 0 else 1.0
+
+
+def _tradeable(o: OptionSummary, *, max_spread_pct: float, min_oi: float,
+               min_volume: float, dte_min: int, dte_max: int) -> bool:
+    return (dte_min <= o.dte <= dte_max
+            and o.open_interest >= min_oi
+            and o.volume_24h >= min_volume
+            and _spread_pct(o) <= max_spread_pct
+            and o.strike > 0 and (o.mark_price > 0 or o.mid_price > 0))
+
+
+def _nearest_by_delta(chain, opt_type, target_abs_delta, *, max_spread_pct,
+                      min_oi, min_volume, dte_min, dte_max):
+    cands = [o for o in chain if o.option_type == opt_type
+             and _tradeable(o, max_spread_pct=max_spread_pct, min_oi=min_oi,
+                            min_volume=min_volume, dte_min=dte_min, dte_max=dte_max)]
+    if not cands:
+        return None
+    return min(cands, key=lambda o: abs(abs(o.delta) - target_abs_delta))
+
+
+def build_delta_debit_vertical(
+    *, chain, spot: float, direction: str, target_delta: float,
+    width_delta: float, dte_min: int, dte_max: int, nav_usd: float,
+    max_loss_pct: float, max_spread_pct: float, min_oi: float, min_volume: float,
+):
+    """Delta-targeted directional debit spread. Long leg ≈ `target_delta`; short
+    leg `width_delta` further OTM (lower |delta|). Call spread for long, put
+    spread for short. Returns None (→ DEFER) only on real gates: no tradeable
+    strike near the target delta within the DTE window / liquidity / spread, or
+    a zero-contract size after the premium-budget cap."""
+    opt_type = "call" if direction == "long" else "put"
+    gate = dict(max_spread_pct=max_spread_pct, min_oi=min_oi,
+                min_volume=min_volume, dte_min=dte_min, dte_max=dte_max)
+    long_o = _nearest_by_delta(chain, opt_type, target_delta, **gate)
+    short_o = _nearest_by_delta(chain, opt_type, max(0.05, target_delta - width_delta), **gate)
+    if not long_o or not short_o or long_o.strike == short_o.strike:
+        return None
+    legs = [_leg_from_option(long_o, "buy"), _leg_from_option(short_o, "sell")]
+    _, ml1, _, _ = compute_economics(legs, contracts=1.0)
+    contracts = _size_to_budget(ml1, nav_usd, max_loss_pct)
+    if contracts <= 0:
+        return None
+    net, ml, mp, bes = compute_economics(legs, contracts)
+    return DerivativesStructure(
+        structure_type="debit_vertical", underlying=long_o.underlying,
+        direction=direction, legs=legs, contracts=contracts,
+        net_premium_usd=net, max_loss_usd=ml, max_profit_usd=mp, breakevens=bes)
+
+
 def _prem(o: OptionSummary) -> float:
     return o.mark_price if o.mark_price > 0 else o.mid_price
 
