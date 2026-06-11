@@ -5,6 +5,7 @@ from enum import Enum
 
 class TradeState(str, Enum):
     IDLE = "IDLE"
+    WATCHING = "WATCHING"            # directional 4h bias present, not yet armed
     EARLY_SETUP_ACTIVE = "EARLY_SETUP_ACTIVE"
     CONFIRMED_SETUP_ACTIVE = "CONFIRMED_SETUP_ACTIVE"
     FILTERED = "FILTERED"

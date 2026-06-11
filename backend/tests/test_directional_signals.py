@@ -76,3 +76,63 @@ def test_regime_empty_is_idle():
     r = compute_regime([])
     assert r.macro_regime.value == "IDLE"
     assert r.score == 0.0
+
+
+# ── Fix #1 (loosened arming) + #2 (WATCHING tier) for evaluate_setup ──────
+from app.engines.directional.setup_engine import evaluate_setup
+from app.schemas.directional import (
+    RegimeResult, SignalResult, TradeState, Direction, MacroRegime,
+)
+
+
+def _reg(regime):
+    return RegimeResult(macro_regime=regime, ema50=100.0, close_4h=100.0, score=50.0, adx=30.0)
+
+
+def _sig(trend):
+    return SignalResult(
+        trend=trend, all_green=False, all_red=False, green_arrow=False, red_arrow=False,
+        st_trends=[trend, trend, trend], st_values=[0.0, 0.0, 0.0], close_1h=100.0,
+        score_long=70.0 if trend == 1 else 0.0, score_short=70.0 if trend == -1 else 0.0,
+        signal_strength="SIGNAL" if trend else "NONE", signal_score=70.0 if trend else 0.0)
+
+
+def test_bull_trend_1h_confirms_arms_continuation_long():
+    s = evaluate_setup(_reg(MacroRegime.BULL_TREND), _sig(1))
+    assert s.state == TradeState.ENTRY_ARMED_CONTINUATION and s.direction == Direction.LONG
+
+
+def test_bull_trend_1h_neutral_arms_pullback_long():     # THE FIX: neutral 1h still arms
+    s = evaluate_setup(_reg(MacroRegime.BULL_TREND), _sig(0))
+    assert s.state == TradeState.ENTRY_ARMED_PULLBACK and s.direction == Direction.LONG
+
+
+def test_bear_trend_1h_neutral_arms_pullback_short():     # matches live BTC (4h bear, 1h NONE)
+    s = evaluate_setup(_reg(MacroRegime.BEAR_TREND), _sig(0))
+    assert s.state == TradeState.ENTRY_ARMED_PULLBACK and s.direction == Direction.SHORT
+
+
+def test_bear_trend_1h_confirms_arms_continuation_short():
+    s = evaluate_setup(_reg(MacroRegime.BEAR_TREND), _sig(-1))
+    assert s.state == TradeState.ENTRY_ARMED_CONTINUATION and s.direction == Direction.SHORT
+
+
+def test_bull_trend_1h_contradicts_is_watching_with_bias():   # #2
+    s = evaluate_setup(_reg(MacroRegime.BULL_TREND), _sig(-1))
+    assert s.state == TradeState.WATCHING
+    assert s.direction == Direction.LONG                       # 4h bias still shown
+    assert s.state not in (TradeState.ENTRY_ARMED_PULLBACK, TradeState.ENTRY_ARMED_CONTINUATION)
+
+
+def test_bear_trend_1h_contradicts_is_watching_with_bias():
+    s = evaluate_setup(_reg(MacroRegime.BEAR_TREND), _sig(1))
+    assert s.state == TradeState.WATCHING and s.direction == Direction.SHORT
+
+
+def test_ranging_regime_is_idle():
+    s = evaluate_setup(_reg(MacroRegime.RANGING), _sig(1))
+    assert s.state == TradeState.IDLE and s.direction == Direction.NEUTRAL
+
+
+def test_missing_inputs_idle():
+    assert evaluate_setup(None, None).state == TradeState.IDLE

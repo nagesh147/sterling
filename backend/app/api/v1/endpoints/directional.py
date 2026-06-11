@@ -74,6 +74,7 @@ _ALERT_STATES = frozenset({
 })
 
 _STATE_LABELS = {
+    'WATCHING':                 '👁 WATCHING — Trend Bias',
     'EARLY_SETUP_ACTIVE':       '👁 FORMING — Early Setup',
     'ENTRY_ARMED_PULLBACK':     '⚡ ARMED — Pullback Entry',
     'ENTRY_ARMED_CONTINUATION': '⚡ ARMED — Continuation',
