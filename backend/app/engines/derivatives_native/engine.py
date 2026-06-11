@@ -77,9 +77,15 @@ def _defined_risk_candidate(
             chain=chain, spot=market.spot, direction=signal.direction,
             width_pct=width, nav_usd=nav, max_loss_pct=max_loss_pct)
     else:
-        s = _structures.build_debit_vertical(
+        s = _structures.build_delta_debit_vertical(
             chain=chain, spot=market.spot, direction=signal.direction,
-            width_pct=width, nav_usd=nav, max_loss_pct=max_loss_pct)
+            target_delta=profile.target_delta,
+            width_delta=max(0.15, profile.target_delta - 0.30),
+            dte_min=profile.dte_min, dte_max=profile.dte_max,
+            nav_usd=nav, max_loss_pct=max_loss_pct,
+            max_spread_pct=profile.max_spread_pct,
+            min_oi=profile.min_oi, min_volume=profile.min_volume_24h_x_contract,
+        )
     if s is None:
         return None
     return DerivativesCandidate(

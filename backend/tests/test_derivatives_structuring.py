@@ -109,3 +109,20 @@ def test_delta_debit_vertical_defers_on_low_oi():
         width_delta=0.25, dte_min=7, dte_max=45, nav_usd=500.0, max_loss_pct=0.02,
         max_spread_pct=0.10, min_oi=1.0, min_volume=1.0)
     assert s is None
+
+
+from app.engines.derivatives_native.engine import _defined_risk_candidate
+
+
+def test_defined_risk_uses_delta_targeting_for_directional():
+    prof = get_profile("directional")   # target_delta 0.60, dte 14-45
+    cand = _defined_risk_candidate(
+        signal=_sig(direction="short"), market=_mkt(spot=58000.0),
+        profile=prof,
+        chain=[_opt(58000, "put", -0.60, bid=300.0, ask=304.0),
+               _opt(55000, "put", -0.35, bid=100.0, ask=104.0)],
+        sources={"directional_options"})
+    assert cand is not None
+    assert cand.instrument_type == "options"
+    assert cand.structure is not None and cand.structure.structure_type == "debit_vertical"
+    assert cand.direction == "short"
