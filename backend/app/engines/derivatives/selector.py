@@ -39,6 +39,28 @@ from app.schemas.market import OptionSummary
 log = logging.getLogger(__name__)
 
 
+def _sane_futures_stop(direction: str, *, entry: float, stop, atr: float,
+                       k: float = 1.5):
+    """Return a geometrically-valid stop for a futures entry, or None.
+
+    A valid stop is on the protective side of entry (below for long, above for
+    short) with non-zero distance. When the supplied stop is missing / equal to
+    entry / on the wrong side, fall back to an ATR-based stop in the signal's
+    direction (entry ∓ k·atr). Returns None only when no stop can be derived
+    (bad stop AND atr ≤ 0). This eliminates the spurious sl_tp rejects that left
+    the futures table empty, while never inventing a stop with no risk basis."""
+    is_long = direction == "long"
+    valid = (
+        stop is not None and stop > 0 and
+        ((is_long and stop < entry) or (not is_long and stop > entry))
+    )
+    if valid:
+        return float(stop)
+    if atr and atr > 0 and entry > 0:
+        return entry - k * atr if is_long else entry + k * atr
+    return None
+
+
 def _hold_days(profile: StrategyDerivativesProfile, override_minutes: Optional[int]) -> float:
     minutes = override_minutes if override_minutes is not None else profile.expected_hold_minutes
     return max(0.0, minutes / (24 * 60))
