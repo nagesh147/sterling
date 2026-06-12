@@ -286,7 +286,12 @@ def build_client(a: _Account):
 
 
 def clear() -> None:
-    """Test hook — wipe in-memory state."""
+    """Test hook — wipe in-memory state into a 'loaded & empty' state.
+
+    Sets ``_loaded=True`` so a subsequent app-startup ``bootstrap()`` is a no-op and
+    never reloads stale rows from a shared test DB (kite has no default account to
+    seed, so there is nothing to bootstrap in tests). Keeps the suite deterministic
+    regardless of whether another test has flipped ``db._available`` on."""
     global _loaded
     _accounts.clear()
-    _loaded = False
+    _loaded = True
