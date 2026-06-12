@@ -136,3 +136,16 @@ def test_futures_candidate_ignores_cramped_target_for_non_validated():
     cand = _futures_candidate(signal=sig, market=_mkt(), profile=get_profile("directional"))
     assert cand is not None
     assert cand.direction == "long"
+
+
+def test_defined_risk_candidate_sets_projected_theta_burn():
+    # options candidate must carry a non-zero projected theta-burn (the native
+    # engine previously left it 0, so the options "θ burn" column showed 0).
+    prof = get_profile("directional")
+    cand = _defined_risk_candidate(
+        signal=_sig(direction="short"), market=_mkt(spot=58000.0), profile=prof,
+        chain=[_opt(58000, "put", -0.60, bid=300, ask=304),
+               _opt(55000, "put", -0.35, bid=100, ask=104)],
+        sources={"directional_options"})
+    assert cand is not None
+    assert cand.projected_theta_burn_usd > 0

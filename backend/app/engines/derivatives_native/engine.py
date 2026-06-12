@@ -88,6 +88,11 @@ def _defined_risk_candidate(
         )
     if s is None:
         return None
+    # Projected theta-burn over the option's life: |net leg theta| × contracts ×
+    # DTE. Without this the options "θ burn" column showed 0 for candidate rows.
+    net_theta = sum((getattr(l, "theta", 0.0) or 0.0) for l in s.legs)
+    leg_dte = s.legs[0].dte if s.legs else 0
+    theta_burn = round(abs(net_theta) * s.contracts * max(1, leg_dte), 2)
     return DerivativesCandidate(
         rank=0, instrument_type="options", underlying=signal.underlying,
         entry_price=signal.entry, direction=signal.direction,
@@ -95,6 +100,7 @@ def _defined_risk_candidate(
         notional_usd=round(s.contracts * signal.entry, 2),
         premium_usd=round(s.net_premium_usd, 2),
         expected_r=(round(s.max_profit_usd / s.max_loss_usd, 3) if s.max_loss_usd > 0 else 0.0),
+        projected_theta_burn_usd=theta_burn,
         score=1.0, structure=s,
     )
 
