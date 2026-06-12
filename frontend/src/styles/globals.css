@@ -5,21 +5,21 @@
 
 :root,
 [data-theme="dark"] {
-  /* Backgrounds — deep premium slate/zinc */
-  --bg:           #0B0E14;
-  --bg-card:      #0F1117;
-  --bg-surface:   #141821;
-  --bg-input:     #1A1F2E;
-  /* Borders — subtle, low-opacity zinc */
-  --border:       #1E2535;
-  --border-light: #2A3447;
-  /* Text — high-contrast crisp hierarchy */
-  --text-primary: #F1F5F9;
-  --text-muted:   #94A3B8;
-  --text-dim:     #475569;
-  --text-faint:   #2D3748;
-  --text-muted-alt: #6a7a8a;
-  /* Signal colors — sharp, high-visibility */
+  /* Backgrounds — Gemini dark neutrals (#131314 family) */
+  --bg:           #131314;
+  --bg-card:      #1E1F20;
+  --bg-surface:   #28292C;
+  --bg-input:     #1E1F20;
+  /* Borders — soft Gemini separators */
+  --border:       #2D2F31;
+  --border-light: #444746;
+  /* Text — Gemini hierarchy */
+  --text-primary: #E3E3E3;
+  --text-muted:   #C4C7C5;
+  --text-dim:     #8E918F;
+  --text-faint:   #5F6368;
+  --text-muted-alt: #9AA0A6;
+  /* Signal colors — KEPT (trading semantics: BUY green / SELL red / TP amber) */
   --accent:       #10B981;   /* emerald green — BUY / profit */
   --danger:       #EF4444;   /* crisp crimson — SELL / loss  */
   --warning:      #F59E0B;   /* amber — caution              */
@@ -27,21 +27,18 @@
   --purple:       #A855F7;
 }
 
-/* ── Grey — pure neutral zinc, no blue cast (shadcn reference) ── */
+/* ── Grey — Gemini "elevated" dark (slightly lighter than default) ── */
 [data-theme="grey"] {
-  /* Backgrounds — zinc-900/800 charcoal family */
-  --bg:           #18181B;   /* zinc-900 */
-  --bg-card:      #1F1F23;   /* zinc-850 */
-  --bg-surface:   #27272A;   /* zinc-800 */
-  --bg-input:     #2E2E32;   /* zinc-750 */
-  /* Borders — subtle zinc separators */
-  --border:       #3F3F46;   /* zinc-700 */
-  --border-light: #52525B;   /* zinc-600 */
-  /* Text — crisp white → muted zinc */
-  --text-primary: #FAFAFA;   /* zinc-50 */
-  --text-muted:   #A1A1AA;   /* zinc-400 */
-  --text-dim:     #71717A;   /* zinc-500 */
-  --text-faint:   #52525B;   /* zinc-600 */
+  --bg:           #1B1C1D;
+  --bg-card:      #28292B;
+  --bg-surface:   #303134;
+  --bg-input:     #28292B;
+  --border:       #3C4043;
+  --border-light: #5F6368;
+  --text-primary: #E8EAED;
+  --text-muted:   #BDC1C6;
+  --text-dim:     #9AA0A6;
+  --text-faint:   #5F6368;
   /* Signal colors — same as dark, stays sharp */
   --accent:       #10B981;
   --danger:       #EF4444;
@@ -51,31 +48,32 @@
 }
 
 [data-theme="light"] {
-  --bg:           #F8FAFC;
+  /* Gemini light — near-white surfaces, #F0F4F9 raised */
+  --bg:           #FFFFFF;
   --bg-card:      #FFFFFF;
-  --bg-surface:   #F1F5F9;
-  --bg-input:     #E2E8F0;
-  --border:       #CBD5E1;
-  --border-light: #E2E8F0;
-  --text-primary: #0F172A;
-  --text-muted:   #475569;
-  --text-dim:     #94A3B8;
-  --text-faint:   #CBD5E1;
-  --text-muted-alt: #9099aa;
+  --bg-surface:   #F0F4F9;
+  --bg-input:     #F0F4F9;
+  --border:       #DADCE0;
+  --border-light: #E8EAED;
+  --text-primary: #1F1F1F;
+  --text-muted:   #444746;
+  --text-dim:     #5F6368;
+  --text-faint:   #BDC1C6;
+  --text-muted-alt: #70757A;
   --accent:       #059669;
   --danger:       #DC2626;
-  --warning:      #D97706;
-  --blue:         #2563EB;
+  --warning:      #B26A00;
+  --blue:         #1A73E8;
   --purple:       #7C3AED;
 }
 
-/* ── Design scale (shared border-radius, spacing, font-size) ── */
+/* ── Design scale — Gemini rounding (softer, larger radii) ── */
 :root {
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-pill: 12px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
 
   --space-xs: 4px;
   --space-sm: 6px;
@@ -83,6 +81,17 @@
   --space-lg: 12px;
   --space-xl: 16px;
   --space-2xl: 20px;
+
+  /* ── Gemini brand gradient (blue → purple → pink) ── */
+  --brand-1: #4285F4;   /* Google blue   */
+  --brand-2: #9168C0;   /* purple        */
+  --brand-3: #D96570;   /* pink / coral  */
+  --brand:   #7C7CF0;   /* solid stand-in for focus rings / borders */
+  --brand-grad: linear-gradient(95deg, var(--brand-1) 0%, var(--brand-2) 50%, var(--brand-3) 100%);
+  --brand-grad-soft: linear-gradient(95deg,
+      color-mix(in srgb, var(--brand-1) 18%, transparent) 0%,
+      color-mix(in srgb, var(--brand-2) 18%, transparent) 50%,
+      color-mix(in srgb, var(--brand-3) 18%, transparent) 100%);
 }
 
 /* ── Theme-safe translucent surface tokens ── */
@@ -132,13 +141,14 @@
 html, body { margin: 0; padding: 0; }
 
 body {
-  font-family: var(--app-font, 'Inter', system-ui, sans-serif);
+  font-family: var(--app-font, 'Plus Jakarta Sans', 'Google Sans', system-ui, sans-serif);
   background: var(--bg);
   color: var(--text-primary);
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'tnum';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
+  transition: background-color .35s ease, color .35s ease;
 }
 
 /* Tabular numbers for any currency / pnl figures */
@@ -186,3 +196,71 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ticker-marquee { animation: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════
+ * Gemini look & feel — animated aurora backdrop, smooth transitions,
+ * gradient brand accents. Tuned for the terminal: subtle motion, and
+ * the trading data colors (green/red/amber) are left untouched.
+ * ════════════════════════════════════════════════════════════════ */
+
+/* Animated aurora — fixed, behind everything, low opacity so dense
+   tables stay readable. Soft brand blobs slowly drift + breathe. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -25vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 38vmax at 16% 10%, color-mix(in srgb, var(--brand-1) 24%, transparent), transparent 60%),
+    radial-gradient(36vmax 36vmax at 84% 16%, color-mix(in srgb, var(--brand-2) 22%, transparent), transparent 60%),
+    radial-gradient(46vmax 46vmax at 62% 94%, color-mix(in srgb, var(--brand-3) 18%, transparent), transparent 62%);
+  filter: blur(10px);
+  opacity: .55;
+  animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+[data-theme="light"] body::before { opacity: .40; }
+
+@keyframes aurora-drift {
+  0%   { transform: translate3d(0, 0, 0)        scale(1.08); }
+  50%  { transform: translate3d(1.5vmax, -1.5vmax, 0) scale(1.16); }
+  100% { transform: translate3d(-1.5vmax, 1.5vmax, 0) scale(1.10); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+/* Smooth, Gemini-soft transitions on interactive chrome */
+button, a, input, select, textarea,
+[role="tab"], [role="button"] {
+  transition: background-color .2s ease, border-color .2s ease,
+              color .2s ease, box-shadow .2s ease, transform .12s ease;
+}
+
+/* Gradient brand text — headings / greeting / sparkle marks */
+.brand-gradient-text {
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Gradient brand surface — primary buttons / active pills */
+.brand-gradient-bg {
+  background: var(--brand-grad);
+  color: #fff;
+  border: none;
+}
+.brand-gradient-bg:hover { filter: brightness(1.08); }
+
+/* Soft brand focus ring */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand) 70%, transparent);
+  outline-offset: 2px;
+}
+
+/* Brand-tinted selection + scrollbar */
+::selection { background: color-mix(in srgb, var(--brand-2) 32%, transparent); color: var(--text-primary); }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--brand) 38%, var(--border-light)); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--brand) 60%, var(--border-light)); }

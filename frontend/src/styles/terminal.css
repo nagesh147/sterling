@@ -10,28 +10,31 @@
 @import '@fontsource/jetbrains-mono/500.css';
 
 .term-root {
-  --t-bg:     #07090d;
-  --t-bg2:    #0d1117;
-  --t-bg3:    #141c24;
-  --t-border: #1e2d3d;
-  --t-br2:    #243447;
-  --t-text:   #a8b8c8;
-  --t-bright: #dce8f0;
-  --t-dim:    #4a5a6a;
-  --t-muted:  #6a7a8a;
-  --t-green:  #00c87a;
-  --t-red:    #f03050;
-  --t-amber:  #f0a020;
-  --t-blue:   #2090f0;
-  --t-cyan:   #00d4ff;
-  --t-purple: #9060f0;
-  --t-pink:   #f040a0;
+  /* Gemini dark palette — the main terminal resolves these (--t-*) first.
+     Panel backgrounds are slightly translucent so the aurora bleeds through
+     as a soft brand wash (kept high-opacity so dense tables stay readable). */
+  --t-bg:     rgba(19, 19, 20, 0.76);
+  --t-bg2:    rgba(30, 31, 32, 0.85);
+  --t-bg3:    rgba(40, 41, 44, 0.90);
+  --t-border: #2D2F31;
+  --t-br2:    #444746;
+  --t-text:   #C4C7C5;
+  --t-bright: #E3E3E3;
+  --t-dim:    #8E918F;
+  --t-muted:  #9AA0A6;
+  --t-green:  #1DB981;
+  --t-red:    #F0455A;
+  --t-amber:  #F0A030;
+  --t-blue:   #4285F4;
+  --t-cyan:   #38BDF8;
+  --t-purple: #9168C0;
+  --t-pink:   #D96570;
 
   position: fixed;
   inset: 0;
   background: var(--t-bg);
   color: var(--t-text);
-  font-family: var(--app-font, 'Inter', system-ui, sans-serif);
+  font-family: var(--app-font, 'Plus Jakarta Sans', 'Google Sans', system-ui, sans-serif);
   font-size: 12px;
   line-height: 1.4;
   zoom: var(--app-zoom, 1);
@@ -40,6 +43,26 @@
   flex-direction: column;
   z-index: 10000;
 }
+
+/* Gemini aurora — a soft, slowly-drifting brand gradient behind the whole
+   terminal (the panels float over it). Low opacity so data stays readable. */
+.term-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(45vmax 45vmax at 10% 4%,  color-mix(in srgb, var(--brand-1) 45%, transparent), transparent 60%),
+    radial-gradient(42vmax 42vmax at 92% 10%, color-mix(in srgb, var(--brand-2) 42%, transparent), transparent 60%),
+    radial-gradient(55vmax 55vmax at 55% 100%, color-mix(in srgb, var(--brand-3) 36%, transparent), transparent 62%),
+    radial-gradient(45vmax 45vmax at 30% 75%, color-mix(in srgb, var(--brand-2) 28%, transparent), transparent 60%);
+  filter: blur(8px);
+  opacity: .85;
+  animation: aurora-drift 24s ease-in-out infinite alternate;
+}
+[data-theme="light"] .term-root::before { opacity: .50; }
+.term-root > * { position: relative; z-index: 1; }
 
 .term-root .num {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
@@ -99,44 +122,46 @@
 .t-resize-handle-h:hover { background: var(--t-blue); }
 
 /* Grey mode overrides for .term-root — neutral zinc, no blue cast */
+/* Grey — Gemini "elevated" dark (slightly lighter than the default) */
 [data-theme="grey"] .term-root {
-  --t-bg:     #18181B;
-  --t-bg2:    #1F1F23;
-  --t-bg3:    #27272A;
-  --t-border: #3F3F46;
-  --t-br2:    #52525B;
-  --t-text:   #A1A1AA;
-  --t-bright: #FAFAFA;
-  --t-dim:    #71717A;
-  --t-muted:  #90909a;
-  --t-green:  #10B981;
-  --t-red:    #EF4444;
-  --t-amber:  #F59E0B;
-  --t-blue:   #3B82F6;
-  --t-cyan:   #06B6D4;
-  --t-purple: #A855F7;
-  --t-pink:   #EC4899;
+  --t-bg:     rgba(27, 28, 29, 0.78);
+  --t-bg2:    rgba(40, 41, 43, 0.86);
+  --t-bg3:    rgba(48, 49, 52, 0.90);
+  --t-border: #3C4043;
+  --t-br2:    #5F6368;
+  --t-text:   #BDC1C6;
+  --t-bright: #E8EAED;
+  --t-dim:    #9AA0A6;
+  --t-muted:  #80868B;
+  --t-green:  #1DB981;
+  --t-red:    #F0455A;
+  --t-amber:  #F0A030;
+  --t-blue:   #4285F4;
+  --t-cyan:   #38BDF8;
+  --t-purple: #9168C0;
+  --t-pink:   #D96570;
   background: var(--t-bg);
   color: var(--t-text);
 }
 
-/* Light mode overrides for .term-root */
+/* Light — Gemini light (near-white surfaces; aurora bleeds softly) */
 [data-theme="light"] .term-root {
-  --t-bg:     #f4f6f9;
-  --t-bg2:    #eaecf1;
-  --t-bg3:    #dfe2e9;
-  --t-border: #c8cdd8;
-  --t-br2:    #b8bfcc;
-  --t-text:   #3a4557;
-  --t-bright: #0d1b2a;
-  --t-dim:    #7a8899;
-  --t-green:  #007a55;
-  --t-red:    #c0253a;
-  --t-amber:  #b07000;
-  --t-blue:   #1560bd;
-  --t-cyan:   #007a9e;
-  --t-purple: #5b2d8e;
-  --t-pink:   #d81b60;
+  --t-bg:     rgba(255, 255, 255, 0.70);
+  --t-bg2:    rgba(240, 244, 249, 0.86);
+  --t-bg3:    rgba(232, 234, 237, 0.90);
+  --t-border: #DADCE0;
+  --t-br2:    #C4C7C5;
+  --t-text:   #444746;
+  --t-bright: #1F1F1F;
+  --t-dim:    #5F6368;
+  --t-muted:  #70757A;
+  --t-green:  #059669;
+  --t-red:    #DC2626;
+  --t-amber:  #B26A00;
+  --t-blue:   #1A73E8;
+  --t-cyan:   #0B8AB0;
+  --t-purple: #7C3AED;
+  --t-pink:   #D81B60;
   background: var(--t-bg);
   color: var(--t-text);
 }

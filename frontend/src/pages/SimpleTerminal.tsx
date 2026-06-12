@@ -218,18 +218,20 @@ export function SimpleTerminal() {
               key={id}
               onClick={() => setActiveSection(id)}
               style={{
-                background: 'none',
+                background: activeSection === id ? 'var(--brand-grad)' : 'none',
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: '100% 2.5px',
+                backgroundPosition: '50% 100%',
                 border: 'none',
-                borderBottom: `2px solid ${activeSection === id ? 'var(--t-blue)' : 'transparent'}`,
                 color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
-                padding: '8px 14px',
+                padding: '9px 14px',
                 cursor: 'pointer',
                 fontFamily: 'inherit',
                 fontSize: 11,
                 fontWeight: activeSection === id ? 700 : 400,
                 letterSpacing: '0.08em',
                 marginBottom: -1,
-                transition: 'color .1s',
+                transition: 'color .15s ease',
               }}
             >
               {label}
@@ -264,8 +266,8 @@ export function SimpleTerminal() {
       {/* ── Ticker strip ─────────────────────────────────────────────── */}
       <TickerStrip />
 
-      {/* Main content */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--t-bg)', display: 'flex', flexDirection: 'column' }}>
+      {/* Main content — transparent so the aurora shows behind the panels */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'transparent', display: 'flex', flexDirection: 'column' }}>
         {activeSection === 'sterlingEngine' && (
           <SterlingEngineTab />
         )}

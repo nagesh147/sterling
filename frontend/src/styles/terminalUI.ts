@@ -34,6 +34,12 @@ export const c = {
   cyan:    'var(--t-cyan, var(--blue))',
   purple:  'var(--t-purple, var(--purple))',
   pink:    'var(--t-pink, var(--pink))',
+  /* Gemini brand gradient (chrome accents only — not trading data) */
+  brand:     'var(--brand)',
+  brand1:    'var(--brand-1)',
+  brand2:    'var(--brand-2)',
+  brand3:    'var(--brand-3)',
+  brandGrad: 'var(--brand-grad)',
 } as const;
 
 /* Translucent tint of any token color — replaces the old `var(--x)1c`
@@ -53,8 +59,9 @@ export function alpha(color: string, opacity: number): string {
 export const card: CSSProperties = {
   background: c.bg,
   border: `1px solid ${c.border}`,
-  borderRadius: 8,
+  borderRadius: 16,
   overflow: 'hidden',
+  boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
 };
 
 export const cardHead: CSSProperties = {
@@ -76,7 +83,7 @@ export const cardBody: CSSProperties = { padding: 16 };
 export const grpBox: CSSProperties = {
   background: c.surface,
   border: `1px solid ${c.border}`,
-  borderRadius: 6,
+  borderRadius: 14,
   padding: 12,
   display: 'flex',
   flexDirection: 'column',
@@ -110,8 +117,8 @@ export function chipStyle(on: boolean, tone: string = c.green): CSSProperties {
   return {
     fontSize: 10,
     fontWeight: on ? 700 : 500,
-    padding: '3px 8px',
-    borderRadius: 4,
+    padding: '3px 10px',
+    borderRadius: 999,
     cursor: 'pointer',
     fontFamily: 'inherit',
     border: `1px solid ${on ? tone : 'transparent'}`,
@@ -135,8 +142,9 @@ export const overlay: CSSProperties = {
 export const modal: CSSProperties = {
   background: c.surface,
   border: `1px solid ${c.border}`,
-  borderRadius: 8,
+  borderRadius: 24,
   padding: '22px 24px',
   maxHeight: '90vh',
   overflowY: 'auto',
+  boxShadow: '0 8px 40px rgba(0,0,0,0.40)',
 };
