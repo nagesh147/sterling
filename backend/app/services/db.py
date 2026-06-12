@@ -43,6 +43,24 @@ def _create_tables(conn: sqlite3.Connection) -> None:
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS kite_accounts (
+            id               TEXT PRIMARY KEY,
+            user_id          TEXT NOT NULL,
+            label            TEXT NOT NULL DEFAULT 'My Kite',
+            api_key          TEXT NOT NULL DEFAULT '',
+            api_secret_enc   TEXT NOT NULL DEFAULT '',
+            access_token_enc TEXT NOT NULL DEFAULT '',
+            public_token     TEXT NOT NULL DEFAULT '',
+            kite_user_id     TEXT NOT NULL DEFAULT '',
+            is_paper         INTEGER NOT NULL DEFAULT 1,
+            is_active        INTEGER NOT NULL DEFAULT 0,
+            last_login_at_ms INTEGER,
+            created_at_ms    INTEGER NOT NULL,
+            updated_at_ms    INTEGER NOT NULL
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_kite_accounts_user ON kite_accounts(user_id)")
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS webhooks (
             id               TEXT PRIMARY KEY,
             name             TEXT NOT NULL,

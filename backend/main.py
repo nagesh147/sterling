@@ -1295,6 +1295,8 @@ async def lifespan(app: FastAPI):
     configure_json_logging()  # no-op unless settings.log_json (Phase 2 observability)
     paper_store.bootstrap()
     exchange_account_store.bootstrap()
+    from app.services.exchanges.kite import accounts as _kite_accounts
+    _kite_accounts.bootstrap()
     _webhook_store_svc.bootstrap()
     _alert_store_bootstrap.bootstrap()
     _pnl_history_svc.bootstrap()
@@ -1705,6 +1707,10 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.sterling_engine import router as sterling_engine_router
     app.include_router(sterling_engine_router, prefix="/api/v1")
     
+    # Zerodha Kite (Indian markets) — multi-tenant manual console
+    from app.api.v1.endpoints.kite import router as kite_router
+    app.include_router(kite_router, prefix="/api/v1")
+
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream
     app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])

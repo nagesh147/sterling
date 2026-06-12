@@ -9,7 +9,7 @@
     "zerodha": {
       "adapter": "app.services.exchanges.adapters.zerodha:ZerodhaAdapter",
       "markets": ["equities", "commodities"],
-      "capabilities": ["equity", "futures"],
+      "capabilities": ["equity", "futures", "options", "order_placement", "gtt", "mutual_funds", "streaming"],
       "auth": "token"
     },
     "binance": {

@@ -19,6 +19,7 @@ import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard
 import { GrokTab } from '../components/GrokTab';
 import { SterlingV2Tab } from '../components/SterlingV2Tab';
 import { PaperResearchTab } from '../components/paper/PaperResearchTab';
+import { KiteTab } from '../components/kite/KiteTab';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
@@ -144,7 +145,7 @@ export function SimpleTerminal() {
   const [showLive, setShowLive] = useState(false);
   const sterlingV2 = useSterlingV2();
   const setSterlingV2 = useSetSterlingV2();
-  const [activeSection, setActiveSection] = useState<'sterlingEngine' | 'grok' | 'positions' | 'backtest' | 'sterling_v2' | 'paper'>('sterlingEngine');
+  const [activeSection, setActiveSection] = useState<'sterlingEngine' | 'grok' | 'positions' | 'backtest' | 'sterling_v2' | 'paper' | 'kite'>('sterlingEngine');
 
   return (
     <div className="term-root">
@@ -213,7 +214,8 @@ export function SimpleTerminal() {
             ['positions',   'POSITIONS'],
             ['backtest',    'BACKTEST'],
             ['paper',       'PAPER RESEARCH'],
-          ] as ['sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper', string][]).map(([id, label]) => (
+            ['kite',        'KITE'],
+          ] as ['sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper' | 'kite', string][]).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setActiveSection(id)}
@@ -304,6 +306,7 @@ export function SimpleTerminal() {
             <PaperResearchTab />
           </div>
         )}
+        {activeSection === 'kite' && <KiteTab />}
       </div>
 
       <StatusBar />

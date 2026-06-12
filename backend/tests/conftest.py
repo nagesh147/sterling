@@ -50,6 +50,7 @@ def reset_global_stores():
     from app.services import paper_store, eval_history, arrow_store
     from app.services import alert_store, pnl_history, webhook_store
     from app.services import exchange_account_store as eas
+    from app.services.exchanges.kite import accounts as kite_accounts
     import app.api.v1.endpoints.config as config_ep
     from app.engines.directional.regime_engine import _REGIME_CACHE
     from app.engines.directional.signal_engine import _SIGNAL_CACHE
@@ -67,6 +68,7 @@ def reset_global_stores():
     webhook_store._loaded = True
     eas._configs.clear()
     eas._loaded = False
+    kite_accounts.clear()
     config_ep._risk = _default_risk()
     _REGIME_CACHE.clear()
     _SIGNAL_CACHE.clear()
@@ -82,6 +84,7 @@ def reset_global_stores():
     webhook_store.clear()
     eas._configs.clear()
     eas._loaded = False
+    kite_accounts.clear()
     config_ep._risk = _default_risk()
     _REGIME_CACHE.clear()
     _SIGNAL_CACHE.clear()
