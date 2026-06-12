@@ -218,7 +218,11 @@ export function SimpleTerminal() {
               key={id}
               onClick={() => setActiveSection(id)}
               style={{
-                background: activeSection === id ? 'var(--brand-grad)' : 'none',
+                // gradient UNDERLINE only — use backgroundImage (longhand) so the
+                // `background` shorthand can't reset backgroundSize and fill the
+                // whole button (which rendered as a rectangular background).
+                backgroundColor: 'transparent',
+                backgroundImage: activeSection === id ? 'var(--brand-grad)' : 'none',
                 backgroundRepeat: 'no-repeat',
                 backgroundSize: '100% 2.5px',
                 backgroundPosition: '50% 100%',
