@@ -1588,7 +1588,8 @@ def _build_positions_event(now_ms: int) -> str:
 
 def _build_pnl_event(now_ms: int) -> str:
     """Build live PnL from paper_store + stream_last_prices — zero exchange calls."""
-    from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
+    from app.api.v1.endpoints.positions import (
+        _estimate_pnl, _dte_from_expiry, _funding_cost_usd, _theta_burn_usd)
     active = [p for p in _paper_store.list_positions() if p.status.value in ("open", "partially_closed")]
     closed = [p for p in _paper_store.list_positions() if p.status.value == "closed"]
     results = []
@@ -1618,6 +1619,22 @@ def _build_pnl_event(now_ms: int) -> str:
                 trail_state = _json.loads(pos.trail_stop_json)
             except Exception:
                 pass
+
+        # Funding (futures) + theta-burn (options) — the FE reads these from THIS
+        # SSE 'pnl' event (useLivePnl), not the /pnl-live REST endpoint, so they
+        # must be computed here too. Funding uses the system fallback rate
+        # (0.0001/8h — Delta India 404s the real one) so no exchange call is made.
+        _struct = pos.sized_trade.structure
+        _stype = (getattr(_struct, "structure_type", "") or "").lower()
+        _notional = pos.sized_trade.qty * (pos.entry_spot_price or 0.0)
+        _hours_held = max(0.0, (now_ms - pos.entry_timestamp_ms) / 3_600_000.0)
+        if _stype in ("futures", "spot", "perp"):
+            _funding_cost = _funding_cost_usd(0.0001, _notional, _hours_held)
+            _theta_burn = 0.0
+        else:
+            _funding_cost = 0.0
+            _theta_burn = _theta_burn_usd(_struct.legs, pos.sized_trade.contracts, current_dte)
+
         results.append({
             "position_id": pos.id,
             "underlying": pos.underlying,
@@ -1625,6 +1642,8 @@ def _build_pnl_event(now_ms: int) -> str:
             "current_spot": spot,
             "entry_spot": pos.entry_spot_price,
             "estimated_pnl_usd": pnl,
+            "funding_cost_usd": _funding_cost,
+            "expected_theta_burn_usd": _theta_burn,
             "realized_pnl_usd": None,
             "current_dte": current_dte,
             "max_risk_usd": pos.sized_trade.max_risk_usd,
