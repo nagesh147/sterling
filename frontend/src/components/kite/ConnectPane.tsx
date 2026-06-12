@@ -28,6 +28,24 @@ const badge = (col: string): React.CSSProperties => ({
   padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 700,
 });
 
+/** Map a known Kite/login error message to actionable guidance (null = unknown). */
+function kiteErrorHelp(msg: string): string | null {
+  const m = (msg || '').toLowerCase();
+  if (m.includes('not enabled for the app') || m.includes('user is not enabled')) {
+    return 'This comes from Zerodha, not Sterling. Sign in with the exact User ID that owns the Kite Connect app (+ TOTP). A subscription activated today can take ~15–30 min to enable login — wait, then retry. If it persists, raise a Kite Connect support ticket.';
+  }
+  if (m.includes('token') && (m.includes('invalid') || m.includes('expired') || m.includes('used'))) {
+    return 'request_tokens are single-use and expire within minutes. Open Kite Login again and paste a fresh token immediately.';
+  }
+  if (m.includes('checksum')) {
+    return 'Checksum mismatch — the API secret on this account does not match the app. Re-enter the secret via EDIT KEYS and retry.';
+  }
+  if (m.includes('api_key') || (m.includes('invalid') && m.includes('key'))) {
+    return 'The API key was rejected. Confirm it matches your active Kite Connect app’s key (EDIT KEYS).';
+  }
+  return null;
+}
+
 function StatusBanner() {
   const { data: s } = useKiteStatus();
   if (!s) return null;
@@ -88,6 +106,15 @@ function LoginFlow({ account }: { account: KiteAccount }) {
             </button>
             <span style={S.hint}>Log in on Kite, then copy the <code>request_token</code> from the redirect URL.</span>
           </div>
+          <details style={{ marginBottom: 10 }}>
+            <summary style={{ ...S.hint, cursor: 'pointer' }}>Kite says “user is not enabled for the app”?</summary>
+            <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.6 }}>
+              That error is from Zerodha, not Sterling — the API key is valid, but your login isn’t enabled for the app yet.
+              Sign in with the exact <strong>User ID that owns the Kite Connect app</strong> (+ TOTP). A subscription activated
+              today can take ~15–30 min to propagate — wait and retry in an incognito window. If it persists, raise a
+              Kite Connect support ticket at support.zerodha.com.
+            </div>
+          </details>
           <label style={S.label}>2 · PASTE request_token</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
@@ -100,7 +127,14 @@ function LoginFlow({ account }: { account: KiteAccount }) {
             </button>
           </div>
           {gen.isSuccess && <div style={S.ok}>✓ Session active{gen.data?.user_name ? ` — ${gen.data.user_name}` : ''}</div>}
-          {gen.error && <div style={S.err}>✗ {gen.error.message}</div>}
+          {gen.error && (
+            <div style={{ marginTop: 6 }}>
+              <div style={S.err}>✗ {gen.error.message}</div>
+              {kiteErrorHelp(gen.error.message) && (
+                <div style={{ ...S.hint, marginTop: 4, lineHeight: 1.6 }}>💡 {kiteErrorHelp(gen.error.message)}</div>
+              )}
+            </div>
+          )}
           {account.connected && (
             <button style={{ ...S.btnRed, marginTop: 10 }} onClick={() => logout.mutate()}>Log out</button>
           )}
