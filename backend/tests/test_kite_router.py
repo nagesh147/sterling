@@ -131,3 +131,36 @@ def test_ticker_subscribe_without_live_session(client):
     r = client.post("/api/v1/kite/ticker/subscribe", json={"instrument_tokens": [408065], "mode": "ltp"})
     assert r.status_code == 200
     assert r.json()["ok"] is False  # paper account → no live ticker
+
+
+def test_callback_success_connects_active_account(client, monkeypatch):
+    _add_account(client, paper=True)
+
+    async def fake_gen(self, request_token):
+        return {"access_token": "ATOK", "user_id": "ZID1", "user_name": "Trader"}
+    monkeypatch.setattr(KiteClient, "generate_session", fake_gen)
+
+    r = client.get("/api/v1/kite/callback?request_token=rt&action=login&status=success")
+    assert r.status_code == 200
+    assert "Connected" in r.text and "Trader" in r.text
+    assert client.get("/api/v1/kite/status").json()["connected"] is True
+
+
+def test_callback_missing_token_renders_error(client):
+    _add_account(client, paper=True)
+    r = client.get("/api/v1/kite/callback?status=success")
+    assert r.status_code == 400
+    assert "Missing request_token" in r.text
+
+
+def test_callback_no_active_account(client):
+    r = client.get("/api/v1/kite/callback?request_token=rt&status=success")
+    assert r.status_code == 400
+    assert "No active Kite account" in r.text
+
+
+def test_callback_status_not_success(client):
+    _add_account(client, paper=True)
+    r = client.get("/api/v1/kite/callback?status=cancelled")
+    assert r.status_code == 400
+    assert "Login failed" in r.text

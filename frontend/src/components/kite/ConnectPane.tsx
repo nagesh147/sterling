@@ -115,7 +115,11 @@ function LoginFlow({ account }: { account: KiteAccount }) {
               Kite Connect support ticket at support.zerodha.com.
             </div>
           </details>
-          <label style={S.label}>2 · PASTE request_token</label>
+          <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
+            ↪ Auto-connect: set your app’s <strong>Redirect URL</strong> to{' '}
+            <code>http://localhost:8000/api/v1/kite/callback</code> and login completes itself (no paste needed).
+          </div>
+          <label style={S.label}>2 · PASTE request_token (manual)</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
             <button

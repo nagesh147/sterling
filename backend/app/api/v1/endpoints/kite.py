@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 
 from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
@@ -158,6 +159,65 @@ async def create_session(body: GenerateSessionRequest,
         connected=True, kite_user_id=data.get("user_id"),
         user_name=data.get("user_name"), email=data.get("email"),
         login_time=data.get("login_time"),
+    )
+
+
+def _callback_page(title: str, message: str, ok: bool) -> HTMLResponse:
+    color = "#1DB981" if ok else "#F0455A"
+    icon = "✓" if ok else "✗"
+    html = f"""<!doctype html><html><head><meta charset="utf-8"/>
+<title>Sterling · Kite</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#131314;color:#E3E3E3;font-family:'Plus Jakarta Sans',system-ui,sans-serif}}
+  .card{{max-width:440px;padding:32px;border:1px solid #2D2F31;border-radius:16px;background:#1e1f20;text-align:center}}
+  .icon{{font-size:40px;color:{color}}}
+  h1{{font-size:18px;margin:12px 0 6px}}
+  p{{color:#8E918F;font-size:13px;line-height:1.6;margin:0}}
+</style></head><body><div class="card">
+  <div class="icon">{icon}</div><h1>{title}</h1><p>{message}</p>
+</div><script>setTimeout(function(){{try{{window.close();}}catch(e){{}}}}, 2500);</script></body></html>"""
+    return HTMLResponse(content=html, status_code=200 if ok else 400)
+
+
+@router.get("/callback", response_class=HTMLResponse)
+async def kite_callback(
+    request_token: str = "", status: str = "", action: str = "", uid: str = "default",
+) -> HTMLResponse:
+    """OAuth-style redirect target. Set this as the app's Redirect URL:
+    http://localhost:8000/api/v1/kite/callback  (append ?uid=<user> for multi-user).
+
+    Kite appends ?request_token=...&action=login&status=success after Authorize.
+    We exchange the token, persist the session for the user's active account, and
+    render a self-closing success page.
+    """
+    if status and status != "success":
+        return _callback_page("Login failed", f"Kite returned status='{status}'. Reopen the Kite login and retry.", ok=False)
+    if not request_token:
+        return _callback_page("Missing request_token", "No request_token in the callback URL — reopen the Kite login.", ok=False)
+    acct = kite_accounts.get_active(uid)
+    if not acct:
+        return _callback_page("No active Kite account", "Add your Kite API key & secret in the KITE tab first.", ok=False)
+    if not acct.api_key or not acct.api_secret:
+        return _callback_page("Credentials incomplete", "This account is missing its API key or secret.", ok=False)
+    client = kite_accounts.build_client(acct)
+    try:
+        data = await client.generate_session(request_token)
+    except Exception as exc:  # noqa: BLE001 — render any failure as a friendly page
+        return _callback_page("Could not connect", str(exc), ok=False)
+    finally:
+        await client.close()
+    kite_accounts.save_session(
+        uid, acct.id,
+        access_token=data.get("access_token", ""),
+        public_token=data.get("public_token", ""),
+        kite_user_id=data.get("user_id", ""),
+    )
+    name = data.get("user_name") or data.get("user_id") or ""
+    return _callback_page(
+        "Connected ✓",
+        f"Kite session active{(' for ' + name) if name else ''}. You can close this tab and return to Sterling.",
+        ok=True,
     )
 
 
