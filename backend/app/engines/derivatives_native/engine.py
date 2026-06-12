@@ -88,14 +88,23 @@ def _defined_risk_candidate(
         )
     if s is None:
         return None
-    # Projected theta-burn over the option's life: |net leg theta| × contracts ×
-    # DTE. Without this the options "θ burn" column showed 0 for candidate rows.
-    net_theta = sum((getattr(l, "theta", 0.0) or 0.0) for l in s.legs)
+    # Net position greeks = sum of each leg's greek signed by side (buy +,
+    # sell −). The native engine left these 0, so the options table showed 0
+    # for delta/gamma/theta/vega AND θ-burn on candidate rows.
+    def _net(greek: str) -> float:
+        return sum((getattr(l, greek, 0.0) or 0.0) * (1.0 if l.side == "buy" else -1.0)
+                   for l in s.legs)
+    net_delta = round(_net("delta"), 4)
+    net_gamma = round(_net("gamma"), 6)
+    net_theta = round(_net("theta"), 4)
+    net_vega = round(_net("vega"), 4)
     leg_dte = s.legs[0].dte if s.legs else 0
+    # θ-burn = net (post-offset) daily theta × contracts × DTE.
     theta_burn = round(abs(net_theta) * s.contracts * max(1, leg_dte), 2)
     return DerivativesCandidate(
         rank=0, instrument_type="options", underlying=signal.underlying,
         entry_price=signal.entry, direction=signal.direction,
+        delta=net_delta, gamma=net_gamma, theta=net_theta, vega=net_vega,
         contracts=s.contracts, leverage=1.0,
         notional_usd=round(s.contracts * signal.entry, 2),
         premium_usd=round(s.net_premium_usd, 2),

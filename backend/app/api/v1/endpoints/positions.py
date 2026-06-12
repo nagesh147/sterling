@@ -95,12 +95,14 @@ def _funding_cost_usd(funding_8h_pct: float, notional_usd: float,
 
 def _theta_burn_usd(legs, contracts: float, hold_days: float) -> float:
     """Projected net theta decay over the remaining hold for an option
-    structure: |sum(leg.theta)| × contracts × hold_days. Returns 0 for futures
-    (no legs / no option theta) — the candidate never computed this for the
-    native engine, so the options "θ burn" column was stored/shown as 0."""
+    structure: |net theta| × contracts × hold_days, where net theta sums each
+    leg's theta signed by side (buy +, sell −) so a spread's short leg offsets
+    the long leg. Returns 0 for futures (no legs / no option theta)."""
     if not legs or contracts <= 0 or hold_days <= 0:
         return 0.0
-    net_theta = sum((getattr(l, "theta", 0.0) or 0.0) for l in legs)
+    net_theta = sum((getattr(l, "theta", 0.0) or 0.0)
+                    * (1.0 if getattr(l, "side", "buy") == "buy" else -1.0)
+                    for l in legs)
     return round(abs(net_theta) * contracts * hold_days, 2)
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse

@@ -62,14 +62,15 @@ from app.schemas.market import OptionSummary
 from app.engines.derivatives_native.structures import build_delta_debit_vertical
 
 
-def _opt(strike, otype, delta, dte=21, bid=100.0, ask=104.0, oi=50.0, vol=20.0):
+def _opt(strike, otype, delta, dte=21, bid=100.0, ask=104.0, oi=50.0, vol=20.0,
+         theta=-5.0):
     mid = (bid + ask) / 2
     return OptionSummary(
         instrument_name=f"BTC-{otype}-{int(strike)}", underlying="BTC",
         strike=strike, expiry_date="2026-07-01", dte=dte, option_type=otype,
         bid=bid, ask=ask, mark_price=mid, mid_price=mid, mark_iv=0.5,
         delta=delta, open_interest=oi, volume_24h=vol, last_updated_ms=0,
-        gamma=0.0001, vega=10.0, theta=-5.0)
+        gamma=0.0001, vega=10.0, theta=theta)
 
 
 def _put_chain():
@@ -138,14 +139,18 @@ def test_futures_candidate_ignores_cramped_target_for_non_validated():
     assert cand.direction == "long"
 
 
-def test_defined_risk_candidate_sets_projected_theta_burn():
-    # options candidate must carry a non-zero projected theta-burn (the native
-    # engine previously left it 0, so the options "θ burn" column showed 0).
+def test_defined_risk_candidate_sets_theta_burn_and_greeks():
+    # options candidate must carry a non-zero projected theta-burn AND net greeks
+    # (the native engine previously left both 0, so those columns showed 0).
+    # Legs have different theta (nearer-ATM long decays faster than the OTM short),
+    # so the side-signed net theta is non-zero.
     prof = get_profile("directional")
     cand = _defined_risk_candidate(
         signal=_sig(direction="short"), market=_mkt(spot=58000.0), profile=prof,
-        chain=[_opt(58000, "put", -0.60, bid=300, ask=304),
-               _opt(55000, "put", -0.35, bid=100, ask=104)],
+        chain=[_opt(58000, "put", -0.60, bid=300, ask=304, theta=-8.0),
+               _opt(55000, "put", -0.35, bid=100, ask=104, theta=-3.0)],
         sources={"directional_options"})
     assert cand is not None
     assert cand.projected_theta_burn_usd > 0
+    assert cand.theta != 0.0          # net greeks now populated
+    assert cand.delta != 0.0
