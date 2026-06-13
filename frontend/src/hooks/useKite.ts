@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import type {
-  KiteAccount, KiteAccountList, KiteInstrumentSearch, KitePosition, KiteSessionResult,
+  KiteAccount, KiteAccountList, KiteInstrumentSearch, KiteSessionResult,
   KiteStatus, KiteTickerStatus, PlaceGttBody, PlaceOrderBody, WatchItem,
 } from '../types/kite';
 
@@ -116,7 +116,7 @@ export function useKiteHoldings(enabled = true) {
 }
 
 export function useKitePositions(enabled = true) {
-  return useQuery<{ positions: KitePosition[] }>({
+  return useQuery<{ net: any[]; day: any[] }>({
     queryKey: ['kite-positions'],
     queryFn: () => api.get(`${K}/positions`),
     enabled,

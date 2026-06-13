@@ -315,8 +315,10 @@ async def holdings(user: UserContext = Depends(get_current_user)):
 
 @router.get("/positions")
 async def positions(user: UserContext = Depends(get_current_user)):
-    snap = await _run(user, lambda c: c.get_positions())
-    return {"positions": [p.model_dump() for p in snap]}
+    # Raw {net, day} — carries exchange, product, instrument_token + full P&L,
+    # which the UI needs for display and position conversion.
+    raw = await _run(user, lambda c: c.get_positions_raw())
+    return {"net": raw.get("net", []), "day": raw.get("day", [])}
 
 
 @router.put("/positions/convert")

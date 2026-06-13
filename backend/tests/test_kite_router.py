@@ -110,7 +110,16 @@ def test_place_order_blocked_by_kill_switch(client):
 def test_paper_holdings_and_positions_empty(client):
     _add_account(client, paper=True)
     assert client.get("/api/v1/kite/holdings").json() == []
-    assert client.get("/api/v1/kite/positions").json() == {"positions": []}
+    assert client.get("/api/v1/kite/positions").json() == {"net": [], "day": []}
+
+
+def test_convert_position_paper(client):
+    _add_account(client, paper=True)
+    r = client.put("/api/v1/kite/positions/convert", json={
+        "tradingsymbol": "INFY", "exchange": "NSE", "transaction_type": "BUY",
+        "position_type": "day", "quantity": 1, "old_product": "MIS", "new_product": "CNC",
+    })
+    assert r.status_code == 200  # paper → simulated convert
 
 
 def test_instruments_search(client, monkeypatch):
