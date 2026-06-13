@@ -39,6 +39,30 @@ async def test_search_matches_symbol_and_name():
     assert any(r["tradingsymbol"] == "INFY" for r in by_name)
 
 
+async def test_universal_search_option_strike_multitoken():
+    # "NIFTY 25000 CE" must find the option by name + strike + type across the full dump
+    c, _ = _cache()
+    res = await c.search("NIFTY 25000 CE", exchange="")
+    assert any(r["tradingsymbol"] == "NIFTY25JAN25000CE" for r in res)
+    # token-AND: a strike that isn't present yields nothing
+    assert await c.search("NIFTY 26000 CE", exchange="") == []
+
+
+async def test_universal_search_ranks_equity_before_options():
+    csv = (
+        "instrument_token,tradingsymbol,name,strike,instrument_type,segment,exchange\n"
+        "408065,INFY,INFOSYS,0,EQ,NSE,NSE\n"
+        "111,INFY25JAN1600CE,INFY,1600,CE,NFO-OPT,NFO\n"
+    )
+
+    async def fetch(ex):
+        return csv
+    c = InstrumentCache(fetch)
+    res = await c.search("INFY", exchange="")
+    # both match; the exact-symbol equity (shorter) ranks above the option strike
+    assert res[0]["tradingsymbol"] == "INFY"
+
+
 async def test_resolve_token_exact():
     c, _ = _cache()
     assert await c.resolve_token("INFY", "NSE") == 408065

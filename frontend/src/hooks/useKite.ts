@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import type {
   KiteAccount, KiteAccountList, KiteInstrumentSearch, KitePosition, KiteSessionResult,
-  KiteStatus, KiteTickerStatus, PlaceGttBody, PlaceOrderBody,
+  KiteStatus, KiteTickerStatus, PlaceGttBody, PlaceOrderBody, WatchItem,
 } from '../types/kite';
 
 const K = '/api/v1/kite';
@@ -176,13 +177,32 @@ export function useDeleteKiteGtt() {
 }
 
 // ─── Market data ──────────────────────────────────────────────────────────────
-export function useKiteInstrumentSearch(query: string, exchange: string) {
+// Universal search across all segments (equities, futures, options incl. strikes,
+// indices, currencies, commodities) — like the Zerodha Kite app search box.
+export function useKiteInstrumentSearch(query: string) {
   return useQuery<KiteInstrumentSearch>({
-    queryKey: ['kite-instruments', exchange, query],
-    queryFn: () => api.get<KiteInstrumentSearch>(`${K}/instruments?exchange=${exchange}&query=${encodeURIComponent(query)}&limit=40`),
+    queryKey: ['kite-instruments', query],
+    queryFn: () => api.get<KiteInstrumentSearch>(`${K}/instruments?query=${encodeURIComponent(query)}&limit=50`),
     enabled: query.trim().length >= 2,
     staleTime: 60_000,
   });
+}
+
+// Persisted market watchlist (localStorage → survives pane switches + refresh).
+const WATCH_KEY = 'sterling.kite.watchlist.v1';
+
+export function useKiteWatchlist() {
+  const [items, setItems] = useState<WatchItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem(WATCH_KEY) || '[]'); } catch { return []; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(WATCH_KEY, JSON.stringify(items)); } catch { /* quota — ignore */ }
+  }, [items]);
+  const add = (it: WatchItem) =>
+    setItems((p) => (p.some((x) => x.symbol === it.symbol) ? p : [...p, it]));
+  const remove = (symbol: string) => setItems((p) => p.filter((x) => x.symbol !== symbol));
+  const clear = () => setItems([]);
+  return { items, add, remove, clear };
 }
 
 export function useKiteLtp(symbols: string[], enabled = true) {

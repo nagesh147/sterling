@@ -58,6 +58,13 @@ export interface KiteInstrumentSearch {
   instruments: KiteInstrument[];
 }
 
+export interface WatchItem {
+  symbol: string;   // EXCHANGE:TRADINGSYMBOL (LTP key)
+  token: number;
+  name: string;
+  sub?: string;     // short descriptor (e.g. "NFO · CE 25000")
+}
+
 export interface KitePosition {
   symbol: string;
   underlying: string;

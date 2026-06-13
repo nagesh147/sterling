@@ -277,8 +277,9 @@ async def margins(segment: Optional[str] = None, user: UserContext = Depends(get
 
 # ─── Market data ──────────────────────────────────────────────────────────────
 @router.get("/instruments")
-async def instruments(exchange: str = K.EXCHANGE_NFO, query: str = "", limit: int = 50,
+async def instruments(exchange: str = "", query: str = "", limit: int = 50,
                       user: UserContext = Depends(get_current_user)):
+    """Universal search by default (exchange="" → all segments incl. option strikes)."""
     rows = await _run(user, lambda c: c.search_instruments(query, exchange, limit))
     return {"exchange": exchange, "query": query, "count": len(rows), "instruments": rows}
 

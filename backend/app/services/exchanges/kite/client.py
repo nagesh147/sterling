@@ -216,7 +216,8 @@ class KiteClient(TradingExchangeAdapter):
         resp.raise_for_status()
         return resp.text
 
-    async def search_instruments(self, query: str, exchange: str = K.EXCHANGE_NFO, limit: int = 50) -> List[dict]:
+    async def search_instruments(self, query: str, exchange: str = "", limit: int = 50) -> List[dict]:
+        """exchange="" → universal search across the full instruments dump."""
         return await self._instruments.search(query, exchange, limit)
 
     async def resolve_token(self, tradingsymbol: str, exchange: str = K.EXCHANGE_NFO) -> int:

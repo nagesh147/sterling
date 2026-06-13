@@ -66,21 +66,50 @@ class InstrumentCache:
         self._cache_ts[key] = now
         return rows
 
-    async def search(self, query: str, exchange: str = "NFO", limit: int = 50) -> List[dict]:
-        """Case-insensitive substring match on tradingsymbol / name."""
+    @staticmethod
+    def _strike_str(strike) -> str:
+        try:
+            f = float(strike)
+        except (TypeError, ValueError):
+            return ""
+        if f <= 0:
+            return ""
+        return str(int(f)) if f.is_integer() else str(f)
+
+    async def search(self, query: str, exchange: str = "", limit: int = 50) -> List[dict]:
+        """Kite-style universal instrument search.
+
+        ``exchange=""`` searches the full dump (all segments — equities, futures,
+        options, indices, currencies, commodities). The query is whitespace-tokenized
+        and ALL tokens must appear in the instrument's searchable text
+        (tradingsymbol + name + strike + exchange + segment), so
+        ``"nifty 24000 ce"`` matches ``NFO:NIFTY24D2624000CE``. Results are ranked:
+        exact tradingsymbol → prefix match → shorter symbol (equities/indices float
+        above the option flood) → alphabetical.
+        """
         q = (query or "").strip().upper()
         rows = await self.load(exchange)
         if not q:
             return rows[:limit]
-        out: List[dict] = []
+        tokens = q.split()
+        first = tokens[0]
+        scored = []
         for r in rows:
             ts = str(r.get("tradingsymbol", "")).upper()
             nm = str(r.get("name", "")).upper()
-            if q in ts or q in nm:
-                out.append(r)
-                if len(out) >= limit:
-                    break
-        return out
+            seg = str(r.get("segment", "")).upper()
+            exch = str(r.get("exchange", "")).upper()
+            hay = f"{ts} {nm} {self._strike_str(r.get('strike'))} {exch} {seg}"
+            if all(tok in hay for tok in tokens):
+                rank = (
+                    0 if ts == q else 1,
+                    0 if (ts.startswith(first) or nm.startswith(first)) else 1,
+                    len(ts),
+                    ts,
+                )
+                scored.append((rank, r))
+        scored.sort(key=lambda x: x[0])
+        return [r for _, r in scored[:limit]]
 
     async def resolve_token(self, tradingsymbol: str, exchange: str = "NFO") -> int:
         """Exact tradingsymbol → instrument_token (int). Raises if not found."""
