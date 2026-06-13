@@ -325,6 +325,47 @@ async def convert_position(body: ConvertPositionRequest, user: UserContext = Dep
     return await _run(user, lambda c: c.convert_position(**body.model_dump()))
 
 
+@router.get("/watchlist/sync")
+async def watchlist_sync(user: UserContext = Depends(get_current_user)):
+    """Build a watchlist from the user's Kite account.
+
+    NOTE: Kite Connect has no saved-marketwatch (MW1–MW5) endpoint, so we sync the
+    instruments actually present in the account — holdings, open positions, and
+    GTT-referenced instruments — deduped into watchlist items.
+    """
+    async def _do(c):
+        items: dict = {}
+
+        def put(exchange, tsym, token, source):
+            if not exchange or not tsym:
+                return
+            sym = f"{exchange}:{tsym}"
+            if sym not in items:
+                items[sym] = {"symbol": sym, "token": int(token or 0), "name": tsym,
+                              "sub": f"{exchange} · {source}", "source": source}
+
+        for h in (await c.get_holdings() or []):
+            put(h.get("exchange"), h.get("tradingsymbol"), h.get("instrument_token"), "holding")
+        pos = await c.get_positions_raw()
+        for p in (pos.get("net") or []):
+            if int(p.get("quantity") or 0) != 0:
+                put(p.get("exchange"), p.get("tradingsymbol"), p.get("instrument_token"), "position")
+        for g in (await c.get_gtts() or []):
+            cond = g.get("condition") or {}
+            put(cond.get("exchange"), cond.get("tradingsymbol"), cond.get("instrument_token"), "gtt")
+        return items
+
+    items = await _run(user, _do)
+    vals = list(items.values())
+    sources: dict = {}
+    for v in vals:
+        sources[v["source"]] = sources.get(v["source"], 0) + 1
+    return {
+        "items": vals, "count": len(vals), "sources": sources,
+        "note": "Kite Connect has no saved-marketwatch endpoint; synced from holdings, positions and GTTs.",
+    }
+
+
 # ─── Orders ───────────────────────────────────────────────────────────────────
 @router.get("/orders")
 async def orders(user: UserContext = Depends(get_current_user)):

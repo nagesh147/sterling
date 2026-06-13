@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { c as t, tint } from '../../styles/terminalUI';
-import { useKiteInstrumentSearch, useKiteLtp, useKiteWatchlist } from '../../hooks/useKite';
+import { useKiteInstrumentSearch, useKiteLtp, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 
 const S: Record<string, React.CSSProperties> = {
@@ -50,6 +50,7 @@ export function MarketWatchPane() {
   const [query, setQuery] = useState('');
   const search = useKiteInstrumentSearch(query);
   const { items: watch, add, remove } = useKiteWatchlist();
+  const sync = useSyncKiteWatchlist();
 
   const symbols = useMemo(() => watch.map((w) => w.symbol), [watch]);
   const { data: ltp } = useKiteLtp(symbols, symbols.length > 0);
@@ -111,9 +112,26 @@ export function MarketWatchPane() {
       <div style={S.card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={S.title}>WATCHLIST · LIVE LTP</div>
-          {watch.length > 0 && <span style={S.hint}>{watch.length} saved</span>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              style={{ ...pill(t.blue), cursor: 'pointer', fontFamily: 'inherit', padding: '4px 10px', fontSize: 10 }}
+              disabled={sync.isPending}
+              title="Add your Kite holdings, positions & GTT instruments to the watchlist (needs a connected live session)"
+              onClick={() => sync.mutate(undefined, { onSuccess: (d) => d.items.forEach(add) })}
+            >
+              {sync.isPending ? 'Syncing…' : '⟳ Sync from Kite'}
+            </button>
+            {watch.length > 0 && <span style={S.hint}>{watch.length} saved</span>}
+          </div>
         </div>
-        {watch.length === 0 && <div style={S.hint}>Search above and click a result to add it. Your watchlist is saved automatically.</div>}
+        {sync.isSuccess && (
+          <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.6 }}>
+            ✓ Synced {sync.data.count} from your account
+            {sync.data.count > 0 && ` (${Object.entries(sync.data.sources).map(([k, v]) => `${v} ${k}`).join(', ')})`}. {sync.data.note}
+          </div>
+        )}
+        {sync.isError && <div style={{ color: t.red, fontSize: 11, marginTop: 6 }}>✗ {sync.error.message}</div>}
+        {watch.length === 0 && <div style={S.hint}>Search above and click a result to add it, or ⟳ Sync from Kite. Your watchlist is saved automatically.</div>}
         {watch.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>

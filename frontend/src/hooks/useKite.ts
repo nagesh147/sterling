@@ -188,6 +188,21 @@ export function useKiteInstrumentSearch(query: string) {
   });
 }
 
+// Sync watchlist from the Kite account (holdings + positions + GTT instruments).
+// Kite Connect has no saved-marketwatch endpoint, so this is the account-derived set.
+export interface KiteWatchlistSync {
+  items: WatchItem[];
+  count: number;
+  sources: Record<string, number>;
+  note: string;
+}
+
+export function useSyncKiteWatchlist() {
+  return useMutation<KiteWatchlistSync, Error, void>({
+    mutationFn: () => api.get<KiteWatchlistSync>(`${K}/watchlist/sync`),
+  });
+}
+
 // Persisted market watchlist (localStorage → survives pane switches + refresh).
 const WATCH_KEY = 'sterling.kite.watchlist.v1';
 

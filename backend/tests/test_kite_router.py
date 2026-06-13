@@ -164,3 +164,34 @@ def test_callback_status_not_success(client):
     r = client.get("/api/v1/kite/callback?status=cancelled")
     assert r.status_code == 400
     assert "Login failed" in r.text
+
+
+def test_watchlist_sync_aggregates_account_instruments(client, monkeypatch):
+    _add_account(client, paper=True)
+
+    async def fake_holdings(self):
+        return [{"exchange": "NSE", "tradingsymbol": "INFY", "instrument_token": 408065}]
+
+    async def fake_positions(self):
+        return {"net": [{"exchange": "NFO", "tradingsymbol": "NIFTY25JAN25000CE",
+                         "instrument_token": 111, "quantity": 50}]}
+
+    async def fake_gtts(self):
+        return [{"condition": {"exchange": "NSE", "tradingsymbol": "TCS", "instrument_token": 222}}]
+
+    monkeypatch.setattr(KiteClient, "get_holdings", fake_holdings)
+    monkeypatch.setattr(KiteClient, "get_positions_raw", fake_positions)
+    monkeypatch.setattr(KiteClient, "get_gtts", fake_gtts)
+
+    r = client.get("/api/v1/kite/watchlist/sync")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["count"] == 3
+    syms = {i["symbol"] for i in d["items"]}
+    assert syms == {"NSE:INFY", "NFO:NIFTY25JAN25000CE", "NSE:TCS"}
+    assert d["sources"] == {"holding": 1, "position": 1, "gtt": 1}
+
+
+def test_watchlist_sync_requires_active_account(client):
+    r = client.get("/api/v1/kite/watchlist/sync")
+    assert r.status_code == 409

@@ -477,6 +477,13 @@ class KiteClient(TradingExchangeAdapter):
             return []
         return await self._auth_get("/portfolio/holdings") or []
 
+    async def get_positions_raw(self) -> dict:
+        """Raw {net, day} positions (keeps exchange + instrument_token, unlike the
+        mapped get_positions)."""
+        if self._is_paper:
+            return {"net": [], "day": []}
+        return await self._auth_get("/portfolio/positions") or {"net": [], "day": []}
+
     async def convert_position(self, **fields) -> dict:
         if self._is_paper:
             return {"status": "paper"}
