@@ -63,6 +63,16 @@ TXN_SELL = "SELL"
 GTT_TYPE_SINGLE = "single"
 GTT_TYPE_OCO = "two-leg"
 
+# Alerts (native Kite Connect Alerts API)
+ALERT_TYPE_SIMPLE = "simple"   # price/attribute threshold → notification
+ALERT_TYPE_ATO = "ato"         # alert-triggered order (carries a basket)
+ALERT_TYPES = (ALERT_TYPE_SIMPLE, ALERT_TYPE_ATO)
+ALERT_OPERATORS = ("<=", ">=", "<", ">", "==")
+ALERT_STATUS_ENABLED = "enabled"
+ALERT_STATUS_DISABLED = "disabled"
+# Common LHS attributes the UI exposes (Kite supports more on the quote object)
+ALERT_ATTR_LTP = "LastTradedPrice"
+
 # Position conversion / GTT statuses we treat as "open"
 OPEN_ORDER_STATUSES = ("OPEN", "TRIGGER PENDING", "AMO REQ RECEIVED", "MODIFY PENDING")
 

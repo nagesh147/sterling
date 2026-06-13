@@ -44,6 +44,7 @@ class _Account:
     api_key: str = ""
     api_secret_enc: str = ""
     access_token_enc: str = ""
+    refresh_token_enc: str = ""
     public_token: str = ""
     kite_user_id: str = ""
     is_paper: bool = True
@@ -60,6 +61,10 @@ class _Account:
     @property
     def access_token(self) -> str:
         return decrypt(self.access_token_enc)
+
+    @property
+    def refresh_token(self) -> str:
+        return decrypt(self.refresh_token_enc)
 
     @property
     def has_credentials(self) -> bool:
@@ -90,6 +95,7 @@ def _init_table() -> None:
                     api_key          TEXT NOT NULL DEFAULT '',
                     api_secret_enc   TEXT NOT NULL DEFAULT '',
                     access_token_enc TEXT NOT NULL DEFAULT '',
+                    refresh_token_enc TEXT NOT NULL DEFAULT '',
                     public_token     TEXT NOT NULL DEFAULT '',
                     kite_user_id     TEXT NOT NULL DEFAULT '',
                     is_paper         INTEGER NOT NULL DEFAULT 1,
@@ -100,6 +106,11 @@ def _init_table() -> None:
                 )
             """)
             c.execute("CREATE INDEX IF NOT EXISTS ix_kite_accounts_user ON kite_accounts(user_id)")
+            # Idempotent migration for DBs created before refresh_token persistence.
+            try:
+                c.execute("ALTER TABLE kite_accounts ADD COLUMN refresh_token_enc TEXT NOT NULL DEFAULT ''")
+            except Exception:
+                pass  # column already exists
     except Exception as exc:
         log.warning("kite_accounts table init failed: %s", exc)
 
@@ -113,13 +124,13 @@ def _persist(a: _Account) -> None:
             c.execute("""
                 INSERT OR REPLACE INTO kite_accounts
                     (id, user_id, label, api_key, api_secret_enc, access_token_enc,
-                     public_token, kite_user_id, is_paper, is_active, last_login_at_ms,
-                     created_at_ms, updated_at_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     refresh_token_enc, public_token, kite_user_id, is_paper, is_active,
+                     last_login_at_ms, created_at_ms, updated_at_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 a.id, a.user_id, a.label, a.api_key, a.api_secret_enc, a.access_token_enc,
-                a.public_token, a.kite_user_id, int(a.is_paper), int(a.is_active),
-                a.last_login_at_ms, a.created_at_ms, a.updated_at_ms,
+                a.refresh_token_enc, a.public_token, a.kite_user_id, int(a.is_paper),
+                int(a.is_active), a.last_login_at_ms, a.created_at_ms, a.updated_at_ms,
             ))
     except Exception as exc:
         log.warning("kite_accounts persist failed for %s: %s", a.id, exc)
@@ -148,6 +159,7 @@ def _load_from_db() -> List[_Account]:
             out.append(_Account(
                 id=r["id"], user_id=r["user_id"], label=r["label"], api_key=r["api_key"],
                 api_secret_enc=r["api_secret_enc"], access_token_enc=r["access_token_enc"],
+                refresh_token_enc=(r["refresh_token_enc"] if "refresh_token_enc" in r.keys() else ""),
                 public_token=r["public_token"], kite_user_id=r["kite_user_id"],
                 is_paper=bool(r["is_paper"]), is_active=bool(r["is_active"]),
                 last_login_at_ms=r["last_login_at_ms"],
@@ -241,12 +253,28 @@ def get_active(user_id: str) -> Optional[_Account]:
     return next((a for a in _accounts.values() if a.user_id == user_id and a.is_active), None)
 
 
+def find_by_kite_user_id(kite_user_id: str) -> Optional[_Account]:
+    """Resolve a Zerodha user id (carried in order postbacks) → stored account.
+
+    Order postbacks identify the trader by their Kite ``user_id``, not our app
+    ``user_id``; this maps it back so the update can be routed to the right tenant.
+    """
+    if not kite_user_id:
+        return None
+    return next((a for a in _accounts.values() if a.kite_user_id == kite_user_id), None)
+
+
 def save_session(user_id: str, account_id: str, *, access_token: str,
-                 public_token: str = "", kite_user_id: str = "") -> Optional[_Account]:
+                 refresh_token: str = "", public_token: str = "",
+                 kite_user_id: str = "") -> Optional[_Account]:
     a = get(user_id, account_id)
     if not a:
         return None
     a.access_token_enc = encrypt(access_token)
+    # Keep the existing refresh_token if the caller didn't supply a new one (a
+    # token refresh may not return one); only re-encrypt when present.
+    if refresh_token:
+        a.refresh_token_enc = encrypt(refresh_token)
     a.public_token = public_token
     a.kite_user_id = kite_user_id or a.kite_user_id
     a.last_login_at_ms = _now_ms()

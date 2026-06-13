@@ -8,7 +8,8 @@ import { TradingModeSelector } from '../components/TradingModeSelector';
 import { SimpleSettingsDrawer, AlgoToggle, AIGatekeeperToggle } from '../components/SimpleSettings';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import LiveControlPanel from '../components/LiveControlPanel';
-import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying } from '../store/useStore';
+import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying, useTabOrder, useSetTabOrder } from '../store/useStore';
+import type { TabId } from '../store/useStore';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
@@ -20,6 +21,7 @@ import { GrokTab } from '../components/GrokTab';
 import { SterlingV2Tab } from '../components/SterlingV2Tab';
 import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { KiteTab } from '../components/kite/KiteTab';
+import { KiteTicker } from '../components/kite/KiteTicker';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
@@ -145,7 +147,20 @@ export function SimpleTerminal() {
   const [showLive, setShowLive] = useState(false);
   const sterlingV2 = useSterlingV2();
   const setSterlingV2 = useSetSterlingV2();
-  const [activeSection, setActiveSection] = useState<'sterlingEngine' | 'grok' | 'positions' | 'backtest' | 'sterling_v2' | 'paper' | 'kite'>('sterlingEngine');
+  const tabOrder = useTabOrder();
+  const setTabOrder = useSetTabOrder();
+  const [activeSection, setActiveSection] = useState<TabId>(tabOrder[0]);
+  const [dragId, setDragId] = useState<TabId | null>(null);
+
+  const TAB_LABELS: Record<TabId, string> = {
+    sterlingEngine: 'STERLING ENGINE',
+    grok: 'GROK ENGINE',
+    sterling_v2: 'STERLING V2',
+    positions: 'POSITIONS',
+    backtest: 'BACKTEST',
+    paper: 'PAPER RESEARCH',
+    kite: 'KITE',
+  };
 
   return (
     <div className="term-root">
@@ -207,31 +222,45 @@ export function SimpleTerminal() {
           padding: '0 20px',
           borderTop: '1px solid var(--t-border)',
         }}>
-          {([
-            ['sterlingEngine',    'STERLING ENGINE'],
-            ['grok',        'GROK ENGINE'],
-            ['sterling_v2', 'STERLING V2'],
-            ['positions',   'POSITIONS'],
-            ['backtest',    'BACKTEST'],
-            ['paper',       'PAPER RESEARCH'],
-            ['kite',        'KITE'],
-          ] as ['sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper' | 'kite', string][]).map(([id, label]) => (
+          {tabOrder.map((id) => (
             <button
               key={id}
+              draggable
+              onDragStart={(e) => {
+                setDragId(id);
+                e.dataTransfer.effectAllowed = 'move';
+                (e.currentTarget as HTMLElement).style.opacity = '0.5';
+              }}
+              onDragEnd={(e) => {
+                setDragId(null);
+                (e.currentTarget as HTMLElement).style.opacity = '1';
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (!dragId || dragId === id) return;
+                const fromIdx = tabOrder.indexOf(dragId);
+                const toIdx = tabOrder.indexOf(id);
+                const next = [...tabOrder];
+                next.splice(fromIdx, 1);
+                next.splice(toIdx, 0, dragId);
+                setTabOrder(next);
+              }}
               onClick={() => setActiveSection(id)}
               style={{
-                // gradient UNDERLINE only — use backgroundImage (longhand) so the
-                // `background` shorthand can't reset backgroundSize and fill the
-                // whole button (which rendered as a rectangular background).
                 backgroundColor: 'transparent',
                 backgroundImage: activeSection === id ? 'var(--brand-grad)' : 'none',
                 backgroundRepeat: 'no-repeat',
                 backgroundSize: '100% 2.5px',
                 backgroundPosition: '50% 100%',
-                border: 'none',
+                border: dragId === id ? '1px dashed var(--t-bright)44' : 'none',
+                borderRadius: 3,
                 color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
                 padding: '9px 14px',
-                cursor: 'pointer',
+                cursor: 'grab',
                 fontFamily: 'inherit',
                 fontSize: 11,
                 fontWeight: activeSection === id ? 700 : 400,
@@ -240,7 +269,7 @@ export function SimpleTerminal() {
                 transition: 'color .15s ease',
               }}
             >
-              {label}
+              {TAB_LABELS[id]}
             </button>
           ))}
           <div style={{ flex: 1 }} />
@@ -270,7 +299,7 @@ export function SimpleTerminal() {
       </div>
 
       {/* ── Ticker strip ─────────────────────────────────────────────── */}
-      <TickerStrip />
+      {activeSection === 'kite' ? <KiteTicker /> : <TickerStrip />}
 
       {/* Main content — transparent so the aurora shows behind the panels */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'transparent', display: 'flex', flexDirection: 'column' }}>

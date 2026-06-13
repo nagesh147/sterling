@@ -49,6 +49,26 @@ function loadZoom(): number {
   catch { return 1; }
 }
 
+const TAB_ORDER_KEY = 'sterling_tab_order';
+const DEFAULT_TAB_ORDER: TabId[] = ['sterlingEngine', 'grok', 'sterling_v2', 'positions', 'backtest', 'paper', 'kite'];
+export type TabId = 'sterlingEngine' | 'grok' | 'sterling_v2' | 'positions' | 'backtest' | 'paper' | 'kite';
+
+function loadTabOrder(): TabId[] {
+  try {
+    const raw = localStorage.getItem(TAB_ORDER_KEY);
+    if (!raw) return DEFAULT_TAB_ORDER;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length !== DEFAULT_TAB_ORDER.length) return DEFAULT_TAB_ORDER;
+    const valid = new Set(DEFAULT_TAB_ORDER);
+    if (parsed.every((id: unknown) => typeof id === 'string' && valid.has(id as TabId))) {
+      return parsed as TabId[];
+    }
+    return DEFAULT_TAB_ORDER;
+  } catch {
+    return DEFAULT_TAB_ORDER;
+  }
+}
+
 interface StoreState {
   selectedUnderlying: string;
   setSelectedUnderlying: (u: string) => void;
@@ -67,6 +87,8 @@ interface StoreState {
   setSterlingV2: (on: boolean) => void;
   zoomLevel: number;
   setZoomLevel: (z: number) => void;
+  tabOrder: TabId[];
+  setTabOrder: (order: TabId[]) => void;
   resetUI: () => void;
 }
 
@@ -115,6 +137,11 @@ export const useStore = create<StoreState>((set) => ({
     document.documentElement.style.setProperty('--app-zoom', clamped.toString());
     set({ zoomLevel: clamped });
   },
+  tabOrder: loadTabOrder(),
+  setTabOrder: (order) => {
+    try { localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(order)); } catch { /* ignore */ }
+    set({ tabOrder: order });
+  },
   resetUI: () => {
     try {
       localStorage.setItem(ZOOM_KEY, '1');
@@ -122,7 +149,7 @@ export const useStore = create<StoreState>((set) => ({
     } catch { /* ignore */ }
     document.documentElement.setAttribute('data-theme', 'dark');
     document.documentElement.style.setProperty('--app-zoom', '1');
-    set({ zoomLevel: 1, theme: 'dark' });
+    set({ zoomLevel: 1, theme: 'dark', tabOrder: DEFAULT_TAB_ORDER });
   },
 }));
 
@@ -160,3 +187,6 @@ export const useSetEngineMode = () => useStore((s) => s.setEngineMode);
 
 export const useSterlingV2 = () => useStore((s) => s.sterlingV2);
 export const useSetSterlingV2 = () => useStore((s) => s.setSterlingV2);
+
+export const useTabOrder = () => useStore((s) => s.tabOrder);
+export const useSetTabOrder = () => useStore((s) => s.setTabOrder);

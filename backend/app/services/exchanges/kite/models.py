@@ -62,6 +62,13 @@ class GenerateSessionRequest(BaseModel):
     account_id: Optional[str] = None      # default: active account for the user
 
 
+class RefreshSessionRequest(BaseModel):
+    """Renew the access_token from a refresh_token (no full re-login). When
+    ``refresh_token`` is omitted, the one captured at login is used."""
+    refresh_token: Optional[str] = None
+    account_id: Optional[str] = None
+
+
 class KiteSessionResult(BaseModel):
     connected: bool
     kite_user_id: Optional[str] = None
@@ -125,6 +132,72 @@ class PlaceGttRequest(BaseModel):
     last_price: float                       # current LTP (required by Kite)
     trigger_values: List[float]             # [t] for single, [lower, upper] for OCO
     orders: List[GttLeg]
+
+
+class HoldingAuthLeg(BaseModel):
+    isin: str
+    quantity: Optional[float] = None
+
+
+class InitiateHoldingsAuthRequest(BaseModel):
+    """Optional ISIN/quantity scoping for CDSL holdings authorisation (eDIS).
+    Empty list = blanket authorisation of all holdings."""
+    instruments: List[HoldingAuthLeg] = Field(default_factory=list)
+
+
+# ─── Mutual fund SIPs ───────────────────────────────────────────────────────
+class PlaceMfSipRequest(BaseModel):
+    tradingsymbol: str                      # fund ISIN / Kite MF symbol
+    amount: float
+    instalments: int = -1                   # -1 = until cancelled
+    frequency: str = "monthly"              # weekly | monthly | quarterly
+    initial_amount: Optional[float] = None  # optional one-time first purchase
+
+
+class ModifyMfSipRequest(BaseModel):
+    amount: Optional[float] = None
+    frequency: Optional[str] = None
+    instalments: Optional[int] = None
+    instalment_day: Optional[int] = None
+    status: Optional[str] = None            # active | paused (pause/resume)
+
+
+# ─── Alerts (native Kite Connect Alerts API) ────────────────────────────────
+class CreateAlertRequest(BaseModel):
+    name: str
+    lhs_exchange: str = K.EXCHANGE_NSE
+    lhs_tradingsymbol: str
+    lhs_attribute: str = K.ALERT_ATTR_LTP   # e.g. LastTradedPrice
+    operator: str = ">="                    # <= >= < > ==
+    rhs_constant: Optional[float] = None     # threshold (rhs_type=constant)
+    alert_type: str = K.ALERT_TYPE_SIMPLE   # simple | ato
+    rhs_type: str = "constant"              # constant | instrument
+    rhs_exchange: Optional[str] = None
+    rhs_tradingsymbol: Optional[str] = None
+    rhs_attribute: Optional[str] = None
+    basket: Optional[List[dict]] = None     # order legs for an ATO alert
+
+
+class ModifyAlertRequest(BaseModel):
+    name: Optional[str] = None
+    lhs_exchange: Optional[str] = None
+    lhs_tradingsymbol: Optional[str] = None
+    lhs_attribute: Optional[str] = None
+    operator: Optional[str] = None
+    rhs_constant: Optional[float] = None
+    alert_type: Optional[str] = Field(default=None, alias="type")
+    rhs_type: Optional[str] = None
+    rhs_exchange: Optional[str] = None
+    rhs_tradingsymbol: Optional[str] = None
+    rhs_attribute: Optional[str] = None
+    basket: Optional[List[dict]] = None
+    status: Optional[str] = None            # enabled | disabled
+
+    model_config = {"populate_by_name": True}
+
+
+class DeleteAlertsRequest(BaseModel):
+    uuids: List[str]
 
 
 class ConvertPositionRequest(BaseModel):

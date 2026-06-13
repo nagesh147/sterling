@@ -115,3 +115,30 @@ async def test_on_message_updates_cache_and_invokes_callback():
     # 1-byte heartbeat is ignored
     await t._on_message(b"\n")
     assert len(received) == 1
+
+
+async def test_text_order_update_invokes_order_callback():
+    import json
+    orders = []
+
+    async def on_order(payload):
+        orders.append(payload)
+
+    t = KiteTicker("ak", "tok", on_order_update=on_order)
+    frame = json.dumps({"type": "order", "data": {"order_id": "ORD1", "status": "COMPLETE"}})
+    await t._on_message(frame)
+    assert orders and orders[0]["order_id"] == "ORD1"
+    assert orders[0]["status"] == "COMPLETE"
+
+
+async def test_text_non_order_frames_ignored():
+    orders = []
+
+    async def on_order(payload):
+        orders.append(payload)
+
+    t = KiteTicker("ak", "tok", on_order_update=on_order)
+    import json
+    await t._on_message(json.dumps({"type": "message", "data": "market open"}))
+    await t._on_message("not json at all")
+    assert orders == []

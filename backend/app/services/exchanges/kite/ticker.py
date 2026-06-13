@@ -26,6 +26,7 @@ from . import constants as K
 log = get_logger(__name__)
 
 OnTicks = Callable[[List[dict]], Awaitable[None]]
+OnOrderUpdate = Callable[[dict], Awaitable[None]]
 
 
 # ─── Pure binary decoding ─────────────────────────────────────────────────────
@@ -133,10 +134,12 @@ def msg_mode(mode: str, tokens: List[int]) -> str:
 
 # ─── Connection manager ───────────────────────────────────────────────────────
 class KiteTicker:
-    def __init__(self, api_key: str, access_token: str, on_ticks: Optional[OnTicks] = None) -> None:
+    def __init__(self, api_key: str, access_token: str, on_ticks: Optional[OnTicks] = None,
+                 on_order_update: Optional[OnOrderUpdate] = None) -> None:
         self._api_key = api_key
         self._access_token = access_token
         self._on_ticks = on_ticks
+        self._on_order_update = on_order_update
         self._subscribed: Dict[int, str] = {}   # token -> mode
         self._ticks: Dict[int, dict] = {}        # latest tick per token
         self._active = False
@@ -246,4 +249,21 @@ class KiteTicker:
                     await self._on_ticks(ticks)
                 except Exception as exc:
                     log.debug("KiteTicker on_ticks callback error: %s", exc)
-        # text frames are postbacks/order updates — ignored for the price feed
+            return
+        # Text frames carry order/trade postbacks + server messages. Kite sends
+        # ``{"type": "order", "data": {...}}`` on every order-state change — fan it
+        # out so the UI updates fills/cancels live (no second public socket).
+        await self._handle_text_frame(raw)
+
+    async def _handle_text_frame(self, raw) -> None:
+        if not self._on_order_update:
+            return
+        try:
+            msg = json.loads(raw)
+        except (ValueError, TypeError):
+            return
+        if isinstance(msg, dict) and msg.get("type") == "order" and isinstance(msg.get("data"), dict):
+            try:
+                await self._on_order_update(msg["data"])
+            except Exception as exc:
+                log.debug("KiteTicker on_order_update callback error: %s", exc)

@@ -12,6 +12,7 @@ live KiteTicker tick stream (over the shared /stream/ws socket).
 """
 from __future__ import annotations
 
+import hashlib
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -26,10 +27,12 @@ from app.services.exchanges.kite import session as kite_session
 from app.services.exchanges.kite import ticker_manager
 from app.services.exchanges.kite.errors import KiteError, KiteTokenError
 from app.services.exchanges.kite.models import (
-    ConvertPositionRequest, GenerateSessionRequest, KiteAccountCreate,
+    ConvertPositionRequest, CreateAlertRequest, DeleteAlertsRequest,
+    GenerateSessionRequest, InitiateHoldingsAuthRequest, KiteAccountCreate,
     KiteAccountListResponse, KiteAccountResponse, KiteAccountUpdate, KiteSessionResult,
-    KiteStatus, LoginUrlResponse, ModifyOrderRequest, OkResponse, PlaceGttRequest,
-    PlaceOrderRequest, TickerSubscribeRequest,
+    KiteStatus, LoginUrlResponse, ModifyAlertRequest, ModifyMfSipRequest,
+    ModifyOrderRequest, OkResponse, PlaceGttRequest, PlaceMfSipRequest,
+    PlaceOrderRequest, RefreshSessionRequest, TickerSubscribeRequest,
 )
 
 log = get_logger(__name__)
@@ -152,6 +155,43 @@ async def create_session(body: GenerateSessionRequest,
     kite_accounts.save_session(
         user.user_id, acct.id,
         access_token=data.get("access_token", ""),
+        refresh_token=data.get("refresh_token", ""),
+        public_token=data.get("public_token", ""),
+        kite_user_id=data.get("user_id", ""),
+    )
+    return KiteSessionResult(
+        connected=True, kite_user_id=data.get("user_id"),
+        user_name=data.get("user_name"), email=data.get("email"),
+        login_time=data.get("login_time"),
+    )
+
+
+@router.post("/session/refresh", response_model=KiteSessionResult)
+async def refresh_session(body: RefreshSessionRequest,
+                         user: UserContext = Depends(get_current_user)) -> KiteSessionResult:
+    """Renew the access_token from a refresh_token (skips the full login redirect)."""
+    acct = (kite_accounts.get(user.user_id, body.account_id) if body.account_id
+            else kite_accounts.get_active(user.user_id))
+    if not acct:
+        raise HTTPException(404, "Kite account not found")
+    if not acct.api_key or not acct.api_secret:
+        raise HTTPException(400, "API key and secret are required to refresh a session.")
+    refresh_token = body.refresh_token or acct.refresh_token
+    if not refresh_token:
+        raise HTTPException(400, "No refresh_token — provide one, or log in again to capture it.")
+    client = kite_accounts.build_client(acct)
+    try:
+        data = await client.renew_access_token(refresh_token)
+    except KiteError as exc:
+        raise HTTPException(401, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(502, str(exc))
+    finally:
+        await client.close()
+    kite_accounts.save_session(
+        user.user_id, acct.id,
+        access_token=data.get("access_token", ""),
+        refresh_token=data.get("refresh_token", ""),  # Kite may rotate it
         public_token=data.get("public_token", ""),
         kite_user_id=data.get("user_id", ""),
     )
@@ -210,6 +250,7 @@ async def kite_callback(
     kite_accounts.save_session(
         uid, acct.id,
         access_token=data.get("access_token", ""),
+        refresh_token=data.get("refresh_token", ""),
         public_token=data.get("public_token", ""),
         kite_user_id=data.get("user_id", ""),
     )
@@ -324,6 +365,28 @@ async def positions(user: UserContext = Depends(get_current_user)):
 @router.put("/positions/convert")
 async def convert_position(body: ConvertPositionRequest, user: UserContext = Depends(get_current_user)):
     return await _run(user, lambda c: c.convert_position(**body.model_dump()))
+
+
+@router.get("/auctions")
+async def auctions(user: UserContext = Depends(get_current_user)):
+    """Instruments currently up for auction that the account can bid on."""
+    return await _run(user, lambda c: c.get_auctions())
+
+
+@router.post("/holdings/authorise")
+async def authorise_holdings(body: InitiateHoldingsAuthRequest,
+                             user: UserContext = Depends(get_current_user)):
+    """Begin CDSL holdings authorisation (eDIS). Returns a ``request_id`` plus a
+    ready-to-open consent URL the UI redirects to so the user can enter their TPIN."""
+    acct = _require_active(user)
+    instruments = [leg.model_dump(exclude_none=True) for leg in body.instruments]
+    data = await _run(user, lambda c: c.initiate_holdings_auth(instruments))
+    request_id = (data or {}).get("request_id", "")
+    authorise_url = (
+        f"https://kite.zerodha.com/connect/portfolio/authorise/holdings/"
+        f"{acct.api_key}/{request_id}" if request_id else ""
+    )
+    return {"request_id": request_id, "authorise_url": authorise_url}
 
 
 @router.get("/watchlist/sync")
@@ -518,9 +581,105 @@ async def place_mf_order(tradingsymbol: str, transaction_type: str,
         amount=amount, quantity=quantity))
 
 
+@router.get("/mf/orders/{order_id}")
+async def mf_order_detail(order_id: str, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.get_mf_order(order_id))
+
+
 @router.delete("/mf/orders/{order_id}")
 async def cancel_mf_order(order_id: str, user: UserContext = Depends(get_current_user)):
     return await _run(user, lambda c: c.cancel_mf_order(order_id))
+
+
+@router.get("/mf/instruments")
+async def mf_instruments(query: str = "", limit: int = 50,
+                         user: UserContext = Depends(get_current_user)):
+    """Search the mutual-fund scheme master (by symbol/name/AMC)."""
+    rows = await _run(user, lambda c: c.search_mf_instruments(query, limit))
+    return {"query": query, "count": len(rows), "instruments": rows}
+
+
+@router.post("/mf/sips")
+async def place_mf_sip(body: PlaceMfSipRequest, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.place_mf_sip(
+        tradingsymbol=body.tradingsymbol, amount=body.amount,
+        instalments=body.instalments, frequency=body.frequency,
+        initial_amount=body.initial_amount))
+
+
+@router.get("/mf/sips/{sip_id}")
+async def mf_sip_detail(sip_id: str, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.get_mf_sip(sip_id))
+
+
+@router.put("/mf/sips/{sip_id}")
+async def modify_mf_sip(sip_id: str, body: ModifyMfSipRequest,
+                        user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.modify_mf_sip(sip_id, **body.model_dump(exclude_none=True)))
+
+
+@router.delete("/mf/sips/{sip_id}")
+async def cancel_mf_sip(sip_id: str, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.cancel_mf_sip(sip_id))
+
+
+# ─── Alerts (native Kite Connect Alerts API) ──────────────────────────────────
+@router.get("/alerts")
+async def list_alerts(user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.get_alerts())
+
+
+@router.post("/alerts")
+async def create_alert(body: CreateAlertRequest, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.create_alert(**body.model_dump()))
+
+
+@router.get("/alerts/{uuid}")
+async def get_alert(uuid: str, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.get_alert(uuid))
+
+
+@router.get("/alerts/{uuid}/history")
+async def alert_history(uuid: str, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.get_alert_history(uuid))
+
+
+@router.put("/alerts/{uuid}")
+async def modify_alert(uuid: str, body: ModifyAlertRequest, user: UserContext = Depends(get_current_user)):
+    fields = body.model_dump(by_alias=True, exclude_none=True)
+    return await _run(user, lambda c: c.modify_alert(uuid, **fields))
+
+
+@router.delete("/alerts")
+async def delete_alerts(body: DeleteAlertsRequest, user: UserContext = Depends(get_current_user)):
+    return await _run(user, lambda c: c.delete_alerts(body.uuids))
+
+
+# ─── Order postback webhook (server-to-server push) ───────────────────────────
+@router.post("/postback")
+async def order_postback(payload: dict = Body(...)):
+    """Receiver for Kite order postbacks (set as the Postback URL in the Kite dev
+    console). Unauthenticated by design — Kite signs each payload with
+    ``sha256(order_id + order_timestamp + api_secret)``. We resolve the trader by
+    their Kite ``user_id``, verify the checksum against that account's secret, and
+    fan the update out on the user's ``kite_orders`` stream channel. Always 200s so
+    Kite does not retry-storm."""
+    kite_user_id = str(payload.get("user_id") or "")
+    acct = kite_accounts.find_by_kite_user_id(kite_user_id)
+    if not acct:
+        return {"ok": True, "routed": False, "reason": "unknown user"}
+    checksum = payload.get("checksum")
+    if checksum:
+        expected = hashlib.sha256(
+            f"{payload.get('order_id','')}{payload.get('order_timestamp','')}{acct.api_secret}".encode()
+        ).hexdigest()
+        if checksum != expected:
+            return {"ok": True, "routed": False, "reason": "checksum mismatch"}
+    try:
+        await ticker_manager.broadcast_order_update(acct.user_id, payload)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("postback broadcast failed: %s", exc)
+    return {"ok": True, "routed": True}
 
 
 # ─── Live ticks (KiteTicker) ──────────────────────────────────────────────────

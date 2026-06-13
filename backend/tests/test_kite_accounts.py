@@ -85,3 +85,21 @@ def test_build_client_carries_decrypted_creds():
     assert client._api_key == "apikey123"
     assert client._api_secret == "topsecret"
     assert client._access_token == "ATOK"
+
+
+def test_save_session_persists_refresh_token():
+    a = _create()
+    accounts.save_session("u1", a.id, access_token="ATOK", refresh_token="RTOK", kite_user_id="ZID1")
+    got = accounts.get("u1", a.id)
+    assert got.refresh_token == "RTOK"          # decrypts
+    assert got.refresh_token_enc != "RTOK"      # stored encrypted
+
+
+def test_find_by_kite_user_id_routes_postbacks():
+    a = _create(user="u1")
+    accounts.save_session("u1", a.id, access_token="ATOK", kite_user_id="ZID1")
+    found = accounts.find_by_kite_user_id("ZID1")
+    assert found is not None
+    assert found.user_id == "u1"
+    assert found.id == a.id
+    assert accounts.find_by_kite_user_id("UNKNOWN") is None

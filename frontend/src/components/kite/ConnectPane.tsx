@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { c as t, tint } from '../../styles/terminalUI';
 import {
   useActivateKiteAccount, useAddKiteAccount, useDeleteKiteAccount, useGenerateKiteSession,
-  useKiteAccounts, useKiteLoginUrl, useKiteLogout, useKiteMargins, useKiteStatus,
+  useKiteAccounts, useKiteBasketMargins, useKiteLoginUrl, useKiteLogout, useKiteOrderCharges,
+  useKiteOrderMargins, useKiteMargins, useKiteStatus, useKiteTickerStatus,
+  useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
 import type { KiteAccount } from '../../types/kite';
@@ -88,6 +90,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
   const { data: lu } = useKiteLoginUrl(account.has_credentials);
   const gen = useGenerateKiteSession();
   const logout = useKiteLogout();
+  const refresh = useRefreshKiteSession();
   const [reqToken, setReqToken] = useState('');
 
   return (
@@ -140,7 +143,19 @@ function LoginFlow({ account }: { account: KiteAccount }) {
             </div>
           )}
           {account.connected && (
-            <button style={{ ...S.btnRed, marginTop: 10 }} onClick={() => logout.mutate()}>Log out</button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                style={S.btn}
+                onClick={() => refresh.mutate({ account_id: account.id })}
+                disabled={refresh.isPending}
+                title="Renew the access token from the stored refresh token — no re-login needed"
+              >
+                {refresh.isPending ? 'Refreshing…' : '↻ Refresh session'}
+              </button>
+              <button style={S.btnRed} onClick={() => logout.mutate()}>Log out</button>
+              {refresh.isSuccess && <span style={S.ok}>✓ Renewed</span>}
+              {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
+            </div>
           )}
         </>
       )}
@@ -237,6 +252,112 @@ function AddAccount() {
   );
 }
 
+function MarginCalc() {
+  const orderMargin = useKiteOrderMargins();
+  const basketMargin = useKiteBasketMargins();
+  const orderCharges = useKiteOrderCharges();
+  const [json, setJson] = useState('[{"exchange":"NSE","tradingsymbol":"INFY","transaction_type":"BUY","quantity":1,"order_type":"MARKET","product":"MIS"}]');
+  const [method, setMethod] = useState<'order' | 'basket' | 'charges'>('order');
+  const [considerPos, setConsiderPos] = useState(false);
+  const [latched, setLatched] = useState<any>(null);
+
+  const calc = () => {
+    let orders: any[];
+    try { orders = JSON.parse(json); } catch { return; }
+    if (method === 'order') orderMargin.mutate(orders, { onSuccess: setLatched });
+    else if (method === 'basket') basketMargin.mutate({ orders, consider_positions: considerPos }, { onSuccess: setLatched });
+    else orderCharges.mutate(orders, { onSuccess: setLatched });
+  };
+
+  const result = (method === 'order' ? orderMargin : method === 'basket' ? basketMargin : orderCharges);
+  const label = method === 'order' ? 'ORDER MARGIN' : method === 'basket' ? 'BASKET MARGIN' : 'CHARGES';
+
+  return (
+    <div style={S.card}>
+      <div style={S.title}>MARGIN & CHARGES CALCULATOR</div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        {(['order', 'basket', 'charges'] as const).map((m) => (
+          <button key={m} style={{ ...S.btn, background: method === m ? tint(t.blue, 20) : S.btn.background, color: method === m ? t.blue : S.btn.color }} onClick={() => setMethod(m)}>
+            {m === 'order' ? 'Order Margin' : m === 'basket' ? 'Basket Margin' : 'Charges'}
+          </button>
+        ))}
+        {method === 'basket' && (
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 11, color: t.dim }}>
+            <input type="checkbox" checked={considerPos} onChange={(e) => setConsiderPos(e.target.checked)} /> Consider positions
+          </label>
+        )}
+      </div>
+      <textarea
+        style={{ background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: 10, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, width: '100%', boxSizing: 'border-box' as const, minHeight: 100, resize: 'vertical' }}
+        value={json}
+        onChange={(e) => setJson(e.target.value)}
+        rows={5}
+      />
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+        <button style={S.btnGreen} onClick={calc} disabled={result.isPending}>{result.isPending ? '…' : `CALCULATE ${label}`}</button>
+        {result.error && <span style={S.err}>✗ {result.error.message}</span>}
+      </div>
+      {latched && (
+        <pre style={{ background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: 10, marginTop: 10, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', overflow: 'auto', maxHeight: 300 }}>
+          {JSON.stringify(latched, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function TickerControl() {
+  const { data: ts } = useKiteTickerStatus(true);
+  const sub = useKiteTickerSubscribe();
+  const unsub = useKiteTickerUnsubscribe();
+  const [tokens, setTokens] = useState('');
+  const [mode, setMode] = useState('quote');
+
+  return (
+    <div style={S.card}>
+      <div style={S.title}>WEBSOCKET TICKER</div>
+      {ts && (
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? t.green : ts.active ? t.amber : t.red, fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
+          <div><span style={S.label}>Subscribed</span><span style={{ color: t.bright }}>{ts.subscribed?.length ?? 0} tokens</span></div>
+          <div><span style={S.label}>Ticks</span><span style={{ color: t.bright }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div>
+          <label style={S.label}>Tokens (comma-separated)</label>
+          <input style={{ ...S.input, width: 260 }} value={tokens} onChange={(e) => setTokens(e.target.value)} placeholder="408065, 356865, 1270529" />
+        </div>
+        <div>
+          <label style={S.label}>Mode</label>
+          <select style={S.input} value={mode} onChange={(e) => setMode(e.target.value)}>
+            {['ltp', 'quote', 'full'].map((m) => <option key={m}>{m}</option>)}
+          </select>
+        </div>
+        <button
+          style={S.btnGreen}
+          onClick={() => sub.mutate({
+            instrument_tokens: tokens.split(',').map(Number).filter((n) => !isNaN(n)),
+            mode,
+          })}
+          disabled={sub.isPending}
+        >SUBSCRIBE</button>
+        <button
+          style={S.btnRed}
+          onClick={() => unsub.mutate({
+            instrument_tokens: tokens.split(',').map(Number).filter((n) => !isNaN(n)),
+          })}
+          disabled={unsub.isPending}
+        >UNSUBSCRIBE</button>
+      </div>
+      {sub.isSuccess && <div style={S.ok}>✓ Subscribed {sub.data?.count ?? sub.data?.subscribed?.length ?? '—'} tokens</div>}
+      {sub.error && <div style={S.err}>✗ {sub.error.message}</div>}
+      {unsub.isSuccess && <div style={S.ok}>✓ Unsubscribed</div>}
+      {unsub.error && <div style={S.err}>✗ {unsub.error.message}</div>}
+    </div>
+  );
+}
+
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const active = data?.accounts.find((a) => a.is_active);
@@ -245,6 +366,8 @@ export function ConnectPane() {
       <StatusBanner />
       {active && <LoginFlow account={active} />}
       {active?.connected && !active.is_paper && <Funds />}
+      {active?.connected && !active.is_paper && <MarginCalc />}
+      {active?.connected && !active.is_paper && <TickerControl />}
       <div style={S.card}>
         <div style={S.title}>KITE ACCOUNTS</div>
         {isLoading && <div style={S.hint}>Loading…</div>}

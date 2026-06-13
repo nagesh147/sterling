@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { c as t, tint } from '../../styles/terminalUI';
 import {
-  useCancelKiteOrder, useKiteOrders, useKiteTrades, useModifyKiteOrder, usePlaceKiteOrder,
+  useCancelKiteOrder, useKiteOrderHistory, useKiteOrderTrades,
+  useKiteOrders, useKiteTrades, useModifyKiteOrder, usePlaceKiteOrder,
 } from '../../hooks/useKite';
 import type { PlaceOrderBody } from '../../types/kite';
+import { GttPane } from './GttPane';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -34,7 +36,11 @@ function OrderRow({ o }: { o: any }) {
   const [edit, setEdit] = useState(false);
   const [qty, setQty] = useState(String(o.quantity ?? ''));
   const [price, setPrice] = useState(String(o.price ?? ''));
+  const [detail, setDetail] = useState<'history' | 'trades' | null>(null);
   const isOpen = OPEN.includes(o.status);
+
+  const history = useKiteOrderHistory(detail === 'history' ? o.order_id : null);
+  const orderTrades = useKiteOrderTrades(detail === 'trades' ? o.order_id : null);
 
   return (
     <>
@@ -46,10 +52,68 @@ function OrderRow({ o }: { o: any }) {
         <td style={{ ...S.td, textAlign: 'right' }}>{Number(o.price ?? 0).toFixed(2)}</td>
         <td style={{ ...S.td, color: t.dim }}>{o.status}{o.status_message ? ` · ${o.status_message}` : ''}</td>
         <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          <span style={{ ...S.link, color: t.blue, marginRight: 8 }} onClick={() => setDetail(detail === 'history' ? null : 'history')}>hist</span>
+          <span style={{ ...S.link, color: t.cyan, marginRight: 8 }} onClick={() => setDetail(detail === 'trades' ? null : 'trades')}>fills</span>
           {isOpen && <span style={{ ...S.link, color: t.blue, marginRight: 8 }} onClick={() => setEdit(!edit)}>{edit ? 'close' : 'modify'}</span>}
           {isOpen && <span style={{ ...S.link, color: t.red }} onClick={() => cancel.mutate({ id: o.order_id, variety: o.variety || 'regular' })}>cancel</span>}
         </td>
       </tr>
+      {detail === 'history' && (
+        <tr>
+          <td colSpan={7} style={{ background: tint(t.blue, 5) }}>
+            <div style={{ padding: 8, fontSize: 11 }}>
+              <div style={{ ...S.label, marginBottom: 4 }}>STATUS HISTORY</div>
+              {history.isLoading && <span style={S.hint}>Loading…</span>}
+              {history.error && <span style={{ color: t.red }}>✗ {(history.error as Error).message}</span>}
+              {history.data && (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>
+                    <th style={{ ...S.th, fontSize: 9 }}>Time</th><th style={{ ...S.th, fontSize: 9 }}>Status</th><th style={{ ...S.th, fontSize: 9 }}>Message</th>
+                  </tr></thead>
+                  <tbody>
+                    {history.data.map((h: any, i: number) => (
+                      <tr key={i}>
+                        <td style={{ ...S.td, fontSize: 10, color: t.dim }}>{h.order_timestamp}</td>
+                        <td style={{ ...S.td, fontSize: 10 }}>{h.status}</td>
+                        <td style={{ ...S.td, fontSize: 10, color: t.dim }}>{h.status_message || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+      {detail === 'trades' && (
+        <tr>
+          <td colSpan={7} style={{ background: tint(t.cyan, 5) }}>
+            <div style={{ padding: 8, fontSize: 11 }}>
+              <div style={{ ...S.label, marginBottom: 4 }}>FILLS FOR {o.order_id}</div>
+              {orderTrades.isLoading && <span style={S.hint}>Loading…</span>}
+              {orderTrades.error && <span style={{ color: t.red }}>✗ {(orderTrades.error as Error).message}</span>}
+              {orderTrades.data && orderTrades.data.length > 0 && (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>
+                    <th style={{ ...S.th, fontSize: 9 }}>Time</th><th style={{ ...S.th, fontSize: 9, textAlign: 'right' }}>Qty</th><th style={{ ...S.th, fontSize: 9, textAlign: 'right' }}>Price</th><th style={{ ...S.th, fontSize: 9 }}>Trade ID</th>
+                  </tr></thead>
+                  <tbody>
+                    {orderTrades.data.map((tr: any, i: number) => (
+                      <tr key={tr.trade_id || i}>
+                        <td style={{ ...S.td, fontSize: 10, color: t.dim }}>{tr.fill_timestamp || tr.exchange_timestamp || ''}</td>
+                        <td style={{ ...S.td, fontSize: 10, textAlign: 'right' }}>{tr.quantity}</td>
+                        <td style={{ ...S.td, fontSize: 10, textAlign: 'right' }}>{Number(tr.average_price ?? tr.price ?? 0).toFixed(2)}</td>
+                        <td style={{ ...S.td, fontSize: 10, color: t.dim }}>{tr.trade_id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {orderTrades.data && orderTrades.data.length === 0 && <span style={S.hint}>No fills yet.</span>}
+            </div>
+          </td>
+        </tr>
+      )}
       {edit && (
         <tr>
           <td style={{ ...S.td, background: tint(t.blue, 5) }} colSpan={7}>
@@ -76,6 +140,81 @@ function OrderRow({ o }: { o: any }) {
 }
 
 export function OrdersPane() {
+  const [tab, setTab] = useState('orders');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', gap: 32, marginBottom: 24, borderBottom: `1px solid ${t.border}` }}>
+        {['orders', 'gtt', 'baskets', 'sip', 'alerts', 'ipo', 'auctions'].map(tName => (
+          <div
+            key={tName}
+            onClick={() => setTab(tName)}
+            style={{
+              paddingBottom: 12,
+              cursor: 'pointer',
+              color: tab === tName ? '#FF5722' : t.dim,
+              borderBottom: tab === tName ? '2px solid #FF5722' : '2px solid transparent',
+              textTransform: 'capitalize',
+              fontSize: 13,
+              fontWeight: tab === tName ? 500 : 400,
+            }}
+          >
+            {tName.toUpperCase()}
+          </div>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {tab === 'orders' && <OrdersSubPane />}
+        {tab === 'gtt' && <GttPane />}
+        {tab === 'ipo' && <IpoPane />}
+        {tab !== 'orders' && tab !== 'gtt' && tab !== 'ipo' && (
+           <div style={{ padding: 48, textAlign: 'center', color: t.dim }}>
+             <div style={{ fontSize: 24, marginBottom: 16 }}>🚧</div>
+             <div>{tab.toUpperCase()} feature not implemented yet.</div>
+           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IpoPane() {
+  return (
+    <div style={{ padding: '24px 32px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 400, color: t.bright, margin: 0 }}>IPO</h2>
+        <a href="#" style={{ color: '#4184f3', fontSize: 13, textDecoration: 'none' }}>IPO history</a>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', marginBottom: 48 }}>
+        <thead><tr>
+          <th style={{ color: t.dim, fontSize: 12, fontWeight: 500, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>Company</th>
+          <th style={{ color: t.dim, fontSize: 12, fontWeight: 500, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>Open</th>
+          <th style={{ color: t.dim, fontSize: 12, fontWeight: 500, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}>Close</th>
+          <th style={{ color: t.dim, fontSize: 12, fontWeight: 500, padding: '8px 0', borderBottom: `1px solid ${t.border}`, textAlign: 'right' }}>Min qty.</th>
+          <th style={{ color: t.dim, fontSize: 12, fontWeight: 500, padding: '8px 0', borderBottom: `1px solid ${t.border}`, textAlign: 'right' }}>Price band</th>
+          <th style={{ color: t.dim, fontSize: 12, fontWeight: 500, padding: '8px 0', borderBottom: `1px solid ${t.border}` }}></th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td colSpan={6} style={{ textAlign: 'center', padding: '64px 0', color: t.dim }}>
+              <div style={{ marginBottom: 16 }}>
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="3" y1="9" x2="21" y2="9" />
+                  <line x1="9" y1="21" x2="9" y2="9" />
+                </svg>
+              </div>
+              <div style={{ fontSize: 16, marginBottom: 8, color: t.bright }}>No ongoing IPOs</div>
+              <div style={{ fontSize: 13 }}>There are no active IPOs to apply for right now.</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OrdersSubPane() {
   const place = usePlaceKiteOrder();
   const { data: orders } = useKiteOrders(true);
   const { data: trades } = useKiteTrades(true);

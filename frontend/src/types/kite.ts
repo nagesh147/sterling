@@ -115,3 +115,106 @@ export interface KiteTickerStatus {
   subscribed: number[];
   tick_count: number;
 }
+
+// ─── Mutual fund SIPs + instruments ──────────────────────────────────────────
+export interface PlaceMfSipBody {
+  tradingsymbol: string;
+  amount: number;
+  instalments: number;          // -1 = until cancelled
+  frequency: string;            // weekly | monthly | quarterly
+  initial_amount?: number | null;
+}
+
+export interface ModifyMfSipBody {
+  amount?: number;
+  frequency?: string;
+  instalments?: number;
+  status?: string;              // active | paused
+}
+
+export interface MfInstrument {
+  tradingsymbol: string;
+  name?: string;
+  amc?: string;
+  scheme_type?: string;
+  plan?: string;
+  last_price?: number;
+  minimum_purchase_amount?: number;
+  purchase_amount_multiplier?: number;
+}
+
+export interface MfInstrumentSearch {
+  query: string;
+  count: number;
+  instruments: MfInstrument[];
+}
+
+// ─── Native Kite alerts ──────────────────────────────────────────────────────
+export interface KiteAlert {
+  uuid: string;
+  name: string;
+  status?: string;              // enabled | disabled
+  type?: string;                // simple | ato
+  user_id?: string;
+  lhs_attribute?: string;
+  lhs_exchange?: string;
+  lhs_tradingsymbol?: string;
+  operator?: string;
+  rhs_type?: string;
+  rhs_constant?: number;
+  rhs_exchange?: string;
+  rhs_tradingsymbol?: string;
+  rhs_attribute?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AtoOrderLeg {
+  exchange: string;
+  tradingsymbol: string;
+  transaction_type: 'BUY' | 'SELL';
+  quantity: number;
+  order_type: string;           // MARKET | LIMIT | SL | SL-M
+  product: string;              // MIS | CNC | NRML
+  price?: number;
+}
+
+export interface CreateAlertBody {
+  name: string;
+  lhs_exchange: string;
+  lhs_tradingsymbol: string;
+  lhs_attribute?: string;
+  operator: string;             // <= >= < > ==
+  rhs_constant: number;
+  alert_type?: string;          // simple | ato
+  rhs_type?: string;            // constant | instrument
+  basket?: AtoOrderLeg[];       // orders fired when an ATO alert triggers
+}
+
+export interface KiteAlertHistoryRow {
+  uuid?: string;
+  type?: string;
+  meta?: unknown;
+  order_id?: string;
+  created_at?: string;
+}
+
+// ─── Holdings authorisation (CDSL eDIS) ──────────────────────────────────────
+export interface HoldingsAuthResult {
+  request_id: string;
+  authorise_url: string;
+}
+
+// ─── Live order postback (over the stream WS) ────────────────────────────────
+export interface KiteOrderUpdate {
+  order_id?: string;
+  status?: string;
+  tradingsymbol?: string;
+  exchange?: string;
+  transaction_type?: string;
+  quantity?: number;
+  filled_quantity?: number;
+  average_price?: number;
+  order_timestamp?: string;
+  [k: string]: unknown;
+}

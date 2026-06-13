@@ -34,6 +34,27 @@ def _make_broadcaster(user_id: str):
     return _broadcast
 
 
+def _make_order_broadcaster(user_id: str):
+    async def _broadcast(order: dict) -> None:
+        try:
+            from app.api.v1.endpoints.stream import stream_manager
+            await stream_manager.broadcast_to_channel(
+                f"kite_orders:{user_id}",
+                {"type": "kite_order_update", "order": order},
+            )
+        except Exception as exc:  # never let a broadcast error kill the WS loop
+            log.debug("kite order broadcast failed for %s: %s", user_id, exc)
+    return _broadcast
+
+
+async def broadcast_order_update(user_id: str, order: dict) -> None:
+    """Push a single order update to the user's ``kite_orders`` channel.
+
+    Used by both the live WS postback (text frames) and the HTTP postback webhook.
+    """
+    await _make_order_broadcaster(user_id)(order)
+
+
 async def ensure(user_id: str) -> Optional[KiteTicker]:
     """Return a started ticker for the user's active connected account, or None."""
     existing = _tickers.get(user_id)
@@ -45,6 +66,7 @@ async def ensure(user_id: str) -> Optional[KiteTicker]:
     ticker = KiteTicker(
         api_key=acct.api_key, access_token=acct.access_token,
         on_ticks=_make_broadcaster(user_id),
+        on_order_update=_make_order_broadcaster(user_id),
     )
     _tickers[user_id] = ticker
     await ticker.start()

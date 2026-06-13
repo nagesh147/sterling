@@ -99,6 +99,7 @@ class KiteClient(TradingExchangeAdapter):
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
         self._instruments = InstrumentCache(self._fetch_instruments_csv)
+        self._mf_instruments = InstrumentCache(self._fetch_mf_instruments_csv)
         # WS price cache placeholder (live ticks flow via ticker_manager, not here)
         self._ws_prices: Dict[int, float] = {}
 
@@ -210,6 +211,24 @@ class KiteClient(TradingExchangeAdapter):
         self._access_token = ""
         return True
 
+    async def renew_access_token(self, refresh_token: str) -> dict:
+        """Exchange a refresh_token for a fresh access_token (no re-login).
+
+        Same checksum scheme as ``generate_session`` —
+        ``sha256(api_key + token + api_secret)`` — against ``/session/refresh_token``.
+        """
+        if not self._api_key or not self._api_secret:
+            raise KiteError("api_key and api_secret are required to refresh a session.")
+        cs = _session.checksum(self._api_key, refresh_token, self._api_secret)
+        client = await self._get_client()
+        resp = await client.post(
+            "/session/refresh_token",
+            data={"api_key": self._api_key, "refresh_token": refresh_token, "checksum": cs},
+        )
+        data = self._handle(resp)
+        self._access_token = (data or {}).get("access_token", "") if isinstance(data, dict) else ""
+        return data or {}
+
     # ─── Instruments ────────────────────────────────────────────────────────
     async def _fetch_instruments_csv(self, exchange: str) -> str:
         client = await self._get_client()
@@ -219,9 +238,23 @@ class KiteClient(TradingExchangeAdapter):
         resp.raise_for_status()
         return resp.text
 
+    async def _fetch_mf_instruments_csv(self, exchange: str = "") -> str:
+        """Fetch the mutual-fund scheme master (``/mf/instruments``). The
+        ``exchange`` arg is ignored — MF has a single, exchange-less dump — so the
+        shared :class:`InstrumentCache` can drive it like the equity master."""
+        client = await self._get_client()
+        headers = self._auth_headers() if self._access_token else {}
+        resp = await client.get("/mf/instruments", headers=headers)
+        resp.raise_for_status()
+        return resp.text
+
     async def search_instruments(self, query: str, exchange: str = "", limit: int = 50) -> List[dict]:
         """exchange="" → universal search across the full instruments dump."""
         return await self._instruments.search(query, exchange, limit)
+
+    async def search_mf_instruments(self, query: str = "", limit: int = 50) -> List[dict]:
+        """Search the mutual-fund scheme master by tradingsymbol/name/AMC."""
+        return await self._mf_instruments.search(query, "", limit)
 
     async def resolve_token(self, tradingsymbol: str, exchange: str = K.EXCHANGE_NFO) -> int:
         return await self._instruments.resolve_token(tradingsymbol, exchange)
@@ -480,6 +513,37 @@ class KiteClient(TradingExchangeAdapter):
             body["initial_amount"] = initial_amount
         return await self._auth_post("/mf/sips", body)
 
+    async def get_mf_order(self, order_id: str) -> dict:
+        """Individual MF order detail (status timeline, allotted NAV/units)."""
+        return await self._auth_get(f"/mf/orders/{order_id}") or {}
+
+    async def get_mf_sip(self, sip_id: str) -> dict:
+        """Individual SIP detail."""
+        return await self._auth_get(f"/mf/sips/{sip_id}") or {}
+
+    async def modify_mf_sip(self, sip_id, *, amount=None, frequency=None,
+                            instalments=None, instalment_day=None, status=None) -> dict:
+        """Modify a SIP — amount/frequency/instalments or pause/resume via status."""
+        if self._is_paper:
+            return {"sip_id": str(sip_id)}
+        body = {}
+        if amount is not None:
+            body["amount"] = amount
+        if frequency is not None:
+            body["frequency"] = frequency
+        if instalments is not None:
+            body["instalments"] = instalments
+        if instalment_day is not None:
+            body["instalment_day"] = instalment_day
+        if status is not None:
+            body["status"] = status
+        return await self._auth_put(f"/mf/sips/{sip_id}", body)
+
+    async def cancel_mf_sip(self, sip_id: str) -> dict:
+        if self._is_paper:
+            return {"sip_id": str(sip_id)}
+        return await self._auth_delete(f"/mf/sips/{sip_id}")
+
     # ─── Portfolio (reads) ─────────────────────────────────────────────────────
     async def get_holdings(self) -> list:
         if not self._access_token:
@@ -498,6 +562,94 @@ class KiteClient(TradingExchangeAdapter):
             return {"status": "paper"}
         body = {k: v for k, v in fields.items() if v is not None}
         return await self._auth_put("/portfolio/positions", body)
+
+    async def get_auctions(self) -> list:
+        """Instruments currently up for auction that the account is eligible for."""
+        if not self._access_token:
+            return []
+        return await self._auth_get("/portfolio/holdings/auctions") or []
+
+    async def initiate_holdings_auth(self, instruments: Optional[list] = None) -> dict:
+        """Begin CDSL holdings authorisation (eDIS) so holdings can be sold via API.
+
+        Returns ``{request_id}``; the caller redirects the user to Kite's consent
+        page to complete TPIN. Pass ``instruments`` ([{isin, quantity}, ...]) to
+        scope the authorisation, or omit for a blanket request.
+        """
+        isins: List[object] = []
+        qtys: List[object] = []
+        for it in (instruments or []):
+            isin = it.get("isin") if isinstance(it, dict) else None
+            if not isin:
+                continue
+            isins.append(isin)
+            if it.get("quantity") is not None:
+                qtys.append(it["quantity"])
+        # httpx encodes a dict whose values are lists as repeated form keys
+        # (isin=A&isin=B); quantity is sent only when every ISIN supplied one so the
+        # positional pairing Kite expects stays intact.
+        body: dict = {}
+        if isins:
+            body["isin"] = isins
+        if qtys and len(qtys) == len(isins):
+            body["quantity"] = qtys
+        return await self._auth_post("/portfolio/holdings/authorise", body) or {}
+
+    # ─── Alerts (native Kite Connect Alerts API) ──────────────────────────────
+    async def get_alerts(self) -> list:
+        if not self._access_token:
+            return []
+        return await self._auth_get("/alerts") or []
+
+    async def get_alert(self, uuid: str) -> dict:
+        return await self._auth_get(f"/alerts/{uuid}") or {}
+
+    async def get_alert_history(self, uuid: str) -> list:
+        return await self._auth_get(f"/alerts/{uuid}/history") or []
+
+    @staticmethod
+    def _alert_body(
+        *, name, lhs_exchange, lhs_tradingsymbol, lhs_attribute, operator,
+        rhs_constant=None, alert_type=K.ALERT_TYPE_SIMPLE, rhs_type="constant",
+        rhs_exchange=None, rhs_tradingsymbol=None, rhs_attribute=None, basket=None,
+    ) -> dict:
+        body: dict = {
+            "name": name, "type": alert_type,
+            "lhs_exchange": lhs_exchange, "lhs_tradingsymbol": lhs_tradingsymbol,
+            "lhs_attribute": lhs_attribute, "operator": operator, "rhs_type": rhs_type,
+        }
+        if rhs_type == "constant":
+            body["rhs_constant"] = rhs_constant
+        else:
+            body["rhs_exchange"] = rhs_exchange
+            body["rhs_tradingsymbol"] = rhs_tradingsymbol
+            body["rhs_attribute"] = rhs_attribute
+        if basket is not None:
+            body["basket"] = basket if isinstance(basket, str) else json.dumps(basket)
+        return body
+
+    async def create_alert(self, **fields) -> dict:
+        """Create a price/attribute alert. ``simple`` → notification only; ``ato``
+        carries a ``basket`` of orders triggered when the condition is met.
+
+        Paper mode simulates ``ato`` alerts (they would arm real orders on trigger)
+        but lets ``simple`` notification alerts through — they have no market impact.
+        """
+        if self._is_paper and fields.get("alert_type") == K.ALERT_TYPE_ATO:
+            return {"uuid": "PAPER-ATO-" + uuid.uuid4().hex[:10], "paper": True}
+        return await self._auth_post("/alerts", self._alert_body(**fields))
+
+    async def modify_alert(self, uuid: str, **fields) -> dict:
+        body = {k: v for k, v in fields.items() if v is not None}
+        if "basket" in body and not isinstance(body["basket"], str):
+            body["basket"] = json.dumps(body["basket"])
+        return await self._auth_put(f"/alerts/{uuid}", body)
+
+    async def delete_alerts(self, uuids: Sequence[str]) -> dict:
+        """Delete one or more alerts (Kite takes repeated ``?uuid=`` params)."""
+        return await self._auth_request(
+            "DELETE", "/alerts", params=[("uuid", u) for u in uuids]
+        ) or {}
 
     # ─── BaseExchangeAdapter / market data (ported) ───────────────────────────
     async def ping(self) -> bool:
@@ -536,9 +688,14 @@ class KiteClient(TradingExchangeAdapter):
         days_needed = max(2, int(n_bars / 6) + 5)
         from_str = (now - timedelta(days=days_needed)).strftime("%Y-%m-%d %H:%M:%S")
         to_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        
+        log.info("Fetching Kite candles: token=%s, resolution=%s, interval=%s, from=%s, to=%s",
+                 token, resolution, interval, from_str, to_str)
         try:
             data = await self.get_historical(token, interval, from_str, to_str)
+            log.info("Kite candle fetch response keys: %s", data.keys() if isinstance(data, dict) else type(data))
             raw = data.get("candles", [])
+            log.info("Kite candle fetch returned %d candles for %s", len(raw), instrument.underlying)
         except Exception as exc:
             log.error("Kite candle fetch failed for %s: %s", instrument.underlying, exc)
             return []
