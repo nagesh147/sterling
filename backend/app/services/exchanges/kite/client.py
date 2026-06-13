@@ -136,7 +136,10 @@ class KiteClient(TradingExchangeAdapter):
         return body.get("data", body) if isinstance(body, dict) else body
 
     def _require_session(self) -> None:
-        if self._is_paper or not self._api_key or not self._access_token:
+        # Paper mode only simulates ORDER PLACEMENT — reads still use the real
+        # session when a token is present, so a connected paper account shows its
+        # real portfolio/orders/funds.
+        if not self._api_key or not self._access_token:
             raise KiteTokenError(
                 "Kite account access requires api_key + access_token — log in first.",
                 error_type="TokenException",
@@ -335,9 +338,15 @@ class KiteClient(TradingExchangeAdapter):
 
     # ─── Orders / trades (reads) ──────────────────────────────────────────────
     async def get_orders(self) -> list:
-        if self._is_paper:
+        if not self._access_token:
             return []
         return await self._auth_get("/orders") or []
+
+    async def get_trades(self) -> list:
+        """Full tradebook for the day (raw)."""
+        if not self._access_token:
+            return []
+        return await self._auth_get("/trades") or []
 
     async def get_order_history(self, order_id: str) -> list:
         return await self._auth_get(f"/orders/{order_id}") or []
@@ -347,7 +356,7 @@ class KiteClient(TradingExchangeAdapter):
 
     # ─── GTT ──────────────────────────────────────────────────────────────────
     async def get_gtts(self) -> list:
-        if self._is_paper:
+        if not self._access_token:
             return []
         return await self._auth_get("/gtt/triggers") or []
 
@@ -429,17 +438,17 @@ class KiteClient(TradingExchangeAdapter):
 
     # ─── Mutual funds ──────────────────────────────────────────────────────────
     async def get_mf_holdings(self) -> list:
-        if self._is_paper:
+        if not self._access_token:
             return []
         return await self._auth_get("/mf/holdings") or []
 
     async def get_mf_orders(self) -> list:
-        if self._is_paper:
+        if not self._access_token:
             return []
         return await self._auth_get("/mf/orders") or []
 
     async def get_mf_sips(self) -> list:
-        if self._is_paper:
+        if not self._access_token:
             return []
         return await self._auth_get("/mf/sips") or []
 
@@ -473,14 +482,14 @@ class KiteClient(TradingExchangeAdapter):
 
     # ─── Portfolio (reads) ─────────────────────────────────────────────────────
     async def get_holdings(self) -> list:
-        if self._is_paper:
+        if not self._access_token:
             return []
         return await self._auth_get("/portfolio/holdings") or []
 
     async def get_positions_raw(self) -> dict:
         """Raw {net, day} positions (keeps exchange + instrument_token, unlike the
         mapped get_positions)."""
-        if self._is_paper:
+        if not self._access_token:
             return {"net": [], "day": []}
         return await self._auth_get("/portfolio/positions") or {"net": [], "day": []}
 
@@ -557,7 +566,7 @@ class KiteClient(TradingExchangeAdapter):
             return []
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:
-        if not instrument.has_options or self._is_paper:
+        if not instrument.has_options or not self._access_token:
             return []
         spot = await self.get_index_price(instrument)
         if spot <= 0:
@@ -657,8 +666,8 @@ class KiteClient(TradingExchangeAdapter):
 
     # ─── AuthenticatedExchangeAdapter ─────────────────────────────────────────
     async def test_connection(self) -> bool:
-        if self._is_paper:
-            return True
+        if not self._access_token:
+            return bool(self._is_paper)  # paper w/o login = "ok"; live w/o login = fail
         try:
             await self.get_profile()
             return True
@@ -666,7 +675,7 @@ class KiteClient(TradingExchangeAdapter):
             return False
 
     async def get_balances(self) -> List[AssetBalance]:
-        if self._is_paper:
+        if not self._access_token:
             return _paper_balances()
         data = await self.get_margins()
         balances = []
@@ -684,7 +693,7 @@ class KiteClient(TradingExchangeAdapter):
         return balances
 
     async def get_positions(self) -> List[AccountPosition]:
-        if self._is_paper:
+        if not self._access_token:
             return []
         data = await self._auth_get("/portfolio/positions")
         positions = []
@@ -709,7 +718,7 @@ class KiteClient(TradingExchangeAdapter):
         return positions
 
     async def get_open_orders(self, underlying: Optional[str] = None) -> List[AccountOrder]:
-        if self._is_paper:
+        if not self._access_token:
             return []
         data = await self._auth_get("/orders")
         orders = []
@@ -733,7 +742,7 @@ class KiteClient(TradingExchangeAdapter):
         return orders
 
     async def get_fills(self, limit: int = 50) -> List[AccountFill]:
-        if self._is_paper:
+        if not self._access_token:
             return []
         data = await self._auth_get("/trades")
         fills = []

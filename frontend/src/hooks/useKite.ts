@@ -142,11 +142,67 @@ export function usePlaceKiteOrder() {
   });
 }
 
+export function useModifyKiteOrder() {
+  const qc = useQueryClient();
+  return useMutation<any, Error, { id: string; variety?: string; quantity?: number; price?: number; order_type?: string; trigger_price?: number; validity?: string }>({
+    mutationFn: ({ id, ...body }) => api.put(`${K}/orders/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-orders'] }),
+  });
+}
+
 export function useCancelKiteOrder() {
   const qc = useQueryClient();
   return useMutation<any, Error, { id: string; variety?: string }>({
     mutationFn: ({ id, variety = 'regular' }) => api.delete(`${K}/orders/${id}?variety=${variety}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-orders'] }),
+  });
+}
+
+export function useKiteTrades(enabled = true) {
+  return useQuery<any[]>({
+    queryKey: ['kite-trades'],
+    queryFn: () => api.get(`${K}/trades`),
+    enabled,
+    refetchInterval: 10_000,
+  });
+}
+
+export function useKiteOrderHistory(orderId: string | null) {
+  return useQuery<any[]>({
+    queryKey: ['kite-order-history', orderId],
+    queryFn: () => api.get(`${K}/orders/${orderId}/history`),
+    enabled: !!orderId,
+    staleTime: 5_000,
+  });
+}
+
+// ─── Profile / funds ────────────────────────────────────────────────────────
+export function useKiteProfile(enabled = true) {
+  return useQuery<any>({
+    queryKey: ['kite-profile'],
+    queryFn: () => api.get(`${K}/profile`),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+// ─── Mutual funds ─────────────────────────────────────────────────────────────
+export function useKiteMfHoldings(enabled = true) {
+  return useQuery<any[]>({ queryKey: ['kite-mf-holdings'], queryFn: () => api.get(`${K}/mf/holdings`), enabled, refetchInterval: 60_000 });
+}
+export function useKiteMfOrders(enabled = true) {
+  return useQuery<any[]>({ queryKey: ['kite-mf-orders'], queryFn: () => api.get(`${K}/mf/orders`), enabled, refetchInterval: 60_000 });
+}
+export function useKiteMfSips(enabled = true) {
+  return useQuery<any[]>({ queryKey: ['kite-mf-sips'], queryFn: () => api.get(`${K}/mf/sips`), enabled, refetchInterval: 60_000 });
+}
+
+// ─── Positions: convert ───────────────────────────────────────────────────────
+export function useConvertKitePosition() {
+  const qc = useQueryClient();
+  return useMutation<any, Error, Record<string, unknown>>({
+    mutationFn: (body) => api.put(`${K}/positions/convert`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-positions'] }),
   });
 }
 

@@ -229,20 +229,19 @@ async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
     if not acct.connected:
         return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id,
                           message="Not logged in — complete the Kite login flow")
-    if acct.is_paper:
-        return KiteStatus(connected=True, is_paper=True, account_id=acct.id,
-                          kite_user_id=acct.kite_user_id or None, message="Paper mode")
+    # Validate the token against Kite (paper too — paper only simulates trades, so a
+    # connected paper account still has a real session that can expire daily).
     client = kite_accounts.build_client(acct)
     try:
         profile = await client.get_profile()
-        return KiteStatus(connected=True, is_paper=False, account_id=acct.id,
+        return KiteStatus(connected=True, is_paper=acct.is_paper, account_id=acct.id,
                           kite_user_id=profile.get("user_id"), user_name=profile.get("user_name"),
-                          message="Connected")
+                          message="Paper mode · live data" if acct.is_paper else "Connected")
     except KiteTokenError:
-        return KiteStatus(connected=False, is_paper=False, account_id=acct.id,
-                          message="Session expired — reconnect via login")
+        return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id,
+                          message="Session expired — reconnect via Kite login (tokens reset ~6 AM IST daily)")
     except Exception as exc:  # noqa: BLE001
-        return KiteStatus(connected=False, is_paper=False, account_id=acct.id, message=str(exc))
+        return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id, message=str(exc))
     finally:
         await client.close()
 
@@ -370,6 +369,12 @@ async def watchlist_sync(user: UserContext = Depends(get_current_user)):
 @router.get("/orders")
 async def orders(user: UserContext = Depends(get_current_user)):
     return await _run(user, lambda c: c.get_orders())
+
+
+@router.get("/trades")
+async def trades(user: UserContext = Depends(get_current_user)):
+    """Today's tradebook (executed fills)."""
+    return await _run(user, lambda c: c.get_trades())
 
 
 @router.get("/orders/{order_id}/history")

@@ -138,12 +138,17 @@ def test_callback_success_connects_active_account(client, monkeypatch):
 
     async def fake_gen(self, request_token):
         return {"access_token": "ATOK", "user_id": "ZID1", "user_name": "Trader"}
+
+    async def fake_profile(self):
+        return {"user_id": "ZID1", "user_name": "Trader"}
     monkeypatch.setattr(KiteClient, "generate_session", fake_gen)
+    monkeypatch.setattr(KiteClient, "get_profile", fake_profile)  # /status now validates the token
 
     r = client.get("/api/v1/kite/callback?request_token=rt&action=login&status=success")
     assert r.status_code == 200
     assert "Connected" in r.text and "Trader" in r.text
-    assert client.get("/api/v1/kite/status").json()["connected"] is True
+    s = client.get("/api/v1/kite/status").json()
+    assert s["connected"] is True and s["user_name"] == "Trader"
 
 
 def test_callback_missing_token_renders_error(client):
@@ -195,3 +200,28 @@ def test_watchlist_sync_aggregates_account_instruments(client, monkeypatch):
 def test_watchlist_sync_requires_active_account(client):
     r = client.get("/api/v1/kite/watchlist/sync")
     assert r.status_code == 409
+
+
+def test_trades_endpoint_empty_without_session(client):
+    _add_account(client, paper=True)  # no access_token yet
+    r = client.get("/api/v1/kite/trades")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_status_session_expired_when_token_invalid(client, monkeypatch):
+    _add_account(client, paper=True)
+    # simulate a connected account whose token Kite rejects
+    from app.services.exchanges.kite import accounts as ka
+    acc = ka.get_active("default")
+    ka.save_session("default", acc.id, access_token="DEADTOKEN")
+
+    from app.services.exchanges.kite.errors import KiteTokenError
+
+    async def fake_profile(self):
+        raise KiteTokenError("Incorrect api_key or access_token.", error_type="TokenException")
+    monkeypatch.setattr(KiteClient, "get_profile", fake_profile)
+
+    s = client.get("/api/v1/kite/status").json()
+    assert s["connected"] is False
+    assert "expired" in s["message"].lower()

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { c as t, tint } from '../../styles/terminalUI';
-import { useCancelKiteOrder, useKiteOrders, usePlaceKiteOrder } from '../../hooks/useKite';
+import {
+  useCancelKiteOrder, useKiteOrders, useKiteTrades, useModifyKiteOrder, usePlaceKiteOrder,
+} from '../../hooks/useKite';
 import type { PlaceOrderBody } from '../../types/kite';
 
 const S: Record<string, React.CSSProperties> = {
@@ -9,9 +11,11 @@ const S: Record<string, React.CSSProperties> = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 },
   label: { color: t.dim, fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
   input: { background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
+  inSm: { background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 6px', fontFamily: 'inherit', fontSize: 11, width: 70 },
   th: { textAlign: 'left' as const, color: t.dim, fontSize: 10, fontWeight: 600, padding: '4px 8px', borderBottom: `1px solid ${t.border}` },
   td: { padding: '6px 8px', fontSize: 12, color: t.bright, borderBottom: `1px solid ${tint(t.border, 50)}` },
   hint: { color: t.dim, fontSize: 11 },
+  link: { cursor: 'pointer', fontSize: 11 },
   btnBuy: { background: tint(t.green, 12), color: t.green, border: `1px solid ${t.green}`, padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 },
   btnSell: { background: tint(t.red, 12), color: t.red, border: `1px solid ${t.red}`, padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 },
 };
@@ -22,10 +26,59 @@ const sel = (val: string, set: (v: string) => void, opts: string[]) => (
   </select>
 );
 
+const OPEN = ['OPEN', 'TRIGGER PENDING', 'AMO REQ RECEIVED', 'MODIFY PENDING'];
+
+function OrderRow({ o }: { o: any }) {
+  const cancel = useCancelKiteOrder();
+  const modify = useModifyKiteOrder();
+  const [edit, setEdit] = useState(false);
+  const [qty, setQty] = useState(String(o.quantity ?? ''));
+  const [price, setPrice] = useState(String(o.price ?? ''));
+  const isOpen = OPEN.includes(o.status);
+
+  return (
+    <>
+      <tr>
+        <td style={S.td}>{o.tradingsymbol}</td>
+        <td style={{ ...S.td, color: o.transaction_type === 'BUY' ? t.green : t.red }}>{o.transaction_type}</td>
+        <td style={S.td}>{o.order_type}</td>
+        <td style={{ ...S.td, textAlign: 'right' }}>{o.filled_quantity ?? 0}/{o.quantity}</td>
+        <td style={{ ...S.td, textAlign: 'right' }}>{Number(o.price ?? 0).toFixed(2)}</td>
+        <td style={{ ...S.td, color: t.dim }}>{o.status}{o.status_message ? ` · ${o.status_message}` : ''}</td>
+        <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+          {isOpen && <span style={{ ...S.link, color: t.blue, marginRight: 8 }} onClick={() => setEdit(!edit)}>{edit ? 'close' : 'modify'}</span>}
+          {isOpen && <span style={{ ...S.link, color: t.red }} onClick={() => cancel.mutate({ id: o.order_id, variety: o.variety || 'regular' })}>cancel</span>}
+        </td>
+      </tr>
+      {edit && (
+        <tr>
+          <td style={{ ...S.td, background: tint(t.blue, 5) }} colSpan={7}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={S.hint}>Qty</span>
+              <input style={S.inSm} value={qty} onChange={(e) => setQty(e.target.value)} />
+              <span style={S.hint}>Price</span>
+              <input style={S.inSm} value={price} onChange={(e) => setPrice(e.target.value)} />
+              <button
+                style={{ ...S.link, color: t.green, border: `1px solid ${t.green}`, borderRadius: 6, padding: '4px 10px', background: tint(t.green, 10) }}
+                disabled={modify.isPending}
+                onClick={() => modify.mutate(
+                  { id: o.order_id, variety: o.variety || 'regular', quantity: Number(qty) || undefined, price: price ? Number(price) : undefined, order_type: o.order_type },
+                  { onSuccess: () => setEdit(false) },
+                )}
+              >{modify.isPending ? 'saving…' : 'save'}</button>
+              {modify.error && <span style={{ color: t.red, fontSize: 11 }}>✗ {modify.error.message}</span>}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 export function OrdersPane() {
   const place = usePlaceKiteOrder();
-  const cancel = useCancelKiteOrder();
   const { data: orders } = useKiteOrders(true);
+  const { data: trades } = useKiteTrades(true);
 
   const [f, setF] = useState({
     tradingsymbol: '', exchange: 'NSE', quantity: '1', order_type: 'MARKET',
@@ -78,23 +131,34 @@ export function OrdersPane() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
               <th style={S.th}>Symbol</th><th style={S.th}>Side</th><th style={S.th}>Type</th>
-              <th style={{ ...S.th, textAlign: 'right' }}>Qty</th><th style={{ ...S.th, textAlign: 'right' }}>Price</th>
+              <th style={{ ...S.th, textAlign: 'right' }}>Filled/Qty</th><th style={{ ...S.th, textAlign: 'right' }}>Price</th>
               <th style={S.th}>Status</th><th style={S.th} />
             </tr></thead>
             <tbody>
-              {orders.map((o: any) => (
-                <tr key={o.order_id}>
-                  <td style={S.td}>{o.tradingsymbol}</td>
-                  <td style={{ ...S.td, color: o.transaction_type === 'BUY' ? t.green : t.red }}>{o.transaction_type}</td>
-                  <td style={S.td}>{o.order_type}</td>
-                  <td style={{ ...S.td, textAlign: 'right' }}>{o.quantity}</td>
-                  <td style={{ ...S.td, textAlign: 'right' }}>{Number(o.price ?? 0).toFixed(2)}</td>
-                  <td style={{ ...S.td, color: t.dim }}>{o.status}</td>
-                  <td style={{ ...S.td, textAlign: 'right' }}>
-                    {['OPEN', 'TRIGGER PENDING'].includes(o.status) && (
-                      <span style={{ cursor: 'pointer', color: t.red }} onClick={() => cancel.mutate({ id: o.order_id, variety: o.variety || 'regular' })}>cancel</span>
-                    )}
-                  </td>
+              {orders.map((o: any) => <OrderRow key={o.order_id} o={o} />)}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={S.card}>
+        <div style={S.title}>TODAY&apos;S TRADES</div>
+        {(!trades || trades.length === 0) && <div style={S.hint}>No executed trades today.</div>}
+        {trades && trades.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr>
+              <th style={S.th}>Symbol</th><th style={S.th}>Side</th>
+              <th style={{ ...S.th, textAlign: 'right' }}>Qty</th><th style={{ ...S.th, textAlign: 'right' }}>Price</th>
+              <th style={S.th}>Time</th>
+            </tr></thead>
+            <tbody>
+              {trades.map((tr: any, i: number) => (
+                <tr key={tr.trade_id || i}>
+                  <td style={S.td}>{tr.tradingsymbol}</td>
+                  <td style={{ ...S.td, color: tr.transaction_type === 'BUY' ? t.green : t.red }}>{tr.transaction_type}</td>
+                  <td style={{ ...S.td, textAlign: 'right' }}>{tr.quantity}</td>
+                  <td style={{ ...S.td, textAlign: 'right' }}>{Number(tr.average_price ?? tr.price ?? 0).toFixed(2)}</td>
+                  <td style={{ ...S.td, color: t.dim }}>{tr.fill_timestamp || tr.exchange_timestamp || ''}</td>
                 </tr>
               ))}
             </tbody>
