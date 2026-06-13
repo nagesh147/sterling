@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useKiteStatus, useKiteMargins, useKiteHoldings } from '../../hooks/useKite';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, AreaSeries } from 'lightweight-charts';
 import { useCandles } from '../../hooks/useCandles';
 
 function formatCurrency(val: number) {
@@ -66,7 +66,7 @@ function DashboardChart({ symbol }: { symbol: string }) {
       handleScale: false,
     });
 
-    const lineSeries = chart.addAreaSeries({
+    const lineSeries = chart.addSeries(AreaSeries, {
       lineColor: '#4184f3',
       topColor: 'rgba(65, 132, 243, 0.2)',
       bottomColor: 'rgba(65, 132, 243, 0)',
