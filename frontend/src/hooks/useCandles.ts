@@ -20,7 +20,7 @@ export function useCandles(underlying: string, tf: string, limit = 1825) {
   return useQuery<OHLCVBar[]>({
     queryKey: ['candles', underlying, tf, limit],
     queryFn: () =>
-      api.get<OHLCVBar[]>(`/api/v1/candles/${underlying}?tf=${tf}&limit=${limit}`),
+      api.get<OHLCVBar[]>(`/api/v1/candles/${encodeURIComponent(underlying)}?tf=${tf}&limit=${limit}`),
     refetchInterval: refetchMs,
     staleTime: refetchMs,
     enabled: !!underlying,

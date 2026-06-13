@@ -74,6 +74,10 @@ class _Account:
     def connected(self) -> bool:
         return bool(self.access_token_enc)
 
+    @property
+    def has_refresh_token(self) -> bool:
+        return bool(self.refresh_token_enc)
+
     def api_key_hint(self) -> str:
         if not self.api_key or len(self.api_key) < 4:
             return "****"
@@ -298,7 +302,8 @@ def to_response(a: _Account) -> KiteAccountResponse:
     return KiteAccountResponse(
         id=a.id, user_id=a.user_id, label=a.label, api_key_hint=a.api_key_hint(),
         has_credentials=a.has_credentials, is_paper=a.is_paper, is_active=a.is_active,
-        connected=a.connected, kite_user_id=a.kite_user_id or None,
+        connected=a.connected, has_refresh_token=a.has_refresh_token,
+        kite_user_id=a.kite_user_id or None,
         last_login_at_ms=a.last_login_at_ms,
         created_at_ms=a.created_at_ms, updated_at_ms=a.updated_at_ms,
     )

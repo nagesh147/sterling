@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sterling — Crypto Trading Signals</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      /* ── Gemini DARK (default) — pre-paint fallback; globals.css wins ── */
+      :root, [data-theme="dark"] {
+        --bg:           #131314;
+        --bg-card:      #1E1F20;
+        --bg-input:     #1E1F20;
+        --border:       #2D2F31;
+        --border-light: #444746;
+        --text-primary: #E3E3E3;
+        --text-muted:   #C4C7C5;
+        --text-dim:     #8E918F;
+        --text-faint:   #5F6368;
+        --accent:       #10B981;   /* BUY green (kept) */
+        --danger:       #EF4444;   /* SELL red (kept) */
+        --warning:      #F59E0B;   /* TP amber (kept) */
+        --blue:         #3B82F6;
+        --purple:       #A855F7;
+      }
+
+      /* ── Gemini LIGHT — near-white surfaces ── */
+      [data-theme="light"] {
+        --bg:           #FFFFFF;
+        --bg-card:      #FFFFFF;
+        --bg-input:     #F0F4F9;
+        --border:       #DADCE0;
+        --border-light: #E8EAED;
+        --text-primary: #1F1F1F;
+        --text-muted:   #444746;
+        --text-dim:     #5F6368;
+        --text-faint:   #BDC1C6;
+        --accent:       #059669;
+        --danger:       #DC2626;
+        --warning:      #B26A00;
+        --blue:         #1A73E8;
+        --purple:       #7C3AED;
+      }
+
+      body {
+        font-family: var(--app-font, 'Plus Jakarta Sans', 'Google Sans', system-ui, sans-serif);
+        background: var(--bg);
+        color: var(--text-primary);
+        min-height: 100vh;
+        transition: background 0.2s, color 0.2s;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      /* Scrollbar — matches dark theme */
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar-track { background: var(--bg); }
+      ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+      /* Selection */
+      ::selection { background: #00d4aa33; color: var(--text-primary); }
+    </style>
+    <!-- App font picker: loads 14 popular UI fonts (the 15th option is system-ui
+         which needs no download) at the three weights we use (400/600/700, plus
+         500 for Roboto / no 600 for Lato). The chosen family is stored in
+         localStorage as 'app.font.stack' and applied to --app-font; the early
+         script below sets it before paint so there's no flash. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Geist:wght@400;600;700&family=DM+Sans:wght@400;600;700&family=Manrope:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&family=Outfit:wght@400;600;700&family=Poppins:wght@400;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600;700&family=Source+Sans+3:wght@400;600;700&family=Lato:wght@400;700&family=Work+Sans:wght@400;600;700&family=Nunito+Sans:wght@400;600;700&display=swap">
+    <script>
+      try {
+        var s = localStorage.getItem('app.font.stack');
+        if (s) document.documentElement.style.setProperty('--app-font', s);
+      } catch (e) { /* private mode / SSR */ }
+    </script>
+    <script type="module" crossorigin src="/assets/index-KOiCTho-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cs87OVWC.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

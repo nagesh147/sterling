@@ -40,6 +40,8 @@ export const c = {
   brand2:    'var(--brand-2)',
   brand3:    'var(--brand-3)',
   brandGrad: 'var(--brand-grad)',
+  /* Default UI font stack (used by Kite panes that set fontFamily explicitly) */
+  fontFamily: 'var(--font-sans, "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)',
 } as const;
 
 /* Translucent tint of any token color — replaces the old `var(--x)1c`

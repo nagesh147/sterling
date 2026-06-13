@@ -95,6 +95,13 @@ def test_save_session_persists_refresh_token():
     assert got.refresh_token_enc != "RTOK"      # stored encrypted
 
 
+def test_to_response_reports_refresh_token_capability():
+    a = _create()
+    assert accounts.to_response(a).has_refresh_token is False
+    accounts.save_session("u1", a.id, access_token="ATOK", refresh_token="RTOK")
+    assert accounts.to_response(accounts.get("u1", a.id)).has_refresh_token is True
+
+
 def test_find_by_kite_user_id_routes_postbacks():
     a = _create(user="u1")
     accounts.save_session("u1", a.id, access_token="ATOK", kite_user_id="ZID1")

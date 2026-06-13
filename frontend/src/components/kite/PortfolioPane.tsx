@@ -1,56 +1,23 @@
 import React, { useState } from 'react';
-import { c as t, tint } from '../../styles/terminalUI';
 import {
   useConvertKitePosition, useKiteHoldings, useKitePositions,
   useKiteAuctions, useInitiateHoldingsAuth,
 } from '../../hooks/useKite';
 
-function parseTs(ts: string): string {
-  const nfoRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)$/;
-  const nfoM = ts.match(nfoRe);
-  if (nfoM) {
-    const underlying = nfoM[1]; const yy = nfoM[2]; const strike = Number(nfoM[4]); const type = nfoM[5];
-    const monIdx = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 }[nfoM[3]] ?? 0;
-    const d = new Date(2000 + Number(yy), monIdx + 1, 0);
-    const month = { JAN:'Jan',FEB:'Feb',MAR:'Mar',APR:'Apr',MAY:'May',JUN:'Jun',JUL:'Jul',AUG:'Aug',SEP:'Sep',OCT:'Oct',NOV:'Nov',DEC:'Dec' }[nfoM[3]] ?? nfoM[3];
-    return `${underlying} ${strike} ${type} · ${d.getDate()} ${month} ${yy}`;
-  }
-  const bseRe = /^([A-Z]+)(\d{2})(\d)(\d{2})(\d+)(CE|PE)$/;
-  const bseM = ts.match(bseRe);
-  if (bseM) {
-    const underlying = bseM[1]; const yy = bseM[2]; const mon = Number(bseM[3]);
-    const day = Number(bseM[4]); const strike = Number(bseM[5]); const type = bseM[6];
-    if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
-      const d = new Date(2000 + Number(yy), mon - 1, day);
-      const month = d.toLocaleString('en-US', { month: 'short' });
-      return `${underlying} ${strike} ${type} · ${day} ${month} ${yy}`;
-    }
-    return ts;
-  }
-  const futRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)FUT$/;
-  const futM = ts.match(futRe);
-  if (futM) {
-    const underlying = futM[1]; const yy = futM[2];
-    const monIdx = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 }[futM[3]] ?? 0;
-    const d = new Date(2000 + Number(yy), monIdx + 1, 0);
-    const month = { JAN:'Jan',FEB:'Feb',MAR:'Mar',APR:'Apr',MAY:'May',JUN:'Jun',JUL:'Jul',AUG:'Aug',SEP:'Sep',OCT:'Oct',NOV:'Nov',DEC:'Dec' }[futM[3]] ?? futM[3];
-    return `${underlying} FUT · ${d.getDate()} ${month} ${yy}`;
-  }
-  return ts;
-}
+import { parseTradingsymbol } from '../../utils/fmt';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 14 },
-  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 10, fontWeight: 700 },
-  th: { textAlign: 'left' as const, color: t.dim, fontSize: 10, fontWeight: 600, padding: '4px 8px', borderBottom: `1px solid ${t.border}` },
-  td: { padding: '6px 8px', fontSize: 12, color: t.bright, borderBottom: `1px solid ${tint(t.border, 50)}` },
-  hint: { color: t.dim, fontSize: 11 },
-  inSm: { background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: '3px 6px', fontFamily: 'inherit', fontSize: 11 },
-  pill: { padding: '1px 6px', borderRadius: 999, fontSize: 9, fontWeight: 700, border: `1px solid ${t.border}`, color: t.dim },
+  card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
+  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 2, marginBottom: 10, fontWeight: 700 },
+  th: { textAlign: 'left' as const, color: '#9b9b9b', fontSize: 12, fontWeight: 400, padding: '12px 16px', borderBottom: `1px solid #f1f1f1` },
+  td: { padding: '12px 16px', fontSize: 13, color: '#444', borderBottom: `1px solid #f1f1f1`, verticalAlign: 'middle' },
+  hint: { color: '#9b9b9b', fontSize: 13 },
+  inSm: { background: '#fff', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 6, padding: '3px 6px', fontFamily: 'inherit', fontSize: 11 },
+  pill: { padding: '2px 6px', borderRadius: 2, fontSize: 10, fontWeight: 500, background: '#f1f1f1', color: '#9b9b9b', letterSpacing: 0.3 },
 };
 
 const num = (v: any) => Number(v ?? 0);
-const pnlColor = (v: number) => (v > 0 ? t.green : v < 0 ? t.red : t.dim);
+const pnlColor = (v: number) => (v > 0 ? '#4caf50' : v < 0 ? '#df514c' : '#9b9b9b');
 
 function ConvertControl({ p }: { p: any }) {
   const convert = useConvertKitePosition();
@@ -63,7 +30,7 @@ function ConvertControl({ p }: { p: any }) {
         {products.map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
       <span
-        style={{ cursor: 'pointer', color: convert.isError ? t.red : t.blue, fontSize: 11 }}
+        style={{ cursor: 'pointer', color: convert.isError ? '#df514c' : '#387ed1', fontSize: 11 }}
         title={convert.isError ? (convert.error as Error).message : `Convert ${p.product} → ${target}`}
         onClick={() => convert.mutate({
           tradingsymbol: p.tradingsymbol, exchange: p.exchange,
@@ -81,7 +48,7 @@ function AuthoriseHoldingsButton() {
   const authorise = useInitiateHoldingsAuth();
   return (
     <button
-      style={{ background: tint(t.blue, 12), color: t.blue, border: `1px solid ${t.blue}`, borderRadius: 6, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+      style={{ background: '#387ed1', color: '#fff', border: `1px solid #387ed1`, borderRadius: 3, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
       title="Authorise holdings via CDSL TPIN (eDIS) — required to sell delivery holdings through the API"
       disabled={authorise.isPending}
       onClick={() => authorise.mutate({}, {
@@ -98,8 +65,8 @@ function AuctionsSection() {
   if (!auctions || auctions.length === 0) return null;
   return (
     <div style={{ marginTop: 48 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 400, color: t.bright, marginBottom: 24 }}>
-        Auctions <span style={{ color: t.dim, fontSize: 14 }}>({auctions.length})</span>
+      <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', marginBottom: 24 }}>
+        Auctions <span style={{ color: '#9b9b9b', fontSize: 18 }}>({auctions.length})</span>
       </h2>
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead><tr>
@@ -112,10 +79,10 @@ function AuctionsSection() {
           {auctions.map((a: any, i: number) => (
             <tr key={`${a.tradingsymbol}-${i}`}>
               <td style={S.td}>
-                <span style={{ color: t.bright, marginRight: 8 }}>{a.tradingsymbol}</span>
-                <span style={{ fontSize: 9, color: t.dim, padding: '1px 4px', background: t.surface, borderRadius: 2 }}>{a.exchange}</span>
+                <span style={{ color: '#444', marginRight: 8 }}>{a.tradingsymbol}</span>
+                <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{a.exchange}</span>
               </td>
-              <td style={{ ...S.td, color: t.dim }}>{a.auction_number}</td>
+              <td style={{ ...S.td, color: '#444' }}>{a.auction_number}</td>
               <td style={{ ...S.td, textAlign: 'right' }}>{num(a.quantity)}</td>
               <td style={{ ...S.td, textAlign: 'right' }}>{num(a.last_price).toFixed(2)}</td>
             </tr>
@@ -137,6 +104,53 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
 
   const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
 
+  // Sorting state
+  const [posSort, setPosSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
+  const [holdSort, setHoldSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
+
+  const handlePosSort = (k: string) => setPosSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
+  const handleHoldSort = (k: string) => setHoldSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
+
+  let sortedPositions = [...positions];
+  if (posSort.key && posSort.dir) {
+    sortedPositions.sort((a: any, b: any) => {
+      let va = a[posSort.key];
+      let vb = b[posSort.key];
+      if (posSort.key === 'chg') {
+        va = num(a.close_price) > 0 ? ((num(a.last_price) - num(a.close_price)) / num(a.close_price)) * 100 : 0;
+        vb = num(b.close_price) > 0 ? ((num(b.last_price) - num(b.close_price)) / num(b.close_price)) * 100 : 0;
+      } else if (posSort.key === 'quantity' || posSort.key === 'average_price' || posSort.key === 'last_price' || posSort.key === 'pnl') {
+        va = num(va);
+        vb = num(vb);
+      }
+      if (typeof va === 'string' && typeof vb === 'string') return posSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return posSort.dir === 'asc' ? num(va) - num(vb) : num(vb) - num(va);
+    });
+  }
+
+  let sortedHoldings = [...(holdings || [])];
+  if (holdSort.key && holdSort.dir) {
+    sortedHoldings.sort((a: any, b: any) => {
+      let va = a[holdSort.key];
+      let vb = b[holdSort.key];
+      if (holdSort.key === 'curVal') {
+        va = num(a.quantity) * num(a.last_price);
+        vb = num(b.quantity) * num(b.last_price);
+      } else if (holdSort.key === 'netChg') {
+        va = ((num(a.last_price) - num(a.average_price)) / (num(a.average_price) || 1)) * 100;
+        vb = ((num(b.last_price) - num(b.average_price)) / (num(b.average_price) || 1)) * 100;
+      } else if (holdSort.key === 'dayChg') {
+        va = num(a.day_change_percentage);
+        vb = num(b.day_change_percentage);
+      } else if (holdSort.key === 'quantity' || holdSort.key === 'average_price' || holdSort.key === 'last_price' || holdSort.key === 'pnl') {
+        va = num(va);
+        vb = num(vb);
+      }
+      if (typeof va === 'string' && typeof vb === 'string') return holdSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return holdSort.dir === 'asc' ? num(va) - num(vb) : num(vb) - num(va);
+    });
+  }
+
   const togglePos = (id: string) => {
     const next = new Set(selectedPos);
     if (next.has(id)) next.delete(id);
@@ -151,16 +165,65 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
 
   const totalPosPnl = positions.reduce((acc: number, p: any) => acc + num(p.pnl), 0);
   const totalHoldingsPnl = (holdings || []).reduce((acc: number, h: any) => acc + num(h.pnl), 0);
+  const totalHoldingsDayPnl = (holdings || []).reduce((acc: number, h: any) => acc + (num(h.day_change) * num(h.quantity)), 0);
   const totalHoldingsVal = (holdings || []).reduce((acc: number, h: any) => acc + (num(h.quantity) * num(h.last_price)), 0);
 
+  const SortHeader = ({ label, sortKey, currentSort, onSort, style }: any) => {
+    const isActive = currentSort.key === sortKey && currentSort.dir !== '';
+    return (
+      <th 
+        style={{ ...style, cursor: sortKey ? 'pointer' : 'default', userSelect: 'none' }} 
+        onClick={() => sortKey && onSort(sortKey)}
+        className={sortKey ? "sort-header" : ""}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: style.textAlign === 'right' ? 'flex-end' : 'flex-start' }}>
+          {label}
+          {sortKey && (
+            <span className={`sort-icon ${isActive ? 'active' : ''}`}>
+              <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && currentSort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || currentSort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
+              <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && currentSort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || currentSort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
+            </span>
+          )}
+        </div>
+      </th>
+    );
+  };
+
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 32px' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '24px 32px' }}>
+      <style>{`
+        .portfolio-row:hover { background-color: #f9f9f9 !important; }
+        .sort-header:hover { color: #444 !important; }
+        .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
+        .sort-header:hover .sort-icon { opacity: 0.5; }
+        .sort-icon.active { opacity: 1 !important; color: #444; }
+      `}</style>
       {showPositions && (
         <div style={{ marginBottom: 48 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 400, color: t.bright, margin: 0 }}>
-              Positions <span style={{ color: t.dim, fontSize: 14 }}>({positions.length})</span>
+            <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', margin: 0 }}>
+              Positions <span style={{ color: '#9b9b9b', fontSize: 18 }}>({positions.length})</span>
             </h2>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
+                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 160, outline: 'none' }} />
+              </div>
+              <a href="#" style={{ color: '#ff5722', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Analyze
+              </a>
+              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10h-10z"></path></svg> Analytics
+              </a>
+              <a href="#" style={{ color: '#9b9b9b', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Settings
+              </a>
+              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
+              </a>
+            </div>
           </div>
           {positions.length === 0 && <div style={S.hint}>No open positions.</div>}
           {positions.length > 0 && (
@@ -170,58 +233,76 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                   <th style={{ ...S.th, width: 40, textAlign: 'center' }}>
                     <input type="checkbox" checked={selectedPos.size === positions.length && positions.length > 0} onChange={toggleAllPos} style={{ cursor: 'pointer' }} />
                   </th>
-                  <th style={S.th}>Product</th>
-                  <th style={S.th}>Instrument</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Qty.</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Avg.</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>LTP</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>P&L</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Chg.</th>
+                  <SortHeader label="Product" sortKey="product" currentSort={posSort} onSort={handlePosSort} style={S.th} />
+                  <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={posSort} onSort={handlePosSort} style={S.th} />
+                  <SortHeader label="Qty." sortKey="quantity" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="Avg." sortKey="average_price" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="LTP" sortKey="last_price" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="P&L" sortKey="pnl" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right', background: '#f9f9f9'}} />
+                  <SortHeader label="Chg." sortKey="chg" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
                 </tr></thead>
                 <tbody>
-                  {positions.map((p: any, idx: number) => {
+                  {sortedPositions.map((p: any, idx: number) => {
                     const qty = num(p.quantity);
                     const id = `${p.exchange}:${p.tradingsymbol}`;
                     const isSelected = selectedPos.has(id);
-                    const chg = ((num(p.last_price) - num(p.average_price)) / (num(p.average_price) || 1)) * 100;
+                    const chg = num(p.average_price) > 0 ? ((num(p.last_price) - num(p.average_price)) / num(p.average_price)) * 100 : 0;
                     return (
-                      <tr key={`${id}-${idx}`} style={{ background: isSelected ? tint(t.blue, 5) : 'transparent' }}>
+                      <tr key={`${id}-${idx}`} className="portfolio-row" style={{ background: isSelected ? 'rgba(56, 126, 209, 0.05)' : 'transparent', transition: 'background 0.2s' }}>
                         <td style={{ ...S.td, textAlign: 'center' }}>
                           <input type="checkbox" checked={isSelected} onChange={() => togglePos(id)} style={{ cursor: 'pointer' }} />
                         </td>
-                        <td style={S.td}><span style={{ ...S.pill, background: t.surface, color: t.dim, border: 'none', padding: '2px 6px', fontSize: 10 }}>{p.product}</span></td>
                         <td style={S.td}>
-                          <span style={{ color: t.bright, marginRight: 8 }}>{parseTs(p.tradingsymbol)}</span>
-                          <span style={{ fontSize: 9, color: t.dim, padding: '1px 4px', background: t.surface, borderRadius: 2 }}>{p.exchange}</span>
+                          {p.product === 'NRML' ? (
+                            <span style={{ ...S.pill, background: 'rgba(200, 86, 162, 0.1)', color: '#c856a2' }}>{p.product}</span>
+                          ) : p.product === 'MIS' ? (
+                            <span style={{ ...S.pill, background: 'rgba(56, 126, 209, 0.1)', color: '#387ed1' }}>{p.product}</span>
+                          ) : (
+                            <span style={{ ...S.pill }}>{p.product}</span>
+                          )}
                         </td>
-                        <td style={{ ...S.td, textAlign: 'right', color: qty >= 0 ? t.blue : t.red }}>{qty}</td>
+                        <td style={{...S.td, whiteSpace: 'nowrap'}}>
+                          <span style={{ color: '#444', marginRight: 8 }}>{parseTradingsymbol(p.tradingsymbol)}</span>
+                          <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 4px', borderRadius: 2 }}>{p.exchange}</span>
+                        </td>
+                        <td style={{ ...S.td, textAlign: 'right', color: qty >= 0 ? '#387ed1' : '#df514c' }}>{qty}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(p.average_price).toFixed(2)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(p.last_price).toFixed(2)}</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(num(p.pnl)) }}>{num(p.pnl).toFixed(2)}</td>
+                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(num(p.pnl)), background: '#f9f9f9' }}>
+                          {num(p.pnl) > 0 ? '+' : ''}{num(p.pnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg) }}>{chg.toFixed(2)}%</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 8px', borderBottom: `1px solid ${tint(t.border, 50)}`, background: t.bg }}>
-                <div style={{ minWidth: 150 }}>
-                  {selectedPos.size > 0 && (
-                    <button style={{ background: '#4184f3', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 16px', fontSize: 13, cursor: 'pointer', fontWeight: 500 }}>
-                      Exit {selectedPos.size} position(s)
-                    </button>
-                  )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '12px 16px', borderTop: `1px solid #f1f1f1` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <span style={{ color: '#444', fontSize: 13 }}>Total P&L</span>
+                  <span style={{ color: pnlColor(totalPosPnl), fontSize: 16, textAlign: 'right', padding: '0 8px', background: '#f9f9f9' }}>
+                    {totalPosPnl > 0 ? '+' : ''}{totalPosPnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', gap: 32, fontSize: 14 }}>
-                  <div>
-                    <span style={{ color: t.dim, marginRight: 8 }}>Day's P&L</span>
-                    <span style={{ color: pnlColor(totalPosPnl), fontWeight: 500 }}>{totalPosPnl.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span style={{ color: t.dim, marginRight: 8 }}>Total P&L</span>
-                    <span style={{ color: pnlColor(totalPosPnl), fontWeight: 500 }}>{totalPosPnl.toFixed(2)}</span>
-                  </div>
-                </div>
+              </div>
+
+              <div style={{ marginTop: 40, borderTop: `1px solid #f1f1f1`, paddingTop: 24 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 400, color: '#444', marginBottom: 24 }}>Breakdown</h3>
+                {sortedPositions.filter((p: any) => num(p.pnl) !== 0).map((p: any, idx: number) => {
+                  const pnl = num(p.pnl);
+                  const maxPnl = Math.max(...positions.map((x: any) => Math.abs(num(x.pnl))), 1);
+                  const width = `${(Math.abs(pnl) / maxPnl) * 100}%`;
+                  return (
+                    <div key={`breakdown-${idx}`} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ width: 250, fontSize: 10, color: '#9b9b9b', textAlign: 'right', paddingRight: 16 }}>
+                        {parseTradingsymbol(p.tradingsymbol)} ({p.product})
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#f1f1f1', height: 6 }}>
+                         <div style={{ height: 6, background: '#387ed1', width }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -231,65 +312,85 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
       {showHoldings && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 400, color: t.bright, margin: 0 }}>
-              Holdings <span style={{ color: t.dim, fontSize: 14 }}>({holdings?.length || 0})</span>
+            <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', margin: 0 }}>
+              Holdings <span style={{ color: '#9b9b9b', fontSize: 18 }}>({holdings?.length || 0})</span>
             </h2>
-            <AuthoriseHoldingsButton />
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
+                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
+              </div>
+              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg> Analytics
+              </a>
+              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
+              </a>
+              <AuthoriseHoldingsButton />
+            </div>
           </div>
           {(!holdings || holdings.length === 0) && <div style={S.hint}>No equity holdings.</div>}
           {holdings && holdings.length > 0 && (
             <div>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead><tr>
-                  <th style={S.th}>Instrument</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Qty.</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Avg. cost</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>LTP</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Cur. val</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>P&L</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Net chg.</th>
-                  <th style={{ ...S.th, textAlign: 'right' }}>Day chg.</th>
+                  <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={holdSort} onSort={handleHoldSort} style={S.th} />
+                  <SortHeader label="Qty." sortKey="quantity" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="Avg. cost" sortKey="average_price" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="LTP" sortKey="last_price" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="Cur. val" sortKey="curVal" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="P&L" sortKey="pnl" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right', background: '#f9f9f9'}} />
+                  <SortHeader label="Net chg." sortKey="netChg" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="Day chg." sortKey="dayChg" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
                 </tr></thead>
                 <tbody>
-                  {holdings.map((h: any, idx: number) => {
+                  {sortedHoldings.map((h: any, idx: number) => {
                     const pnl = num(h.pnl);
                     const curVal = num(h.quantity) * num(h.last_price);
                     const netChg = ((num(h.last_price) - num(h.average_price)) / (num(h.average_price) || 1)) * 100;
+                    const dayChg = num(h.day_change);
+                    const dayChgPct = num(h.day_change_percentage);
                     return (
-                      <tr key={`${h.tradingsymbol}-${idx}`}>
-                        <td style={S.td}>
-                          <span style={{ color: t.bright, marginRight: 8 }}>{parseTs(h.tradingsymbol)}</span>
-                          <span style={{ fontSize: 9, color: t.dim, padding: '1px 4px', background: t.surface, borderRadius: 2 }}>{h.exchange}</span>
+                      <tr key={`${h.tradingsymbol}-${idx}`} className="portfolio-row" style={{ transition: 'background 0.2s' }}>
+                        <td style={{...S.td, whiteSpace: 'nowrap'}}>
+                          <span style={{ color: '#444', marginRight: 8 }}>{parseTradingsymbol(h.tradingsymbol)}</span>
+                          <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{h.exchange}</span>
                         </td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.quantity)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.average_price).toFixed(2)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.last_price).toFixed(2)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{curVal.toFixed(2)}</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(pnl) }}>{pnl.toFixed(2)}</td>
+                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(pnl), background: '#f9f9f9' }}>
+                          {pnl > 0 ? '+' : ''}{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(netChg) }}>{netChg.toFixed(2)}%</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: t.dim }}>0.00%</td>
+                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChgPct) }}>
+                          {dayChg !== 0 ? `${dayChg > 0 ? '+' : ''}${dayChgPct.toFixed(2)}%` : '0.00%'}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '16px 8px', borderBottom: `1px solid ${tint(t.border, 50)}`, background: t.bg }}>
-                <div style={{ display: 'flex', gap: 32, fontSize: 14 }}>
-                  <div>
-                    <span style={{ color: t.dim, marginRight: 8 }}>Total investment</span>
-                    <span style={{ color: t.bright, fontWeight: 500 }}>{(totalHoldingsVal - totalHoldingsPnl).toFixed(2)}</span>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '16px 8px', borderTop: `1px solid #f1f1f1` }}>
+                <div style={{ display: 'flex', gap: 32, fontSize: 13 }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Total investment</span>
+                    <span style={{ color: '#444' }}>{(totalHoldingsVal - totalHoldingsPnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div>
-                    <span style={{ color: t.dim, marginRight: 8 }}>Current value</span>
-                    <span style={{ color: t.bright, fontWeight: 500 }}>{totalHoldingsVal.toFixed(2)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Current value</span>
+                    <span style={{ color: '#444' }}>{totalHoldingsVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div>
-                    <span style={{ color: t.dim, marginRight: 8 }}>Day's P&L</span>
-                    <span style={{ color: pnlColor(totalHoldingsPnl), fontWeight: 500 }}>{totalHoldingsPnl.toFixed(2)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Day's P&L</span>
+                    <span style={{ color: pnlColor(totalHoldingsDayPnl) }}>{totalHoldingsDayPnl > 0 ? '+' : ''}{totalHoldingsDayPnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
-                  <div>
-                    <span style={{ color: t.dim, marginRight: 8 }}>Total P&L</span>
-                    <span style={{ color: pnlColor(totalHoldingsPnl), fontWeight: 500 }}>{totalHoldingsPnl.toFixed(2)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Total P&L</span>
+                    <span style={{ color: pnlColor(totalHoldingsPnl) }}>{totalHoldingsPnl > 0 ? '+' : ''}{totalHoldingsPnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
               </div>

@@ -40,6 +40,7 @@ class KiteAccountResponse(BaseModel):
     is_paper: bool
     is_active: bool
     connected: bool                       # access_token present
+    has_refresh_token: bool = False       # a refresh_token was captured at login
     kite_user_id: Optional[str] = None    # Zerodha user id once logged in
     last_login_at_ms: Optional[int] = None
     created_at_ms: int
@@ -81,6 +82,7 @@ class KiteStatus(BaseModel):
     connected: bool
     is_paper: bool
     account_id: Optional[str] = None
+    has_refresh_token: bool = False
     kite_user_id: Optional[str] = None
     user_name: Optional[str] = None
     message: str = ""

@@ -9,6 +9,7 @@ export interface KiteAccount {
   is_paper: boolean;
   is_active: boolean;
   connected: boolean;
+  has_refresh_token: boolean;
   kite_user_id?: string | null;
   last_login_at_ms?: number | null;
   created_at_ms: number;
@@ -25,6 +26,7 @@ export interface KiteStatus {
   connected: boolean;
   is_paper: boolean;
   account_id?: string | null;
+  has_refresh_token?: boolean;
   kite_user_id?: string | null;
   user_name?: string | null;
   message: string;

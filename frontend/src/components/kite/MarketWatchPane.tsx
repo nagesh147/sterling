@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { k as t, tint, kStyles, Icons } from '../../styles/kiteUI';
 import { useKiteInstrumentSearch, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
+import { parseTradingsymbol } from '../../utils/fmt';
 
 const S = {
   container: { display: 'flex', flexDirection: 'column' as const, height: '100%', background: t.bg, fontFamily: t.fontFamily },
@@ -43,27 +44,6 @@ function instrMeta(i: KiteInstrument) {
 }
 
 const num = (v: any) => Number(v ?? 0);
-
-function parseTradingsymbol(ts: string): string {
-  const nseMatch = ts.match(/^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)$/);
-  if (nseMatch) {
-    const underlying = nseMatch[1];
-    const yy = nseMatch[2];
-    const mon3 = nseMatch[3];
-    const strike = Number(nseMatch[4]);
-    const type = nseMatch[5];
-    return `${underlying} ${strike} ${type}`;
-  }
-  const bseMatch = ts.match(/^([A-Z]+)(\d{2})(\d)(\d{2})(\d+)(CE|PE)$/);
-  if (bseMatch) {
-    return `${bseMatch[1]} ${Number(bseMatch[5])} ${bseMatch[6]}`;
-  }
-  const futMatch = ts.match(/^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)FUT$/);
-  if (futMatch) {
-    return `${futMatch[1]} FUT`;
-  }
-  return ts;
-}
 
 function chgPct(q: any): { value: number | null; abs: number | null; color: string } {
   if (q?.ohlc?.close && q?.last_price) {
@@ -199,7 +179,7 @@ function QuoteDetail({ sym, q }: { sym: string; q: any }) {
 export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
   const [query, setQuery] = useState('');
   const search = useKiteInstrumentSearch(query);
-  const { items: watch, add, remove } = useKiteWatchlist();
+  const { items: watch, add, remove, reorder } = useKiteWatchlist();
   const sync = useSyncKiteWatchlist();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
@@ -308,11 +288,72 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                 </button>
               </div>
             )}
-            {watch.map((w) => {
+            <style>{`
+              .mw-item {
+                position: relative;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0 16px;
+                cursor: pointer;
+                border-bottom: 1px solid ${t.border};
+                background: ${t.bg};
+                transition: background 0.1s;
+                height: 44px;
+                box-sizing: border-box;
+              }
+              .mw-item:hover, .mw-item.expanded {
+                background: ${t.surface};
+              }
+              .mw-drag-handle {
+                opacity: 0;
+                width: 12px;
+                display: flex;
+                align-items: center;
+                color: ${t.dim};
+                transition: opacity 0.1s;
+                position: absolute;
+                left: 2px;
+                cursor: grab;
+              }
+              .mw-drag-handle:active {
+                cursor: grabbing;
+              }
+              .mw-item:hover .mw-drag-handle {
+                opacity: 1;
+              }
+              .mw-prices {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 12px;
+                flex-shrink: 0;
+                justify-content: flex-end;
+              }
+              .mw-item:hover .mw-prices {
+                visibility: hidden;
+              }
+              .mw-actions {
+                display: none;
+                gap: 4px;
+                align-items: center;
+                position: absolute;
+                right: 16px;
+                top: 50%;
+                transform: translateY(-50%);
+                background: ${t.surface};
+              }
+              .mw-item:hover .mw-actions {
+                display: flex;
+              }
+              .mw-item.drag-over {
+                box-shadow: inset 0 2px 0 0 ${t.blue};
+              }
+            `}</style>
+            {watch.map((w, idx) => {
               const q = quotes?.[w.symbol];
               const chg = q ? chgPct(q) : { value: null, abs: null, color: t.dim };
               const isExp = expanded.has(w.symbol);
-              const isHovered = hovered === w.symbol;
               const lastPx = q?.last_price ?? ltp?.[w.symbol]?.last_price;
               const chgVal = chg.value;
               const chgAbs = chg.abs;
@@ -321,55 +362,75 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
               const displayName = parseTradingsymbol(rawTs);
               const exch = w.symbol.split(':')[0] || '';
 
+              let tag = exch;
+              if (rawTs === 'NIFTY 50' || rawTs === 'NIFTY BANK' || rawTs === 'SENSEX' || rawTs === 'BANKEX' || rawTs === 'NIFTY 100' || rawTs === 'NIFTY COMMODITIES' || rawTs === 'NIFTY FIN SERVICE' || rawTs.includes('INDEX') || w.name?.includes('INDEX')) {
+                tag = 'INDEX';
+              }
+
               return (
-                <div key={w.symbol}>
+                <div 
+                  key={w.symbol}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', idx.toString());
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('drag-over');
+                  }}
+                  onDragLeave={(e) => {
+                    e.currentTarget.classList.remove('drag-over');
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('drag-over');
+                    const draggedIdx = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                    if (!isNaN(draggedIdx) && draggedIdx !== idx && reorder) {
+                      reorder(draggedIdx, idx);
+                    }
+                  }}
+                >
                   <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '12px 16px',
-                      cursor: 'pointer',
-                      borderBottom: `1px solid ${t.border}`,
-                      background: isHovered || isExp ? t.surface : t.bg,
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={() => setHovered(w.symbol)}
-                    onMouseLeave={() => setHovered(null)}
+                    className={`mw-item ${isExp ? 'expanded' : ''}`}
                     onClick={() => toggleExpand(w.symbol)}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <span style={{ color: chgColor, fontWeight: 500, fontSize: 13, display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                        {displayName}
-                        <span style={{ fontSize: 10, color: t.dim, fontWeight: 400 }}>{w.sub || w.name}</span>
-                      </span>
-                      <span style={pillStyle(exColor(exch))}>{exch}</span>
+                    <div className="mw-drag-handle" title="Drag to reorder">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="9" cy="5" r="1.5"></circle>
+                        <circle cx="9" cy="12" r="1.5"></circle>
+                        <circle cx="9" cy="19" r="1.5"></circle>
+                        <circle cx="15" cy="5" r="1.5"></circle>
+                        <circle cx="15" cy="12" r="1.5"></circle>
+                        <circle cx="15" cy="19" r="1.5"></circle>
+                      </svg>
                     </div>
 
-                    {isHovered ? (
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-                        <button style={{ ...S.btnAction, background: t.blue, color: '#fff', fontSize: 13 }} title="Buy">B</button>
-                        <button style={{ ...S.btnAction, background: t.red, color: '#fff', fontSize: 13 }} title="Sell">S</button>
-                        <button style={{ ...S.btnAction, background: 'transparent', color: t.text, border: `1px solid ${t.border}` }} onClick={() => toggleExpand(w.symbol)} title="Market Depth"><Icons.Depth /></button>
-                        <button style={{ ...S.btnAction, background: 'transparent', color: t.text, border: `1px solid ${t.border}` }} onClick={() => onOpenInstrument?.(w.symbol, 'chart')} title="Chart"><Icons.Chart /></button>
-                        <button style={{ ...S.btnAction, background: 'transparent', color: t.text, border: `1px solid ${t.border}` }} onClick={() => remove(w.symbol)} title="Delete"><Icons.Trash /></button>
-                        <button style={{ ...S.btnAction, background: 'transparent', color: t.text, border: `1px solid ${t.border}` }} onClick={(e) => handleMenuClick(e, w.symbol)} title="More"><Icons.More /></button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                        <span style={{ color: chgColor, fontWeight: 500, fontSize: 13 }}>
-                          {lastPx != null ? formatPrice(lastPx) : '—'}
-                          {isExp && <span style={{ color: t.dim, fontSize: 10, marginLeft: 6 }}>{isExp ? '▾' : '▸'}</span>}
-                        </span>
-                        <span style={{ fontSize: 11, color: t.dim }}>
-                          {chgAbs != null && chgVal != null ? (
-                            <span>{chgAbs >= 0 ? '+' : ''}{chgAbs.toFixed(2)} <span style={{ color: chgColor }}>({chgVal.toFixed(2)}%)</span></span>
-                          ) : (
-                            '—'
-                          )}
-                        </span>
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, paddingRight: 8 }}>
+                      <span style={{ color: chgColor, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
+                      <span style={{ fontSize: 9, color: t.dim, letterSpacing: 0.3, flexShrink: 0 }}>{tag}</span>
+                    </div>
+
+                    <div className="mw-actions" onClick={(e) => e.stopPropagation()}>
+                      <button style={{ ...S.btnAction, background: '#387ed1', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
+                      <button style={{ ...S.btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
+                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => toggleExpand(w.symbol)} title="Market Depth"><Icons.Depth /></button>
+                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => onOpenInstrument?.(w.symbol, 'chart')} title="Chart"><Icons.Chart /></button>
+                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => remove(w.symbol)} title="Delete"><Icons.Trash /></button>
+                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={(e) => handleMenuClick(e, w.symbol)} title="More"><Icons.More /></button>
+                    </div>
+                    
+                    <div className="mw-prices">
+                      <span style={{ color: t.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>
+                      <span style={{ color: t.dim, fontSize: 11, marginLeft: 4 }}>{chgVal != null ? `${chgVal.toFixed(2)}%` : '—'}</span>
+                      <span style={{ color: chgColor, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
+                        {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                        {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                      </span>
+                      <span style={{ color: chgColor, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
+                        {lastPx != null ? formatPrice(lastPx) : '—'}
+                      </span>
+                    </div>
                   </div>
                   {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} />}
                 </div>

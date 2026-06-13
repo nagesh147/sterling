@@ -121,3 +121,31 @@ export function fmtArrow(type: string | null | undefined): string {
   if (type === 'red') return 'Bearish signal';
   return type;
 }
+
+export function parseTradingsymbol(ts: string): string {
+  // Monthly options: NIFTY24JUN24500CE
+  const nseMatch = ts.match(/^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)(BFO|NFO)?$/);
+  if (nseMatch) {
+    const mm: Record<string, string> = { 'JAN':'Jan','FEB':'Feb','MAR':'Mar','APR':'Apr','MAY':'May','JUN':'Jun','JUL':'Jul','AUG':'Aug','SEP':'Sep','OCT':'Oct','NOV':'Nov','DEC':'Dec' };
+    return `${nseMatch[1]} ${mm[nseMatch[3]]} ${nseMatch[4]} ${nseMatch[5]}`;
+  }
+  // Weekly options: NIFTY2461324500CE (Year=24, Month=6, Date=13)
+  const weeklyMatch = ts.match(/^([A-Z]+)(\d{2})(1|2|3|4|5|6|7|8|9|O|N|D)(\d{2})(\d+)(CE|PE)(BFO|NFO)?$/);
+  if (weeklyMatch) {
+    const underlying = weeklyMatch[1];
+    const m = weeklyMatch[3];
+    const dd = parseInt(weeklyMatch[4], 10);
+    const strike = weeklyMatch[5];
+    const type = weeklyMatch[6];
+    const mMap: Record<string, string> = {'1':'Jan','2':'Feb','3':'Mar','4':'Apr','5':'May','6':'Jun','7':'Jul','8':'Aug','9':'Sep','O':'Oct','N':'Nov','D':'Dec'};
+    const month = mMap[m];
+    // Add ordinal suffix
+    const getOrdinal = (n: number) => {
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    };
+    return `${underlying} ${getOrdinal(dd)} ${month} ${strike} ${type}`;
+  }
+  return ts.replace(/(CE|PE)(BFO|NFO)$/, ' $1');
+}

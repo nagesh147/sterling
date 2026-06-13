@@ -1,266 +1,97 @@
-import React, { useState } from 'react';
-import { c as t, tint } from '../../styles/terminalUI';
-import {
-  useKiteAlerts, useCreateKiteAlert, useModifyKiteAlert, useDeleteKiteAlerts,
-  useKiteAlertHistory, useKiteInstrumentSearch,
-} from '../../hooks/useKite';
+import React from 'react';
+import { useKiteAlerts } from '../../hooks/useKite';
 import type { KiteAlert } from '../../types/kite';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 10, padding: 14, marginBottom: 14 },
-  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 10, fontWeight: 700 },
-  th: { textAlign: 'left' as const, color: t.dim, fontSize: 10, fontWeight: 600, padding: '4px 8px', borderBottom: `1px solid ${t.border}` },
-  td: { padding: '6px 8px', fontSize: 12, color: t.bright, borderBottom: `1px solid ${tint(t.border, 50)}` },
-  hint: { color: t.dim, fontSize: 11 },
-  input: { background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, boxSizing: 'border-box' as const, width: '100%' },
-  label: { color: t.dim, fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
-  btn: { background: tint(t.cyan, 12), color: t.cyan, border: `1px solid ${t.cyan}`, padding: '8px 18px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8, alignItems: 'end' },
-  pill: { padding: '1px 7px', borderRadius: 999, fontSize: 9, fontWeight: 700 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px', borderBottom: '1px solid #f1f1f1' },
+  title: { fontSize: 16, color: '#444', fontWeight: 400 },
+  actions: { display: 'flex', gap: 12, alignItems: 'center' },
+  primaryBtn: { background: '#387ed1', color: 'white', padding: '8px 16px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 },
+  searchInputWrapper: { position: 'relative', display: 'flex', alignItems: 'center' },
+  searchInput: { border: '1px solid #e0e0e0', borderRadius: 3, padding: '8px 12px 8px 30px', fontSize: 13, color: '#444', outline: 'none', width: 200 },
+  searchIcon: { position: 'absolute', left: 10, color: '#9b9b9b' },
+  th: { textAlign: 'left', color: '#9b9b9b', fontSize: 12, fontWeight: 400, padding: '12px 16px', borderBottom: '1px solid #f1f1f1' },
+  td: { padding: '12px 16px', fontSize: 13, color: '#444', borderBottom: '1px solid #f1f1f1', verticalAlign: 'top' },
+  pill: { padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 500, display: 'inline-block' },
 };
 
-const OPERATORS = ['>=', '<=', '>', '<', '=='];
-const ATTRS = ['LastTradedPrice', 'High', 'Low', 'Open', 'Close', 'Volume'];
-
-function InstrumentPicker({ value, onPick }: { value: string; onPick: (sym: string) => void }) {
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const { data } = useKiteInstrumentSearch(q);
-  return (
-    <div style={{ position: 'relative' }}>
-      <input
-        style={S.input}
-        value={open ? q : value}
-        placeholder="Search instrument…"
-        onFocus={() => { setOpen(true); setQ(''); }}
-        onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-      />
-      {open && (data?.instruments?.length ?? 0) > 0 && (
-        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, maxHeight: 220, overflow: 'auto', background: t.surface, border: `1px solid ${t.border}`, borderRadius: 6, marginTop: 2 }}>
-          {data!.instruments.slice(0, 15).map((ins) => {
-            const sym = `${ins.exchange}:${ins.tradingsymbol}`;
-            return (
-              <div
-                key={`${sym}-${ins.instrument_token}`}
-                style={{ padding: '6px 9px', fontSize: 12, cursor: 'pointer', color: t.bright, borderBottom: `1px solid ${tint(t.border, 40)}` }}
-                onMouseDown={() => { onPick(sym); setOpen(false); }}
-              >
-                <span style={{ fontWeight: 600 }}>{ins.tradingsymbol}</span>
-                <span style={{ color: t.dim, marginLeft: 6, fontSize: 10 }}>{ins.exchange} · {ins.name}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AlertHistory({ uuid }: { uuid: string }) {
-  const { data, isLoading } = useKiteAlertHistory(uuid);
-  if (isLoading) return <div style={{ ...S.hint, padding: '6px 8px' }}>Loading history…</div>;
-  if (!data || data.length === 0) return <div style={{ ...S.hint, padding: '6px 8px' }}>Never triggered yet.</div>;
-  return (
-    <div style={{ padding: '4px 8px 10px' }}>
-      {data.map((h, i) => (
-        <div key={i} style={{ fontSize: 11, color: t.dim, padding: '2px 0' }}>
-          {(h.created_at as string) || '—'} · {(h.type as string) || 'triggered'}{h.order_id ? ` · order ${h.order_id}` : ''}
-        </div>
-      ))}
-    </div>
-  );
+function Pill({ type, children }: { type: 'disabled' | 'enabled' | 'simple' | 'ato'; children: React.ReactNode }) {
+  const styles = {
+    disabled: { color: '#e53935', background: 'rgba(229, 57, 53, 0.1)' },
+    enabled: { color: '#4caf50', background: 'rgba(76, 175, 80, 0.1)' },
+    simple: { color: '#9c27b0', background: 'rgba(156, 39, 176, 0.1)' },
+    ato: { color: '#ff9800', background: 'rgba(255, 152, 0, 0.1)' },
+  };
+  return <span style={{ ...S.pill, ...styles[type] }}>{children}</span>;
 }
 
 export function AlertsPane() {
   const { data: alerts } = useKiteAlerts(true);
-  const create = useCreateKiteAlert();
-  const modify = useModifyKiteAlert();
-  const del = useDeleteKiteAlerts();
-  const [form, setForm] = useState({
-    symbol: '', attribute: 'LastTradedPrice', operator: '>=', value: '', name: '',
-    mode: 'simple' as 'simple' | 'ato',
-    side: 'BUY' as 'BUY' | 'SELL', qty: '1', orderType: 'MARKET', product: 'CNC', price: '',
-  });
-  const [openHist, setOpenHist] = useState<string | null>(null);
-
-  const set = (k: string, v: string) => setForm((s) => ({ ...s, [k]: v } as typeof s));
-
-  const submit = () => {
-    const [exchange, tradingsymbol] = form.symbol.includes(':') ? form.symbol.split(':') : ['NSE', form.symbol];
-    const name = form.name.trim() || `${tradingsymbol} ${form.operator} ${form.value}`;
-    const base = {
-      name,
-      lhs_exchange: exchange,
-      lhs_tradingsymbol: tradingsymbol,
-      lhs_attribute: form.attribute,
-      operator: form.operator,
-      rhs_constant: Number(form.value),
-    };
-    const payload = form.mode === 'ato'
-      ? {
-          ...base, alert_type: 'ato',
-          basket: [{
-            exchange, tradingsymbol,
-            transaction_type: form.side, quantity: Number(form.qty) || 1,
-            order_type: form.orderType, product: form.product,
-            ...(form.orderType === 'LIMIT' && form.price ? { price: Number(form.price) } : {}),
-          }],
-        }
-      : base;
-    create.mutate(payload, { onSuccess: () => setForm((s) => ({ ...s, value: '', name: '', price: '' })) });
-  };
-
-  const canSubmit = form.symbol.trim() && form.value.trim() && !Number.isNaN(Number(form.value)) && !create.isPending;
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <div style={S.card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ ...S.title, marginBottom: 0 }}>CREATE ALERT</div>
-          <div style={{ display: 'flex', gap: 4, background: t.bg, borderRadius: 6, padding: 2, border: `1px solid ${t.border}` }}>
-            {(['simple', 'ato'] as const).map((m) => (
-              <span
-                key={m}
-                onClick={() => set('mode', m)}
-                style={{
-                  cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 4,
-                  color: form.mode === m ? t.bright : t.dim,
-                  background: form.mode === m ? tint(t.cyan, 16) : 'transparent',
-                }}
-              >
-                {m === 'simple' ? 'Notify' : 'Auto-order'}
-              </span>
-            ))}
-          </div>
-        </div>
-        <div style={S.grid}>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={S.label}>INSTRUMENT</label>
-            <InstrumentPicker value={form.symbol} onPick={(sym) => set('symbol', sym)} />
-          </div>
-          <div>
-            <label style={S.label}>ATTRIBUTE</label>
-            <select style={S.input} value={form.attribute} onChange={(e) => set('attribute', e.target.value)}>
-              {ATTRS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={S.label}>OPERATOR</label>
-            <select style={S.input} value={form.operator} onChange={(e) => set('operator', e.target.value)}>
-              {OPERATORS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={S.label}>VALUE</label>
-            <input style={S.input} value={form.value} onChange={(e) => set('value', e.target.value)} placeholder="1500" />
-          </div>
-        </div>
-
-        {form.mode === 'ato' && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${tint(t.border, 60)}` }}>
-            <div style={{ ...S.label, marginBottom: 8, color: t.amber }}>ORDER TO FIRE WHEN TRIGGERED</div>
-            <div style={S.grid}>
-              <div>
-                <label style={S.label}>SIDE</label>
-                <select style={S.input} value={form.side} onChange={(e) => set('side', e.target.value)}>
-                  {['BUY', 'SELL'].map((x) => <option key={x}>{x}</option>)}
-                </select>
-              </div>
-              <div><label style={S.label}>QTY</label><input style={S.input} value={form.qty} onChange={(e) => set('qty', e.target.value)} placeholder="1" /></div>
-              <div>
-                <label style={S.label}>ORDER TYPE</label>
-                <select style={S.input} value={form.orderType} onChange={(e) => set('orderType', e.target.value)}>
-                  {['MARKET', 'LIMIT'].map((x) => <option key={x}>{x}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={S.label}>PRODUCT</label>
-                <select style={S.input} value={form.product} onChange={(e) => set('product', e.target.value)}>
-                  {['CNC', 'MIS', 'NRML'].map((x) => <option key={x}>{x}</option>)}
-                </select>
-              </div>
-              {form.orderType === 'LIMIT' && (
-                <div><label style={S.label}>LIMIT PRICE</label><input style={S.input} value={form.price} onChange={(e) => set('price', e.target.value)} placeholder="1500" /></div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, alignItems: 'center' }}>
-          <button style={{ ...S.btn, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? 'pointer' : 'not-allowed' }} disabled={!canSubmit} onClick={submit}>
-            {create.isPending ? 'CREATING…' : form.mode === 'ato' ? 'CREATE AUTO-ORDER ALERT' : 'CREATE ALERT'}
+    <div style={{ background: '#fff', height: '100%', padding: '24px 32px' }}>
+      <div style={S.header}>
+        <div style={S.title}>Alerts ({alerts?.length || 0})</div>
+        <div style={S.actions}>
+          <button style={S.primaryBtn}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            New alert
           </button>
-          {create.isSuccess && <span style={{ color: t.green, fontSize: 11 }}>✓ Alert created</span>}
-          {create.error && <span style={{ color: t.red, fontSize: 11 }}>✗ {create.error.message}</span>}
-        </div>
-        <div style={{ ...S.hint, marginTop: 8 }}>
-          {form.mode === 'ato'
-            ? 'Auto-order (ATO): Kite places the order above automatically when the condition is met. Simulated on paper accounts — no real order is armed.'
-            : 'Native Kite server-side alerts — they trigger even when Sterling is closed, firing once the chosen attribute crosses your threshold.'}
+          <div style={S.searchInputWrapper}>
+            <svg style={S.searchIcon} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input style={S.searchInput} placeholder="Search" />
+          </div>
         </div>
       </div>
-
-      <div style={S.card}>
-        <div style={S.title}>ALERTS ({alerts?.length || 0})</div>
-        {(!alerts || alerts.length === 0) && <div style={S.hint}>No alerts yet.</div>}
-        {alerts && alerts.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>
-              <th style={S.th}>Name</th><th style={S.th}>Condition</th><th style={S.th}>Status</th>
-              <th style={{ ...S.th, textAlign: 'right' }} />
-            </tr></thead>
-            <tbody>
-              {alerts.map((a: KiteAlert) => {
-                const enabled = (a.status || '').toLowerCase() === 'enabled';
-                const cond = `${a.lhs_tradingsymbol ?? ''} ${a.lhs_attribute ?? ''} ${a.operator ?? ''} ${a.rhs_constant ?? ''}`.trim();
-                const isOpen = openHist === a.uuid;
-                return (
-                  <React.Fragment key={a.uuid}>
-                    <tr>
-                      <td style={S.td}>{a.name}</td>
-                      <td style={{ ...S.td, color: t.dim }}>{cond}</td>
-                      <td style={S.td}>
-                        <span style={{ ...S.pill, color: enabled ? t.green : t.dim, background: tint(enabled ? t.green : t.dim, 14) }}>
-                          {a.status || 'unknown'}
-                        </span>
-                      </td>
-                      <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <span style={{ cursor: 'pointer', color: t.blue, fontSize: 11, marginRight: 12 }}
-                          onClick={() => setOpenHist(isOpen ? null : a.uuid)}>
-                          {isOpen ? 'hide' : 'history'}
-                        </span>
-                        <span style={{ cursor: 'pointer', color: t.amber, fontSize: 11, marginRight: 12 }}
-                          onClick={() => modify.mutate({
-                            uuid: a.uuid,
-                            // Kite's modify replaces the whole definition — resend it with the flipped status.
-                            name: a.name,
-                            lhs_exchange: a.lhs_exchange,
-                            lhs_tradingsymbol: a.lhs_tradingsymbol,
-                            lhs_attribute: a.lhs_attribute,
-                            operator: a.operator,
-                            rhs_constant: a.rhs_constant,
-                            status: enabled ? 'disabled' : 'enabled',
-                          })}>
-                          {enabled ? 'disable' : 'enable'}
-                        </span>
-                        <span style={{ cursor: 'pointer', color: t.red, fontSize: 11 }}
-                          onClick={() => del.mutate([a.uuid])}>
-                          {del.isPending ? '…' : 'delete'}
-                        </span>
-                      </td>
-                    </tr>
-                    {isOpen && (
-                      <tr><td colSpan={4} style={{ background: t.bg, padding: 0 }}><AlertHistory uuid={a.uuid} /></td></tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead><tr>
+          <th style={{ ...S.th, width: 40 }}><input type="checkbox" style={{ cursor: 'pointer' }} /></th>
+          <th style={S.th}>Name</th>
+          <th style={S.th}>Status</th>
+          <th style={S.th}>Type</th>
+          <th style={S.th}>Triggered</th>
+          <th style={S.th}>Created on</th>
+        </tr></thead>
+        <tbody>
+          {(!alerts || alerts.length === 0) && (
+            <tr>
+              <td colSpan={6} style={{ textAlign: 'center', padding: '60px 20px', color: '#9b9b9b', fontSize: 14 }}>
+                No alerts found.
+              </td>
+            </tr>
+          )}
+          {alerts && alerts.map((a: KiteAlert) => {
+            const enabled = (a.status || '').toLowerCase() === 'enabled';
+            const cond = `${a.lhs_tradingsymbol ?? ''} ${a.lhs_attribute ?? ''} ${a.operator ?? ''} ${a.rhs_constant ?? ''}`.trim();
+            const isAto = a.alert_type === 'ato';
+            
+            return (
+              <tr key={a.uuid} style={{ transition: 'background 0.2s', cursor: 'default' }}>
+                <td style={{ ...S.td, width: 40 }}><input type="checkbox" style={{ cursor: 'pointer' }} /></td>
+                <td style={S.td}>
+                  <div style={{ color: '#444', fontWeight: 400, marginBottom: 4 }}>{a.name}</div>
+                  <div style={{ color: '#9b9b9b', fontSize: 11 }}>Last price of {cond}</div>
+                </td>
+                <td style={S.td}>
+                  <Pill type={enabled ? 'enabled' : 'disabled'}>{a.status?.toUpperCase() || 'UNKNOWN'}</Pill>
+                </td>
+                <td style={S.td}>
+                  <Pill type={isAto ? 'ato' : 'simple'}>{isAto ? 'ATO' : 'SIMPLE'}</Pill>
+                </td>
+                <td style={{ ...S.td, color: '#387ed1' }}>0</td>
+                <td style={S.td}>{a.created_at ? new Date(a.created_at as string).toISOString().split('T')[0] : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
-
-export default AlertsPane;

@@ -35,6 +35,7 @@
 # ui-formatting
 - Format backend reason strings for user-facing display: fix casing (title/sentence case where appropriate), correct grammar, and use readable labels — never show raw-backend underscore_delimited or ALL_CAPS strings directly to users. Confidence: 0.65
 - Use descriptive human-readable labels with parenthetical clarifications in dropdown/select options instead of raw technical identifiers (e.g., "Trend following (futures)" not "directional_futures", "Buy only" not "long_only"). Confidence: 0.70
+- Parse and display option tradingsymbols in human-readable format: extract underlying name, strike price, option type (CE/PE), and expiry date — display as "{underlying} {strike} {type} · {formatted expiry}" using two-digit year (e.g., "SENSEX 75500 PE · 18 June 26" from "SENSEX2661875500PE"). Confidence: 0.75
 
 # naming
 - Use "Sterling's Gate" for the routing gate component and "Claude's Native" for the native engine component in UI labels and user-facing text. Confidence: 0.80

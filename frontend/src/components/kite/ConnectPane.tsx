@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { c as t, tint } from '../../styles/terminalUI';
 import {
   useActivateKiteAccount, useAddKiteAccount, useDeleteKiteAccount, useGenerateKiteSession,
   useKiteAccounts, useKiteBasketMargins, useKiteLoginUrl, useKiteLogout, useKiteOrderCharges,
@@ -10,24 +9,24 @@ import {
 import type { KiteAccount } from '../../types/kite';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: t.raised, border: `1px solid ${t.border}`, borderRadius: 10, padding: 16, marginBottom: 14 },
-  title: { color: t.dim, fontSize: 11, letterSpacing: 2, marginBottom: 12, fontWeight: 700 },
-  row: { background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '10px 14px', marginBottom: 8 },
-  name: { fontWeight: 700, color: t.bright, fontSize: 13 },
+  card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 16, marginBottom: 14 },
+  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 1, marginBottom: 12, fontWeight: 700 },
+  row: { background: '#f9f9f9', border: `1px solid #e0e0e0`, borderRadius: 4, padding: '10px 14px', marginBottom: 8 },
+  name: { fontWeight: 700, color: '#444', fontSize: 13 },
   actions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 },
-  btn: { background: t.raised, color: t.blue, border: `1px solid ${t.border}`, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnGreen: { background: tint(t.green, 10), color: t.green, border: `1px solid ${t.green}`, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
-  btnRed: { background: t.raised, color: t.red, border: `1px solid ${t.red}`, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  input: { background: t.raised, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
-  label: { color: t.dim, fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
-  hint: { color: t.dim, fontSize: 11 },
-  err: { color: t.red, fontSize: 11, marginTop: 6 },
-  ok: { color: t.green, fontSize: 11, marginTop: 6 },
+  btn: { background: '#fff', color: '#387ed1', border: `1px solid #e0e0e0`, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  btnGreen: { background: '#4caf50', color: '#fff', border: `1px solid #4caf50`, padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
+  btnRed: { background: '#fff', color: '#e53935', border: `1px solid #e53935`, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
+  input: { background: '#fff', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 4, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
+  label: { color: '#9b9b9b', fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
+  hint: { color: '#9b9b9b', fontSize: 11 },
+  err: { color: '#e53935', fontSize: 11, marginTop: 6 },
+  ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
 };
 
 const badge = (col: string): React.CSSProperties => ({
-  background: tint(col, 13), color: col, border: `1px solid ${col}`,
-  padding: '2px 8px', borderRadius: 999, fontSize: 9, fontWeight: 700,
+  background: '#f9f9f9', color: col, border: `1px solid ${col}`,
+  padding: '2px 8px', borderRadius: 2, fontSize: 9, fontWeight: 700,
 });
 
 /** Map a known Kite/login error message to actionable guidance (null = unknown). */
@@ -51,12 +50,12 @@ function kiteErrorHelp(msg: string): string | null {
 function StatusBanner() {
   const { data: s } = useKiteStatus();
   if (!s) return null;
-  const col = s.connected ? (s.is_paper ? t.amber : t.green) : t.red;
+  const col = s.connected ? (s.is_paper ? '#ff9800' : '#4caf50') : '#e53935';
   return (
-    <div style={{ ...S.card, borderColor: col, background: tint(col, 6) }}>
+    <div style={{ ...S.card, borderColor: col, background: '#f9f9f9' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ width: 9, height: 9, borderRadius: 5, background: col, display: 'inline-block' }} />
-        <span style={{ fontWeight: 700, color: t.bright, fontSize: 13 }}>
+        <span style={{ fontWeight: 700, color: '#444', fontSize: 13 }}>
           {s.connected ? (s.is_paper ? 'Paper mode' : `Connected${s.user_name ? ` — ${s.user_name}` : ''}`) : 'Not connected'}
         </span>
         {s.kite_user_id && <span style={S.hint}>· {s.kite_user_id}</span>}
@@ -76,8 +75,8 @@ function Funds() {
       <div style={S.title}>FUNDS</div>
       {segs.map(([seg, info]: [string, any]) => (
         <div key={seg} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
-          <span style={{ color: t.dim }}>{seg}</span>
-          <span style={{ color: t.bright, fontWeight: 700 }}>
+          <span style={{ color: '#9b9b9b' }}>{seg}</span>
+          <span style={{ color: '#444', fontWeight: 700 }}>
             ₹{Number(info?.net ?? info?.available?.live_balance ?? 0).toLocaleString('en-IN')}
           </span>
         </div>
@@ -87,63 +86,83 @@ function Funds() {
 }
 
 function LoginFlow({ account }: { account: KiteAccount }) {
-  const { data: lu } = useKiteLoginUrl(account.has_credentials);
+  const { data: lu } = useKiteLoginUrl(account.has_credentials && !account.connected);
   const gen = useGenerateKiteSession();
   const logout = useKiteLogout();
   const refresh = useRefreshKiteSession();
   const [reqToken, setReqToken] = useState('');
+  const [showRelogin, setShowRelogin] = useState(false);
+
+  // The manual login steps (Open Kite Login + paste request_token). Shown when
+  // NOT connected, or behind the "Re-login manually" toggle when a live session
+  // has lapsed and the user wants to re-authenticate without logging out.
+  const loginSteps = (
+    <>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+        <button
+          style={S.btnGreen}
+          disabled={!lu?.login_url}
+          onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}
+        >
+          1 · Open Kite Login ↗
+        </button>
+        <span style={S.hint}>Log in on Kite, then copy the <code>request_token</code> from the redirect URL.</span>
+      </div>
+      <details style={{ marginBottom: 10 }}>
+        <summary style={{ ...S.hint, cursor: 'pointer' }}>Kite says “user is not enabled for the app”?</summary>
+        <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.6 }}>
+          That error is from Zerodha, not Sterling — the API key is valid, but your login isn’t enabled for the app yet.
+          Sign in with the exact <strong>User ID that owns the Kite Connect app</strong> (+ TOTP). A subscription activated
+          today can take ~15–30 min to propagate — wait and retry in an incognito window. If it persists, raise a
+          Kite Connect support ticket at support.zerodha.com.
+        </div>
+      </details>
+      <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
+        ↪ Auto-connect: set your app’s <strong>Redirect URL</strong> to{' '}
+        <code>http://localhost:8000/api/v1/kite/callback</code> and login completes itself (no paste needed).
+      </div>
+      <label style={S.label}>2 · PASTE request_token (manual)</label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
+        <button
+          style={S.btnGreen}
+          disabled={!reqToken.trim() || gen.isPending}
+          onClick={() => gen.mutate({ request_token: reqToken.trim(), account_id: account.id }, { onSuccess: () => { setReqToken(''); setShowRelogin(false); } })}
+        >
+          {gen.isPending ? '…' : 'Connect'}
+        </button>
+      </div>
+      {gen.isSuccess && <div style={S.ok}>✓ Session active{gen.data?.user_name ? ` — ${gen.data.user_name}` : ''}</div>}
+      {gen.error && (
+        <div style={{ marginTop: 6 }}>
+          <div style={S.err}>✗ {gen.error.message}</div>
+          {kiteErrorHelp(gen.error.message) && (
+            <div style={{ ...S.hint, marginTop: 4, lineHeight: 1.6 }}>💡 {kiteErrorHelp(gen.error.message)}</div>
+          )}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div style={S.card}>
       <div style={S.title}>KITE LOGIN — {account.label}</div>
       {!account.has_credentials && <div style={S.hint}>Add API key & secret first (below).</div>}
-      {account.has_credentials && (
+
+      {/* Connected → compact session controls; the paste-token flow is hidden
+          behind "Re-login manually" so it doesn't clutter an active session. */}
+      {account.has_credentials && account.connected && (
         <>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
-            <button
-              style={S.btnGreen}
-              disabled={!lu?.login_url}
-              onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}
-            >
-              1 · Open Kite Login ↗
-            </button>
-            <span style={S.hint}>Log in on Kite, then copy the <code>request_token</code> from the redirect URL.</span>
+          <div style={{ ...S.hint, marginBottom: 10, lineHeight: 1.6 }}>
+            Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}.{' '}
+            {account.has_refresh_token
+              ? <>Sterling <strong>auto-recovers</strong> this session from the stored refresh token whenever it lapses — no
+                clicking needed. A fresh 2FA login may still be required at Zerodha’s daily ~6 AM IST reset.</>
+              : <>Kite didn’t issue a refresh token for this app, so the session can’t be auto-renewed — Zerodha requires a
+                fresh 2FA login each day (~6 AM IST). Re-login below when it lapses.</>}
           </div>
-          <details style={{ marginBottom: 10 }}>
-            <summary style={{ ...S.hint, cursor: 'pointer' }}>Kite says “user is not enabled for the app”?</summary>
-            <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.6 }}>
-              That error is from Zerodha, not Sterling — the API key is valid, but your login isn’t enabled for the app yet.
-              Sign in with the exact <strong>User ID that owns the Kite Connect app</strong> (+ TOTP). A subscription activated
-              today can take ~15–30 min to propagate — wait and retry in an incognito window. If it persists, raise a
-              Kite Connect support ticket at support.zerodha.com.
-            </div>
-          </details>
-          <div style={{ ...S.hint, marginBottom: 8, lineHeight: 1.6 }}>
-            ↪ Auto-connect: set your app’s <strong>Redirect URL</strong> to{' '}
-            <code>http://localhost:8000/api/v1/kite/callback</code> and login completes itself (no paste needed).
-          </div>
-          <label style={S.label}>2 · PASTE request_token (manual)</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
-            <button
-              style={S.btnGreen}
-              disabled={!reqToken.trim() || gen.isPending}
-              onClick={() => gen.mutate({ request_token: reqToken.trim(), account_id: account.id }, { onSuccess: () => setReqToken('') })}
-            >
-              {gen.isPending ? '…' : 'Connect'}
-            </button>
-          </div>
-          {gen.isSuccess && <div style={S.ok}>✓ Session active{gen.data?.user_name ? ` — ${gen.data.user_name}` : ''}</div>}
-          {gen.error && (
-            <div style={{ marginTop: 6 }}>
-              <div style={S.err}>✗ {gen.error.message}</div>
-              {kiteErrorHelp(gen.error.message) && (
-                <div style={{ ...S.hint, marginTop: 4, lineHeight: 1.6 }}>💡 {kiteErrorHelp(gen.error.message)}</div>
-              )}
-            </div>
-          )}
-          {account.connected && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {account.has_refresh_token && (
               <button
                 style={S.btn}
                 onClick={() => refresh.mutate({ account_id: account.id })}
@@ -152,13 +171,24 @@ function LoginFlow({ account }: { account: KiteAccount }) {
               >
                 {refresh.isPending ? 'Refreshing…' : '↻ Refresh session'}
               </button>
-              <button style={S.btnRed} onClick={() => logout.mutate()}>Log out</button>
-              {refresh.isSuccess && <span style={S.ok}>✓ Renewed</span>}
-              {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
+            )}
+            <button style={account.has_refresh_token ? S.btn : S.btnGreen} onClick={() => setShowRelogin((v) => !v)}>
+              {showRelogin ? 'Cancel re-login' : 'Re-login'}
+            </button>
+            <button style={S.btnRed} onClick={() => logout.mutate()}>Log out</button>
+            {refresh.isSuccess && <span style={S.ok}>✓ Renewed</span>}
+            {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
+          </div>
+          {showRelogin && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid #e0e0e0` }}>
+              {loginSteps}
             </div>
           )}
         </>
       )}
+
+      {/* Not connected → the full login flow. */}
+      {account.has_credentials && !account.connected && loginSteps}
     </div>
   );
 }
@@ -178,10 +208,10 @@ function AccountRow({ acc }: { acc: KiteAccount }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={S.name}>{acc.label}</span>
-          {acc.is_active && <span style={badge(t.green)}>ACTIVE</span>}
-          {acc.is_paper && <span style={badge(t.amber)}>PAPER</span>}
-          {acc.connected && <span style={badge(t.blue)}>CONNECTED</span>}
-          {acc.has_credentials && <span style={badge(t.purple)}>KEYS SET</span>}
+          {acc.is_active && <span style={badge('#4caf50')}>ACTIVE</span>}
+          {acc.is_paper && <span style={badge('#ff9800')}>PAPER</span>}
+          {acc.connected && <span style={badge('#387ed1')}>CONNECTED</span>}
+          {acc.has_credentials && <span style={badge('#9c27b0')}>KEYS SET</span>}
         </div>
         <span style={S.hint}>{acc.api_key_hint}</span>
       </div>
@@ -277,18 +307,18 @@ function MarginCalc() {
       <div style={S.title}>MARGIN & CHARGES CALCULATOR</div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         {(['order', 'basket', 'charges'] as const).map((m) => (
-          <button key={m} style={{ ...S.btn, background: method === m ? tint(t.blue, 20) : S.btn.background, color: method === m ? t.blue : S.btn.color }} onClick={() => setMethod(m)}>
+          <button key={m} style={{ ...S.btn, background: method === m ? '#f1f1f1' : S.btn.background, color: method === m ? '#387ed1' : S.btn.color }} onClick={() => setMethod(m)}>
             {m === 'order' ? 'Order Margin' : m === 'basket' ? 'Basket Margin' : 'Charges'}
           </button>
         ))}
         {method === 'basket' && (
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 11, color: t.dim }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 11, color: '#9b9b9b' }}>
             <input type="checkbox" checked={considerPos} onChange={(e) => setConsiderPos(e.target.checked)} /> Consider positions
           </label>
         )}
       </div>
       <textarea
-        style={{ background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: 10, fontFamily: 'JetBrains Mono, monospace', fontSize: 11, width: '100%', boxSizing: 'border-box' as const, minHeight: 100, resize: 'vertical' }}
+        style={{ background: '#fff', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 10, fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const, minHeight: 100, resize: 'vertical' }}
         value={json}
         onChange={(e) => setJson(e.target.value)}
         rows={5}
@@ -298,7 +328,7 @@ function MarginCalc() {
         {result.error && <span style={S.err}>✗ {result.error.message}</span>}
       </div>
       {latched && (
-        <pre style={{ background: t.bg, color: t.bright, border: `1px solid ${t.border}`, borderRadius: 6, padding: 10, marginTop: 10, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', overflow: 'auto', maxHeight: 300 }}>
+        <pre style={{ background: '#f9f9f9', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 10, marginTop: 10, fontSize: 11, fontFamily: 'monospace', overflow: 'auto', maxHeight: 300 }}>
           {JSON.stringify(latched, null, 2)}
         </pre>
       )}
@@ -318,9 +348,9 @@ function TickerControl() {
       <div style={S.title}>WEBSOCKET TICKER</div>
       {ts && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? t.green : ts.active ? t.amber : t.red, fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
-          <div><span style={S.label}>Subscribed</span><span style={{ color: t.bright }}>{ts.subscribed?.length ?? 0} tokens</span></div>
-          <div><span style={S.label}>Ticks</span><span style={{ color: t.bright }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
+          <div><span style={S.label}>State</span><span style={{ color: ts.connected ? '#4caf50' : ts.active ? '#ff9800' : '#e53935', fontWeight: 700 }}>{ts.active ? (ts.connected ? 'Connected' : 'Connecting…') : 'Off'}</span></div>
+          <div><span style={S.label}>Subscribed</span><span style={{ color: '#444' }}>{ts.subscribed?.length ?? 0} tokens</span></div>
+          <div><span style={S.label}>Ticks</span><span style={{ color: '#444' }}>{ts.tick_count?.toLocaleString('en-IN') ?? 0}</span></div>
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -362,7 +392,7 @@ export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const active = data?.accounts.find((a) => a.is_active);
   return (
-    <div>
+    <div style={{ padding: '24px 32px' }}>
       <StatusBanner />
       {active && <LoginFlow account={active} />}
       {active?.connected && !active.is_paper && <Funds />}

@@ -101,6 +101,55 @@ export function useRefreshKiteSession() {
   });
 }
 
+// Background session-keeper: auto-recovers a lapsed Kite session using the stored
+// refresh_token — no manual "Refresh" click. Reactive (not a token-churning timer):
+// it only acts when the status poll reports the active account is NOT connected,
+// and also retries when the tab/window regains focus. Best-effort + debounced;
+// failures are swallowed (Zerodha may still require the daily 2FA login, which
+// this cannot bypass). Mount once where the Kite UI lives.
+export function useKiteAutoSession(enabled = true) {
+  const { data: status } = useKiteStatus();
+  const refresh = useRefreshKiteSession();
+  const lastAttempt = useRef(0);
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  // Only auto-recover when Kite actually issued a refresh_token at login — otherwise
+  // a renewal is impossible and the daily 2FA re-login is the only path (don't spam it).
+  const needsRecovery = !!(status?.account_id && !status.connected && status.has_refresh_token);
+
+  const tryRecover = (minGapMs: number) => {
+    if (!enabled || !needsRecovery) return;
+    const now = Date.now();
+    if (now - lastAttempt.current < minGapMs) return;
+    if (refreshRef.current.isPending) return;
+    lastAttempt.current = now;
+    // empty body → backend uses the refresh_token captured at login
+    refreshRef.current.mutate({});
+  };
+
+  // Attempt as soon as a lapse is detected (status polls every ~30s).
+  useEffect(() => {
+    tryRecover(45_000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsRecovery, enabled]);
+
+  // Attempt when the user returns to the tab (e.g. next morning).
+  useEffect(() => {
+    if (!enabled) return;
+    const onFocus = () => tryRecover(20_000);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, needsRecovery]);
+
+  return { recovering: refresh.isPending, needsRecovery };
+}
+
 export function useKiteLogout() {
   const qc = useQueryClient();
   return useMutation<{ ok: boolean }, Error, void>({
@@ -141,6 +190,24 @@ export function useKiteAuctions(enabled = true) {
   return useQuery<any[]>({
     queryKey: ['kite-auctions'],
     queryFn: () => api.get(`${K}/auctions`),
+    enabled,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useKiteCorporateActions(enabled = true) {
+  return useQuery<any[]>({
+    queryKey: ['kite-corporate-actions'],
+    queryFn: () => api.get(`${K}/corporate-actions`),
+    enabled,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useKiteIPOs(enabled = true) {
+  return useQuery<any[]>({
+    queryKey: ['kite-ipos'],
+    queryFn: () => api.get(`${K}/ipos`),
     enabled,
     refetchInterval: 60_000,
   });
@@ -437,8 +504,16 @@ export function useKiteWatchlist() {
       return [...p, it];
     });
   const remove = (symbol: string) => setItems((p) => p.filter((x) => x.symbol !== symbol));
+  const reorder = (startIndex: number, endIndex: number) => {
+    setItems((p) => {
+      const result = Array.from(p);
+      const [removed] = result.splice(startIndex, 1);
+      result.splice(endIndex, 0, removed);
+      return result;
+    });
+  };
   const clear = () => setItems([]);
-  return { items, add, remove, clear };
+  return { items, add, remove, reorder, clear };
 }
 
 export function useKiteLtp(symbols: string[], enabled = true) {
