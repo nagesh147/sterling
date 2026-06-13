@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useKiteStatus, useKiteMargins, useKiteHoldings } from '../../hooks/useKite';
+import { createChart, ColorType } from 'lightweight-charts';
+import { useCandles } from '../../hooks/useCandles';
 
 function formatCurrency(val: number) {
   if (!val) return '0';
@@ -38,6 +40,64 @@ function MarginCard({ title, available, used, opening }: { title: string, availa
       </div>
     </div>
   );
+}
+
+function DashboardChart({ symbol }: { symbol: string }) {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const { data: candles } = useCandles(symbol, '1H', 500);
+
+  useEffect(() => {
+    if (!chartContainerRef.current || !candles || candles.length === 0) return;
+
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: '#9b9b9b',
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { visible: false },
+      },
+      width: chartContainerRef.current.clientWidth,
+      height: 80,
+      rightPriceScale: { visible: false },
+      timeScale: { visible: false },
+      handleScroll: false,
+      handleScale: false,
+    });
+
+    const lineSeries = chart.addAreaSeries({
+      lineColor: '#4184f3',
+      topColor: 'rgba(65, 132, 243, 0.2)',
+      bottomColor: 'rgba(65, 132, 243, 0)',
+      lineWidth: 1.5,
+      priceLineVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
+    const formattedData = candles.map(c => ({
+      time: c.time as any,
+      value: c.close
+    }));
+    
+    // Ensure uniqueness and sorted order
+    formattedData.sort((a, b) => a.time - b.time);
+    const uniqueData = formattedData.filter((v, i, a) => i === 0 || v.time !== a[i - 1].time);
+    
+    lineSeries.setData(uniqueData);
+
+    const handleResize = () => {
+      chart.applyOptions({ width: chartContainerRef.current?.clientWidth });
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, [candles]);
+
+  return <div ref={chartContainerRef} style={{ width: '100%', height: '80px' }} />;
 }
 
 export function KiteDashboard() {
@@ -98,9 +158,7 @@ export function KiteDashboard() {
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </div>
           <div style={{ width: '100%' }}>
-            <svg width="100%" height="80" viewBox="0 0 400 80" preserveAspectRatio="none">
-              <path d="M0,50 L20,45 L40,60 L60,55 L80,60 L100,50 L120,45 L140,40 L160,35 L180,45 L200,40 L220,55 L240,65 L260,55 L280,75 L300,55 L320,65 L340,60 L360,70 L380,65 L400,70" fill="none" stroke="#4184f3" strokeWidth="1.5" strokeLinejoin="round" />
-            </svg>
+            <DashboardChart symbol="NSE:NIFTY 50" />
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid #f1f1f1`, paddingTop: 8, fontSize: 10, color: '#9b9b9b' }}>
               <span>Jul 25</span>
               <span>Oct 25</span>
