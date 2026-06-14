@@ -8,10 +8,11 @@ interface KiteLayoutProps {
   onNavClick: (nav: NavItem) => void;
   sidebar?: React.ReactNode;
   rightSidebar?: React.ReactNode;
+  bottomBar?: React.ReactNode;
   content: React.ReactNode;
 }
 
-export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, content }: KiteLayoutProps) {
+export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, content }: KiteLayoutProps) {
   const { data: status } = useKiteStatus();
   
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -29,7 +30,18 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, conte
     return saved ? saved === 'true' : true;
   });
 
+  const [isBottomBarOpen, setIsBottomBarOpen] = useState(() => {
+    const saved = localStorage.getItem('kite_bottombar_open');
+    return saved ? saved === 'true' : true;
+  });
+
+  const [bottomBarHeight, setBottomBarHeight] = useState(() => {
+    const saved = localStorage.getItem('kite_bottombar_height');
+    return saved ? parseInt(saved, 10) : 200;
+  });
+
   const isDragging = useRef(false);
+  const isDraggingBottom = useRef(false);
 
   useEffect(() => {
     localStorage.setItem('kite_sidebar_width', sidebarWidth.toString());
@@ -43,13 +55,27 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, conte
     localStorage.setItem('kite_right_sidebar_open', isRightSidebarOpen.toString());
   }, [isRightSidebarOpen]);
 
+  useEffect(() => {
+    localStorage.setItem('kite_bottombar_open', isBottomBarOpen.toString());
+  }, [isBottomBarOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('kite_bottombar_height', bottomBarHeight.toString());
+  }, [bottomBarHeight]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;
     document.body.style.cursor = 'col-resize';
   }, []);
 
+  const handleBottomMouseDown = useCallback((e: React.MouseEvent) => {
+    isDraggingBottom.current = true;
+    document.body.style.cursor = 'row-resize';
+  }, []);
+
   const handleMouseUp = useCallback(() => {
     isDragging.current = false;
+    isDraggingBottom.current = false;
     document.body.style.cursor = '';
   }, []);
 
@@ -57,6 +83,10 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, conte
     if (isDragging.current) {
       const newWidth = Math.max(250, Math.min(e.clientX, 800));
       setSidebarWidth(newWidth);
+    }
+    if (isDraggingBottom.current) {
+      const newHeight = Math.max(80, Math.min(window.innerHeight - e.clientY, 600));
+      setBottomBarHeight(newHeight);
     }
   }, []);
 
@@ -173,6 +203,27 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, conte
                 </svg>
               </div>
             )}
+            {bottomBar && (
+              <div
+                onClick={() => setIsBottomBarOpen(!isBottomBarOpen)}
+                style={{
+                  cursor: 'pointer',
+                  padding: '4px',
+                  color: isBottomBarOpen ? '#ff5722' : '#9b9b9b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: isBottomBarOpen ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
+                  borderRadius: 4,
+                  transition: 'background 0.2s, color 0.2s'
+                }}
+                title="Toggle Kite Terminal"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="3" y1="15" x2="21" y2="15" />
+                </svg>
+              </div>
+            )}
             <div className="kite-icon-btn" style={{ color: '#444', cursor: 'pointer', fontSize: 16 }}>🔔</div>
             <div style={{
               display: 'flex',
@@ -230,16 +281,32 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, conte
           </>
         )}
 
-        {/* Right Content */}
+        {/* Center column: content + bottom bar (terminal stays BETWEEN the sidebars) */}
         <div style={{
           flex: 1,
-          background: '#fff',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'auto',
+          overflow: 'hidden',
           borderLeft: (sidebar && isSidebarOpen) ? 'none' : '1px solid #f1f1f1'
         }}>
-          {content}
+          <div style={{ flex: 1, background: '#fff', overflow: 'auto' }}>
+            {content}
+          </div>
+
+          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ── */}
+          {bottomBar && isBottomBarOpen && (
+            <>
+              <div
+                onMouseDown={handleBottomMouseDown}
+                style={{ height: 4, background: '#f1f1f1', cursor: 'row-resize', flexShrink: 0, transition: 'background 0.2s' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#ff5722')}
+                onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = '#f1f1f1'; }}
+              />
+              <div style={{ height: bottomBarHeight, flexShrink: 0, borderTop: '1px solid #f1f1f1', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {bottomBar}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right Sidebar */}

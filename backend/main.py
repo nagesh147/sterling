@@ -1519,6 +1519,12 @@ async def lifespan(app: FastAPI):
     deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
     log.info("Derivatives scanner started (every 30s)")
 
+    # Kite triple-SuperTrend engine — background auto-scan of connected Kite
+    # accounts (advisory by default; gated auto-exec when the user enables it).
+    from app.services.kite_engine.service import auto_scan_loop as _kite_auto_scan
+    kite_engine_task = asyncio.create_task(_kite_auto_scan())
+    log.info("Kite triple-SuperTrend auto-scan loop started (every 5 min)")
+
     # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
     # Auto-starts with the server so a genuine IV history accrues for vol-timing strategies.
     # Fails gracefully if the Delta WS is unreachable (ticks stay empty, recorder no-ops).
@@ -1587,6 +1593,11 @@ async def lifespan(app: FastAPI):
     deriv_scan_task.cancel()
     try:
         await deriv_scan_task
+    except (Exception, BaseException):
+        pass
+    kite_engine_task.cancel()
+    try:
+        await kite_engine_task
     except (Exception, BaseException):
         pass
     vcp_feed_task.cancel()
@@ -1710,6 +1721,10 @@ def create_app() -> FastAPI:
     # Zerodha Kite (Indian markets) — multi-tenant manual console
     from app.api.v1.endpoints.kite import router as kite_router
     app.include_router(kite_router, prefix="/api/v1")
+
+    # Kite-exclusive triple-SuperTrend options engine (scanner + advisory/auto-exec)
+    from app.api.v1.endpoints.kite_engine import router as kite_engine_router
+    app.include_router(kite_engine_router, prefix="/api/v1")
 
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream

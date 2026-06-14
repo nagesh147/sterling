@@ -13,16 +13,24 @@ import { BidsPane } from './BidsPane';
 import { AlertsPane } from './AlertsPane';
 import { InstrumentPane, InstrumentTab } from './InstrumentPane';
 import { OrderUpdateToast } from './OrderUpdateToast';
+import { TripleSupertrendPane } from './TripleSupertrendPane';
+import { SetupChart } from './SetupChart';
+import { SignalDetailPane } from './SignalDetailPane';
+import { EngineTerminal } from './EngineTerminal';
 import { useKiteAutoSession } from '../../hooks/useKite';
 
 export function KiteTab() {
   const [nav, setNav] = useState<NavItem>('dashboard');
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab } | null>(null);
+  const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
+  const [detailView, setDetailView] = useState<{ token: number; underlying: string } | null>(null);
   useKiteAutoSession();   // silently auto-recover a lapsed session via the stored refresh token
-  
+
   const handleNavClick = (n: NavItem) => {
     setNav(n);
     setInstrumentView(null);
+    setSetupView(null);
+    setDetailView(null);
   };
 
   const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain') => {
@@ -30,7 +38,19 @@ export function KiteTab() {
   };
   
   let content = null;
-  if (instrumentView) {
+  if (setupView) {
+    content = <SetupChart token={setupView.token} underlying={setupView.underlying} onClose={() => setSetupView(null)} />;
+  } else if (detailView) {
+    content = (
+      <SignalDetailPane
+        token={detailView.token}
+        underlying={detailView.underlying}
+        onClose={() => setDetailView(null)}
+        onShowSetup={() => setSetupView(detailView)}
+        onShowOptionChain={(u) => { setDetailView(null); setInstrumentView({ symbol: u, tab: 'option-chain' }); }}
+      />
+    );
+  } else if (instrumentView) {
     content = <InstrumentPane symbol={instrumentView.symbol} initialTab={instrumentView.tab} />;
   } else {
     if (nav === 'dashboard') content = <KiteDashboard />;
@@ -51,7 +71,8 @@ export function KiteTab() {
         activeNav={nav}
         onNavClick={handleNavClick}
         sidebar={<MarketWatchPane onOpenInstrument={handleOpenInstrument} />}
-        rightSidebar={<div style={{ width: '100%', height: '100%', background: '#fff' }}></div>}
+        rightSidebar={<TripleSupertrendPane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} />}
+        bottomBar={<EngineTerminal />}
         content={content}
       />
       <OrderUpdateToast />

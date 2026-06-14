@@ -350,10 +350,13 @@ class KiteClient(TradingExchangeAdapter):
         self, option_symbol: str, side: str, size: float,
         order_type: str = "market_order", limit_price: Optional[float] = None,
         stop_loss: Optional[float] = None, take_profit: Optional[float] = None,
+        exchange: str = K.EXCHANGE_NFO, tag: Optional[str] = None,
     ) -> dict:
+        """Place an option order. ``exchange`` is NFO for NSE-segment options
+        (NIFTY/BANKNIFTY/FINNIFTY + equity options) or BFO for SENSEX/BSE options."""
         return await self.place_order(
             option_symbol, side, size, order_type=order_type, limit_price=limit_price,
-            exchange=K.EXCHANGE_NFO, product=K.PRODUCT_NRML, stop_loss=stop_loss,
+            exchange=exchange, product=K.PRODUCT_NRML, stop_loss=stop_loss, tag=tag,
         )
 
     async def cancel_order(self, order_id: str, product_id: int = 0, variety: str = K.VARIETY_REGULAR) -> dict:

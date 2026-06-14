@@ -1,0 +1,94 @@
+"""Pure Black-Scholes option greeks — self-contained (no scipy, no other-engine
+imports). Used by the Kite engine detail panel. Inputs use IV as a decimal
+(0.18 = 18%), DTE in calendar days; theta is per-day, vega per 1% vol move.
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+_R_DEFAULT = 0.065  # India ~risk-free
+
+
+def _norm_cdf(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _norm_pdf(x: float) -> float:
+    return math.exp(-0.5 * x * x) / math.sqrt(2.0 * math.pi)
+
+
+@dataclass(frozen=True)
+class Greeks:
+    delta: float
+    gamma: float
+    theta: float  # per calendar day
+    vega: float   # per 1% vol move
+
+
+def black_scholes_greeks(
+    *, spot: float, strike: float, dte_days: float, iv: float,
+    option_type: str, rate: float = _R_DEFAULT,
+) -> Greeks:
+    """Greeks for a European option. ``option_type`` is "CE"/"call" or "PE"/"put"."""
+    is_call = str(option_type).upper().startswith("C")
+    t = max(dte_days, 0.0) / 365.0
+    # Degenerate: expired or no vol → delta is the intrinsic sign, rest ~0.
+    if t <= 0 or iv <= 0 or spot <= 0 or strike <= 0:
+        if is_call:
+            delta = 1.0 if spot > strike else 0.0
+        else:
+            delta = -1.0 if spot < strike else 0.0
+        return Greeks(delta=delta, gamma=0.0, theta=0.0, vega=0.0)
+
+    sig_rt = iv * math.sqrt(t)
+    d1 = (math.log(spot / strike) + (rate + 0.5 * iv * iv) * t) / sig_rt
+    d2 = d1 - sig_rt
+    pdf = _norm_pdf(d1)
+
+    delta = _norm_cdf(d1) if is_call else _norm_cdf(d1) - 1.0
+    gamma = pdf / (spot * sig_rt)
+    vega = spot * pdf * math.sqrt(t) / 100.0
+    if is_call:
+        theta = (-spot * pdf * iv / (2 * math.sqrt(t))
+                 - rate * strike * math.exp(-rate * t) * _norm_cdf(d2)) / 365.0
+    else:
+        theta = (-spot * pdf * iv / (2 * math.sqrt(t))
+                 + rate * strike * math.exp(-rate * t) * _norm_cdf(-d2)) / 365.0
+    return Greeks(delta=delta, gamma=gamma, theta=theta, vega=vega)
+
+
+def bs_price(*, spot: float, strike: float, dte_days: float, iv: float,
+             option_type: str, rate: float = _R_DEFAULT) -> float:
+    """Black-Scholes option premium."""
+    is_call = str(option_type).upper().startswith("C")
+    t = max(dte_days, 0.0) / 365.0
+    if t <= 0 or iv <= 0 or spot <= 0 or strike <= 0:
+        return max(0.0, (spot - strike) if is_call else (strike - spot))
+    sig_rt = iv * math.sqrt(t)
+    d1 = (math.log(spot / strike) + (rate + 0.5 * iv * iv) * t) / sig_rt
+    d2 = d1 - sig_rt
+    disc = strike * math.exp(-rate * t)
+    if is_call:
+        return spot * _norm_cdf(d1) - disc * _norm_cdf(d2)
+    return disc * _norm_cdf(-d2) - spot * _norm_cdf(-d1)
+
+
+def implied_vol(*, price: float, spot: float, strike: float, dte_days: float,
+                option_type: str, rate: float = _R_DEFAULT) -> float:
+    """Back IV out of a market premium by bisection. Returns 0.0 if unsolvable
+    (e.g. price below intrinsic). Lets us show greeks after hours from last price."""
+    t = max(dte_days, 0.0) / 365.0
+    is_call = str(option_type).upper().startswith("C")
+    intrinsic = max(0.0, (spot - strike) if is_call else (strike - spot))
+    if price <= 0 or t <= 0 or spot <= 0 or strike <= 0 or price < intrinsic - 1e-6:
+        return 0.0
+    lo, hi = 1e-3, 5.0
+    for _ in range(64):
+        mid = 0.5 * (lo + hi)
+        if bs_price(spot=spot, strike=strike, dte_days=dte_days, iv=mid,
+                    option_type=option_type, rate=rate) > price:
+            hi = mid
+        else:
+            lo = mid
+    return 0.5 * (lo + hi)

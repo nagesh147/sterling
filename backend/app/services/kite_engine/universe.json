@@ -1,0 +1,9 @@
+{
+  "indices": [
+    {"name": "NIFTY 50",          "spot_symbol": "NIFTY 50",          "spot_token": 256265, "option_name": "NIFTY",     "option_exchange": "NFO"},
+    {"name": "NIFTY BANK",        "spot_symbol": "NIFTY BANK",        "spot_token": 260105, "option_name": "BANKNIFTY", "option_exchange": "NFO"},
+    {"name": "NIFTY FIN SERVICE", "spot_symbol": "NIFTY FIN SERVICE", "spot_token": 257801, "option_name": "FINNIFTY",  "option_exchange": "NFO"},
+    {"name": "SENSEX",            "spot_symbol": "SENSEX",            "spot_token": 265,    "option_name": "SENSEX",    "option_exchange": "BFO"}
+  ],
+  "include_fno_equities": true
+}
