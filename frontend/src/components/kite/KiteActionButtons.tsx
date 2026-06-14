@@ -1,0 +1,69 @@
+import React from 'react';
+import { k, Icons } from '../../styles/kiteUI';
+
+interface KiteActionButtonsProps {
+  onBuy?: (e: React.MouseEvent) => void;
+  onSell?: (e: React.MouseEvent) => void;
+  onDepth?: (e: React.MouseEvent) => void;
+  onChart?: (e: React.MouseEvent) => void;
+  onDelete?: (e: React.MouseEvent) => void;
+  onMore?: (e: React.MouseEvent) => void;
+  className?: string;
+  variant?: 'short' | 'long';
+}
+
+export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, onMore, className, variant = 'short' }: KiteActionButtonsProps) {
+  const btnAction: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 28, height: 28, borderRadius: 2, cursor: 'pointer',
+    fontSize: 12, fontWeight: 600, border: 'none'
+  };
+
+  const buySellStyle: React.CSSProperties = variant === 'long' 
+    ? {
+        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+        width: 125, height: 32, borderRadius: 3, padding: 0, 
+        fontWeight: 500, border: 'none', cursor: 'pointer', 
+        fontSize: 12, letterSpacing: '0.5px', color: '#fff'
+      }
+    : { ...btnAction, color: '#fff' };
+
+  const iconBtnStyle: React.CSSProperties = {
+    ...btnAction, background: 'transparent', color: k.dim, padding: 4
+  };
+
+  return (
+    <div className={className} onClick={(e) => e.stopPropagation()}>
+      {onBuy && (
+        <button style={{ ...buySellStyle, background: '#4184f3' }} title="Buy" onClick={onBuy}>
+          {variant === 'long' ? 'BUY' : 'B'}
+        </button>
+      )}
+      {onSell && (
+        <button style={{ ...buySellStyle, background: '#ff5722' }} title="Sell" onClick={onSell}>
+          {variant === 'long' ? 'SELL' : 'S'}
+        </button>
+      )}
+      {onDepth && (
+        <button style={iconBtnStyle} title="Market Depth" onClick={onDepth}>
+          <Icons.Depth />
+        </button>
+      )}
+      {onChart && (
+        <button style={iconBtnStyle} title="Chart" onClick={onChart}>
+          <Icons.Chart />
+        </button>
+      )}
+      {onDelete && (
+        <button style={iconBtnStyle} title="Delete" onClick={onDelete}>
+          <Icons.Trash />
+        </button>
+      )}
+      {onMore && (
+        <button style={iconBtnStyle} title="More" onClick={onMore}>
+          <Icons.More />
+        </button>
+      )}
+    </div>
+  );
+}

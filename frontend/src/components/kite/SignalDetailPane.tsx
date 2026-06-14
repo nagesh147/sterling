@@ -7,6 +7,7 @@ import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { QuoteDetail } from './MarketWatchPane';
 import { AlignmentChips } from './TripleSupertrendPane';
+import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 
 function OrderEntryPanel({ leg, exchange, onTradeSubmit, side, onSideChange }: { leg: OptionDetail, exchange: string, onTradeSubmit: (leg: OptionDetail, side: 'BUY'|'SELL', qty: number, price: number, type: 'MARKET'|'LIMIT') => void, side: 'BUY'|'SELL', onSideChange: (s: 'BUY'|'SELL') => void }) {
@@ -125,7 +126,6 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
   }
 
   const [hovered, setHovered] = useState(false);
-  const btnAction = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 2, cursor: 'pointer', fontSize: 11, fontWeight: 600, border: 'none' };
 
   return (
     <div 
@@ -159,13 +159,15 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
               </span>
             </div>
             
-            <div className="sd-actions" onClick={(e) => e.stopPropagation()}>
-              <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 25.5, height: 32, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500, border: 'none', cursor: 'pointer', fontSize: 11 }} title="Buy" onClick={() => { setOrderSide('BUY'); setShowDepth(true); }}>B</button>
-              <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 25.5, height: 32, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500, border: 'none', cursor: 'pointer', fontSize: 11 }} title="Sell" onClick={() => { setOrderSide('SELL'); setShowDepth(true); }}>S</button>
-              <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={() => setShowDepth(!showDepth)} title="Market Depth"><Icons.Depth /></button>
-              <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
-              <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
-            </div>
+            <KiteActionButtons
+              className="sd-actions"
+              variant="long"
+              onBuy={(e) => { e.stopPropagation(); setOrderSide('BUY'); setShowDepth(true); }}
+              onSell={(e) => { e.stopPropagation(); setOrderSide('SELL'); setShowDepth(true); }}
+              onDepth={(e) => { e.stopPropagation(); setShowDepth(!showDepth); }}
+              onChart={(e) => { e.stopPropagation(); }}
+              onMore={(e) => { e.stopPropagation(); }}
+            />
           </div>
         )}
       </div>
@@ -261,7 +263,7 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
         }
         .sd-actions {
           display: flex;
-          gap: 4px;
+          gap: 8px;
           align-items: center;
         }
         .sd-prices {

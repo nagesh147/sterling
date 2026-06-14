@@ -3,6 +3,7 @@ import { k as t, tint, kStyles, Icons } from '../../styles/kiteUI';
 import { useKiteInstrumentSearch, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
+import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 
 const S = {
@@ -623,14 +624,15 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                       <span style={{ color: chgColor, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={w.symbol} /></span>
                     </div>
 
-                    <div className="mw-actions" onClick={(e) => e.stopPropagation()}>
-                      <button style={{ ...S.btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
-                      <button style={{ ...S.btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => toggleExpand(w.symbol)} title="Market Depth"><Icons.Depth /></button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => onOpenInstrument?.(w.symbol, 'chart')} title="Chart"><Icons.Chart /></button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => remove(w.symbol)} title="Delete"><Icons.Trash /></button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={(e) => handleMenuClick(e, w.symbol)} title="More"><Icons.More /></button>
-                    </div>
+                    <KiteActionButtons 
+                      className="mw-actions"
+                      onBuy={(e) => { e.stopPropagation(); }}
+                      onSell={(e) => { e.stopPropagation(); }}
+                      onDepth={(e) => { e.stopPropagation(); toggleExpand(w.symbol); }}
+                      onChart={(e) => { e.stopPropagation(); onOpenInstrument?.(w.symbol, 'chart'); }}
+                      onDelete={(e) => { e.stopPropagation(); remove(w.symbol); }}
+                      onMore={(e) => { e.stopPropagation(); handleMenuClick(e, w.symbol); }}
+                    />
                     
                     <div className="mw-prices" style={{ opacity: isExp ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: isExp ? 'none' : 'auto' }}>
                       {s.showPriceChange && <span style={{ color: t.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}

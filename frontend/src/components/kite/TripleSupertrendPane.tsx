@@ -10,9 +10,9 @@ import { useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
+import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 
-const btnAction = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 2, cursor: 'pointer', fontSize: 11, fontWeight: 600, border: 'none' };
 
 interface Props {
   onSelectSignal: (sel: { token: number; underlying: string }) => void;
@@ -186,13 +186,14 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
                 </div>
 
                 {!isExp && (
-                  <div className="st-actions" onClick={(e) => e.stopPropagation()}>
-                    <button style={{ ...btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
-                    <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
-                    <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={(e) => toggleExpand(e, leg.option_symbol)} title="Market Depth"><Icons.Depth /></button>
-                    <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
-                    <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
-                  </div>
+                  <KiteActionButtons
+                    className="st-actions"
+                    onBuy={(e) => { e.stopPropagation(); }}
+                    onSell={(e) => { e.stopPropagation(); }}
+                    onDepth={(e) => { e.stopPropagation(); toggleExpand(e, leg.option_symbol); }}
+                    onChart={(e) => { e.stopPropagation(); }}
+                    onMore={(e) => { e.stopPropagation(); }}
+                  />
                 )}
                 
                 {!isExp && (
@@ -466,7 +467,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         }
         .st-actions {
           display: none;
-          gap: 4px;
+          gap: 8px;
           align-items: center;
           position: absolute;
           right: 0;
