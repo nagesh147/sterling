@@ -144,28 +144,28 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
         </div>
         
         {!showDepth && (
-          <div className="sd-actions" onClick={(e) => e.stopPropagation()}>
-            <button style={{ ...btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy" onClick={() => { setOrderSide('BUY'); setShowDepth(true); }}>B</button>
-            <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell" onClick={() => { setOrderSide('SELL'); setShowDepth(true); }}>S</button>
-            <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={() => setShowDepth(!showDepth)} title="Market Depth"><Icons.Depth /></button>
-            <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
-            <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
-          </div>
-        )}
-        
-        {!showDepth && (
-          <div className="sd-prices">
-            {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-            {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, marginLeft: 4 }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
-            {s.showPriceDirection && (
-              <span style={{ color: color, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
-                {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
-                {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="sd-prices">
+              {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
+              {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, marginLeft: 4 }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
+              {s.showPriceDirection && (
+                <span style={{ color: color, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
+                  {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                  {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                </span>
+              )}
+              <span style={{ color: color, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
+                {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
               </span>
-            )}
-            <span style={{ color: color, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
-              {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-            </span>
+            </div>
+            
+            <div className="sd-actions" onClick={(e) => e.stopPropagation()}>
+              <button style={{ ...btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy" onClick={() => { setOrderSide('BUY'); setShowDepth(true); }}>B</button>
+              <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell" onClick={() => { setOrderSide('SELL'); setShowDepth(true); }}>S</button>
+              <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={() => setShowDepth(!showDepth)} title="Market Depth"><Icons.Depth /></button>
+              <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
+              <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
+            </div>
           </div>
         )}
       </div>
@@ -260,21 +260,9 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
           box-sizing: border-box;
         }
         .sd-actions {
-          display: none;
+          display: flex;
           gap: 4px;
           align-items: center;
-          position: absolute;
-          right: 16px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: ${k.surfaceHover};
-          padding-left: 8px;
-        }
-        .sd-leg-row:hover .sd-actions {
-          display: flex;
-        }
-        .sd-leg-row:hover .sd-prices {
-          visibility: hidden;
         }
         .sd-prices {
           display: flex;
