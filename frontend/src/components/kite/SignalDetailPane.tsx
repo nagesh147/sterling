@@ -7,9 +7,9 @@ import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { QuoteDetail } from './MarketWatchPane';
 import { AlignmentChips } from './TripleSupertrendPane';
+import { useKiteSettings } from '../../store/useKiteSettings';
 
-function OrderEntryPanel({ leg, exchange, onTradeSubmit }: { leg: OptionDetail, exchange: string, onTradeSubmit: (leg: OptionDetail, side: 'BUY'|'SELL', qty: number, price: number, type: 'MARKET'|'LIMIT') => void }) {
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
+function OrderEntryPanel({ leg, exchange, onTradeSubmit, side, onSideChange }: { leg: OptionDetail, exchange: string, onTradeSubmit: (leg: OptionDetail, side: 'BUY'|'SELL', qty: number, price: number, type: 'MARKET'|'LIMIT') => void, side: 'BUY'|'SELL', onSideChange: (s: 'BUY'|'SELL') => void }) {
   const [qty, setQty] = useState(leg.lot_size ?? 0);
   const [price, setPrice] = useState(leg.last_price ?? 0);
   const [type, setType] = useState<'MARKET'|'LIMIT'>('MARKET');
@@ -21,13 +21,13 @@ function OrderEntryPanel({ leg, exchange, onTradeSubmit }: { leg: OptionDetail, 
       {/* Tab Header */}
       <div style={{ display: 'flex', background: '#f9f9f9', borderBottom: `1px solid ${k.border}` }}>
         <button 
-          onClick={() => setSide('BUY')}
+          onClick={() => onSideChange('BUY')}
           style={{ flex: 1, padding: '12px 0', border: 'none', background: side === 'BUY' ? '#4184f3' : 'transparent', color: side === 'BUY' ? '#fff' : k.text, fontWeight: 500, cursor: 'pointer', fontSize: 12, transition: 'all 0.2s' }}
         >
           BUY
         </button>
         <button 
-          onClick={() => setSide('SELL')}
+          onClick={() => onSideChange('SELL')}
           style={{ flex: 1, padding: '12px 0', border: 'none', background: side === 'SELL' ? '#ff5722' : 'transparent', color: side === 'SELL' ? '#fff' : k.text, fontWeight: 500, cursor: 'pointer', fontSize: 12, transition: 'all 0.2s' }}
         >
           SELL
@@ -100,62 +100,81 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
   underlying: string;
 }) {
   const [showDepth, setShowDepth] = useState(false);
+  const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
   const sym = `${exchange}:${leg.option_symbol}`;
   const { data: quotes } = useKiteQuote([sym]);
   const q = quotes?.[sym];
+  const s = useKiteSettings();
 
-  const netChange = q?.net_change || 0;
-  const pctChange = q?.pct_change || 0;
-  const color = netChange > 0 ? k.green : netChange < 0 ? k.red : k.dim;
+  let chgAbs: number | null = null;
+  let chgPct: number | null = null;
+  let lastPx: number | null = null;
+  let color = k.dim;
+
+  if (q) {
+    lastPx = q.last_price;
+    const base = s.chgType === 'close' ? q.ohlc?.close : q.ohlc?.open;
+    if (base) {
+      chgAbs = q.last_price - base;
+      chgPct = (chgAbs / base) * 100;
+      color = s.showPriceDirection ? (chgAbs >= 0 ? k.green : k.red) : k.dim;
+    } else if (q.net_change != null) {
+      chgPct = q.net_change;
+      color = s.showPriceDirection ? (chgPct >= 0 ? k.green : k.red) : k.dim;
+    }
+  }
 
   const [hovered, setHovered] = useState(false);
+  const btnAction = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 2, cursor: 'pointer', fontSize: 11, fontWeight: 600, border: 'none' };
 
   return (
     <div 
-      style={{ borderBottom: `1px solid ${k.border}`, background: hovered ? k.surface : k.bg }}
+      style={{ borderBottom: `1px solid ${k.border}`, background: hovered || showDepth ? k.surfaceHover : 'transparent' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       <div 
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px', height: 44, cursor: 'pointer' }}
+        className="sd-leg-row"
         onClick={() => setShowDepth(!showDepth)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2 }}>{leg.moneyness}</span>
-          <span style={{ fontSize: 13, color: k.text, fontWeight: 400 }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, paddingRight: 8, flex: 1 }}>
+          <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
+          <span style={{ fontSize: 13, color: color, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
+          <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {q && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                <span style={{ color: k.dim }}>{netChange.toFixed(2)}</span>
-                <span style={{ color: k.text }}>{pctChange.toFixed(2)}%</span>
-                <span style={{ color: color, display: 'flex', alignItems: 'center', margin: '0 2px' }}>
-                  {netChange !== 0 ? (netChange > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
-                </span>
-              </div>
+        {!showDepth && (
+          <div className="sd-actions" onClick={(e) => e.stopPropagation()}>
+            <button style={{ ...btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy" onClick={() => { setOrderSide('BUY'); setShowDepth(true); }}>B</button>
+            <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell" onClick={() => { setOrderSide('SELL'); setShowDepth(true); }}>S</button>
+            <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={() => setShowDepth(!showDepth)} title="Market Depth"><Icons.Depth /></button>
+            <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
+            <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
+          </div>
+        )}
+        
+        {!showDepth && (
+          <div className="sd-prices">
+            {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
+            {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, marginLeft: 4 }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
+            {s.showPriceDirection && (
+              <span style={{ color: color, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
+                {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+              </span>
             )}
-            <span style={{ fontSize: 13, color: q ? color : k.text, fontWeight: 500 }}>{leg.last_price.toFixed(2)}</span>
+            <span style={{ color: color, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
+              {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+            </span>
           </div>
-          
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button onClick={(e) => { e.stopPropagation(); setShowDepth(!showDepth); }} style={{ background: '#4184f3', color: '#fff', border: 'none', borderRadius: 3, padding: '0 12px', height: 28, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}>B</button>
-            <button onClick={(e) => { e.stopPropagation(); setShowDepth(!showDepth); }} style={{ background: '#ff5722', color: '#fff', border: 'none', borderRadius: 3, padding: '0 12px', height: 28, fontSize: 11, fontWeight: 500, cursor: 'pointer' }}>S</button>
-            <button onClick={(e) => { e.stopPropagation(); setShowDepth(!showDepth); }} style={{ background: 'transparent', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Market Depth"><Icons.Depth /></button>
-            <button onClick={(e) => e.stopPropagation()} style={{ background: 'transparent', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
-            <button onClick={(e) => e.stopPropagation()} style={{ background: 'transparent', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
-          </div>
-        </div>
+        )}
       </div>
-
-
 
       {showDepth && (
         <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.surface }}>
           <div style={{ display: 'flex' }}>
             {/* LEFT: Market Depth (with native BUY/SELL buttons at top) */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
               {q ? (
                 <QuoteDetail 
                   sym={sym} 
@@ -163,9 +182,9 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
                   expiry={parseInstrument(leg.option_symbol) ? `${parseInstrument(leg.option_symbol)!.day ? parseInstrument(leg.option_symbol)!.day + ' ' : ''}${parseInstrument(leg.option_symbol)!.month} 20${parseInstrument(leg.option_symbol)!.year}` : ''}
                   spotName={underlying} 
                   instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
-                  hideHeaderAndActions={true} 
-                  onBuy={() => {}}
-                  onSell={() => {}}
+                  hideHeaderAndActions={false} 
+                  onBuy={() => setOrderSide('BUY')}
+                  onSell={() => setOrderSide('SELL')}
                   greeks={leg}
                 />
               ) : (
@@ -176,8 +195,8 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
             <div style={{ width: 1, background: k.border }} />
             
             {/* RIGHT: Order Panel */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <OrderEntryPanel leg={leg} exchange={exchange} onTradeSubmit={onTrade} />
+            <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+              <OrderEntryPanel leg={leg} exchange={exchange} onTradeSubmit={onTrade} side={orderSide} onSideChange={setOrderSide} />
             </div>
           </div>
         </div>
@@ -225,11 +244,46 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
   };
 
   const bull = data?.regime === 'BULL';
-  const accent = bull ? k.green : k.red;
   const move = data ? data.spot_now - data.spot_at_trigger : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily, overflow: 'auto' }}>
+      <style>{`
+        .sd-leg-row {
+          position: relative;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 6px 16px;
+          height: 44px;
+          cursor: pointer;
+          box-sizing: border-box;
+        }
+        .sd-actions {
+          display: none;
+          gap: 4px;
+          align-items: center;
+          position: absolute;
+          right: 16px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: ${k.surfaceHover};
+          padding-left: 8px;
+        }
+        .sd-leg-row:hover .sd-actions {
+          display: flex;
+        }
+        .sd-leg-row:hover .sd-prices {
+          visibility: hidden;
+        }
+        .sd-prices {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          flex-shrink: 0;
+          justify-content: flex-end;
+        }
+      `}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: `1px solid ${k.border}`, position: 'sticky', top: 0, background: k.bg, zIndex: 1 }}>
         <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', color: k.text }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
