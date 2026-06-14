@@ -6,7 +6,7 @@ import {
 import type {
   AlignmentChip, EngineConfigModel, EngineSignalRow, Moneyness, SignalsResponse, TrailTarget,
 } from '../../types/kiteEngine';
-import { useKiteQuote } from '../../hooks/useKite';
+import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
@@ -401,6 +401,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const { data: cfg } = useEngineConfig();
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
+  // Kite-only paper/live, scoped to the active Kite account. Independent of the
+  // global top-bar PAPER/LIVE toggle, which is crypto (Delta) only.
+  const { data: kiteAccts } = useKiteAccounts();
+  const updateAcct = useUpdateKiteAccount();
+  const activeAcct = kiteAccts?.accounts.find((a) => a.is_active);
+  const kiteLive = !!activeAcct && !activeAcct.is_paper;
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
   const [sortBy, setSortBy] = React.useState('Custom');
@@ -423,6 +429,23 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       if (!ok) return;
     }
     patch({ auto_execute: !cfg.auto_execute });
+  };
+
+  // Kite paper↔live. Arming (→LIVE) confirms — it routes real orders to Zerodha;
+  // de-arming (→PAPER) is immediate. Crypto/Delta is untouched (separate toggle).
+  const toggleKiteLive = () => {
+    if (!activeAcct) { window.alert('No active Kite account. Add one on the Connect page first.'); return; }
+    if (activeAcct.is_paper) {
+      if (!activeAcct.has_credentials) {
+        window.alert('Add your Kite API key & secret on the Connect page before trading live.');
+        return;
+      }
+      const ok = window.confirm(`Switch Kite to LIVE trading? Orders will execute on your REAL Zerodha account (${activeAcct.label}). Crypto stays on its own toggle.`);
+      if (!ok) return;
+      updateAcct.mutate({ id: activeAcct.id, is_paper: false });
+    } else {
+      updateAcct.mutate({ id: activeAcct.id, is_paper: true });
+    }
   };
 
   const rows = signals?.rows ?? [];
@@ -584,6 +607,21 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                   <ZapIcon /> Auto-execute {cfg?.auto_execute ? 'ON' : 'OFF'}
                 </span>
                 <span style={{ fontSize: 10, color: k.dim }}>Places real option BUY orders on ready signals (live-safety gated).</span>
+              </div>
+            </div>
+
+            {/* Kite-only PAPER ↔ LIVE — independent of the global (crypto/Delta) toggle. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${kiteLive ? tint(k.green, 45) : k.border}`, background: kiteLive ? tint(k.green, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
+              <Switch on={kiteLive} color={k.green} label="Kite live trading" onChange={toggleKiteLive} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: kiteLive ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 4, background: kiteLive ? k.green : k.amber, flexShrink: 0 }} /> Kite {kiteLive ? 'LIVE' : 'PAPER'}
+                </span>
+                <span style={{ fontSize: 10, color: k.dim }}>
+                  {kiteLive
+                    ? 'Orders execute on your real Zerodha account. Separate from the crypto (Delta) toggle.'
+                    : 'Simulated — no real money. Controls Kite only, not crypto (Delta).'}
+                </span>
               </div>
             </div>
 

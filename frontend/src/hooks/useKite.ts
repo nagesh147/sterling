@@ -35,7 +35,13 @@ export function useUpdateKiteAccount() {
   const qc = useQueryClient();
   return useMutation<KiteAccount, Error, { id: string; label?: string; api_key?: string; api_secret?: string; is_paper?: boolean }>({
     mutationFn: ({ id, ...body }) => api.put<KiteAccount>(`${K}/accounts/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-accounts'] }),
+    // Also refresh live /status: flipping is_paper changes the banner's paper/live
+    // state, which reads from /status (not the accounts list) — without this the
+    // status banner stays stale until its 30s poll.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['kite-accounts'] });
+      qc.invalidateQueries({ queryKey: ['kite-status'] });
+    },
   });
 }
 

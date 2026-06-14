@@ -12,6 +12,7 @@
 
 # trading-platform
 - Use Delta Exchange as the default data source, not Deribit. Confidence: 0.65
+- Zerodha Kite must have its own exclusive live/paper toggle, independent of the crypto-specific live/paper toggle. The crypto toggle should not affect Kite trading and vice versa. Confidence: 0.70
 
 # strategy
 - Optimize strategies by priority: EXPECTANCY > PF > MAXDD > CONSISTENCY > TRADE COUNT > WIN RATE. Confidence: 0.70

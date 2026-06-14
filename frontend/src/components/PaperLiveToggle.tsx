@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useExchanges, useUpdateExchange } from '../hooks/useExchanges';
 import { api } from '../utils/api';
@@ -270,9 +271,18 @@ const btnSecondary: React.CSSProperties = {
 };
 
 function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
+  // Portal to <body>: this toggle lives in the app header, which sits in a
+  // `position:relative; z-index:1` stacking context. Rendered inline, the
+  // fixed overlay's z-index:3000 is trapped inside that context and paints
+  // BEHIND the main content — so only the top bar darkened and the dialog was
+  // unreachable ("page top goes blank, doesn't switch to live"). Portaling out
+  // of the header lets the overlay cover the whole viewport as intended.
+  return createPortal(
+    // zIndex must clear `.term-root` (the app root: position:fixed; z-index:10000).
+    // Portaled to <body>, the overlay is now a sibling of .term-root, so 3000
+    // would still lose to 10000 and stay hidden. 100000 puts it above the app.
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
@@ -281,6 +291,7 @@ function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: (
       }}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

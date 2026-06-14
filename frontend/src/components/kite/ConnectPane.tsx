@@ -7,6 +7,8 @@ import {
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
 import type { KiteAccount } from '../../types/kite';
+import { ModeToggle } from './ModeToggle';
+import { TradingModeControls } from './TradingModeControls';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 16, marginBottom: 14 },
@@ -215,13 +217,22 @@ function AccountRow({ acc }: { acc: KiteAccount }) {
   const [apiSecret, setApiSecret] = useState('');
   const [paper, setPaper] = useState(acc.is_paper);
 
+  // Inline PAPER/LIVE flip for this row. De-arming (→PAPER) is immediate; arming
+  // (→LIVE) confirms, since it routes orders to the real Zerodha account.
+  const flipPaperLive = (side: 'left' | 'right') => {
+    if (side === 'left') { update.mutate({ id: acc.id, is_paper: true }); return; }
+    if (!acc.has_credentials) return;
+    if (window.confirm(`Switch "${acc.label}" to LIVE? Orders will execute on your real Zerodha account.`)) {
+      update.mutate({ id: acc.id, is_paper: false });
+    }
+  };
+
   return (
     <div style={S.row}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={S.name}>{acc.label}</span>
           {acc.is_active && <span style={badge('#4caf50')}>ACTIVE</span>}
-          {acc.is_paper && <span style={badge('#ff9800')}>PAPER</span>}
           {acc.connected && <span style={badge('#387ed1')}>CONNECTED</span>}
           {acc.has_credentials && <span style={badge('#9c27b0')}>KEYS SET</span>}
         </div>
@@ -233,6 +244,15 @@ function AccountRow({ acc }: { acc: KiteAccount }) {
         </div>
       )}
       <div style={S.actions}>
+        <ModeToggle
+          size="sm" left="PAPER" right="LIVE"
+          value={acc.is_paper ? 'left' : 'right'}
+          onSelect={flipPaperLive}
+          leftColor="#387ed1" rightColor="#4caf50"
+          rightDotWhenActive busy={update.isPending}
+          rightDisabled={!acc.has_credentials}
+          rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
+        />
         {!acc.is_active && <button style={S.btnGreen} onClick={() => activate.mutate(acc.id)}>SET ACTIVE</button>}
         <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>{test.isPending ? '…' : 'TEST'}</button>
         <button style={S.btn} onClick={() => setEdit(!edit)}>{edit ? 'CANCEL' : 'EDIT KEYS'}</button>
@@ -406,6 +426,7 @@ export function ConnectPane() {
   return (
     <div style={{ padding: '24px 32px' }}>
       <StatusBanner />
+      <TradingModeControls />
       {active && <LoginFlow account={active} />}
       {active?.connected && !active.is_paper && <Funds />}
       {active?.connected && !active.is_paper && <MarginCalc />}
