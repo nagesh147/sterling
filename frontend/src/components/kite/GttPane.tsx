@@ -1,5 +1,6 @@
 import React from 'react';
 import { useKiteGtts } from '../../hooks/useKite';
+import { InstrumentLabel } from './InstrumentLabel';
 
 const S: Record<string, React.CSSProperties> = {
   emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 100 },
@@ -46,7 +47,7 @@ export function GttPane() {
           {gtts.map((g: any) => (
             <tr key={g.id}>
               <td style={S.td}>{g.id}</td>
-              <td style={S.td}>{g.condition?.tradingsymbol ?? '—'}</td>
+              <td style={S.td}><InstrumentLabel symbol={g.condition?.tradingsymbol ?? ''} fallback="—" /></td>
               <td style={S.td}>{g.type}</td>
               <td style={{ ...S.td, color: '#9b9b9b' }}>{g.status}</td>
               <td style={{ ...S.td, textAlign: 'right' }}>

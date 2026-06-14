@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useKiteAuctions, useKiteIPOs, useKiteCorporateActions } from '../../hooks/useKite';
+import { InstrumentLabel } from './InstrumentLabel';
 
 const S: Record<string, React.CSSProperties> = {
   container: { padding: '24px 32px', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' as const, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' },
@@ -89,7 +90,7 @@ export function BidsPane() {
                 <tbody>
                   {auctions.map((a: any, i: number) => (
                     <tr key={i} style={{ borderBottom: `1px solid #f1f1f1` }}>
-                      <td style={S.td}>{a.tradingsymbol}</td>
+                      <td style={S.td}><InstrumentLabel symbol={a.tradingsymbol} /></td>
                       <td style={S.td}>{a.quantity}</td>
                       <td style={S.td}>{a.price}</td>
                       <td style={{ ...S.td, textAlign: 'right' }}>{a.status}</td>

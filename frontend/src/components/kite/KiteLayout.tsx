@@ -157,8 +157,8 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   const footBtn = (active: boolean, disabled = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 24, height: 22, padding: 0, cursor: disabled ? 'default' : 'pointer', borderRadius: 4, border: 'none',
-    background: active ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
-    color: active ? '#ff5722' : '#9b9b9b', transition: 'background 0.2s, color 0.2s',
+    background: active ? 'rgba(240, 100, 40, 0.1)' : 'transparent',
+    color: active ? '#f06428' : '#9b9b9b', transition: 'background 0.2s, color 0.2s',
     opacity: disabled ? 0.35 : 1,
   });
 
@@ -166,9 +166,9 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}>
       <style>{`
         .kite-nav-item { transition: color 0.2s; }
-        .kite-nav-item:hover { color: #ff5722 !important; }
+        .kite-nav-item:hover { color: #f06428 !important; }
         .kite-icon-btn { transition: color 0.2s; }
-        .kite-icon-btn:hover { color: #ff5722 !important; }
+        .kite-icon-btn:hover { color: #f06428 !important; }
         .kite-reset-btn { transition: background 0.2s, color 0.2s; }
         .kite-reset-btn:hover { color: #444 !important; background: #f9f9f9 !important; }
       `}</style>
@@ -181,14 +181,13 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
         padding: '0 24px',
         height: 56,
         background: '#fff',
-        borderBottom: '1px solid #f1f1f1',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+        borderBottom: '1px solid #e0e0e0',
         zIndex: 10
       }}>
         {/* Logo area */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ color: '#ff5722', fontSize: 24, fontWeight: 900, transform: 'scaleX(-1)' }}>◩</div>
+            <div style={{ color: '#f06428', fontSize: 24, fontWeight: 900, transform: 'scaleX(-1)' }}>◩</div>
           </div>
           <div style={{ fontSize: 14, fontWeight: 500, color: '#444', letterSpacing: 0.5 }}>STERLING KITE</div>
         </div>
@@ -207,9 +206,9 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: activeNav === item ? 500 : 400,
-                  color: activeNav === item ? '#ff5722' : '#444',
-                  borderBottom: activeNav === item ? '2px solid #ff5722' : '2px solid transparent',
-                  textTransform: 'capitalize'
+                  color: activeNav === item ? '#f06428' : '#444',
+                  textTransform: 'capitalize',
+                  textDecoration: 'none'
                 }}
               >
                 {item === 'mf' ? 'Mutual Funds' : item}
@@ -229,8 +228,8 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               cursor: 'pointer'
             }}>
               <div style={{
-                width: 28, height: 28, borderRadius: 14, background: 'rgba(255, 87, 34, 0.1)',
-                color: '#ff5722', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 28, height: 28, borderRadius: 14, background: 'rgba(240, 100, 40, 0.1)',
+                color: '#f06428', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 500
               }}>
                 {status?.user_name ? status.user_name.substring(0, 2).toUpperCase() : 'SK'}
@@ -263,16 +262,17 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <div
               onMouseDown={handleMouseDown}
               style={{
-                width: 4,
-                background: '#f1f1f1',
+                width: 5,
+                marginLeft: -5,
+                background: 'transparent',
                 cursor: isLocked ? 'default' : 'col-resize',
                 zIndex: 10,
                 flexShrink: 0,
                 transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = '#ff5722'; }}
+              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = 'rgba(240, 100, 40, 0.2)'; }}
               onMouseLeave={(e) => {
-                if (!isDragging.current) e.currentTarget.style.background = '#f1f1f1';
+                if (!isDragging.current) e.currentTarget.style.background = 'transparent';
               }}
             />
           </>
@@ -284,7 +284,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          borderLeft: (sidebar && isSidebarOpen) ? 'none' : '1px solid #f1f1f1'
+          borderLeft: (sidebar && isSidebarOpen) ? '1px solid #e0e0e0' : 'none'
         }}>
           <div style={{ flex: 1, background: '#fff', overflow: 'auto' }}>
             {content}
@@ -295,11 +295,11 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <>
               <div
                 onMouseDown={handleBottomMouseDown}
-                style={{ height: 4, background: '#f1f1f1', cursor: isLocked ? 'default' : 'row-resize', flexShrink: 0, transition: 'background 0.2s' }}
-                onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = '#ff5722'; }}
-                onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = '#f1f1f1'; }}
+                style={{ height: 5, marginBottom: -5, background: 'transparent', cursor: isLocked ? 'default' : 'row-resize', flexShrink: 0, transition: 'background 0.2s', zIndex: 10 }}
+                onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = 'rgba(240, 100, 40, 0.2)'; }}
+                onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = 'transparent'; }}
               />
-              <div style={{ height: bottomBarHeight, flexShrink: 0, borderTop: '1px solid #f1f1f1', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ height: bottomBarHeight, flexShrink: 0, borderTop: '1px solid #e0e0e0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {bottomBar}
               </div>
             </>
@@ -313,21 +313,22 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <div
               onMouseDown={handleRightMouseDown}
               style={{
-                width: 4,
-                background: '#f1f1f1',
+                width: 5,
+                marginRight: -5,
+                background: 'transparent',
                 cursor: isLocked ? 'default' : 'col-resize',
                 zIndex: 10,
                 flexShrink: 0,
                 transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = '#ff5722'; }}
-              onMouseLeave={(e) => { if (!isDraggingRight.current) e.currentTarget.style.background = '#f1f1f1'; }}
+              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = 'rgba(240, 100, 40, 0.2)'; }}
+              onMouseLeave={(e) => { if (!isDraggingRight.current) e.currentTarget.style.background = 'transparent'; }}
             />
             <div style={{
               width: rightSidebarWidth,
               flexShrink: 0,
               background: '#fff',
-              borderLeft: '1px solid #f1f1f1',
+              borderLeft: '1px solid #e0e0e0',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'auto'
@@ -339,7 +340,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
       </div>
 
       {/* ── Kite Footer — panel show/hide + reset + lock (Kite-specific) ── */}
-      <div style={{ height: 30, flexShrink: 0, background: '#fff', borderTop: '1px solid #f1f1f1', display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
+      <div style={{ height: 30, flexShrink: 0, background: '#fff', borderTop: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
         <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>STERLING KITE</span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           {sidebar && (

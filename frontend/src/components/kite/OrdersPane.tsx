@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useKiteOrders } from '../../hooks/useKite';
 import { GttPane } from './GttPane';
 import { AlertsPane } from './AlertsPane';
+import { InstrumentLabel } from './InstrumentLabel';
 
 const S: Record<string, React.CSSProperties> = {
   emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 100 },
@@ -59,7 +60,10 @@ function OrdersSubPane() {
               <td style={{ ...S.td, color: o.transaction_type === 'BUY' ? '#4caf50' : '#e53935' }}>
                 <span style={{ padding: '2px 6px', background: o.transaction_type === 'BUY' ? 'rgba(76, 175, 80, 0.1)' : 'rgba(229, 57, 53, 0.1)', borderRadius: 3, fontSize: 11 }}>{o.transaction_type}</span>
               </td>
-              <td style={S.td}>{o.tradingsymbol}</td>
+              <td style={{...S.td, whiteSpace: 'nowrap'}}>
+                <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={o.tradingsymbol} /></span>
+                <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 4px', borderRadius: 2 }}>{o.exchange || 'NSE'}</span>
+              </td>
               <td style={S.td}>{o.product}</td>
               <td style={S.td}>{o.filled_quantity ?? 0}/{o.quantity}</td>
               <td style={S.td}>{Number(o.average_price ?? 0).toFixed(2)}</td>

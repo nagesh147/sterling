@@ -4,7 +4,7 @@ import {
   useKiteAuctions, useInitiateHoldingsAuth,
 } from '../../hooks/useKite';
 
-import { parseTradingsymbol } from '../../utils/fmt';
+import { InstrumentLabel } from './InstrumentLabel';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -262,7 +262,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                           )}
                         </td>
                         <td style={{...S.td, whiteSpace: 'nowrap'}}>
-                          <span style={{ color: '#444', marginRight: 8 }}>{parseTradingsymbol(p.tradingsymbol)}</span>
+                          <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={p.tradingsymbol} /></span>
                           <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 4px', borderRadius: 2 }}>{p.exchange}</span>
                         </td>
                         <td style={{ ...S.td, textAlign: 'right', color: qty >= 0 ? '#387ed1' : '#df514c' }}>{qty}</td>
@@ -295,7 +295,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                   return (
                     <div key={`breakdown-${idx}`} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
                       <div style={{ width: 250, fontSize: 10, color: '#9b9b9b', textAlign: 'right', paddingRight: 16 }}>
-                        {parseTradingsymbol(p.tradingsymbol)} ({p.product})
+                        <InstrumentLabel symbol={p.tradingsymbol} /> ({p.product})
                       </div>
                       <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#f1f1f1', height: 6 }}>
                          <div style={{ height: 6, background: '#387ed1', width }} />
@@ -355,7 +355,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                     return (
                       <tr key={`${h.tradingsymbol}-${idx}`} className="portfolio-row" style={{ transition: 'background 0.2s' }}>
                         <td style={{...S.td, whiteSpace: 'nowrap'}}>
-                          <span style={{ color: '#444', marginRight: 8 }}>{parseTradingsymbol(h.tradingsymbol)}</span>
+                          <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={h.tradingsymbol} /></span>
                           <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{h.exchange}</span>
                         </td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.quantity)}</td>

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { k, tint } from '../../styles/kiteUI';
+import { k, tint, Icons } from '../../styles/kiteUI';
 import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useTripleSupertrend';
 import type { DepthLevel, OptionDetail } from '../../types/kiteEngine';
 import { parseTradingsymbol } from '../../utils/fmt';
+import { InstrumentLabel } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { QuoteDetail } from './MarketWatchPane';
+
 interface Props {
   token: number;
   underlying: string;
@@ -35,19 +37,18 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
   const sym = `${exchange}:${leg.option_symbol}`;
   const { data: quotes } = useKiteQuote([sym], showDepth);
   const q = quotes?.[sym];
-  const displayName = parseTradingsymbol(leg.option_symbol);
 
   return (
     <div style={{ border: `1px solid ${k.border}`, borderRadius: 6, padding: 12, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, color: k.orange, background: tint(k.orange, 10), padding: '2px 6px', borderRadius: 3 }}>{leg.moneyness}</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{displayName}</span>
+          <span style={{ padding: '2px 6px', borderRadius: 2, fontSize: 10, fontWeight: 500, background: tint(k.orange, 10), color: k.orange, letterSpacing: 0.3 }}>{leg.moneyness}</span>
+          <span style={{ fontSize: 13, color: '#444' }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
         </div>
         <span style={{ fontSize: 14, fontWeight: 700, color: k.text }}>₹{leg.last_price.toFixed(2)}</span>
       </div>
 
-      <div style={{ display: 'flex', gap: 18, marginTop: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 18, marginTop: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <Stat label="Strike" value={`${leg.strike}`} />
         <Stat label="Expiry" value={`${leg.expiry} (${leg.dte}d)`} />
         <Stat label="IV" value={`${(leg.iv * 100).toFixed(1)}%`} />
@@ -56,18 +57,18 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
         <Stat label="Θ theta/day" value={leg.theta.toFixed(1)} color={k.red} />
         <Stat label="V vega" value={leg.vega.toFixed(1)} />
         <Stat label="Lot" value={`${leg.lot_size ?? '—'}`} />
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-        <button onClick={() => onTrade(leg, 'BUY')} style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>BUY</button>
-        <button onClick={() => onTrade(leg, 'SELL')} style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>SELL</button>
-        <button onClick={() => setShowDepth((s) => !s)} style={{ background: 'none', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>
-          {showDepth ? 'Hide depth' : 'Market depth'}
-        </button>
+        
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          <button onClick={() => onTrade(leg, 'BUY')} style={{ background: '#4184f3', color: '#fff', border: 'none', borderRadius: 4, padding: '0 12px', height: 28, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>BUY</button>
+          <button onClick={() => onTrade(leg, 'SELL')} style={{ background: '#df514c', color: '#fff', border: 'none', borderRadius: 4, padding: '0 12px', height: 28, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>SELL</button>
+          <button onClick={() => setShowDepth((s) => !s)} style={{ background: showDepth ? tint(k.blue, 10) : 'transparent', color: showDepth ? k.blue : k.text, border: `1px solid ${showDepth ? k.blue : k.border}`, borderRadius: 4, width: 32, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Market Depth"><Icons.Depth /></button>
+          <button style={{ background: 'transparent', color: k.text, border: `1px solid ${k.border}`, borderRadius: 4, width: 32, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
+          <button style={{ background: 'transparent', color: k.text, border: `1px solid ${k.border}`, borderRadius: 4, width: 32, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
+        </div>
       </div>
       {showDepth && (
         <div style={{ marginTop: 12, borderTop: `1px solid ${k.border}` }}>
-          {q ? <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={underlying} instrumentName={displayName} /> : <div style={{ padding: 12, color: k.dim, fontSize: 12 }}>Loading market depth...</div>}
+          {q ? <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={underlying} instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} hideHeaderAndActions={true} /> : <div style={{ padding: 12, color: k.dim, fontSize: 12 }}>Loading market depth...</div>}
         </div>
       )}
     </div>

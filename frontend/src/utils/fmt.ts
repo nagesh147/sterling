@@ -122,64 +122,38 @@ export function fmtArrow(type: string | null | undefined): string {
   return type;
 }
 
+import { parseInstrument, getOrdinal } from '../components/kite/InstrumentLabel';
+
 export function parseTradingsymbol(ts: string): string {
-  const toTitleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
-
-  // Monthly NFO options: APLAPOLLO26JUN1820CE
-  const nfoRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)(BFO|NFO)?$/;
-  const nfoM = ts.match(nfoRe);
-  if (nfoM) {
-    const underlying = nfoM[1]; 
-    const yy = nfoM[2]; 
-    const month = toTitleCase(nfoM[3]); 
-    const strike = nfoM[4]; 
-    const type = nfoM[5];
-    return `${underlying} ${strike} ${type} · ${month} 20${yy}`;
+  const parsed = parseInstrument(ts);
+  if (!parsed) {
+    return ts.replace(/(CE|PE)(BFO|NFO)?$/, ' $1');
   }
 
-  // Weekly NFO options: NIFTY2461324500CE
-  const weeklyMatch = ts.match(/^([A-Z]+)(\d{2})(1|2|3|4|5|6|7|8|9|O|N|D)(\d{2})(\d+)(CE|PE)(BFO|NFO)?$/);
-  if (weeklyMatch) {
-    const underlying = weeklyMatch[1]; 
-    const yy = weeklyMatch[2]; 
-    const m = weeklyMatch[3];
-    const dd = parseInt(weeklyMatch[4], 10); 
-    const strike = weeklyMatch[5]; 
-    const type = weeklyMatch[6];
-    const mMap: Record<string, string> = {'1':'Jan','2':'Feb','3':'Mar','4':'Apr','5':'May','6':'Jun','7':'Jul','8':'Aug','9':'Sep','O':'Oct','N':'Nov','D':'Dec'};
-    const month = mMap[m];
-    return `${underlying} ${strike} ${type} · ${dd} ${month} ${yy}`;
+  const { underlying, day, month, year, strike, type, isWeekly } = parsed;
+  const parts = [underlying];
+  
+  if (day) {
+    parts.push(`${day}${getOrdinal(day)}`);
   }
-
-  // NFO Futures: NIFTY24JUNFUT
-  const futRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)FUT(BFO|NFO)?$/;
-  const futM = ts.match(futRe);
-  if (futM) {
-    const underlying = futM[1]; 
-    const yy = futM[2]; 
-    const month = toTitleCase(futM[3]);
-    return `${underlying} FUT · ${month} ${yy}`;
+  if (isWeekly) {
+    parts.push('w');
   }
-
-  // BSE options: SENSEX2461875500CE
-  const bseRe = /^([A-Z]+)(\d{2})([1-9A-COND])(\d{2})(\d+)(CE|PE)$/;
-  const bseM = ts.match(bseRe);
-  if (bseM) {
-    const underlying = bseM[1]; 
-    const yy = bseM[2]; 
-    const dd = parseInt(bseM[4], 10);
-    const strike = bseM[5]; 
-    const type = bseM[6];
-    let mon = parseInt(bseM[3], 10);
-    if (bseM[3] === 'O' || bseM[3] === 'A') mon = 10;
-    if (bseM[3] === 'N' || bseM[3] === 'B') mon = 11;
-    if (bseM[3] === 'D' || bseM[3] === 'C') mon = 12;
-    if (mon >= 1 && mon <= 12 && dd >= 1 && dd <= 31) {
-      const d = new Date(2000 + Number(yy), mon - 1, dd);
-      const month = toTitleCase(d.toLocaleString('en-US', { month: 'short' }));
-      return `${underlying} ${strike} ${type} · ${dd} ${month} ${yy}`;
+  if (month) {
+    if (!day && !isWeekly && year && year !== '24') {
+      parts.push(`${month} ${year}`);
+    } else {
+      parts.push(month);
     }
   }
+  if (strike) {
+    parts.push(strike);
+  }
+  if (type) {
+    parts.push(type);
+  } else if (!strike && !type) {
+    // maybe it's just FUT? But futures type="FUT". Wait, parseInstrument returns type="FUT".
+  }
 
-  return ts.replace(/(CE|PE)(BFO|NFO)?$/, ' $1');
+  return parts.join(' ');
 }

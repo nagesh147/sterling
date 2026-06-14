@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useKiteStatus, useKiteMargins, useKiteHoldings } from '../../hooks/useKite';
 import { createChart, ColorType, AreaSeries } from 'lightweight-charts';
 import { useCandles } from '../../hooks/useCandles';
+import { InstrumentLabel } from './InstrumentLabel';
 
 function formatCurrency(val: number) {
   if (!val) return '0';
@@ -9,34 +10,49 @@ function formatCurrency(val: number) {
 }
 
 function MarginCard({ title, available, used, opening }: { title: string, available: number, used: number, opening: number }) {
+  const Icon = title === 'Equity' 
+    ? <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+    : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>;
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
-        <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid #f1f1f1`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: title === 'Equity' ? '#387ed1' : '#ff5722' }} />
-        </div>
-        <span style={{ fontSize: 18, color: '#444', fontWeight: 400 }}>{title}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 24 }}>
+        {Icon}
+        <span style={{ fontSize: 14, color: '#444', fontWeight: 500 }}>{title}</span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <div style={{ fontSize: 44, fontWeight: 300, color: '#444', lineHeight: 1, marginBottom: 12 }}>{formatCurrency(available)}</div>
-          <div style={{ fontSize: 13, color: '#9b9b9b' }}>Margin available</div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ 
+            fontSize: '2.625rem', 
+            fontWeight: 300, 
+            color: '#444', 
+            lineHeight: 1.3, 
+            letterSpacing: 0,
+            fontFamily: '"Open Sans", sans-serif',
+            marginBottom: 4 
+          }}>
+            {formatCurrency(available)}
+          </div>
+          <div style={{ fontSize: 12, color: '#9b9b9b' }}>Margin available</div>
         </div>
-        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 16, marginTop: 4 }}>
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 40 }}>
-            <div style={{ fontSize: 13, color: '#9b9b9b' }}>Margins used</div>
-            <div style={{ fontSize: 13, color: '#444' }}>{formatCurrency(used)}</div>
+            <div style={{ fontSize: 12, color: '#9b9b9b' }}>Margins used</div>
+            <div style={{ fontSize: 12, color: '#444' }}>{formatCurrency(used)}</div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 40 }}>
-            <div style={{ fontSize: 13, color: '#9b9b9b' }}>Opening balance</div>
-            <div style={{ fontSize: 13, color: '#444' }}>{formatCurrency(opening)}</div>
+            <div style={{ fontSize: 12, color: '#9b9b9b' }}>Opening balance</div>
+            <div style={{ fontSize: 12, color: '#444' }}>{formatCurrency(opening)}</div>
           </div>
         </div>
       </div>
 
       <div style={{ marginTop: 'auto', paddingTop: 8 }}>
-        <a href="#" style={{ color: '#387ed1', fontSize: 13, textDecoration: 'none' }}>View statement</a>
+        <a href="#" style={{ color: '#387ed1', fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          View statement
+        </a>
       </div>
     </div>
   );
@@ -118,19 +134,23 @@ export function KiteDashboard() {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '32px 32px 0 32px' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 400, color: '#444', marginBottom: 40, marginTop: 0 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 400, color: '#444', marginBottom: 24, marginTop: 0 }}>
         Hi, {name}
       </h1>
       
       {/* Margins Row */}
-      <div style={{ display: 'flex', gap: 80, marginBottom: 48 }}>
-        <MarginCard title="Equity" available={eq} used={eqUsed} opening={eqOpening} />
-        <MarginCard title="Commodity" available={com} used={comUsed} opening={comOpening} />
+      <div style={{ display: 'flex', marginBottom: 48 }}>
+        <div style={{ flex: 1, paddingRight: 40, borderRight: '1px solid #e0e0e0' }}>
+          <MarginCard title="Equity" available={eq} used={eqUsed} opening={eqOpening} />
+        </div>
+        <div style={{ flex: 1, paddingLeft: 40 }}>
+          <MarginCard title="Commodity" available={com} used={comUsed} opening={comOpening} />
+        </div>
       </div>
       </div>
 
       {/* Holdings Section */}
-      <div style={{ borderTop: `1px solid #f1f1f1`, borderBottom: `1px solid #f1f1f1`, padding: '48px 0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div style={{ borderTop: `1px solid #e0e0e0`, borderBottom: `1px solid #e0e0e0`, padding: '48px 0', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'center' }}>
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
@@ -148,18 +168,21 @@ export function KiteDashboard() {
       </div>
 
       {/* Overview & Positions Row */}
-      <div style={{ display: 'flex', gap: 80, padding: '40px 32px 32px 32px' }}>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 400, color: '#444', marginBottom: 24, margin: 0 }}>
-            Market overview
-          </h2>
+      <div style={{ display: 'flex', padding: '40px 32px 32px 32px' }}>
+        <div style={{ flex: 1, paddingRight: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 24 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+            <h2 style={{ fontSize: 14, fontWeight: 500, color: '#444', margin: 0 }}>
+              Market overview
+            </h2>
+          </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', border: `1px solid #e0e0e0`, borderRadius: 3, cursor: 'pointer', marginBottom: 16 }}>
             <span style={{ fontSize: 10, color: '#9b9b9b' }}>NIFTY 50</span>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
           </div>
           <div style={{ width: '100%' }}>
             <DashboardChart symbol="NSE:NIFTY 50" />
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid #f1f1f1`, paddingTop: 8, fontSize: 10, color: '#9b9b9b' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid #e0e0e0`, paddingTop: 8, fontSize: 10, color: '#9b9b9b' }}>
               <span>Jul 25</span>
               <span>Oct 25</span>
               <span>Jan 26</span>
@@ -168,12 +191,17 @@ export function KiteDashboard() {
           </div>
         </div>
 
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 400, color: '#444', marginBottom: 24, margin: 0 }}>
-            Positions (1)
-          </h2>
+        <div style={{ flex: 1, paddingLeft: 40 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 24 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <h2 style={{ fontSize: 14, fontWeight: 500, color: '#444', margin: 0 }}>
+              Positions (1)
+            </h2>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 40 }}>
-            <span style={{ fontSize: 10, color: '#9b9b9b', whiteSpace: 'nowrap' }}>SENSEX 18th JUN 75500 PE (NRML)</span>
+            <span style={{ fontSize: 10, color: '#9b9b9b', whiteSpace: 'nowrap' }}>
+              <InstrumentLabel symbol="SENSEX2461875500CE" fallback="SENSEX 18th w JUN 75500 PE" /> (NRML)
+            </span>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#f1f1f1', height: 6 }}>
               <div style={{ width: '100%', height: 6, background: '#4184f3', borderRadius: 0 }}></div>
             </div>

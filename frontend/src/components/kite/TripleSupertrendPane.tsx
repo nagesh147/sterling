@@ -7,7 +7,7 @@ import type {
   AlignmentChip, EngineConfigModel, EngineSignalRow, Moneyness, SignalsResponse, TrailTarget,
 } from '../../types/kiteEngine';
 import { useKiteQuote } from '../../hooks/useKite';
-import { parseTradingsymbol } from '../../utils/fmt';
+import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
 import { useKiteSettings } from '../../store/useKiteSettings';
@@ -170,8 +170,6 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
               color = s.showPriceDirection ? (chgPct >= 0 ? k.green : k.red) : k.dim;
             }
           }
-          
-          const displayName = parseTradingsymbol(leg.option_symbol);
           const isExp = expanded.has(leg.option_symbol);
 
           return (
@@ -183,7 +181,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, minWidth: 28 }}>{leg.moneyness}</span>
-                   <span style={{ color: color, fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
+                   <span style={{ color: color, fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                    <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{row.exchange}</span>
                 </div>
 
@@ -215,7 +213,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
               </div>
               {isExp && (
                 <div onClick={(e) => e.stopPropagation()}>
-                  <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={row.underlying} spotPx={row.spot} instrumentName={displayName} />
+                  <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={row.underlying} spotPx={row.spot} instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} />
                 </div>
               )}
             </div>
@@ -450,8 +448,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           setQuery={setQuery} 
           searchSettingsOpen={searchSettingsOpen} 
           setSearchSettingsOpen={setSearchSettingsOpen} 
-          sortBy={sortBy}
-          setSortBy={setSortBy}
         />
       </div>
       <style>{`

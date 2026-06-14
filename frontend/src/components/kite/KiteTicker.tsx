@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useKiteWatchlist, useKiteLtp } from '../../hooks/useKite';
-import { parseTradingsymbol } from '../../utils/fmt';
+import { InstrumentLabel } from './InstrumentLabel';
 const SEG_COLORS: Record<string, string> = {
   NSE: '#10B981', NFO: '#8B5CF6', BFO: '#8B5CF6',
   BSE: '#06B6D4', MCX: '#F59E0B', CDS: '#10B981',
@@ -42,7 +42,6 @@ function KiteCard({ sym, name, ltp, prevRef }: {
   const segments = sym.split(':');
   const exch = segments[0] || '';
   const rawTs = segments.slice(1).join(':') || sym;
-  const displayLabel = parseTradingsymbol(rawTs);
 
   return (
     <div style={{
@@ -68,7 +67,7 @@ function KiteCard({ sym, name, ltp, prevRef }: {
             fontSize: 13, fontWeight: 800, color: 'var(--t-bright)',
             letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            {displayLabel}
+            <InstrumentLabel symbol={rawTs} />
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
