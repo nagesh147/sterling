@@ -112,6 +112,7 @@ export interface EngineDetailResponse {
   exchange: string;
   direction: 'long' | 'short';
   regime: 'BULL' | 'BEAR';
+  alignment: AlignmentChip;
   option_type: 'CE' | 'PE';
   triggered_ms: number;
   spot_at_trigger: number;

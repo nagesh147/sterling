@@ -65,7 +65,7 @@ function formatPrice(v: number | null | undefined): string {
 
 // ─── Expanded Quote Row ──────────────────────────────────────────────────────
 
-export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, hideHeaderAndActions }: { sym?: string; q: any; expiry?: string; spotName?: string; spotPx?: number; instrumentName?: React.ReactNode; hideHeaderAndActions?: boolean }) {
+export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, hideHeaderAndActions, onBuy, onSell, greeks }: { sym?: string; q: any; expiry?: string; spotName?: string; spotPx?: number; instrumentName?: React.ReactNode; hideHeaderAndActions?: boolean; onBuy?: () => void; onSell?: () => void; greeks?: { iv: number; delta: number; gamma: number; theta: number; vega: number; lot_size?: number | null } }) {
   const s = useKiteSettings();
   if (!q || typeof q !== 'object') return null;
   const chg = chgPct(q, s.chgType);
@@ -80,8 +80,8 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
       {!hideHeaderAndActions && (
         <>
           <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
-             <button style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>BUY</button>
-             <button style={{ flex: 1, background: '#df514c', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>SELL</button>
+             <button onClick={onBuy} style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>BUY</button>
+             <button onClick={onSell} style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>SELL</button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Market Depth"><Icons.Depth /></button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
@@ -205,6 +205,37 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
             <span style={{ color: t.dim }}>OI</span><span style={{ color: t.text }}>{q.oi != null ? num(q.oi).toLocaleString('en-IN') : 'N/A'}</span>
           </div>
         </div>
+
+        {greeks && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+                <span style={{ color: t.dim }}>IV</span><span style={{ color: t.text }}>{(greeks.iv * 100).toFixed(1)}%</span>
+              </div>
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: t.dim }}>Δ delta</span><span style={{ color: t.text }}>{greeks.delta.toFixed(3)}</span>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+                <span style={{ color: t.dim }}>Γ gamma</span><span style={{ color: t.text }}>{greeks.gamma.toFixed(5)}</span>
+              </div>
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: t.dim }}>Θ theta/day</span><span style={{ color: t.text }}>{greeks.theta.toFixed(1)}</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+                <span style={{ color: t.dim }}>V vega</span><span style={{ color: t.text }}>{greeks.vega.toFixed(1)}</span>
+              </div>
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: t.dim }}>Lot</span><span style={{ color: t.text }}>{greeks.lot_size ?? '—'}</span>
+              </div>
+            </div>
+          </>
+        )}
 
         {spotName && spotPx != null && (
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -603,7 +634,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                     
                     <div className="mw-prices" style={{ opacity: isExp ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: isExp ? 'none' : 'auto' }}>
                       {s.showPriceChange && <span style={{ color: t.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                      {s.showPriceChangePct && <span style={{ color: t.dim, fontSize: 11, marginLeft: 4 }}>{chgVal != null ? `${chgVal.toFixed(2)}%` : '—'}</span>}
+                      {s.showPriceChangePct && <span style={{ color: t.text, fontSize: 11, marginLeft: 4 }}>{chgVal != null ? `${chgVal.toFixed(2)}%` : '—'}</span>}
                       {s.showPriceDirection && (
                         <span style={{ color: chgColor, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
                           {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}

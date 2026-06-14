@@ -86,7 +86,7 @@ function DashboardChart({ symbol }: { symbol: string }) {
       lineColor: '#4184f3',
       topColor: 'rgba(65, 132, 243, 0.2)',
       bottomColor: 'rgba(65, 132, 243, 0)',
-      lineWidth: 1.5,
+      lineWidth: 2,
       priceLineVisible: false,
       crosshairMarkerVisible: false,
     });

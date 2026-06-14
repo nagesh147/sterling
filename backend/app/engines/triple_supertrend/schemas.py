@@ -114,6 +114,7 @@ class EngineDetailResponse(BaseModel):
     exchange: str  # option exchange (NFO/BFO)
     direction: Literal["long", "short"]
     regime: Literal["BULL", "BEAR"]
+    alignment: AlignmentChip
     option_type: Literal["CE", "PE"]
     triggered_ms: int
     spot_at_trigger: float

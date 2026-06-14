@@ -109,19 +109,21 @@ export function InstrumentLabel({ symbol, fallback }: { symbol: string; fallback
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
-      <span style={{ marginRight: 4, color: 'inherit' }}>{underlying}</span>
-      <span style={{ marginRight: 4, display: 'inline-flex', alignItems: 'baseline', gap: 3, color: '#9b9b9b', fontSize: 12 }}>
+      <span style={{ marginRight: 4 }}>{underlying}</span>
+      <span style={{ marginRight: 4, display: 'inline-flex', alignItems: 'baseline', gap: 3, fontSize: 12 }}>
         {day && (
           <span>
             {day}<span style={{ fontSize: '0.85em', verticalAlign: 'baseline', position: 'relative', top: '-0.1em' }}>{getOrdinal(day)}</span>
           </span>
         )}
+        {isWeekly && (
+          <span style={{ fontSize: 9, background: '#e3f2fd', color: '#4184f3', padding: '0 3px', borderRadius: 2, marginLeft: 2, marginRight: 2 }}>W</span>
+        )}
         {month && <span>{month}</span>}
-        {!day && year && year !== '24' && year !== '25' && <span> {year}</span>}
       </span>
-      {strike && <span style={{ marginRight: 4, color: 'inherit' }}>{strike}</span>}
-      {type && <span style={{ marginRight: 4, color: 'inherit' }}>{type}</span>}
-      {exchange && <span style={{ fontSize: 9, color: '#9b9b9b' }}>{exchange}</span>}
+      {strike && <span style={{ marginRight: 4 }}>{strike}</span>}
+      {type && <span style={{ marginRight: 4 }}>{type}</span>}
+      {exchange && !type && exchange !== 'INDEX' && <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 4px', borderRadius: 2 }}>{exchange}</span>}
     </span>
   );
 }

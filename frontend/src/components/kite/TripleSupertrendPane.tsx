@@ -44,12 +44,12 @@ function countdown(ms: number): string {
   return s >= 60 ? `${Math.floor(s / 60)}m` : `${s}s`;
 }
 
-function Arrow({ v }: { v: number }) {
+export function Arrow({ v }: { v: number }) {
   const flat = v === 0;
   return <span style={{ color: flat ? k.dim : v > 0 ? k.green : k.red, fontSize: 11, fontWeight: 700 }}>{flat ? '·' : v > 0 ? '▲' : '▼'}</span>;
 }
 
-function AlignmentChips({ a }: { a: AlignmentChip }) {
+export function AlignmentChips({ a }: { a: AlignmentChip }) {
   return (
     <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
       {(['fast', 'mid', 'slow'] as const).map((key) => (
@@ -121,8 +121,8 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
           
           <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
             <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>
-            {s.showPriceChange && <span style={{ fontSize: 10, color: k.dim }}>{uChgAbs != null ? (uChgAbs > 0 ? '+' : '') + uChgAbs.toFixed(2) : ''}</span>}
-            {s.showPriceChangePct && <span style={{ fontSize: 10, color: k.dim }}>{uChgPct != null ? `(${uChgPct.toFixed(2)}%)` : ''}</span>}
+            {s.showPriceChange && <span style={{ fontSize: 10, color: k.dim }}>{uChgAbs != null ? uChgAbs.toFixed(2) : ''}</span>}
+            {s.showPriceChangePct && <span style={{ fontSize: 10, color: k.text }}>{uChgPct != null ? `${uChgPct.toFixed(2)}%` : ''}</span>}
             {s.showPriceDirection && (
               <span style={{ display: 'flex', alignItems: 'center', margin: '0 -2px' }}>
                 {uChgAbs != null && uChgAbs !== 0 ? (uChgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
@@ -198,7 +198,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
                 {!isExp && (
                   <div className="st-prices">
                     {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                    {s.showPriceChangePct && <span style={{ color: k.dim, fontSize: 11, marginLeft: 4 }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
+                    {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, marginLeft: 4 }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
                     {s.showPriceDirection && (
                       <span style={{ color: color, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
                         {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}

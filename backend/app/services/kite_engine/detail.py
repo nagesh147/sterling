@@ -92,7 +92,7 @@ async def build_detail(client, uid: str, token: int) -> Optional[EngineDetailRes
 
     return EngineDetailResponse(
         underlying=row.underlying, token=row.token, exchange=row.exchange,
-        direction=row.direction, regime=row.regime, option_type=row.option_type,
+        direction=row.direction, regime=row.regime, alignment=row.alignment, option_type=row.option_type,
         triggered_ms=row.timestamp_ms, spot_at_trigger=row.spot, spot_now=spot_now,
         stop_loss=row.stop_loss, options=options,
     )

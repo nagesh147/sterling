@@ -125,23 +125,25 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   }, []);
 
   const resetLayout = useCallback(() => {
+    if (isLocked) return;
     setSidebarWidth(DEFAULTS.left);
     setRightSidebarWidth(DEFAULTS.right);
     setBottomBarHeight(DEFAULTS.bottom);
-  }, []);
+  }, [isLocked]);
 
   // Right pane has three quick layouts from the footer: hidden (the toggle), the
   // default width (640px), and a compact width (450px). This button flips between
   // compact and default — opening the pane straight into compact if it was hidden.
   const RIGHT_COMPACT = 450;
   const toggleRightCompact = useCallback(() => {
+    if (isLocked) return;
     if (!isRightSidebarOpen) {
       setIsRightSidebarOpen(true);
       setRightSidebarWidth(RIGHT_COMPACT);
     } else {
       setRightSidebarWidth((w) => (w === RIGHT_COMPACT ? DEFAULTS.right : RIGHT_COMPACT));
     }
-  }, [isRightSidebarOpen]);
+  }, [isRightSidebarOpen, isLocked]);
 
   useEffect(() => {
     document.addEventListener('mousemove', handleMouseMove);
@@ -360,8 +362,8 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           {rightSidebar && (
             <button
               onClick={toggleRightCompact}
-              title={isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT ? 'Right pane: back to default width' : 'Right pane: compact (450px)'}
-              style={footBtn(isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT)}
+              title={isLocked ? 'Unlock to resize panes' : isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT ? 'Right pane: back to default width' : 'Right pane: compact (450px)'}
+              style={footBtn(isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT, isLocked)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -378,7 +380,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             </button>
           )}
           <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
-          <button onClick={resetLayout} title="Reset panel sizes to defaults" style={footBtn(false)}>
+          <button onClick={resetLayout} title={isLocked ? 'Unlock to reset panel sizes' : 'Reset panel sizes to defaults'} style={footBtn(false, isLocked)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>

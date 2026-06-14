@@ -70,7 +70,7 @@ export function AlertsPane() {
           {alerts && alerts.map((a: KiteAlert) => {
             const enabled = (a.status || '').toLowerCase() === 'enabled';
             const cond = `${a.lhs_tradingsymbol ?? ''} ${a.lhs_attribute ?? ''} ${a.operator ?? ''} ${a.rhs_constant ?? ''}`.trim();
-            const isAto = a.alert_type === 'ato';
+            const isAto = (a as any).alert_type === 'ato';
             
             return (
               <tr key={a.uuid} style={{ transition: 'background 0.2s', cursor: 'default' }}>
