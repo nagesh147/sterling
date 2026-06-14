@@ -124,13 +124,13 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
               {uChgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
             </span>
           </span>
-
-          <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, borderLeft: `1px solid ${k.border}`, paddingLeft: 6 }}>
-            <AlignmentChips a={row.alignment} />
-            <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>
-            <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
-          </span>
         </div>
+
+        <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <AlignmentChips a={row.alignment} />
+          <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>
+          <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
+        </span>
       </div>
 
       {expanded.has(row.underlying) && uQ && (
