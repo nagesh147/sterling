@@ -338,7 +338,8 @@ export function SimpleTerminal() {
         {activeSection === 'kite' && <KiteTab />}
       </div>
 
-      <StatusBar />
+      {/* Crypto status footer — irrelevant to Kite, which has its own footer in KiteLayout */}
+      {activeSection !== 'kite' && <StatusBar />}
       <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
 
       {/* Live control drawer — slide-out from the right */}

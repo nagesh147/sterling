@@ -86,12 +86,24 @@ function Funds() {
 }
 
 function LoginFlow({ account }: { account: KiteAccount }) {
-  const { data: lu } = useKiteLoginUrl(account.has_credentials && !account.connected);
+  // Fetch the login URL whenever credentials exist — NOT only when disconnected.
+  // `account.connected` just means a token is *stored*, not that it's *valid*: after
+  // Kite's daily ~6 AM expiry the token is stale-but-saved (connected=true), which
+  // would otherwise leave the "Open Kite Login" button permanently disabled during
+  // re-login. The /login-url endpoint only needs the api_key, so this is safe.
+  const { data: lu } = useKiteLoginUrl(account.has_credentials);
   const gen = useGenerateKiteSession();
   const logout = useKiteLogout();
   const refresh = useRefreshKiteSession();
   const [reqToken, setReqToken] = useState('');
   const [showRelogin, setShowRelogin] = useState(false);
+  const { data: status } = useKiteStatus();
+  // `account.connected` only means a token is STORED, not that it's valid. The live
+  // /status validates it (and auto-clears it on expiry). Treat a stale token (status
+  // says disconnected for this account) as NOT connected, so we show the login flow
+  // instead of "Log out / Re-login" before a real session exists.
+  const connected = account.connected
+    && !(status?.account_id === account.id && status?.connected === false);
 
   // The manual login steps (Open Kite Login + paste request_token). Shown when
   // NOT connected, or behind the "Re-login manually" toggle when a live session
@@ -151,7 +163,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
 
       {/* Connected → compact session controls; the paste-token flow is hidden
           behind "Re-login manually" so it doesn't clutter an active session. */}
-      {account.has_credentials && account.connected && (
+      {account.has_credentials && connected && (
         <>
           <div style={{ ...S.hint, marginBottom: 10, lineHeight: 1.6 }}>
             Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}.{' '}
@@ -187,8 +199,8 @@ function LoginFlow({ account }: { account: KiteAccount }) {
         </>
       )}
 
-      {/* Not connected → the full login flow. */}
-      {account.has_credentials && !account.connected && loginSteps}
+      {/* Not connected (or stored token expired) → the full login flow. */}
+      {account.has_credentials && !connected && loginSteps}
     </div>
   );
 }

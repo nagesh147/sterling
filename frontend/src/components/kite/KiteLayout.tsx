@@ -40,8 +40,21 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     return saved ? parseInt(saved, 10) : 200;
   });
 
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('kite_right_sidebar_width');
+    return saved ? parseInt(saved, 10) : 640;
+  });
+
+  const [isLocked, setIsLocked] = useState(() => {
+    return localStorage.getItem('kite_layout_locked') === 'true';
+  });
+
+  // Defaults — used by the reset button.
+  const DEFAULTS = { left: 420, right: 640, bottom: 200 };
+
   const isDragging = useRef(false);
   const isDraggingBottom = useRef(false);
+  const isDraggingRight = useRef(false);
 
   useEffect(() => {
     localStorage.setItem('kite_sidebar_width', sidebarWidth.toString());
@@ -63,19 +76,36 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     localStorage.setItem('kite_bottombar_height', bottomBarHeight.toString());
   }, [bottomBarHeight]);
 
+  useEffect(() => {
+    localStorage.setItem('kite_right_sidebar_width', rightSidebarWidth.toString());
+  }, [rightSidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('kite_layout_locked', isLocked.toString());
+  }, [isLocked]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isLocked) return;
     isDragging.current = true;
     document.body.style.cursor = 'col-resize';
-  }, []);
+  }, [isLocked]);
 
   const handleBottomMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isLocked) return;
     isDraggingBottom.current = true;
     document.body.style.cursor = 'row-resize';
-  }, []);
+  }, [isLocked]);
+
+  const handleRightMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isLocked) return;
+    isDraggingRight.current = true;
+    document.body.style.cursor = 'col-resize';
+  }, [isLocked]);
 
   const handleMouseUp = useCallback(() => {
     isDragging.current = false;
     isDraggingBottom.current = false;
+    isDraggingRight.current = false;
     document.body.style.cursor = '';
   }, []);
 
@@ -88,6 +118,16 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
       const newHeight = Math.max(80, Math.min(window.innerHeight - e.clientY, 600));
       setBottomBarHeight(newHeight);
     }
+    if (isDraggingRight.current) {
+      const newWidth = Math.max(320, Math.min(window.innerWidth - e.clientX, 1000));
+      setRightSidebarWidth(newWidth);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    setSidebarWidth(DEFAULTS.left);
+    setRightSidebarWidth(DEFAULTS.right);
+    setBottomBarHeight(DEFAULTS.bottom);
   }, []);
 
   useEffect(() => {
@@ -100,6 +140,13 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   }, [handleMouseMove, handleMouseUp]);
 
   const navItems: NavItem[] = ['dashboard', 'orders', 'holdings', 'positions', 'bids', 'funds', 'mf', 'alerts', 'data', 'connect'];
+
+  const footBtn = (active: boolean): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 24, height: 22, padding: 0, cursor: 'pointer', borderRadius: 4, border: 'none',
+    background: active ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
+    color: active ? '#ff5722' : '#9b9b9b', transition: 'background 0.2s, color 0.2s',
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}>
@@ -130,28 +177,6 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <div style={{ color: '#ff5722', fontSize: 24, fontWeight: 900, transform: 'scaleX(-1)' }}>◩</div>
           </div>
           <div style={{ fontSize: 14, fontWeight: 500, color: '#444', letterSpacing: 0.5 }}>STERLING KITE</div>
-          {sidebar && (
-            <div 
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              style={{ 
-                cursor: 'pointer', 
-                padding: '4px', 
-                color: isSidebarOpen ? '#ff5722' : '#9b9b9b', 
-                marginLeft: 16,
-                display: 'flex',
-                alignItems: 'center',
-                background: isSidebarOpen ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
-                borderRadius: 4,
-                transition: 'background 0.2s, color 0.2s'
-              }}
-              title="Toggle Left Sidebar"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
-            </div>
-          )}
         </div>
 
         {/* Navigation items */}
@@ -180,50 +205,8 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           {/* Spacer */}
           <div style={{ width: 16 }} />
 
-          {/* Right side icons/profile */}
+          {/* Right side icons/profile (panel controls live in the Kite footer below) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {rightSidebar && (
-              <div 
-                onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-                style={{ 
-                  cursor: 'pointer', 
-                  padding: '4px', 
-                  color: isRightSidebarOpen ? '#ff5722' : '#9b9b9b', 
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: isRightSidebarOpen ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
-                  borderRadius: 4,
-                  transition: 'background 0.2s, color 0.2s'
-                }}
-                title="Toggle Right Sidebar"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <line x1="15" y1="3" x2="15" y2="21" />
-                </svg>
-              </div>
-            )}
-            {bottomBar && (
-              <div
-                onClick={() => setIsBottomBarOpen(!isBottomBarOpen)}
-                style={{
-                  cursor: 'pointer',
-                  padding: '4px',
-                  color: isBottomBarOpen ? '#ff5722' : '#9b9b9b',
-                  display: 'flex',
-                  alignItems: 'center',
-                  background: isBottomBarOpen ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
-                  borderRadius: 4,
-                  transition: 'background 0.2s, color 0.2s'
-                }}
-                title="Toggle Kite Terminal"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <line x1="3" y1="15" x2="21" y2="15" />
-                </svg>
-              </div>
-            )}
             <div className="kite-icon-btn" style={{ color: '#444', cursor: 'pointer', fontSize: 16 }}>🔔</div>
             <div style={{
               display: 'flex',
@@ -268,12 +251,12 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               style={{
                 width: 4,
                 background: '#f1f1f1',
-                cursor: 'col-resize',
+                cursor: isLocked ? 'default' : 'col-resize',
                 zIndex: 10,
                 flexShrink: 0,
                 transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#ff5722'}
+              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = '#ff5722'; }}
               onMouseLeave={(e) => {
                 if (!isDragging.current) e.currentTarget.style.background = '#f1f1f1';
               }}
@@ -298,8 +281,8 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <>
               <div
                 onMouseDown={handleBottomMouseDown}
-                style={{ height: 4, background: '#f1f1f1', cursor: 'row-resize', flexShrink: 0, transition: 'background 0.2s' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#ff5722')}
+                style={{ height: 4, background: '#f1f1f1', cursor: isLocked ? 'default' : 'row-resize', flexShrink: 0, transition: 'background 0.2s' }}
+                onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = '#ff5722'; }}
                 onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = '#f1f1f1'; }}
               />
               <div style={{ height: bottomBarHeight, flexShrink: 0, borderTop: '1px solid #f1f1f1', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -309,20 +292,76 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           )}
         </div>
 
-        {/* Right Sidebar */}
+        {/* Right Sidebar (resizable) */}
         {rightSidebar && isRightSidebarOpen && (
-          <div style={{
-            width: 640,
-            flexShrink: 0,
-            background: '#fff',
-            borderLeft: '1px solid #f1f1f1',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'auto'
-          }}>
-            {rightSidebar}
-          </div>
+          <>
+            {/* Resizer handle — left edge of the right sidebar */}
+            <div
+              onMouseDown={handleRightMouseDown}
+              style={{
+                width: 4,
+                background: '#f1f1f1',
+                cursor: isLocked ? 'default' : 'col-resize',
+                zIndex: 10,
+                flexShrink: 0,
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = '#ff5722'; }}
+              onMouseLeave={(e) => { if (!isDraggingRight.current) e.currentTarget.style.background = '#f1f1f1'; }}
+            />
+            <div style={{
+              width: rightSidebarWidth,
+              flexShrink: 0,
+              background: '#fff',
+              borderLeft: '1px solid #f1f1f1',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'auto'
+            }}>
+              {rightSidebar}
+            </div>
+          </>
         )}
+      </div>
+
+      {/* ── Kite Footer — panel show/hide + reset + lock (Kite-specific) ── */}
+      <div style={{ height: 30, flexShrink: 0, background: '#fff', borderTop: '1px solid #f1f1f1', display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
+        <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>STERLING KITE</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {sidebar && (
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} title="Show / hide left sidebar" style={footBtn(isSidebarOpen)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+            </button>
+          )}
+          {rightSidebar && (
+            <button onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)} title="Show / hide right sidebar" style={footBtn(isRightSidebarOpen)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
+            </button>
+          )}
+          {bottomBar && (
+            <button onClick={() => setIsBottomBarOpen(!isBottomBarOpen)} title="Show / hide Kite terminal" style={footBtn(isBottomBarOpen)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="15" x2="21" y2="15" />
+              </svg>
+            </button>
+          )}
+          <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
+          <button onClick={resetLayout} title="Reset panel sizes to defaults" style={footBtn(false)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+          </button>
+          <button onClick={() => setIsLocked(!isLocked)} title={isLocked ? 'Unlock panel sizes' : 'Lock panel sizes'} style={footBtn(isLocked)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              {isLocked ? <path d="M7 11V7a5 5 0 0 1 10 0v4" /> : <path d="M7 11V7a5 5 0 0 1 9.9-1" />}
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

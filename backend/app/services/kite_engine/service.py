@@ -100,6 +100,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
 async def _scan_all_connected_once() -> None:
     """One pass over every connected Kite account."""
     from app.services.exchanges.kite import accounts as kite_accounts
+    from app.services.exchanges.kite.errors import KiteTokenError
     try:
         accts = [a for a in kite_accounts._load_from_db() if a.connected]
     except Exception as exc:  # noqa: BLE001
@@ -108,6 +109,14 @@ async def _scan_all_connected_once() -> None:
     for acct in accts:
         client = kite_accounts.build_client(acct)
         try:
+            try:
+                await client.get_profile()  # cheap token-validity probe
+            except KiteTokenError:
+                # Auto-expire: clear the stale token so the UI flips to disconnected.
+                kite_accounts.clear_session(acct.user_id, acct.id)
+                state.log(acct.user_id, "info",
+                          "Kite session expired — auto-disconnected; re-login required.")
+                continue
             await scan_user(client, acct.user_id)
         except Exception:  # noqa: BLE001 — already logged in scan_user
             pass

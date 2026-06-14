@@ -281,6 +281,9 @@ async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
                           kite_user_id=profile.get("user_id"), user_name=profile.get("user_name"),
                           message="Paper mode · live data" if acct.is_paper else "Connected")
     except KiteTokenError:
+        # Auto-expire the stale token: clear it so `connected` (stored-token presence)
+        # flips false everywhere and the UI offers re-login instead of "Log out".
+        kite_accounts.clear_session(user.user_id, acct.id)
         return KiteStatus(connected=False, is_paper=acct.is_paper, account_id=acct.id,
                           has_refresh_token=acct.has_refresh_token,
                           message="Session expired — reconnect via Kite login (tokens reset ~6 AM IST daily)")
