@@ -182,7 +182,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   {!isExp && <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, minWidth: 28 }}>{leg.moneyness}</span>}
+                   <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, minWidth: 28 }}>{leg.moneyness}</span>
                    <span style={{ color: color, fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
                    <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{row.exchange}</span>
                 </div>
@@ -215,7 +215,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
               </div>
               {isExp && (
                 <div onClick={(e) => e.stopPropagation()}>
-                  <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={row.underlying} spotPx={row.spot} tag={leg.moneyness} />
+                  <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={row.underlying} spotPx={row.spot} instrumentName={displayName} />
                 </div>
               )}
             </div>

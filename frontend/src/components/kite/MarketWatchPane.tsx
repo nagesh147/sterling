@@ -66,7 +66,7 @@ function formatPrice(v: number | null | undefined): string {
 
 // ─── Expanded Quote Row ──────────────────────────────────────────────────────
 
-export function QuoteDetail({ sym, q, expiry, spotName, spotPx, tag }: { sym: string; q: KiteQuote | undefined; expiry?: string; spotName?: string; spotPx?: number; tag?: string }) {
+export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName }: { sym?: string; q: any; expiry?: string; spotName?: string; spotPx?: number; instrumentName?: string }) {
   const s = useKiteSettings();
   if (!q || typeof q !== 'object') return null;
   const chg = chgPct(q, s.chgType);
@@ -81,7 +81,7 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, tag }: { sym: st
   return (
     <div style={{ padding: '16px', background: t.bg, borderBottom: `1px solid ${t.border}`, fontFamily: t.fontFamily }}>
       {/* Prominent Price Display */}
-      {tag && <div style={{ fontSize: 11, fontWeight: 600, color: '#ff5722', marginBottom: 6 }}>{tag}</div>}
+      {instrumentName && <div style={{ fontSize: 14, fontWeight: 500, color: t.text, marginBottom: 6 }}>{instrumentName}</div>}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 16 }}>
         <span style={{ color: color, fontSize: 18, fontWeight: 500 }}>{formatPrice(q.last_price)}</span>
         <span style={{ color: t.dim, fontSize: 12 }}>{chg.abs != null ? (chg.abs > 0 ? '+' : '') + chg.abs.toFixed(2) : ''}</span>
@@ -600,7 +600,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, paddingRight: 8 }}>
                       <span style={{ color: chgColor, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
-                      {!isExp && <span style={{ fontSize: 9, color: s.showGroupColors ? t.dim : '#9b9b9b', background: s.showGroupColors ? undefined : 'transparent', letterSpacing: 0.3, flexShrink: 0 }}>{tag}</span>}
+                      <span style={{ fontSize: 9, color: s.showGroupColors ? t.dim : '#9b9b9b', background: s.showGroupColors ? undefined : 'transparent', letterSpacing: 0.3, flexShrink: 0 }}>{tag}</span>
                     </div>
 
                     {!isExp && (
@@ -630,7 +630,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                       </div>
                     )}
                   </div>
-                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} tag={tag} />}
+                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} />}
                 </div>
               );
             })}
