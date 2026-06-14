@@ -6,7 +6,7 @@ import pytest
 
 from app.services.exchanges.kite import constants as K
 from app.services.exchanges.kite.client import KiteClient
-from app.services.exchanges.kite.errors import KiteOrderError
+from app.services.exchanges.kite.errors import KiteError, KiteOrderError
 
 
 def _client(handler, *, is_paper=False):
@@ -118,6 +118,46 @@ async def test_place_gtt_encodes_condition_and_orders_as_json():
     assert cond["tradingsymbol"] == "INFY"
     orders = json.loads(f["orders"])
     assert orders[0]["transaction_type"] == "SELL"
+
+
+async def test_regular_order_auto_retries_as_amo_when_market_closed():
+    """Markets closed: Zerodha 400s a regular order with hint `switch_to_amo`.
+    Mirror the Kite web app — auto-resubmit to /orders/amo and flag the result."""
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path == "/orders/regular":
+            return httpx.Response(400, json={
+                "status": "error",
+                "message": "Your order could not be converted to a After Market Order (AMO).",
+                "data": {"hints": ["switch_to_amo"]},
+                "error_type": "InputException",
+            })
+        return httpx.Response(200, json={"status": "success", "data": {"order_id": "AMO99"}})
+
+    c = _client(handler)
+    out = await c.place_order("NSE:INFY", "buy", 10, product=K.PRODUCT_CNC)
+    assert calls == ["/orders/regular", "/orders/amo"]
+    assert out["order_id"] == "AMO99"
+    assert out["amo"] is True
+
+
+async def test_regular_order_error_without_amo_hint_does_not_retry():
+    """A plain rejection (no switch_to_amo hint) must NOT silently become an AMO."""
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        return httpx.Response(400, json={
+            "status": "error", "message": "Insufficient funds",
+            "data": {}, "error_type": "MarginException",
+        })
+
+    c = _client(handler)
+    with pytest.raises(KiteError):
+        await c.place_order("NSE:INFY", "buy", 10)
+    assert calls == ["/orders/regular"]
 
 
 async def test_order_margins_posts_json_array():

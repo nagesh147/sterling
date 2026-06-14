@@ -130,7 +130,8 @@ class KiteClient(TradingExchangeAdapter):
                 raise_for_kite(f"HTTP {resp.status_code}: {resp.text[:200]}", "", resp.status_code)
             raise KiteError(f"Non-JSON response from {resp.request.url}", status_code=resp.status_code)
         if isinstance(body, dict) and body.get("status") == "error":
-            raise_for_kite(body.get("message", ""), body.get("error_type", ""), resp.status_code)
+            raise_for_kite(body.get("message", ""), body.get("error_type", ""), resp.status_code,
+                           data=body.get("data") if isinstance(body.get("data"), dict) else None)
         if not resp.is_success:
             msg = body.get("message") if isinstance(body, dict) else str(body)
             etype = body.get("error_type", "") if isinstance(body, dict) else ""
@@ -319,7 +320,19 @@ class KiteClient(TradingExchangeAdapter):
             body["iceberg_quantity"] = int(iceberg_quantity)
         if tag:
             body["tag"] = str(tag)[:20]
-        return await self._auth_post(f"/orders/{variety}", body)
+        try:
+            return await self._auth_post(f"/orders/{variety}", body)
+        except KiteError as exc:
+            # Markets closed: Zerodha rejects a regular order with the hint
+            # `switch_to_amo`. Mirror the Kite web app — auto-resubmit the same
+            # order as an After-Market Order (queues for the next session open)
+            # instead of failing the click. Flag the result so the UI can say so.
+            if variety == K.VARIETY_REGULAR and "switch_to_amo" in exc.hints:
+                result = await self._auth_post(f"/orders/{K.VARIETY_AMO}", body)
+                if isinstance(result, dict):
+                    result["amo"] = True
+                return result
+            raise
 
     async def place_order(
         self, symbol: str, side: str, size: float,

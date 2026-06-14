@@ -12,7 +12,7 @@ import { FundsPane } from './FundsPane';
 import { BidsPane } from './BidsPane';
 import { AlertsPane } from './AlertsPane';
 import { InstrumentPane, InstrumentTab } from './InstrumentPane';
-import { OrderUpdateToast } from './OrderUpdateToast';
+import { KiteNotifications } from './KiteNotifications';
 import { TripleSupertrendPane } from './TripleSupertrendPane';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
@@ -79,7 +79,7 @@ export function KiteTab() {
         bottomBar={<EngineTerminal />}
         content={content}
       />
-      <OrderUpdateToast />
+      <KiteNotifications />
       {isOpen && options && (
         <OrderWindow options={options} onClose={closeOrderWindow} />
       )}

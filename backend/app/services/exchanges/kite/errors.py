@@ -13,10 +13,19 @@ from typing import Optional
 class KiteError(RuntimeError):
     """Base error for all Kite interactions."""
 
-    def __init__(self, message: str, error_type: str = "", status_code: Optional[int] = None):
+    def __init__(self, message: str, error_type: str = "", status_code: Optional[int] = None,
+                 data: Optional[dict] = None):
         super().__init__(message)
         self.error_type = error_type
         self.status_code = status_code
+        # Kite's error envelope `data` (e.g. {"hints": ["switch_to_amo"]}) — kept so
+        # callers can react (the order path auto-converts to AMO on that hint).
+        self.data = data if isinstance(data, dict) else {}
+
+    @property
+    def hints(self) -> list:
+        h = self.data.get("hints")
+        return h if isinstance(h, list) else []
 
 
 class KiteTokenError(KiteError):
@@ -56,7 +65,8 @@ _ERROR_MAP = {
 }
 
 
-def raise_for_kite(message: str, error_type: str = "", status_code: Optional[int] = None) -> None:
+def raise_for_kite(message: str, error_type: str = "", status_code: Optional[int] = None,
+                   data: Optional[dict] = None) -> None:
     """Raise the most specific KiteError subclass for a Kite error envelope."""
     cls, default = _ERROR_MAP.get(error_type, (KiteError, "Kite request failed."))
-    raise cls(message or default, error_type=error_type, status_code=status_code)
+    raise cls(message or default, error_type=error_type, status_code=status_code, data=data)

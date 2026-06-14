@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
+import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   CreateAlertBody, HoldingsAuthResult, KiteAccount, KiteAccountList, KiteAlert,
   KiteAlertHistoryRow, KiteInstrumentSearch, KiteOrderUpdate, KiteSessionResult,
@@ -241,7 +242,28 @@ export function usePlaceKiteOrder() {
   const qc = useQueryClient();
   return useMutation<any, Error, PlaceOrderBody>({
     mutationFn: (body) => api.post(`${K}/orders`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-orders'] }),
+    // Toast every placement result — including paper (simulated) orders, which
+    // have no live WS postback, and rejections (e.g. "Markets are closed").
+    onSuccess: (data, body) => {
+      qc.invalidateQueries({ queryKey: ['kite-orders'] });
+      const paper = !!data?.paper;
+      const amo = !!data?.amo;  // backend auto-converted a market-closed order to AMO
+      notifyOrder({
+        kind: amo ? 'open' : 'placed',
+        title: paper ? 'Paper order placed' : amo ? 'Placed as AMO' : 'Order placed',
+        message: amo
+          ? `${body.transaction_type} ${body.quantity} ${body.tradingsymbol} — market closed, queued as an After-Market Order for the next open.`
+          : `${body.transaction_type} ${body.quantity} ${body.tradingsymbol}${paper ? ' (simulated)' : ''}.`,
+        orderId: data?.order_id,
+      });
+    },
+    onError: (err, body) => {
+      notifyOrder({
+        kind: 'rejected',
+        title: 'Order rejected',
+        message: `${body.transaction_type} ${body.tradingsymbol} — ${err.message}`,
+      });
+    },
   });
 }
 

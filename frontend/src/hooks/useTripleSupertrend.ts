@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
+import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   ActivityResponse, EngineConfigModel, EngineDetailResponse, EngineOrderRequest,
   EngineOrderResponse, SetupChart, SignalsResponse,
@@ -67,7 +68,18 @@ export function useEnginePlaceOrder() {
   const qc = useQueryClient();
   return useMutation<EngineOrderResponse, Error, EngineOrderRequest>({
     mutationFn: (body) => api.post<EngineOrderResponse>(`${E}/order`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-engine-activity'] }),
+    onSuccess: (data, body) => {
+      qc.invalidateQueries({ queryKey: ['kite-engine-activity'] });
+      notifyOrder({
+        kind: data?.status === 'duplicate' ? 'info' : 'placed',
+        title: data?.status === 'duplicate' ? 'Already submitted' : 'Order placed',
+        message: `${body.side} ${body.quantity} ${body.option_symbol}.`,
+        orderId: data?.order_id,
+      });
+    },
+    onError: (err, body) => {
+      notifyOrder({ kind: 'rejected', title: 'Order rejected', message: `${body.side} ${body.option_symbol} — ${err.message}` });
+    },
   });
 }
 
