@@ -113,11 +113,40 @@ export function InstrumentLabel({ symbol, fallback }: { symbol: string; fallback
       <span style={{ marginRight: 4, display: 'inline-flex', alignItems: 'baseline', gap: 3, fontSize: 12 }}>
         {day && (
           <span>
-            {day}<span style={{ fontSize: '0.85em', verticalAlign: 'baseline', position: 'relative', top: '-0.1em' }}>{getOrdinal(day)}</span>
+            {day}
+            <sup style={{ fontSize: '0.85em', marginLeft: 1 }}>
+              {getOrdinal(day)}
+              {isWeekly && (
+                <span style={{ 
+                  color: 'var(--color-text-4, #4184f3)', 
+                  backgroundColor: 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)', 
+                  textAlign: 'center', 
+                  borderRadius: '100%', 
+                  width: 10, 
+                  height: 10, 
+                  fontSize: '0.65em', 
+                  lineHeight: '10px',
+                  display: 'inline-block',
+                  marginLeft: 4
+                }}>w</span>
+              )}
+            </sup>
           </span>
         )}
-        {isWeekly && (
-          <span style={{ fontSize: 9, background: '#e3f2fd', color: '#4184f3', padding: '0 3px', borderRadius: 2, marginLeft: 2, marginRight: 2 }}>W</span>
+        {!day && isWeekly && (
+          <span style={{ 
+            color: 'var(--color-text-4, #4184f3)', 
+            backgroundColor: 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)', 
+            textAlign: 'center', 
+            borderRadius: '100%', 
+            width: 10, 
+            height: 10, 
+            fontSize: '0.65em', 
+            lineHeight: '10px',
+            display: 'inline-block',
+            marginLeft: 2,
+            marginRight: 2
+          }}>w</span>
         )}
         {month && <span>{month}</span>}
       </span>

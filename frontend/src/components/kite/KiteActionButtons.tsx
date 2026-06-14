@@ -16,17 +16,21 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
   const btnAction: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 28, height: 28, borderRadius: 2, cursor: 'pointer',
-    fontSize: 12, fontWeight: 600, border: 'none'
+    fontSize: 12, border: 'none'
   };
 
   const buySellStyle: React.CSSProperties = variant === 'long' 
     ? {
         display: 'flex', alignItems: 'center', justifyContent: 'center', 
         width: 125, height: 32, borderRadius: 3, padding: 0, 
-        fontWeight: 500, border: 'none', cursor: 'pointer', 
+        border: 'none', cursor: 'pointer', 
         fontSize: 12, letterSpacing: '0.5px', color: '#fff'
       }
-    : { ...btnAction, color: '#fff' };
+    : { 
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        minWidth: 35, borderRadius: 3, padding: '6px 10px', cursor: 'pointer',
+        fontSize: 12, border: 'none', color: '#fff'
+      };
 
   const iconBtnStyle: React.CSSProperties = {
     ...btnAction, background: 'transparent', color: k.dim, padding: 4
