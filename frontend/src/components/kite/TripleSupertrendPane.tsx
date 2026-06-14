@@ -131,14 +131,6 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
             <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
           </span>
         </div>
-
-        <div className="st-actions" onClick={(e) => e.stopPropagation()}>
-          <button style={{ ...btnAction, background: '#387ed1', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
-          <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
-          <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={(e) => toggleExpand(e, row.underlying)} title="Market Depth"><Icons.Depth /></button>
-          <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
-          <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
-        </div>
       </div>
 
       {expanded.has(row.underlying) && uQ && (
@@ -300,23 +292,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         .st-parent-row {
           position: relative;
         }
-        .st-parent-header .st-actions {
-          display: none;
-          gap: 4px;
-          align-items: center;
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: ${k.surfaceHover};
-          padding-left: 8px;
-        }
-        .st-parent-header:hover .st-actions {
-          display: flex;
-        }
-        .st-parent-header:hover .st-prices-parent {
-          visibility: hidden;
-        }
+
         .st-leg-row {
           position: relative;
           display: flex;
