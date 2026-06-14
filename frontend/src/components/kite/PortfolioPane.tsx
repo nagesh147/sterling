@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import {
   useConvertKitePosition, useKiteHoldings, useKitePositions,
-  useKiteAuctions, useInitiateHoldingsAuth,
+  useKiteAuctions, useInitiateHoldingsAuth
 } from '../../hooks/useKite';
 
 import { InstrumentLabel } from './InstrumentLabel';
+import { KiteActionButtons } from './KiteActionButtons';
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -98,6 +100,20 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const { data: holdings } = useKiteHoldings(true);
   const { data: pos } = useKitePositions(true);
   const positions = (pos?.net ?? []).filter((p: any) => num(p.quantity) !== 0 || num(p.pnl) !== 0);
+
+  const { openOrderWindow } = useOrderWindowStore();
+
+  const handleOpenOrder = (symbol: string, initialSide: 'BUY' | 'SELL', initialQty: number, product: string, lastPx: number | null = null) => {
+    const [exchange, tradingsymbol] = symbol.split(':');
+    openOrderWindow({
+      symbol: tradingsymbol || symbol,
+      exchange: exchange || 'NSE',
+      initialSide,
+      initialQty,
+      lastPrice: lastPx || 0,
+      product: product as 'MIS' | 'CNC' | 'NRML',   // square off / add to the position in its own product
+    });
+  };
 
   const showHoldings = view === 'holdings' || !view;
   const showPositions = view === 'positions' || !view;
@@ -193,6 +209,8 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '24px 32px' }}>
       <style>{`
         .portfolio-row:hover { background-color: #f9f9f9 !important; }
+        .portfolio-row:hover .portfolio-content { visibility: hidden; }
+        .portfolio-row:hover .portfolio-actions { display: flex !important; }
         .sort-header:hover { color: #444 !important; }
         .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header:hover .sort-icon { opacity: 0.5; }
@@ -271,7 +289,17 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(num(p.pnl)), background: '#f9f9f9' }}>
                           {num(p.pnl) > 0 ? '+' : ''}{num(p.pnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg) }}>{chg.toFixed(2)}%</td>
+                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg), position: 'relative' }}>
+                          <span className="portfolio-content">{chg.toFixed(2)}%</span>
+                          <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
+                            <KiteActionButtons 
+                              onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
+                              buyLabel="Add"
+                              onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
+                              sellLabel="Exit"
+                            />
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -366,8 +394,16 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                           {pnl > 0 ? '+' : ''}{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(netChg) }}>{netChg.toFixed(2)}%</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChgPct) }}>
-                          {dayChg !== 0 ? `${dayChg > 0 ? '+' : ''}${dayChgPct.toFixed(2)}%` : '0.00%'}
+                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChgPct), position: 'relative' }}>
+                          <span className="portfolio-content">{dayChg !== 0 ? `${dayChg > 0 ? '+' : ''}${dayChgPct.toFixed(2)}%` : '0.00%'}</span>
+                          <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
+                            <KiteActionButtons 
+                              onBuy={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'BUY', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
+                              buyLabel="Add"
+                              onSell={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
+                              sellLabel="Exit"
+                            />
+                          </div>
                         </td>
                       </tr>
                     );

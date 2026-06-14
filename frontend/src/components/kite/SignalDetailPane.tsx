@@ -10,69 +10,7 @@ import { AlignmentChips } from './TripleSupertrendPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 
-function OrderEntryPanel({ leg, exchange, onTradeSubmit, side, onSideChange }: { leg: OptionDetail, exchange: string, onTradeSubmit: (leg: OptionDetail, side: 'BUY'|'SELL', qty: number, price: number, type: 'MARKET'|'LIMIT') => void, side: 'BUY'|'SELL', onSideChange: (s: 'BUY'|'SELL') => void }) {
-  const [qty, setQty] = useState(leg.lot_size ?? 0);
-  const [price, setPrice] = useState(leg.last_price ?? 0);
-  const [type, setType] = useState<'MARKET'|'LIMIT'>('MARKET');
-
-  const accent = side === 'BUY' ? '#4184f3' : '#ff5722';
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Tab Header */}
-      <div style={{ display: 'flex', background: '#f9f9f9', borderBottom: `1px solid ${k.border}` }}>
-        <button 
-          onClick={() => onSideChange('BUY')}
-          style={{ flex: 1, padding: '12px 0', border: 'none', background: side === 'BUY' ? '#4184f3' : 'transparent', color: side === 'BUY' ? '#fff' : k.text, fontWeight: 500, cursor: 'pointer', fontSize: 12, transition: 'all 0.2s' }}
-        >
-          BUY
-        </button>
-        <button 
-          onClick={() => onSideChange('SELL')}
-          style={{ flex: 1, padding: '12px 0', border: 'none', background: side === 'SELL' ? '#ff5722' : 'transparent', color: side === 'SELL' ? '#fff' : k.text, fontWeight: 500, cursor: 'pointer', fontSize: 12, transition: 'all 0.2s' }}
-        >
-          SELL
-        </button>
-      </div>
-
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: k.dim }}>
-            Qty.
-            <input type="number" value={qty} onChange={e => setQty(Number(e.target.value))} style={{ padding: '8px 12px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14, outline: 'none' }} />
-          </label>
-          <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: k.dim }}>
-            Price
-            <input type="number" step="0.05" value={price} disabled={type === 'MARKET'} onChange={e => setPrice(Number(e.target.value))} style={{ padding: '8px 12px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14, outline: 'none', background: type === 'MARKET' ? '#f5f5f5' : '#fff', color: type === 'MARKET' ? k.dim : k.text }} />
-          </label>
-        </div>
-
-        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: k.text }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="radio" checked={type === 'MARKET'} onChange={() => setType('MARKET')} /> Market
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <input type="radio" checked={type === 'LIMIT'} onChange={() => setType('LIMIT')} /> Limit
-          </label>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: `1px solid ${k.border}`, background: '#f9f9f9' }}>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: 11, color: k.dim }}>Margin req.</span>
-          <span style={{ fontSize: 14, color: k.text }}>₹{(qty * price).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-        </div>
-        <button 
-          onClick={() => onTradeSubmit(leg, side, qty, type === 'MARKET' ? 0 : price, type)}
-          style={{ background: accent, color: '#fff', border: 'none', borderRadius: 3, padding: '8px 24px', fontSize: 13, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        >
-          {side} <Icons.ArrowUp /> 
-        </button>
-      </div>
-    </div>
-  );
-}
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
 interface Props {
   token: number;
@@ -95,13 +33,12 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function LegCard({ leg, exchange, onTrade, underlying }: {
+function LegCard({ leg, exchange, underlying }: {
   leg: OptionDetail; exchange: string;
-  onTrade: (leg: OptionDetail, side: 'BUY' | 'SELL', qty: number, price: number, order_type: 'MARKET' | 'LIMIT') => void;
   underlying: string;
 }) {
   const [showDepth, setShowDepth] = useState(false);
-  const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const sym = `${exchange}:${leg.option_symbol}`;
   const { data: quotes } = useKiteQuote([sym]);
   const q = quotes?.[sym];
@@ -121,11 +58,22 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
       color = s.showPriceDirection ? (chgAbs >= 0 ? k.green : k.red) : k.dim;
     } else if (q.net_change != null) {
       chgPct = q.net_change;
-      color = s.showPriceDirection ? (chgPct >= 0 ? k.green : k.red) : k.dim;
+      color = s.showPriceDirection ? (chgPct! >= 0 ? k.green : k.red) : k.dim;
     }
   }
 
   const [hovered, setHovered] = useState(false);
+
+  const handleAction = (e: React.MouseEvent, type: 'BUY' | 'SELL') => {
+    e.stopPropagation();
+    openOrderWindow({
+      symbol: leg.option_symbol,
+      exchange: exchange,
+      initialSide: type,
+      lotSize: leg.lot_size || 1,
+      lastPrice: lastPx || 0,
+    });
+  };
 
   return (
     <div 
@@ -162,8 +110,8 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
             <KiteActionButtons
               className="sd-actions"
               variant="long"
-              onBuy={(e) => { e.stopPropagation(); setOrderSide('BUY'); setShowDepth(true); }}
-              onSell={(e) => { e.stopPropagation(); setOrderSide('SELL'); setShowDepth(true); }}
+              onBuy={(e) => handleAction(e, 'BUY')}
+              onSell={(e) => handleAction(e, 'SELL')}
               onDepth={(e) => { e.stopPropagation(); setShowDepth(!showDepth); }}
               onChart={(e) => { e.stopPropagation(); }}
               onMore={(e) => { e.stopPropagation(); }}
@@ -175,7 +123,6 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
       {showDepth && (
         <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.surface }}>
           <div style={{ display: 'flex' }}>
-            {/* LEFT: Market Depth (with native BUY/SELL buttons at top) */}
             <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
               {q ? (
                 <QuoteDetail 
@@ -185,20 +132,13 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
                   spotName={underlying} 
                   instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
                   hideHeaderAndActions={false} 
-                  onBuy={() => setOrderSide('BUY')}
-                  onSell={() => setOrderSide('SELL')}
+                  onBuy={() => handleAction({ stopPropagation: () => {} } as React.MouseEvent, 'BUY')}
+                  onSell={() => handleAction({ stopPropagation: () => {} } as React.MouseEvent, 'SELL')}
                   greeks={leg}
                 />
               ) : (
                 <div style={{ padding: 16, color: k.dim, fontSize: 12 }}>Loading market depth...</div>
               )}
-            </div>
-            
-            <div style={{ width: 1, background: k.border }} />
-            
-            {/* RIGHT: Order Panel */}
-            <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-              <OrderEntryPanel leg={leg} exchange={exchange} onTradeSubmit={onTrade} side={orderSide} onSideChange={setOrderSide} />
             </div>
           </div>
         </div>
@@ -209,7 +149,6 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
 
 export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onShowOptionChain }: Props) {
   const { data, isLoading, isError } = useEngineDetail(token, true);
-  const placeOrder = useEnginePlaceOrder();
   const [pinned, setPinned] = useState<boolean>(() => {
     try { return JSON.parse(localStorage.getItem('kite_engine_pins') || '[]').includes(token); } catch { return false; }
   });
@@ -226,24 +165,6 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
   const uExch = data?.exchange === 'BFO' ? 'BSE' : 'NSE';
   const { data: quotes } = useKiteQuote(data ? [`${uExch}:${underlying}`] : [], false);
   const uQ = data ? quotes?.[`${uExch}:${underlying}`] : undefined;
-
-  const onTradeSubmit = (leg: OptionDetail, side: 'BUY' | 'SELL', qty: number, price: number, order_type: 'MARKET' | 'LIMIT') => {
-    if (!data) return;
-    const ok = window.confirm(
-      `${side} ${qty} ${parseTradingsymbol(leg.option_symbol)} @ ${order_type === 'MARKET' ? 'MARKET' : price} on ${data.exchange}?\n` +
-      `(${underlying} ${data.regime} · last ₹${leg.last_price.toFixed(2)})`
-    );
-    if (!ok) return;
-    placeOrder.mutate({
-      option_symbol: leg.option_symbol,
-      exchange: data.exchange,
-      side,
-      quantity: qty,
-      order_type,
-      limit_price: order_type === 'LIMIT' ? price : undefined,
-      product: 'NRML',
-    } as any);
-  };
 
   const bull = data?.regime === 'BULL';
   const move = data ? data.spot_now - data.spot_at_trigger : 0;
@@ -319,20 +240,12 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
             <Stat label="SL" value={data.stop_loss.toFixed(2)} color={k.amber} />
           </div>
 
-          {placeOrder.isPending && <div style={{ color: k.amber, fontSize: 12, marginBottom: 10 }}>Submitting order…</div>}
-          {placeOrder.isSuccess && (
-            <div style={{ color: k.green, fontSize: 12, marginBottom: 10 }}>
-              ✓ {placeOrder.data.status === 'duplicate' ? 'Already submitted' : 'Order submitted'} — #{placeOrder.data.order_id}
-            </div>
-          )}
-          {placeOrder.isError && <div style={{ color: k.red, fontSize: 12, marginBottom: 10 }}>Order failed: {(placeOrder.error as Error)?.message}</div>}
-
           {/* option legs */}
           {data.options.length === 0 ? (
             <div style={{ color: k.dim, fontSize: 12 }}>No option legs resolved (no liquid ATM/ITM contract).</div>
           ) : (
             data.options.map((leg) => (
-              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} onTrade={onTradeSubmit} underlying={underlying} />
+              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} />
             ))
           )}
           <div style={{ fontSize: 10, color: k.dim, marginTop: 8 }}>

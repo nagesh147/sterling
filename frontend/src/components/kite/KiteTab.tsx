@@ -18,6 +18,8 @@ import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
 import { EngineTerminal } from './EngineTerminal';
 import { useKiteAutoSession } from '../../hooks/useKite';
+import { OrderWindow } from './OrderWindow';
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
 export function KiteTab() {
   const [nav, setNav] = useState<NavItem>('dashboard');
@@ -25,6 +27,8 @@ export function KiteTab() {
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
   const [detailView, setDetailView] = useState<{ token: number; underlying: string } | null>(null);
   useKiteAutoSession();   // silently auto-recover a lapsed session via the stored refresh token
+
+  const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
 
   const handleNavClick = (n: NavItem) => {
     setNav(n);
@@ -76,6 +80,9 @@ export function KiteTab() {
         content={content}
       />
       <OrderUpdateToast />
+      {isOpen && options && (
+        <OrderWindow options={options} onClose={closeOrderWindow} />
+      )}
     </>
   );
 }

@@ -13,6 +13,7 @@ Backwards-compat: re-exported as ``ZerodhaAdapter`` from the legacy adapter path
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -251,6 +252,10 @@ class KiteClient(TradingExchangeAdapter):
     async def search_instruments(self, query: str, exchange: str = "", limit: int = 50) -> List[dict]:
         """exchange="" → universal search across the full instruments dump."""
         return await self._instruments.search(query, exchange, limit)
+
+    async def instrument_lot_sizes(self, symbols: list) -> dict:
+        """EXCHANGE:TRADINGSYMBOL → lot_size for a batch (found instruments only)."""
+        return await self._instruments.lot_sizes(symbols)
 
     async def search_mf_instruments(self, query: str = "", limit: int = 50) -> List[dict]:
         """Search the mutual-fund scheme master by tradingsymbol/name/AMC."""
@@ -694,14 +699,25 @@ class KiteClient(TradingExchangeAdapter):
         
         log.info("Fetching Kite candles: token=%s, resolution=%s, interval=%s, from=%s, to=%s",
                  token, resolution, interval, from_str, to_str)
-        try:
-            data = await self.get_historical(token, interval, from_str, to_str)
-            log.info("Kite candle fetch response keys: %s", data.keys() if isinstance(data, dict) else type(data))
-            raw = data.get("candles", [])
-            log.info("Kite candle fetch returned %d candles for %s", len(raw), instrument.underlying)
-        except Exception as exc:
-            log.error("Kite candle fetch failed for %s: %s", instrument.underlying, exc)
-            return []
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                data = await self.get_historical(token, interval, from_str, to_str)
+                # log.info("Kite candle fetch response keys: %s", data.keys() if isinstance(data, dict) else type(data))
+                raw = data.get("candles", [])
+                # log.info("Kite candle fetch returned %d candles for %s", len(raw), instrument.underlying)
+                break  # success
+            except Exception as exc:
+                is_429 = "429" in str(exc)
+                if attempt < max_retries - 1:
+                    sleep_time = 1.0 if is_429 else 0.5
+                    log.warning("Kite candle fetch failed for %s (attempt %d): %s. Retrying in %ss...", 
+                                instrument.underlying, attempt + 1, exc, sleep_time)
+                    await asyncio.sleep(sleep_time)
+                else:
+                    log.error("Kite candle fetch failed for %s after %d attempts: %s", 
+                              instrument.underlying, max_retries, exc)
+                    return []
         candles: List[Candle] = []
         for row in raw:
             try:

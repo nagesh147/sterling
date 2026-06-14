@@ -12,6 +12,7 @@ import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
 
 interface Props {
@@ -65,6 +66,7 @@ export function AlignmentChips({ a }: { a: AlignmentChip }) {
 function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: () => void; quotes?: any }) {
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const s = useKiteSettings();
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const bull = row.regime === 'BULL';
   const accent = bull ? k.green : k.red;
   
@@ -188,8 +190,26 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
                 {!isExp && (
                   <KiteActionButtons
                     className="st-actions"
-                    onBuy={(e) => { e.stopPropagation(); }}
-                    onSell={(e) => { e.stopPropagation(); }}
+                    onBuy={(e) => {
+                      e.stopPropagation();
+                      openOrderWindow({
+                        symbol: leg.option_symbol,
+                        exchange: row.exchange,
+                        initialSide: 'BUY',
+                        lotSize: leg.lot_size || 1,
+                        lastPrice: lastPx || 0,
+                      });
+                    }}
+                    onSell={(e) => {
+                      e.stopPropagation();
+                      openOrderWindow({
+                        symbol: leg.option_symbol,
+                        exchange: row.exchange,
+                        initialSide: 'SELL',
+                        lotSize: leg.lot_size || 1,
+                        lastPrice: lastPx || 0,
+                      });
+                    }}
                     onDepth={(e) => { e.stopPropagation(); toggleExpand(e, leg.option_symbol); }}
                     onChart={(e) => { e.stopPropagation(); }}
                     onMore={(e) => { e.stopPropagation(); }}
@@ -393,7 +413,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     if (!cfg) return;
     const has = cfg.strike_moneyness.includes(m);
     const next = has ? cfg.strike_moneyness.filter((x) => x !== m) : [...cfg.strike_moneyness, m];
-    patch({ strike_moneyness: next.length ? next : ['ATM'] });
+    patch({ strike_moneyness: next.length ? next : ['ATM', 'ITM1', 'ITM2'] });
   };
 
   const toggleAuto = () => {

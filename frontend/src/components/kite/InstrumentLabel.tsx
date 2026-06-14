@@ -85,10 +85,18 @@ export function getOrdinal(n: number) {
   return s[(v - 20) % 10] || s[v] || s[0];
 }
 
-export function InstrumentLabel({ symbol, fallback }: { symbol: string; fallback?: string }) {
+export function InstrumentLabel({ symbol, fallback, onColor }: { symbol: string; fallback?: string; onColor?: string }) {
   const parts = symbol.split(':');
   let exchange = parts.length > 1 ? parts[0] : '';
   const rawTs = parts.length > 1 ? parts[1] : symbol;
+  // On a colored header (onColor set), the default blue weekly badge is invisible —
+  // render it as a light chip with the accent letter instead.
+  const wkColor = onColor || 'var(--color-text-4, #4184f3)';
+  const wkBg = onColor ? 'rgba(255,255,255,0.92)' : 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)';
+  const wkBase: React.CSSProperties = {
+    color: wkColor, backgroundColor: wkBg, textAlign: 'center', borderRadius: '100%',
+    width: 11, height: 11, fontSize: '0.62em', lineHeight: '11px', display: 'inline-block', fontWeight: 700,
+  };
   
   if (rawTs === 'NIFTY 50' || rawTs === 'NIFTY BANK' || rawTs === 'SENSEX' || rawTs === 'BANKEX' || rawTs === 'NIFTY 100' || rawTs === 'NIFTY COMMODITIES' || rawTs === 'NIFTY FIN SERVICE' || rawTs.includes('INDEX')) {
     exchange = 'INDEX';
@@ -116,38 +124,11 @@ export function InstrumentLabel({ symbol, fallback }: { symbol: string; fallback
             {day}
             <sup style={{ fontSize: '0.85em', marginLeft: 1 }}>
               {getOrdinal(day)}
-              {isWeekly && (
-                <span style={{ 
-                  color: 'var(--color-text-4, #4184f3)', 
-                  backgroundColor: 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)', 
-                  textAlign: 'center', 
-                  borderRadius: '100%', 
-                  width: 10, 
-                  height: 10, 
-                  fontSize: '0.65em', 
-                  lineHeight: '10px',
-                  display: 'inline-block',
-                  marginLeft: 4
-                }}>w</span>
-              )}
+              {isWeekly && <span style={{ ...wkBase, marginLeft: 4 }}>w</span>}
             </sup>
           </span>
         )}
-        {!day && isWeekly && (
-          <span style={{ 
-            color: 'var(--color-text-4, #4184f3)', 
-            backgroundColor: 'rgba(var(--color-bg-5--rgb, 65, 132, 243), 0.1)', 
-            textAlign: 'center', 
-            borderRadius: '100%', 
-            width: 10, 
-            height: 10, 
-            fontSize: '0.65em', 
-            lineHeight: '10px',
-            display: 'inline-block',
-            marginLeft: 2,
-            marginRight: 2
-          }}>w</span>
-        )}
+        {!day && isWeekly && <span style={{ ...wkBase, marginLeft: 2, marginRight: 2 }}>w</span>}
         {month && <span>{month}</span>}
       </span>
       {strike && <span style={{ marginRight: 4 }}>{strike}</span>}

@@ -141,11 +141,11 @@ class EngineOrderResponse(BaseModel):
 class EngineConfigModel(BaseModel):
     trail_target: Literal["fast", "mid", "slow"] = "mid"
     # multi-select: scan resolves a leg for EACH selected moneyness (never OTM)
-    strike_moneyness: List[Literal["ATM", "ITM1", "ITM2"]] = ["ATM"]
+    strike_moneyness: List[Literal["ATM", "ITM1", "ITM2"]] = ["ATM", "ITM1", "ITM2"]
     early_lock: bool = False
     auto_execute: bool = False
 
     @field_validator("strike_moneyness")
     @classmethod
     def _at_least_one(cls, v):
-        return v or ["ATM"]
+        return v or ["ATM", "ITM1", "ITM2"]

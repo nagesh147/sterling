@@ -126,6 +126,31 @@ class InstrumentCache:
                 return tok
         raise KeyError(f"Instrument not found: {exchange}:{tradingsymbol}")
 
+    async def lot_sizes(self, symbols: List[str]) -> Dict[str, int]:
+        """Bulk ``EXCHANGE:TRADINGSYMBOL`` → ``lot_size`` lookup.
+
+        Only instruments actually found are returned (callers keep their own
+        fallback for anything unresolved). Each exchange dump is loaded at most
+        once, then resolved in-memory — cheap for a whole watchlist.
+        """
+        by_ex: Dict[str, List[Tuple[str, str]]] = {}
+        for sym in symbols:
+            ex, sep, ts = sym.partition(":")
+            if not sep:
+                ex, ts = "", ex
+            by_ex.setdefault(ex.upper(), []).append((sym, ts.upper()))
+        out: Dict[str, int] = {}
+        for ex, pairs in by_ex.items():
+            rows = await self.load(ex)
+            idx = {str(r.get("tradingsymbol", "")).upper(): r for r in rows}
+            for sym, ts in pairs:
+                r = idx.get(ts)
+                if r is None:
+                    continue
+                ls = int(r.get("lot_size") or 0)
+                out[sym] = ls if ls > 0 else 1
+        return out
+
     def clear(self) -> None:
         self._cache.clear()
         self._cache_ts.clear()

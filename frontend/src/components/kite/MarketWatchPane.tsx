@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { k as t, tint, kStyles, Icons } from '../../styles/kiteUI';
-import { useKiteInstrumentSearch, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
+import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
@@ -365,15 +365,19 @@ export function KiteSearchBar({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+
 export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
   const [query, setQuery] = useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   const search = useKiteInstrumentSearch(query);
-  const { items: watch, add, remove, reorder } = useKiteWatchlist();
+  const { items: watch, add, remove, reorder, mergeLots } = useKiteWatchlist();
   const sync = useSyncKiteWatchlist();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<{ symbol: string; top: number; left: number } | null>(null);
+
+  const { openOrderWindow } = useOrderWindowStore();
 
   React.useEffect(() => {
     const closeMenu = () => setMenuOpen(null);
@@ -391,6 +395,15 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
   const { data: ltp } = useKiteLtp(symbols, symbols.length > 0);
   const { data: quotes } = useKiteQuote(symbols, symbols.length > 0);
 
+  // Backfill real lot sizes onto watch items that lack one (legacy/synced items),
+  // so every Buy/Sell opens the ticket with the correct quantity directly.
+  const missingLots = useMemo(() => watch.filter((w) => w.lot_size == null).map((w) => w.symbol), [watch]);
+  const { data: lotMap } = useKiteInstrumentLots(missingLots);
+  React.useEffect(() => {
+    if (lotMap && Object.keys(lotMap).length) mergeLots(lotMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lotMap]);
+
   const s = useKiteSettings();
   
   const toggleExpand = (sym: string) => {
@@ -406,8 +419,20 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
     const meta = instrMeta(i);
     const sym = `${i.exchange || 'NSE'}:${i.tradingsymbol}`;
     const label = i.name || `${i.exchange} · ${meta.kind}`;
-    add({ symbol: sym, token: i.instrument_token, name: i.tradingsymbol, sub: label });
+    add({ symbol: sym, token: i.instrument_token, name: i.tradingsymbol, sub: label, lot_size: i.lot_size });
     setQuery('');
+  };
+
+  const handleOpenOrder = (symbol: string, initialSide: 'BUY' | 'SELL', lastPx: number | null, lotSize?: number) => {
+    const [exchange, tradingsymbol] = symbol.split(':');
+    openOrderWindow({
+      symbol: tradingsymbol || symbol,
+      exchange: exchange || 'NSE',
+      initialSide,
+      lastPrice: lastPx || 0,
+      lotSize,                                  // real contract lot when known (else window resolves it)
+      initialQty: lotSize && lotSize > 0 ? lotSize : undefined,   // default to exactly 1 lot
+    });
   };
 
   const sortedWatch = useMemo(() => {
@@ -626,8 +651,8 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
 
                     <KiteActionButtons 
                       className="mw-actions"
-                      onBuy={(e) => { e.stopPropagation(); }}
-                      onSell={(e) => { e.stopPropagation(); }}
+                      onBuy={(e) => { e.stopPropagation(); handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size); }}
+                      onSell={(e) => { e.stopPropagation(); handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size); }}
                       onDepth={(e) => { e.stopPropagation(); toggleExpand(w.symbol); }}
                       onChart={(e) => { e.stopPropagation(); onOpenInstrument?.(w.symbol, 'chart'); }}
                       onDelete={(e) => { e.stopPropagation(); remove(w.symbol); }}
@@ -648,7 +673,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                       </span>
                     </div>
                   </div>
-                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} />}
+                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} onBuy={() => handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size)} onSell={() => handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size)} />}
                 </div>
               );
             })}

@@ -331,6 +331,18 @@ async def instruments(exchange: str = "", query: str = "", limit: int = 50,
     return {"exchange": exchange, "query": query, "count": len(rows), "instruments": rows}
 
 
+@router.get("/instruments/lots")
+async def instrument_lots(symbols: str = "", user: UserContext = Depends(get_current_user)):
+    """Bulk lot-size lookup: ?symbols=BFO:SENSEX...,NSE:INFY → {symbol: lot_size}.
+
+    Used by the market watch to size F&O orders without a per-order lookup.
+    """
+    syms = [s for s in (symbols or "").split(",") if s]
+    if not syms:
+        return {}
+    return await _run(user, lambda c: c.instrument_lot_sizes(syms))
+
+
 @router.get("/quote")
 async def quote(i: List[str] = Query(...), user: UserContext = Depends(get_current_user)):
     return await _run(user, lambda c: c.get_quote(i))

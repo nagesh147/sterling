@@ -65,6 +65,7 @@ export interface WatchItem {
   token: number;
   name: string;
   sub?: string;     // short descriptor (e.g. "NFO · CE 25000")
+  lot_size?: number; // contract lot for F&O (1 for equity); used to size orders
 }
 
 export interface KitePosition {
@@ -86,11 +87,13 @@ export interface PlaceOrderBody {
   transaction_type: 'BUY' | 'SELL';
   quantity: number;
   order_type: 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
-  product: 'MIS' | 'CNC' | 'NRML';
+  product: 'MIS' | 'CNC' | 'NRML' | 'MTF';
   variety?: string;
   price?: number | null;
   trigger_price?: number | null;
-  validity?: string;
+  validity?: 'DAY' | 'IOC' | 'TTL' | string;
+  validity_ttl?: number | null;
+  disclosed_quantity?: number | null;
   tag?: string | null;
 }
 

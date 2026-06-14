@@ -445,6 +445,18 @@ export function useKiteInstrumentSearch(query: string) {
   });
 }
 
+// Bulk EXCHANGE:TRADINGSYMBOL → lot_size (found instruments only). Lets the
+// market watch size F&O orders without a per-order lookup in the ticket.
+export function useKiteInstrumentLots(symbols: string[]) {
+  const key = [...symbols].sort().join(',');
+  return useQuery<Record<string, number>>({
+    queryKey: ['kite-instrument-lots', key],
+    queryFn: () => api.get<Record<string, number>>(`${K}/instruments/lots?symbols=${encodeURIComponent(key)}`),
+    enabled: symbols.length > 0,
+    staleTime: 3_600_000,
+  });
+}
+
 export function useKiteQuote(symbols: string[], enabled = true) {
   return useQuery<Record<string, any>>({
     queryKey: ['kite-quote', symbols.join(',')],
@@ -504,6 +516,16 @@ export function useKiteWatchlist() {
       return [...p, it];
     });
   const remove = (symbol: string) => setItems((p) => p.filter((x) => x.symbol !== symbol));
+  // Backfill lot sizes onto items that don't have one yet (persists to storage).
+  const mergeLots = (map: Record<string, number>) =>
+    setItems((p) => {
+      let changed = false;
+      const next = p.map((x) => {
+        if (x.lot_size == null && map[x.symbol] != null) { changed = true; return { ...x, lot_size: map[x.symbol] }; }
+        return x;
+      });
+      return changed ? next : p;
+    });
   const reorder = (startIndex: number, endIndex: number) => {
     setItems((p) => {
       const result = Array.from(p);
@@ -513,7 +535,7 @@ export function useKiteWatchlist() {
     });
   };
   const clear = () => setItems([]);
-  return { items, add, remove, reorder, clear };
+  return { items, add, remove, reorder, clear, mergeLots };
 }
 
 export function useKiteLtp(symbols: string[], enabled = true) {
