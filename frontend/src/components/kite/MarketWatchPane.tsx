@@ -89,9 +89,8 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName }
       </div>
 
       <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
-         <button style={{ flex: 1, background: '#387ed1', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>B</button>
-         <button style={{ flex: 1, background: '#df514c', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>S</button>
-         <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 4, padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Market Depth"><Icons.Depth /></button>
+         <button style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>BUY</button>
+         <button style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>SELL</button>
          <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 4, padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
          <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 4, padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
       </div>
@@ -605,7 +604,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
 
                     {!isExp && (
                       <div className="mw-actions" onClick={(e) => e.stopPropagation()}>
-                        <button style={{ ...S.btnAction, background: '#387ed1', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
+                        <button style={{ ...S.btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
                         <button style={{ ...S.btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
                         <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => toggleExpand(w.symbol)} title="Market Depth"><Icons.Depth /></button>
                         <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => onOpenInstrument?.(w.symbol, 'chart')} title="Chart"><Icons.Chart /></button>

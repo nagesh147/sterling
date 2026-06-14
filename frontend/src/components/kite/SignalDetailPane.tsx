@@ -59,8 +59,8 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-        <button onClick={() => onTrade(leg, 'BUY')} style={{ flex: 1, background: k.green, color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>BUY</button>
-        <button onClick={() => onTrade(leg, 'SELL')} style={{ flex: 1, background: k.red, color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>SELL</button>
+        <button onClick={() => onTrade(leg, 'BUY')} style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>BUY</button>
+        <button onClick={() => onTrade(leg, 'SELL')} style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>SELL</button>
         <button onClick={() => setShowDepth((s) => !s)} style={{ background: 'none', color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>
           {showDepth ? 'Hide depth' : 'Market depth'}
         </button>

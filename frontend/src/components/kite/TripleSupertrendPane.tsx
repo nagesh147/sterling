@@ -189,7 +189,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
 
                 {!isExp && (
                   <div className="st-actions" onClick={(e) => e.stopPropagation()}>
-                    <button style={{ ...btnAction, background: '#387ed1', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
+                    <button style={{ ...btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
                     <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
                     <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={(e) => toggleExpand(e, leg.option_symbol)} title="Market Depth"><Icons.Depth /></button>
                     <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>

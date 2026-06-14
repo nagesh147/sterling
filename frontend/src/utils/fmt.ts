@@ -134,7 +134,7 @@ export function parseTradingsymbol(ts: string): string {
     const month = toTitleCase(nfoM[3]); 
     const strike = nfoM[4]; 
     const type = nfoM[5];
-    return `${underlying} ${strike} ${type} · ${month} ${yy}`;
+    return `${underlying} ${strike} ${type} · ${month} 20${yy}`;
   }
 
   // Weekly NFO options: NIFTY2461324500CE
