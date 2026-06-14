@@ -160,8 +160,8 @@ function LegCard({ leg, exchange, onTrade, underlying }: {
             </div>
             
             <div className="sd-actions" onClick={(e) => e.stopPropagation()}>
-              <button style={{ ...btnAction, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy" onClick={() => { setOrderSide('BUY'); setShowDepth(true); }}>B</button>
-              <button style={{ ...btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell" onClick={() => { setOrderSide('SELL'); setShowDepth(true); }}>S</button>
+              <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 25.5, height: 32, background: '#4184f3', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500, border: 'none', cursor: 'pointer', fontSize: 11 }} title="Buy" onClick={() => { setOrderSide('BUY'); setShowDepth(true); }}>B</button>
+              <button style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 25.5, height: 32, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500, border: 'none', cursor: 'pointer', fontSize: 11 }} title="Sell" onClick={() => { setOrderSide('SELL'); setShowDepth(true); }}>S</button>
               <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} onClick={() => setShowDepth(!showDepth)} title="Market Depth"><Icons.Depth /></button>
               <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="Chart"><Icons.Chart /></button>
               <button style={{ ...btnAction, background: 'transparent', color: k.dim, padding: 4 }} title="More"><Icons.More /></button>
