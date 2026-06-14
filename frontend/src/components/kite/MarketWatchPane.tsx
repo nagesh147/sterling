@@ -64,112 +64,265 @@ function formatPrice(v: number | null | undefined): string {
 
 // ─── Expanded Quote Row ──────────────────────────────────────────────────────
 
-function QuoteDetail({ sym, q }: { sym: string; q: any }) {
+export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName }: { sym?: string; q: any; expiry?: string; spotName?: string; spotPx?: number; instrumentName?: string }) {
   if (!q || typeof q !== 'object') return null;
   const chg = chgPct(q);
+  const color = chg >= 0 ? t.green : t.red;
+  const chgAbs = q.ohlc?.close ? q.last_price - q.ohlc.close : null;
   
   // Fake total quantities for progress bar scale
   const totalBuy = num(q.buy_quantity) || 100000;
   const totalSell = num(q.sell_quantity) || 100000;
 
   return (
-    <div style={{ padding: '16px', background: t.surface, borderBottom: `1px solid ${t.border}`, fontFamily: t.fontFamily }}>
-      {/* ── Market Depth ── */}
-      {q.depth?.buy?.length > 0 && q.depth?.sell?.length > 0 && (
+    <div style={{ padding: '16px', background: t.bg, borderBottom: `1px solid ${t.border}`, fontFamily: t.fontFamily }}>
+      {instrumentName && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderBottom: `1px solid ${t.border}`, color: t.dim, fontSize: 11, background: t.surface }}>
-                <span style={{flex: 1, textAlign: 'left'}}>Bid</span><span style={{flex: 1, textAlign: 'right'}}>Orders</span><span style={{flex: 1, textAlign: 'right'}}>Qty.</span>
-              </div>
-              {Array.from({ length: 5 }).map((_, i) => {
-                const bid = q.depth.buy[i] || {};
-                const qty = num(bid.quantity || bid.qty);
-                const pct = totalBuy > 0 ? (qty / totalBuy) * 100 : 0;
-                return (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', fontSize: 12, position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: `${Math.min(100, pct * 5)}%`, background: tint(t.blue, 6), zIndex: 0 }} />
-                    <span style={{ color: t.blue, flex: 1, textAlign: 'left', zIndex: 1 }}>{bid.price ? formatPrice(Number(bid.price)) : '—'}</span>
-                    <span style={{ color: t.dim, flex: 1, textAlign: 'right', zIndex: 1 }}>{bid.orders ?? '—'}</span>
-                    <span style={{ color: t.text, flex: 1, textAlign: 'right', zIndex: 1 }}>{qty.toLocaleString('en-IN')}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ width: 1, background: t.border }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px', borderBottom: `1px solid ${t.border}`, color: t.dim, fontSize: 11, background: t.surface }}>
-                <span style={{flex: 1, textAlign: 'left'}}>Offer</span><span style={{flex: 1, textAlign: 'right'}}>Orders</span><span style={{flex: 1, textAlign: 'right'}}>Qty.</span>
-              </div>
-              {Array.from({ length: 5 }).map((_, i) => {
-                const ask = q.depth.sell[i] || {};
-                const qty = num(ask.quantity || ask.qty);
-                const pct = totalSell > 0 ? (qty / totalSell) * 100 : 0;
-                return (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', fontSize: 12, position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${Math.min(100, pct * 5)}%`, background: tint(t.red, 6), zIndex: 0 }} />
-                    <span style={{ color: t.red, flex: 1, textAlign: 'left', zIndex: 1 }}>{ask.price ? formatPrice(Number(ask.price)) : '—'}</span>
-                    <span style={{ color: t.dim, flex: 1, textAlign: 'right', zIndex: 1 }}>{ask.orders ?? '—'}</span>
-                    <span style={{ color: t.text, flex: 1, textAlign: 'right', zIndex: 1 }}>{qty.toLocaleString('en-IN')}</span>
-                  </div>
-                );
-              })}
-            </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 4 }}>{instrumentName}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: color }}>{formatPrice(q.last_price)}</span>
+            <span style={{ fontSize: 12, color: t.dim }}>{chgAbs != null ? (chgAbs > 0 ? '+' : '') + formatPrice(chgAbs) : ''}</span>
+            <span style={{ fontSize: 12, color: t.dim }}>{chg != null ? `(${chg.toFixed(2)}%)` : ''}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', fontSize: 12, borderTop: `1px solid ${t.border}`, borderBottom: `1px solid ${t.border}` }}>
-            <span style={{ color: t.blue, flex: 1 }}>Total</span>
-            <span style={{ color: t.blue, fontWeight: 500, flex: 1, textAlign: 'right' }}>{num(q.buy_quantity).toLocaleString('en-IN')}</span>
-            <span style={{ width: 1 }} />
-            <span style={{ color: t.red, flex: 1, paddingLeft: 8 }}>Total</span>
-            <span style={{ color: t.red, fontWeight: 500, flex: 1, textAlign: 'right' }}>{num(q.sell_quantity).toLocaleString('en-IN')}</span>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+             <button style={{ flex: 1, background: '#387ed1', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>B</button>
+             <button style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>S</button>
           </div>
         </div>
       )}
-
-      {/* ── Key stats grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px 32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Open</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.open)}</span>
+      {/* ── Market Depth ── */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px 8px 0', color: t.dim, fontSize: 11, background: t.bg }}>
+                <span style={{flex: 1, textAlign: 'left'}}>Bid</span><span style={{flex: 1, textAlign: 'center'}}>Orders</span><span style={{flex: 1, textAlign: 'right'}}>Qty.</span>
+              </div>
+              {Array.from({ length: 5 }).map((_, i) => {
+                const bid = q.depth?.buy?.[i] || {};
+                const qty = num(bid.quantity || bid.qty);
+                const pct = totalBuy > 0 ? (qty / totalBuy) * 100 : 0;
+                return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px 6px 0', fontSize: 12, position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: `${Math.min(100, pct * 5)}%`, background: tint(t.blue, 6), zIndex: 0 }} />
+                    <span style={{ color: t.blue, flex: 1, textAlign: 'left', zIndex: 1 }}>{bid.price ? formatPrice(Number(bid.price)) : '0.00'}</span>
+                    <span style={{ color: bid.orders ? t.text : t.blue, flex: 1, textAlign: 'center', zIndex: 1 }}>{bid.orders ?? '0'}</span>
+                    <span style={{ color: qty ? t.text : t.blue, flex: 1, textAlign: 'right', zIndex: 1 }}>{qty ? qty.toLocaleString('en-IN') : '0'}</span>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 8px 8px 0', fontSize: 12 }}>
+                <span style={{ color: t.blue, flex: 1 }}>Total</span>
+                <span style={{ flex: 1 }} />
+                <span style={{ color: t.blue, flex: 1, textAlign: 'right' }}>{num(q.buy_quantity) ? num(q.buy_quantity).toLocaleString('en-IN') : '0'}</span>
+              </div>
+            </div>
+            <div style={{ width: 1, background: t.border, margin: '0 8px' }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0 8px 8px', color: t.dim, fontSize: 11, background: t.bg }}>
+                <span style={{flex: 1, textAlign: 'left'}}>Offer</span><span style={{flex: 1, textAlign: 'center'}}>Orders</span><span style={{flex: 1, textAlign: 'right'}}>Qty.</span>
+              </div>
+              {Array.from({ length: 5 }).map((_, i) => {
+                const ask = q.depth?.sell?.[i] || {};
+                const qty = num(ask.quantity || ask.qty);
+                const pct = totalSell > 0 ? (qty / totalSell) * 100 : 0;
+                return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 6px 8px', fontSize: 12, position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: `${Math.min(100, pct * 5)}%`, background: tint(t.red, 6), zIndex: 0 }} />
+                    <span style={{ color: t.red, flex: 1, textAlign: 'left', zIndex: 1 }}>{ask.price ? formatPrice(Number(ask.price)) : '0.00'}</span>
+                    <span style={{ color: ask.orders ? t.text : t.red, flex: 1, textAlign: 'center', zIndex: 1 }}>{ask.orders ?? '0'}</span>
+                    <span style={{ color: qty ? t.text : t.red, flex: 1, textAlign: 'right', zIndex: 1 }}>{qty ? qty.toLocaleString('en-IN') : '0'}</span>
+                  </div>
+                );
+              })}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 8px 8px', fontSize: 12 }}>
+                <span style={{ color: t.red, flex: 1 }}>Total</span>
+                <span style={{ flex: 1 }} />
+                <span style={{ color: t.red, flex: 1, textAlign: 'right' }}>{num(q.sell_quantity) ? num(q.sell_quantity).toLocaleString('en-IN') : '0'}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Prev. Close</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.close)}</span>
+
+      {/* ── OHLC Box ── */}
+      <div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>Open</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.open)}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>Prev. Close</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.close)}</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>Low</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.low)}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>High</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.high)}</span>
+          </div>
         </div>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Low</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.low)}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>High</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.high)}</span>
-        </div>
-
         {/* Progress Bar */}
-        <div style={{ gridColumn: '1 / -1', padding: '2px 0 8px 0' }}>
-           <div style={{ height: 4, background: t.border, borderRadius: 2, position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '20%', right: '30%', top: 0, bottom: 0, background: t.red, borderRadius: 2 }} />
-           </div>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Volume</span><span style={{ color: t.text }}>{q.volume != null ? num(q.volume).toLocaleString('en-IN') : 'N/A'}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Avg. price</span><span style={{ color: t.text }}>{formatPrice(q.average_price) || 'N/A'}</span>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Lower circuit</span><span style={{ color: t.text }}>{formatPrice(q.lower_circuit_limit) || 'N/A'}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>Upper circuit</span><span style={{ color: t.text }}>{formatPrice(q.upper_circuit_limit) || 'N/A'}</span>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>LTQ</span><span style={{ color: t.text }}>{q.last_quantity || 'N/A'}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderBottom: `1px solid ${t.border}`, paddingBottom: 4 }}>
-          <span style={{ color: t.dim }}>LTT</span><span style={{ color: t.text }}>{q.last_trade_time ? new Date(q.last_trade_time).toLocaleTimeString() : 'N/A'}</span>
+        <div style={{ height: 4, background: '#e0e0e0', borderRadius: 2, position: 'relative' }}>
+          <div style={{ position: 'absolute', left: '20%', right: '30%', top: 0, bottom: 0, background: t.red, borderRadius: 2 }} />
+          <div style={{ position: 'absolute', left: '20%', top: '100%', borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: '5px solid #999', marginTop: 1, transform: 'translateX(-50%)' }} />
+          <div style={{ position: 'absolute', right: '30%', top: '100%', width: 6, height: 6, background: '#999', borderRadius: '50%', marginTop: 2, transform: 'translateX(50%)' }} />
         </div>
       </div>
+
+      {/* ── Key Stats ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>Volume</span><span style={{ color: t.text }}>{q.volume != null ? num(q.volume).toLocaleString('en-IN') : 'N/A'}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>Avg. price</span><span style={{ color: t.text }}>{formatPrice(q.average_price) || 'N/A'}</span>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>Lower circuit</span><span style={{ color: t.text }}>{formatPrice(q.lower_circuit_limit) || 'N/A'}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>Upper circuit</span><span style={{ color: t.text }}>{formatPrice(q.upper_circuit_limit) || 'N/A'}</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>LTQ</span><span style={{ color: t.text }}>{q.last_quantity != null ? q.last_quantity : 'N/A'}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>LTT</span><span style={{ color: t.text }}>{q.last_trade_time ? q.last_trade_time.replace('T', ' ').split('+')[0] : 'N/A'}</span>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>Expiry</span><span style={{ color: t.text }}>{expiry || 'N/A'}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>OI</span><span style={{ color: t.text }}>{q.oi != null ? num(q.oi).toLocaleString('en-IN') : 'N/A'}</span>
+          </div>
+        </div>
+
+        {spotName && spotPx != null && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+              <span style={{ color: t.dim }}>{spotName}</span><span style={{ color: t.text }}>{formatPrice(spotPx)}</span>
+            </div>
+            <div style={{ flex: 1 }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Search Bar Component ───────────────────────────────────────────────────────
+
+export function KiteSearchBar({ 
+  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen,
+  sortBy = 'Custom', setSortBy
+}: { 
+  query: string; setQuery: (q: string) => void; watchCount?: number; 
+  searchSettingsOpen: boolean; setSearchSettingsOpen: (v: boolean) => void;
+  sortBy?: string; setSortBy?: (s: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', borderBottom: `1px solid ${t.border}`, height: 50 }}>
+        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+          <span style={{ position: 'absolute', left: 0, color: t.dim }}><Icons.Search /></span>
+          <input
+            style={{ flex: 1, background: 'transparent', color: t.text, border: 'none', padding: '8px 8px 8px 32px', fontFamily: 'inherit', fontSize: 13, outline: 'none' }}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search eg: infy bse, nifty fut, index fund, etc"
+            autoFocus
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ color: t.dim, fontSize: 11, border: `1px solid ${t.border}`, padding: '2px 6px', borderRadius: 3, letterSpacing: 0.5 }}>Ctrl + K</span>
+            {watchCount !== undefined && <span style={{ color: t.dim, fontSize: 12 }}>{watchCount} / 50</span>}
+            <div style={{ width: 1, height: 16, background: t.border }} />
+            <div style={{ cursor: 'pointer', color: searchSettingsOpen ? t.blue : t.dim, display: 'flex', alignItems: 'center' }} onClick={() => setSearchSettingsOpen(!searchSettingsOpen)}>
+              <Icons.Sliders />
+            </div>
+          </div>
+        </div>
+      </div>
+      {searchSettingsOpen && (
+        <div style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 100, padding: '24px 16px', background: t.bg, borderBottom: `1px solid ${t.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, color: t.text }}>
+          <div style={{ display: 'flex', marginBottom: 24, alignItems: 'center' }}>
+            <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, display: 'flex', alignItems: 'center' }}>CHANGE TYPE <span style={{ marginLeft: 6, cursor: 'pointer' }}><Icons.Info /></span></div>
+            <div style={{ display: 'flex', gap: 24, accentColor: t.blue }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="radio" name="chgType" defaultChecked style={{ cursor: 'pointer' }} /> Close price
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="radio" name="chgType" style={{ cursor: 'pointer' }} /> Open price
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', marginBottom: 24 }}>
+            <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, paddingTop: 2 }}>SHOW</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', flex: 1, accentColor: t.blue }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Price change
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Price change %
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Price direction
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Holdings
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Notes
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Group colors
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5 }}>SORT BY</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {['%', 'LTP', 'A-Z', 'EXCH'].map(lbl => (
+                <button 
+                  key={lbl} 
+                  onClick={() => setSortBy && setSortBy(lbl === sortBy ? 'Custom' : lbl)}
+                  style={{ 
+                    background: sortBy === lbl ? t.blue : t.bg, 
+                    border: `1px solid ${sortBy === lbl ? t.blue : t.border}`, 
+                    padding: '4px 16px', 
+                    borderRadius: 3, 
+                    cursor: 'pointer', 
+                    color: sortBy === lbl ? '#fff' : t.text, 
+                    fontSize: 12 
+                  }}
+                >
+                  {lbl}
+                </button>
+              ))}
+              {sortBy !== 'Custom' && (
+                <button 
+                  onClick={() => setSortBy && setSortBy('Custom')}
+                  style={{ background: 'transparent', border: 'none', color: t.dim, fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -178,6 +331,7 @@ function QuoteDetail({ sym, q }: { sym: string; q: any }) {
 
 export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
   const [query, setQuery] = useState('');
+  const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   const search = useKiteInstrumentSearch(query);
   const { items: watch, add, remove, reorder } = useKiteWatchlist();
   const sync = useSyncKiteWatchlist();
@@ -221,18 +375,14 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
 
   return (
     <div style={S.container}>
-      <div style={S.searchContainer}>
-        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', borderBottom: `1px solid ${t.border}` }}>
-          <span style={{ position: 'absolute', left: 8, color: t.dim }}><Icons.Search /></span>
-          <input
-            style={S.search}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search eg: infy bse, nifty fut, nifty 22nd oct 14500 ce"
-            autoFocus
-          />
-        </div>
-        <span style={{ color: t.dim, fontSize: 12, cursor: 'pointer' }}>{watch.length} / 50</span>
+      <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+        <KiteSearchBar 
+          query={query} 
+          setQuery={setQuery} 
+          watchCount={watch.length} 
+          searchSettingsOpen={searchSettingsOpen} 
+          setSearchSettingsOpen={setSearchSettingsOpen} 
+        />
       </div>
 
       <div style={S.listContainer}>

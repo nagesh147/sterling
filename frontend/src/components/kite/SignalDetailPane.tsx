@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useTripleSupertrend';
 import type { DepthLevel, OptionDetail } from '../../types/kiteEngine';
-
+import { parseTradingsymbol } from '../../utils/fmt';
+import { useKiteQuote } from '../../hooks/useKite';
+import { QuoteDetail } from './MarketWatchPane';
 interface Props {
   token: number;
   underlying: string;
@@ -24,43 +26,23 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function Depth({ buy, sell }: { buy: DepthLevel[]; sell: DepthLevel[] }) {
-  const rows = Math.max(buy.length, sell.length, 1);
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
-      <div>
-        <div style={{ fontSize: 10, color: k.green, fontWeight: 600, marginBottom: 2 }}>BID</div>
-        {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: k.text }}>
-            <span>{buy[i]?.quantity ?? ''}</span>
-            <span style={{ color: k.green }}>{buy[i]?.price?.toFixed(2) ?? ''}</span>
-          </div>
-        ))}
-      </div>
-      <div>
-        <div style={{ fontSize: 10, color: k.red, fontWeight: 600, marginBottom: 2 }}>ASK</div>
-        {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: k.text }}>
-            <span style={{ color: k.red }}>{sell[i]?.price?.toFixed(2) ?? ''}</span>
-            <span>{sell[i]?.quantity ?? ''}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LegCard({ leg, exchange, onTrade }: {
+function LegCard({ leg, exchange, onTrade, underlying }: {
   leg: OptionDetail; exchange: string;
   onTrade: (leg: OptionDetail, side: 'BUY' | 'SELL') => void;
+  underlying: string;
 }) {
   const [showDepth, setShowDepth] = useState(false);
+  const sym = `${exchange}:${leg.option_symbol}`;
+  const { data: quotes } = useKiteQuote([sym], showDepth);
+  const q = quotes?.[sym];
+  const displayName = parseTradingsymbol(leg.option_symbol);
+
   return (
     <div style={{ border: `1px solid ${k.border}`, borderRadius: 6, padding: 12, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: k.orange, background: tint(k.orange, 10), padding: '2px 6px', borderRadius: 3 }}>{leg.moneyness}</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{leg.option_symbol}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{displayName}</span>
         </div>
         <span style={{ fontSize: 14, fontWeight: 700, color: k.text }}>₹{leg.last_price.toFixed(2)}</span>
       </div>
@@ -83,7 +65,11 @@ function LegCard({ leg, exchange, onTrade }: {
           {showDepth ? 'Hide depth' : 'Market depth'}
         </button>
       </div>
-      {showDepth && <Depth buy={leg.depth_buy} sell={leg.depth_sell} />}
+      {showDepth && (
+        <div style={{ marginTop: 12, borderTop: `1px solid ${k.border}` }}>
+          {q ? <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={underlying} instrumentName={displayName} /> : <div style={{ padding: 12, color: k.dim, fontSize: 12 }}>Loading market depth...</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -109,7 +95,7 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
     const qty = leg.lot_size ?? 0;
     if (qty <= 0) { alert('No lot size resolved for this contract.'); return; }
     const ok = window.confirm(
-      `${side} ${qty} ${leg.option_symbol} @ MARKET on ${data.exchange}?\n` +
+      `${side} ${qty} ${parseTradingsymbol(leg.option_symbol)} @ MARKET on ${data.exchange}?\n` +
       `(${underlying} ${data.regime} · last ₹${leg.last_price.toFixed(2)})`);
     if (!ok) return;
     placeOrder.mutate({
@@ -162,7 +148,7 @@ export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onSh
             <div style={{ color: k.dim, fontSize: 12 }}>No option legs resolved (no liquid ATM/ITM contract).</div>
           ) : (
             data.options.map((leg) => (
-              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} onTrade={onTrade} />
+              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} onTrade={onTrade} underlying={underlying} />
             ))
           )}
           <div style={{ fontSize: 10, color: k.dim, marginTop: 8 }}>

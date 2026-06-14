@@ -5,6 +5,10 @@
 # architecture
 - Keep all functions under engines/ strictly pure: no DB calls, no time.time(), no I/O, no live exchange calls inside engines. Confidence: 0.85
 - Schemas must be additive-only: new fields must be Optional with defaults, no breaking changes to existing Pydantic schemas. Confidence: 0.75
+- Kite engine is exclusive and self-contained: do not import or reuse strategy/signal/options/derivative logic from other engines. The Kite module stands alone with its own primitives. Confidence: 0.80
+
+# infrastructure
+- Handle Zerodha Kite session refresh automatically: auto-capture refresh_token, auto-refresh access tokens before expiry (~6 AM IST daily), and prevent session lapses without manual user intervention. Confidence: 0.70
 
 # trading-platform
 - Use Delta Exchange as the default data source, not Deribit. Confidence: 0.65
@@ -63,6 +67,11 @@
 
 # ui-layout
 See [ui-layout/taste.md](ui-layout/taste.md)
+- Right sidebar must be user-resizable/extendible, not fixed-width. Confidence: 0.70
+- Bottom taskbar should be the single consolidated location for sidebar control icons: hide/show toggles, reset widths, and lock. Remove sidebar controls from the individual sidebars. Confidence: 0.70
+
+# ui-workflow
+- Background scanning engines should run automatically without requiring the user to manually click a "scan" button. Scan status and terminal output should always be visible so the user knows what's running. Confidence: 0.70
 
 # ui-symbols
 - Core symbols (BTC, ETH, SOL) in Global Strategy Config > SYMBOLS must stay always present but be individually toggleable (enable/disable) — never deletable and never permanently locked. Use a checkbox or similar on/off control, not a remove (×) button. Confidence: 0.75

@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useKiteWatchlist, useKiteLtp } from '../../hooks/useKite';
-
+import { parseTradingsymbol } from '../../utils/fmt';
 const SEG_COLORS: Record<string, string> = {
   NSE: '#10B981', NFO: '#8B5CF6', BFO: '#8B5CF6',
   BSE: '#06B6D4', MCX: '#F59E0B', CDS: '#10B981',
@@ -11,39 +11,7 @@ function segColor(sym: string): string {
   return SEG_COLORS[seg] || 'var(--t-dim)';
 }
 
-function parseSymbol(ts: string): string {
-  const nfoRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)$/;
-  const nfoM = ts.match(nfoRe);
-  if (nfoM) {
-    const underlying = nfoM[1]; const yy = nfoM[2]; const strike = Number(nfoM[4]); const type = nfoM[5];
-    const monIdx = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 }[nfoM[3]] ?? 0;
-    const d = new Date(2000 + Number(yy), monIdx + 1, 0);
-    const month = { JAN:'Jan',FEB:'Feb',MAR:'Mar',APR:'Apr',MAY:'May',JUN:'Jun',JUL:'Jul',AUG:'Aug',SEP:'Sep',OCT:'Oct',NOV:'Nov',DEC:'Dec' }[nfoM[3]] ?? nfoM[3];
-    return `${underlying} ${strike} ${type} · ${d.getDate()} ${month} ${yy}`;
-  }
-  const bseRe = /^([A-Z]+)(\d{2})(\d)(\d{2})(\d+)(CE|PE)$/;
-  const bseM = ts.match(bseRe);
-  if (bseM) {
-    const underlying = bseM[1]; const yy = bseM[2]; const mon = Number(bseM[3]);
-    const day = Number(bseM[4]); const strike = Number(bseM[5]); const type = bseM[6];
-    if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
-      const d = new Date(2000 + Number(yy), mon - 1, day);
-      const month = d.toLocaleString('en-US', { month: 'short' });
-      return `${underlying} ${strike} ${type} · ${day} ${month} ${yy}`;
-    }
-    return ts;
-  }
-  const futRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)FUT$/;
-  const futM = ts.match(futRe);
-  if (futM) {
-    const underlying = futM[1]; const yy = futM[2];
-    const monIdx = { JAN:0,FEB:1,MAR:2,APR:3,MAY:4,JUN:5,JUL:6,AUG:7,SEP:8,OCT:9,NOV:10,DEC:11 }[futM[3]] ?? 0;
-    const d = new Date(2000 + Number(yy), monIdx + 1, 0);
-    const month = { JAN:'Jan',FEB:'Feb',MAR:'Mar',APR:'Apr',MAY:'May',JUN:'Jun',JUL:'Jul',AUG:'Aug',SEP:'Sep',OCT:'Oct',NOV:'Nov',DEC:'Dec' }[futM[3]] ?? futM[3];
-    return `${underlying} FUT · ${d.getDate()} ${month} ${yy}`;
-  }
-  return ts;
-}
+
 
 function KiteCard({ sym, name, ltp, prevRef }: {
   sym: string;
@@ -74,7 +42,7 @@ function KiteCard({ sym, name, ltp, prevRef }: {
   const segments = sym.split(':');
   const exch = segments[0] || '';
   const rawTs = segments.slice(1).join(':') || sym;
-  const displayLabel = parseSymbol(rawTs);
+  const displayLabel = parseTradingsymbol(rawTs);
 
   return (
     <div style={{
