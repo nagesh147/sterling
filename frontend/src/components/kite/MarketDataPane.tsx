@@ -249,7 +249,7 @@ export function MarketDataPane() {
           style={S.search}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search instruments (e.g. NIFTY 24APR 25000 CE, INFY, CRUDEOIL FUT)"
+          placeholder="Search"
           autoFocus
         />
         {search.isFetching && query.trim().length >= 2 && <div style={{ ...S.hint, marginTop: 8 }}>Searching…</div>}

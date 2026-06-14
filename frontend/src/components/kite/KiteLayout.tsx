@@ -130,6 +130,19 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     setBottomBarHeight(DEFAULTS.bottom);
   }, []);
 
+  // Right pane has three quick layouts from the footer: hidden (the toggle), the
+  // default width (640px), and a compact width (450px). This button flips between
+  // compact and default — opening the pane straight into compact if it was hidden.
+  const RIGHT_COMPACT = 450;
+  const toggleRightCompact = useCallback(() => {
+    if (!isRightSidebarOpen) {
+      setIsRightSidebarOpen(true);
+      setRightSidebarWidth(RIGHT_COMPACT);
+    } else {
+      setRightSidebarWidth((w) => (w === RIGHT_COMPACT ? DEFAULTS.right : RIGHT_COMPACT));
+    }
+  }, [isRightSidebarOpen]);
+
   useEffect(() => {
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -141,11 +154,12 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
   const navItems: NavItem[] = ['dashboard', 'orders', 'holdings', 'positions', 'bids', 'funds', 'mf', 'alerts', 'data', 'connect'];
 
-  const footBtn = (active: boolean): React.CSSProperties => ({
+  const footBtn = (active: boolean, disabled = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: 24, height: 22, padding: 0, cursor: 'pointer', borderRadius: 4, border: 'none',
+    width: 24, height: 22, padding: 0, cursor: disabled ? 'default' : 'pointer', borderRadius: 4, border: 'none',
     background: active ? 'rgba(255, 87, 34, 0.1)' : 'transparent',
     color: active ? '#ff5722' : '#9b9b9b', transition: 'background 0.2s, color 0.2s',
+    opacity: disabled ? 0.35 : 1,
   });
 
   return (
@@ -339,6 +353,19 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <button onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)} title="Show / hide right sidebar" style={footBtn(isRightSidebarOpen)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
+            </button>
+          )}
+          {rightSidebar && (
+            <button
+              onClick={toggleRightCompact}
+              title={isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT ? 'Right pane: back to default width' : 'Right pane: compact (450px)'}
+              style={footBtn(isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT)}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="14" y1="3" x2="14" y2="21" />
+                <rect x="14" y="3" width="7" height="18" fill="currentColor" stroke="none" opacity="0.25" />
               </svg>
             </button>
           )}

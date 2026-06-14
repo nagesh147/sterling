@@ -48,7 +48,7 @@ import { PositionsStrip } from '../components/PositionsStrip';
 import { WalkForwardPanel } from '../components/WalkForwardPanel';
 import { SensitivityPanel } from '../components/SensitivityPanel';
 import { CorrelationHeatmap } from '../components/CorrelationHeatmap';
-import { GreeksBudgetGauge } from '../components/GreeksBudgetGauge';
+
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { CalibrationPanel } from '../components/CalibrationPanel';
 import { AlertsPanel } from '../components/AlertsPanel';
@@ -353,7 +353,7 @@ export function Dashboard() {
               </PanelBoundary>
               <PanelBoundary title="GREEKS"><GreeksPanel /></PanelBoundary>
               <PanelBoundary title="CORRELATION"><CorrelationHeatmap /></PanelBoundary>
-              <PanelBoundary title="GREEKS BUDGET"><GreeksBudgetGauge /></PanelBoundary>
+
               <PanelBoundary title="ANALYTICS"><AnalyticsPanel /></PanelBoundary>
               <PanelBoundary title="POSITIONS"><PositionsPanel underlying={selectedUnderlying} /></PanelBoundary>
             </>

@@ -14,7 +14,7 @@ import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
-import { GreeksBudgetHeaderChip } from '../components/GreeksBudgetHeaderChip';
+
 import { SterlingEngineTab } from '../components/sterling_engine/SterlingEngineTab';
 import { MassiveBacktestDashboard } from '../components/MassiveBacktestDashboard';
 import { GrokTab } from '../components/GrokTab';
@@ -279,7 +279,7 @@ export function SimpleTerminal() {
             <AIGatekeeperToggle chipStyle={chip} />
             <DataSourceSelector chipStyle={chip} />
             <CbChip />
-            <GreeksBudgetHeaderChip />
+
             <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}

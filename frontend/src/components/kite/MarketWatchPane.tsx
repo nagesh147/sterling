@@ -3,6 +3,7 @@ import { k as t, tint, kStyles, Icons } from '../../styles/kiteUI';
 import { useKiteInstrumentSearch, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 import { parseTradingsymbol } from '../../utils/fmt';
+import { useKiteSettings } from '../../store/useKiteSettings';
 
 const S = {
   container: { display: 'flex', flexDirection: 'column' as const, height: '100%', background: t.bg, fontFamily: t.fontFamily },
@@ -45,10 +46,11 @@ function instrMeta(i: KiteInstrument) {
 
 const num = (v: any) => Number(v ?? 0);
 
-function chgPct(q: any): { value: number | null; abs: number | null; color: string } {
-  if (q?.ohlc?.close && q?.last_price) {
-    const abs = q.last_price - q.ohlc.close;
-    const chg = (abs / q.ohlc.close) * 100;
+function chgPct(q: any, chgType: 'close' | 'open' = 'close'): { value: number | null; abs: number | null; color: string } {
+  const base = chgType === 'open' ? q?.ohlc?.open : q?.ohlc?.close;
+  if (base && q?.last_price) {
+    const abs = q.last_price - base;
+    const chg = (abs / base) * 100;
     return { value: chg, abs, color: chg >= 0 ? t.green : t.red };
   }
   if (q?.net_change != null) {
@@ -64,11 +66,13 @@ function formatPrice(v: number | null | undefined): string {
 
 // ─── Expanded Quote Row ──────────────────────────────────────────────────────
 
-export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName }: { sym?: string; q: any; expiry?: string; spotName?: string; spotPx?: number; instrumentName?: string }) {
+export function QuoteDetail({ sym, q, expiry, spotName, spotPx, tag }: { sym: string; q: KiteQuote | undefined; expiry?: string; spotName?: string; spotPx?: number; tag?: string }) {
+  const s = useKiteSettings();
   if (!q || typeof q !== 'object') return null;
-  const chg = chgPct(q);
-  const color = chg >= 0 ? t.green : t.red;
-  const chgAbs = q.ohlc?.close ? q.last_price - q.ohlc.close : null;
+  const chg = chgPct(q, s.chgType);
+  const color = chg.color;
+  const base = s.chgType === 'open' ? q.ohlc?.open : q.ohlc?.close;
+  const chgAbs = base ? q.last_price - base : null;
   
   // Fake total quantities for progress bar scale
   const totalBuy = num(q.buy_quantity) || 100000;
@@ -76,20 +80,21 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName }
 
   return (
     <div style={{ padding: '16px', background: t.bg, borderBottom: `1px solid ${t.border}`, fontFamily: t.fontFamily }}>
-      {instrumentName && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: t.text, marginBottom: 4 }}>{instrumentName}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: color }}>{formatPrice(q.last_price)}</span>
-            <span style={{ fontSize: 12, color: t.dim }}>{chgAbs != null ? (chgAbs > 0 ? '+' : '') + formatPrice(chgAbs) : ''}</span>
-            <span style={{ fontSize: 12, color: t.dim }}>{chg != null ? `(${chg.toFixed(2)}%)` : ''}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-             <button style={{ flex: 1, background: '#387ed1', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>B</button>
-             <button style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>S</button>
-          </div>
-        </div>
-      )}
+      {/* Prominent Price Display */}
+      {tag && <div style={{ fontSize: 11, fontWeight: 600, color: '#ff5722', marginBottom: 6 }}>{tag}</div>}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 16 }}>
+        <span style={{ color: color, fontSize: 18, fontWeight: 500 }}>{formatPrice(q.last_price)}</span>
+        <span style={{ color: t.dim, fontSize: 12 }}>{chg.abs != null ? (chg.abs > 0 ? '+' : '') + chg.abs.toFixed(2) : ''}</span>
+        <span style={{ color: t.dim, fontSize: 12 }}>{chg.value != null ? `(${chg.value.toFixed(2)}%)` : ''}</span>
+      </div>
+
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
+         <button style={{ flex: 1, background: '#387ed1', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>B</button>
+         <button style={{ flex: 1, background: '#df514c', color: '#fff', border: 'none', borderRadius: 4, padding: '8px 0', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>S</button>
+         <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 4, padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Market Depth"><Icons.Depth /></button>
+         <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 4, padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
+         <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 4, padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
+      </div>
       {/* ── Market Depth ── */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -224,15 +229,17 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName }
 // ─── Search Bar Component ───────────────────────────────────────────────────────
 
 export function KiteSearchBar({ 
-  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen,
-  sortBy = 'Custom', setSortBy
+  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen
 }: { 
   query: string; setQuery: (q: string) => void; watchCount?: number; 
   searchSettingsOpen: boolean; setSearchSettingsOpen: (v: boolean) => void;
-  sortBy?: string; setSortBy?: (s: string) => void;
 }) {
+  const s = useKiteSettings();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <style>{`
+        .kite-radio, .kite-checkbox { display: none; }
+      `}</style>
       <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', borderBottom: `1px solid ${t.border}`, height: 50 }}>
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
           <span style={{ position: 'absolute', left: 0, color: t.dim }}><Icons.Search /></span>
@@ -240,11 +247,10 @@ export function KiteSearchBar({
             style={{ flex: 1, background: 'transparent', color: t.text, border: 'none', padding: '8px 8px 8px 32px', fontFamily: 'inherit', fontSize: 13, outline: 'none' }}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search eg: infy bse, nifty fut, index fund, etc"
+            placeholder="Search"
             autoFocus
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ color: t.dim, fontSize: 11, border: `1px solid ${t.border}`, padding: '2px 6px', borderRadius: 3, letterSpacing: 0.5 }}>Ctrl + K</span>
             {watchCount !== undefined && <span style={{ color: t.dim, fontSize: 12 }}>{watchCount} / 50</span>}
             <div style={{ width: 1, height: 16, background: t.border }} />
             <div style={{ cursor: 'pointer', color: searchSettingsOpen ? t.blue : t.dim, display: 'flex', alignItems: 'center' }} onClick={() => setSearchSettingsOpen(!searchSettingsOpen)}>
@@ -257,37 +263,40 @@ export function KiteSearchBar({
         <div style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 100, padding: '24px 16px', background: t.bg, borderBottom: `1px solid ${t.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, color: t.text }}>
           <div style={{ display: 'flex', marginBottom: 24, alignItems: 'center' }}>
             <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, display: 'flex', alignItems: 'center' }}>CHANGE TYPE <span style={{ marginLeft: 6, cursor: 'pointer' }}><Icons.Info /></span></div>
-            <div style={{ display: 'flex', gap: 24, accentColor: t.blue }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="radio" name="chgType" defaultChecked style={{ cursor: 'pointer' }} /> Close price
+            <div style={{ display: 'flex', gap: 24 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: s.chgType === 'close' ? t.text : t.dim }}>
+                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${s.chgType === 'close' ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {s.chgType === 'close' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.blue }} />}
+                </div>
+                <input type="radio" style={{ display: 'none' }} name="chgType" checked={s.chgType === 'close'} onChange={() => s.setChgType('close')} /> Close price
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="radio" name="chgType" style={{ cursor: 'pointer' }} /> Open price
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: s.chgType === 'open' ? t.text : t.dim }}>
+                <div style={{ width: 14, height: 14, borderRadius: '50%', border: `1px solid ${s.chgType === 'open' ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {s.chgType === 'open' && <div style={{ width: 6, height: 6, borderRadius: '50%', background: t.blue }} />}
+                </div>
+                <input type="radio" style={{ display: 'none' }} name="chgType" checked={s.chgType === 'open'} onChange={() => s.setChgType('open')} /> Open price
               </label>
             </div>
           </div>
           
           <div style={{ display: 'flex', marginBottom: 24 }}>
             <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, paddingTop: 2 }}>SHOW</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', flex: 1, accentColor: t.blue }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Price change
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Price change %
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Price direction
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Holdings
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Notes
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <input type="checkbox" defaultChecked style={{ cursor: 'pointer' }} /> Group colors
-              </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', flex: 1, color: t.dim }}>
+              {[
+                { lbl: 'Price change', val: s.showPriceChange, set: s.setShowPriceChange },
+                { lbl: 'Price change %', val: s.showPriceChangePct, set: s.setShowPriceChangePct },
+                { lbl: 'Price direction', val: s.showPriceDirection, set: s.setShowPriceDirection },
+                { lbl: 'Holdings', val: s.showHoldings, set: s.setShowHoldings },
+                { lbl: 'Notes', val: s.showNotes, set: s.setShowNotes },
+                { lbl: 'Group colors', val: s.showGroupColors, set: s.setShowGroupColors }
+              ].map(opt => (
+                <label key={opt.lbl} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: opt.val ? t.text : t.dim }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 2, border: `1px solid ${opt.val ? t.blue : '#ccc'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {opt.val && <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 5 l1.5 1.5 l3.5 -3.5" fill="none" stroke={t.blue} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <input type="checkbox" style={{ display: 'none' }} checked={opt.val} onChange={(e) => opt.set(e.target.checked)} /> {opt.lbl}
+                </label>
+              ))}
             </div>
           </div>
           
@@ -297,23 +306,25 @@ export function KiteSearchBar({
               {['%', 'LTP', 'A-Z', 'EXCH'].map(lbl => (
                 <button 
                   key={lbl} 
-                  onClick={() => setSortBy && setSortBy(lbl === sortBy ? 'Custom' : lbl)}
+                  onClick={() => s.setSortBy(lbl === s.sortBy ? 'Custom' : lbl)}
                   style={{ 
-                    background: sortBy === lbl ? t.blue : t.bg, 
-                    border: `1px solid ${sortBy === lbl ? t.blue : t.border}`, 
+                    background: '#fff', 
+                    border: `1px solid ${s.sortBy === lbl ? t.blue : t.border}`, 
                     padding: '4px 16px', 
                     borderRadius: 3, 
                     cursor: 'pointer', 
-                    color: sortBy === lbl ? '#fff' : t.text, 
-                    fontSize: 12 
+                    color: s.sortBy === lbl ? t.blue : t.dim, 
+                    fontSize: 12,
+                    outline: 'none',
+                    boxSizing: 'border-box'
                   }}
                 >
                   {lbl}
                 </button>
               ))}
-              {sortBy !== 'Custom' && (
+              {s.sortBy !== 'Custom' && (
                 <button 
-                  onClick={() => setSortBy && setSortBy('Custom')}
+                  onClick={() => s.setSortBy('Custom')}
                   style={{ background: 'transparent', border: 'none', color: t.dim, fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}
                 >
                   Clear
@@ -355,7 +366,10 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
   const { data: ltp } = useKiteLtp(symbols, symbols.length > 0);
   const { data: quotes } = useKiteQuote(symbols, symbols.length > 0);
 
+  const s = useKiteSettings();
+  
   const toggleExpand = (sym: string) => {
+    window.getSelection()?.removeAllRanges();
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(sym)) next.delete(sym); else next.add(sym);
@@ -372,6 +386,34 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
     add({ symbol: sym, token: i.instrument_token, name: meta.detail || i.tradingsymbol, sub: label });
     setQuery('');
   };
+
+  const sortedWatch = useMemo(() => {
+    if (s.sortBy === 'Custom') return watch;
+    return [...watch].sort((a, b) => {
+      const qa = quotes?.[a.symbol];
+      const qb = quotes?.[b.symbol];
+      if (s.sortBy === '%') {
+        const ca = qa ? chgPct(qa, s.chgType).value || 0 : 0;
+        const cb = qb ? chgPct(qb, s.chgType).value || 0 : 0;
+        return cb - ca;
+      }
+      if (s.sortBy === 'LTP') {
+        const lpa = qa?.last_price || ltp?.[a.symbol]?.last_price || 0;
+        const lpb = qb?.last_price || ltp?.[b.symbol]?.last_price || 0;
+        return lpb - lpa;
+      }
+      if (s.sortBy === 'A-Z') {
+        return a.symbol.localeCompare(b.symbol);
+      }
+      if (s.sortBy === 'EXCH') {
+        const exA = a.symbol.split(':')[0] || '';
+        const exB = b.symbol.split(':')[0] || '';
+        if (exA === exB) return a.symbol.localeCompare(b.symbol);
+        return exA.localeCompare(exB);
+      }
+      return 0;
+    });
+  }, [watch, quotes, ltp, s.sortBy, s.chgType]);
 
   return (
     <div style={S.container}>
@@ -500,14 +542,14 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                 box-shadow: inset 0 2px 0 0 ${t.blue};
               }
             `}</style>
-            {watch.map((w, idx) => {
+            {sortedWatch.map((w, idx) => {
               const q = quotes?.[w.symbol];
-              const chg = q ? chgPct(q) : { value: null, abs: null, color: t.dim };
+              const chg = q ? chgPct(q, s.chgType) : { value: null, abs: null, color: t.dim };
               const isExp = expanded.has(w.symbol);
               const lastPx = q?.last_price ?? ltp?.[w.symbol]?.last_price;
               const chgVal = chg.value;
               const chgAbs = chg.abs;
-              const chgColor = chg.color;
+              const chgColor = s.showPriceDirection ? chg.color : t.dim;
               const rawTs = w.symbol.split(':')[1] || w.symbol;
               const displayName = parseTradingsymbol(rawTs);
               const exch = w.symbol.split(':')[0] || '';
@@ -558,31 +600,37 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, paddingRight: 8 }}>
                       <span style={{ color: chgColor, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName}</span>
-                      <span style={{ fontSize: 9, color: t.dim, letterSpacing: 0.3, flexShrink: 0 }}>{tag}</span>
+                      {!isExp && <span style={{ fontSize: 9, color: s.showGroupColors ? t.dim : '#9b9b9b', background: s.showGroupColors ? undefined : 'transparent', letterSpacing: 0.3, flexShrink: 0 }}>{tag}</span>}
                     </div>
 
-                    <div className="mw-actions" onClick={(e) => e.stopPropagation()}>
-                      <button style={{ ...S.btnAction, background: '#387ed1', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
-                      <button style={{ ...S.btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => toggleExpand(w.symbol)} title="Market Depth"><Icons.Depth /></button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => onOpenInstrument?.(w.symbol, 'chart')} title="Chart"><Icons.Chart /></button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => remove(w.symbol)} title="Delete"><Icons.Trash /></button>
-                      <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={(e) => handleMenuClick(e, w.symbol)} title="More"><Icons.More /></button>
-                    </div>
+                    {!isExp && (
+                      <div className="mw-actions" onClick={(e) => e.stopPropagation()}>
+                        <button style={{ ...S.btnAction, background: '#387ed1', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Buy">B</button>
+                        <button style={{ ...S.btnAction, background: '#ff5722', color: '#fff', borderRadius: 3, padding: 0, fontWeight: 500 }} title="Sell">S</button>
+                        <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => toggleExpand(w.symbol)} title="Market Depth"><Icons.Depth /></button>
+                        <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => onOpenInstrument?.(w.symbol, 'chart')} title="Chart"><Icons.Chart /></button>
+                        <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={() => remove(w.symbol)} title="Delete"><Icons.Trash /></button>
+                        <button style={{ ...S.btnAction, background: 'transparent', color: t.dim, padding: 4 }} onClick={(e) => handleMenuClick(e, w.symbol)} title="More"><Icons.More /></button>
+                      </div>
+                    )}
                     
-                    <div className="mw-prices">
-                      <span style={{ color: t.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>
-                      <span style={{ color: t.dim, fontSize: 11, marginLeft: 4 }}>{chgVal != null ? `${chgVal.toFixed(2)}%` : '—'}</span>
-                      <span style={{ color: chgColor, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
-                        {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
-                        {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
-                      </span>
-                      <span style={{ color: chgColor, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
-                        {lastPx != null ? formatPrice(lastPx) : '—'}
-                      </span>
-                    </div>
+                    {!isExp && (
+                      <div className="mw-prices">
+                        {s.showPriceChange && <span style={{ color: t.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
+                        {s.showPriceChangePct && <span style={{ color: t.dim, fontSize: 11, marginLeft: 4 }}>{chgVal != null ? `${chgVal.toFixed(2)}%` : '—'}</span>}
+                        {s.showPriceDirection && (
+                          <span style={{ color: chgColor, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
+                            {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                            {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                          </span>
+                        )}
+                        <span style={{ color: chgColor, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
+                          {lastPx != null ? formatPrice(lastPx) : '—'}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} />}
+                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} tag={tag} />}
                 </div>
               );
             })}
