@@ -34,6 +34,21 @@ export function useSetEngineConfig() {
   });
 }
 
+export function useResetEngineConfig() {
+  const qc = useQueryClient();
+  return useMutation<EngineConfigModel, Error, void>({
+    mutationFn: () => api.post<EngineConfigModel>(`${E}/config/reset`),
+    onSuccess: (data) => {
+      qc.setQueryData(['kite-engine-config'], data);
+      notifyOrder({
+        kind: 'info',
+        title: 'Settings reset',
+        message: 'Triple SuperTrend configuration restored to defaults.',
+      });
+    },
+  });
+}
+
 // ─── Scan trigger ────────────────────────────────────────────────────────────
 export function useRunScan() {
   const qc = useQueryClient();

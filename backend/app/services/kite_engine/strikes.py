@@ -1,7 +1,8 @@
-"""Kite-only ATM/ITM option strike picker.
+"""Kite-only ATM/ITM/OTM option strike picker.
 
-Bull → CE, bear → PE. ATM (nearest strike to spot) or ITM only — never OTM.
-Built fresh for Kite option chains; imports no other engine's selector logic.
+Bull → CE, bear → PE. ATM is the strike nearest spot; ITM steps *into* the money,
+OTM steps *out of* the money. Built fresh for Kite option chains; imports no other
+engine's selector logic.
 """
 from __future__ import annotations
 
@@ -9,8 +10,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List, Literal, Optional, Sequence
 
-Moneyness = Literal["ATM", "ITM1", "ITM2"]
-_STEPS = {"ATM": 0, "ITM1": 1, "ITM2": 2}
+Moneyness = Literal["ATM", "ITM1", "ITM2", "OTM1", "OTM2"]
+# Signed "into-the-money" offset (in strike steps): positive = ITM, negative = OTM.
+_ITM_OFFSET = {"ATM": 0, "ITM1": 1, "ITM2": 2, "OTM1": -1, "OTM2": -2}
 
 
 def chain_rows_for(option_instruments: Sequence[dict], name: str, today: date) -> List[dict]:
@@ -45,6 +47,7 @@ def chain_rows_for(option_instruments: Sequence[dict], name: str, today: date) -
             "dte": (ed - today).days,
             "instrument_name": str(r.get("tradingsymbol", "")),
             "lot_size": int(r.get("lot_size") or 0),
+            "token": int(r.get("instrument_token") or 0),
         })
     return out
 
@@ -57,6 +60,7 @@ class OptionPick:
     expiry: str
     dte: int
     lot_size: int = 0
+    token: int = 0  # option instrument_token (for fetching the contract's own candles)
 
 
 def pick_strike(
@@ -70,8 +74,9 @@ def pick_strike(
     """Pick the CE (bull) / PE (bear) at the requested moneyness from a Kite
     option chain (list of OptionSummary-like dicts), or ``None`` if unavailable.
 
-    ATM = nearest strike to ``spot``. ITM steps *into* the money — CALL ITM is a
-    lower strike, PUT ITM is a higher strike. OTM is never selected.
+    ATM = nearest strike to ``spot``. ITM steps *into* the money (CALL ITM = lower
+    strike, PUT ITM = higher strike); OTM steps *out of* the money (CALL OTM =
+    higher strike, PUT OTM = lower strike).
     """
     want_call = direction == "long"
     want_type = "call" if want_call else "put"
@@ -89,9 +94,10 @@ def pick_strike(
     strikes = [float(r["strike"]) for r in rows]
 
     atm = min(range(len(strikes)), key=lambda k: abs(strikes[k] - spot))
-    steps = _STEPS[moneyness]
-    # CALL ITM = lower strike (atm - steps); PUT ITM = higher strike (atm + steps)
-    idx = atm - steps if want_call else atm + steps
+    off = _ITM_OFFSET[moneyness]
+    # CALL ITM = lower strike (atm - off); PUT ITM = higher strike (atm + off).
+    # OTM flips the sign (off < 0), so CALL OTM = higher, PUT OTM = lower.
+    idx = atm - off if want_call else atm + off
     if idx < 0 or idx >= len(strikes):
         return None
 
@@ -103,6 +109,7 @@ def pick_strike(
         expiry=str(r.get("expiry_date", "")),
         dte=int(r.get("dte", 0)),
         lot_size=int(r.get("lot_size", 0) or 0),
+        token=int(r.get("token", 0) or 0),
     )
 
 
@@ -122,4 +129,25 @@ def pick_strikes(
         if pick and pick.option_symbol not in seen:
             seen.add(pick.option_symbol)
             out.append((m, pick))
+    return out
+
+
+def pick_contracts(
+    chain: Sequence[dict], *, spot: float,
+    moneynesses: Sequence[Moneyness], min_dte: int = 1,
+) -> List[tuple]:
+    """Resolve BOTH the CE and the PE contract at each requested moneyness — used by
+    the derivatives scan, which charts both sides of every selected strike.
+
+    ITM/OTM are relative to each option's own side (CALL ITM is below spot, PUT ITM
+    is above), so "ITM1" yields two different strikes. Returns ``(moneyness, OptionPick)``
+    tuples de-duplicated by resolved option_symbol."""
+    out: List[tuple] = []
+    seen: set = set()
+    for m in moneynesses:
+        for direction in ("long", "short"):  # long → CE, short → PE
+            pick = pick_strike(chain, spot=spot, direction=direction, moneyness=m, min_dte=min_dte)
+            if pick and pick.option_symbol not in seen:
+                seen.add(pick.option_symbol)
+                out.append((m, pick))
     return out

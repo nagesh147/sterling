@@ -1,16 +1,18 @@
 import React from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import {
-  useEngineConfig, useEngineSignals, useRunScan, useSetEngineConfig,
+  useEngineConfig, useEngineSignals, useRunScan, useSetEngineConfig, useResetEngineConfig,
 } from '../../hooks/useTripleSupertrend';
 import type {
-  AlignmentChip, EngineConfigModel, EngineSignalRow, Moneyness, SignalsResponse, TrailTarget,
+  AlignmentChip, EngineConfigModel, EngineSignalRow, Moneyness,
+  ScanSource, SignalsResponse, TrailTarget,
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
 import { KiteActionButtons } from './KiteActionButtons';
+import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
@@ -26,10 +28,48 @@ const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
   { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
 ];
 const MONEY_OPTS: { value: Moneyness; hint: string }[] = [
-  { value: 'ATM', hint: 'At-the-money — strike nearest spot.' },
+  { value: 'ITM2', hint: 'Two strikes in-the-money — deepest, most intrinsic value.' },
   { value: 'ITM1', hint: 'One strike in-the-money.' },
-  { value: 'ITM2', hint: 'Two strikes in-the-money.' },
+  { value: 'ATM', hint: 'At-the-money — strike nearest spot.' },
+  { value: 'OTM1', hint: 'One strike out-of-the-money — cheaper, more leverage.' },
+  { value: 'OTM2', hint: 'Two strikes out-of-the-money — cheapest, lottery-like.' },
 ];
+const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
+  { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy. (Default)" },
+  { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up." },
+  { value: 'both', label: 'Both', hint: 'Run both scans; each signal is tagged Spot or DERIV.' },
+];
+// Granular universe pickers. `name` is the value stored in config (matches the
+// backend UniverseItem display name); `label` is the short chip text.
+const INDEX_OPTS: { name: string; label: string }[] = [
+  { name: 'NIFTY 50', label: 'NIFTY' },
+  { name: 'NIFTY BANK', label: 'BANKNIFTY' },
+  { name: 'NIFTY FIN SERVICE', label: 'FINNIFTY' },
+  { name: 'SENSEX', label: 'SENSEX' },
+];
+// Mirrors CURATED_STOCKS in backend universe.py — the quick-pick liquid F&O names.
+const CURATED_STOCKS = [
+  'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'INFY', 'TCS', 'SBIN', 'AXISBANK', 'KOTAKBANK',
+  'ITC', 'LT', 'BHARTIARTL', 'HINDUNILVR', 'BAJFINANCE', 'MARUTI', 'TATAMOTORS',
+  'SUNPHARMA', 'WIPRO', 'TATASTEEL',
+];
+const ALL_FNO_APPROX = 190; // ≈ count of all F&O stocks, for the cost estimate only
+
+function fmtTime(charts: number): string {
+  const secs = Math.round(charts / 3); // ~3 historical req/s
+  return secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
+}
+
+// Simple scan-cost readout from the current selection. Spot = one fetch per
+// instrument; derivatives = one per contract (CE+PE per selected strike).
+function scanCost(cfg: EngineConfigModel): string {
+  const stockCount = cfg.scan_all_stocks ? ALL_FNO_APPROX : cfg.scan_stocks.length;
+  const instruments = cfg.scan_indices.length + stockCount;
+  const charts = instruments * Math.max(1, cfg.strike_moneyness.length) * 2;
+  if (cfg.scan_source === 'spot') return `≈ ${instruments} instruments · ${fmtTime(instruments)}/scan`;
+  if (cfg.scan_source === 'derivatives') return `≈ ${charts.toLocaleString('en-IN')} option charts · ${fmtTime(charts)}/scan`;
+  return `spot ${fmtTime(instruments)} · deriv ${fmtTime(charts)} (${charts.toLocaleString('en-IN')} charts)/scan`;
+}
 
 function timeAgo(ms: number): string {
   if (!ms) return 'never';
@@ -69,7 +109,11 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const bull = row.regime === 'BULL';
   const accent = bull ? k.green : k.red;
-  
+  // Derivatives rows: the SuperTrend ran on this contract's OWN premium chart, so
+  // the contract is the headline and spot/stop_loss are premium values.
+  const isDeriv = row.source === 'derivatives';
+  const derivLeg = isDeriv ? row.legs[0] : undefined;
+
   const toggleExpand = (e: React.MouseEvent, sym: string) => {
     e.stopPropagation();
     window.getSelection()?.removeAllRanges();
@@ -118,20 +162,33 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
         onMouseEnter={(e) => (e.currentTarget.style.background = k.surfaceHover)}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{row.underlying}</span>
-          
-          <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
-            <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>
-            {s.showPriceChange && <span style={{ fontSize: 10, color: k.dim }}>{uChgAbs != null ? uChgAbs.toFixed(2) : ''}</span>}
-            {s.showPriceChangePct && <span style={{ fontSize: 10, color: k.text }}>{uChgPct != null ? `${uChgPct.toFixed(2)}%` : ''}</span>}
-            {s.showPriceDirection && (
-              <span style={{ display: 'flex', alignItems: 'center', margin: '0 -2px' }}>
-                {uChgAbs != null && uChgAbs !== 0 ? (uChgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
-                {uChgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
+          {isDeriv && derivLeg ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, color: k.orange, border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>DERIV</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: k.text, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={derivLeg.option_symbol} /></span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: accent, flexShrink: 0 }}>{row.spot.toFixed(2)}</span>
               </span>
-            )}
-          </span>
+              <span style={{ fontSize: 9.5, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.underlying} · {derivLeg.moneyness} · prem chart</span>
+            </div>
+          ) : (
+            <>
+              <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{row.underlying}</span>
+
+              <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
+                <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>
+                {s.showPriceChange && <span style={{ fontSize: 10, color: k.dim }}>{uChgAbs != null ? uChgAbs.toFixed(2) : ''}</span>}
+                {s.showPriceChangePct && <span style={{ fontSize: 10, color: k.text }}>{uChgPct != null ? `${uChgPct.toFixed(2)}%` : ''}</span>}
+                {s.showPriceDirection && (
+                  <span style={{ display: 'flex', alignItems: 'center', margin: '0 -2px' }}>
+                    {uChgAbs != null && uChgAbs !== 0 ? (uChgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                    {uChgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                  </span>
+                )}
+              </span>
+            </>
+          )}
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -150,7 +207,7 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
       {/* option legs */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {row.legs.length === 0 ? (
-          <span style={{ fontSize: 10, color: k.dim }}>no liquid ATM/ITM contract</span>
+          <span style={{ fontSize: 10, color: k.dim }}>no liquid contract at the selected strikes</span>
         ) : row.legs.map((leg) => {
           const sym = `${row.exchange}:${leg.option_symbol}`;
           const q = quotes?.[sym];
@@ -360,6 +417,22 @@ function Segmented({ options, isActive, onSelect }: {
   );
 }
 
+// Pill toggle for the granular universe pickers (multi-select chips).
+function Chip({ label, active, onClick, dim }: { label: string; active: boolean; onClick: () => void; dim?: boolean }) {
+  return (
+    <button onClick={onClick} aria-pressed={active} title={dim ? 'Turn off “All F&O” to pick individual stocks' : label}
+      style={{
+        fontSize: 10.5, fontWeight: active ? 600 : 500, padding: '3px 9px', borderRadius: 999,
+        cursor: dim ? 'default' : 'pointer', whiteSpace: 'nowrap', transition: 'all .14s ease',
+        border: `1px solid ${active ? k.orange : k.border}`,
+        background: active ? tint(k.orange, 12) : k.bg,
+        color: active ? k.orange : (dim ? k.dim : k.text), opacity: dim ? 0.5 : 1,
+      }}>
+      {label}
+    </button>
+  );
+}
+
 // Status line + live "time to next scan" bar. Ticks on its own 1s interval so
 // the rest of the pane (and the signal list) don't re-render every second.
 function ScanStatus({ signals }: { signals?: SignalsResponse }) {
@@ -413,38 +486,81 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
   React.useEffect(() => { localStorage.setItem('kite_st_settings_open', String(settingsOpen)); }, [settingsOpen]);
 
-  const patch = (p: Partial<EngineConfigModel>) => { if (cfg) setCfg.mutate({ ...cfg, ...p }); };
+  const resetCfg = useResetEngineConfig();
+
+  const patch = (p: Partial<EngineConfigModel>, msg?: string) => { 
+    if (cfg) {
+      setCfg.mutate({ ...cfg, ...p }, {
+        onSuccess: () => {
+          if (msg) notifyOrder({ kind: 'info', title: 'Settings updated', message: msg });
+        }
+      });
+    }
+  };
 
   const toggleMoneyness = (m: Moneyness) => {
     if (!cfg) return;
     const has = cfg.strike_moneyness.includes(m);
     const next = has ? cfg.strike_moneyness.filter((x) => x !== m) : [...cfg.strike_moneyness, m];
-    patch({ strike_moneyness: next.length ? next : ['ATM', 'ITM1', 'ITM2'] });
+    const finalNext = next.length ? next : ['ATM', 'ITM1', 'ITM2', 'OTM1', 'OTM2'];
+    patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`);
+  };
+
+  // Changing the scan source must re-scan immediately — otherwise the list keeps
+  // showing the previous scan's rows (e.g. spot signals) until the 5-min auto-loop
+  // runs, which reads as "I switched to derivatives but nothing changed".
+  const changeScanSource = (v: ScanSource) => {
+    if (!cfg || cfg.scan_source === v) return;
+    // Auto-rescan so the switch takes effect now — EXCEPT the heavy case (derivatives
+    // over All F&O ≈ thousands of charts / many minutes), which would block the scan
+    // request; there the user should narrow the universe to indices first.
+    const heavy = (v === 'derivatives' || v === 'both') && cfg.scan_all_stocks;
+    setCfg.mutate({ ...cfg, scan_source: v }, { 
+      onSuccess: () => { 
+        notifyOrder({ kind: 'info', title: 'Settings updated', message: `Scan source changed to ${v}` });
+        if (!heavy) scan.mutate(); 
+      } 
+    });
+  };
+
+  const toggleIndex = (name: string) => {
+    if (!cfg) return;
+    const has = cfg.scan_indices.includes(name);
+    const next = has ? cfg.scan_indices.filter((x) => x !== name) : [...cfg.scan_indices, name];
+    patch({ scan_indices: next }, `Indices updated: ${has ? `Removed ${name}` : `Added ${name}`}`);
+  };
+
+  const toggleStock = (name: string) => {
+    if (!cfg) return;
+    const has = cfg.scan_stocks.includes(name);
+    const next = has ? cfg.scan_stocks.filter((x) => x !== name) : [...cfg.scan_stocks, name];
+    patch({ scan_stocks: next }, `Stocks updated: ${has ? `Removed ${name}` : `Added ${name}`}`);
   };
 
   const toggleAuto = () => {
     if (!cfg) return;
-    if (!cfg.auto_execute) {
-      const ok = window.confirm('Enable AUTO-EXECUTE? Ready signals will place real ATM/ITM option BUY orders on your active Kite account (under the live-safety gate). Continue?');
-      if (!ok) return;
-    }
-    patch({ auto_execute: !cfg.auto_execute });
+    patch({ auto_execute: !cfg.auto_execute }, `Auto-execute turned ${!cfg.auto_execute ? 'ON' : 'OFF'}`);
   };
 
   // Kite paper↔live. Arming (→LIVE) confirms — it routes real orders to Zerodha;
   // de-arming (→PAPER) is immediate. Crypto/Delta is untouched (separate toggle).
   const toggleKiteLive = () => {
-    if (!activeAcct) { window.alert('No active Kite account. Add one on the Connect page first.'); return; }
+    if (!activeAcct) {
+      notifyOrder({ kind: 'rejected', title: 'Action blocked', message: 'No active Kite account. Add one on the Connect page first.' });
+      return;
+    }
     if (activeAcct.is_paper) {
       if (!activeAcct.has_credentials) {
-        window.alert('Add your Kite API key & secret on the Connect page before trading live.');
+        notifyOrder({ kind: 'rejected', title: 'Action blocked', message: 'Add your Kite API key & secret on the Connect page before trading live.' });
         return;
       }
-      const ok = window.confirm(`Switch Kite to LIVE trading? Orders will execute on your REAL Zerodha account (${activeAcct.label}). Crypto stays on its own toggle.`);
-      if (!ok) return;
-      updateAcct.mutate({ id: activeAcct.id, is_paper: false });
+      updateAcct.mutate({ id: activeAcct.id, is_paper: false }, {
+        onSuccess: () => notifyOrder({ kind: 'info', title: 'Trading mode updated', message: 'Kite is now LIVE' })
+      });
     } else {
-      updateAcct.mutate({ id: activeAcct.id, is_paper: true });
+      updateAcct.mutate({ id: activeAcct.id, is_paper: true }, {
+        onSuccess: () => notifyOrder({ kind: 'info', title: 'Trading mode updated', message: 'Kite is now PAPER' })
+      });
     }
   };
 
@@ -486,14 +602,40 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-        <KiteSearchBar 
-          query={query} 
-          setQuery={setQuery} 
-          searchSettingsOpen={searchSettingsOpen} 
-          setSearchSettingsOpen={setSearchSettingsOpen} 
-        />
+      {/* ── Console header ── */}
+      <div style={{ padding: '12px 16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+            <EngineMark />
+            <span title={UNIVERSE_TIP} style={{ fontSize: 14, fontWeight: 600, color: k.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Triple SuperTrend
+            </span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>1H</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <ReadyPill count={rows.length} />
+            <HeaderIconBtn title={scan.isPending || scanning ? 'Scanning…' : 'Re-scan now'} disabled={scan.isPending || scanning} onClick={() => scan.mutate()}>
+              <RefreshIcon spinning={scan.isPending || scanning} />
+            </HeaderIconBtn>
+
+            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+              <Icons.Settings />
+            </HeaderIconBtn>
+          </div>
+        </div>
+        <ScanStatus signals={signals} />
       </div>
+
+      {rows.length > 0 && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+          <KiteSearchBar 
+            query={query} 
+            setQuery={setQuery} 
+            searchSettingsOpen={searchSettingsOpen} 
+            setSearchSettingsOpen={setSearchSettingsOpen} 
+          />
+        </div>
+      )}
       <style>{`
         .st-parent-row {
           position: relative;
@@ -546,43 +688,30 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           .st-spin, .st-pulse, .st-scan-bar, .st-drawer { animation: none !important; transition: none !important; }
         }
       `}</style>
-      {/* ── Console header ── */}
-      <div style={{ padding: '12px 16px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-            <EngineMark />
-            <span title={UNIVERSE_TIP} style={{ fontSize: 14, fontWeight: 600, color: k.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Triple SuperTrend
-            </span>
-            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>1H</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <ReadyPill count={rows.length} />
-            <HeaderIconBtn title={scan.isPending || scanning ? 'Scanning…' : 'Re-scan now'} disabled={scan.isPending || scanning} onClick={() => scan.mutate()}>
-              <RefreshIcon spinning={scan.isPending || scanning} />
-            </HeaderIconBtn>
-            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-              <Icons.Settings />
-            </HeaderIconBtn>
-          </div>
-        </div>
-        <ScanStatus signals={signals} />
-      </div>
+
 
       {/* ── Settings drawer (collapsible) ── */}
       <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
         <div style={{ overflow: 'hidden' }}>
           <div style={{ padding: '13px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${k.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11, color: k.dim, minWidth: 92 }} title="How tightly the position is trailed before exit.">Exit trailing</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+              <span style={{ fontSize: 11, color: k.dim }} title="Where the SuperTrend runs: the underlying's chart (Spot), each contract's own premium chart (Derivatives), or both.">Scan source</span>
+              <Segmented
+                options={SCAN_SOURCE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                isActive={(v) => (cfg?.scan_source ?? 'spot') === v}
+                onSelect={(v) => changeScanSource(v as ScanSource)}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+              <span style={{ fontSize: 11, color: k.dim }} title="How tightly the position is trailed before exit.">Exit trailing</span>
               <Segmented
                 options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg?.trail_target ?? 'mid') === v}
-                onSelect={(v) => patch({ trail_target: v as TrailTarget })}
+                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Exit trailing changed to ${v}`)}
               />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 11, color: k.dim, minWidth: 92 }} title="Which strikes to resolve per signal. Select one or more — never OTM.">Strikes</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+              <span style={{ fontSize: 11, color: k.dim }} title="Which strikes to resolve per signal — in-the-money (ITM), at-the-money (ATM) or out-of-the-money (OTM). Select one or more.">Strikes</span>
               <Segmented
                 options={MONEY_OPTS.map((o) => ({ value: o.value, label: o.value, hint: o.hint }))}
                 isActive={(v) => cfg?.strike_moneyness.includes(v as Moneyness) ?? false}
@@ -590,10 +719,39 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               />
             </div>
 
+            {cfg && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 7 }}>
+                <span style={{ fontSize: 11, color: k.dim }} title="Pick exactly which indices and stocks to scan. Applies to both Spot and Derivatives.">Universe</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                  <span style={{ fontSize: 9.5, color: k.dim, minWidth: 42 }}>Indices</span>
+                  {INDEX_OPTS.map((o) => (
+                    <Chip key={o.name} label={o.label} active={cfg.scan_indices.includes(o.name)} onClick={() => toggleIndex(o.name)} />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                  <span style={{ fontSize: 9.5, color: k.dim, minWidth: 42 }}>Stocks</span>
+                  <Chip label="All F&O" active={cfg.scan_all_stocks} onClick={() => patch({ scan_all_stocks: !cfg.scan_all_stocks }, `Universe set to ${!cfg.scan_all_stocks ? 'All F&O' : 'Custom selection'}`)} />
+                  {CURATED_STOCKS.map((nm) => (
+                    <Chip key={nm} label={nm} active={!cfg.scan_all_stocks && cfg.scan_stocks.includes(nm)}
+                      dim={cfg.scan_all_stocks} onClick={() => { if (!cfg.scan_all_stocks) toggleStock(nm); }} />
+                  ))}
+                </div>
+                {(() => {
+                  const heavy = cfg.scan_all_stocks && cfg.scan_source !== 'spot';
+                  return (
+                    <span style={{ fontSize: 10, color: heavy ? k.amber : k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span style={{ flexShrink: 0 }}>ℹ</span>
+                      <span>{scanCost(cfg)}{heavy ? ' — heavy (minutes). Turn off “All F&O” for a fast indices-only scan.' : ''}</span>
+                    </span>
+                  );
+                })()}
+              </div>
+            )}
+
             <div style={{ height: 1, background: k.border, margin: '1px 0' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <Switch on={cfg?.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => patch({ early_lock: !(cfg?.early_lock ?? false) })} />
+              <Switch on={cfg?.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => patch({ early_lock: !(cfg?.early_lock ?? false) }, `Early lock turned ${!(cfg?.early_lock ?? false) ? 'ON' : 'OFF'}`)} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <span style={{ fontSize: 11.5, color: k.text, fontWeight: 500 }}>Lock profits early</span>
                 <span style={{ fontSize: 10, color: k.dim }}>Exit on a slow-SuperTrend flip once comfortably in profit.</span>
@@ -625,8 +783,13 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               </div>
             </div>
 
-            <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.55 }}>
-              Scanning <span style={{ color: k.text, fontWeight: 500 }}>Nifty50 · BankNifty · FinNifty · Sensex</span> stocks + index options on the <span style={{ color: k.text, fontWeight: 500 }}>1H</span> timeframe.
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.55 }}>
+                Scanning <span style={{ color: k.text, fontWeight: 500 }}>Nifty50 · BankNifty · FinNifty · Sensex</span> stocks + index options on the <span style={{ color: k.text, fontWeight: 500 }}>1H</span> timeframe.
+              </div>
+              <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
+                <Icons.Reload style={{ width: 15, height: 15, color: 'inherit' }} />
+              </HeaderIconBtn>
             </div>
           </div>
         </div>

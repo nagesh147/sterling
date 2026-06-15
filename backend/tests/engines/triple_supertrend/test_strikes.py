@@ -42,6 +42,33 @@ def test_no_itm_available_returns_none():
     assert pick_strike(chain, spot=100, direction="long", moneyness="ATM") is not None
 
 
+def test_otm1_call_steps_above_spot():
+    chain = _chain([80, 90, 100, 110, 120], "call")
+    pick = pick_strike(chain, spot=102, direction="long", moneyness="OTM1")
+    # CALL OTM = strike ABOVE spot; OTM1 = one step out-of-the-money
+    assert pick.strike == 110 and pick.option_type == "CE"
+
+
+def test_otm2_call_two_steps_above_spot():
+    chain = _chain([80, 90, 100, 110, 120], "call")
+    pick = pick_strike(chain, spot=102, direction="long", moneyness="OTM2")
+    assert pick.strike == 120 and pick.option_type == "CE"
+
+
+def test_otm1_put_steps_below_spot():
+    chain = _chain([80, 90, 100, 110, 120], "put")
+    pick = pick_strike(chain, spot=102, direction="short", moneyness="OTM1")
+    # PUT OTM = strike BELOW spot
+    assert pick.strike == 90 and pick.option_type == "PE"
+
+
+def test_no_otm_available_returns_none():
+    chain = _chain([70, 80, 90], "call")  # all strikes below spot → no OTM calls
+    assert pick_strike(chain, spot=100, direction="long", moneyness="OTM1") is None
+    # ATM still resolves to the nearest strike
+    assert pick_strike(chain, spot=100, direction="long", moneyness="ATM") is not None
+
+
 def test_nearest_expiry_and_min_dte_filter():
     near = _chain([100], "call", expiry="2026-06-19", dte=3)
     far = _chain([100], "call", expiry="2026-07-31", dte=45)
@@ -51,13 +78,31 @@ def test_nearest_expiry_and_min_dte_filter():
     assert pick is not None and pick.dte == 3  # nearest expiry above the DTE floor
 
 
+def test_pick_strike_carries_instrument_token():
+    chain = [{"strike": 100.0, "option_type": "call", "expiry_date": "2026-06-26",
+              "dte": 8, "instrument_name": "X100CE", "token": 999}]
+    pick = pick_strike(chain, spot=100, direction="long", moneyness="ATM")
+    assert pick.token == 999
+
+
+def test_pick_contracts_resolves_both_ce_and_pe_per_moneyness():
+    from app.services.kite_engine.strikes import pick_contracts
+    chain = _chain([90, 100, 110], "call") + _chain([90, 100, 110], "put")
+    picks = pick_contracts(chain, spot=100, moneynesses=["ATM", "ITM1"])
+    by = {(m, p.option_type): p.strike for m, p in picks}
+    # ATM is the nearest strike for both sides
+    assert by[("ATM", "CE")] == 100 and by[("ATM", "PE")] == 100
+    # ITM is in-the-money for THAT side: CALL ITM below spot, PUT ITM above spot
+    assert by[("ITM1", "CE")] == 90 and by[("ITM1", "PE")] == 110
+
+
 def test_chain_rows_for_filters_and_computes_dte():
     from datetime import date
     from app.services.kite_engine.strikes import chain_rows_for
 
     dump = [
         {"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUN3000CE", "instrument_type": "CE",
-         "strike": 3000, "expiry": "2026-06-26", "lot_size": 250},
+         "strike": 3000, "expiry": "2026-06-26", "lot_size": 250, "instrument_token": 88001},
         {"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUN3000PE", "instrument_type": "PE",
          "strike": 3000, "expiry": "2026-06-26", "lot_size": 250},
         {"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUNFUT", "instrument_type": "FUT",
@@ -69,6 +114,7 @@ def test_chain_rows_for_filters_and_computes_dte():
     assert len(rows) == 2  # only RELIANCE CE/PE (FUT excluded, INFY excluded)
     r = rows[0]
     assert r["dte"] == 13 and r["option_type"] in ("call", "put")
+    assert r["token"] == 88001  # instrument_token carried through for candle fetch
     # feeds straight into pick_strike
     pick = pick_strike(rows, spot=3010, direction="long", moneyness="ATM")
     assert pick is not None and pick.strike == 3000 and pick.option_type == "CE"

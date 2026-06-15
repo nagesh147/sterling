@@ -13,7 +13,7 @@ class AlignmentChip(BaseModel):
 
 
 class OptionLeg(BaseModel):
-    moneyness: str  # ATM / ITM1 / ITM2
+    moneyness: str  # ATM / ITM1 / ITM2 / OTM1 / OTM2
     option_type: str  # CE / PE
     option_symbol: str
     strike: float
@@ -29,11 +29,14 @@ class EngineSignalRow(BaseModel):
     alignment: AlignmentChip
     direction: Literal["long", "short"]
     option_type: Literal["CE", "PE"]
-    legs: List[OptionLeg] = []  # one per selected moneyness (ATM/ITM1/ITM2)
+    legs: List[OptionLeg] = []  # one per selected moneyness (ATM/ITM1/ITM2/OTM1/OTM2)
     spot: float
     stop_loss: float
     score: float
     timestamp_ms: int
+    # "spot" = SuperTrend on the underlying chart (legs are candidate strikes to BUY);
+    # "derivatives" = SuperTrend on this contract's OWN premium chart (single leg, BUY-only).
+    source: Literal["spot", "derivatives"] = "spot"
 
 
 class SignalsResponse(BaseModel):
@@ -138,14 +141,46 @@ class EngineOrderResponse(BaseModel):
     message: str
 
 
+class HistorySignal(BaseModel):
+    """A past entry transition found by replaying the engine over a date window."""
+    ts_ms: int
+    underlying: str
+    source: Literal["spot", "derivatives"]
+    direction: Literal["long", "short"]
+    option_type: Literal["CE", "PE"]
+    option_symbol: str = ""   # derivatives only
+    moneyness: str = ""       # derivatives only
+    entry_price: float
+    stop_loss: float
+    is_now: bool = False      # fresh entry on the latest closed bar (the live "ready" signal)
+
+
+class HistoryResponse(BaseModel):
+    generated_ms: int
+    from_ms: int
+    to_ms: int
+    scan_source: str
+    signals: List[HistorySignal]
+
+
 class EngineConfigModel(BaseModel):
     trail_target: Literal["fast", "mid", "slow"] = "mid"
-    # multi-select: scan resolves a leg for EACH selected moneyness (never OTM)
-    strike_moneyness: List[Literal["ATM", "ITM1", "ITM2"]] = ["ATM", "ITM1", "ITM2"]
+    # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
+    # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.
+    strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "OTM1", "OTM2"]] = [
+        "ITM1", "ATM", "OTM1"]
+    # Where the SuperTrend runs: "spot" = underlying chart (legs are candidate strikes);
+    # "derivatives" = each selected contract's own premium chart (BUY-only); "both".
+    scan_source: Literal["spot", "derivatives", "both"] = "derivatives"
+    # Granular universe selection — applied to BOTH the spot and derivatives scans.
+    # Indices are kept by display name; stocks by name, unless scan_all_stocks is set.
+    scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]
+    scan_stocks: List[str] = []
+    scan_all_stocks: bool = False  # default preserves the full spot universe
     early_lock: bool = False
     auto_execute: bool = False
 
     @field_validator("strike_moneyness")
     @classmethod
     def _at_least_one(cls, v):
-        return v or ["ATM", "ITM1", "ITM2"]
+        return v or ["ITM1", "ATM", "OTM1"]

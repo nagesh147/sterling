@@ -15,7 +15,7 @@ from app.engines.triple_supertrend.schemas import EngineConfigModel
 from app.services import live_safety, paper_store
 from app.services.kite_engine import state
 from app.services.kite_engine.scanner import option_order_args, scanner
-from app.services.kite_engine.universe import build_universe
+from app.services.kite_engine.universe import build_universe, select_scan_universe
 
 log = get_logger(__name__)
 
@@ -33,15 +33,16 @@ def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
 
 
 def _make_place_cb(client, uid: str):
-    """Gated auto-exec: 1-lot ATM/ITM (primary leg) option BUY under the same
-    live-safety + idempotency checks as manual Kite orders. Logs every outcome."""
+    """Gated auto-exec: 1-lot at-the-money (nearest-spot leg) option BUY under the
+    same live-safety + idempotency checks as manual Kite orders. Logs every outcome."""
     async def _cb(row, item) -> None:
         args = option_order_args(row)  # primary (first) leg
         if not args or not args["option_symbol"] or args["size"] <= 0:
             return
-        # One position per underlying: skip if we already hold an auto-exec'd
-        # position on this name (a later re-alignment is a new signal otherwise).
-        if state.is_auto_open(uid, row.underlying):
+        # One open auto-position per "slot": per underlying for spot signals, per
+        # contract for derivatives (so each fired CE/PE strike is independent).
+        guard_key = args["option_symbol"] if row.source == "derivatives" else row.underlying
+        if state.is_auto_open(uid, guard_key):
             return
         idem = live_safety.make_idempotency_key(
             uid, args["option_symbol"], "BUY", args["size"], row.timestamp_ms)
@@ -63,7 +64,7 @@ def _make_place_cb(client, uid: str):
         oid = (result or {}).get("order_id", "")
         if oid:
             live_safety.record_idempotency(idem, oid)
-            state.mark_auto_open(uid, row.underlying)  # one-position guard
+            state.mark_auto_open(uid, guard_key)  # one-position guard (per slot)
             state.log(uid, "order_placed",
                       f"BUY {args['size']} {args['option_symbol']} @ market (#{oid})")
     return _cb
@@ -79,15 +80,47 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         bfo = await client.search_instruments("", "BFO", limit=1_000_000)
         nse = await client.search_instruments("", "NSE", limit=1_000_000)
         bse = await client.search_instruments("", "BSE", limit=1_000_000)
-        universe = build_universe(nfo_instruments=nfo, bfo_instruments=bfo, equities=nse + bse)
+        full_universe = build_universe(nfo_instruments=nfo, bfo_instruments=bfo, equities=nse + bse)
+        source = cfg_model.scan_source
+        # Granular selection applies to BOTH scans.
+        selected = select_scan_universe(
+            full_universe, indices=cfg_model.scan_indices,
+            stocks=cfg_model.scan_stocks, all_stocks=cfg_model.scan_all_stocks)
+        spot_universe = selected if source in ("spot", "both") else []
+        deriv_universe = selected if source in ("derivatives", "both") else None
+        # Auto-exec is universal — it fires on both spot and derivatives signals.
         place_cb = _make_place_cb(client, uid) if cfg_model.auto_execute else None
         await scanner.scan(
-            uid=uid, client=client, universe=universe, nfo_rows=nfo, bfo_rows=bfo,
-            cfg=_ts_cfg(cfg_model), moneyness=cfg_model.strike_moneyness, place_cb=place_cb)
-        count = len(scanner.snapshot(uid).rows)
-        mode = "auto-exec ON" if cfg_model.auto_execute else "advisory"
+            uid=uid, client=client, universe=spot_universe, nfo_rows=nfo, bfo_rows=bfo,
+            cfg=_ts_cfg(cfg_model), moneyness=cfg_model.strike_moneyness, place_cb=place_cb,
+            deriv_universe=deriv_universe)
+        snap = scanner.snapshot(uid)
+        count = len(snap.rows)
+        d = snap.diag
+        mode = "auto-exec ON" if place_cb else "advisory"
+        parts = []
+        if source in ("spot", "both"):
+            # Index breakdown makes the 'no index signals' case visible: if indices
+            # have 0 with data, the live index candle fetch is coming back empty.
+            ix = f"indices {d.index_fired} fired, {d.index_evaluated}/{d.indices} with data"
+            if d.indices and d.index_evaluated == 0:
+                ix += " — index candle fetch returned nothing"
+            parts.append(ix)
+        if source in ("derivatives", "both"):
+            # Per-stage so a zero-signal scan is self-explaining:
+            #   resolved 0           → chains/strikes didn't resolve (config/expiry)
+            #   resolved N, charts 0 → premium fetch returned nothing
+            #   charts N, fired 0    → scanning fine; no fresh BUY this bar (base rate)
+            dv = (f"deriv {d.deriv_fired} fired / {d.deriv_charts} charts "
+                  f"(resolved {d.deriv_resolved}, bars {d.deriv_min_bars}–{d.deriv_max_bars})")
+            if d.deriv_no_data:
+                dv += f", {d.deriv_no_data} no-data"
+            if d.deriv_resolved == 0:
+                dv += " — no option contracts resolved from chains"
+            parts.append(dv)
         state.log(uid, "scan_done",
-                  f"Scan complete — {count} ready signal(s) / {len(universe)} instruments ({mode})")
+                  f"Scan complete — {count} ready signal(s) / {len(selected)} instruments "
+                  f"[{source}] ({mode}) · {' · '.join(parts)}")
         state.mark_scan_done(uid, signal_count=count, next_in_s=interval_s)
         return count
     except Exception as exc:  # noqa: BLE001

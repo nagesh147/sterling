@@ -14,6 +14,14 @@ from typing import Dict, List, Optional, Sequence
 
 _CFG_PATH = Path(__file__).with_name("universe.json")
 
+# High-liquidity F&O stocks for the "indices + liquid stocks" derivatives bucket.
+# Names match the option-chain `name` / equity tradingsymbol. Edit freely.
+CURATED_STOCKS = (
+    "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "SBIN", "AXISBANK",
+    "KOTAKBANK", "ITC", "LT", "BHARTIARTL", "HINDUNILVR", "BAJFINANCE",
+    "MARUTI", "TATAMOTORS", "SUNPHARMA", "WIPRO", "TATASTEEL",
+)
+
 
 @dataclass(frozen=True)
 class UniverseItem:
@@ -77,4 +85,26 @@ def build_universe(
                     exchange=str(eq.get("exchange", "NSE")),
                     option_exchange=opt_exch,
                 ))
+    return out
+
+
+def select_scan_universe(
+    universe: List[UniverseItem], *,
+    indices: Sequence[str], stocks: Sequence[str], all_stocks: bool,
+) -> List[UniverseItem]:
+    """Filter the universe to the user's granular selection, preserving order.
+
+    An index is kept iff its display name is in ``indices``. A stock is kept iff
+    ``all_stocks`` is set OR its name is in ``stocks``. Applied to BOTH the spot and
+    the derivatives scan, so the user controls exactly what each scan covers.
+    """
+    idx = set(indices)
+    stk = set(stocks)
+    out: List[UniverseItem] = []
+    for u in universe:
+        if u.is_index:
+            if u.name in idx:
+                out.append(u)
+        elif all_stocks or u.name in stk:
+            out.append(u)
     return out

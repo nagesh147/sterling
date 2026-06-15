@@ -7,8 +7,10 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Set
+import json
 
 from app.engines.triple_supertrend.schemas import ActivityEvent, EngineConfigModel
+from app.services import db
 
 _ACTIVITY_MAX = 300
 
@@ -30,11 +32,24 @@ _auto_open: Dict[str, Set[str]] = {}
 
 # ── config ──────────────────────────────────────────────────────────────────
 def get_config(uid: str) -> EngineConfigModel:
-    return _config.setdefault(uid, EngineConfigModel())
+    if uid not in _config:
+        try:
+            saved = db.get_config(f"kite_engine_config_{uid}")
+            if saved:
+                _config[uid] = EngineConfigModel.model_validate_json(saved)
+            else:
+                _config[uid] = EngineConfigModel()
+        except Exception:
+            _config[uid] = EngineConfigModel()
+    return _config[uid]
 
 
 def set_config(uid: str, cfg: EngineConfigModel) -> EngineConfigModel:
     _config[uid] = cfg
+    try:
+        db.set_config(f"kite_engine_config_{uid}", cfg.model_dump_json())
+    except Exception:
+        pass
     return cfg
 
 

@@ -28,7 +28,9 @@ from app.engines.triple_supertrend.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
 from app.schemas.instruments import InstrumentMeta
-from app.services.kite_engine.strikes import chain_rows_for, pick_strikes
+from app.services.kite_engine.strikes import (
+    OptionPick, chain_rows_for, pick_contracts, pick_strikes,
+)
 from app.services.kite_engine.universe import UniverseItem
 
 log = get_logger(__name__)
@@ -82,6 +84,52 @@ def evaluate_item(
     )
 
 
+# Fixed display/priority order: ATM first (the auto-exec primary), then ITM
+# inwards, then OTM outwards — independent of the order the UI sends them in.
+_MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "OTM1": 3, "OTM2": 4}
+
+
+def evaluate_derivative_contract(
+    item: UniverseItem, moneyness: str, pick: OptionPick,
+    candles: Sequence[Candle], cfg: TripleSupertrendConfig,
+) -> Optional[EngineSignalRow]:
+    """Run the triple-SuperTrend on an option CONTRACT's own premium series.
+
+    Options-buying only: emit a BUY signal on a fresh *uptrend* transition of the
+    premium (a fresh downtrend is a holder's exit, not an entry, so it's ignored).
+    A rising CE = bullish underlying (BULL); a rising PE = bearish underlying (BEAR).
+    ``spot`` carries the premium last close and ``stop_loss`` the premium ST trail;
+    ``token`` is the option's own instrument_token so a click opens its premium chart.
+
+    Short-dated weeklies are NOT skipped — they're evaluated like everything else; the
+    SuperTrend simply returns no signal until the contract has ~``warmup`` 1H bars (so a
+    young weekly produces no signal, never a fabricated one).
+    """
+    if len(candles) <= 1:
+        return None
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    c = np.array([c.close for c in candles], float)
+    r = compute_regime(o, h, l, c, cfg)
+    longs, _shorts = entry_transitions(r)
+    i = len(c) - 1
+    if not longs[i]:
+        return None
+    is_ce = pick.option_type == "CE"
+    return EngineSignalRow(
+        underlying=item.name, token=pick.token, exchange=item.option_exchange,
+        regime="BULL" if is_ce else "BEAR",
+        alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
+        direction="long", option_type=pick.option_type,
+        legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
+                        option_symbol=pick.option_symbol, strike=pick.strike,
+                        expiry=pick.expiry, lot_size=pick.lot_size or None)],
+        spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
+        score=85.0, timestamp_ms=int(candles[i].timestamp_ms), source="derivatives",
+    )
+
+
 def attach_strikes(
     row: EngineSignalRow, option_rows: Sequence[dict], *, option_name: str,
     moneynesses: Sequence[str] = ("ATM",), today: Optional[date] = None,
@@ -89,11 +137,13 @@ def attach_strikes(
     """Resolve and attach an option leg per selected moneyness from a raw dump.
 
     ``option_name`` is the option-chain underlying ("NIFTY"), which differs from
-    ``row.underlying`` (the display name, e.g. "NIFTY 50") for indices.
+    ``row.underlying`` (the display name, e.g. "NIFTY 50") for indices. Legs are
+    emitted in a fixed canonical order (ATM, ITM…, OTM…) regardless of request order.
     """
     today = today or datetime.now(_IST).date()
     chain = chain_rows_for(option_rows, option_name, today)
-    picks = pick_strikes(chain, spot=row.spot, direction=row.direction, moneynesses=moneynesses)
+    ordered = sorted(moneynesses, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
+    picks = pick_strikes(chain, spot=row.spot, direction=row.direction, moneynesses=ordered)
     row.legs = [
         OptionLeg(moneyness=m, option_type=p.option_type, option_symbol=p.option_symbol,
                   strike=p.strike, expiry=p.expiry, lot_size=p.lot_size or None)
@@ -106,10 +156,12 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
     """Pure mapping: a ready row (+ chosen leg) → Kite option-BUY order args.
 
     Options buying is always a BUY (a call for bull, a put for bear); quantity is
-    one lot (``lot_size``). Defaults to the first/primary leg for auto-exec.
-    The advisory ST trailing stop rides along as the SL trigger.
+    one lot (``lot_size``). For auto-exec the primary leg is the one *nearest spot*
+    (i.e. ATM when selected) — never a deep OTM contract just because it sorts
+    first. The advisory ST trailing stop rides along as the SL trigger.
     """
-    leg = leg or (row.legs[0] if row.legs else None)
+    if leg is None and row.legs:
+        leg = min(row.legs, key=lambda l: abs(l.strike - row.spot))
     if leg is None:
         return None
     return {
@@ -123,12 +175,32 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
 
 # ── per-user scan state ─────────────────────────────────────────────────────
 @dataclass
+class ScanDiag:
+    """Per-scan breakdown — surfaced to the activity log so a silently-empty index
+    candle fetch (the classic 'no index signals' symptom) is visible, not guessed."""
+    universe: int = 0          # instruments in the scan universe
+    indices: int = 0           # of those, how many are indices
+    evaluated: int = 0         # had enough candles to run the engine
+    no_data: int = 0           # skipped: no token / no or too-few candles (silent drops)
+    index_evaluated: int = 0   # indices that had usable candles
+    index_no_data: int = 0     # indices dropped for missing data
+    index_fired: int = 0       # indices that produced a ready signal
+    deriv_resolved: int = 0    # contracts resolved from option chains (pre-fetch)
+    deriv_charts: int = 0      # option contracts charted (had premium candles)
+    deriv_no_data: int = 0     # contracts skipped: no token / empty premium fetch
+    deriv_fired: int = 0       # contracts that produced a BUY signal
+    deriv_min_bars: int = 0    # premium-chart bar depth of charted contracts (history)
+    deriv_max_bars: int = 0
+
+
+@dataclass
 class UserScan:
     engine: TripleSupertrendEngine
     rows: List[EngineSignalRow] = field(default_factory=list)
     candle_cache: Dict[int, tuple] = field(default_factory=dict)  # token -> (mono_ts, candles)
     generated_ms: int = 0
     scanning: bool = False
+    diag: ScanDiag = field(default_factory=ScanDiag)
 
 
 def _inst(item: UniverseItem) -> InstrumentMeta:
@@ -156,19 +228,30 @@ class KiteEngineScanner:
     def snapshot(self, uid: str) -> UserScan:
         return self._users.get(uid) or UserScan(engine=TripleSupertrendEngine())
 
-    async def _fetch_1h(self, client, us: UserScan, item: UniverseItem) -> List[Candle]:
-        hit = us.candle_cache.get(item.token)
+    async def _fetch_candles(self, client, us: UserScan, token: int, name: str) -> List[Candle]:
+        """Fetch + cache 1H candles by instrument_token. Works for underlyings AND
+        option contracts (distinct token spaces, so the cache never collides)."""
+        hit = us.candle_cache.get(token)
         if hit and (time.monotonic() - hit[0]) < _CANDLE_TTL_S:
             return hit[1]
-        candles = await client.get_candles(_inst(item), "1H", _LOOKBACK_BARS)
-        us.candle_cache[item.token] = (time.monotonic(), candles)
+        inst = InstrumentMeta(
+            underlying=name, tick_size=0.05, strike_step=1.0, exchange_currency="INR",
+            perp_symbol="", index_name=name, has_options=True, exchange="zerodha",
+            zerodha_token=token,
+        )
+        candles = await client.get_candles(inst, "1H", _LOOKBACK_BARS)
+        us.candle_cache[token] = (time.monotonic(), candles)
         return candles
+
+    async def _fetch_1h(self, client, us: UserScan, item: UniverseItem) -> List[Candle]:
+        return await self._fetch_candles(client, us, item.token, item.tradingsymbol)
 
     async def scan(
         self, *, uid: str, client, universe: List[UniverseItem],
         nfo_rows: Sequence[dict], bfo_rows: Sequence[dict],
         cfg: TripleSupertrendConfig, moneyness: Sequence[str] = ("ATM",),
         place_cb: Optional[PlaceCb] = None,
+        deriv_universe: Optional[List[UniverseItem]] = None,
     ) -> None:
         us = self._user(uid, cfg)
         us.engine.cfg = cfg
@@ -176,16 +259,32 @@ class KiteEngineScanner:
         sem = asyncio.Semaphore(_CONCURRENCY)
         today = datetime.now(_IST).date()
         rows: List[EngineSignalRow] = []
+        diag = ScanDiag(universe=len(universe),
+                        indices=sum(1 for i in universe if i.is_index))
+
+        def _no_data(item: UniverseItem) -> None:
+            diag.no_data += 1
+            if item.is_index:
+                diag.index_no_data += 1
 
         async def _one(item: UniverseItem) -> None:
             if not item.token:
+                _no_data(item)
                 return
             async with sem:
                 try:
                     candles = drop_forming(await self._fetch_1h(client, us, item))
                 except Exception as exc:  # noqa: BLE001
                     log.warning("kite-engine scan candle fail %s: %s", item.name, exc)
+                    _no_data(item)
                     return
+            # Too few bars to run the engine → a silent drop unless we record it.
+            if len(candles) <= cfg.warmup + 1:
+                _no_data(item)
+                return
+            diag.evaluated += 1
+            if item.is_index:
+                diag.index_evaluated += 1
             row = evaluate_item(us.engine, item, candles, cfg)
             if row is None:
                 return
@@ -193,6 +292,8 @@ class KiteEngineScanner:
             attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                            moneynesses=moneyness, today=today)
             rows.append(row)
+            if item.is_index:
+                diag.index_fired += 1
             if place_cb is not None and row.legs:
                 try:
                     await place_cb(row, item)
@@ -200,7 +301,62 @@ class KiteEngineScanner:
                     log.warning("kite-engine auto-exec fail %s: %s", item.name, exc)
 
         await asyncio.gather(*[_one(i) for i in universe])
+
+        # ── derivatives scan: triple-ST on each contract's OWN premium chart ──
+        async def _deriv_one(item: UniverseItem) -> None:
+            if not item.token:
+                return
+            async with sem:
+                try:
+                    under = drop_forming(await self._fetch_candles(
+                        client, us, item.token, item.tradingsymbol))
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("kite-engine deriv spot-anchor fail %s: %s", item.name, exc)
+                    return
+            spot = float(under[-1].close) if under else 0.0
+            if spot <= 0:
+                return
+            option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
+            chain = chain_rows_for(option_rows, item.tradingsymbol, today)
+            contracts = pick_contracts(chain, spot=spot, moneynesses=moneyness)
+            diag.deriv_resolved += len(contracts)
+
+            async def _contract(m: str, pick) -> None:
+                if not pick.token:
+                    diag.deriv_no_data += 1
+                    return
+                async with sem:
+                    try:
+                        oc = drop_forming(await self._fetch_candles(
+                            client, us, pick.token, pick.option_symbol))
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("kite-engine deriv chart fail %s: %s", pick.option_symbol, exc)
+                        diag.deriv_no_data += 1
+                        return
+                if not oc:
+                    diag.deriv_no_data += 1  # nothing returned (a short-but-present
+                    return                   # weekly is still charted below, never skipped)
+                diag.deriv_charts += 1
+                bars = len(oc)               # premium-history depth, to expose short weeklies
+                diag.deriv_min_bars = bars if diag.deriv_min_bars == 0 else min(diag.deriv_min_bars, bars)
+                diag.deriv_max_bars = max(diag.deriv_max_bars, bars)
+                drow = evaluate_derivative_contract(item, m, pick, oc, cfg)
+                if drow is None:
+                    return
+                rows.append(drow)
+                diag.deriv_fired += 1
+                if place_cb is not None:  # auto-exec is universal (spot + derivatives)
+                    try:
+                        await place_cb(drow, item)
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("kite-engine deriv auto-exec fail %s: %s", pick.option_symbol, exc)
+
+            await asyncio.gather(*[_contract(m, p) for m, p in contracts])
+
+        await asyncio.gather(*[_deriv_one(i) for i in (deriv_universe or [])])
+
         us.rows = rows
+        us.diag = diag
         us.generated_ms = int(time.time() * 1000)
         us.scanning = False
 

@@ -2,7 +2,8 @@
 // Mirrors backend app/engines/triple_supertrend/schemas.py.
 
 export type TrailTarget = 'fast' | 'mid' | 'slow';
-export type Moneyness = 'ATM' | 'ITM1' | 'ITM2';
+export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'OTM1' | 'OTM2';
+export type ScanSource = 'spot' | 'derivatives' | 'both';
 
 export interface AlignmentChip {
   fast: number; // +1 / -1 / 0
@@ -11,7 +12,7 @@ export interface AlignmentChip {
 }
 
 export interface OptionLeg {
-  moneyness: string; // ATM / ITM1 / ITM2
+  moneyness: string; // ATM / ITM1 / ITM2 / OTM1 / OTM2
   option_type: string; // CE / PE
   option_symbol: string;
   strike: number;
@@ -32,6 +33,7 @@ export interface EngineSignalRow {
   stop_loss: number;
   score: number;
   timestamp_ms: number;
+  source?: 'spot' | 'derivatives';
 }
 
 export interface SignalsResponse {
@@ -124,6 +126,10 @@ export interface EngineDetailResponse {
 export interface EngineConfigModel {
   trail_target: TrailTarget;
   strike_moneyness: Moneyness[];
+  scan_source: ScanSource;
+  scan_indices: string[];
+  scan_stocks: string[];
+  scan_all_stocks: boolean;
   early_lock: boolean;
   auto_execute: boolean;
 }

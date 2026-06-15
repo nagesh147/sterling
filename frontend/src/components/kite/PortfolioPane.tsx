@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   useConvertKitePosition, useKiteHoldings, useKitePositions,
-  useKiteAuctions, useInitiateHoldingsAuth
+  useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp
 } from '../../hooks/useKite';
 
 import { InstrumentLabel } from './InstrumentLabel';
@@ -99,7 +99,20 @@ function AuctionsSection() {
 export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const { data: holdings } = useKiteHoldings(true);
   const { data: pos } = useKitePositions(true);
-  const positions = (pos?.net ?? []).filter((p: any) => num(p.quantity) !== 0 || num(p.pnl) !== 0);
+  const rawPositions = (pos?.net ?? []).filter((p: any) => num(p.quantity) !== 0 || num(p.pnl) !== 0);
+
+  // Kite's /portfolio/positions last_price/pnl lag the live tick (Kite web overlays
+  // its ticker). Overlay the same live LTP the marketwatch uses and recompute P&L by
+  // the price delta — pnl = snapshot_pnl + (liveLtp - snapshot_ltp) * qty * multiplier —
+  // so LTP/P&L/Chg/Total track Kite web instead of showing a stale snapshot.
+  const posSymbols = rawPositions.map((p: any) => `${p.exchange}:${p.tradingsymbol}`);
+  const { data: liveLtp } = useKiteLtp(posSymbols, posSymbols.length > 0);
+  const positions = rawPositions.map((p: any) => {
+    const live = num(liveLtp?.[`${p.exchange}:${p.tradingsymbol}`]?.last_price);
+    if (live <= 0) return p;  // no live tick yet → keep the broker snapshot
+    const pnl = num(p.pnl) + (live - num(p.last_price)) * num(p.quantity) * (num(p.multiplier) || 1);
+    return { ...p, last_price: live, pnl };
+  });
 
   const { openOrderWindow } = useOrderWindowStore();
 

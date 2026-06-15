@@ -48,6 +48,11 @@ async def set_config(body: EngineConfigModel,
     return state.set_config(user.user_id, body)
 
 
+@router.post("/config/reset", response_model=EngineConfigModel)
+async def reset_config(user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
+    return state.set_config(user.user_id, EngineConfigModel())
+
+
 @router.get("/signals", response_model=SignalsResponse)
 async def signals(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
     uid = user.user_id

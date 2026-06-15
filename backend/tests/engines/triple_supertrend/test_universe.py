@@ -1,4 +1,23 @@
-from app.services.kite_engine.universe import UniverseItem, build_universe
+from app.services.kite_engine.universe import (
+    UniverseItem, build_universe, select_scan_universe,
+)
+
+
+def test_select_scan_universe_granular():
+    ix1 = UniverseItem("NIFTY 50", "NIFTY", 1, "INDICES", "NFO", is_index=True)
+    ix2 = UniverseItem("SENSEX", "SENSEX", 2, "INDICES", "BFO", is_index=True)
+    s1 = UniverseItem("RELIANCE", "RELIANCE", 3, "NSE", "NFO")
+    s2 = UniverseItem("INFY", "INFY", 4, "NSE", "NFO")
+    uni = [ix1, ix2, s1, s2]
+
+    # granular: only the NIFTY index + RELIANCE stock
+    assert select_scan_universe(uni, indices=["NIFTY 50"], stocks=["RELIANCE"],
+                                all_stocks=False) == [ix1, s1]
+    # all_stocks overrides the stock list (still respects the index selection)
+    assert select_scan_universe(uni, indices=["NIFTY 50", "SENSEX"], stocks=[],
+                                all_stocks=True) == [ix1, ix2, s1, s2]
+    # no indices selected → stocks only
+    assert select_scan_universe(uni, indices=[], stocks=["INFY"], all_stocks=False) == [s2]
 
 
 def test_build_universe_from_instruments_dump():
