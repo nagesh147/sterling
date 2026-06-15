@@ -356,7 +356,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 220 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                    {s.showExchange && (
                      <span style={{ fontSize: 11, color: k.dim, width: 40, flexShrink: 0 }}>
                        {row.exchange}
@@ -899,7 +899,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1, minWidth: 220 }} />
                  {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
                  {s.showLeg && <SortHeaderDiv label="Leg" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 45, flexShrink: 0 }} />}
                  {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
