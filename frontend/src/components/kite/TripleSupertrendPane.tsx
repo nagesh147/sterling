@@ -430,7 +430,32 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
               </div>
               {isExp && (
                 <div onClick={(e) => e.stopPropagation()}>
-                  <QuoteDetail sym={sym} q={q} expiry={leg.expiry} spotName={row.underlying} spotPx={row.spot} instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} />
+                  <QuoteDetail 
+                    sym={sym} 
+                    q={q} 
+                    expiry={leg.expiry} 
+                    spotName={row.underlying} 
+                    spotPx={row.spot} 
+                    instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
+                    onBuy={() => {
+                      openOrderWindow({
+                        symbol: leg.option_symbol,
+                        exchange: row.exchange,
+                        initialSide: 'BUY',
+                        lotSize: leg.lot_size || 1,
+                        lastPrice: lastPx || 0,
+                      });
+                    }}
+                    onSell={() => {
+                      openOrderWindow({
+                        symbol: leg.option_symbol,
+                        exchange: row.exchange,
+                        initialSide: 'SELL',
+                        lotSize: leg.lot_size || 1,
+                        lastPrice: lastPx || 0,
+                      });
+                    }}
+                  />
                 </div>
               )}
             </div>
