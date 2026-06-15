@@ -9,6 +9,8 @@ export interface KiteSettingsState {
   showHoldings: boolean;
   showNotes: boolean;
   showGroupColors: boolean;
+  showExchange: boolean;
+  showLeg: boolean;
   sortBy: string;
   setChgType: (t: 'close' | 'open') => void;
   toggleShow: (key: keyof Omit<KiteSettingsState, 'chgType'|'sortBy'|'setChgType'|'toggleShow'|'setSortBy'>) => void;
@@ -25,6 +27,8 @@ export const useKiteSettings = create<KiteSettingsState>()(
       showHoldings: true,
       showNotes: true,
       showGroupColors: true,
+      showExchange: true,
+      showLeg: true,
       sortBy: 'Custom',
       setChgType: (t) => set({ chgType: t }),
       toggleShow: (key) => set((state) => ({ [key]: !state[key as keyof KiteSettingsState] })),

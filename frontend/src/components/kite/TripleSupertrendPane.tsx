@@ -355,22 +355,32 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
                    <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   {s.showExchange && (
+                     <span style={{ fontSize: 11, color: k.dim, width: 40, flexShrink: 0 }}>
+                       {row.exchange}
+                     </span>
+                   )}
+                   {s.showLeg && (
+                     <span style={{ fontSize: 11, color: k.dim, width: 45, flexShrink: 0 }}>
+                       {leg.moneyness}
+                     </span>
+                   )}
                    {isDeriv && (leg as any).premium_spot != null && (
-                     <span style={{ fontSize: 11, fontWeight: 500, color: accent, width: 45, textAlign: 'right', flexShrink: 0 }}>
+                     <span style={{ fontSize: 11, fontWeight: 500, color: accent, width: 70, textAlign: 'right', flexShrink: 0 }}>
                        {(leg as any).premium_spot.toFixed(2)}
                      </span>
                    )}
                    {isDeriv && (leg as any).premium_sl != null && (
-                     <span style={{ fontSize: 10, color: k.dim, width: 50, textAlign: 'right', flexShrink: 0 }}>
-                       SL {(leg as any).premium_sl.toFixed(1)}
+                     <span style={{ fontSize: 10, color: k.dim, width: 70, textAlign: 'right', flexShrink: 0 }}>
+                       {(leg as any).premium_sl.toFixed(1)}
                      </span>
                    )}
                 </div>
 
                 {!isExp && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
                       onBuy={(e) => {
@@ -397,16 +407,16 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                       onChart={(e) => { e.stopPropagation(); onClick(); }}
                     />
                     
-                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end', gap: 0 }}>
-                      {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11, width: 45, textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                      {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, width: 55, textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
+                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11, width: 50, textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
+                      {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, width: 60, textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
                       {s.showPriceDirection && (
                         <span style={{ color: color, display: 'flex', alignItems: 'center', width: 14, justifyContent: 'center' }}>
                           {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
                           {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
                         </span>
                       )}
-                      <span style={{ color: color, fontWeight: 500, fontSize: 13, width: 60, textAlign: 'right' }}>
+                      <span style={{ color: color, fontWeight: 500, fontSize: 13, width: 70, textAlign: 'right' }}>
                         {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                       </span>
                     </div>
@@ -734,7 +744,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     let result = [...rows];
     if (query.trim()) {
       const qLower = query.toLowerCase();
-      result = result.filter(r => r.underlying.toLowerCase().includes(qLower));
+      result = result.filter(r => {
+        if (r.underlying.toLowerCase().includes(qLower)) return true;
+        if (r.exchange.toLowerCase().includes(qLower)) return true;
+        if (r.legs.some(l => l.option_symbol.toLowerCase().includes(qLower))) return true;
+        return false;
+      });
     }
     if (sortBy === 'A-Z') {
       result.sort((a, b) => a.underlying.localeCompare(b.underlying));
@@ -855,21 +870,23 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           />
           {viewLayout === 'list' && (
             <div style={{ 
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 32,
               padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
                  <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 45, flexShrink: 0 }} align="right" />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Stop" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 50, flexShrink: 0 }} align="right" />}
+                 {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
+                 {s.showLeg && <SortHeaderDiv label="Leg" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 45, flexShrink: 0 }} />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Stop" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
                  <div style={{ width: 150 }}></div>
-                 <div style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end' }}>
-                   {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" sort={legSort} handleSort={handleLegSort} style={{ width: 45 }} align="right" />}
-                   {s.showPriceChangePct && <SortHeaderDiv label="Chg. %" sortKey="chgPct" sort={legSort} handleSort={handleLegSort} style={{ width: 55 }} align="right" />}
+                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                   {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" sort={legSort} handleSort={handleLegSort} style={{ width: 50 }} align="right" />}
+                   {s.showPriceChangePct && <SortHeaderDiv label="Chg. %" sortKey="chgPct" sort={legSort} handleSort={handleLegSort} style={{ width: 60 }} align="right" />}
                    {s.showPriceDirection && <span style={{ width: 14 }}></span>}
-                   <SortHeaderDiv label="LTP" sortKey="ltp" sort={legSort} handleSort={handleLegSort} style={{ width: 60 }} align="right" />
+                   <SortHeaderDiv label="LTP" sortKey="ltp" sort={legSort} handleSort={handleLegSort} style={{ width: 70 }} align="right" />
                  </div>
                  <div style={{ width: 28 }}></div>
               </div>
@@ -887,6 +904,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          gap: 32px;
           padding: 12px 16px;
           border-bottom: 1px solid ${k.border};
         }
