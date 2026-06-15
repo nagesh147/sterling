@@ -74,7 +74,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
     """Run one full scan for ``uid`` with ``client``. Returns the signal count."""
     cfg_model = state.get_config(uid)
     state.set_scanning(uid, True)
-    state.log(uid, "scan_start", "Scanning universe (1H triple-SuperTrend)…")
+    state.log(uid, "scan_start", f"Initiating 1H triple-SuperTrend scan…")
     try:
         nfo = await client.search_instruments("", "NFO", limit=1_000_000)
         bfo = await client.search_instruments("", "BFO", limit=1_000_000)
@@ -88,12 +88,14 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             stocks=cfg_model.scan_stocks, all_stocks=cfg_model.scan_all_stocks)
         spot_universe = selected if source in ("spot", "both") else []
         deriv_universe = selected if source in ("derivatives", "both") else None
+        state.log(uid, "info", f"Scan plan: Scanning {len(selected)} instruments using '{source}' source.")
+        
         # Auto-exec is universal — it fires on both spot and derivatives signals.
         place_cb = _make_place_cb(client, uid) if cfg_model.auto_execute else None
         await scanner.scan(
             uid=uid, client=client, universe=spot_universe, nfo_rows=nfo, bfo_rows=bfo,
             cfg=_ts_cfg(cfg_model), moneyness=cfg_model.strike_moneyness, place_cb=place_cb,
-            deriv_universe=deriv_universe)
+            deriv_universe=deriv_universe, log_cb=lambda msg: state.log(uid, "info", msg))
         snap = scanner.snapshot(uid)
         count = len(snap.rows)
         d = snap.diag
@@ -115,7 +117,9 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
                   f"(resolved {d.deriv_resolved}, bars {d.deriv_min_bars}–{d.deriv_max_bars})")
             if d.deriv_no_data:
                 dv += f", {d.deriv_no_data} no-data"
-            if d.deriv_resolved == 0:
+            if d.deriv_no_spot:
+                dv += f", {d.deriv_no_spot} no-spot (underlying price unavailable)"
+            if d.deriv_resolved == 0 and d.deriv_no_spot == 0:
                 dv += " — no option contracts resolved from chains"
             parts.append(dv)
         state.log(uid, "scan_done",

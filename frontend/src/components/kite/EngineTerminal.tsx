@@ -46,6 +46,19 @@ export function EngineTerminal() {
   const { data } = useEngineActivity();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('kite_terminal_theme') as Theme) || 'dark');
+  const [mode, setModeState] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+
+  const setMode = (m: 'minimized' | 'normal' | 'partial' | 'full') => {
+    setModeState(m);
+    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: m }));
+  };
+
+  useEffect(() => {
+    const cb = (e: any) => setModeState(e.detail);
+    window.addEventListener('kite-terminal-mode', cb);
+    return () => window.removeEventListener('kite-terminal-mode', cb);
+  }, []);
+
   const t = THEME[theme];
   const events = data?.events ?? [];
 
@@ -56,32 +69,67 @@ export function EngineTerminal() {
 
   const dot = data?.scanning ? k.green : data?.auto_scan ? k.blue : t.dim;
 
+  const btnStyle = { background: 'none', border: 'none', color: t.headDim, cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bg, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-      {/* header / status bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim }}>
+      {/* HEADER */}
+      {mode !== 'minimized' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim, flexShrink: 0 }}>
+          <span style={{ fontWeight: 600, color: t.headTxt }}>KITE TERMINAL</span>
+          
+          <span style={{ marginLeft: 'auto', color: k.orange }}>{data?.signal_count ?? 0} ready</span>
+          
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title="Toggle terminal theme"
+            style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '1px 8px', fontSize: 11, cursor: 'pointer' }}
+          >
+            {theme === 'dark' ? '☀ Light' : '🌙 Dark'}
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8 }}>
+            <button onClick={() => setMode('minimized')} title="Minimize" style={btnStyle}>
+              <svg width="12" height="12" viewBox="0 0 24 24"><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            </button>
+            <button onClick={() => setMode(mode === 'partial' ? 'normal' : 'partial')} title="Partial Full Screen" style={btnStyle}>
+              <svg width="12" height="12" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" rx="2"/></svg>
+            </button>
+            <button onClick={() => setMode(mode === 'full' ? 'normal' : 'full')} title="Full Screen" style={btnStyle}>
+              <svg width="12" height="12" viewBox="0 0 24 24"><path d="M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* LOG AREA */}
+      {mode !== 'minimized' && (
+        <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '8px 14px', fontSize: 11.5, lineHeight: 1.5, color: t.text }}>
+          {events.length === 0 ? (
+            <div style={{ color: t.dim }}>Waiting for background scan… the engine scans every ~5 min automatically.</div>
+          ) : (
+            events.map((ev, i) => <Line key={`${ev.ts_ms}:${i}`} ev={ev} t={t} />)
+          )}
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderTop: mode !== 'minimized' ? `1px solid ${t.border}` : 'none', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: t.headTxt }}>
           <span style={{ width: 8, height: 8, borderRadius: 4, background: dot, boxShadow: data?.scanning ? `0 0 6px ${k.green}` : 'none' }} />
-          KITE TERMINAL
+          {mode === 'minimized' ? 'KITE TERMINAL' : 'INFO'}
         </span>
         <span>{data?.scanning ? 'scanning…' : data?.auto_scan ? 'auto-scan ON' : 'idle'}</span>
         <span>last: {data?.last_scan_ms ? hhmmss(data.last_scan_ms) : '—'}</span>
         <span>next: {fmtCountdown(data?.next_scan_ms ?? 0)}</span>
-        <span style={{ marginLeft: 'auto', color: k.orange }}>{data?.signal_count ?? 0} ready</span>
-        <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          title="Toggle terminal theme"
-          style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '1px 8px', fontSize: 11, cursor: 'pointer' }}
-        >
-          {theme === 'dark' ? '☀ Light' : '🌙 Dark'}
-        </button>
-      </div>
-      {/* log */}
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '8px 14px', fontSize: 11.5, lineHeight: 1.5, color: t.text }}>
-        {events.length === 0 ? (
-          <div style={{ color: t.dim }}>Waiting for background scan… the engine scans every ~5 min automatically.</div>
-        ) : (
-          events.map((ev, i) => <Line key={`${ev.ts_ms}:${i}`} ev={ev} t={t} />)
+
+        {mode === 'minimized' && (
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ color: k.orange }}>{data?.signal_count ?? 0} ready</span>
+            <button onClick={() => setMode('normal')} style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '1px 8px', fontSize: 11, cursor: 'pointer' }}>
+              Restore
+            </button>
+          </div>
         )}
       </div>
     </div>

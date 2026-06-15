@@ -10,9 +10,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List, Literal, Optional, Sequence
 
-Moneyness = Literal["ATM", "ITM1", "ITM2", "OTM1", "OTM2"]
+Moneyness = Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]
 # Signed "into-the-money" offset (in strike steps): positive = ITM, negative = OTM.
-_ITM_OFFSET = {"ATM": 0, "ITM1": 1, "ITM2": 2, "OTM1": -1, "OTM2": -2}
+_ITM_OFFSET = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5, "OTM1": -1, "OTM2": -2, "OTM3": -3, "OTM4": -4, "OTM5": -5}
 
 
 def chain_rows_for(option_instruments: Sequence[dict], name: str, today: date) -> List[dict]:
@@ -22,9 +22,18 @@ def chain_rows_for(option_instruments: Sequence[dict], name: str, today: date) -
     which is all the strike picker needs and works for both NFO and BFO (SENSEX).
     """
     want = name.upper()
+    # BSE index options carry a SHORT CODE in the `name` field (SENSEX→BSX,
+    # BANKEX→BKX) even though their tradingsymbol still starts with the index name.
+    # Match on the name, the known alias, OR a tradingsymbol prefix (the index name
+    # immediately followed by a digit, e.g. "SENSEX25..."). The prefix net means
+    # resolution never silently breaks if Kite's `name` field isn't what we assume.
+    alias = {"SENSEX": "BSX", "BANKEX": "BKX"}.get(want)
     out: List[dict] = []
     for r in option_instruments:
-        if str(r.get("name", "")).upper() != want:
+        n = str(r.get("name", "")).upper()
+        tsym = str(r.get("tradingsymbol", "")).upper()
+        prefix_hit = tsym.startswith(want) and len(tsym) > len(want) and tsym[len(want)].isdigit()
+        if n != want and not (alias and n == alias) and not prefix_hit:
             continue
         it = r.get("instrument_type")
         if it not in ("CE", "PE"):

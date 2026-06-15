@@ -69,6 +69,21 @@ def test_equity_without_spot_listing_is_skipped():
     assert all(u.name != "GHOSTCO" for u in uni)
 
 
+def test_dual_listed_fno_stock_prefers_nse_spot_token():
+    """RELIANCE lists on BOTH NSE and BSE. The spot token/exchange must resolve to
+    NSE (where the options trade and 1H history is deepest), not be overwritten by a
+    later BSE row."""
+    nfo = [{"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUN3000CE", "instrument_type": "CE"}]
+    # NSE first, BSE second (the order service.py passes: nse + bse)
+    equities = [
+        {"tradingsymbol": "RELIANCE", "instrument_token": 738561, "exchange": "NSE"},
+        {"tradingsymbol": "RELIANCE", "instrument_token": 128083204, "exchange": "BSE"},
+    ]
+    uni = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
+    r = next(u for u in uni if u.name == "RELIANCE")
+    assert r.exchange == "NSE" and r.token == 738561
+
+
 def test_option_rows_deduped_per_underlying():
     nfo = [
         {"name": "TCS", "tradingsymbol": "TCS25JUN3900CE", "instrument_type": "CE"},

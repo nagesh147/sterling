@@ -49,6 +49,14 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     return localStorage.getItem('kite_layout_locked') === 'true';
   });
 
+  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+
+  useEffect(() => {
+    const cb = (e: any) => setTerminalMode(e.detail);
+    window.addEventListener('kite-terminal-mode', cb);
+    return () => window.removeEventListener('kite-terminal-mode', cb);
+  }, []);
+
   // Defaults — used by the reset button.
   const DEFAULTS = { left: 420, right: 640, bottom: 200 };
 
@@ -131,6 +139,15 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     setBottomBarHeight(DEFAULTS.bottom);
   }, [isLocked]);
 
+  const resetLayout2 = useCallback(() => {
+    if (isLocked) return;
+    
+    // Using exact pixel values requested to prevent layout breakage
+    setSidebarWidth(425);
+    setRightSidebarWidth(900);
+    setBottomBarHeight(425);
+  }, [isLocked]);
+
   // Right pane has three quick layouts from the footer: hidden (the toggle), the
   // default width (640px), and a compact width (450px). This button flips between
   // compact and default — opening the pane straight into compact if it was hidden.
@@ -191,7 +208,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ color: '#f06428', fontSize: 24, fontWeight: 900, transform: 'scaleX(-1)' }}>◩</div>
           </div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: '#444', letterSpacing: 0.5 }}>STERLING KITE</div>
+          <div style={{ fontSize: 14, fontWeight: 500, color: '#444', letterSpacing: 0.5 }}>KITE</div>
         </div>
 
         {/* Navigation items */}
@@ -286,6 +303,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          position: 'relative',
           borderLeft: (sidebar && isSidebarOpen) ? '1px solid #e0e0e0' : 'none'
         }}>
           <div style={{ flex: 1, background: '#fff', overflow: 'auto' }}>
@@ -294,17 +312,27 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
           {/* ── Bottom Bar (Kite Terminal) — spans only the center column ── */}
           {bottomBar && isBottomBarOpen && (
-            <>
-              <div
-                onMouseDown={handleBottomMouseDown}
-                style={{ height: 5, marginBottom: -5, background: 'transparent', cursor: isLocked ? 'default' : 'row-resize', flexShrink: 0, transition: 'background 0.2s', zIndex: 10 }}
-                onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = 'rgba(240, 100, 40, 0.2)'; }}
-                onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = 'transparent'; }}
-              />
-              <div style={{ height: bottomBarHeight, flexShrink: 0, borderTop: '1px solid #e0e0e0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            terminalMode === 'full' ? (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: '#fff', display: 'flex', flexDirection: 'column' }}>
                 {bottomBar}
               </div>
-            </>
+            ) : terminalMode === 'partial' ? (
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50, background: '#fff', display: 'flex', flexDirection: 'column' }}>
+                {bottomBar}
+              </div>
+            ) : (
+              <>
+                <div
+                  onMouseDown={handleBottomMouseDown}
+                  style={{ height: 5, marginBottom: -5, background: 'transparent', cursor: isLocked ? 'default' : 'row-resize', flexShrink: 0, transition: 'background 0.2s', zIndex: 10 }}
+                  onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = 'rgba(240, 100, 40, 0.2)'; }}
+                  onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = 'transparent'; }}
+                />
+                <div id="kite-bottom-bar-wrapper" style={{ height: terminalMode === 'minimized' ? 33 : bottomBarHeight, flexShrink: 0, borderTop: '1px solid #e0e0e0', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'height 0.2s ease-out' }}>
+                  {bottomBar}
+                </div>
+              </>
+            )
           )}
         </div>
 
@@ -343,7 +371,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
       {/* ── Kite Footer — panel show/hide + reset + lock (Kite-specific) ── */}
       <div style={{ height: 30, flexShrink: 0, background: '#fff', borderTop: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
-        <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>STERLING KITE</span>
+        <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>KITE</span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
           {sidebar && (
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} title="Show / hide left sidebar" style={footBtn(isSidebarOpen)}>
@@ -384,6 +412,14 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>
+          </button>
+          <button onClick={resetLayout2} title={isLocked ? 'Unlock to reset panel sizes' : 'Reset panel sizes to preset 2'} style={footBtn(false, isLocked)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+              <span style={{ fontSize: '10px', fontWeight: 'bold', lineHeight: 1 }}>2</span>
+            </div>
           </button>
           <button onClick={() => setIsLocked(!isLocked)} title={isLocked ? 'Unlock panel sizes' : 'Lock panel sizes'} style={footBtn(isLocked)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

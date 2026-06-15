@@ -712,19 +712,19 @@ class KiteClient(TradingExchangeAdapter):
         
         log.info("Fetching Kite candles: token=%s, resolution=%s, interval=%s, from=%s, to=%s",
                  token, resolution, interval, from_str, to_str)
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             try:
                 data = await self.get_historical(token, interval, from_str, to_str)
-                # log.info("Kite candle fetch response keys: %s", data.keys() if isinstance(data, dict) else type(data))
                 raw = data.get("candles", [])
-                # log.info("Kite candle fetch returned %d candles for %s", len(raw), instrument.underlying)
                 break  # success
             except Exception as exc:
                 is_429 = "429" in str(exc)
                 if attempt < max_retries - 1:
-                    sleep_time = 1.0 if is_429 else 0.5
-                    log.warning("Kite candle fetch failed for %s (attempt %d): %s. Retrying in %ss...", 
+                    # Exponential backoff on rate-limit (429) so a big multi-contract
+                    # scan recovers instead of dropping contracts; short retry otherwise.
+                    sleep_time = min(8.0, 0.75 * (2 ** attempt)) if is_429 else 0.5
+                    log.warning("Kite candle fetch failed for %s (attempt %d): %s. Retrying in %ss...",
                                 instrument.underlying, attempt + 1, exc, sleep_time)
                     await asyncio.sleep(sleep_time)
                 else:

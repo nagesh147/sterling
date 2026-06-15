@@ -13,12 +13,16 @@ class AlignmentChip(BaseModel):
 
 
 class OptionLeg(BaseModel):
-    moneyness: str  # ATM / ITM1 / ITM2 / OTM1 / OTM2
+    moneyness: str  # ATM / ITM1-5 / OTM1-5
     option_type: str  # CE / PE
     option_symbol: str
     strike: float
     expiry: str
     lot_size: Optional[int] = None
+    premium_spot: Optional[float] = None
+    premium_sl: Optional[float] = None
+    token: Optional[int] = None
+    is_active: bool = False   # this contract's SuperTrend is still aligned on the latest bar
 
 
 class EngineSignalRow(BaseModel):
@@ -29,11 +33,17 @@ class EngineSignalRow(BaseModel):
     alignment: AlignmentChip
     direction: Literal["long", "short"]
     option_type: Literal["CE", "PE"]
-    legs: List[OptionLeg] = []  # one per selected moneyness (ATM/ITM1/ITM2/OTM1/OTM2)
+    legs: List[OptionLeg] = []  # one per selected moneyness (ATM/ITM1-5/OTM1-5)
     spot: float
     stop_loss: float
     score: float
     timestamp_ms: int
+    # is_active = the SuperTrend is STILL aligned on the latest closed bar (trade is
+    # running), vs. a stale entry whose trend has since broken. is_fresh = entered on
+    # the latest bar (the live "ready now" trigger). For grouped derivative rows these
+    # are OR'd across the legs; per-contract liveness is on each OptionLeg.is_active.
+    is_active: bool = False
+    is_fresh: bool = False
     # "spot" = SuperTrend on the underlying chart (legs are candidate strikes to BUY);
     # "derivatives" = SuperTrend on this contract's OWN premium chart (single leg, BUY-only).
     source: Literal["spot", "derivatives"] = "spot"
@@ -167,7 +177,7 @@ class EngineConfigModel(BaseModel):
     trail_target: Literal["fast", "mid", "slow"] = "mid"
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
     # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.
-    strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "OTM1", "OTM2"]] = [
+    strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]] = [
         "ITM1", "ATM", "OTM1"]
     # Where the SuperTrend runs: "spot" = underlying chart (legs are candidate strikes);
     # "derivatives" = each selected contract's own premium chart (BUY-only); "both".

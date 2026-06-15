@@ -18,7 +18,7 @@ import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
 
 interface Props {
-  onSelectSignal: (sel: { token: number; underlying: string }) => void;
+  onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
 }
 
 // Plain-language labels (users were confused by fast/mid/slow + "early lock").
@@ -28,15 +28,21 @@ const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
   { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
 ];
 const MONEY_OPTS: { value: Moneyness; hint: string }[] = [
-  { value: 'ITM2', hint: 'Two strikes in-the-money — deepest, most intrinsic value.' },
+  { value: 'ITM5', hint: 'Five strikes in-the-money.' },
+  { value: 'ITM4', hint: 'Four strikes in-the-money.' },
+  { value: 'ITM3', hint: 'Three strikes in-the-money.' },
+  { value: 'ITM2', hint: 'Two strikes in-the-money — deep intrinsic value.' },
   { value: 'ITM1', hint: 'One strike in-the-money.' },
   { value: 'ATM', hint: 'At-the-money — strike nearest spot.' },
   { value: 'OTM1', hint: 'One strike out-of-the-money — cheaper, more leverage.' },
-  { value: 'OTM2', hint: 'Two strikes out-of-the-money — cheapest, lottery-like.' },
+  { value: 'OTM2', hint: 'Two strikes out-of-the-money.' },
+  { value: 'OTM3', hint: 'Three strikes out-of-the-money.' },
+  { value: 'OTM4', hint: 'Four strikes out-of-the-money.' },
+  { value: 'OTM5', hint: 'Five strikes out-of-the-money — cheapest, lottery-like.' },
 ];
 const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
-  { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy. (Default)" },
-  { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up." },
+  { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
+  { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
   { value: 'both', label: 'Both', hint: 'Run both scans; each signal is tagged Spot or DERIV.' },
 ];
 // Granular universe pickers. `name` is the value stored in config (matches the
@@ -103,8 +109,14 @@ export function AlignmentChips({ a }: { a: AlignmentChip }) {
   );
 }
 
-function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: () => void; quotes?: any }) {
+function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout }: {
+  row: EngineSignalRow; onClick: () => void;
+  onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
+  quotes?: any;
+  viewLayout: 'grid' | 'list';
+}) {
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const [sort, setSort] = React.useState({ key: '', dir: '' });
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const bull = row.regime === 'BULL';
@@ -113,6 +125,31 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
   // the contract is the headline and spot/stop_loss are premium values.
   const isDeriv = row.source === 'derivatives';
   const derivLeg = isDeriv ? row.legs[0] : undefined;
+
+  const handleSort = (key: string) => {
+    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : s.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
+  };
+
+  const SortHeaderDiv = ({ label, sortKey, style, align = 'left' }: any) => {
+    const isActive = sort.key === sortKey && sort.dir !== '';
+    return (
+      <div 
+        style={{ ...style, cursor: 'pointer', userSelect: 'none' }} 
+        onClick={() => handleSort(sortKey)}
+        className={sortKey ? "sort-header-div" : ""}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
+          {label}
+          {sortKey && (
+            <span className={`sort-icon ${isActive ? 'active' : ''}`}>
+               <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
+               <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const toggleExpand = (e: React.MouseEvent, sym: string) => {
     e.stopPropagation();
@@ -163,14 +200,12 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
-          {isDeriv && derivLeg ? (
+          {isDeriv ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, color: k.orange, border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>DERIV</span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: k.text, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={derivLeg.option_symbol} /></span>
-                <span style={{ fontSize: 11, fontWeight: 500, color: accent, flexShrink: 0 }}>{row.spot.toFixed(2)}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{row.underlying}</span>
               </span>
-              <span style={{ fontSize: 9.5, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.underlying} · {derivLeg.moneyness} · prem chart</span>
             </div>
           ) : (
             <>
@@ -192,24 +227,126 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <AlignmentChips a={row.alignment} />
-          <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>
+          {row.is_active
+            ? <span title="SuperTrend still aligned on the latest 1H bar — trade running"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: k.green }}>
+                <span style={{ width: 6, height: 6, borderRadius: 3, background: k.green }} />running</span>
+            : <span title="The entry's SuperTrend has since flipped — shown for history, not a live entry"
+                    style={{ fontSize: 10, color: k.dim }}>trend ended</span>}
+          {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
           <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
+          <span style={{ fontSize: 10, color: k.text, paddingLeft: 4, opacity: 0.8 }}>
+            {`${new Date(row.timestamp_ms).toLocaleDateString('en-US', { weekday: 'short' })} ${new Date(row.timestamp_ms).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()} ${new Date(row.timestamp_ms).toLocaleDateString('en-US', { day: '2-digit' })} ${new Date(row.timestamp_ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`}
+          </span>
         </span>
+        
       </div>
 
-      {expanded.has(row.underlying) && uQ && (
-        <div onClick={(e) => e.stopPropagation()}>
-          <QuoteDetail sym={`${uExch}:${uSym}`} q={uQ} spotName={row.underlying} spotPx={row.spot} instrumentName={row.underlying} />
-        </div>
-      )}
-
       {/* option legs */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {isDeriv && viewLayout === 'grid' ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px', borderTop: `1px solid ${k.border}` }}>
+          {row.legs.map((leg) => {
+            const sym = `${row.exchange}:${leg.option_symbol}`;
+            const q = quotes?.[sym];
+            const lastPx = q?.last_price || (leg as any).premium_spot;
+            const slPx = (leg as any).premium_sl;
+            const isExp = expanded.has(leg.option_symbol);
+            return (
+              <div 
+                key={leg.option_symbol}
+                onClick={(e) => { e.stopPropagation(); onSelectSignal({ token: (leg as any).token || row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms }); }}
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 3,
+                  padding: '6px 8px', borderRadius: 4,
+                  background: isExp ? k.surfaceHover : 'transparent',
+                  border: `1px solid ${k.border}`,
+                  cursor: 'pointer', minWidth: 105
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = tint(k.orange, 5); }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>{leg.moneyness}</span>
+                  <span style={{ fontSize: 12, color: k.text, fontWeight: 600 }}>{lastPx != null ? lastPx.toFixed(2) : '—'}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                  {slPx != null && <span style={{ fontSize: 10, color: k.dim }}>SL {slPx.toFixed(1)}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', margin: '0 -12px' }}>
         {row.legs.length === 0 ? (
           <span style={{ fontSize: 10, color: k.dim }}>no liquid contract at the selected strikes</span>
-        ) : row.legs.map((leg) => {
-          const sym = `${row.exchange}:${leg.option_symbol}`;
+        ) : (
+          <React.Fragment>
+            <div style={{ 
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
+                 <SortHeaderDiv label="Leg" sortKey="leg" style={{ width: 32, flexShrink: 0 }} />
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" style={{ flex: 1 }} />
+                 {isDeriv && <SortHeaderDiv label="Entry" sortKey="entry" style={{ width: 45, flexShrink: 0 }} align="right" />}
+                 {isDeriv && <SortHeaderDiv label="Stop" sortKey="stop" style={{ width: 50, flexShrink: 0 }} align="right" />}
+                 <SortHeaderDiv label="Exc." sortKey="exc" style={{ width: 30, flexShrink: 0 }} align="right" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end' }}>
+                 {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" style={{ width: 45 }} align="right" />}
+                 {s.showPriceChangePct && <SortHeaderDiv label="Chg. %" sortKey="chgPct" style={{ width: 55 }} align="right" />}
+                 {s.showPriceDirection && <span style={{ width: 14 }}></span>}
+                 <SortHeaderDiv label="LTP" sortKey="ltp" style={{ width: 60 }} align="right" />
+              </div>
+            </div>
+            {[...row.legs].sort((a, b) => {
+              if (!sort.key || !sort.dir) return 0;
+              const symA = `${row.exchange}:${a.option_symbol}`;
+              const symB = `${row.exchange}:${b.option_symbol}`;
+              const qA = quotes?.[symA];
+              const qB = quotes?.[symB];
+
+              let valA: any = 0;
+              let valB: any = 0;
+
+              if (sort.key === 'leg') {
+                 valA = (a as any).strike_dist || 0; 
+                 valB = (b as any).strike_dist || 0; 
+              } else if (sort.key === 'instrument') {
+                 valA = a.option_symbol;
+                 valB = b.option_symbol;
+              } else if (sort.key === 'entry') {
+                 valA = (a as any).premium_spot || 0;
+                 valB = (b as any).premium_spot || 0;
+              } else if (sort.key === 'stop') {
+                 valA = (a as any).premium_sl || 0;
+                 valB = (b as any).premium_sl || 0;
+              } else if (sort.key === 'exc') {
+                 valA = row.exchange;
+                 valB = row.exchange;
+              } else if (sort.key === 'ltp') {
+                 valA = qA?.last_price || (a as any).premium_spot || 0;
+                 valB = qB?.last_price || (b as any).premium_spot || 0;
+              } else if (sort.key === 'chg' || sort.key === 'chgPct') {
+                 const getChg = (q: any) => {
+                   if (!q) return 0;
+                   const base = s.chgType === 'close' ? q.ohlc?.close : q.ohlc?.open;
+                   if (base) return sort.key === 'chgPct' ? ((q.last_price - base) / base) * 100 : (q.last_price - base);
+                   if (q.net_change != null) return sort.key === 'chgPct' ? q.net_change : 0;
+                   return 0;
+                 };
+                 valA = getChg(qA);
+                 valB = getChg(qB);
+              }
+
+              if (typeof valA === 'string' && typeof valB === 'string') {
+                return sort.dir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+              }
+              return sort.dir === 'asc' ? valA - valB : valB - valA;
+            }).map((leg) => {
+              const sym = `${row.exchange}:${leg.option_symbol}`;
           const q = quotes?.[sym];
           
           let chgAbs = null;
@@ -239,9 +376,19 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, minWidth: 28 }}>{leg.moneyness}</span>
-                   <span style={{ color: color, fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
-                   <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{row.exchange}</span>
+                   <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, width: 32, flexShrink: 0 }}>{leg.moneyness}</span>
+                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   {isDeriv && (leg as any).premium_spot != null && (
+                     <span style={{ fontSize: 11, fontWeight: 500, color: accent, width: 45, textAlign: 'right', flexShrink: 0 }}>
+                       {(leg as any).premium_spot.toFixed(2)}
+                     </span>
+                   )}
+                   {isDeriv && (leg as any).premium_sl != null && (
+                     <span style={{ fontSize: 10, color: k.dim, width: 50, textAlign: 'right', flexShrink: 0 }}>
+                       SL {(leg as any).premium_sl.toFixed(1)}
+                     </span>
+                   )}
+                   <span style={{ fontSize: 9, color: k.dim, width: 30, textAlign: 'right', flexShrink: 0 }}>{row.exchange}</span>
                 </div>
 
                 {!isExp && (
@@ -268,22 +415,22 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
                       });
                     }}
                     onDepth={(e) => { e.stopPropagation(); toggleExpand(e, leg.option_symbol); }}
-                    onChart={(e) => { e.stopPropagation(); }}
+                    onChart={(e) => { e.stopPropagation(); onClick(); }}
                     onMore={(e) => { e.stopPropagation(); }}
                   />
                 )}
                 
                 {!isExp && (
-                  <div className="st-prices">
-                    {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                    {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, marginLeft: 4 }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
+                  <div className="st-prices" style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end', gap: 0 }}>
+                    {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11, width: 45, textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
+                    {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, width: 55, textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
                     {s.showPriceDirection && (
-                      <span style={{ color: color, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
+                      <span style={{ color: color, display: 'flex', alignItems: 'center', width: 14, justifyContent: 'center' }}>
                         {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
                         {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
                       </span>
                     )}
-                    <span style={{ color: color, fontWeight: 500, fontSize: 12, minWidth: 50, textAlign: 'right' }}>
+                    <span style={{ color: color, fontWeight: 500, fontSize: 13, width: 60, textAlign: 'right' }}>
                       {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                     </span>
                   </div>
@@ -297,7 +444,10 @@ function SignalCard({ row, onClick, quotes }: { row: EngineSignalRow; onClick: (
             </div>
           );
         })}
+        </React.Fragment>
+        )}
       </div>
+      )}
     </div>
   );
 }
@@ -329,6 +479,30 @@ function ZapIcon() {
   );
 }
 
+function GridIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7"></rect>
+      <rect x="14" y="3" width="7" height="7"></rect>
+      <rect x="14" y="14" width="7" height="7"></rect>
+      <rect x="3" y="14" width="7" height="7"></rect>
+    </svg>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6"></line>
+      <line x1="8" y1="12" x2="21" y2="12"></line>
+      <line x1="8" y1="18" x2="21" y2="18"></line>
+      <line x1="3" y1="6" x2="3.01" y2="6"></line>
+      <line x1="3" y1="12" x2="3.01" y2="12"></line>
+      <line x1="3" y1="18" x2="3.01" y2="18"></line>
+    </svg>
+  );
+}
+
 // Three stepped trend strokes — a quiet nod to fast / mid / slow SuperTrend.
 function EngineMark() {
   return (
@@ -351,7 +525,7 @@ function ReadyPill({ count }: { count: number }) {
       fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
     }}>
       <span style={{ width: 6, height: 6, borderRadius: 3, background: has ? k.orange : k.dim }} />
-      {count} ready
+      {count} live
     </span>
   );
 }
@@ -484,7 +658,10 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
   const [sortBy, setSortBy] = React.useState('Custom');
   const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
+  const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(() => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'grid');
+  
   React.useEffect(() => { localStorage.setItem('kite_st_settings_open', String(settingsOpen)); }, [settingsOpen]);
+  React.useEffect(() => { localStorage.setItem('kite_st_view_layout', viewLayout); }, [viewLayout]);
 
   const resetCfg = useResetEngineConfig();
 
@@ -502,7 +679,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     if (!cfg) return;
     const has = cfg.strike_moneyness.includes(m);
     const next = has ? cfg.strike_moneyness.filter((x) => x !== m) : [...cfg.strike_moneyness, m];
-    const finalNext = next.length ? next : ['ATM', 'ITM1', 'ITM2', 'OTM1', 'OTM2'];
+    const finalNext = next.length ? next : ['ATM', 'ITM1', 'ITM2', 'ITM3', 'OTM1', 'OTM2', 'OTM3'];
     patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`);
   };
 
@@ -580,6 +757,52 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     }
     return result;
   }, [rows, query, sortBy]);
+
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set());
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+
+  const groupedRows = React.useMemo(() => {
+    const buckets: { label: string; rows: typeof filteredRows; active?: boolean }[] = [];
+    const sorted = [...filteredRows].sort((a, b) => b.timestamp_ms - a.timestamp_ms);
+
+    // Currently-running trades (SuperTrend still aligned on the latest bar) surface at
+    // the TOP regardless of when they entered. Otherwise a live trade that entered a few
+    // days ago hides under "Last week" and the list reads empty even though there's an
+    // active signal. The date buckets below are the history log of entries whose trend
+    // has since ended.
+    const active = sorted.filter((r) => r.is_active);
+    const history = sorted.filter((r) => !r.is_active);
+    if (active.length) buckets.push({ label: 'Active now', rows: active, active: true });
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const groups: Record<string, typeof filteredRows> = {
+      "Today": [], "Yesterday": [], "Last week": [], "Last 15 days": [],
+    };
+    for (const r of history) {
+      const d = new Date(r.timestamp_ms);
+      const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const diffDays = Math.round((todayStart - startOfDay) / (1000 * 60 * 60 * 24));
+      let label = "";
+      if (diffDays === 0) label = "Today";
+      else if (diffDays === 1) label = "Yesterday";
+      else if (diffDays >= 2 && diffDays <= 7) label = "Last week";
+      else if (diffDays >= 8 && diffDays <= 15) label = "Last 15 days";
+      else continue;
+      groups[label].push(r);
+    }
+    for (const label of ["Today", "Yesterday", "Last week", "Last 15 days"]) {
+      if (groups[label].length) buckets.push({ label: `${label} (ended)`, rows: groups[label] });
+    }
+    return buckets;
+  }, [filteredRows]);
   const scanning = signals?.scanning;
 
   const optionSymbols = React.useMemo(() => {
@@ -613,10 +836,18 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>1H</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <ReadyPill count={rows.length} />
+            <ReadyPill count={rows.filter((r) => r.is_active).length} />
             <HeaderIconBtn title={scan.isPending || scanning ? 'Scanning…' : 'Re-scan now'} disabled={scan.isPending || scanning} onClick={() => scan.mutate()}>
               <RefreshIcon spinning={scan.isPending || scanning} />
             </HeaderIconBtn>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <HeaderIconBtn title="Grid Layout" active={viewLayout === 'grid'} onClick={() => setViewLayout('grid')} disabled={false}>
+                <GridIcon />
+              </HeaderIconBtn>
+              <HeaderIconBtn title="List Layout" active={viewLayout === 'list'} onClick={() => setViewLayout('list')} disabled={false}>
+                <ListIcon />
+              </HeaderIconBtn>
+            </div>
 
             <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
               <Icons.Settings />
@@ -646,10 +877,14 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 6px 0;
-          border-top: 1px solid ${k.border};
-          margin-top: 4px;
+          padding: 12px 16px;
+          border-bottom: 1px solid ${k.border};
         }
+        .st-leg-row:hover { background-color: ${k.surfaceHover} !important; }
+        .sort-header-div:hover { color: #444 !important; }
+        .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
+        .sort-header-div:hover .sort-icon { opacity: 0.5; }
+        .sort-icon.active { opacity: 1 !important; color: #444; }
         .st-actions {
           display: none;
           gap: 8px;
@@ -698,7 +933,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               <span style={{ fontSize: 11, color: k.dim }} title="Where the SuperTrend runs: the underlying's chart (Spot), each contract's own premium chart (Derivatives), or both.">Scan source</span>
               <Segmented
                 options={SCAN_SOURCE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg?.scan_source ?? 'spot') === v}
+                isActive={(v) => (cfg?.scan_source ?? 'derivatives') === v}
                 onSelect={(v) => changeScanSource(v as ScanSource)}
               />
             </div>
@@ -788,7 +1023,9 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 Scanning <span style={{ color: k.text, fontWeight: 500 }}>Nifty50 · BankNifty · FinNifty · Sensex</span> stocks + index options on the <span style={{ color: k.text, fontWeight: 500 }}>1H</span> timeframe.
               </div>
               <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
-                <Icons.Reload style={{ width: 15, height: 15, color: 'inherit' }} />
+                <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}>
+                  <Icons.Reload />
+                </span>
               </HeaderIconBtn>
             </div>
           </div>
@@ -797,15 +1034,47 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
       {/* Signal list */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {filteredRows.length === 0 ? (
+        {groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
             {scanning ? 'Scanning the universe…' : 'No ready setups right now. The engine re-scans automatically.'}
           </div>
         ) : (
-          filteredRows.map((row) => (
-            <SignalCard key={`${row.token}:${row.option_type}`} row={row} quotes={quotes}
-              onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying })} />
-          ))
+          groupedRows.map(group => {
+            const isCollapsed = collapsedGroups.has(group.label);
+            return (
+              <div key={group.label}>
+                <div 
+                  onClick={() => toggleGroup(group.label)}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 16px', background: k.surfaceHover, borderBottom: `1px solid ${k.border}`,
+                    cursor: 'pointer', userSelect: 'none'
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600, color: group.active ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {group.active && <span style={{ width: 7, height: 7, borderRadius: 4, background: k.green }} />}
+                    {group.label}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, color: k.dim }}>{group.rows.length} signals</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </div>
+                </div>
+                
+                {!isCollapsed && (
+                  <div>
+                    {group.rows.map((row) => (
+                      <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
+                        onSelectSignal={onSelectSignal}
+                        onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

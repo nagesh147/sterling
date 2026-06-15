@@ -118,3 +118,43 @@ def test_chain_rows_for_filters_and_computes_dte():
     # feeds straight into pick_strike
     pick = pick_strike(rows, spot=3010, direction="long", moneyness="ATM")
     assert pick is not None and pick.strike == 3000 and pick.option_type == "CE"
+
+
+def test_chain_rows_for_resolves_sensex_regardless_of_name_field():
+    """BSE index options carry a SHORT CODE in `name` (SENSEX→BSX). Resolution must
+    work whether Kite labels them "BSX", "SENSEX", or anything else — the
+    tradingsymbol prefix ("SENSEX25…") is the bulletproof net."""
+    from datetime import date
+    from app.services.kite_engine.strikes import chain_rows_for
+
+    for name_field in ("BSX", "SENSEX", "WHATEVER"):
+        dump = [
+            {"name": name_field, "tradingsymbol": "SENSEX2561876000CE", "instrument_type": "CE",
+             "strike": 76000, "expiry": "2026-06-18", "lot_size": 20, "instrument_token": 9001},
+            {"name": name_field, "tradingsymbol": "SENSEX2561876000PE", "instrument_type": "PE",
+             "strike": 76000, "expiry": "2026-06-18", "lot_size": 20, "instrument_token": 9002},
+            # an unrelated BFO name must NOT leak in
+            {"name": "BKX", "tradingsymbol": "BANKEX2561862000CE", "instrument_type": "CE",
+             "strike": 62000, "expiry": "2026-06-18"},
+        ]
+        rows = chain_rows_for(dump, "SENSEX", date(2026, 6, 15))
+        assert len(rows) == 2, f"name_field={name_field!r}"
+        assert {r["token"] for r in rows} == {9001, 9002}
+
+
+def test_chain_prefix_match_does_not_over_match_sibling_indices():
+    """The tradingsymbol-prefix net requires a DIGIT after the name, so "NIFTY"
+    never swallows BANKNIFTY / FINNIFTY / NIFTYNXT50 options."""
+    from datetime import date
+    from app.services.kite_engine.strikes import chain_rows_for
+
+    dump = [
+        {"name": "NIFTY", "tradingsymbol": "NIFTY2561824500CE", "instrument_type": "CE",
+         "strike": 24500, "expiry": "2026-06-18", "instrument_token": 1},
+        {"name": "BANKNIFTY", "tradingsymbol": "BANKNIFTY2561854000CE", "instrument_type": "CE",
+         "strike": 54000, "expiry": "2026-06-18", "instrument_token": 2},
+        {"name": "NIFTYNXT50", "tradingsymbol": "NIFTYNXT502561868000CE", "instrument_type": "CE",
+         "strike": 68000, "expiry": "2026-06-18", "instrument_token": 3},
+    ]
+    rows = chain_rows_for(dump, "NIFTY", date(2026, 6, 15))
+    assert [r["token"] for r in rows] == [1]  # only the real NIFTY option

@@ -60,8 +60,9 @@ def test_evaluate_item_emits_row_on_fresh_transition():
     eng = TripleSupertrendEngine(cfg)
     item = UniverseItem("RELIANCE", "RELIANCE", 111, "NSE", "NFO")
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
-    row = evaluate_item(eng, item, candles, cfg)
-    assert row is not None
+    rows = evaluate_item(eng, item, candles, cfg)
+    assert rows  # all transitions in the window; the latest bar is the fresh long
+    row = rows[-1]
     assert row.regime == "BULL" and row.option_type == "CE" and row.direction == "long"
     assert row.token == 111 and row.exchange == "NFO" and row.stop_loss > 0
 
@@ -71,8 +72,9 @@ def test_attach_strike_uses_option_name_for_indices():
     eng = TripleSupertrendEngine(cfg)
     nifty = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
-    row = evaluate_item(eng, nifty, candles, cfg)
-    assert row is not None
+    rows = evaluate_item(eng, nifty, candles, cfg)
+    assert rows
+    row = rows[-1]
     spot = row.spot
     base = int(round(spot / 50) * 50)
     dump = [
@@ -91,8 +93,9 @@ def test_attach_strikes_multi_moneyness_legs():
     eng = TripleSupertrendEngine(cfg)
     item = UniverseItem("ACME", "ACME", 1, "NSE", "NFO")
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
-    row = evaluate_item(eng, item, candles, cfg)
-    assert row is not None
+    rows = evaluate_item(eng, item, candles, cfg)
+    assert rows
+    row = rows[-1]
     spot = row.spot
     base = int(round(spot / 50) * 50)
     dump = [
@@ -116,8 +119,9 @@ def test_attach_strikes_otm_legs_and_canonical_order():
     eng = TripleSupertrendEngine(cfg)
     item = UniverseItem("ACME", "ACME", 1, "NSE", "NFO")
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
-    row = evaluate_item(eng, item, candles, cfg)
-    assert row is not None
+    rows = evaluate_item(eng, item, candles, cfg)
+    assert rows
+    row = rows[-1]
     spot = row.spot
     base = int(round(spot / 50) * 50)
     dump = [
@@ -181,9 +185,11 @@ async def test_scan_end_to_end_with_fake_client():
                   bfo_rows=[], cfg=TripleSupertrendConfig(), moneyness=["ATM"])
     snap = sc.snapshot("u1")
     assert not snap.scanning and snap.generated_ms > 0
-    names = [r.underlying for r in snap.rows]
-    assert names == ["ACME"]  # only the firing item
-    assert snap.rows[0].legs[0].option_symbol == "ACME25JUN300CE"
+    # only the firing item appears (DULL is flat); evaluate_item now returns all
+    # transitions in the window, so there may be >1 ACME row (e.g. a short then the long)
+    assert {r.underlying for r in snap.rows} == {"ACME"}
+    fresh = max(snap.rows, key=lambda r: r.timestamp_ms)  # latest bar = the fresh long/CE
+    assert fresh.option_type == "CE" and fresh.legs[0].option_symbol == "ACME25JUN300CE"
 
 
 def test_evaluate_derivative_contract_emits_buy_on_premium_uptrend():
@@ -192,8 +198,9 @@ def test_evaluate_derivative_contract_emits_buy_on_premium_uptrend():
     pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
                       expiry="2026-06-26", dte=8, lot_size=75, token=44001)
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")  # premium uptrend
-    row = evaluate_derivative_contract(item, "ATM", pick, candles, cfg)
-    assert row is not None
+    rows = evaluate_derivative_contract(item, "ATM", pick, candles, cfg)
+    assert rows
+    row = rows[-1]  # latest-bar BUY entry
     assert row.source == "derivatives"
     assert row.option_type == "CE" and row.regime == "BULL" and row.direction == "long"
     assert row.token == 44001  # the option's OWN token (click → option premium chart)
@@ -209,8 +216,10 @@ def test_evaluate_derivative_contract_pe_is_bearish():
     pick = OptionPick(option_symbol="BANKNIFTY25JUN54000PE", strike=54000.0, option_type="PE",
                       expiry="2026-06-26", dte=8, lot_size=15, token=55001)
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")  # PE premium rising
-    row = evaluate_derivative_contract(item, "ATM", pick, candles, cfg)
-    assert row is not None and row.option_type == "PE" and row.regime == "BEAR" and row.direction == "long"
+    rows = evaluate_derivative_contract(item, "ATM", pick, candles, cfg)
+    assert rows
+    row = rows[-1]
+    assert row.option_type == "PE" and row.regime == "BEAR" and row.direction == "long"
 
 
 def test_evaluate_derivative_contract_buy_only_skips_premium_downtrend():
@@ -218,22 +227,22 @@ def test_evaluate_derivative_contract_buy_only_skips_premium_downtrend():
     item = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
     pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
                       expiry="2026-06-26", dte=8, lot_size=75, token=44001)
-    # last bar = a fresh premium DOWN-trend (a buyer's exit), not an entry → no signal
-    candles = _trim_to_transition(_candles(_fresh_short_path()), cfg, "short")
-    assert evaluate_derivative_contract(item, "ATM", pick, candles, cfg) is None
+    # a premium that ONLY falls has no uptrend transition → no BUY ever (buy-only)
+    candles = _candles(list(np.linspace(600, 150, 140)))
+    assert evaluate_derivative_contract(item, "ATM", pick, candles, cfg) == []
 
 
 def test_engine_config_default_offers_itm_and_otm():
     from app.engines.triple_supertrend.schemas import EngineConfigModel
     cfg = EngineConfigModel()
-    assert cfg.strike_moneyness == ["ATM", "ITM1", "ITM2", "OTM1", "OTM2"]
+    assert cfg.strike_moneyness == ["ITM1", "ATM", "OTM1"]
 
 
 def test_engine_config_scan_source_and_universe_defaults():
     from app.engines.triple_supertrend.schemas import EngineConfigModel
     c = EngineConfigModel()
-    assert c.scan_source == "spot"          # opt-in to derivatives
-    assert c.scan_all_stocks is True        # spot full-universe preserved by default
+    assert c.scan_source == "derivatives"   # default engine mode
+    assert c.scan_all_stocks is False       # indices/curated only by default
     assert "NIFTY 50" in c.scan_indices and len(c.scan_indices) == 4
     c2 = EngineConfigModel(scan_source="both", scan_all_stocks=False,
                            scan_indices=["NIFTY 50"], scan_stocks=["RELIANCE"])
@@ -244,8 +253,8 @@ def test_engine_config_accepts_otm_only_selection():
     from app.engines.triple_supertrend.schemas import EngineConfigModel
     cfg = EngineConfigModel(strike_moneyness=["OTM1", "OTM2"])
     assert cfg.strike_moneyness == ["OTM1", "OTM2"]
-    # empty falls back to the full set (validator)
-    assert EngineConfigModel(strike_moneyness=[]).strike_moneyness == ["ATM", "ITM1", "ITM2", "OTM1", "OTM2"]
+    # empty falls back to the default set (validator)
+    assert EngineConfigModel(strike_moneyness=[]).strike_moneyness == ["ITM1", "ATM", "OTM1"]
 
 
 def test_option_order_args_maps_buy_one_lot():
@@ -393,6 +402,122 @@ async def test_scan_derivatives_invokes_place_cb_for_auto_exec():
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
                   cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv, place_cb=cb)
     assert calls == [("derivatives", "NIFTY25JUN100CE", 75)]
+
+
+@pytest.mark.asyncio
+async def test_deriv_index_spot_fallback_quotes_by_display_name():
+    """When an index's 1H candle fetch comes back empty, the deriv scan resolves the
+    spot from a QUOTE keyed by the DISPLAY name ("NSE:NIFTY 50"), not the option name
+    ("NSE:NIFTY") which is not a valid quote symbol. Proves the chain still scans."""
+    fired = _trim_to_transition(_candles(_fresh_long_path()), TripleSupertrendConfig(), "long")
+    quoted = {}
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 256265:  # the index underlying → EMPTY (silent drop)
+                return []
+            if inst.zerodha_token == 7001:     # ATM CE premium → fires
+                return fired
+            return _candles(list(np.linspace(100, 101, 40)))
+
+        async def get_quote(self, syms):
+            quoted['syms'] = list(syms)
+            # Only the DISPLAY-name symbol resolves; the option-name symbol would 404.
+            return {"NSE:NIFTY 50": {"last_price": 24510.0}}
+
+    nfo = [
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN24500CE", "instrument_type": "CE",
+         "strike": 24500, "expiry": "2099-01-01", "instrument_token": 7001, "lot_size": 75},
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN24500PE", "instrument_type": "PE",
+         "strike": 24500, "expiry": "2099-01-01", "instrument_token": 7002, "lot_size": 75},
+    ]
+    deriv = [UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv)
+    assert quoted['syms'] == ["NSE:NIFTY 50"]          # display name, not "NSE:NIFTY"
+    snap = sc.snapshot("u1")
+    assert snap.diag.deriv_no_spot == 0                # spot WAS resolved via the quote
+    assert len(snap.rows) == 1 and snap.rows[0].option_type == "CE"
+
+
+@pytest.mark.asyncio
+async def test_deriv_unresolved_spot_is_visible_not_silent():
+    """If BOTH the candle fetch and the quote come back empty, the underlying is
+    skipped — but it's COUNTED (deriv_no_spot), never a silent drop."""
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            return []  # everything empty
+
+        async def get_quote(self, syms):
+            return {}  # quote also empty
+
+    deriv = [UniverseItem("SENSEX", "SENSEX", 265, "INDICES", "BFO", is_index=True)]
+    logs = []
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=[], bfo_rows=[],
+                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv,
+                  log_cb=lambda m: logs.append(m))
+    d = sc.snapshot("u1").diag
+    assert d.deriv_no_spot == 1 and d.deriv_resolved == 0
+    assert any("spot unavailable" in m for m in logs)
+
+
+def test_derivative_signal_marks_active_when_trend_intact_vs_stale():
+    """A signal whose premium SuperTrend is still aligned on the latest bar is
+    is_active=True (running); once the premium reverses and the trend breaks it goes
+    is_active=False (stale entry, kept only for history). This is the fix for "I see a
+    big move on the chart but the engine shows nothing today" — the entry was days ago
+    and the trend has since ended."""
+    cfg = TripleSupertrendConfig()
+    item = UniverseItem("SENSEX", "SENSEX", 265, "INDICES", "BFO", is_index=True)
+    pick = OptionPick(option_symbol="SENSEX2561876000CE", strike=76000.0, option_type="CE",
+                      expiry="2026-06-18", dte=3, lot_size=20, token=999001)
+
+    # still rising on the last bar → active
+    rising = _candles(_fresh_long_path())
+    rows = evaluate_derivative_contract(item, "ATM", pick, rising, cfg)
+    assert rows and rows[-1].is_active is True and rows[-1].legs[0].is_active is True
+
+    # entered (proven firing path), then reversed hard so the trend breaks before the
+    # last bar → the entry still exists but is no longer running
+    reversed_ = _candles(_fresh_long_path() + list(np.linspace(600, 150, 40)))
+    rows2 = evaluate_derivative_contract(item, "ATM", pick, reversed_, cfg)
+    assert rows2 and rows2[0].is_active is False
+    assert rows2[0].legs[0].is_active is False
+
+
+@pytest.mark.asyncio
+async def test_deriv_grouping_dedupes_legs_for_repeated_transitions():
+    """A contract that fires more than once over its premium history yields ONE leg
+    (the most recent), not a duplicate strike chip per transition."""
+    cfg = TripleSupertrendConfig()
+    # premium that transitions up TWICE (up, down, up again) → 2 long transitions
+    twice = (list(np.linspace(300, 150, 50)) + list(np.linspace(150, 600, 40))
+             + list(np.linspace(600, 200, 40)) + list(np.linspace(200, 700, 40)))
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return _candles([100.0] * 40)       # underlying anchor
+            if inst.zerodha_token == 7001:
+                return _candles(twice)               # ATM CE fires twice
+            return _candles(list(np.linspace(100, 101, 40)))  # PE flat
+
+    nfo = [
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100CE", "instrument_type": "CE",
+         "strike": 100, "expiry": "2099-01-01", "instrument_token": 7001, "lot_size": 75},
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100PE", "instrument_type": "PE",
+         "strike": 100, "expiry": "2099-01-01", "instrument_token": 7002, "lot_size": 75},
+    ]
+    deriv = [UniverseItem("NIFTY 50", "NIFTY", 100, "INDICES", "NFO", is_index=True)]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], deriv_universe=deriv)
+    rows = sc.snapshot("u1").rows
+    assert len(rows) == 1
+    syms = [l.option_symbol for l in rows[0].legs]
+    assert syms == ["NIFTY25JUN100CE"]              # ONE leg, not duplicated per transition
 
 
 @pytest.mark.asyncio

@@ -63,7 +63,7 @@ async def signals(user: UserContext = Depends(get_current_user)) -> SignalsRespo
 
 
 @router.get("/activity", response_model=ActivityResponse)
-async def activity(limit: int = 200,
+async def activity(limit: int = 2000,
                    user: UserContext = Depends(get_current_user)) -> ActivityResponse:
     uid = user.user_id
     st = state.status(uid)
@@ -136,12 +136,12 @@ async def place_order(body: EngineOrderRequest,
 
 
 @router.get("/detail/{token}", response_model=EngineDetailResponse)
-async def detail(token: int, user: UserContext = Depends(get_current_user)) -> EngineDetailResponse:
+async def detail(token: int, timestamp_ms: int = 0, user: UserContext = Depends(get_current_user)) -> EngineDetailResponse:
     """Trigger context + live underlying price + per-leg quote/depth/greeks for a
     ready signal (BUY/SELL are placed via the standard /kite/orders endpoint)."""
     client = _client(user)
     try:
-        d = await build_detail(client, user.user_id, token)
+        d = await build_detail(client, user.user_id, token, timestamp_ms)
     finally:
         await client.close()
     if d is None:

@@ -2,7 +2,7 @@
 // Mirrors backend app/engines/triple_supertrend/schemas.py.
 
 export type TrailTarget = 'fast' | 'mid' | 'slow';
-export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'OTM1' | 'OTM2';
+export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
 export type ScanSource = 'spot' | 'derivatives' | 'both';
 
 export interface AlignmentChip {
@@ -18,6 +18,10 @@ export interface OptionLeg {
   strike: number;
   expiry: string;
   lot_size: number | null;
+  premium_spot?: number;
+  premium_sl?: number;
+  token?: number;
+  is_active?: boolean; // this contract's SuperTrend still aligned on the latest bar
 }
 
 export interface EngineSignalRow {
@@ -34,6 +38,8 @@ export interface EngineSignalRow {
   score: number;
   timestamp_ms: number;
   source?: 'spot' | 'derivatives';
+  is_active?: boolean; // SuperTrend still aligned on the latest bar (trade running)
+  is_fresh?: boolean;  // entered on the latest closed bar (the live "ready now" trigger)
 }
 
 export interface SignalsResponse {

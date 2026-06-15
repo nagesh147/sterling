@@ -25,7 +25,7 @@ export function KiteTab() {
   const [nav, setNav] = useState<NavItem>('dashboard');
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
-  const [detailView, setDetailView] = useState<{ token: number; underlying: string } | null>(null);
+  const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
   useKiteAutoSession();   // silently auto-recover a lapsed session via the stored refresh token
 
   const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
@@ -49,6 +49,7 @@ export function KiteTab() {
       <SignalDetailPane
         token={detailView.token}
         underlying={detailView.underlying}
+        timestamp_ms={detailView.timestamp_ms}
         onClose={() => setDetailView(null)}
         onShowSetup={() => setSetupView(detailView)}
         onShowOptionChain={(u) => { setDetailView(null); setInstrumentView({ symbol: u, tab: 'option-chain' }); }}

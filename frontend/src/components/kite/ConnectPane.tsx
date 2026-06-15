@@ -35,7 +35,7 @@ const badge = (col: string): React.CSSProperties => ({
 function kiteErrorHelp(msg: string): string | null {
   const m = (msg || '').toLowerCase();
   if (m.includes('not enabled for the app') || m.includes('user is not enabled')) {
-    return 'This comes from Zerodha, not Sterling. Sign in with the exact User ID that owns the Kite Connect app (+ TOTP). A subscription activated today can take ~15–30 min to enable login — wait, then retry. If it persists, raise a Kite Connect support ticket.';
+    return 'This comes from Zerodha, not Kite Engine. Sign in with the exact User ID that owns the Kite Connect app (+ TOTP). A subscription activated today can take ~15–30 min to enable login — wait, then retry. If it persists, raise a Kite Connect support ticket.';
   }
   if (m.includes('token') && (m.includes('invalid') || m.includes('expired') || m.includes('used'))) {
     return 'request_tokens are single-use and expire within minutes. Open Kite Login again and paste a fresh token immediately.';
@@ -125,7 +125,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
       <details style={{ marginBottom: 10 }}>
         <summary style={{ ...S.hint, cursor: 'pointer' }}>Kite says “user is not enabled for the app”?</summary>
         <div style={{ ...S.hint, marginTop: 6, lineHeight: 1.6 }}>
-          That error is from Zerodha, not Sterling — the API key is valid, but your login isn’t enabled for the app yet.
+          That error is from Zerodha, not Kite Engine — the API key is valid, but your login isn’t enabled for the app yet.
           Sign in with the exact <strong>User ID that owns the Kite Connect app</strong> (+ TOTP). A subscription activated
           today can take ~15–30 min to propagate — wait and retry in an incognito window. If it persists, raise a
           Kite Connect support ticket at support.zerodha.com.
@@ -170,7 +170,7 @@ function LoginFlow({ account }: { account: KiteAccount }) {
           <div style={{ ...S.hint, marginBottom: 10, lineHeight: 1.6 }}>
             Session active{account.kite_user_id ? ` · ${account.kite_user_id}` : ''}.{' '}
             {account.has_refresh_token
-              ? <>Sterling <strong>auto-recovers</strong> this session from the stored refresh token whenever it lapses — no
+              ? <>Kite Engine <strong>auto-recovers</strong> this session from the stored refresh token whenever it lapses — no
                 clicking needed. A fresh 2FA login may still be required at Zerodha’s daily ~6 AM IST reset.</>
               : <>Kite didn’t issue a refresh token for this app, so the session can’t be auto-renewed — Zerodha requires a
                 fresh 2FA login each day (~6 AM IST). Re-login below when it lapses.</>}

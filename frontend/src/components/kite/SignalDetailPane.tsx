@@ -15,13 +15,15 @@ import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 interface Props {
   token: number;
   underlying: string;
+  timestamp_ms: number;
   onClose: () => void;
   onShowSetup: () => void;
   onShowOptionChain: (underlying: string) => void;
 }
 
 function ist(ms: number): string {
-  return new Date(ms).toLocaleString('en-IN', { hour12: false });
+  const d = new Date(ms);
+  return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()} ${d.toLocaleDateString('en-US', { day: '2-digit' })} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
 }
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -147,8 +149,8 @@ function LegCard({ leg, exchange, underlying }: {
   );
 }
 
-export function SignalDetailPane({ token, underlying, onClose, onShowSetup, onShowOptionChain }: Props) {
-  const { data, isLoading, isError } = useEngineDetail(token, true);
+export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onShowSetup, onShowOptionChain }: Props) {
+  const { data, isLoading, isError } = useEngineDetail(token, timestamp_ms, true);
   const [pinned, setPinned] = useState<boolean>(() => {
     try { return JSON.parse(localStorage.getItem('kite_engine_pins') || '[]').includes(token); } catch { return false; }
   });

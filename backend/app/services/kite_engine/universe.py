@@ -45,9 +45,15 @@ def build_universe(
     cfg: Optional[dict] = None,
 ) -> List[UniverseItem]:
     cfg = cfg if cfg is not None else load_cfg()
-    by_symbol: Dict[str, dict] = {
-        str(e.get("tradingsymbol", "")): e for e in equities if e.get("tradingsymbol")
-    }
+    # Build the spot lookup so the FIRST listing wins on a tradingsymbol collision.
+    # Callers pass equities as NSE + BSE, so an F&O name that lists on both venues
+    # (RELIANCE, TCS, …) keeps its NSE spot token — NSE is where the options trade
+    # and where 1H history is deepest; a BSE token would chart a thinner series.
+    by_symbol: Dict[str, dict] = {}
+    for e in equities:
+        ts = str(e.get("tradingsymbol", ""))
+        if ts and ts not in by_symbol:
+            by_symbol[ts] = e
     out: List[UniverseItem] = []
 
     # Indices first. Prefer the well-known stable spot_token from config; fall

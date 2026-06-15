@@ -99,10 +99,10 @@ export function useEnginePlaceOrder() {
 }
 
 // ─── Signal detail (trigger info + live price + greeks + depth) ───────────────
-export function useEngineDetail(token: number | null, enabled: boolean) {
+export function useEngineDetail(token: number | null, timestamp_ms: number | null, enabled: boolean) {
   return useQuery<EngineDetailResponse>({
-    queryKey: ['kite-engine-detail', token],
-    queryFn: () => api.get<EngineDetailResponse>(`${E}/detail/${token}`),
+    queryKey: ['kite-engine-detail', token, timestamp_ms],
+    queryFn: () => api.get<EngineDetailResponse>(`${E}/detail/${token}?timestamp_ms=${timestamp_ms || 0}`),
     enabled: enabled && token != null,
     refetchInterval: 15_000,
   });

@@ -12,7 +12,7 @@ import json
 from app.engines.triple_supertrend.schemas import ActivityEvent, EngineConfigModel
 from app.services import db
 
-_ACTIVITY_MAX = 300
+_ACTIVITY_MAX = 2000
 
 
 @dataclass

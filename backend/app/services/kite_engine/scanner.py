@@ -36,7 +36,7 @@ from app.services.kite_engine.universe import UniverseItem
 log = get_logger(__name__)
 
 _CANDLE_TTL_S = 180          # re-use cached 1H candles for ~3 min
-_CONCURRENCY = 3             # Kite historical ~3 req/s
+_CONCURRENCY = 2             # stay UNDER Kite historical ~3 req/s (3 concurrent → 429s)
 _TF_MS = 3_600_000           # 1H bar in ms
 _LOOKBACK_BARS = 320
 
@@ -60,39 +60,50 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
 def evaluate_item(
     engine: TripleSupertrendEngine, item: UniverseItem,
     candles: Sequence[Candle], cfg: TripleSupertrendConfig,
-) -> Optional[EngineSignalRow]:
-    """Run the engine on closed candles; return a row only on a fresh transition."""
+) -> List[EngineSignalRow]:
+    """Run the engine on closed candles; return all historical fresh transitions."""
     if len(candles) <= cfg.warmup + 1:
-        return None
+        return []
     o = np.array([c.open for c in candles], float)
     h = np.array([c.high for c in candles], float)
     l = np.array([c.low for c in candles], float)
     c = np.array([c.close for c in candles], float)
     r = compute_regime(o, h, l, c, cfg)
     longs, shorts = entry_transitions(r)
-    i = len(c) - 1
-    if not (longs[i] or shorts[i]):
-        return None
-    direction = "long" if longs[i] else "short"
-    return EngineSignalRow(
-        underlying=item.name, token=item.token, exchange=item.option_exchange,
-        regime="BULL" if direction == "long" else "BEAR",
-        alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
-        direction=direction, option_type="CE" if direction == "long" else "PE",
-        spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
-        score=85.0, timestamp_ms=int(candles[i].timestamp_ms),
-    )
+
+    rows = []
+    indices = np.where(longs | shorts)[0]
+    latest_ts = int(candles[-1].timestamp_ms)
+    # A trade is "running" until its TRAIL line (the configured target, mid by default)
+    # flips — not when full 3-line alignment breaks (the fast ST whipsaws long before
+    # the position would actually exit).
+    trail_now = int(r.trend(cfg.trail_target)[-1])
+    for i in indices:
+        direction = "long" if longs[i] else "short"
+        ts = int(candles[i].timestamp_ms)
+        rows.append(EngineSignalRow(
+            underlying=item.name, token=item.token, exchange=item.option_exchange,
+            regime="BULL" if direction == "long" else "BEAR",
+            alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
+            direction=direction, option_type="CE" if direction == "long" else "PE",
+            spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
+            score=85.0, timestamp_ms=ts,
+            # trail line still in the entry's direction on the latest bar = trade running
+            is_active=(trail_now == 1 if direction == "long" else trail_now == -1),
+            is_fresh=(ts == latest_ts),
+        ))
+    return rows
 
 
 # Fixed display/priority order: ATM first (the auto-exec primary), then ITM
 # inwards, then OTM outwards — independent of the order the UI sends them in.
-_MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "OTM1": 3, "OTM2": 4}
+_MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5, "OTM1": 6, "OTM2": 7, "OTM3": 8, "OTM4": 9, "OTM5": 10}
 
 
 def evaluate_derivative_contract(
     item: UniverseItem, moneyness: str, pick: OptionPick,
     candles: Sequence[Candle], cfg: TripleSupertrendConfig,
-) -> Optional[EngineSignalRow]:
+) -> List[EngineSignalRow]:
     """Run the triple-SuperTrend on an option CONTRACT's own premium series.
 
     Options-buying only: emit a BUY signal on a fresh *uptrend* transition of the
@@ -106,28 +117,37 @@ def evaluate_derivative_contract(
     young weekly produces no signal, never a fabricated one).
     """
     if len(candles) <= 1:
-        return None
+        return []
     o = np.array([c.open for c in candles], float)
     h = np.array([c.high for c in candles], float)
     l = np.array([c.low for c in candles], float)
     c = np.array([c.close for c in candles], float)
     r = compute_regime(o, h, l, c, cfg)
     longs, _shorts = entry_transitions(r)
-    i = len(c) - 1
-    if not longs[i]:
-        return None
+
+    rows = []
     is_ce = pick.option_type == "CE"
-    return EngineSignalRow(
-        underlying=item.name, token=pick.token, exchange=item.option_exchange,
-        regime="BULL" if is_ce else "BEAR",
-        alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
-        direction="long", option_type=pick.option_type,
-        legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
-                        option_symbol=pick.option_symbol, strike=pick.strike,
-                        expiry=pick.expiry, lot_size=pick.lot_size or None)],
-        spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
-        score=85.0, timestamp_ms=int(candles[i].timestamp_ms), source="derivatives",
-    )
+    indices = np.where(longs)[0]
+    latest_ts = int(candles[-1].timestamp_ms)
+    # "running" until the TRAIL line (configured target) flips down — not when full
+    # alignment breaks (the fast ST whipsaws long before the position would exit).
+    active_now = int(r.trend(cfg.trail_target)[-1]) == 1
+    for i in indices:
+        ts = int(candles[i].timestamp_ms)
+        rows.append(EngineSignalRow(
+            underlying=item.name, token=pick.token, exchange=item.option_exchange,
+            regime="BULL" if is_ce else "BEAR",
+            alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
+            direction="long", option_type=pick.option_type,
+            legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
+                            option_symbol=pick.option_symbol, strike=pick.strike,
+                            expiry=pick.expiry, lot_size=pick.lot_size or None,
+                            is_active=active_now)],
+            spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
+            score=85.0, timestamp_ms=ts, source="derivatives",
+            is_active=active_now, is_fresh=(ts == latest_ts),
+        ))
+    return rows
 
 
 def attach_strikes(
@@ -186,6 +206,7 @@ class ScanDiag:
     index_no_data: int = 0     # indices dropped for missing data
     index_fired: int = 0       # indices that produced a ready signal
     deriv_resolved: int = 0    # contracts resolved from option chains (pre-fetch)
+    deriv_no_spot: int = 0     # underlyings skipped: spot price unresolved (candles+quote empty)
     deriv_charts: int = 0      # option contracts charted (had premium candles)
     deriv_no_data: int = 0     # contracts skipped: no token / empty premium fetch
     deriv_fired: int = 0       # contracts that produced a BUY signal
@@ -252,6 +273,7 @@ class KiteEngineScanner:
         cfg: TripleSupertrendConfig, moneyness: Sequence[str] = ("ATM",),
         place_cb: Optional[PlaceCb] = None,
         deriv_universe: Optional[List[UniverseItem]] = None,
+        log_cb: Optional[Callable[[str], None]] = None,
     ) -> None:
         us = self._user(uid, cfg)
         us.engine.cfg = cfg
@@ -271,6 +293,8 @@ class KiteEngineScanner:
             if not item.token:
                 _no_data(item)
                 return
+            if log_cb:
+                log_cb(f"Scanning spot: {item.name} ({item.exchange})")
             async with sem:
                 try:
                     candles = drop_forming(await self._fetch_1h(client, us, item))
@@ -285,20 +309,26 @@ class KiteEngineScanner:
             diag.evaluated += 1
             if item.is_index:
                 diag.index_evaluated += 1
-            row = evaluate_item(us.engine, item, candles, cfg)
-            if row is None:
+            eval_rows = evaluate_item(us.engine, item, candles, cfg)
+            if not eval_rows:
                 return
             option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
-            attach_strikes(row, option_rows, option_name=item.tradingsymbol,
-                           moneynesses=moneyness, today=today)
-            rows.append(row)
-            if item.is_index:
-                diag.index_fired += 1
-            if place_cb is not None and row.legs:
-                try:
-                    await place_cb(row, item)
-                except Exception as exc:  # noqa: BLE001
-                    log.warning("kite-engine auto-exec fail %s: %s", item.name, exc)
+            
+            latest_ts = candles[-1].timestamp_ms
+            for row in eval_rows:
+                attach_strikes(row, option_rows, option_name=item.tradingsymbol,
+                               moneynesses=moneyness, today=today)
+                rows.append(row)
+                
+                is_fresh = (row.timestamp_ms == latest_ts)
+                if is_fresh:
+                    if item.is_index:
+                        diag.index_fired += 1
+                    if place_cb is not None and row.legs:
+                        try:
+                            await place_cb(row, item)
+                        except Exception as exc:  # noqa: BLE001
+                            log.warning("kite-engine auto-exec fail %s: %s", item.name, exc)
 
         await asyncio.gather(*[_one(i) for i in universe])
 
@@ -312,9 +342,27 @@ class KiteEngineScanner:
                         client, us, item.token, item.tradingsymbol))
                 except Exception as exc:  # noqa: BLE001
                     log.warning("kite-engine deriv spot-anchor fail %s: %s", item.name, exc)
-                    return
+                    under = []
+            
             spot = float(under[-1].close) if under else 0.0
             if spot <= 0:
+                try:
+                    # Quote by DISPLAY name (mirrors detail._spot_symbol): the LTP
+                    # symbol is "NSE:NIFTY 50" / "BSE:SENSEX", NOT the option name
+                    # ("NIFTY"), which is not a valid quote symbol and returns nothing.
+                    qsym = f"BSE:{item.name}" if item.option_exchange == "BFO" else f"NSE:{item.name}"
+                    q = await client.get_quote([qsym])
+                    if q and qsym in q:
+                        spot = float(q[qsym].get("last_price") or 0.0)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("kite-engine deriv spot fallback fail %s: %s", item.name, exc)
+
+            if spot <= 0:
+                # Don't fail silently — a zero spot drops the whole chain (the classic
+                # "no derivative signals" symptom), so make it visible in the log + diag.
+                diag.deriv_no_spot += 1
+                if log_cb:
+                    log_cb(f"⚠ {item.name}: spot unavailable (candles + quote both empty) — derivatives skipped")
                 return
             option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
             chain = chain_rows_for(option_rows, item.tradingsymbol, today)
@@ -325,6 +373,15 @@ class KiteEngineScanner:
                 if not pick.token:
                     diag.deriv_no_data += 1
                     return
+                if log_cb:
+                    try:
+                        ed = datetime.strptime(pick.expiry[:10], "%Y-%m-%d")
+                        day = ed.day
+                        sfx = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+                        readable = f"{item.name} {day}{sfx} w {ed.strftime('%b').upper()} {int(pick.strike)} {pick.option_type}"
+                    except Exception:
+                        readable = pick.option_symbol
+                    log_cb(f"Scanning derivative: {readable} ({m})")
                 async with sem:
                     try:
                         oc = drop_forming(await self._fetch_candles(
@@ -340,22 +397,74 @@ class KiteEngineScanner:
                 bars = len(oc)               # premium-history depth, to expose short weeklies
                 diag.deriv_min_bars = bars if diag.deriv_min_bars == 0 else min(diag.deriv_min_bars, bars)
                 diag.deriv_max_bars = max(diag.deriv_max_bars, bars)
-                drow = evaluate_derivative_contract(item, m, pick, oc, cfg)
-                if drow is None:
+                drows = evaluate_derivative_contract(item, m, pick, oc, cfg)
+                if not drows:
                     return
-                rows.append(drow)
-                diag.deriv_fired += 1
-                if place_cb is not None:  # auto-exec is universal (spot + derivatives)
-                    try:
-                        await place_cb(drow, item)
-                    except Exception as exc:  # noqa: BLE001
-                        log.warning("kite-engine deriv auto-exec fail %s: %s", pick.option_symbol, exc)
+                
+                latest_ts = oc[-1].timestamp_ms
+                for drow in drows:
+                    rows.append(drow)
+                    is_fresh = (drow.timestamp_ms == latest_ts)
+                    if is_fresh:
+                        diag.deriv_fired += 1
+                        if place_cb is not None:  # auto-exec is universal (spot + derivatives)
+                            try:
+                                await place_cb(drow, item)
+                            except Exception as exc:  # noqa: BLE001
+                                log.warning("kite-engine deriv auto-exec fail %s: %s", pick.option_symbol, exc)
 
             await asyncio.gather(*[_contract(m, p) for m, p in contracts])
 
         await asyncio.gather(*[_deriv_one(i) for i in (deriv_universe or [])])
 
-        us.rows = rows
+        # One card per (underlying, side); each selected strike is a leg. A contract
+        # that fired more than once (multiple historical premium up-transitions) must
+        # yield ONE leg — the most recent — not a duplicate chip per transition.
+        grouped_derivs: Dict[tuple, EngineSignalRow] = {}
+        leg_ts: Dict[tuple, int] = {}     # (underlying, side, option_symbol) -> ts of the kept leg
+        final_rows = []
+        for r in rows:
+            if r.source != "derivatives":
+                final_rows.append(r)
+                continue
+            key = (r.underlying, r.option_type)
+            leg = r.legs[0]
+            leg.premium_spot = r.spot
+            leg.premium_sl = r.stop_loss
+            leg.token = r.token
+            sym_key = (*key, leg.option_symbol)
+            if key not in grouped_derivs:
+                r.spot = 0
+                r.stop_loss = 0
+                r.legs = [leg]
+                grouped_derivs[key] = r
+                leg_ts[sym_key] = r.timestamp_ms
+                continue
+            parent = grouped_derivs[key]
+            if sym_key not in leg_ts:
+                parent.legs.append(leg)
+                leg_ts[sym_key] = r.timestamp_ms
+            elif r.timestamp_ms > leg_ts[sym_key]:
+                # same contract fired again later — refresh its leg in place (no dup)
+                for i, existing in enumerate(parent.legs):
+                    if existing.option_symbol == leg.option_symbol:
+                        parent.legs[i] = leg
+                        break
+                leg_ts[sym_key] = r.timestamp_ms
+            # the group is "running" if ANY of its strikes is still trending
+            parent.is_active = parent.is_active or leg.is_active
+            parent.is_fresh = parent.is_fresh or r.is_fresh
+            if r.timestamp_ms > parent.timestamp_ms:
+                parent.timestamp_ms = r.timestamp_ms
+
+        final_rows.extend(grouped_derivs.values())
+        
+        # Sort legs by moneyness (ATM, ITM1, etc.)
+        for r in final_rows:
+            if r.source == "derivatives" and len(r.legs) > 1:
+                r.legs.sort(key=lambda leg: _MONEYNESS_ORDER.get(leg.moneyness, 99))
+
+        us.rows = final_rows
         us.diag = diag
         us.generated_ms = int(time.time() * 1000)
         us.scanning = False
