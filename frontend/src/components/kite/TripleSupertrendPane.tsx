@@ -109,14 +109,35 @@ export function AlignmentChips({ a }: { a: AlignmentChip }) {
   );
 }
 
-function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout }: {
+export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align = 'left' }: any) {
+  const isActive = sort.key === sortKey && sort.dir !== '';
+  return (
+    <div 
+      style={{ ...style, cursor: 'pointer', userSelect: 'none' }} 
+      onClick={() => handleSort(sortKey)}
+      className={sortKey ? "sort-header-div" : ""}
+      title={`Sort by ${label}`}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
+        {label}
+        {sortKey && (
+          <span className={`sort-icon ${isActive ? 'active' : ''}`}>
+             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
+             <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
+  sort: { key: string; dir: string };
 }) {
-  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
-  const [sort, setSort] = React.useState({ key: '', dir: '' });
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const bull = row.regime === 'BULL';
@@ -126,30 +147,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout }: {
   const isDeriv = row.source === 'derivatives';
   const derivLeg = isDeriv ? row.legs[0] : undefined;
 
-  const handleSort = (key: string) => {
-    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : s.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
-  };
-
-  const SortHeaderDiv = ({ label, sortKey, style, align = 'left' }: any) => {
-    const isActive = sort.key === sortKey && sort.dir !== '';
-    return (
-      <div 
-        style={{ ...style, cursor: 'pointer', userSelect: 'none' }} 
-        onClick={() => handleSort(sortKey)}
-        className={sortKey ? "sort-header-div" : ""}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
-          {label}
-          {sortKey && (
-            <span className={`sort-icon ${isActive ? 'active' : ''}`}>
-               <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
-               <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && sort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || sort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
   const toggleExpand = (e: React.MouseEvent, sym: string) => {
     e.stopPropagation();
@@ -278,29 +276,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout }: {
           })}
         </div>
       ) : (
-      <div style={{ display: 'flex', flexDirection: 'column', margin: '0 -12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
         {row.legs.length === 0 ? (
           <span style={{ fontSize: 10, color: k.dim }}>no liquid contract at the selected strikes</span>
         ) : (
           <React.Fragment>
-            <div style={{ 
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                 <SortHeaderDiv label="Leg" sortKey="leg" style={{ width: 32, flexShrink: 0 }} />
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" style={{ flex: 1 }} />
-                 {isDeriv && <SortHeaderDiv label="Entry" sortKey="entry" style={{ width: 45, flexShrink: 0 }} align="right" />}
-                 {isDeriv && <SortHeaderDiv label="Stop" sortKey="stop" style={{ width: 50, flexShrink: 0 }} align="right" />}
-                 <SortHeaderDiv label="Exc." sortKey="exc" style={{ width: 30, flexShrink: 0 }} align="right" />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end' }}>
-                 {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" style={{ width: 45 }} align="right" />}
-                 {s.showPriceChangePct && <SortHeaderDiv label="Chg. %" sortKey="chgPct" style={{ width: 55 }} align="right" />}
-                 {s.showPriceDirection && <span style={{ width: 14 }}></span>}
-                 <SortHeaderDiv label="LTP" sortKey="ltp" style={{ width: 60 }} align="right" />
-              </div>
-            </div>
             {[...row.legs].sort((a, b) => {
               if (!sort.key || !sort.dir) return 0;
               const symA = `${row.exchange}:${a.option_symbol}`;
@@ -376,8 +356,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout }: {
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, width: 32, flexShrink: 0 }}>{leg.moneyness}</span>
-                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                    {isDeriv && (leg as any).premium_spot != null && (
                      <span style={{ fontSize: 11, fontWeight: 500, color: accent, width: 45, textAlign: 'right', flexShrink: 0 }}>
                        {(leg as any).premium_spot.toFixed(2)}
@@ -388,51 +367,54 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout }: {
                        SL {(leg as any).premium_sl.toFixed(1)}
                      </span>
                    )}
-                   <span style={{ fontSize: 9, color: k.dim, width: 30, textAlign: 'right', flexShrink: 0 }}>{row.exchange}</span>
                 </div>
 
                 {!isExp && (
-                  <KiteActionButtons
-                    className="st-actions"
-                    onBuy={(e) => {
-                      e.stopPropagation();
-                      openOrderWindow({
-                        symbol: leg.option_symbol,
-                        exchange: row.exchange,
-                        initialSide: 'BUY',
-                        lotSize: leg.lot_size || 1,
-                        lastPrice: lastPx || 0,
-                      });
-                    }}
-                    onSell={(e) => {
-                      e.stopPropagation();
-                      openOrderWindow({
-                        symbol: leg.option_symbol,
-                        exchange: row.exchange,
-                        initialSide: 'SELL',
-                        lotSize: leg.lot_size || 1,
-                        lastPrice: lastPx || 0,
-                      });
-                    }}
-                    onDepth={(e) => { e.stopPropagation(); toggleExpand(e, leg.option_symbol); }}
-                    onChart={(e) => { e.stopPropagation(); onClick(); }}
-                    onMore={(e) => { e.stopPropagation(); }}
-                  />
-                )}
-                
-                {!isExp && (
-                  <div className="st-prices" style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end', gap: 0 }}>
-                    {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11, width: 45, textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                    {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, width: 55, textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
-                    {s.showPriceDirection && (
-                      <span style={{ color: color, display: 'flex', alignItems: 'center', width: 14, justifyContent: 'center' }}>
-                        {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
-                        {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <KiteActionButtons
+                      className="st-actions-persistent"
+                      onBuy={(e) => {
+                        e.stopPropagation();
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'BUY',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                        });
+                      }}
+                      onSell={(e) => {
+                        e.stopPropagation();
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'SELL',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                        });
+                      }}
+                      onDepth={(e) => { e.stopPropagation(); toggleExpand(e, leg.option_symbol); }}
+                      onChart={(e) => { e.stopPropagation(); onClick(); }}
+                    />
+                    
+                    <div className="st-prices" style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end', gap: 0 }}>
+                      {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11, width: 45, textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
+                      {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, width: 55, textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
+                      {s.showPriceDirection && (
+                        <span style={{ color: color, display: 'flex', alignItems: 'center', width: 14, justifyContent: 'center' }}>
+                          {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                          {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                        </span>
+                      )}
+                      <span style={{ color: color, fontWeight: 500, fontSize: 13, width: 60, textAlign: 'right' }}>
+                        {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
                       </span>
-                    )}
-                    <span style={{ color: color, fontWeight: 500, fontSize: 13, width: 60, textAlign: 'right' }}>
-                      {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                    </span>
+                    </div>
+
+                    <KiteActionButtons
+                      className="st-actions-more-persistent"
+                      onMore={(e) => { e.stopPropagation(); }}
+                    />
                   </div>
                 )}
               </div>
@@ -644,6 +626,7 @@ function ScanStatus({ signals }: { signals?: SignalsResponse }) {
 }
 
 export function TripleSupertrendPane({ onSelectSignal }: Props) {
+  const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
   const setCfg = useSetEngineConfig();
@@ -659,7 +642,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const [sortBy, setSortBy] = React.useState('Custom');
   const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(() => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'grid');
+  const [legSort, setLegSort] = React.useState({ key: '', dir: '' });
   
+  const handleLegSort = (key: string) => {
+    setLegSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : s.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
+  };
+
   React.useEffect(() => { localStorage.setItem('kite_st_settings_open', String(settingsOpen)); }, [settingsOpen]);
   React.useEffect(() => { localStorage.setItem('kite_st_view_layout', viewLayout); }, [viewLayout]);
 
@@ -858,13 +846,35 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       </div>
 
       {rows.length > 0 && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <KiteSearchBar 
             query={query} 
             setQuery={setQuery} 
             searchSettingsOpen={searchSettingsOpen} 
             setSearchSettingsOpen={setSearchSettingsOpen} 
           />
+          {viewLayout === 'list' && (
+            <div style={{ 
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 8, flex: 1 }}>
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 45, flexShrink: 0 }} align="right" />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Stop" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 50, flexShrink: 0 }} align="right" />}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
+                 <div style={{ width: 150 }}></div>
+                 <div style={{ display: 'flex', alignItems: 'center', width: 180, justifyContent: 'flex-end' }}>
+                   {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" sort={legSort} handleSort={handleLegSort} style={{ width: 45 }} align="right" />}
+                   {s.showPriceChangePct && <SortHeaderDiv label="Chg. %" sortKey="chgPct" sort={legSort} handleSort={handleLegSort} style={{ width: 55 }} align="right" />}
+                   {s.showPriceDirection && <span style={{ width: 14 }}></span>}
+                   <SortHeaderDiv label="LTP" sortKey="ltp" sort={legSort} handleSort={handleLegSort} style={{ width: 60 }} align="right" />
+                 </div>
+                 <div style={{ width: 28 }}></div>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <style>{`
@@ -885,22 +895,14 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
         .sort-icon.active { opacity: 1 !important; color: #444; }
-        .st-actions {
-          display: none;
+        .st-actions-persistent {
+          display: flex;
           gap: 8px;
           align-items: center;
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          background: ${k.surfaceHover};
-          padding-left: 8px;
         }
-        .st-leg-row:hover .st-actions {
+        .st-actions-more-persistent {
           display: flex;
-        }
-        .st-leg-row:hover .st-prices {
-          visibility: hidden;
+          align-items: center;
         }
         .st-prices {
           display: flex;
@@ -908,9 +910,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           gap: 2px;
           flex-shrink: 0;
           justify-content: flex-end;
-        }
-        .st-leg-row:hover .st-prices {
-          visibility: hidden;
         }
         .st-spin { animation: st-spin .8s linear infinite; transform-origin: 50% 50%; }
         @keyframes st-spin { to { transform: rotate(360deg); } }
@@ -1067,7 +1066,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                   <div>
                     {group.rows.map((row) => (
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
-                        onSelectSignal={onSelectSignal}
+                        onSelectSignal={onSelectSignal} sort={legSort}
                         onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })} />
                     ))}
                   </div>
