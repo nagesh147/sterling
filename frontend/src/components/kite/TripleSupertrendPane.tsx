@@ -356,7 +356,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 220 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                    {s.showExchange && (
                      <span style={{ fontSize: 11, color: k.dim, width: 40, flexShrink: 0 }}>
                        {row.exchange}
@@ -367,14 +367,14 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                        {leg.moneyness}
                      </span>
                    )}
-                   {isDeriv && (leg as any).premium_spot != null && (
-                     <span style={{ fontSize: 11, fontWeight: 500, color: accent, width: 70, textAlign: 'right', flexShrink: 0 }}>
-                       {(leg as any).premium_spot.toFixed(2)}
+                   {isDeriv && (
+                     <span style={{ fontSize: 11, fontWeight: 500, color: (leg as any).premium_spot != null ? accent : k.dim, width: 70, textAlign: 'right', flexShrink: 0 }}>
+                       {(leg as any).premium_spot != null ? (leg as any).premium_spot.toFixed(2) : '—'}
                      </span>
                    )}
-                   {isDeriv && (leg as any).premium_sl != null && (
+                   {isDeriv && (
                      <span style={{ fontSize: 10, color: k.dim, width: 70, textAlign: 'right', flexShrink: 0 }}>
-                       {(leg as any).premium_sl.toFixed(1)}
+                       {(leg as any).premium_sl != null ? (leg as any).premium_sl.toFixed(1) : '—'}
                      </span>
                    )}
                 </div>
@@ -677,10 +677,10 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const [sortBy, setSortBy] = React.useState('Custom');
   const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(() => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'grid');
-  const [legSort, setLegSort] = React.useState({ key: '', dir: '' });
-  
+  const legSort = s.legSort;
+  const setLegSort = s.setLegSort;
   const handleLegSort = (key: string) => {
-    setLegSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : s.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
+    setLegSort(legSort.key === key ? { key, dir: legSort.dir === 'asc' ? 'desc' : legSort.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
   };
 
   React.useEffect(() => { localStorage.setItem('kite_st_settings_open', String(settingsOpen)); }, [settingsOpen]);
@@ -899,7 +899,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1, minWidth: 220 }} />
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
                  {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
                  {s.showLeg && <SortHeaderDiv label="Leg" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 45, flexShrink: 0 }} />}
                  {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}

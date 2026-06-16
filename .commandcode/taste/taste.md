@@ -81,4 +81,4 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 - Avoid browser-native `title` attribute hover tooltips on table headers — show descriptions inline as a second descriptive line below the header label using `fontSize: 8`, `fontWeight: 400`, muted color, no letter-spacing, no text-transform. Confidence: 0.70
 
 # git-workflow
-- When user says "push all code; sync branches;updated;", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch origin main && git merge origin/main, then report push hash and main status. Confidence: 0.70
+- When user says "push all code; sync branches;updated;", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch origin main && git merge origin/main, then report push hash and main status. Confidence: 0.80
