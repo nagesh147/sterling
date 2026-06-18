@@ -41,6 +41,7 @@
 - Disable save/submit buttons in settings forms when field values are unchanged from their persisted state, matching the Delta Exchange credentials save pattern. Confidence: 0.60
 
 # ui-formatting
+- Display expiry dates (YYYY-MM-DD) as "{day}{ordinal} {MON} {year}" format — e.g., "23rd JUN 2026" with ordinal suffix (st/nd/rd/th), abbreviated uppercase month, and four-digit year. Confidence: 0.70
 - Format backend reason strings for user-facing display: fix casing (title/sentence case where appropriate), correct grammar, and use readable labels — never show raw-backend underscore_delimited or ALL_CAPS strings directly to users. Confidence: 0.65
 - Use descriptive human-readable labels with parenthetical clarifications in dropdown/select options instead of raw technical identifiers (e.g., "Trend following (futures)" not "directional_futures", "Buy only" not "long_only"). Confidence: 0.70
 - Parse and display option tradingsymbols in human-readable format: extract underlying name, strike price, option type (CE/PE), and expiry date — display as "{underlying} {strike} {type} · {formatted expiry}" using two-digit year (e.g., "SENSEX 75500 PE · 18 June 26" from "SENSEX2661875500PE"). Confidence: 0.75
@@ -76,6 +77,8 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 
 # ui-workflow
 - Background scanning engines should run automatically without requiring the user to manually click a "scan" button. Scan status and terminal output should always be visible so the user knows what's running. Confidence: 0.70
+- When displaying scan status, show what specifically is being scanned (e.g., "Scanning BTC options…", "Scanning ETH futures…") instead of a generic "scanning…" indicator — the label should identify the active scan target. Confidence: 0.70
+- Cache and reuse historical scan data when markets are closed — avoid re-scanning unchanged data outside market hours. Only actively poll/refresh during live market hours when data can actually change. Confidence: 0.60
 
 # ui-symbols
 - Core symbols (BTC, ETH, SOL) in Global Strategy Config > SYMBOLS must stay always present but be individually toggleable (enable/disable) — never deletable and never permanently locked. Use a checkbox or similar on/off control, not a remove (×) button. Confidence: 0.75

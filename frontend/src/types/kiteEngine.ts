@@ -50,6 +50,7 @@ export interface SignalsResponse {
   rows: EngineSignalRow[];
   next_scan_ms: number;
   auto_scan: boolean;
+  market_open: boolean;
 }
 
 export interface ActivityEvent {
@@ -65,6 +66,7 @@ export interface ActivityResponse {
   last_scan_ms: number;
   next_scan_ms: number;
   signal_count: number;
+  scanning_label: string;
 }
 
 export interface SetupPoint {

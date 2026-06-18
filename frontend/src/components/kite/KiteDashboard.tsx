@@ -9,7 +9,7 @@ function formatCurrency(val: number) {
   return val.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
 
-function MarginCard({ title, available, used, opening }: { title: string, available: number, used: number, opening: number }) {
+function MarginCard({ title, available, used, opening, loading }: { title: string, available: number, used: number, opening: number, loading: boolean }) {
   const Icon = title === 'Equity' 
     ? <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
     : <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9b9b9b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>;
@@ -26,24 +26,24 @@ function MarginCard({ title, available, used, opening }: { title: string, availa
           <div style={{ 
             fontSize: '2.625rem', 
             fontWeight: 300, 
-            color: '#444', 
+            color: loading ? '#ccc' : '#444', 
             lineHeight: 1.3, 
             letterSpacing: 0,
             fontFamily: '"Open Sans", sans-serif',
             marginBottom: 4 
           }}>
-            {formatCurrency(available)}
+            {loading ? '—' : formatCurrency(available)}
           </div>
           <div style={{ fontSize: 12, color: '#9b9b9b' }}>Margin available</div>
         </div>
         <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 40 }}>
             <div style={{ fontSize: 12, color: '#9b9b9b' }}>Margins used</div>
-            <div style={{ fontSize: 12, color: '#444' }}>{formatCurrency(used)}</div>
+            <div style={{ fontSize: 12, color: loading ? '#ccc' : '#444' }}>{loading ? '—' : formatCurrency(used)}</div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 40 }}>
             <div style={{ fontSize: 12, color: '#9b9b9b' }}>Opening balance</div>
-            <div style={{ fontSize: 12, color: '#444' }}>{formatCurrency(opening)}</div>
+            <div style={{ fontSize: 12, color: loading ? '#ccc' : '#444' }}>{loading ? '—' : formatCurrency(opening)}</div>
           </div>
         </div>
       </div>
@@ -123,13 +123,15 @@ export function KiteDashboard() {
 
   const name = status?.user_name ? status.user_name.split(' ')[0] : 'Madaram';
   
-  const eq = margins?.equity?.net || 293.2;
-  const eqUsed = margins?.equity?.utilised?.debits || 0;
-  const eqOpening = margins?.equity?.available?.opening_balance || 293.2;
+  const eq = margins?.equity?.net ?? 0;
+  const eqUsed = margins?.equity?.utilised?.debits ?? 0;
+  const eqOpening = margins?.equity?.available?.opening_balance ?? 0;
   
-  const com = margins?.commodity?.net || 0;
-  const comUsed = margins?.commodity?.utilised?.debits || 0;
-  const comOpening = margins?.commodity?.available?.opening_balance || 0;
+  const com = margins?.commodity?.net ?? 0;
+  const comUsed = margins?.commodity?.utilised?.debits ?? 0;
+  const comOpening = margins?.commodity?.available?.opening_balance ?? 0;
+  
+  const marginsLoading = !margins;
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -141,10 +143,10 @@ export function KiteDashboard() {
       {/* Margins Row */}
       <div style={{ display: 'flex', marginBottom: 48 }}>
         <div style={{ flex: 1, paddingRight: 40, borderRight: '1px solid #e0e0e0' }}>
-          <MarginCard title="Equity" available={eq} used={eqUsed} opening={eqOpening} />
+          <MarginCard title="Equity" available={eq} used={eqUsed} opening={eqOpening} loading={marginsLoading} />
         </div>
         <div style={{ flex: 1, paddingLeft: 40 }}>
-          <MarginCard title="Commodity" available={com} used={comUsed} opening={comOpening} />
+          <MarginCard title="Commodity" available={com} used={comUsed} opening={comOpening} loading={marginsLoading} />
         </div>
       </div>
       </div>

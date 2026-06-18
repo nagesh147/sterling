@@ -56,6 +56,7 @@ class SignalsResponse(BaseModel):
     rows: List[EngineSignalRow]
     next_scan_ms: int = 0
     auto_scan: bool = False
+    market_open: bool = True
 
 
 class SetupPoint(BaseModel):
@@ -94,6 +95,7 @@ class ActivityResponse(BaseModel):
     last_scan_ms: int
     next_scan_ms: int
     signal_count: int
+    scanning_label: str = ""
 
 
 class DepthLevel(BaseModel):

@@ -119,7 +119,7 @@ export function EngineTerminal() {
           <span style={{ width: 8, height: 8, borderRadius: 4, background: dot, boxShadow: data?.scanning ? `0 0 6px ${k.green}` : 'none' }} />
           {mode === 'minimized' ? 'KITE TERMINAL' : 'INFO'}
         </span>
-        <span>{data?.scanning ? 'scanning…' : data?.auto_scan ? 'auto-scan ON' : 'idle'}</span>
+        <span>{data?.scanning ? data?.scanning_label || 'scanning…' : data?.auto_scan ? 'auto-scan ON' : 'idle'}</span>
         <span>last: {data?.last_scan_ms ? hhmmss(data.last_scan_ms) : '—'}</span>
         <span>next: {fmtCountdown(data?.next_scan_ms ?? 0)}</span>
 

@@ -21,6 +21,7 @@ from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite.errors import KiteError
 from app.services.kite_engine import service, state
 from app.services.kite_engine.detail import build_detail
+from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import build_setup_chart, scanner
 
 log = get_logger(__name__)
@@ -60,7 +61,8 @@ async def signals(user: UserContext = Depends(get_current_user)) -> SignalsRespo
     us = scanner.snapshot(uid)
     st = state.status(uid)
     return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
-                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running())
+                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running(),
+                           market_open=is_market_open())
 
 
 @router.get("/activity", response_model=ActivityResponse)
@@ -68,10 +70,11 @@ async def activity(limit: int = 2000,
                    user: UserContext = Depends(get_current_user)) -> ActivityResponse:
     uid = user.user_id
     st = state.status(uid)
+    us = scanner.snapshot(uid)
     return ActivityResponse(
-        events=state.activity(uid, limit), scanning=st.scanning,
-        auto_scan=service.is_auto_running(), last_scan_ms=st.last_scan_ms,
-        next_scan_ms=st.next_scan_ms, signal_count=st.signal_count,
+        events=state.activity(uid, limit), scanning=st.scanning, auto_scan=service.is_auto_running(),
+        last_scan_ms=st.last_scan_ms, next_scan_ms=st.next_scan_ms, signal_count=st.signal_count,
+        scanning_label=us.scanning_label if us.scanning else "",
     )
 
 
@@ -87,7 +90,8 @@ async def run_scan(user: UserContext = Depends(get_current_user)) -> SignalsResp
     us = scanner.snapshot(uid)
     st = state.status(uid)
     return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
-                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running())
+                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running(),
+                           market_open=is_market_open())
 
 
 @router.post("/scan/cancel", response_model=SignalsResponse)
@@ -102,7 +106,8 @@ async def cancel_scan(user: UserContext = Depends(get_current_user)) -> SignalsR
     us = scanner.snapshot(uid)
     st = state.status(uid)
     return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
-                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running())
+                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running(),
+                           market_open=is_market_open())
 
 
 @router.get("/setup/{token}", response_model=SetupChart)

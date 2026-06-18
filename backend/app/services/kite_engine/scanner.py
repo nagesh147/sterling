@@ -11,6 +11,7 @@ broker-agnostic. Nothing here imports another engine's strategy logic.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -32,6 +33,7 @@ from app.services.kite_engine.strikes import (
     ExpiryType, OptionPick, chain_rows_for, pick_contracts, pick_strikes,
 )
 from app.services.kite_engine.universe import UniverseItem
+from app.services.kite_engine import state
 
 log = get_logger(__name__)
 
@@ -268,7 +270,20 @@ class KiteEngineScanner:
         return us
 
     def snapshot(self, uid: str) -> UserScan:
-        return self._users.get(uid) or UserScan(engine=TripleSupertrendEngine())
+        us = self._users.get(uid)
+        if us is not None:
+            return us
+        us = UserScan(engine=TripleSupertrendEngine())
+        cached = state.load_signal_cache(uid)
+        if cached:
+            rows_data, gen_ms = cached
+            try:
+                us.rows = [EngineSignalRow(**r) for r in rows_data]
+                us.generated_ms = gen_ms
+            except Exception:
+                pass
+        self._users[uid] = us
+        return us
 
     def cancel(self, uid: str) -> bool:
         """Signal a running scan to stop. Returns True if a scan was running."""
@@ -546,6 +561,8 @@ class KiteEngineScanner:
             us.rows = final_rows
             us.diag = diag
             us.generated_ms = int(time.time() * 1000)
+            model_rows = [r.model_dump() for r in final_rows]
+            state.save_signal_cache(uid, json.dumps(model_rows), us.generated_ms)
         finally:
             us.scanning = False
             us.scanning_label = ""

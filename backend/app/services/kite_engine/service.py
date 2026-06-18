@@ -14,6 +14,7 @@ from app.engines.triple_supertrend.config import TripleSupertrendConfig
 from app.engines.triple_supertrend.schemas import EngineConfigModel
 from app.services import live_safety, paper_store
 from app.services.kite_engine import state
+from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
 from app.services.kite_engine.universe import build_universe, select_scan_universe
 
@@ -22,10 +23,15 @@ log = get_logger(__name__)
 SCAN_INTERVAL_S = 300  # background auto-scan cadence (5 min; 1H bars move slowly)
 
 _auto_running = False
+_first_scan_done = False
 
 
 def is_auto_running() -> bool:
     return _auto_running
+
+
+def has_scanned() -> bool:
+    return _first_scan_done
 
 
 def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
@@ -144,6 +150,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
 
 async def _scan_all_connected_once() -> None:
     """One pass over every connected Kite account."""
+    global _first_scan_done
     from app.services.exchanges.kite import accounts as kite_accounts
     from app.services.exchanges.kite.errors import KiteTokenError
     try:
@@ -151,33 +158,40 @@ async def _scan_all_connected_once() -> None:
     except Exception as exc:  # noqa: BLE001
         log.warning("kite-engine auto-scan: account load failed: %s", exc)
         return
+    scanned = False
     for acct in accts:
         client = kite_accounts.build_client(acct)
         try:
             try:
-                await client.get_profile()  # cheap token-validity probe
+                await client.get_profile()
             except KiteTokenError:
-                # Auto-expire: clear the stale token so the UI flips to disconnected.
                 kite_accounts.clear_session(acct.user_id, acct.id)
                 state.log(acct.user_id, "info",
                           "Kite session expired — auto-disconnected; re-login required.")
                 continue
             await scan_user(client, acct.user_id)
-        except Exception:  # noqa: BLE001 — already logged in scan_user
+            scanned = True
+        except Exception:
             pass
         finally:
             await client.close()
+    if scanned:
+        _first_scan_done = True
 
 
 async def auto_scan_loop(interval_s: float = SCAN_INTERVAL_S) -> None:
-    """Background task: periodically scan all connected accounts. Started at app
-    startup. Survives per-iteration errors so one bad scan doesn't kill the loop."""
+    """Background task: scan all connected accounts every ``interval_s`` seconds.
+    Runs one initial scan regardless of market hours (to seed the DB cache), then
+    gates subsequent iterations on market-open only."""
     global _auto_running
     _auto_running = True
     log.info("kite-engine auto-scan loop started (every %ss)", interval_s)
     try:
         while True:
             try:
+                if _first_scan_done and not is_market_open():
+                    await asyncio.sleep(30)  # check market hours every 30s when closed
+                    continue
                 await _scan_all_connected_once()
             except Exception as exc:  # noqa: BLE001
                 log.warning("kite-engine auto-scan iteration error: %s", exc)

@@ -118,6 +118,26 @@ def auto_open_underlyings(uid: str) -> Set[str]:
     return set(_auto_open.get(uid, set()))
 
 
+# ── signal cache (DB-persisted for restarts / market-closed hours) ────────
+def save_signal_cache(uid: str, rows_json: str, generated_ms: int) -> None:
+    try:
+        data = json.dumps({"rows": json.loads(rows_json), "generated_ms": generated_ms})
+        db.set_config(f"kite_engine_signals_{uid}", data)
+    except Exception:
+        pass
+
+
+def load_signal_cache(uid: str):
+    raw = db.get_config(f"kite_engine_signals_{uid}")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data["rows"], data["generated_ms"]
+    except Exception:
+        return None
+
+
 def reset(uid: str = "") -> None:
     """Test helper."""
     if uid:
@@ -125,3 +145,14 @@ def reset(uid: str = "") -> None:
         _status.pop(uid, None); _auto_open.pop(uid, None)
     else:
         _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear()
+
+
+def load_signal_cache(uid: str):
+    raw = db.get_config(f"kite_engine_signals_{uid}")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        return data["rows"], data["generated_ms"]
+    except Exception:
+        return None

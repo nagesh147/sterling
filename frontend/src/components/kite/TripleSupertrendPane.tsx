@@ -685,6 +685,7 @@ function ScanStatus({ signals }: { signals?: SignalsResponse }) {
 
   const scanning = signals?.scanning ?? false;
   const auto = signals?.auto_scan ?? false;
+  const marketOpen = signals?.market_open ?? true;
   const gen = signals?.generated_ms ?? 0;
   const next = signals?.next_scan_ms ?? 0;
   const interval = next - gen;
@@ -696,7 +697,7 @@ function ScanStatus({ signals }: { signals?: SignalsResponse }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
         <span className={scanning ? 'st-pulse' : undefined} style={{ width: 7, height: 7, borderRadius: 4, background: dotColor, flexShrink: 0 }} />
         <span style={{ color: scanning ? k.green : auto ? k.text : k.dim, fontWeight: 500 }}>
-          {scanning ? 'scanning…' : auto ? 'auto-scan on' : 'manual'}
+          {scanning ? signals?.scanning_label || (signals?.scanning ? 'scanning…' : '') : auto ? 'auto-scan on' : !marketOpen ? 'market closed' : 'manual'}
         </span>
         {!scanning && gen > 0 && <span>· last {timeAgo(gen)}</span>}
         {!scanning && auto && next > 0 && <span>· next {countdown(next)}</span>}
@@ -1315,7 +1316,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : 'No ready setups right now. The engine re-scans automatically.'}
+            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : signals?.market_open ? 'No ready setups right now. The engine re-scans automatically.' : `No cached signals from today's session. Markets open Mon–Fri 9:15 AM – 3:30 PM IST.`}
           </div>
         ) : (
           groupedRows.map(group => {
