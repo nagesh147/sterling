@@ -256,27 +256,67 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
             const slPx = (leg as any).premium_sl;
             const isExp = expanded.has(leg.option_symbol);
             return (
-              <div 
-                key={leg.option_symbol}
-                onClick={(e) => { e.stopPropagation(); onSelectSignal({ token: (leg as any).token || row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms }); }}
-                style={{
-                  display: 'flex', flexDirection: 'column', gap: 3,
-                  padding: '6px 8px', borderRadius: 4,
-                  background: isExp ? k.surfaceHover : 'transparent',
-                  border: `1px solid ${k.border}`,
-                  cursor: 'pointer', minWidth: 105
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = tint(k.orange, 5); }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>{leg.moneyness}</span>
-                  <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>{lastPx != null ? lastPx.toFixed(2) : '—'}</span>
+              <div key={leg.option_symbol} style={{ minWidth: 105 }}>
+                <div 
+                  onClick={(e) => toggleExpand(e, leg.option_symbol)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 3,
+                    padding: '6px 8px', borderRadius: 4,
+                    background: isExp ? k.surfaceHover : 'transparent',
+                    border: `1px solid ${k.border}`,
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = tint(k.orange, 5); }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>{leg.moneyness}</span>
+                    <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>{lastPx != null ? lastPx.toFixed(2) : '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                    {slPx != null && <span style={{ fontSize: 10, color: k.dim }}>SL {slPx.toFixed(1)}</span>}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
-                  {slPx != null && <span style={{ fontSize: 10, color: k.dim }}>SL {slPx.toFixed(1)}</span>}
-                </div>
+                {isExp && (() => {
+                  const spot = uLastPx ?? row.spot ?? 0;
+                  const greeks = computeGreeksFromLeg(
+                    leg.strike, leg.expiry, leg.option_type, spot,
+                    q, leg.lot_size ?? null,
+                  );
+                  return (
+                    <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 4 }}>
+                      <QuoteDetail
+                        sym={sym}
+                        q={q}
+                        expiry={leg.expiry}
+                        spotName={row.underlying}
+                        spotPx={spot || undefined}
+                        instrumentName={<InstrumentLabel symbol={leg.option_symbol} />}
+                        greeks={greeks ?? undefined}
+                        hideHeaderAndActions={false}
+                        onBuy={() => {
+                          openOrderWindow({
+                            symbol: leg.option_symbol,
+                            exchange: row.exchange,
+                            initialSide: 'BUY',
+                            lotSize: leg.lot_size || 1,
+                            lastPrice: lastPx || 0,
+                          });
+                        }}
+                        onSell={() => {
+                          openOrderWindow({
+                            symbol: leg.option_symbol,
+                            exchange: row.exchange,
+                            initialSide: 'SELL',
+                            lotSize: leg.lot_size || 1,
+                            lastPrice: lastPx || 0,
+                          });
+                        }}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -434,8 +474,9 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                 )}
               </div>
               {isExp && (() => {
+                const spot = uLastPx ?? row.spot ?? 0;
                 const greeks = computeGreeksFromLeg(
-                  leg.strike, leg.expiry, leg.option_type, row.spot,
+                  leg.strike, leg.expiry, leg.option_type, spot,
                   q, leg.lot_size ?? null,
                 );
                 return (
@@ -445,7 +486,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                       q={q} 
                       expiry={leg.expiry} 
                       spotName={row.underlying} 
-                      spotPx={row.spot} 
+                      spotPx={spot || undefined} 
                       instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
                       greeks={greeks ?? undefined}
                       onBuy={() => {

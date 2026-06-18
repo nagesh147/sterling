@@ -35,9 +35,10 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function LegCard({ leg, exchange, underlying }: {
+function LegCard({ leg, exchange, underlying, spotPx }: {
   leg: OptionDetail; exchange: string;
   underlying: string;
+  spotPx?: number;
 }) {
   const [showDepth, setShowDepth] = useState(false);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -126,21 +127,18 @@ function LegCard({ leg, exchange, underlying }: {
         <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.surface }}>
           <div style={{ display: 'flex' }}>
             <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
-              {q ? (
-                <QuoteDetail 
+              <QuoteDetail 
                   sym={sym} 
                   q={q} 
                   expiry={parseInstrument(leg.option_symbol) ? `${parseInstrument(leg.option_symbol)!.day ? parseInstrument(leg.option_symbol)!.day + ' ' : ''}${parseInstrument(leg.option_symbol)!.month} 20${parseInstrument(leg.option_symbol)!.year}` : ''}
-                  spotName={underlying} 
+                  spotName={underlying}
+                  spotPx={spotPx}
                   instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
                   hideHeaderAndActions={false} 
                   onBuy={() => handleAction({ stopPropagation: () => {} } as React.MouseEvent, 'BUY')}
                   onSell={() => handleAction({ stopPropagation: () => {} } as React.MouseEvent, 'SELL')}
                   greeks={leg}
                 />
-              ) : (
-                <div style={{ padding: 16, color: k.dim, fontSize: 12 }}>Loading market depth...</div>
-              )}
             </div>
           </div>
         </div>
@@ -247,7 +245,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             <div style={{ color: k.dim, fontSize: 12 }}>No option legs resolved (no liquid ATM/ITM contract).</div>
           ) : (
             data.options.map((leg) => (
-              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} />
+              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} />
             ))
           )}
           <div style={{ fontSize: 10, color: k.dim, marginTop: 8 }}>

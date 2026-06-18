@@ -82,7 +82,7 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 
 # ui-tables
 - Avoid browser-native `title` attribute hover tooltips on table headers — show descriptions inline as a second descriptive line below the header label using `fontSize: 8`, `fontWeight: 400`, muted color, no letter-spacing, no text-transform. Confidence: 0.70
-- Show Greeks (IV, delta Δ, gamma Γ, theta Θ, vega V) and Lot size on row expand in both MarketWatch and TripleSupertrend tables. Format as: IV x.x%, delta x.xxxx, gamma x.xxxxx, theta/day x.x, vega x.x, Lot N. Confidence: 0.75
+- Show Greeks (IV, delta Δ, gamma Γ, theta Θ, vega V) and Lot size on row expand in both MarketWatch and TripleSupertrend tables. Format as: IV x.x%, Δ delta x.xxx, Γ gamma x.xxxxx, Θ theta/day x.x, V vega x.x, Lot N. Confidence: 0.80
 
 # scan-configuration
 - Provide granular scan selection controls: users should be able to independently toggle stocks/indices, spot/derivatives, and ITM/ATM/OTM strike types for each scan strategy. Display scan cost estimates based on the user's current selection to help them understand the data and cost impact. Confidence: 0.75

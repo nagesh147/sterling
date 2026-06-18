@@ -65,17 +65,30 @@ function formatPrice(v: number | null | undefined): string {
   return v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatExpiry(ymd: string | undefined): string {
+  if (!ymd) return 'N/A';
+  try {
+    const d = new Date(ymd + 'T00:00:00');
+    if (isNaN(d.getTime())) return ymd;
+    const day = d.getDate();
+    const suffix = day === 1 || day === 21 || day === 31 ? 'st' : day === 2 || day === 22 ? 'nd' : day === 3 || day === 23 ? 'rd' : 'th';
+    const mon = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    const yr = d.getFullYear();
+    return `${day}${suffix} ${mon} ${yr}`;
+  } catch { return ymd; }
+}
+
 // ─── Expanded Quote Row ──────────────────────────────────────────────────────
 
 export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, hideHeaderAndActions, onBuy, onSell, greeks }: { sym?: string; q: any; expiry?: string; spotName?: string; spotPx?: number; instrumentName?: React.ReactNode; hideHeaderAndActions?: boolean; onBuy?: () => void; onSell?: () => void; greeks?: { iv: number; delta: number; gamma: number; theta: number; vega: number; lot_size?: number | null } }) {
   const s = useKiteSettings();
-  if (!q || typeof q !== 'object') return null;
-  const chg = chgPct(q, s.chgType);
+  if ((!q || typeof q !== 'object') && !greeks && !instrumentName && !spotName) return null;
+  const hasQ = q && typeof q === 'object';
+  const chg = hasQ ? chgPct(q, s.chgType) : { value: null, abs: null, color: t.dim };
   const color = chg.color;
   
-  // Fake total quantities for progress bar scale
-  const totalBuy = num(q.buy_quantity) || 100000;
-  const totalSell = num(q.sell_quantity) || 100000;
+  const totalBuy = hasQ ? (num(q.buy_quantity) || 100000) : 100000;
+  const totalSell = hasQ ? (num(q.sell_quantity) || 100000) : 100000;
 
   return (
     <div style={{ padding: '16px', background: t.bg, borderBottom: `1px solid ${t.border}`, fontFamily: t.fontFamily }}>
@@ -91,7 +104,7 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
         </>
       )}
       {/* ── Market Depth ── */}
-      <div style={{ marginBottom: hideHeaderAndActions ? 0 : 24 }}>
+      {hasQ && (<div style={{ marginBottom: hideHeaderAndActions ? 0 : 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px 8px 0', color: t.dim, fontSize: 11, background: t.bg }}>
@@ -141,10 +154,10 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
               </div>
             </div>
           </div>
-        </div>
+        </div>)}
 
       {/* ── OHLC Box ── */}
-      <div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, marginBottom: 16 }}>
+      {hasQ && (<div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 12 }}>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
             <span style={{ color: t.dim }}>Open</span><span style={{ color: t.text }}>{formatPrice(q.ohlc?.open)}</span>
@@ -168,10 +181,10 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
           <div style={{ position: 'absolute', left: '20%', top: '100%', borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: '5px solid #999', marginTop: 1, transform: 'translateX(-50%)' }} />
           <div style={{ position: 'absolute', right: '30%', top: '100%', width: 6, height: 6, background: '#999', borderRadius: '50%', marginTop: 2, transform: 'translateX(50%)' }} />
         </div>
-      </div>
+      </div>)}
 
       {/* ── Key Stats ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {hasQ && (<div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
             <span style={{ color: t.dim }}>Volume</span><span style={{ color: t.text }}>{q.volume != null ? num(q.volume).toLocaleString('en-IN') : 'N/A'}</span>
@@ -201,53 +214,45 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
         
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
-            <span style={{ color: t.dim }}>Expiry</span><span style={{ color: t.text }}>{expiry || 'N/A'}</span>
+            <span style={{ color: t.dim }}>Expiry</span><span style={{ color: t.text }}>{formatExpiry(expiry)}</span>
           </div>
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: t.dim }}>OI</span><span style={{ color: t.text }}>{q.oi != null ? num(q.oi).toLocaleString('en-IN') : 'N/A'}</span>
           </div>
         </div>
+      </div>)}
 
-        {greeks && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
-                <span style={{ color: t.dim }}>IV</span><span style={{ color: t.text }}>{(greeks.iv * 100).toFixed(1)}%</span>
-              </div>
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: t.dim }}>Δ delta</span><span style={{ color: t.text }}>{greeks.delta.toFixed(3)}</span>
-              </div>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
-                <span style={{ color: t.dim }}>Γ gamma</span><span style={{ color: t.text }}>{greeks.gamma.toFixed(5)}</span>
-              </div>
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: t.dim }}>Θ theta/day</span><span style={{ color: t.text }}>{greeks.theta.toFixed(1)}</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
-                <span style={{ color: t.dim }}>V vega</span><span style={{ color: t.text }}>{greeks.vega.toFixed(1)}</span>
-              </div>
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: t.dim }}>Lot</span><span style={{ color: t.text }}>{greeks.lot_size ?? '—'}</span>
-              </div>
-            </div>
-          </>
-        )}
-
-        {spotName && spotPx != null && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
-              <span style={{ color: t.dim }}>{spotName}</span><span style={{ color: t.text }}>{formatPrice(spotPx)}</span>
-            </div>
-            <div style={{ flex: 1 }} />
+      {/* ── Greeks ── */}
+      {greeks && (<div style={{ background: '#f9f9f9', padding: '12px 16px', borderRadius: 4, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>IV</span><span style={{ color: t.text }}>{(greeks.iv * 100).toFixed(1)}%</span>
           </div>
-        )}
-      </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>Δ delta</span><span style={{ color: t.text }}>{greeks.delta.toFixed(3)}</span>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>Γ gamma</span><span style={{ color: t.text }}>{greeks.gamma.toFixed(5)}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>Θ theta/day</span><span style={{ color: t.text }}>{greeks.theta.toFixed(1)}</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', paddingRight: 32 }}>
+            <span style={{ color: t.dim }}>V vega</span><span style={{ color: t.text }}>{greeks.vega.toFixed(1)}</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ color: t.dim }}>Lot</span><span style={{ color: t.text }}>{greeks.lot_size ?? '—'}</span>
+          </div>
+        </div>
+      </div>)}
+
+
     </div>
   );
 }

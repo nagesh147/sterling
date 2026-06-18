@@ -1,4 +1,5 @@
 # ui-layout
+- In MarketWatchPane: Greeks (IV, delta, gamma, theta, vega, lot) should render in their own separate card, not merged into the same card as Key Stats (volume, circuits, LTQ, expiry, OI) or Spot price. Each logical group gets its own #f9f9f9 card. Confidence: 0.65
 - For ScalpSignalCard: direction label (○ NEAR LEVEL), status badge (PENDING), and reason text (near 4H support @ 83...) should render in a single horizontal line, not stacked in separate lines. Combine into one flex row. Confidence: 0.70
 - For the scalping signal table: use fixed-width columns (Symbol, Type, Entry, Current, Stop, Target, Risk, Strategy/Mode) so all rows align vertically, and strategy badges (PRICE ACTION, SMC, MA CROSS) share a common width with center-aligned text. Confidence: 0.75
 - Signal profile badges should display only the correct/relevant profile tag, not all available profiles. Confidence: 0.65
