@@ -32,11 +32,11 @@ def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
     return TripleSupertrendConfig(trail_target=c.trail_target, early_lock=c.early_lock)
 
 
-def _client(user: UserContext):
+async def _client(user: UserContext):
     acct = kite_accounts.get_active(user.user_id)
     if not acct:
         raise HTTPException(409, "No active Kite account — add credentials and log in first.")
-    return kite_accounts.build_client(acct)
+    return await kite_accounts.acquire_client(acct)   # warm, cached (no per-call close)
 
 
 @router.get("/config", response_model=EngineConfigModel)
@@ -82,11 +82,8 @@ async def activity(limit: int = 2000,
 async def run_scan(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
     """Manual scan trigger (the background loop also scans automatically)."""
     uid = user.user_id
-    client = _client(user)
-    try:
-        await service.scan_user(client, uid)
-    finally:
-        await client.close()
+    client = await _client(user)
+    await service.scan_user(client, uid)
     us = scanner.snapshot(uid)
     st = state.status(uid)
     return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
@@ -113,11 +110,8 @@ async def cancel_scan(user: UserContext = Depends(get_current_user)) -> SignalsR
 @router.get("/setup/{token}", response_model=SetupChart)
 async def setup(token: int, underlying: str = "",
                 user: UserContext = Depends(get_current_user)) -> SetupChart:
-    client = _client(user)
-    try:
-        return await build_setup_chart(client, token, underlying, _ts_cfg(state.get_config(user.user_id)))
-    finally:
-        await client.close()
+    client = await _client(user)
+    return await build_setup_chart(client, token, underlying, _ts_cfg(state.get_config(user.user_id)))
 
 
 @router.post("/order", response_model=EngineOrderResponse)
@@ -136,7 +130,7 @@ async def place_order(body: EngineOrderRequest,
     if prior:
         return EngineOrderResponse(order_id=prior, status="duplicate", message="Already submitted")
 
-    client = _client(user)
+    client = await _client(user)
     try:
         result = await client.place_order_option(
             body.option_symbol, side, body.quantity, exchange=body.exchange, tag=idem)
@@ -146,8 +140,6 @@ async def place_order(body: EngineOrderRequest,
     except Exception as exc:  # noqa: BLE001
         state.log(uid, "order_failed", f"{body.side} {body.option_symbol}: {exc}")
         raise HTTPException(502, detail=str(exc))
-    finally:
-        await client.close()
 
     oid = (result or {}).get("order_id", "")
     if oid:
@@ -160,11 +152,8 @@ async def place_order(body: EngineOrderRequest,
 async def detail(token: int, timestamp_ms: int = 0, user: UserContext = Depends(get_current_user)) -> EngineDetailResponse:
     """Trigger context + live underlying price + per-leg quote/depth/greeks for a
     ready signal (BUY/SELL are placed via the standard /kite/orders endpoint)."""
-    client = _client(user)
-    try:
-        d = await build_detail(client, user.user_id, token, timestamp_ms)
-    finally:
-        await client.close()
+    client = await _client(user)
+    d = await build_detail(client, user.user_id, token, timestamp_ms)
     if d is None:
         raise HTTPException(404, "No ready signal for that instrument in the latest scan.")
     return d

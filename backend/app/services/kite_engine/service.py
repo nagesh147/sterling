@@ -88,10 +88,14 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
     state.set_scanning(uid, True)
     state.log(uid, "scan_start", f"Initiating 1H triple-SuperTrend scan…")
     try:
-        nfo = await client.search_instruments("", "NFO", limit=1_000_000)
-        bfo = await client.search_instruments("", "BFO", limit=1_000_000)
-        nse = await client.search_instruments("", "NSE", limit=1_000_000)
-        bse = await client.search_instruments("", "BSE", limit=1_000_000)
+        # Fetch the four exchange dumps concurrently (warm cache → instant; cold →
+        # parallel downloads instead of ~1s of sequential round-trips).
+        nfo, bfo, nse, bse = await asyncio.gather(
+            client.search_instruments("", "NFO", limit=1_000_000),
+            client.search_instruments("", "BFO", limit=1_000_000),
+            client.search_instruments("", "NSE", limit=1_000_000),
+            client.search_instruments("", "BSE", limit=1_000_000),
+        )
         full_universe = build_universe(nfo_instruments=nfo, bfo_instruments=bfo, equities=nse + bse)
         source = cfg_model.scan_source
         # Granular selection applies to BOTH scans.
@@ -162,12 +166,15 @@ async def _scan_all_connected_once() -> None:
         return
     scanned = False
     for acct in accts:
-        client = kite_accounts.build_client(acct)
+        # Warm cached client — keeps the instrument dump (1h TTL) hot across scan
+        # cycles instead of re-downloading all four exchange dumps every interval.
+        client = await kite_accounts.acquire_client(acct)
         try:
             try:
                 await client.get_profile()
             except KiteTokenError:
                 kite_accounts.clear_session(acct.user_id, acct.id)
+                await kite_accounts.release_client(acct.id)
                 state.log(acct.user_id, "info",
                           "Kite session expired — auto-disconnected; re-login required.")
                 continue
@@ -175,8 +182,6 @@ async def _scan_all_connected_once() -> None:
             scanned = True
         except Exception:
             pass
-        finally:
-            await client.close()
     if scanned:
         _first_scan_done = True
 

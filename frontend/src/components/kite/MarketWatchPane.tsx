@@ -6,6 +6,7 @@ import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { computeGreeksFromSymbol } from '../../utils/computeGreeks';
+import { useDebounced } from '../../hooks/useDebounced';
 
 const S = {
   container: { display: 'flex', flexDirection: 'column' as const, height: '100%', background: t.bg, fontFamily: t.fontFamily },
@@ -378,7 +379,10 @@ import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
   const [query, setQuery] = useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
-  const search = useKiteInstrumentSearch(query);
+  // Debounce so we fire ONE /instruments request after typing pauses, not one
+  // per keystroke (each is a heavy full-dump filter server-side).
+  const debouncedQuery = useDebounced(query, 300);
+  const search = useKiteInstrumentSearch(debouncedQuery);
   const { items: watch, add, remove, reorder, mergeLots } = useKiteWatchlist();
   const sync = useSyncKiteWatchlist();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());

@@ -51,7 +51,7 @@ async def _run(user: UserContext, fn):
     """Build a client from the user's active account, run ``fn(client)``, close it,
     and map Kite errors to HTTP statuses."""
     acct = _require_active(user)
-    client = kite_accounts.build_client(acct)
+    client = await kite_accounts.acquire_client(acct)   # warm, cached per account
     try:
         return await fn(client)
     except HTTPException:
@@ -62,8 +62,7 @@ async def _run(user: UserContext, fn):
         raise HTTPException(502, str(exc))
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(502, str(exc))
-    finally:
-        await client.close()
+    # NB: no close() — the client is cached/shared (see kite_accounts.acquire_client)
 
 
 # ─── Account credentials CRUD (user-scoped) ──────────────────────────────────
@@ -96,6 +95,7 @@ async def update_account(account_id: str, body: KiteAccountUpdate,
 async def delete_account(account_id: str, user: UserContext = Depends(get_current_user)) -> None:
     if not kite_accounts.delete(user.user_id, account_id):
         raise HTTPException(404, "Kite account not found")
+    await kite_accounts.release_client(account_id)
     await ticker_manager.stop(user.user_id)
 
 
@@ -307,6 +307,7 @@ async def logout(user: UserContext = Depends(get_current_user)) -> OkResponse:
             finally:
                 await client.close()
         kite_accounts.clear_session(user.user_id, acct.id)
+        await kite_accounts.release_client(acct.id)
     await ticker_manager.stop(user.user_id)
     return OkResponse(message="Logged out")
 

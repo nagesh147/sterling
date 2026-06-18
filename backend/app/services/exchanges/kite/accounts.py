@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app.core.logging import get_logger
 from app.core.security import decrypt, encrypt
@@ -310,12 +310,50 @@ def to_response(a: _Account) -> KiteAccountResponse:
 
 
 def build_client(a: _Account):
-    """Construct a KiteClient from a stored account (secrets decrypted in-memory)."""
+    """Construct a fresh KiteClient from a stored account (secrets decrypted
+    in-memory). Prefer :func:`acquire_client` on hot paths — a fresh client has an
+    empty instrument cache and no connection pool, so building one per request
+    re-downloads the ~80k-row instrument dump and re-does the TLS handshake."""
     from .client import KiteClient
     return KiteClient(
         api_key=a.api_key, api_secret=a.api_secret, access_token=a.access_token,
         is_paper=a.is_paper,
     )
+
+
+# ─── Cached clients (warm instrument dump + connection pool, per account) ──────
+# One live KiteClient per account, reused across requests so its InstrumentCache
+# (1h TTL) and httpx connection pool stay warm. Rebuilt only when credentials or
+# the access token rotate — validated against the *encrypted* fields so the hot
+# path never decrypts. This is the fix for instrument search taking minutes
+# (every request used to rebuild the client and re-fetch the full dump).
+_client_cache: Dict[str, Tuple[str, str, "object"]] = {}  # id -> (api_key, token_enc, client)
+
+
+async def acquire_client(a: _Account):
+    """Return a warm KiteClient for the account, reusing its instrument cache and
+    connection pool. Rebuilt only when api_key / access token change."""
+    cached = _client_cache.get(a.id)
+    if cached is not None and cached[0] == a.api_key and cached[1] == a.access_token_enc:
+        return cached[2]
+    if cached is not None:                      # credentials rotated — drop the stale client
+        try:
+            await cached[2].close()
+        except Exception:  # noqa: BLE001
+            pass
+    client = build_client(a)
+    _client_cache[a.id] = (a.api_key, a.access_token_enc, client)
+    return client
+
+
+async def release_client(account_id: str) -> None:
+    """Drop and close a cached client (account deleted / switched / logged out)."""
+    cached = _client_cache.pop(account_id, None)
+    if cached is not None:
+        try:
+            await cached[2].close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def clear() -> None:

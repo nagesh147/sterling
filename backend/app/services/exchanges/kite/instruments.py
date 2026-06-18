@@ -11,6 +11,7 @@ testable with a fake fetcher.
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import time
@@ -53,18 +54,32 @@ class InstrumentCache:
         self._cache: Dict[str, List[dict]] = {}
         self._cache_ts: Dict[str, float] = {}
         self._token_cache: Dict[Tuple[str, str], int] = {}
+        self._locks: Dict[str, asyncio.Lock] = {}
+
+    def _fresh(self, key: str, now: float) -> bool:
+        return key in self._cache and (now - self._cache_ts.get(key, 0.0)) < self._ttl
 
     async def load(self, exchange: str = "") -> List[dict]:
-        """Return cached rows for ``exchange`` (``""`` = full dump), fetching if stale."""
+        """Return cached rows for ``exchange`` (``""`` = full dump), fetching if stale.
+
+        A per-key lock dedupes concurrent cold loads (the client is now shared, so
+        a burst of searches/scans must not each download the multi-MB dump), and
+        the ~80k-row CSV parse runs in a thread so it never blocks the event loop.
+        """
         key = (exchange or "").upper()
         now = time.monotonic()
-        if key in self._cache and (now - self._cache_ts.get(key, 0.0)) < self._ttl:
+        if self._fresh(key, now):
             return self._cache[key]
-        text = await self._fetch(key)
-        rows = parse_instruments_csv(text)
-        self._cache[key] = rows
-        self._cache_ts[key] = now
-        return rows
+        lock = self._locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            now = time.monotonic()
+            if self._fresh(key, now):           # filled while we waited for the lock
+                return self._cache[key]
+            text = await self._fetch(key)
+            rows = await asyncio.to_thread(parse_instruments_csv, text)
+            self._cache[key] = rows
+            self._cache_ts[key] = now
+            return rows
 
     @staticmethod
     def _strike_str(strike) -> str:

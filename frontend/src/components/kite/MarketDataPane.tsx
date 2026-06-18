@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useKiteInstrumentSearch, useKiteQuote, useKiteOhlc, useKiteHistorical, useKiteWatchlist } from '../../hooks/useKite';
+import { useDebounced } from '../../hooks/useDebounced';
 
 function parseTs(ts: string): string {
   const nfoRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)$/;
@@ -232,7 +233,8 @@ function HistoricalCard() {
 
 export function MarketDataPane() {
   const [query, setQuery] = useState('');
-  const search = useKiteInstrumentSearch(query);
+  const debouncedQuery = useDebounced(query, 300);
+  const search = useKiteInstrumentSearch(debouncedQuery);
   const { items: watch, add } = useKiteWatchlist();
   const [selected, setSelected] = useState<string[]>([]);
   const [tab, setTab] = useState<'quote' | 'ohlc' | 'historical'>('quote');

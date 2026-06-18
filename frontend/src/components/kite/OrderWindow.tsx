@@ -4,6 +4,7 @@ import {
   usePlaceKiteOrder, useKiteOrderMargins, useKiteMargins,
   useKiteInstrumentSearch, useKiteQuote, usePlaceKiteGtt,
 } from '../../hooks/useKite';
+import { useDebounced } from '../../hooks/useDebounced';
 import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -45,13 +46,6 @@ const Refresh = () => (
 const Pencil = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
 );
-
-// Debounce a value so the search only hits the backend after typing pauses.
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
-  return v;
-}
 
 export function OrderWindow({ options, onClose }: Props) {
   const { initialSide, initialQty, product: productHint, tag, onPlaced } = options;
