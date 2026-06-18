@@ -38,6 +38,47 @@ def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
     return TripleSupertrendConfig(trail_target=c.trail_target, early_lock=c.early_lock)
 
 
+async def place_manual_order(uid: str, option_symbol: str, side: str,
+                             quantity: int, exchange: str = "NFO") -> dict:
+    """Shared manual BUY/SELL path used by BOTH the detail-panel REST endpoint and
+    the Telegram bot, so they apply the identical live-safety gate + idempotency and
+    place through the same warm client. Returns a status dict (never raises):
+      {status: ok|duplicate|blocked|error, order_id?, message?, reason?, code?}
+    Callers map this to HTTP / chat replies."""
+    from app.services.exchanges.kite import accounts as kite_accounts
+    from app.services.exchanges.kite.errors import KiteError
+
+    norm = "buy" if side.upper() == "BUY" else "sell"
+    idem = live_safety.make_idempotency_key(uid, option_symbol, side.upper(), quantity)
+    decision = live_safety.assert_safe_to_trade(positions=[], idempotency_key=idem)
+    if not decision.allowed and decision.code != "duplicate_order":
+        state.log(uid, "order_blocked", f"{side} {option_symbol} blocked: {decision.reason}")
+        return {"status": "blocked", "reason": decision.reason, "code": decision.code}
+    prior = live_safety.check_idempotency(idem)
+    if prior:
+        return {"status": "duplicate", "order_id": prior, "message": "Already submitted"}
+
+    acct = kite_accounts.get_active(uid)
+    if not acct:
+        return {"status": "error", "message": "No active Kite account."}
+    client = await kite_accounts.acquire_client(acct)
+    try:
+        result = await client.place_order_option(
+            option_symbol, norm, quantity, exchange=exchange, tag=idem)
+    except KiteError as exc:
+        state.log(uid, "order_failed", f"{side} {option_symbol}: {exc}")
+        return {"status": "error", "message": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        state.log(uid, "order_failed", f"{side} {option_symbol}: {exc}")
+        return {"status": "error", "message": str(exc)}
+
+    oid = (result or {}).get("order_id", "")
+    if oid:
+        live_safety.record_idempotency(idem, oid)
+    state.log(uid, "order_placed", f"{side} {quantity} {option_symbol} (#{oid})")
+    return {"status": "ok", "order_id": oid, "message": "Order submitted"}
+
+
 def _make_place_cb(client, uid: str):
     """Gated auto-exec: 1-lot at-the-money (nearest-spot leg) option BUY under the
     same live-safety + idempotency checks as manual Kite orders. Logs every outcome."""

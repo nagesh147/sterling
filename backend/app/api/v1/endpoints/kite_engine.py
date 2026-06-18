@@ -119,33 +119,15 @@ async def place_order(body: EngineOrderRequest,
                      user: UserContext = Depends(get_current_user)) -> EngineOrderResponse:
     """Place a manual BUY/SELL from the detail panel — same live-safety gate as the
     standard order path, but logged to the engine terminal with full error surfacing."""
-    uid = user.user_id
-    side = "buy" if body.side.upper() == "BUY" else "sell"
-    idem = live_safety.make_idempotency_key(uid, body.option_symbol, body.side.upper(), body.quantity)
-    decision = live_safety.assert_safe_to_trade(positions=[], idempotency_key=idem)
-    if not decision.allowed and decision.code != "duplicate_order":
-        state.log(uid, "order_blocked", f"{body.side} {body.option_symbol} blocked: {decision.reason}")
-        raise HTTPException(423, detail={"reason": decision.reason, "code": decision.code})
-    prior = live_safety.check_idempotency(idem)
-    if prior:
-        return EngineOrderResponse(order_id=prior, status="duplicate", message="Already submitted")
-
-    client = await _client(user)
-    try:
-        result = await client.place_order_option(
-            body.option_symbol, side, body.quantity, exchange=body.exchange, tag=idem)
-    except KiteError as exc:
-        state.log(uid, "order_failed", f"{body.side} {body.option_symbol}: {exc}")
-        raise HTTPException(502, detail=str(exc))
-    except Exception as exc:  # noqa: BLE001
-        state.log(uid, "order_failed", f"{body.side} {body.option_symbol}: {exc}")
-        raise HTTPException(502, detail=str(exc))
-
-    oid = (result or {}).get("order_id", "")
-    if oid:
-        live_safety.record_idempotency(idem, oid)
-    state.log(uid, "order_placed", f"{body.side} {body.quantity} {body.option_symbol} (#{oid})")
-    return EngineOrderResponse(order_id=oid, status="ok", message="Order submitted")
+    res = await service.place_manual_order(
+        user.user_id, body.option_symbol, body.side, body.quantity, body.exchange)
+    if res["status"] == "blocked":
+        raise HTTPException(423, detail={"reason": res.get("reason"), "code": res.get("code")})
+    if res["status"] == "error":
+        raise HTTPException(502, detail=res.get("message", "Order failed"))
+    return EngineOrderResponse(
+        order_id=res.get("order_id", ""), status=res["status"],
+        message=res.get("message", ""))
 
 
 @router.get("/detail/{token}", response_model=EngineDetailResponse)

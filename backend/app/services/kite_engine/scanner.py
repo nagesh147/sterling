@@ -288,6 +288,36 @@ class UserScan:
     scanning_label: str = ""
     cancelled: bool = False
     diag: ScanDiag = field(default_factory=ScanDiag)
+    # token → row index, lazily built and invalidated when a new scan lands
+    # (keyed by generated_ms + row count). Turns detail lookup O(n)→O(1).
+    _idx_key: tuple = (-1, -1)
+    _row_by_token: Dict[int, "EngineSignalRow"] = field(default_factory=dict)
+
+    def row_for_token(self, token: int, timestamp_ms: int = 0):
+        """Return the scan row whose own token or one of whose leg tokens matches
+        ``token`` (optionally also matching ``timestamp_ms``). O(1) via a cached
+        index; falls back to a scan only on the rare token/timestamp-collision case."""
+        key = (self.generated_ms, len(self.rows))
+        if self._idx_key != key:
+            idx: Dict[int, "EngineSignalRow"] = {}
+            for r in self.rows:
+                rt = getattr(r, "token", None)
+                if rt is not None:
+                    idx.setdefault(rt, r)
+                for leg in r.legs:
+                    lt = getattr(leg, "token", None)
+                    if lt is not None:
+                        idx.setdefault(lt, r)
+            self._row_by_token = idx
+            self._idx_key = key
+        r = self._row_by_token.get(token)
+        if timestamp_ms > 0 and r is not None and r.timestamp_ms != timestamp_ms:
+            # token reused across snapshots at different timestamps — exact-match scan
+            return next((x for x in self.rows
+                         if (getattr(x, "token", None) == token
+                             or any(getattr(l, "token", None) == token for l in x.legs))
+                         and x.timestamp_ms == timestamp_ms), None)
+        return r
 
 
 def _inst(item: UniverseItem) -> InstrumentMeta:
@@ -438,7 +468,7 @@ class KiteEngineScanner:
                 us.rows = _compile_rows(rows)
                 us.generated_ms = int(time.time() * 1000)
                 model_rows = [r.model_dump() for r in us.rows]
-                state.save_signal_cache(uid, json.dumps(model_rows), us.generated_ms)
+                state.save_signal_cache(uid, model_rows, us.generated_ms)
             _flush()
 
             # ── derivatives scan: triple-ST on each contract's OWN premium chart ──
@@ -574,7 +604,7 @@ class KiteEngineScanner:
             us.diag = diag
             us.generated_ms = int(time.time() * 1000)
             model_rows = [r.model_dump() for r in us.rows]
-            state.save_signal_cache(uid, json.dumps(model_rows), us.generated_ms)
+            state.save_signal_cache(uid, model_rows, us.generated_ms)
         finally:
             us.scanning = False
             us.scanning_label = ""

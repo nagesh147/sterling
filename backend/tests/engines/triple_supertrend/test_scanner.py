@@ -548,3 +548,56 @@ async def test_scan_invokes_place_cb_for_ready_rows():
     await sc.scan(uid="u1", client=FakeClient(), universe=universe, nfo_rows=nfo,
                   bfo_rows=[], cfg=TripleSupertrendConfig(), moneyness=["ATM"], place_cb=cb)
     assert calls == [("ACME", "ACME25JUN300CE", 50)]
+
+
+# ── UserScan.row_for_token (O(1) index used by the detail endpoint) ───────────
+def _row(token, ts, legs=()):
+    from app.engines.triple_supertrend.schemas import EngineSignalRow, AlignmentChip, OptionLeg
+    return EngineSignalRow(
+        underlying="NIFTY", token=token, exchange="NFO", regime="BULL",
+        alignment=AlignmentChip(fast=1, mid=1, slow=1), direction="long",
+        option_type="CE", spot=100.0, stop_loss=95.0, score=85.0, timestamp_ms=ts,
+        legs=[OptionLeg(moneyness="ATM", option_type="CE", option_symbol=s,
+                        strike=k, expiry="2026-06-25", token=lt)
+              for (s, k, lt) in legs],
+    )
+
+
+def test_row_for_token_matches_own_and_leg_tokens():
+    from app.services.kite_engine.scanner import UserScan
+    from app.engines.triple_supertrend.engine import TripleSupertrendEngine
+    from app.engines.triple_supertrend.config import TripleSupertrendConfig
+    us = UserScan(engine=TripleSupertrendEngine(TripleSupertrendConfig()))
+    us.rows = [_row(111, 1000, legs=[("NIFTYCE", 25000, 5001), ("NIFTYCE2", 25100, 5002)]),
+               _row(222, 1000, legs=[("BANKCE", 50000, 6001)])]
+    us.generated_ms = 1000
+    assert us.row_for_token(111).token == 111          # own token
+    assert us.row_for_token(5002).token == 111         # leg token → parent row
+    assert us.row_for_token(6001).token == 222
+    assert us.row_for_token(999) is None               # unknown
+
+
+def test_row_for_token_reindexes_after_new_scan():
+    from app.services.kite_engine.scanner import UserScan
+    from app.engines.triple_supertrend.engine import TripleSupertrendEngine
+    from app.engines.triple_supertrend.config import TripleSupertrendConfig
+    us = UserScan(engine=TripleSupertrendEngine(TripleSupertrendConfig()))
+    us.rows = [_row(111, 1000)]
+    us.generated_ms = 1000
+    assert us.row_for_token(111).token == 111
+    # new scan lands with different rows + generated_ms → index must rebuild
+    us.rows = [_row(333, 2000)]
+    us.generated_ms = 2000
+    assert us.row_for_token(111) is None
+    assert us.row_for_token(333).token == 333
+
+
+def test_row_for_token_respects_timestamp():
+    from app.services.kite_engine.scanner import UserScan
+    from app.engines.triple_supertrend.engine import TripleSupertrendEngine
+    from app.engines.triple_supertrend.config import TripleSupertrendConfig
+    us = UserScan(engine=TripleSupertrendEngine(TripleSupertrendConfig()))
+    us.rows = [_row(111, 1000)]
+    us.generated_ms = 1000
+    assert us.row_for_token(111, timestamp_ms=1000).token == 111
+    assert us.row_for_token(111, timestamp_ms=9999) is None   # ts mismatch

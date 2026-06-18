@@ -40,13 +40,7 @@ def _levels(side: list) -> List[DepthLevel]:
 async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> Optional[EngineDetailResponse]:
     """Build the detail for the currently-displayed signal row matching ``token``.
     Returns None if no such ready signal is in the latest scan snapshot."""
-    if timestamp_ms > 0:
-        row = next((r for r in scanner.snapshot(uid).rows 
-                    if (r.token == token or getattr(r, "token", None) == token or any(getattr(leg, "token", None) == token for leg in r.legs)) 
-                    and r.timestamp_ms == timestamp_ms), None)
-    else:
-        row = next((r for r in scanner.snapshot(uid).rows 
-                    if (r.token == token or getattr(r, "token", None) == token or any(getattr(leg, "token", None) == token for leg in r.legs))), None)
+    row = scanner.snapshot(uid).row_for_token(token, timestamp_ms)
     if row is None:
         return None
 

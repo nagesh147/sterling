@@ -82,10 +82,9 @@
   letter-spacing: 0.06em;
 }
 
-/* Scrollbars */
-.term-root ::-webkit-scrollbar { width: 4px; height: 4px; }
-.term-root ::-webkit-scrollbar-track { background: var(--t-bg); }
-.term-root ::-webkit-scrollbar-thumb { background: var(--t-border); border-radius: 2px; }
+/* Scrollbars — inherit the macOS overlay style from globals.css (thin, rounded,
+   fade-in on hover/scroll). Just contain wheel scroll within the terminal. */
+.term-root { overscroll-behavior: contain; }
 
 /* Ticker scroll animation */
 @keyframes ticker-move {
@@ -260,14 +259,8 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Improve scrollbar in feed */
-.signal-feed-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
-.signal-feed-scroll::-webkit-scrollbar { width: 4px; }
-.signal-feed-scroll::-webkit-scrollbar-track { background: transparent; }
-.signal-feed-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+/* Feed scroll — macOS overlay style from globals.css; just contain the scroll. */
+.signal-feed-scroll { overscroll-behavior: contain; }
 
 /* Improve SignalPane header */
 .signal-pane-header {

@@ -294,11 +294,47 @@ body {
 /* Tabular numbers for any currency / pnl figures */
 .tabular { font-variant-numeric: tabular-nums; }
 
-/* Scroll bar — matches dark palette */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* Zero-dependency virtualization: long row lists skip layout/paint (and the
+   per-row work inside, e.g. greeks) for off-screen rows. `auto` intrinsic size
+   lets the browser remember each row's real height, so the scrollbar stays
+   stable. Applied to the big Kite lists (signals, option chain, search results). */
+.kv-rows > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
+/* ── macOS-style overlay scrollbars ───────────────────────────────────────
+   Invisible at rest; a thin, rounded, semi-transparent pill fades in on hover or
+   while scrolling (`.is-scrolling` is toggled by scrollAutohide.ts, so keyboard/
+   trackpad scrolls reveal it too). Cross-platform — Linux/Windows get the macOS
+   feel. The transparent border + background-clip:padding-box make a slim inset pill. */
+* {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: transparent transparent;
+}
+*:hover, *:focus-within, .is-scrolling {
+  scrollbar-color: rgba(140, 140, 150, 0.5) transparent;
+}
+::-webkit-scrollbar { width: 11px; height: 11px; background: transparent; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  transition: background-color 0.25s ease;
+}
+:hover::-webkit-scrollbar-thumb,
+.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 150, 0.45);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(150, 150, 160, 0.78); background-clip: padding-box; }
+
+/* Contain wheel/touch scroll so it doesn't chain to the page (native feel). */
+html, body { overscroll-behavior: none; }
+.mac-scroll { overscroll-behavior: contain; }
 
 /* Selection */
 ::selection {
@@ -400,7 +436,5 @@ button, a, input, select, textarea,
   outline-offset: 2px;
 }
 
-/* Brand-tinted selection + scrollbar */
+/* Brand-tinted selection (scrollbars handled by the macOS overlay rules above). */
 ::selection { background: color-mix(in srgb, var(--brand-2) 32%, transparent); color: var(--text-primary); }
-::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--brand) 38%, var(--border-light)); border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--brand) 60%, var(--border-light)); }

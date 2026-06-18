@@ -496,7 +496,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
             {search.isFetching && query.trim().length >= 2 && <div style={{ padding: 16, color: t.dim, fontSize: 13 }}>Searching…</div>}
             {search.error && <div style={{ padding: 16, color: t.red, fontSize: 13 }}>✗ {(search.error as Error).message}</div>}
             {search.data && query.trim().length >= 2 && (
-              <div>
+              <div className="kv-rows">
                 {search.data.instruments.map((i) => {
                   const { kind, detail } = instrMeta(i);
                   const sym = `${i.exchange || 'NSE'}:${i.tradingsymbol}`;

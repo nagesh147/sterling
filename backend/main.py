@@ -1305,6 +1305,23 @@ async def _background_scalping_alerts(app: FastAPI, interval: int = 45) -> None:
         await asyncio.sleep(interval)
 
 
+async def _background_kite_alerts(interval: int = 60) -> None:
+    """Push NEW active Kite engine signals to Telegram — a SEPARATE stream from the
+    crypto scalping alerts. Gated on market hours; the push itself no-ops unless a
+    bot token/chat is configured and alerts are enabled."""
+    import asyncio
+    from app.services.notifications import telegram_kite as _kbot
+    from app.services.kite_engine.market_hours import is_market_open
+    await asyncio.sleep(12)
+    while True:
+        try:
+            if is_market_open():
+                await _kbot.push_kite_alerts()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("kite alert push error: %s", exc)
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -1566,7 +1583,8 @@ async def lifespan(app: FastAPI):
     from app.services.notifications import telegram_bot as _tg_bot
     tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
     tg_alert_task = asyncio.create_task(_background_scalping_alerts(app, interval=45))
-    log.info("Telegram bot + signal alerts started")
+    tg_kite_alert_task = asyncio.create_task(_background_kite_alerts(interval=60))
+    log.info("Telegram bot + signal alerts started (crypto + kite)")
 
     # ── Live event bus + agents (Phase 3) — only when enable_event_bus is set ──
     from app.core.config import settings as _settings

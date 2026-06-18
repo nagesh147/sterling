@@ -119,9 +119,11 @@ def auto_open_underlyings(uid: str) -> Set[str]:
 
 
 # ── signal cache (DB-persisted for restarts / market-closed hours) ────────
-def save_signal_cache(uid: str, rows_json: str, generated_ms: int) -> None:
+def save_signal_cache(uid: str, rows: list, generated_ms: int) -> None:
+    """Persist the latest scan rows. ``rows`` is a list of plain dicts
+    (``model_dump`` output) — encoded once here, not parsed-then-reencoded."""
     try:
-        data = json.dumps({"rows": json.loads(rows_json), "generated_ms": generated_ms})
+        data = json.dumps({"rows": rows, "generated_ms": generated_ms})
         db.set_config(f"kite_engine_signals_{uid}", data)
     except Exception:
         pass

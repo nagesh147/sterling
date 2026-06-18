@@ -195,20 +195,34 @@ def build_pnl_text() -> str:
 
 _HELP = (
     "<b>🤖 Sterling Bot</b>\n\n"
+    "<b>📈 Crypto</b>\n"
     "/signals — scalping signals (filter by strategy / ready)\n"
     "/positions — open & closed positions\n"
     "/pnl — portfolio P&L summary\n"
-    "/alerts — toggle signal push alerts\n"
+    "/alerts — toggle signal push alerts\n\n"
+    "<b>🇮🇳 Kite</b>\n"
+    "/kite — Kite desk: signals, positions, P&L, scan, auto-trade, orders\n\n"
     "/help — this message"
 )
+
+_TOP_MENU = "<b>🤖 Sterling</b>\nChoose a desk:"
+
+
+def _top_menu_kb() -> dict:
+    return {"inline_keyboard": [[_btn("📈 Crypto", "menu_crypto"), _btn("🇮🇳 Kite", "menu_kite")]]}
 
 
 # ── Update dispatch ───────────────────────────────────────────────────────────
 async def _handle_message(chat_id: str, text: str) -> None:
     cmd = text.strip().split()[0].lower().lstrip("/")
     cmd = cmd.split("@")[0]  # strip @botname
-    if cmd in ("start", "help"):
+    if cmd == "start":
+        await _send(_TOP_MENU, chat_id, _top_menu_kb())
+    elif cmd == "help":
         await _send(_HELP, chat_id)
+    elif cmd in ("kite", "k"):
+        from app.services.notifications import telegram_kite
+        await telegram_kite.handle_kite_command(chat_id)
     elif cmd == "signals":
         scan = await _scan()
         await _send(build_signals_text(scan, "all", True), chat_id, _signals_kb("all", True))
@@ -225,10 +239,19 @@ async def _handle_message(chat_id: str, text: str) -> None:
 
 
 async def _handle_callback(chat_id: str, message_id: int, cb_id: str, data: str) -> None:
+    kind = data.split("|")[0]
+    # Kite desk owns the `k*` callback namespace + the "Kite" top-menu button.
+    if kind.startswith("k") or data == "menu_kite":
+        from app.services.notifications import telegram_kite
+        await telegram_kite.handle_kite_callback(
+            chat_id, message_id, cb_id, "kmenu" if data == "menu_kite" else data)
+        return
     await _answer_cb(cb_id)
     parts = data.split("|")
-    kind = parts[0]
-    if kind == "sig":
+    if kind == "menu_crypto":
+        scan = await _scan()
+        await _edit(chat_id, message_id, build_signals_text(scan, "all", True), _signals_kb("all", True))
+    elif kind == "sig":
         strategy = parts[1] if len(parts) > 1 else "all"
         ready_only = bool(int(parts[2])) if len(parts) > 2 else True
         scan = await _scan()

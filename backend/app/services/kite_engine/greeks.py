@@ -76,13 +76,39 @@ def bs_price(*, spot: float, strike: float, dte_days: float, iv: float,
 
 def implied_vol(*, price: float, spot: float, strike: float, dte_days: float,
                 option_type: str, rate: float = _R_DEFAULT) -> float:
-    """Back IV out of a market premium by bisection. Returns 0.0 if unsolvable
-    (e.g. price below intrinsic). Lets us show greeks after hours from last price."""
+    """Back IV out of a market premium. Newton-Raphson (vega-driven) from a
+    Brenner–Subrahmanyam seed, converging in a few iterations on the common path;
+    falls back to bisection if a step leaves bounds or vega goes flat. Returns 0.0
+    if unsolvable (e.g. price below intrinsic). Lets us show greeks after hours."""
     t = max(dte_days, 0.0) / 365.0
     is_call = str(option_type).upper().startswith("C")
     intrinsic = max(0.0, (spot - strike) if is_call else (strike - spot))
     if price <= 0 or t <= 0 or spot <= 0 or strike <= 0 or price < intrinsic - 1e-6:
         return 0.0
+
+    sqrt_t = math.sqrt(t)
+    disc = strike * math.exp(-rate * t)
+    log_sk = math.log(spot / strike)
+    # Brenner–Subrahmanyam closed-form seed (exact ATM, good elsewhere), clamped.
+    iv = min(5.0, max(1e-3, math.sqrt(2.0 * math.pi / t) * price / spot))
+    for _ in range(12):
+        sig_rt = iv * sqrt_t
+        d1 = (log_sk + (rate + 0.5 * iv * iv) * t) / sig_rt
+        d2 = d1 - sig_rt
+        model = (spot * _norm_cdf(d1) - disc * _norm_cdf(d2)) if is_call \
+            else (disc * _norm_cdf(-d2) - spot * _norm_cdf(-d1))
+        diff = model - price
+        if abs(diff) < 1e-6:
+            return iv
+        vega = spot * _norm_pdf(d1) * sqrt_t            # d(price)/d(iv), raw
+        if vega < 1e-8:
+            break                                        # flat — bisect instead
+        nxt = iv - diff / vega
+        if not (1e-4 < nxt < 5.0) or math.isnan(nxt):
+            break                                        # left bounds — bisect instead
+        iv = nxt
+
+    # Robust fallback: bracketed bisection always converges.
     lo, hi = 1e-3, 5.0
     for _ in range(64):
         mid = 0.5 * (lo + hi)

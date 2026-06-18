@@ -1470,7 +1470,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 </div>
                 
                 {!isCollapsed && (
-                  <div>
+                  <div className="kv-rows">
                     {group.rows.map((row) => (
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
                         onSelectSignal={onSelectSignal} sort={legSort}
