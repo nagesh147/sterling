@@ -5,6 +5,7 @@ import {
   useKiteInstrumentSearch, useKiteQuote, usePlaceKiteGtt,
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
+import { useMacKite } from '../../hooks/useMacKite';
 import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -48,7 +49,15 @@ const Pencil = () => (
 );
 
 export function OrderWindow({ options, onClose }: Props) {
+  const { on, motion, AnimatePresence, sp, setTicketOpen } = useMacKite();
   const { initialSide, initialQty, product: productHint, tag, onPlaced } = options;
+
+  // Dim + 2% scale-down of the background Kite canvas while the ticket is open.
+  // No-op when Mac Kite is off (setTicketOpen guards on the flag internally).
+  useEffect(() => {
+    setTicketOpen(true);
+    return () => setTicketOpen(false);
+  }, [setTicketOpen]);
 
   const [instr, setInstr] = useState({
     symbol: options.symbol, exchange: options.exchange,
@@ -272,20 +281,10 @@ export function OrderWindow({ options, onClose }: Props) {
     </div>
   );
 
-  return (
+  // Shared card body (header → footer). Markup is identical in both the static
+  // and the Mac App Store morph paths — only the enclosing card element differs.
+  const cardInner = (
     <>
-      <style>{`
-        .ow-num::-webkit-outer-spin-button,.ow-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-        .ow-num{-moz-appearance:textfield;}
-        .ow-row:hover{background:${k.surfaceHover};}
-        @keyframes ow-spin{to{transform:rotate(360deg);}} .ow-spin{animation:ow-spin .6s linear infinite;}
-      `}</style>
-
-      <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, display: 'flex', alignItems: 'flex-start', fontFamily: k.fontFamily }}>
-        <div style={{ position: 'relative', width: cardW, transition: 'width .12s' }}>
-          {nudge && nudgeOpen && <NudgePopup message={nudge.message} onClose={() => setNudgeOpen(false)} />}
-
-          <div style={{ width: '100%', background: k.bg, borderRadius: 4, boxShadow: '0 6px 34px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             {/* Header */}
             <div onMouseDown={onHeaderDown} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 16px', background: accent, color: '#fff', cursor: 'move' }}>
               <div onMouseDown={(e) => e.stopPropagation()} style={{ minWidth: 0, flex: '0 1 auto', maxWidth: '70%', cursor: 'default' }}>
@@ -423,16 +422,78 @@ export function OrderWindow({ options, onClose }: Props) {
                 </div>
               </div>
             )}
+    </>
+  );
+
+  const styleTag = (
+    <style>{`
+        .ow-num::-webkit-outer-spin-button,.ow-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+        .ow-num{-moz-appearance:textfield;}
+        .ow-row:hover{background:${k.surfaceHover};}
+        @keyframes ow-spin{to{transform:rotate(360deg);}} .ow-spin{animation:ow-spin .6s linear infinite;}
+      `}</style>
+  );
+
+  // Card chrome shared by both paths (background, radius, shadow, layout).
+  const cardStyle: React.CSSProperties = { width: '100%', background: k.bg, borderRadius: 4, boxShadow: '0 6px 34px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' };
+
+  const searchOverlay = searchOpen && (
+    <InstrumentSearchOverlay symbol={instr.symbol} accent={accent} onPick={selectInstrument} onClose={() => setSearchOpen(false)} />
+  );
+
+  // ── Off-path: byte-identical to the original static popover. ─────────────────
+  if (!on) {
+    return (
+      <>
+        {styleTag}
+
+        <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, display: 'flex', alignItems: 'flex-start', fontFamily: k.fontFamily }}>
+          <div style={{ position: 'relative', width: cardW, transition: 'width .12s' }}>
+            {nudge && nudgeOpen && <NudgePopup message={nudge.message} onClose={() => setNudgeOpen(false)} />}
+
+            <div style={cardStyle}>
+              {cardInner}
+            </div>
           </div>
+
+          {depthOpen && <MarketDepth q={depthQ} onClose={() => setDepthOpen(false)} />}
+        </div>
+
+        {/* Centered search overlay — its own component, so typing never re-renders the ticket */}
+        {searchOverlay}
+      </>
+    );
+  }
+
+  // ── Mac path: App Store "card expansion" morph from the anchor (top-left). ────
+  return (
+    <>
+      {styleTag}
+
+      <div style={{ position: 'fixed', left: pos.x, top: pos.y, zIndex: 1000, display: 'flex', alignItems: 'flex-start', fontFamily: k.fontFamily }}>
+        <div style={{ position: 'relative', width: cardW, transition: 'width .12s' }}>
+          {nudge && nudgeOpen && <NudgePopup message={nudge.message} onClose={() => setNudgeOpen(false)} />}
+
+          <AnimatePresence>
+            <motion.div
+              key="ow-card"
+              className="mac-gpu"
+              style={{ ...cardStyle, transformOrigin: 'top left' }}
+              initial={{ opacity: 0, scale: 0.9, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 6 }}
+              transition={sp('standard')}
+            >
+              {cardInner}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {depthOpen && <MarketDepth q={depthQ} onClose={() => setDepthOpen(false)} />}
       </div>
 
       {/* Centered search overlay — its own component, so typing never re-renders the ticket */}
-      {searchOpen && (
-        <InstrumentSearchOverlay symbol={instr.symbol} accent={accent} onPick={selectInstrument} onClose={() => setSearchOpen(false)} />
-      )}
+      {searchOverlay}
     </>
   );
 }

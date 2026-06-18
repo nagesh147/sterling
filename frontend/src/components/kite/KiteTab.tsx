@@ -20,6 +20,8 @@ import { EngineTerminal } from './EngineTerminal';
 import { useKiteAutoSession } from '../../hooks/useKite';
 import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { MacMotionProvider } from './mac/MacMotionProvider';
+import { MacSectionFade } from './mac/MacSectionFade';
 
 export function KiteTab() {
   const [nav, setNav] = useState<NavItem>('dashboard');
@@ -70,21 +72,28 @@ export function KiteTab() {
     else if (nav === 'connect') content = <ConnectPane />;
   }
 
+  // Key that identifies the current center view — drives the Mac nav-section
+  // crossfade (no-op when Mac Kite is off).
+  const contentKey = setupView ? `setup:${setupView.token}`
+    : detailView ? `detail:${detailView.token}`
+    : instrumentView ? `inst:${instrumentView.symbol}`
+    : `nav:${nav}`;
+
   return (
-    <>
+    <MacMotionProvider>
       <KiteLayout
         activeNav={nav}
         onNavClick={handleNavClick}
         sidebar={<MarketWatchPane onOpenInstrument={handleOpenInstrument} />}
         rightSidebar={<TripleSupertrendPane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} />}
         bottomBar={<EngineTerminal />}
-        content={content}
+        content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
       />
       <KiteNotifications />
       {isOpen && options && (
         <OrderWindow options={options} onClose={closeOrderWindow} />
       )}
-    </>
+    </MacMotionProvider>
   );
 }
 

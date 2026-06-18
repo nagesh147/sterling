@@ -4,6 +4,7 @@ import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuot
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
+import { PriceCell } from './PriceCell';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { computeGreeksFromSymbol } from '../../utils/computeGreeks';
 import { useDebounced } from '../../hooks/useDebounced';
@@ -646,7 +647,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                   }}
                 >
                   <div
-                    className={`mw-item ${isExp ? 'expanded' : ''}`}
+                    className={`mw-item mac-hover-tint ${isExp ? 'expanded' : ''}`}
                     onClick={() => toggleExpand(w.symbol)}
                   >
                     <div className="mw-drag-handle" title="Drag to reorder">
@@ -674,17 +675,20 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                     />
                     
                     <div className="mw-prices" style={{ opacity: isExp ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: isExp ? 'none' : 'auto' }}>
-                      {s.showPriceChange && <span style={{ color: t.dim, fontSize: 11 }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                      {s.showPriceChangePct && <span style={{ color: t.text, fontSize: 11, marginLeft: 4 }}>{chgVal != null ? `${chgVal.toFixed(2)}%` : '—'}</span>}
+                      {s.showPriceChange && <PriceCell text={chgAbs != null ? chgAbs.toFixed(2) : '—'} value={chgAbs ?? null} color={t.dim} style={{ fontSize: 11 }} />}
+                      {s.showPriceChangePct && <PriceCell text={chgVal != null ? `${chgVal.toFixed(2)}%` : '—'} value={chgVal ?? null} color={t.text} style={{ fontSize: 11, marginLeft: 4 }} />}
                       {s.showPriceDirection && (
                         <span style={{ color: chgColor, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
                           {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
                           {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
                         </span>
                       )}
-                      <span style={{ color: chgColor, fontWeight: 500, fontSize: 13, minWidth: 50, textAlign: 'right' }}>
-                        {lastPx != null ? formatPrice(lastPx) : '—'}
-                      </span>
+                      <PriceCell
+                        text={lastPx != null ? formatPrice(lastPx) : '—'}
+                        value={lastPx ?? null}
+                        color={chgColor}
+                        style={{ fontWeight: 500, fontSize: 13, minWidth: 50, justifyContent: 'flex-end', textAlign: 'right' }}
+                      />
                     </div>
                   </div>
                   {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} greeks={computeGreeksFromSymbol(w.symbol, quotes?.[w.symbol], ltp) ?? undefined} onBuy={() => handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size)} onSell={() => handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size)} />}

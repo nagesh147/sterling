@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useKiteInstrumentSearch, useKiteQuote, useKiteOhlc, useKiteHistorical, useKiteWatchlist } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
+import { MacChartSwitch } from './mac/MacChartSwitch';
 
 function parseTs(ts: string): string {
   const nfoRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)$/;
@@ -298,9 +299,11 @@ export function MarketDataPane() {
           <button style={tabStyle(tab === 'ohlc')} onClick={() => setTab('ohlc')}>OHLC</button>
           <button style={tabStyle(tab === 'historical')} onClick={() => setTab('historical')}>HISTORICAL</button>
         </div>
-        {tab === 'quote' && <QuoteCard symbols={selected} />}
-        {tab === 'ohlc' && <OhlcCard symbols={selected} />}
-        {tab === 'historical' && <HistoricalCard />}
+        <MacChartSwitch switchKey={tab === 'historical' ? 'historical' : `${tab}:${selected.join(',')}`}>
+          {tab === 'quote' && <QuoteCard symbols={selected} />}
+          {tab === 'ohlc' && <OhlcCard symbols={selected} />}
+          {tab === 'historical' && <HistoricalCard />}
+        </MacChartSwitch>
       </div>
     </div>
   );

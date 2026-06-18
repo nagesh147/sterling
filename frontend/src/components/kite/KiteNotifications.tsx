@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useKiteOrderUpdates, useKiteStatus } from '../../hooks/useKite';
 import { useKiteNotifications, notifyOrder, type KiteNotif, type NotifKind } from '../../store/useKiteNotifications';
+import { useMacKite } from '../../hooks/useMacKite';
 
 // Kite's own colour language: cancelled=blue, complete=green, rejected=red,
 // open/pending=amber, placed=blue.
@@ -45,7 +46,7 @@ function OrderUpdateBridge() {
   return null;
 }
 
-function Toast({ n }: { n: KiteNotif }) {
+function Toast({ n, mac }: { n: KiteNotif; mac?: boolean }) {
   const dismiss = useKiteNotifications((s) => s.dismiss);
   const color = COLOR[n.kind] ?? '#387ed1';
   useEffect(() => {
@@ -57,7 +58,9 @@ function Toast({ n }: { n: KiteNotif }) {
     <div style={{
       display: 'flex', background: '#fff', borderRadius: 8, overflow: 'hidden',
       boxShadow: '0 8px 28px rgba(0,0,0,0.16)', border: '1px solid #ececec',
-      minWidth: 300, maxWidth: 380, animation: 'kn-in .18s ease',
+      // In Mac mode the parent motion.div drives the spring entrance, so the
+      // CSS keyframe is disabled to avoid a double-animation.
+      minWidth: 300, maxWidth: 380, animation: mac ? 'none' : 'kn-in .18s ease',
     }}>
       <div style={{ width: 6, background: color, flexShrink: 0 }} />
       <div style={{ padding: '12px 14px', flex: 1, minWidth: 0 }}>
@@ -78,15 +81,35 @@ function Toast({ n }: { n: KiteNotif }) {
 // reference_modal_stacking_term_root.
 export function KiteNotifications() {
   const items = useKiteNotifications((s) => s.items);
+  const { on, motion, AnimatePresence, sp } = useMacKite();
   return (
     <>
       <OrderUpdateBridge />
       {createPortal(
         <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 100000, display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'none' }}>
           <style>{'@keyframes kn-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }'}</style>
-          {items.map((n) => (
-            <div key={n.id} style={{ pointerEvents: 'auto' }}><Toast n={n} /></div>
-          ))}
+          {on ? (
+            // Mac mode: spring entrance from the right + layout reflow as the stack grows/shrinks.
+            <AnimatePresence initial={false}>
+              {items.map((n) => (
+                <motion.div
+                  key={n.id}
+                  layout
+                  initial={{ opacity: 0, x: 40, scale: 0.96 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 40, scale: 0.96 }}
+                  transition={sp('standard')}
+                  style={{ pointerEvents: 'auto' }}
+                >
+                  <Toast n={n} mac />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          ) : (
+            items.map((n) => (
+              <div key={n.id} style={{ pointerEvents: 'auto' }}><Toast n={n} /></div>
+            ))
+          )}
         </div>,
         document.body,
       )}

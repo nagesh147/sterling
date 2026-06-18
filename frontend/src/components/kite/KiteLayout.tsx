@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useKiteStatus } from '../../hooks/useKite';
+import { MacKiteToggle } from './mac/MacKiteToggle';
+import { useMacKite } from '../../hooks/useMacKite';
+import { MacStageLayout } from './mac/MacStageLayout';
 
 export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'bids' | 'funds' | 'data' | 'connect' | 'mf' | 'alerts';
 
@@ -14,7 +17,8 @@ interface KiteLayoutProps {
 
 export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, content }: KiteLayoutProps) {
   const { data: status } = useKiteStatus();
-  
+  const { on: macOn } = useMacKite();
+
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('kite_sidebar_width');
     return saved ? parseInt(saved, 10) : 420;
@@ -261,8 +265,11 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
         </div>
       </div>
 
-      {/* ── MAIN LAYOUT ── */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      {/* ── MAIN LAYOUT ── (mac-canvas: dims + scales 2% behind the order ticket) */}
+      {macOn ? (
+        <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
+      ) : (
+      <div className="mac-canvas" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left Sidebar (Watchlist) */}
         {sidebar && isSidebarOpen && (
           <>
@@ -368,11 +375,14 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           </>
         )}
       </div>
+      )}
 
       {/* ── Kite Footer — panel show/hide + reset + lock (Kite-specific) ── */}
       <div style={{ height: 30, flexShrink: 0, background: '#fff', borderTop: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
         <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>KITE</span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <MacKiteToggle />
+          <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
           {sidebar && (
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} title="Show / hide left sidebar" style={footBtn(isSidebarOpen)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
