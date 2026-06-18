@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
+import { underlyingSpotKey } from '../utils/computeGreeks';
+import { registerTokens, getTick, useTickVersion } from './useKiteLiveTicks';
 import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   CreateAlertBody, HoldingsAuthResult, KiteAccount, KiteAccountList, KiteAlert,
@@ -13,6 +15,29 @@ const K = '/api/v1/kite';
 
 function iParams(symbols: string[]): string {
   return symbols.map((s) => `i=${encodeURIComponent(s)}`).join('&');
+}
+
+// Canonical symbol list: deduped + sorted. Makes the React Query key
+// order-independent (so two callers asking for the same instruments share one
+// poll instead of running parallel loops) and guarantees no instrument is sent
+// twice in a single request.
+function canonSyms(symbols: string[]): string[] {
+  return Array.from(new Set(symbols)).sort();
+}
+
+// Watchlist symbols + their option underlyings (spot index/stock), deduped.
+// The scrolling ticker and the market-watch sidebar both need LTP for the
+// watchlist; sharing this exact set lets React Query collapse them into a
+// single 5s poll instead of two parallel loops over the same instruments.
+export function watchLtpSymbols(items: { symbol: string }[]): string[] {
+  const set = new Set<string>();
+  for (const w of items) {
+    set.add(w.symbol);
+    const parts = w.symbol.split(':');
+    const key = underlyingSpotKey(parts.length > 1 ? parts[1] : w.symbol);
+    if (key) set.add(key);
+  }
+  return Array.from(set).sort();
 }
 
 // ─── Accounts (credentials CRUD) ──────────────────────────────────────────────
@@ -485,20 +510,88 @@ export function useKiteInstrumentLots(symbols: string[]) {
   });
 }
 
-export function useKiteQuote(symbols: string[], enabled = true) {
-  return useQuery<Record<string, any>>({
-    queryKey: ['kite-quote', symbols.join(',')],
-    queryFn: () => api.get(`${K}/quote?${iParams(symbols)}`),
-    enabled: enabled && symbols.length > 0,
-    refetchInterval: 15_000,
+// Live prices now arrive over the tick WebSocket (useKiteLiveTicks); REST runs
+// only as a slow cold-start/fallback heartbeat + symbol→token resolver.
+const LIVE_HEARTBEAT_MS = 30_000;
+
+// Module-level symbol→token cache, learned from the instrument_token in REST
+// responses. Persists across renders/remounts so tokens resolve once, not per
+// mount, and survive while the REST snapshot is briefly undefined.
+const _symTokenCache = new Map<string, number>();
+
+// Overlay live ticks on a REST snapshot: resolve+cache tokens, register them for
+// WS subscription (ref-counted union), and merge tick fields over REST per
+// symbol (tick wins). Re-renders on each tick batch via useTickVersion.
+function useKiteLive(
+  symbols: string[],
+  rest: Record<string, any> | undefined,
+): Record<string, any> {
+  const ver = useTickVersion();
+  const symKey = symbols.join(',');
+
+  const tokenBySym = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of symbols) {
+      const fromRest = rest?.[s]?.instrument_token;
+      if (typeof fromRest === 'number') _symTokenCache.set(s, fromRest);
+      const t = _symTokenCache.get(s);
+      if (t != null) map[s] = t;
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symKey, rest]);
+
+  const tokensKey = useMemo(
+    () => Array.from(new Set(Object.values(tokenBySym))).sort((a, b) => a - b).join(','),
+    [tokenBySym],
+  );
+
+  useEffect(() => {
+    if (!tokensKey) return;
+    return registerTokens(tokensKey.split(',').map(Number));
+  }, [tokensKey]);
+
+  return useMemo(() => {
+    const out: Record<string, any> = {};
+    for (const s of symbols) {
+      const base: Record<string, any> = rest?.[s] ? { ...rest[s] } : {};
+      const tok = tokenBySym[s];
+      const tick = tok != null ? getTick(tok) : undefined;
+      if (tick) {
+        if (tick.last_price != null) base.last_price = tick.last_price;
+        if (tick.ohlc != null) base.ohlc = tick.ohlc;
+        if (tick.change != null) base.change = tick.change;
+        if (tick.oi != null) base.oi = tick.oi;
+        if (tick.depth != null) base.depth = tick.depth;
+        if (base.instrument_token == null) base.instrument_token = tok;
+      }
+      if (Object.keys(base).length) out[s] = base;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symKey, rest, tokenBySym, ver]);
+}
+
+// `heartbeatMs` lets transient depth consumers (OrderWindow) refresh the REST
+// depth ladder faster, since quote-mode ticks omit market depth.
+export function useKiteQuote(symbols: string[], enabled = true, heartbeatMs = LIVE_HEARTBEAT_MS) {
+  const syms = canonSyms(symbols);
+  const q = useQuery<Record<string, any>>({
+    queryKey: ['kite-quote', syms.join(',')],
+    queryFn: () => api.get(`${K}/quote?${iParams(syms)}`),
+    enabled: enabled && syms.length > 0,
+    refetchInterval: heartbeatMs,
   });
+  const data = useKiteLive(syms, q.data);
+  return { ...q, data };
 }
 
 export function useKiteOhlc(symbols: string[], enabled = true) {
+  const syms = canonSyms(symbols);
   return useQuery<Record<string, any>>({
-    queryKey: ['kite-ohlc', symbols.join(',')],
-    queryFn: () => api.get(`${K}/ohlc?${iParams(symbols)}`),
-    enabled: enabled && symbols.length > 0,
+    queryKey: ['kite-ohlc', syms.join(',')],
+    queryFn: () => api.get(`${K}/ohlc?${iParams(syms)}`),
+    enabled: enabled && syms.length > 0,
     refetchInterval: 30_000,
   });
 }
@@ -567,12 +660,15 @@ export function useKiteWatchlist() {
 }
 
 export function useKiteLtp(symbols: string[], enabled = true) {
-  return useQuery<Record<string, { last_price?: number; instrument_token?: number }>>({
-    queryKey: ['kite-ltp', symbols.join(',')],
-    queryFn: () => api.get(`${K}/ltp?${iParams(symbols)}`),
-    enabled: enabled && symbols.length > 0,
-    refetchInterval: 5_000,
+  const syms = canonSyms(symbols);
+  const q = useQuery<Record<string, { last_price?: number; instrument_token?: number }>>({
+    queryKey: ['kite-ltp', syms.join(',')],
+    queryFn: () => api.get(`${K}/ltp?${iParams(syms)}`),
+    enabled: enabled && syms.length > 0,
+    refetchInterval: LIVE_HEARTBEAT_MS,
   });
+  const data = useKiteLive(syms, q.data) as Record<string, { last_price?: number; instrument_token?: number }>;
+  return { ...q, data };
 }
 
 // ─── Ticker ───────────────────────────────────────────────────────────────────

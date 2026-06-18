@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { k as t, tint, kStyles, Icons } from '../../styles/kiteUI';
-import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist } from '../../hooks/useKite';
+import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist, watchLtpSymbols } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { computeGreeksFromSymbol, underlyingSpotKey } from '../../utils/computeGreeks';
+import { computeGreeksFromSymbol } from '../../utils/computeGreeks';
 
 const S = {
   container: { display: 'flex', flexDirection: 'column' as const, height: '100%', background: t.bg, fontFamily: t.fontFamily },
@@ -400,17 +400,10 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
   };
 
   const symbols = useMemo(() => watch.map((w) => w.symbol), [watch]);
-  const underlyingSyms = useMemo(() => {
-    const set = new Set<string>();
-    for (const w of watch) {
-      const parts = w.symbol.split(':');
-      const rawTs = parts.length > 1 ? parts[1] : w.symbol;
-      const key = underlyingSpotKey(rawTs);
-      if (key) set.add(key);
-    }
-    return [...set];
-  }, [watch]);
-  const { data: ltp } = useKiteLtp(symbols.concat(underlyingSyms), symbols.length > 0);
+  // Watch symbols + option underlyings (for change% and greeks spot). Shared with
+  // the scrolling ticker so the two panes run one LTP poll, not two parallel ones.
+  const ltpSyms = useMemo(() => watchLtpSymbols(watch), [watch]);
+  const { data: ltp } = useKiteLtp(ltpSyms, watch.length > 0);
   const { data: quotes } = useKiteQuote(symbols, symbols.length > 0);
 
   // Backfill real lot sizes onto watch items that lack one (legacy/synced items),

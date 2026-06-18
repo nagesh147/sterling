@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useKiteWatchlist, useKiteLtp } from '../../hooks/useKite';
+import { useKiteWatchlist, useKiteLtp, watchLtpSymbols } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 const SEG_COLORS: Record<string, string> = {
   NSE: '#10B981', NFO: '#8B5CF6', BFO: '#8B5CF6',
@@ -86,8 +86,10 @@ function KiteCard({ sym, name, ltp, prevRef }: {
 
 export function KiteTicker() {
   const { items } = useKiteWatchlist();
-  const symbols = items.map((w) => w.symbol);
-  const { data: ltp } = useKiteLtp(symbols, symbols.length > 0);
+  // Share the market-watch sidebar's exact LTP symbol set (watch + underlyings)
+  // so React Query collapses both into a single 5s poll instead of two loops.
+  const symbols = watchLtpSymbols(items);
+  const { data: ltp } = useKiteLtp(symbols, items.length > 0);
   const prevRef = useRef<Record<string, number>>({});
   const outerRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
