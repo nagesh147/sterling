@@ -12,15 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
+from app.services.kite_engine.stock_registry import CURATED_STOCK_NAMES, LIQUIDITY_ORDER, STOCKS_BY_LIQUIDITY
+
 _CFG_PATH = Path(__file__).with_name("universe.json")
 
 # High-liquidity F&O stocks for the "indices + liquid stocks" derivatives bucket.
 # Names match the option-chain `name` / equity tradingsymbol. Edit freely.
-CURATED_STOCKS = (
-    "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "SBIN", "AXISBANK",
-    "KOTAKBANK", "ITC", "LT", "BHARTIARTL", "HINDUNILVR", "BAJFINANCE",
-    "MARUTI", "TATAMOTORS", "SUNPHARMA", "WIPRO", "TATASTEEL",
-)
+CURATED_STOCKS = tuple(CURATED_STOCK_NAMES)
 
 
 @dataclass(frozen=True)

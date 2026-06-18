@@ -138,6 +138,8 @@ export interface EngineConfigModel {
   strike_moneyness: Moneyness[];
   scan_source: ScanSource;
   scan_expiries: ScanExpiry[];
+  scan_expiries_indices?: ScanExpiry[] | null;
+  scan_expiries_stocks?: ScanExpiry[] | null;
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
@@ -158,6 +160,23 @@ export interface EngineOrderResponse {
   order_id: string;
   status: string;
   message: string;
+}
+
+// ─── Stock registry ────────────────────────────────────────────────────────
+export type LiquidityLevel = 'Very High' | 'High' | 'Good' | 'Moderate' | 'Moderate-Good';
+
+export interface StockEntry {
+  name: string;
+  label: string;
+  liquidity: LiquidityLevel;
+  volatility: string;
+  indices: string;
+  why: string;
+}
+
+export interface LiquidityGroup {
+  liquidity: string;
+  stocks: StockEntry[];
 }
 
 // ─── Per-contract scan report ──────────────────────────────────────────────

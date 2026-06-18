@@ -102,6 +102,49 @@ def evaluate_item(
 _MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5, "OTM1": 6, "OTM2": 7, "OTM3": 8, "OTM4": 9, "OTM5": 10}
 
 
+def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
+    """Group derivative legs and de-duplicate into final display rows."""
+    grouped_derivs: Dict[tuple, EngineSignalRow] = {}
+    leg_ts: Dict[tuple, int] = {}
+    final_rows: List[EngineSignalRow] = []
+    for r in rows:
+        if r.source != "derivatives":
+            final_rows.append(r)
+            continue
+        key = (r.underlying, r.option_type)
+        leg = r.legs[0]
+        leg.premium_spot = r.spot
+        leg.premium_sl = r.stop_loss
+        leg.token = r.token
+        sym_key = (*key, leg.option_symbol)
+        if key not in grouped_derivs:
+            r.spot = 0
+            r.stop_loss = 0
+            r.legs = [leg]
+            grouped_derivs[key] = r
+            leg_ts[sym_key] = r.timestamp_ms
+            continue
+        parent = grouped_derivs[key]
+        if sym_key not in leg_ts:
+            parent.legs.append(leg)
+            leg_ts[sym_key] = r.timestamp_ms
+        elif r.timestamp_ms > leg_ts[sym_key]:
+            for i, existing in enumerate(parent.legs):
+                if existing.option_symbol == leg.option_symbol:
+                    parent.legs[i] = leg
+                    break
+            leg_ts[sym_key] = r.timestamp_ms
+        parent.is_active = parent.is_active or leg.is_active
+        parent.is_fresh = parent.is_fresh or r.is_fresh
+        if r.timestamp_ms > parent.timestamp_ms:
+            parent.timestamp_ms = r.timestamp_ms
+    final_rows.extend(grouped_derivs.values())
+    for r in final_rows:
+        if r.source == "derivatives" and len(r.legs) > 1:
+            r.legs.sort(key=lambda leg: _MONEYNESS_ORDER.get(leg.moneyness, 99))
+    return final_rows
+
+
 def evaluate_derivative_contract(
     item: UniverseItem, moneyness: str, pick: OptionPick,
     candles: Sequence[Candle], cfg: TripleSupertrendConfig,
@@ -318,6 +361,8 @@ class KiteEngineScanner:
         nfo_rows: Sequence[dict], bfo_rows: Sequence[dict],
         cfg: TripleSupertrendConfig, moneyness: Sequence[str] = ("ATM",),
         expiry_types: Sequence[ExpiryType] = (),
+        expiry_types_indices: Optional[Sequence[ExpiryType]] = None,
+        expiry_types_stocks: Optional[Sequence[ExpiryType]] = None,
         place_cb: Optional[PlaceCb] = None,
         deriv_universe: Optional[List[UniverseItem]] = None,
         log_cb: Optional[Callable[[str], None]] = None,
@@ -366,12 +411,13 @@ class KiteEngineScanner:
                 if not eval_rows:
                     return
                 option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
+                _expiry = expiry_types_indices if (expiry_types_indices is not None and item.is_index) else expiry_types_stocks if (expiry_types_stocks is not None and not item.is_index) else expiry_types
                 
                 latest_ts = candles[-1].timestamp_ms
                 for row in eval_rows:
                     attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                                    moneynesses=moneyness, today=today,
-                                   expiry_types=expiry_types)
+                                   expiry_types=_expiry)
                     rows.append(row)
                     
                     is_fresh = (row.timestamp_ms == latest_ts)
@@ -385,6 +431,15 @@ class KiteEngineScanner:
                                 log.warning("kite-engine auto-exec fail %s: %s", item.name, exc)
 
             await asyncio.gather(*[_one(i) for i in universe])
+
+            # ── flush spot results immediately so the frontend shows them while
+            # derivatives are still scanning ──
+            def _flush() -> None:
+                us.rows = _compile_rows(rows)
+                us.generated_ms = int(time.time() * 1000)
+                model_rows = [r.model_dump() for r in us.rows]
+                state.save_signal_cache(uid, json.dumps(model_rows), us.generated_ms)
+            _flush()
 
             # ── derivatives scan: triple-ST on each contract's OWN premium chart ──
             async def _deriv_one(item: UniverseItem) -> None:
@@ -422,8 +477,9 @@ class KiteEngineScanner:
                     return
                 option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
                 chain = chain_rows_for(option_rows, item.tradingsymbol, today)
+                _expiry = expiry_types_indices if (expiry_types_indices is not None and item.is_index) else expiry_types_stocks if (expiry_types_stocks is not None and not item.is_index) else expiry_types
                 contracts = pick_contracts(chain, spot=spot, moneynesses=moneyness,
-                                           expiry_types=expiry_types, today=today)
+                                           expiry_types=_expiry, today=today)
                 diag.deriv_resolved += len(contracts)
 
                 async def _contract(m: str, pick) -> None:
@@ -509,59 +565,15 @@ class KiteEngineScanner:
 
                 await asyncio.gather(*[_contract(m, p) for m, p in contracts])
 
+                # Flush after this underlying's derivatives finish so signals
+                # from already-scanned symbols appear immediately in the table.
+                _flush()
+
             await asyncio.gather(*[_deriv_one(i) for i in (deriv_universe or [])])
 
-            # One card per (underlying, side); each selected strike is a leg. A contract
-            # that fired more than once (multiple historical premium up-transitions) must
-            # yield ONE leg — the most recent — not a duplicate chip per transition.
-            grouped_derivs: Dict[tuple, EngineSignalRow] = {}
-            leg_ts: Dict[tuple, int] = {}     # (underlying, side, option_symbol) -> ts of the kept leg
-            final_rows = []
-            for r in rows:
-                if r.source != "derivatives":
-                    final_rows.append(r)
-                    continue
-                key = (r.underlying, r.option_type)
-                leg = r.legs[0]
-                leg.premium_spot = r.spot
-                leg.premium_sl = r.stop_loss
-                leg.token = r.token
-                sym_key = (*key, leg.option_symbol)
-                if key not in grouped_derivs:
-                    r.spot = 0
-                    r.stop_loss = 0
-                    r.legs = [leg]
-                    grouped_derivs[key] = r
-                    leg_ts[sym_key] = r.timestamp_ms
-                    continue
-                parent = grouped_derivs[key]
-                if sym_key not in leg_ts:
-                    parent.legs.append(leg)
-                    leg_ts[sym_key] = r.timestamp_ms
-                elif r.timestamp_ms > leg_ts[sym_key]:
-                    # same contract fired again later — refresh its leg in place (no dup)
-                    for i, existing in enumerate(parent.legs):
-                        if existing.option_symbol == leg.option_symbol:
-                            parent.legs[i] = leg
-                            break
-                    leg_ts[sym_key] = r.timestamp_ms
-                # the group is "running" if ANY of its strikes is still trending
-                parent.is_active = parent.is_active or leg.is_active
-                parent.is_fresh = parent.is_fresh or r.is_fresh
-                if r.timestamp_ms > parent.timestamp_ms:
-                    parent.timestamp_ms = r.timestamp_ms
-
-            final_rows.extend(grouped_derivs.values())
-            
-            # Sort legs by moneyness (ATM, ITM1, etc.)
-            for r in final_rows:
-                if r.source == "derivatives" and len(r.legs) > 1:
-                    r.legs.sort(key=lambda leg: _MONEYNESS_ORDER.get(leg.moneyness, 99))
-
-            us.rows = final_rows
             us.diag = diag
             us.generated_ms = int(time.time() * 1000)
-            model_rows = [r.model_dump() for r in final_rows]
+            model_rows = [r.model_dump() for r in us.rows]
             state.save_signal_cache(uid, json.dumps(model_rows), us.generated_ms)
         finally:
             us.scanning = False

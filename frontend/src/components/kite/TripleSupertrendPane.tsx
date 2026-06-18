@@ -2,11 +2,11 @@ import React from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
-  useScanReport,
+  useScanReport, useStockRegistry,
 } from '../../hooks/useTripleSupertrend';
 import type {
-  AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, Moneyness,
-  ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, TrailTarget,
+  AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
+  ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -59,14 +59,6 @@ const INDEX_OPTS: { name: string; label: string }[] = [
   { name: 'NIFTY FIN SERVICE', label: 'FINNIFTY' },
   { name: 'SENSEX', label: 'SENSEX' },
 ];
-// Mirrors CURATED_STOCKS in backend universe.py — the quick-pick liquid F&O names.
-const CURATED_STOCKS = [
-  'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'INFY', 'TCS', 'SBIN', 'AXISBANK', 'KOTAKBANK',
-  'ITC', 'LT', 'BHARTIARTL', 'HINDUNILVR', 'BAJFINANCE', 'MARUTI', 'TATAMOTORS',
-  'SUNPHARMA', 'WIPRO', 'TATASTEEL',
-];
-const ALL_FNO_APPROX = 190; // ≈ count of all F&O stocks, for the cost estimate only
-
 function fmtTime(charts: number): string {
   const secs = Math.round(charts / 3); // ~3 historical req/s
   return secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
@@ -75,12 +67,14 @@ function fmtTime(charts: number): string {
 // Simple scan-cost readout from the current selection. Spot = one fetch per
 // instrument; derivatives = one per contract (CE+PE per selected strike).
 function scanCost(cfg: EngineConfigModel): string {
-  const stockCount = cfg.scan_all_stocks ? ALL_FNO_APPROX : cfg.scan_stocks.length;
-  const instruments = cfg.scan_indices.length + stockCount;
+  const nStocks = cfg.scan_stocks?.length ?? 0;
+  const nIdx = cfg.scan_indices.length;
+  const instruments = nIdx + nStocks;
   const charts = instruments * Math.max(1, cfg.strike_moneyness.length) * 2;
-  if (cfg.scan_source === 'spot') return `≈ ${instruments} instruments · ${fmtTime(instruments)}/scan`;
-  if (cfg.scan_source === 'derivatives') return `≈ ${charts.toLocaleString('en-IN')} option charts · ${fmtTime(charts)}/scan`;
-  return `spot ${fmtTime(instruments)} · deriv ${fmtTime(charts)} (${charts.toLocaleString('en-IN')} charts)/scan`;
+  const prefix = `${nIdx} indices + ${nStocks} stocks → `;
+  if (cfg.scan_source === 'spot') return `${prefix}≈ ${instruments} instruments · ${fmtTime(instruments)}/scan`;
+  if (cfg.scan_source === 'derivatives') return `${prefix}≈ ${charts.toLocaleString('en-IN')} option charts · ${fmtTime(charts)}/scan`;
+  return `${prefix}spot ${fmtTime(instruments)} · deriv ${fmtTime(charts)} (${charts.toLocaleString('en-IN')} charts)/scan`;
 }
 
 function timeAgo(ms: number): string {
@@ -194,14 +188,14 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
   return (
     <div
       className="st-parent-row"
-      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6 }}
+      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: row.is_active ? 'transparent' : tint(k.amber, 5) }}
     >
       <div 
         className="st-parent-header" 
         onClick={onClick}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
         onMouseEnter={(e) => (e.currentTarget.style.background = k.surfaceHover)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = row.is_active ? 'transparent' : tint(k.amber, 5))}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           {isDeriv ? (
@@ -399,7 +393,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
               <div 
                 className="st-leg-row" 
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
+                style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (row.is_active ? 'transparent' : tint(k.amber, 5)) }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -677,6 +671,24 @@ function Chip({ label, active, onClick, dim }: { label: string; active: boolean;
   );
 }
 
+function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ fontSize: 10, color: k.dim }}>Ended</span>
+      <button onClick={onChange}
+        style={{
+          position: 'relative', width: 28, height: 16, borderRadius: 999, border: 'none', padding: 0,
+          cursor: 'pointer', flexShrink: 0, background: on ? k.amber : k.border, transition: 'background .18s ease',
+        }}>
+        <span style={{
+          position: 'absolute', top: 1, left: on ? 13 : 1, width: 14, height: 14, borderRadius: '50%',
+          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // Status line + live "time to next scan" bar. Ticks on its own 1s interval so
 // the rest of the pane (and the signal list) don't re-render every second.
 function ScanStatus({ signals }: { signals?: SignalsResponse }) {
@@ -855,6 +867,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
+  const { data: stockReg } = useStockRegistry();
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
   const cancelScan = useCancelScan();
@@ -873,6 +886,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const activeAcct = kiteAccts?.accounts.find((a) => a.is_active);
   const kiteLive = !!activeAcct && !activeAcct.is_paper;
   const [query, setQuery] = React.useState('');
+  const [customStock, setCustomStock] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
   const [sortBy, setSortBy] = React.useState('Custom');
   const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
@@ -914,19 +928,33 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     patch({ scan_expiries: finalNext as ScanExpiry[] }, `Expiries updated to ${finalNext.join(', ')}`);
   };
 
+  const toggleExpiryIndices = (e: ScanExpiry) => {
+    if (!cfg) return;
+    const cur = cfg.scan_expiries_indices ?? cfg.scan_expiries;
+    const has = cur.includes(e);
+    const next = has ? cur.filter((x) => x !== e) : [...cur, e];
+    const finalNext = next.length ? next : ['weekly', 'monthly'];
+    patch({ scan_expiries_indices: finalNext as ScanExpiry[] }, `Indices expiries updated to ${finalNext.join(', ')}`);
+  };
+
+  const toggleExpiryStocks = (e: ScanExpiry) => {
+    if (!cfg) return;
+    const cur = cfg.scan_expiries_stocks ?? ['monthly'];
+    const has = cur.includes(e);
+    const next = has ? cur.filter((x) => x !== e) : [...cur, e];
+    const finalNext = next.length ? next : ['weekly', 'monthly'];
+    patch({ scan_expiries_stocks: finalNext as ScanExpiry[] }, `Stocks expiries updated to ${finalNext.join(', ')}`);
+  };
+
   // Changing the scan source must re-scan immediately — otherwise the list keeps
   // showing the previous scan's rows (e.g. spot signals) until the 5-min auto-loop
   // runs, which reads as "I switched to derivatives but nothing changed".
   const changeScanSource = (v: ScanSource) => {
     if (!cfg || cfg.scan_source === v) return;
-    // Auto-rescan so the switch takes effect now — EXCEPT the heavy case (derivatives
-    // over All F&O ≈ thousands of charts / many minutes), which would block the scan
-    // request; there the user should narrow the universe to indices first.
-    const heavy = (v === 'derivatives' || v === 'both') && cfg.scan_all_stocks;
     setCfg.mutate({ ...cfg, scan_source: v }, { 
       onSuccess: () => { 
         notifyOrder({ kind: 'info', title: 'Settings updated', message: `Scan source changed to ${v}` });
-        if (!heavy) doScan(); 
+        doScan(); 
       } 
     });
   };
@@ -943,6 +971,19 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     const has = cfg.scan_stocks.includes(name);
     const next = has ? cfg.scan_stocks.filter((x) => x !== name) : [...cfg.scan_stocks, name];
     patch({ scan_stocks: next }, `Stocks updated: ${has ? `Removed ${name}` : `Added ${name}`}`);
+  };
+
+  const addCustomStock = (name: string) => {
+    if (!cfg || !name.trim()) return;
+    const upper = name.trim().toUpperCase();
+    if (cfg.scan_stocks.includes(upper)) return;
+    patch({ scan_stocks: [...cfg.scan_stocks, upper] }, `Added ${upper} to scan`);
+    setCustomStock('');
+  };
+
+  const removeCustomStock = (name: string) => {
+    if (!cfg) return;
+    patch({ scan_stocks: cfg.scan_stocks.filter(x => x !== name) }, `Removed ${name} from scan`);
   };
 
   const toggleAuto = () => {
@@ -995,6 +1036,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   }, [rows, query, sortBy]);
 
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set());
+  const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
   const toggleGroup = (label: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -1015,7 +1057,15 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     // has since ended.
     const active = sorted.filter((r) => r.is_active);
     const history = sorted.filter((r) => !r.is_active);
-    if (active.length) buckets.push({ label: 'Active now', rows: active, active: true });
+    // Indices first in "Active now", then stocks alphabetically.
+    const INDEX_NAMES = new Set(INDEX_OPTS.map(o => o.name));
+    const sortedActive = [...active].sort((a, b) => {
+      const aIdx = INDEX_NAMES.has(a.underlying) ? 1 : 0;
+      const bIdx = INDEX_NAMES.has(b.underlying) ? 1 : 0;
+      if (aIdx !== bIdx) return bIdx - aIdx; // indices first
+      return a.underlying.localeCompare(b.underlying);
+    });
+    if (active.length) buckets.push({ label: 'Active now', rows: sortedActive, active: true });
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -1037,9 +1087,25 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     for (const label of ["Today", "Yesterday", "Last week", "Last 15 days"]) {
       if (groups[label].length) buckets.push({ label: `${label} (ended)`, rows: groups[label] });
     }
+    if (!showEnded) return buckets.filter(b => b.active);
     return buckets;
-  }, [filteredRows]);
+  }, [filteredRows, showEnded]);
   const scanning = signals?.scanning;
+
+  // Auto-collapse ended groups on first appearance. User can manually expand.
+  React.useEffect(() => {
+    const endedLabels = groupedRows.filter(g => !g.active).map(g => g.label);
+    if (endedLabels.length === 0) return;
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const l of endedLabels) {
+        if (!next.has(l)) { next.add(l); changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupedRows]);
 
   const optionSymbols = React.useMemo(() => {
     const syms = new Set<string>();
@@ -1060,7 +1126,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/* ── Console header ── */}
       <div style={{ padding: '12px 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -1114,14 +1180,21 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         </div>
       </div>
 
-      {rows.length > 0 && (
+      {rows.length > 0 && !settingsOpen && (
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
-          <KiteSearchBar 
-            query={query} 
-            setQuery={setQuery} 
-            searchSettingsOpen={searchSettingsOpen} 
-            setSearchSettingsOpen={setSearchSettingsOpen} 
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
+            <div style={{ flex: 1 }}>
+              <KiteSearchBar 
+                query={query} 
+                setQuery={setQuery} 
+                searchSettingsOpen={searchSettingsOpen} 
+                setSearchSettingsOpen={setSearchSettingsOpen} 
+              />
+            </div>
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <EndedToggle on={showEnded} onChange={() => { setShowEnded(v => { const n = !v; localStorage.setItem('kite_st_show_ended', String(n)); return n; }); }} />
+            </div>
+          </div>
           {viewLayout === 'list' && (
             <div style={{ 
               display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 32,
@@ -1225,13 +1298,26 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               />
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-              <span style={{ fontSize: 11, color: k.dim }} title="Filter option contracts by expiry type — weekly (every Thursday), monthly (last Thursday of the month), or both.">Expiries</span>
-              <Segmented
-                options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => cfg?.scan_expiries.includes(v as ScanExpiry) ?? false}
-                onSelect={(v) => toggleExpiry(v as ScanExpiry)}
-              />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 11, color: k.dim }} title="Which option expiries to scan. Separate controls for indices and stocks — stocks default to monthly only (fewer weekly contracts).">Expiries</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 9.5, color: k.dim }}>Indices</span>
+                  <Segmented
+                    options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                    isActive={(v) => (cfg?.scan_expiries_indices ?? cfg?.scan_expiries ?? ['weekly', 'monthly']).includes(v as ScanExpiry)}
+                    onSelect={(v) => toggleExpiryIndices(v as ScanExpiry)}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ fontSize: 9.5, color: k.dim }}>Stocks</span>
+                  <Segmented
+                    options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                    isActive={(v) => (cfg?.scan_expiries_stocks ?? ['monthly']).includes(v as ScanExpiry) ?? false}
+                    onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
+                  />
+                </div>
+              </div>
             </div>
 
             {cfg && (
@@ -1243,20 +1329,60 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                     <Chip key={o.name} label={o.label} active={cfg.scan_indices.includes(o.name)} onClick={() => toggleIndex(o.name)} />
                   ))}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                  <span style={{ fontSize: 9.5, color: k.dim, minWidth: 42 }}>Stocks</span>
-                  <Chip label="All F&O" active={cfg.scan_all_stocks} onClick={() => patch({ scan_all_stocks: !cfg.scan_all_stocks }, `Universe set to ${!cfg.scan_all_stocks ? 'All F&O' : 'Custom selection'}`)} />
-                  {CURATED_STOCKS.map((nm) => (
-                    <Chip key={nm} label={nm} active={!cfg.scan_all_stocks && cfg.scan_stocks.includes(nm)}
-                      dim={cfg.scan_all_stocks} onClick={() => { if (!cfg.scan_all_stocks) toggleStock(nm); }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  <span style={{ fontSize: 9.5, color: k.dim }}>Stocks</span>
+                  {stockReg && stockReg.map((group: LiquidityGroup) => (
+                    <div key={group.liquidity} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>{group.liquidity.toUpperCase()}</span>
+                        <button onClick={() => {
+                          const names = group.stocks.map(s => s.name);
+                          const allIn = names.every(n => cfg.scan_stocks.includes(n));
+                          if (allIn) {
+                            patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`);
+                          } else {
+                            const next = [...new Set([...cfg.scan_stocks, ...names])];
+                            patch({ scan_stocks: next }, `Added ${group.liquidity} stocks`);
+                          }
+                        }}
+                          style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                          {group.stocks.every(s => cfg.scan_stocks.includes(s.name)) ? '− all' : '+ all'}
+                        </button>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
+                        {group.stocks.map((st: StockEntry) => (
+                          <Chip key={st.name} label={st.label || st.name} active={cfg.scan_stocks.includes(st.name)}
+                            onClick={() => toggleStock(st.name)} />
+                        ))}
+                      </div>
+                    </div>
                   ))}
+                  {/* Free-form search + add for stocks outside the registry */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>CUSTOM</span>
+                    <input
+                      style={{ width: 90, fontSize: 9.5, padding: '2px 6px', background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
+                      value={customStock} onChange={e => setCustomStock(e.target.value)}
+                      placeholder="Add stock…"
+                      onKeyDown={e => { if (e.key === 'Enter') addCustomStock(customStock); }}
+                    />
+                    <button onClick={() => addCustomStock(customStock)}
+                      style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add</button>
+                  </div>
+                  {/* Show custom-added stocks not in registry */}
+                  {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
+                      {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).map(n => (
+                        <Chip key={n} label={n} active={true} onClick={() => removeCustomStock(n)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {(() => {
-                  const heavy = cfg.scan_all_stocks && cfg.scan_source !== 'spot';
                   return (
-                    <span style={{ fontSize: 10, color: heavy ? k.amber : k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                    <span style={{ fontSize: 10, color: k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5 }}>
                       <span style={{ flexShrink: 0 }}>ℹ</span>
-                      <span>{scanCost(cfg)}{heavy ? ' — heavy (minutes). Turn off “All F&O” for a fast indices-only scan.' : ''}</span>
+                      <span>{scanCost(cfg)}</span>
                     </span>
                   );
                 })()}

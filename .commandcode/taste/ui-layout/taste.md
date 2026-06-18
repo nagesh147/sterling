@@ -1,4 +1,9 @@
 # ui-layout
+- In the Triple Supertrend table, ended/historical signal rows should be collapsed by default — only expand when the user explicitly toggles them open. Confidence: 0.75
+- In the Triple Supertrend "Active now" group, indices should always sort to the top above individual stocks. Confidence: 0.75
+- In the Triple Supertrend table, stocks should be sorted alphabetically by default (when no explicit sort column is selected). Confidence: 0.75
+- Table filter controls (filter icon, "ended" filter, and related toolbar items) should be right-aligned, not centered or left-aligned in the table toolbar. Confidence: 0.65
+- Hide the data table header entirely when the settings panel/drawer is open — the table header should only be visible when settings are closed. Confidence: 0.65
 - In MarketWatchPane: Greeks (IV, delta, gamma, theta, vega, lot) should render in their own separate card, not merged into the same card as Key Stats (volume, circuits, LTQ, expiry, OI) or Spot price. Each logical group gets its own #f9f9f9 card. Confidence: 0.65
 - For ScalpSignalCard: direction label (○ NEAR LEVEL), status badge (PENDING), and reason text (near 4H support @ 83...) should render in a single horizontal line, not stacked in separate lines. Combine into one flex row. Confidence: 0.70
 - For the scalping signal table: use fixed-width columns (Symbol, Type, Entry, Current, Stop, Target, Risk, Strategy/Mode) so all rows align vertically, and strategy badges (PRICE ACTION, SMC, MA CROSS) share a common width with center-aligned text. Confidence: 0.75
@@ -11,3 +16,4 @@
 - Use emojis in terminal log output for user-friendly, colorful display. Confidence: 0.65
 - All table components (spot index, derivatives futures, derivatives options, etc.) should share consistent CSS/UI/UX styling — uniform visual design across all data tables in the application. Use the shared `c` token object and `alpha()` helper from terminalUI.ts for all colors/borders/backgrounds, not raw CSS variables. This includes AUTO/position badges, EXECUTE buttons, row padding, and expanded detail padding. Confidence: 0.85
 - Data table columns should use stable fixed widths defined by the shared column spec — column widths must not shift or resize when cell values update (e.g., number changes in spot index table). Confidence: 0.70
+- In the terminal header, the Kite and Crypto top-level tabs belong on the first row next to the STERLING branding text, not on a separate second row. The second row (with crypto sub-tabs, toggles, chip controls) should only be visible when the Crypto tab is selected — hide the entire second row when Kite is active since none of its contents relate to Kite. Confidence: 0.75

@@ -16,6 +16,7 @@
 # trading-platform
 - Use Delta Exchange as the default data source, not Deribit. Confidence: 0.65
 - Zerodha Kite must have its own exclusive live/paper toggle, independent of the crypto-specific live/paper toggle. The crypto toggle should not affect Kite trading and vice versa. Confidence: 0.70
+- Top-level navigation uses two tabs: Kite and Crypto. All crypto-related tabs (Sterling, Grok, Sterling V2, positions, backtest, paper research, toggles, settings) live under the Crypto tab. Both Kite and Crypto tabs remain always visible — do not hide Crypto when scalp_mode is off; instead provide a user-toggleable show/hide setting for the Crypto tab. Confidence: 0.75
 
 # strategy
 - Optimize strategies by priority: EXPECTANCY > PF > MAXDD > CONSISTENCY > TRADE COUNT > WIN RATE. Confidence: 0.70
@@ -23,6 +24,7 @@
 # ui-ux
 - Use side panels/drawers for advanced settings rather than inline configuration sections. Keep default view simple with signals only; hide advanced config behind a toggle. Confidence: 0.75
 - Add expand/collapse to all sidebar sections for better information density management. Confidence: 0.70
+- Settings toggles and controls should include a concise info/description line explaining what the current setting does or what state is active — not just the toggle label alone. Confidence: 0.65
 
 # trading-platform
 - When auto/algo trading mode is enabled, automatically execute signals on both paper and live trading (when live is enabled). Confidence: 0.65
@@ -89,8 +91,12 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 
 # scan-configuration
 - Provide granular scan selection controls: users should be able to independently toggle stocks/indices, spot/derivatives, and ITM/ATM/OTM strike types for each scan strategy. Display scan cost estimates based on the user's current selection to help them understand the data and cost impact. Confidence: 0.75
+- "All F&O" toggle should only enable stocks from the curated app registry, not the full exchange F&O universe (~190 stocks). Users must be able to add/remove individual stocks beyond the curated tiers. Confidence: 0.65
 - Support historical scan with flexible date range presets: today, yesterday, last 5 days, last week, 15 days, month, and custom range. Historical scans help users verify scan logic and review past signals. Today should remain the default/primary view. Confidence: 0.75
 - Allow users to select option expiries in scan settings: provide separate toggle controls for weekly and monthly expiries, following the same UX pattern as stocks/indices and strikes/moneyness selection. Confidence: 0.70
+
+# backend-lifespan
+- Background WebSocket managers and stream services must NOT auto-start at module import time (no `manager.start()` at module level). All crypto-related background processes must be explicitly started from the FastAPI lifespan, gated behind the `scalp_mode` kill switch so they stay completely stopped when crypto engines are off. Confidence: 0.75
 
 # git-workflow
 - When user says "push all code; sync branches;updated;", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch origin main && git merge origin/main, then report push hash and main status. Confidence: 0.80

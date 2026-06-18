@@ -56,6 +56,7 @@ import { GoLivePanel } from '../components/GoLivePanel';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
 import { SimpleSettingsDrawer, SimpleStatusDots } from '../components/SimpleSettings';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
+import { useScalpMode } from '../hooks/useSignalAlerts';
 
 type Tab = 'analysis' | 'charts' | 'chain' | 'account' | 'alerts' | 'backtest' | 'positions' | 'watchlist' | 'config';
 
@@ -138,7 +139,9 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('analysis');
   const { data: sysInfo } = useConfigInfo();
   const { data: modeData } = useTradingMode();
-  const { data: posData } = usePositions();
+  const { data: scalpData } = useScalpMode();
+  const scalpOn = scalpData?.enabled ?? false;
+  const { data: posData } = usePositions(scalpOn ? undefined : undefined);
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
   const appMode = useAppMode();

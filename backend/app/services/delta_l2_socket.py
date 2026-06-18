@@ -94,4 +94,4 @@ class DeltaL2Manager:
             self._task.cancel()
 
 l2_manager = DeltaL2Manager()
-l2_manager.start()
+# Do NOT auto-start on import — main.py lifespan starts it when scalp_mode is on.

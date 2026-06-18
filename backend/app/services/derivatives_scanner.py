@@ -143,8 +143,9 @@ async def run_scanner_tick(app: Any, interval_s: int = 30) -> dict:
     attempts = 0
     accepted = 0
     algo_on = bool(getattr(app.state, "algo_mode", False))
-    log.info(f"DERIV scanner tick: algo_on={algo_on}")
-    if algo_on:
+    scalp_on = bool(getattr(app.state, "scalp_mode", False))
+    log.info(f"DERIV scanner tick: algo_on={algo_on} scalp_on={scalp_on}")
+    if algo_on and scalp_on:
         overrides = _deriv_ep._profile_overrides(app)
         for rows, leg in ((futures_rows, "futures"), (options_rows, "options")):
             for row in rows:

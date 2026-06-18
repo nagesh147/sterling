@@ -116,6 +116,27 @@ async def set_algo_mode(body: AlgoModeRequest, request: Request) -> AlgoModeResp
     return AlgoModeResponse(enabled=body.enabled)
 
 
+class ScalpModeRequest(BaseModel):
+    enabled: bool
+
+
+class ScalpModeResponse(BaseModel):
+    enabled: bool
+
+
+@router.get("/scalp-mode", response_model=ScalpModeResponse)
+async def get_scalp_mode(request: Request) -> ScalpModeResponse:
+    return ScalpModeResponse(enabled=getattr(request.app.state, "scalp_mode", False))
+
+
+@router.post("/scalp-mode", response_model=ScalpModeResponse)
+async def set_scalp_mode(body: ScalpModeRequest, request: Request) -> ScalpModeResponse:
+    from app.services.db import set_config
+    request.app.state.scalp_mode = body.enabled
+    set_config("scalp_mode", "true" if body.enabled else "false")
+    return ScalpModeResponse(enabled=body.enabled)
+
+
 class ScoringStrategyRequest(BaseModel):
     strategy: str  # "by_edge_max_linear_agree" | "unweighted_mean"
 

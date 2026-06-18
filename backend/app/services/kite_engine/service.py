@@ -108,6 +108,8 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             uid=uid, client=client, universe=spot_universe, nfo_rows=nfo, bfo_rows=bfo,
             cfg=_ts_cfg(cfg_model), moneyness=cfg_model.strike_moneyness,
             expiry_types=cfg_model.scan_expiries,
+            expiry_types_indices=cfg_model.scan_expiries_indices,
+            expiry_types_stocks=cfg_model.scan_expiries_stocks,
             place_cb=place_cb,
             deriv_universe=deriv_universe, log_cb=lambda msg: state.log(uid, "info", msg))
         snap = scanner.snapshot(uid)

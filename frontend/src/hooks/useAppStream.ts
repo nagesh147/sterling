@@ -47,6 +47,18 @@ let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _reconnectDelay  = BASE_DELAY;
 let _status: StreamStatus = 'disconnected';
 
+let _scalpEnabled = true;  // default true on first load; setCryptoEnabled(false) disconnects
+
+/** Called by scalp mode toggle to enable/disable the SSE connection globally. */
+export function setCryptoEnabled(enabled: boolean) {
+  _scalpEnabled = enabled;
+  if (!enabled) {
+    _disconnect();
+  } else if (_refCount > 0) {
+    _connect();
+  }
+}
+
 function _setStatus(s: StreamStatus) {
   if (_status === s) return;
   _status = s;
@@ -68,6 +80,7 @@ function _emit(event: AppStreamEvent, raw: string) {
 
 function _connect() {
   if (_es) return;
+  if (!_scalpEnabled) return;
   _setStatus('connecting');
 
   const es = new EventSource(STREAM_URL);

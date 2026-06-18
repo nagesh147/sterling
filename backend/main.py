@@ -66,6 +66,8 @@ async def _background_alert_checker(app: FastAPI, interval: int = 30) -> None:
     while True:
         await asyncio.sleep(interval)
         try:
+            if not getattr(app.state, "scalp_mode", False):
+                continue
             ad = adapter_manager.get_adapter()
             if not ad:
                 continue
@@ -154,6 +156,8 @@ async def _background_position_monitor(app: FastAPI) -> None:
         await asyncio.sleep(interval)
 
         try:
+            if not getattr(app.state, "scalp_mode", False):
+                continue
             ad = adapter_manager.get_adapter()
             if not ad:
                 continue
@@ -542,6 +546,8 @@ async def _background_retry_worker(app: FastAPI, base_interval: int = 60) -> Non
     while True:
         await asyncio.sleep(base_interval)
         try:
+            if not getattr(app.state, "scalp_mode", False):
+                continue
             items = live_safety.list_retries(include_poison=False)
             if not items:
                 continue
@@ -979,6 +985,9 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
 
     while True:
         try:
+            if not getattr(app.state, "scalp_mode", False):
+                await asyncio.sleep(interval)
+                continue
             ad = adapter_manager.get_adapter()
             if not ad:
                 await asyncio.sleep(interval)
@@ -1058,7 +1067,8 @@ async def _background_derivatives_scanner(app: FastAPI, interval: int = 30) -> N
 
     while True:
         try:
-            await run_scanner_tick(app, interval_s=interval)
+            if getattr(app.state, "scalp_mode", False):
+                await run_scanner_tick(app, interval_s=interval)
         except Exception as exc:
             import traceback
             log.warning("DERIV scanner outer error: %s\n%s", exc, traceback.format_exc())
@@ -1070,7 +1080,8 @@ async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
     from app.services.delta_candle_fetcher import run_full_fetch
     while True:
         try:
-            await run_full_fetch()
+            if getattr(app.state, "scalp_mode", False):
+                await run_full_fetch()
         except Exception as exc:
             log.warning("OHLCV background update error: %s", exc)
         await asyncio.sleep(interval_hours * 3600)
@@ -1084,7 +1095,8 @@ async def _background_1m_updater(interval_min: int = 5) -> None:
     from app.services.delta_candle_fetcher import fetch_core_1m
     while True:
         try:
-            await fetch_core_1m()
+            if getattr(app.state, "scalp_mode", False):
+                await fetch_core_1m()
         except Exception as exc:
             log.warning("1m OHLCV background update error: %s", exc)
         await asyncio.sleep(interval_min * 60)
@@ -1104,6 +1116,8 @@ async def _broadcast_ofi(app: FastAPI) -> None:
     while True:
         await asyncio.sleep(0.5)
         try:
+            if not getattr(app.state, "scalp_mode", False):
+                continue
             for sym in active_symbols:
                 ofi_val = l2_manager.get_ofi(sym)
                 if ofi_val != 0:
@@ -1200,11 +1214,12 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
 
         try:
             algo_mode = getattr(app.state, "algo_mode", False)
+            scalp_mode = getattr(app.state, "scalp_mode", False)
             vcp_mode  = getattr(app.state, "vcp_mode_enabled", False)
             router_mode_str = getattr(app.state, "algo_router_mode", "live") or "live"
 
             # Both algo_mode AND vcp_mode must be on to start feeds
-            if not algo_mode or not vcp_mode:
+            if not algo_mode or not vcp_mode or not scalp_mode:
                 # algo_mode off — stop all feeds gracefully
                 for f in feeds.values():
                     await f.stop()
@@ -1276,14 +1291,15 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
             log.warning("VCP live feed background error: %s", exc)
 
 
-async def _background_scalping_alerts(interval: int = 45) -> None:
+async def _background_scalping_alerts(app: FastAPI, interval: int = 45) -> None:
     """Periodically scan scalping signals and push Telegram alerts for new ready
-    setups. No-ops when Telegram isn't configured or alerts are toggled off."""
+    setups. Skips entirely when scalp_mode is off."""
     from app.services.notifications import telegram_bot as _bot
     await asyncio.sleep(10)  # let startup settle before the first scan
     while True:
         try:
-            await _bot.push_signal_alerts()
+            if getattr(app.state, "scalp_mode", False):
+                await _bot.push_signal_alerts()
         except Exception as exc:
             log.debug("scalping alert push error: %s", exc)
         await asyncio.sleep(interval)
@@ -1328,6 +1344,7 @@ async def lifespan(app: FastAPI):
         mode_name = DEFAULT_MODE
     app.state.trading_mode = MODES[mode_name]
     app.state.algo_mode = get_config("algo_mode", "false").lower() == "true"
+    app.state.scalp_mode = get_config("scalp_mode", "false").lower() == "true"
     app.state.vcp_mode_enabled = get_config("vcp_mode", "false").lower() == "true"
     # Scoring strategy — controls how TF+VCP+MR are combined into a direction/score.
     # Persisted via db.set_config("scoring_strategy", ...). Default "by_edge_max_linear_agree".
@@ -1501,10 +1518,14 @@ async def lifespan(app: FastAPI):
     ofi_broadcast_task = asyncio.create_task(_broadcast_ofi(app))
     log.info("OFI Broadcaster started (every 0.5s)")
 
-    # Arbitrator fake log worker for UI parity
-    from app.api.v1.endpoints.stream import _arbitrator_log_worker
-    arbitrator_log_task = asyncio.create_task(_arbitrator_log_worker())
-    log.info("Arbitrator log worker started")
+    # Arbitrator fake log worker for UI parity — only runs when crypto is on
+    if app.state.scalp_mode:
+        from app.api.v1.endpoints.stream import _arbitrator_log_worker
+        arbitrator_log_task = asyncio.create_task(_arbitrator_log_worker())
+        log.info("Arbitrator log worker started")
+    else:
+        arbitrator_log_task = None
+        log.info("scalp_mode OFF — Arbitrator log worker NOT started")
 
 
     # ── VCP Live Feed ─────────────────────────────────────────────────────────
@@ -1526,21 +1547,25 @@ async def lifespan(app: FastAPI):
     log.info("Kite triple-SuperTrend auto-scan loop started (every 5 min)")
 
     # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
-    # Auto-starts with the server so a genuine IV history accrues for vol-timing strategies.
-    # Fails gracefully if the Delta WS is unreachable (ticks stay empty, recorder no-ops).
-    try:
-        from app.services.delta_iv_socket import iv_manager
-        from app.services.delta_iv_recorder import start_recorder
-        iv_manager.start()
-        start_recorder()
-        log.info("Delta real-time IV stream and recorder started")
-    except Exception:
-        log.warning("Delta IV stream start failed (ws may be unreachable) — retry on next restart")
+    # Only starts when scalp_mode (crypto kill switch) is enabled.
+    if app.state.scalp_mode:
+        try:
+            from app.services.delta_iv_socket import iv_manager
+            from app.services.delta_iv_recorder import start_recorder
+            from app.services.delta_l2_socket import l2_manager
+            iv_manager.start()
+            start_recorder()
+            l2_manager.start()
+            log.info("Delta real-time IV stream, recorder, and L2 socket started")
+        except Exception:
+            log.warning("Delta IV stream start failed (ws may be unreachable) — retry on next restart")
+    else:
+        log.info("scalp_mode OFF — Delta IV stream, recorder, and L2 socket NOT started")
 
     # ── Telegram bot + signal-detection alerts ────────────────────────────────
     from app.services.notifications import telegram_bot as _tg_bot
     tg_bot_task = asyncio.create_task(_tg_bot.poll_loop())
-    tg_alert_task = asyncio.create_task(_background_scalping_alerts(interval=45))
+    tg_alert_task = asyncio.create_task(_background_scalping_alerts(app, interval=45))
     log.info("Telegram bot + signal alerts started")
 
     # ── Live event bus + agents (Phase 3) — only when enable_event_bus is set ──
@@ -1581,6 +1606,13 @@ async def lifespan(app: FastAPI):
         _t.cancel()
         try:
             await _t
+        except (Exception, BaseException):
+            pass
+
+    if arbitrator_log_task is not None:
+        arbitrator_log_task.cancel()
+        try:
+            await arbitrator_log_task
         except (Exception, BaseException):
             pass
 
@@ -1639,10 +1671,12 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.delta_iv_recorder import stop_recorder
         from app.services.delta_iv_socket import iv_manager
+        from app.services.delta_l2_socket import l2_manager
         stop_recorder()
         iv_manager.stop()
+        l2_manager.stop()
     except Exception as exc:
-        log.warning("Error stopping IV stream/recorder: %s", exc)
+        log.warning("Error stopping IV stream/recorder/L2: %s", exc)
 
     await adapter_manager.close_current()
     log.info("Sterling shutdown complete")

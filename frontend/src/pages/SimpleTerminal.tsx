@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TickerStrip } from '../components/TickerStrip';
 import { StatusBar } from '../components/StatusBar';
 import { PositionsStrip } from '../components/PositionsStrip';
 import { DrawdownBreakerBadge } from '../components/DrawdownBreakerBadge';
 import { PaperLiveToggle } from '../components/PaperLiveToggle';
-import { TradingModeSelector } from '../components/TradingModeSelector';
 import { SimpleSettingsDrawer, AlgoToggle, AIGatekeeperToggle } from '../components/SimpleSettings';
 import { DataSourceSelector } from '../components/DataSourceSelector';
 import LiveControlPanel from '../components/LiveControlPanel';
 import { useSetAppMode, useTheme, useToggleTheme, useSelectedUnderlying, useTabOrder, useSetTabOrder } from '../store/useStore';
 import type { TabId } from '../store/useStore';
+import { useScalpMode } from '../hooks/useSignalAlerts';
 import { useDrawdownBreaker } from '../hooks/useDrawdownBreaker';
+import { setCryptoEnabled } from '../hooks/useAppStream';
 import { V4AnalyticsDashboard } from '../components/V4AnalyticsDashboard';
 import { OHLCVChart } from '../components/OHLCVChart';
 import { BacktestPanel } from '../components/BacktestPanel';
@@ -28,6 +29,8 @@ import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
 
 function CbChip() {
+  const { data: scalpData } = useScalpMode();
+  if (!scalpData?.enabled) return null;
   const { data: cb } = useDrawdownBreaker();
   if (!cb || cb.state === 'clear') return null;
   const color = cb.state === 'warning' ? 'var(--t-amber)' : 'var(--t-red)';
@@ -45,8 +48,6 @@ function CbChip() {
   );
 }
 
-// ── Backtest tab — chart toggle + panels ──────────────────────────────────────
-
 function BacktestView() {
   const [showChart, setShowChart] = useState(true);
   const [symbol, setSymbol]       = useState('BTC');
@@ -62,21 +63,16 @@ function BacktestView() {
 
   return (
     <div style={{ flex: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 10, padding: 0 }}>
-
-      {/* ── Chart panel ── */}
       <div style={{ ...card, flexShrink: 0 }}>
-        {/* Chart header with toggle */}
         <div style={{ ...cardHead, borderBottom: showChart ? '1px solid var(--t-border)' : 'none', gap: 10 }}>
           <span>HISTORICAL CANDLES</span>
           <span style={{ fontSize: 9, fontWeight: 400, letterSpacing: 0, color: 'var(--t-dim)' }}>Delta Exchange · 6m · 5m–4h</span>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {/* Symbol selector */}
             <div style={{ display: 'flex', gap: 3 }}>
               {['BTC', 'ETH', 'SOL', 'XRP'].map(s => (
                 <button key={s} onClick={() => setSymbol(s)} style={headerBtn(symbol === s)}>{s}</button>
               ))}
             </div>
-            {/* Chart toggle */}
             <button
               onClick={() => setShowChart(v => !v)}
               title={showChart ? 'Hide chart' : 'Show chart'}
@@ -88,8 +84,6 @@ function BacktestView() {
         </div>
         {showChart && <OHLCVChart />}
       </div>
-
-      {/* ── Massive Vectorized Backtest panel ── */}
       <div style={card}>
         <div style={cardHead}>
           <span>MASSIVE VECTORIZED BACKTEST</span>
@@ -101,8 +95,6 @@ function BacktestView() {
           <MassiveBacktestDashboard underlying={symbol} />
         </div>
       </div>
-
-      {/* ── Signal backtest panel ── */}
       <div style={card}>
         <div style={cardHead}>
           <span>SIGNAL BACKTEST + SIMULATION</span>
@@ -118,7 +110,6 @@ function BacktestView() {
   );
 }
 
-// Shared chip style for every header control button
 const chip: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -138,47 +129,79 @@ const chip: React.CSSProperties = {
   transition: 'color 0.1s, border-color 0.1s',
 };
 
+const TOP_TAB = (active: boolean): React.CSSProperties => ({
+  backgroundColor: 'transparent',
+  backgroundImage: active ? 'var(--brand-grad)' : 'none',
+  backgroundRepeat: 'no-repeat',
+  backgroundSize: '100% 2.5px',
+  backgroundPosition: '50% 100%',
+  border: 'none',
+  borderRadius: 3,
+  color: active ? 'var(--t-bright)' : 'var(--t-dim)',
+  padding: '9px 20px',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: 12,
+  fontWeight: active ? 700 : 400,
+  letterSpacing: '0.10em',
+  marginBottom: -1,
+  transition: 'color .15s ease',
+});
+
+type TopTab = 'kite' | 'crypto';
+
+const CRYPTO_TABS: TabId[] = ['sterlingEngine', 'grok', 'sterling_v2', 'positions', 'backtest', 'paper'];
+const CRYPTO_LABELS: Record<TabId, string> = {
+  sterlingEngine: 'STERLING',
+  grok: 'GROK',
+  sterling_v2: 'STERLING V2',
+  positions: 'POSITIONS',
+  backtest: 'BACKTEST',
+  paper: 'PAPER RESEARCH',
+  kite: 'KITE',
+};
+
 export function SimpleTerminal() {
   const setAppMode = useSetAppMode();
   const theme = useTheme();
   const toggleTheme = useToggleTheme();
   const underlying = useSelectedUnderlying();
+  const { data: scalpData } = useScalpMode();
+  const scalpOn = scalpData?.enabled ?? false;
   const [showSettings, setShowSettings] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const sterlingV2 = useSterlingV2();
   const setSterlingV2 = useSetSterlingV2();
-  const tabOrder = useTabOrder();
-  const setTabOrder = useSetTabOrder();
-  const [activeSection, setActiveSection] = useState<TabId>(tabOrder[0]);
-  const [dragId, setDragId] = useState<TabId | null>(null);
+  const [activeTopTab, setActiveTopTab] = useState<TopTab>('kite');
+  const [activeSection, setActiveSection] = useState<TabId>('sterlingEngine');
+  const [showCryptoTab, setShowCryptoTab] = useState(() => {
+    const stored = localStorage.getItem('sterling_show_crypto_tab');
+    return stored === null ? true : stored === 'true';
+  });
 
-  const TAB_LABELS: Record<TabId, string> = {
-    sterlingEngine: 'STERLING ENGINE',
-    grok: 'GROK ENGINE',
-    sterling_v2: 'STERLING V2',
-    positions: 'POSITIONS',
-    backtest: 'BACKTEST',
-    paper: 'PAPER RESEARCH',
-    kite: 'KITE',
-  };
+  useEffect(() => {
+    localStorage.setItem('sterling_show_crypto_tab', String(showCryptoTab));
+  }, [showCryptoTab]);
+
+  // Sync SSE connection to scalp_mode: when crypto is disabled, kill the live data stream
+  useEffect(() => {
+    setCryptoEnabled(scalpOn);
+  }, [scalpOn]);
 
   return (
     <div className="term-root">
-      <DrawdownBreakerBadge />
+      {scalpOn && <DrawdownBreakerBadge />}
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────── */}
       <div style={{
         flexShrink: 0,
         background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
       }}>
-        {/* Top bar: wordmark left, icons right */}
+        {/* Row 1: STERLING | KITE | CRYPTO ──────────────── [actions] */}
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          height: 44,
-          padding: '0 20px',
+          display: 'flex', alignItems: 'center', gap: 16,
+          height: 44, padding: '0 20px',
         }}>
           <span style={{
             fontSize: 17, fontWeight: 800, letterSpacing: '0.18em',
@@ -186,16 +209,27 @@ export function SimpleTerminal() {
           }}>
             STERLING
           </span>
+          <button onClick={() => setActiveTopTab('kite')} style={TOP_TAB(activeTopTab === 'kite')}>
+            KITE
+          </button>
+          {showCryptoTab && (
+            <button onClick={() => setActiveTopTab('crypto')} style={{ ...TOP_TAB(activeTopTab === 'crypto'), opacity: 1, color: activeTopTab === 'crypto' ? 'var(--t-bright)' : 'var(--t-dim)' }}>
+              CRYPTO
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button onClick={() => setShowLive(true)} title="Live alerts & controls" style={{
-              background: 'none', border: '1px solid var(--t-border)', cursor: 'pointer',
-              width: 34, height: 34, borderRadius: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--t-dim)', fontSize: 14, transition: 'border-color .12s, color .12s',
-            }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-bright)44'; (e.currentTarget as HTMLElement).style.color = 'var(--t-bright)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--t-dim)'; }}
-            >🔔</button>
+            {scalpOn && (
+              <button onClick={() => setShowLive(true)} title="Live alerts & controls" style={{
+                background: 'none', border: '1px solid var(--t-border)', cursor: 'pointer',
+                width: 34, height: 34, borderRadius: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--t-dim)', fontSize: 14, transition: 'border-color .12s, color .12s',
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-bright)44'; (e.currentTarget as HTMLElement).style.color = 'var(--t-bright)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--t-dim)'; }}
+              >🔔</button>
+            )}
             <div title="User profile" style={{
               width: 32, height: 32, borderRadius: '50%',
               background: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
@@ -215,169 +249,110 @@ export function SimpleTerminal() {
           </div>
         </div>
 
-        {/* Tab bar: tabs center, controls right */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 20px',
-          borderTop: '1px solid var(--t-border)',
-        }}>
-          {tabOrder.map((id) => (
-            <button
-              key={id}
-              draggable
-              onDragStart={(e) => {
-                setDragId(id);
-                e.dataTransfer.effectAllowed = 'move';
-                (e.currentTarget as HTMLElement).style.opacity = '0.5';
-              }}
-              onDragEnd={(e) => {
-                setDragId(null);
-                (e.currentTarget as HTMLElement).style.opacity = '1';
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (!dragId || dragId === id) return;
-                const fromIdx = tabOrder.indexOf(dragId);
-                const toIdx = tabOrder.indexOf(id);
-                const next = [...tabOrder];
-                next.splice(fromIdx, 1);
-                next.splice(toIdx, 0, dragId);
-                setTabOrder(next);
-              }}
-              onClick={() => setActiveSection(id)}
-              style={{
-                backgroundColor: 'transparent',
-                backgroundImage: activeSection === id ? 'var(--brand-grad)' : 'none',
-                backgroundRepeat: 'no-repeat',
-                backgroundSize: '100% 2.5px',
-                backgroundPosition: '50% 100%',
-                border: dragId === id ? '1px dashed var(--t-bright)44' : 'none',
-                borderRadius: 3,
-                color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
-                padding: '9px 14px',
-                cursor: 'grab',
-                fontFamily: 'inherit',
-                fontSize: 11,
-                fontWeight: activeSection === id ? 700 : 400,
-                letterSpacing: '0.08em',
-                marginBottom: -1,
-                transition: 'color .15s ease',
-              }}
-            >
-              {TAB_LABELS[id]}
-            </button>
-          ))}
-          <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <PaperLiveToggle />
-            <AlgoToggle chipStyle={chip} />
-            <AIGatekeeperToggle chipStyle={chip} />
-            <DataSourceSelector chipStyle={chip} />
-            <CbChip />
-
-            <button
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Switch to Grey' : theme === 'grey' ? 'Switch to Light' : 'Switch to Dark'}
-              style={chip}
-            >
-              {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
-            </button>
-            <button
-              onClick={() => setAppMode('pro')}
-              title="Switch to 3-pane Terminal"
-              style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}
-            >
-              Sterling Pro
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Ticker strip ─────────────────────────────────────────────── */}
-      {activeSection === 'kite' ? <KiteTicker /> : <TickerStrip />}
-
-      {/* Main content — transparent so the aurora shows behind the panels */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'transparent', display: 'flex', flexDirection: 'column' }}>
-        {activeSection === 'sterlingEngine' && (
-          <SterlingEngineTab />
-        )}
-        {activeSection === 'grok' && (
-          <GrokTab />
-        )}
-        {activeSection === 'sterling_v2' && (
-          <SterlingV2Tab />
-        )}
-        {activeSection === 'positions' && <PositionsStrip asPage />}
-        {activeSection === 'backtest' && (
-          <ThreeColumnLayout
-            leftNav={[{ id: 'backtest', label: 'Backtest', color: 'var(--t-blue)' }]}
-            activeNav="backtest"
-            onNavClick={() => {}}
-            centerHeader={<>
-              <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Backtest</div>
-              <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Historical candle data & signal simulation</div>
-            </>}
-            centerContent={<BacktestView />}
-            rightSidebar={<>
-              <RightSection label="Analytics">
-                <V4AnalyticsDashboard activeSymbol={underlying} />
-              </RightSection>
-            </>}
-          />
-        )}
-        {activeSection === 'paper' && (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 20 }}>
-            <PaperResearchTab />
+        {/* Row 2: crypto sub-tabs + controls — only when crypto is selected */}
+        {activeTopTab === 'crypto' && (
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px', borderTop: '1px solid var(--t-border)', overflow: 'hidden' }}>
+            {CRYPTO_TABS.map((id) => (
+              <button
+                key={id}
+                onClick={() => setActiveSection(id)}
+                style={{
+                  backgroundColor: 'transparent',
+                  backgroundImage: activeSection === id ? 'var(--brand-grad)' : 'none',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: '100% 2.5px',
+                  backgroundPosition: '50% 100%',
+                  border: 'none', borderRadius: 3,
+                  color: activeSection === id ? 'var(--t-bright)' : 'var(--t-dim)',
+                  padding: '9px 12px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 10, fontWeight: activeSection === id ? 700 : 400,
+                  letterSpacing: '0.06em', marginBottom: -1, transition: 'color .15s ease',
+                }}
+              >
+                {CRYPTO_LABELS[id]}
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <PaperLiveToggle />
+              <AlgoToggle chipStyle={chip} />
+              <AIGatekeeperToggle chipStyle={chip} />
+              <DataSourceSelector chipStyle={chip} />
+              <CbChip />
+              <button onClick={toggleTheme} title="Toggle theme" style={chip}>
+                {theme === 'dark' ? '◑' : theme === 'grey' ? '☀' : '◐'}
+              </button>
+              <button onClick={() => setAppMode('pro')} title="Sterling Pro" style={{ ...chip, color: 'var(--t-blue)', borderColor: 'var(--t-blue)44' }}>
+                Pro
+              </button>
+            </div>
           </div>
         )}
-        {activeSection === 'kite' && <KiteTab />}
       </div>
 
-      {/* Crypto status footer — irrelevant to Kite, which has its own footer in KiteLayout */}
-      {activeSection !== 'kite' && <StatusBar />}
+      {/* ── Content ──────────────────────────────────────────────── */}
+      {activeTopTab === 'kite' && (
+        <>
+          <KiteTicker />
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <KiteTab />
+          </div>
+        </>
+      )}
+
+      {activeTopTab === 'crypto' && (
+        <>
+          <TickerStrip />
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'transparent', display: 'flex', flexDirection: 'column' }}>
+            {activeSection === 'sterlingEngine' && <SterlingEngineTab />}
+            {activeSection === 'grok' && <GrokTab />}
+            {activeSection === 'sterling_v2' && <SterlingV2Tab />}
+            {activeSection === 'positions' && <PositionsStrip asPage />}
+            {activeSection === 'backtest' && (
+              <ThreeColumnLayout
+                leftNav={[{ id: 'backtest', label: 'Backtest', color: 'var(--t-blue)' }]}
+                activeNav="backtest"
+                onNavClick={() => {}}
+                centerHeader={<>
+                  <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '0.06em', color: 'var(--t-bright)' }}>Backtest</div>
+                  <div style={{ fontSize: 10, color: 'var(--t-dim)', marginTop: 1 }}>Historical candle data & signal simulation</div>
+                </>}
+                centerContent={<BacktestView />}
+                rightSidebar={<>
+                  <RightSection label="Analytics">
+                    <V4AnalyticsDashboard activeSymbol={underlying} />
+                  </RightSection>
+                </>}
+              />
+            )}
+            {activeSection === 'paper' && (
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 20 }}>
+                <PaperResearchTab />
+              </div>
+            )}
+          </div>
+          <StatusBar />
+        </>
+      )}
+
       <SimpleSettingsDrawer open={showSettings} onClose={() => setShowSettings(false)} />
 
-      {/* Live control drawer — slide-out from the right */}
+      {/* Live control drawer */}
       {showLive && (
         <div
           onClick={() => setShowLive(false)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            zIndex: 3000, display: 'flex', justifyContent: 'flex-end',
-          }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 3000, display: 'flex', justifyContent: 'flex-end' }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 380, height: '100%', background: 'var(--bg, #07090d)',
-              borderLeft: '1px solid var(--t-border)',
-              display: 'flex', flexDirection: 'column', overflow: 'auto',
-            }}
-          >
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: 380, height: '100%', background: 'var(--bg, #07090d)',
+            borderLeft: '1px solid var(--t-border)', display: 'flex', flexDirection: 'column', overflow: 'auto',
+          }}>
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 14px', borderBottom: '1px solid var(--t-border)',
-              background: 'var(--t-bg2)',
+              padding: '10px 14px', borderBottom: '1px solid var(--t-border)', background: 'var(--t-bg2)',
             }}>
-              <span style={{
-                fontSize: 11, letterSpacing: 2, fontWeight: 700, color: 'var(--t-bright)',
-              }}>
-                LIVE CONTROL
-              </span>
-              <button
-                onClick={() => setShowLive(false)}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--t-dim)',
-                  cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0,
-                }}
-              >
-                ×
-              </button>
+              <span style={{ fontSize: 11, letterSpacing: 2, fontWeight: 700, color: 'var(--t-bright)' }}>LIVE CONTROL</span>
+              <button onClick={() => setShowLive(false)} style={{ background: 'none', border: 'none', color: 'var(--t-dim)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
             </div>
             <div style={{ padding: 12 }}>
               <LiveControlPanel />

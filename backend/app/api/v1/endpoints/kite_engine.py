@@ -206,3 +206,18 @@ async def scan_report(user: UserContext = Depends(get_current_user)) -> ScanRepo
         fired_pe=fired_pe,
     )
     return ScanReportResponse(summary=summary, entries=entries)
+
+
+@router.get("/stock-registry")
+async def stock_registry() -> list[dict]:
+    """Return the curated stock registry with liquidity / volatility metadata,
+    plus a separate optional-stocks group for the '+' picker."""
+    from app.services.kite_engine.stock_registry import OPTIONAL_STOCKS, STOCK_REGISTRY, STOCKS_BY_LIQUIDITY
+    groups = [
+        {"liquidity": liq, "stocks": [e.to_dict() for e in entries]}
+        for liq in ["Very High", "High", "Good"]
+        if liq in STOCKS_BY_LIQUIDITY
+        for entries in [STOCKS_BY_LIQUIDITY[liq]]
+    ]
+    groups.append({"liquidity": "optional", "stocks": [e.to_dict() for e in OPTIONAL_STOCKS]})
+    return groups

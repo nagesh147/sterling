@@ -187,6 +187,9 @@ class EngineConfigModel(BaseModel):
     scan_source: Literal["spot", "derivatives", "both"] = "derivatives"
     # Option expiries to scan — weekly, monthly, or both. Defaults to all.
     scan_expiries: List[Literal["weekly", "monthly"]] = ["weekly", "monthly"]
+    # Per-category override: indices (default both), stocks (default monthly only).
+    scan_expiries_indices: Optional[List[Literal["weekly", "monthly"]]] = None
+    scan_expiries_stocks: Optional[List[Literal["weekly", "monthly"]]] = None
     # Granular universe selection — applied to BOTH the spot and derivatives scans.
     # Indices are kept by display name; stocks by name, unless scan_all_stocks is set.
     scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]

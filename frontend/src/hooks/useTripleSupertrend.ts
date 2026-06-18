@@ -3,7 +3,7 @@ import { api } from '../utils/api';
 import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   ActivityResponse, EngineConfigModel, EngineDetailResponse, EngineOrderRequest,
-  EngineOrderResponse, ScanReportResponse, SetupChart, SignalsResponse,
+  EngineOrderResponse, LiquidityGroup, ScanReportResponse, SetupChart, SignalsResponse,
 } from '../types/kiteEngine';
 
 const E = '/api/v1/kite/engine';
@@ -14,6 +14,15 @@ export function useEngineSignals() {
     queryKey: ['kite-engine-signals'],
     queryFn: () => api.get<SignalsResponse>(`${E}/signals`),
     refetchInterval: 15_000,
+  });
+}
+
+// ─── Stock registry (cached) ───────────────────────────────────────────────
+export function useStockRegistry() {
+  return useQuery<LiquidityGroup[]>({
+    queryKey: ['kite-engine-stock-registry'],
+    queryFn: () => api.get<LiquidityGroup[]>(`${E}/stock-registry`),
+    staleTime: 300_000,
   });
 }
 

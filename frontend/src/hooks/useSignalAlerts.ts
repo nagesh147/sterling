@@ -107,3 +107,21 @@ export function useSetAlgoMode() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['algo-mode'] }),
   });
 }
+
+// ─── Scalp Mode (crypto engine kill switch) ─────────────────────────────
+export function useScalpMode() {
+  return useQuery<AlgoModeResponse>({
+    queryKey: ['scalp-mode'],
+    queryFn: () => api.get<AlgoModeResponse>('/api/v1/trading/scalp-mode'),
+    staleTime: 0,
+  });
+}
+
+export function useSetScalpMode() {
+  const qc = useQueryClient();
+  return useMutation<AlgoModeResponse, Error, boolean>({
+    mutationFn: (enabled) =>
+      api.post<AlgoModeResponse>('/api/v1/trading/scalp-mode', { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['scalp-mode'] }),
+  });
+}

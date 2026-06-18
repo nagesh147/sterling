@@ -130,7 +130,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 pass
     except WebSocketDisconnect:
         stream_manager.disconnect(websocket)
-
 async def _arbitrator_log_worker():
     import random
     while True:
