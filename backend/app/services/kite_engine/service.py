@@ -73,6 +73,12 @@ def _make_place_cb(client, uid: str):
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) -> int:
     """Run one full scan for ``uid`` with ``client``. Returns the signal count."""
     cfg_model = state.get_config(uid)
+    if state.status(uid).scanning:
+        state.log(uid, "info", "Scan skipped — another scan is already in progress for this account.")
+        return 0
+    if state.clear_cooldown(uid):
+        state.log(uid, "info", "Scan skipped — cancelled recently (60s cooldown).")
+        return 0
     state.set_scanning(uid, True)
     state.log(uid, "scan_start", f"Initiating 1H triple-SuperTrend scan…")
     try:
@@ -94,7 +100,9 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         place_cb = _make_place_cb(client, uid) if cfg_model.auto_execute else None
         await scanner.scan(
             uid=uid, client=client, universe=spot_universe, nfo_rows=nfo, bfo_rows=bfo,
-            cfg=_ts_cfg(cfg_model), moneyness=cfg_model.strike_moneyness, place_cb=place_cb,
+            cfg=_ts_cfg(cfg_model), moneyness=cfg_model.strike_moneyness,
+            expiry_types=cfg_model.scan_expiries,
+            place_cb=place_cb,
             deriv_universe=deriv_universe, log_cb=lambda msg: state.log(uid, "info", msg))
         snap = scanner.snapshot(uid)
         count = len(snap.rows)

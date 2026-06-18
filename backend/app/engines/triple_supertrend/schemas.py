@@ -52,6 +52,7 @@ class EngineSignalRow(BaseModel):
 class SignalsResponse(BaseModel):
     generated_ms: int
     scanning: bool
+    scanning_label: str = ""
     rows: List[EngineSignalRow]
     next_scan_ms: int = 0
     auto_scan: bool = False
@@ -182,6 +183,8 @@ class EngineConfigModel(BaseModel):
     # Where the SuperTrend runs: "spot" = underlying chart (legs are candidate strikes);
     # "derivatives" = each selected contract's own premium chart (BUY-only); "both".
     scan_source: Literal["spot", "derivatives", "both"] = "derivatives"
+    # Option expiries to scan — weekly, monthly, or both. Defaults to all.
+    scan_expiries: List[Literal["weekly", "monthly"]] = ["weekly", "monthly"]
     # Granular universe selection — applied to BOTH the spot and derivatives scans.
     # Indices are kept by display name; stocks by name, unless scan_all_stocks is set.
     scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]
@@ -192,5 +195,46 @@ class EngineConfigModel(BaseModel):
 
     @field_validator("strike_moneyness")
     @classmethod
-    def _at_least_one(cls, v):
+    def _at_least_one_moneyness(cls, v):
         return v or ["ITM1", "ATM", "OTM1"]
+
+    @field_validator("scan_expiries")
+    @classmethod
+    def _at_least_one_expiry(cls, v):
+        return v or ["weekly", "monthly"]
+
+
+# ── Per-contract scan report ─────────────────────────────────────────────────
+class ContractScanEntry(BaseModel):
+    underlying: str
+    symbol: str          # option tradingsymbol
+    strike: float
+    option_type: Literal["CE", "PE"]
+    expiry: str          # YYYY-MM-DD
+    moneyness: str       # ATM/ITM1-5/OTM1-5
+    bars: int            # premium bars available
+    premium_close: float # last premium close (0 if no candles)
+    fired: bool          # produced a BUY signal on the latest bar
+    fired_at_ms: int = 0 # timestamp of the fired entry (0 if not fired)
+    reason: str          # "fresh BUY signal" | "no up-transition" (bars>warmup) | "too few bars" | "no data" | "expired"
+
+
+class ScanReportSummary(BaseModel):
+    generated_ms: int
+    scan_source: str
+    indices: List[str]
+    total_contracts: int
+    charted: int         # contracts with premium candle data
+    fired: int           # contracts that produced a fresh BUY signal
+    no_data: int         # contracts skipped (no token/empty fetch)
+    min_bars: int
+    max_bars: int
+    total_ce: int
+    total_pe: int
+    fired_ce: int
+    fired_pe: int
+
+
+class ScanReportResponse(BaseModel):
+    summary: ScanReportSummary
+    entries: List[ContractScanEntry]

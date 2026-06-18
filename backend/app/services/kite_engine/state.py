@@ -21,6 +21,7 @@ class _Status:
     last_scan_ms: int = 0
     next_scan_ms: int = 0
     signal_count: int = 0
+    cancel_cooldown_ms: int = 0
 
 
 _config: Dict[str, EngineConfigModel] = {}
@@ -82,6 +83,22 @@ def mark_scan_done(uid: str, *, signal_count: int, next_in_s: float) -> None:
     s.last_scan_ms = now
     s.next_scan_ms = now + int(next_in_s * 1000)
     s.signal_count = signal_count
+
+
+_COOLDOWN_S = 60
+
+
+def clear_cooldown(uid: str) -> bool:
+    """Returns True if the user is in a cancel cooldown (scan should not start)."""
+    s = status(uid)
+    if s.cancel_cooldown_ms and time.time() * 1000 < s.cancel_cooldown_ms:
+        return True
+    return False
+
+
+def set_cooldown(uid: str) -> None:
+    s = status(uid)
+    s.cancel_cooldown_ms = int(time.time() * 1000 + _COOLDOWN_S * 1000)
 
 
 # ── auto-exec open positions (one per underlying) ───────────────────────────

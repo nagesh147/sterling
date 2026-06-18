@@ -4,6 +4,7 @@
 export type TrailTarget = 'fast' | 'mid' | 'slow';
 export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
 export type ScanSource = 'spot' | 'derivatives' | 'both';
+export type ScanExpiry = 'weekly' | 'monthly';
 
 export interface AlignmentChip {
   fast: number; // +1 / -1 / 0
@@ -45,6 +46,7 @@ export interface EngineSignalRow {
 export interface SignalsResponse {
   generated_ms: number;
   scanning: boolean;
+  scanning_label: string;
   rows: EngineSignalRow[];
   next_scan_ms: number;
   auto_scan: boolean;
@@ -133,6 +135,7 @@ export interface EngineConfigModel {
   trail_target: TrailTarget;
   strike_moneyness: Moneyness[];
   scan_source: ScanSource;
+  scan_expiries: ScanExpiry[];
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
@@ -153,4 +156,40 @@ export interface EngineOrderResponse {
   order_id: string;
   status: string;
   message: string;
+}
+
+// ─── Per-contract scan report ──────────────────────────────────────────────
+export interface ContractScanEntry {
+  underlying: string;
+  symbol: string;
+  strike: number;
+  option_type: 'CE' | 'PE';
+  expiry: string;
+  moneyness: string;
+  bars: number;
+  premium_close: number;
+  fired: boolean;
+  fired_at_ms: number;
+  reason: string;
+}
+
+export interface ScanReportSummary {
+  generated_ms: number;
+  scan_source: string;
+  indices: string[];
+  total_contracts: number;
+  charted: number;
+  fired: number;
+  no_data: number;
+  min_bars: number;
+  max_bars: number;
+  total_ce: number;
+  total_pe: number;
+  fired_ce: number;
+  fired_pe: number;
+}
+
+export interface ScanReportResponse {
+  summary: ScanReportSummary;
+  entries: ContractScanEntry[];
 }

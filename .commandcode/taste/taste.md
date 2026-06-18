@@ -7,6 +7,9 @@
 - Schemas must be additive-only: new fields must be Optional with defaults, no breaking changes to existing Pydantic schemas. Confidence: 0.75
 - Kite engine is exclusive and self-contained: do not import or reuse strategy/signal/options/derivative logic from other engines. The Kite module stands alone with its own primitives. Confidence: 0.80
 
+# debugging
+- When user reports a signal visible on a chart but missing in the app, clarify which signal table/engine they are referring to (directional, Kite triple super trend, scalping, or derivatives) before investigating the pipeline. Confidence: 0.65
+
 # infrastructure
 - Handle Zerodha Kite session refresh automatically: auto-capture refresh_token, auto-refresh access tokens before expiry (~6 AM IST daily), and prevent session lapses without manual user intervention. Confidence: 0.70
 
@@ -79,10 +82,12 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 
 # ui-tables
 - Avoid browser-native `title` attribute hover tooltips on table headers — show descriptions inline as a second descriptive line below the header label using `fontSize: 8`, `fontWeight: 400`, muted color, no letter-spacing, no text-transform. Confidence: 0.70
+- Show Greeks (IV, delta Δ, gamma Γ, theta Θ, vega V) and Lot size on row expand in both MarketWatch and TripleSupertrend tables. Format as: IV x.x%, delta x.xxxx, gamma x.xxxxx, theta/day x.x, vega x.x, Lot N. Confidence: 0.75
 
 # scan-configuration
 - Provide granular scan selection controls: users should be able to independently toggle stocks/indices, spot/derivatives, and ITM/ATM/OTM strike types for each scan strategy. Display scan cost estimates based on the user's current selection to help them understand the data and cost impact. Confidence: 0.75
 - Support historical scan with flexible date range presets: today, yesterday, last 5 days, last week, 15 days, month, and custom range. Historical scans help users verify scan logic and review past signals. Today should remain the default/primary view. Confidence: 0.75
+- Allow users to select option expiries in scan settings: provide separate toggle controls for weekly and monthly expiries, following the same UX pattern as stocks/indices and strikes/moneyness selection. Confidence: 0.70
 
 # git-workflow
 - When user says "push all code; sync branches;updated;", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch origin main && git merge origin/main, then report push hash and main status. Confidence: 0.80

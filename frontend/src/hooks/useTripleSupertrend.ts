@@ -3,7 +3,7 @@ import { api } from '../utils/api';
 import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   ActivityResponse, EngineConfigModel, EngineDetailResponse, EngineOrderRequest,
-  EngineOrderResponse, SetupChart, SignalsResponse,
+  EngineOrderResponse, ScanReportResponse, SetupChart, SignalsResponse,
 } from '../types/kiteEngine';
 
 const E = '/api/v1/kite/engine';
@@ -14,6 +14,15 @@ export function useEngineSignals() {
     queryKey: ['kite-engine-signals'],
     queryFn: () => api.get<SignalsResponse>(`${E}/signals`),
     refetchInterval: 15_000,
+  });
+}
+
+// ─── Per-contract scan report ───────────────────────────────────────────────
+export function useScanReport() {
+  return useQuery<ScanReportResponse>({
+    queryKey: ['kite-engine-scan-report'],
+    queryFn: () => api.get<ScanReportResponse>(`${E}/scan-report`),
+    staleTime: 120_000,
   });
 }
 
@@ -54,6 +63,15 @@ export function useRunScan() {
   const qc = useQueryClient();
   return useMutation<SignalsResponse, Error, void>({
     mutationFn: () => api.post<SignalsResponse>(`${E}/scan`),
+    onSuccess: (data) => qc.setQueryData(['kite-engine-signals'], data),
+  });
+}
+
+// ─── Cancel scan (force-stop) ─────────────────────────────────────────────────
+export function useCancelScan() {
+  const qc = useQueryClient();
+  return useMutation<SignalsResponse, Error, void>({
+    mutationFn: () => api.post<SignalsResponse>(`${E}/scan/cancel`),
     onSuccess: (data) => qc.setQueryData(['kite-engine-signals'], data),
   });
 }

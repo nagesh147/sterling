@@ -5,6 +5,7 @@ import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
+import { computeGreeksFromSymbol, underlyingSpotKey } from '../../utils/computeGreeks';
 
 const S = {
   container: { display: 'flex', flexDirection: 'column' as const, height: '100%', background: t.bg, fontFamily: t.fontFamily },
@@ -394,7 +395,17 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
   };
 
   const symbols = useMemo(() => watch.map((w) => w.symbol), [watch]);
-  const { data: ltp } = useKiteLtp(symbols, symbols.length > 0);
+  const underlyingSyms = useMemo(() => {
+    const set = new Set<string>();
+    for (const w of watch) {
+      const parts = w.symbol.split(':');
+      const rawTs = parts.length > 1 ? parts[1] : w.symbol;
+      const key = underlyingSpotKey(rawTs);
+      if (key) set.add(key);
+    }
+    return [...set];
+  }, [watch]);
+  const { data: ltp } = useKiteLtp(symbols.concat(underlyingSyms), symbols.length > 0);
   const { data: quotes } = useKiteQuote(symbols, symbols.length > 0);
 
   // Backfill real lot sizes onto watch items that lack one (legacy/synced items),
@@ -655,7 +666,6 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                       className="mw-actions"
                       onBuy={(e) => { e.stopPropagation(); handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size); }}
                       onSell={(e) => { e.stopPropagation(); handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size); }}
-                      onDepth={(e) => { e.stopPropagation(); toggleExpand(w.symbol); }}
                       onChart={(e) => { e.stopPropagation(); onOpenInstrument?.(w.symbol, 'chart'); }}
                       onDelete={(e) => { e.stopPropagation(); remove(w.symbol); }}
                       onMore={(e) => { e.stopPropagation(); handleMenuClick(e, w.symbol); }}
@@ -675,7 +685,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                       </span>
                     </div>
                   </div>
-                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} onBuy={() => handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size)} onSell={() => handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size)} />}
+                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} greeks={computeGreeksFromSymbol(w.symbol, quotes?.[w.symbol], ltp) ?? undefined} onBuy={() => handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size)} onSell={() => handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size)} />}
                 </div>
               );
             })}

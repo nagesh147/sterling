@@ -1,17 +1,19 @@
 import React from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import {
-  useEngineConfig, useEngineSignals, useRunScan, useSetEngineConfig, useResetEngineConfig,
+  useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
+  useScanReport,
 } from '../../hooks/useTripleSupertrend';
 import type {
-  AlignmentChip, EngineConfigModel, EngineSignalRow, Moneyness,
-  ScanSource, SignalsResponse, TrailTarget,
+  AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, Moneyness,
+  ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, TrailTarget,
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
 import { KiteActionButtons } from './KiteActionButtons';
+import { computeGreeksFromLeg } from '../../utils/computeGreeks';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -39,6 +41,10 @@ const MONEY_OPTS: { value: Moneyness; hint: string }[] = [
   { value: 'OTM3', hint: 'Three strikes out-of-the-money.' },
   { value: 'OTM4', hint: 'Four strikes out-of-the-money.' },
   { value: 'OTM5', hint: 'Five strikes out-of-the-money — cheapest, lottery-like.' },
+];
+const EXPIRY_OPTS: { value: ScanExpiry; label: string; hint: string }[] = [
+  { value: 'weekly', label: 'Weekly', hint: 'Weekly contracts expiring every Thursday (including current week).' },
+  { value: 'monthly', label: 'Monthly', hint: 'Monthly contracts expiring on the last Thursday of the month.' },
 ];
 const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
@@ -170,7 +176,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
   let uChgAbs = null;
   let uChgPct = null;
   let uLastPx = null;
-  let uColor = k.dim;
+  let uColor = k.text;
 
   if (uQ) {
     uLastPx = uQ.last_price;
@@ -178,10 +184,10 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
     if (base) {
       uChgAbs = uQ.last_price - base;
       uChgPct = (uChgAbs / base) * 100;
-      uColor = s.showPriceDirection ? (uChgAbs >= 0 ? k.green : k.red) : k.dim;
+      uColor = s.showPriceDirection ? (uChgAbs >= 0 ? k.green : k.red) : k.text;
     } else if (uQ.net_change != null) {
       uChgPct = uQ.net_change;
-      uColor = s.showPriceDirection ? (uChgPct >= 0 ? k.green : k.red) : k.dim;
+      uColor = s.showPriceDirection ? (uChgPct >= 0 ? k.green : k.red) : k.text;
     }
   }
 
@@ -202,12 +208,12 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, color: k.orange, border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>DERIV</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{row.underlying}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: uColor }}>{row.underlying}</span>
               </span>
             </div>
           ) : (
             <>
-              <span style={{ fontSize: 13, fontWeight: 600, color: k.text }}>{row.underlying}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: uColor }}>{row.underlying}</span>
 
               <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
                 <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>
@@ -265,7 +271,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>{leg.moneyness}</span>
-                  <span style={{ fontSize: 12, color: k.text, fontWeight: 600 }}>{lastPx != null ? lastPx.toFixed(2) : '—'}</span>
+                  <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>{lastPx != null ? lastPx.toFixed(2) : '—'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -332,7 +338,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
           let chgAbs = null;
           let chgPct = null;
           let lastPx = null;
-          let color = k.dim;
+          let color = k.text;
           
           if (q) {
             lastPx = q.last_price;
@@ -340,10 +346,10 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
             if (base) {
               chgAbs = q.last_price - base;
               chgPct = (chgAbs / base) * 100;
-              color = s.showPriceDirection ? (chgAbs >= 0 ? k.green : k.red) : k.dim;
+              color = s.showPriceDirection ? (chgAbs >= 0 ? k.green : k.red) : k.text;
             } else if (q.net_change != null) {
               chgPct = q.net_change;
-              color = s.showPriceDirection ? (chgPct >= 0 ? k.green : k.red) : k.dim;
+              color = s.showPriceDirection ? (chgPct >= 0 ? k.green : k.red) : k.text;
             }
           }
           const isExp = expanded.has(leg.option_symbol);
@@ -356,7 +362,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : 'transparent' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   <span style={{ color: k.text, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                    {s.showExchange && (
                      <span style={{ fontSize: 11, color: k.dim, width: 40, flexShrink: 0 }}>
                        {row.exchange}
@@ -403,7 +409,6 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                           lastPrice: lastPx || 0,
                         });
                       }}
-                      onDepth={(e) => { e.stopPropagation(); toggleExpand(e, leg.option_symbol); }}
                       onChart={(e) => { e.stopPropagation(); onClick(); }}
                     />
                     
@@ -428,36 +433,43 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                   </div>
                 )}
               </div>
-              {isExp && (
-                <div onClick={(e) => e.stopPropagation()}>
-                  <QuoteDetail 
-                    sym={sym} 
-                    q={q} 
-                    expiry={leg.expiry} 
-                    spotName={row.underlying} 
-                    spotPx={row.spot} 
-                    instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
-                    onBuy={() => {
-                      openOrderWindow({
-                        symbol: leg.option_symbol,
-                        exchange: row.exchange,
-                        initialSide: 'BUY',
-                        lotSize: leg.lot_size || 1,
-                        lastPrice: lastPx || 0,
-                      });
-                    }}
-                    onSell={() => {
-                      openOrderWindow({
-                        symbol: leg.option_symbol,
-                        exchange: row.exchange,
-                        initialSide: 'SELL',
-                        lotSize: leg.lot_size || 1,
-                        lastPrice: lastPx || 0,
-                      });
-                    }}
-                  />
-                </div>
-              )}
+              {isExp && (() => {
+                const greeks = computeGreeksFromLeg(
+                  leg.strike, leg.expiry, leg.option_type, row.spot,
+                  q, leg.lot_size ?? null,
+                );
+                return (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <QuoteDetail 
+                      sym={sym} 
+                      q={q} 
+                      expiry={leg.expiry} 
+                      spotName={row.underlying} 
+                      spotPx={row.spot} 
+                      instrumentName={<InstrumentLabel symbol={leg.option_symbol} />} 
+                      greeks={greeks ?? undefined}
+                      onBuy={() => {
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'BUY',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                        });
+                      }}
+                      onSell={() => {
+                        openOrderWindow({
+                          symbol: leg.option_symbol,
+                          exchange: row.exchange,
+                          initialSide: 'SELL',
+                          lotSize: leg.lot_size || 1,
+                          lastPrice: lastPx || 0,
+                        });
+                      }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
@@ -660,12 +672,158 @@ function ScanStatus({ signals }: { signals?: SignalsResponse }) {
   );
 }
 
+// ─── Scan Report View ─────────────────────────────────────────────────────
+type ReportSortKey = 'symbol' | 'strike' | 'type' | 'expiry' | 'bars' | 'premium' | 'status' | 'reason';
+
+function ScanReportView({ data }: { data?: ScanReportResponse }) {
+  const [sortKey, setSortKey] = React.useState<ReportSortKey>('strike');
+  const [sortDir, setSortDir] = React.useState<'asc'|'desc'>('asc');
+  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
+
+  // Grouped by underlying — MUST be before early return (hook count consistency)
+  const grouped = React.useMemo(() => {
+    if (!data || !data.entries.length) return [];
+    const map = new Map<string, ContractScanEntry[]>();
+    for (const e of data.entries) {
+      const arr = map.get(e.underlying) || [];
+      arr.push(e);
+      map.set(e.underlying, arr);
+    }
+    const out: { symbol: string; entries: ContractScanEntry[]; firedCount: number }[] = [];
+    for (const [symbol, entries] of map) {
+      const firedCount = entries.filter(e => e.fired).length;
+      const sorted = [...entries].sort((a, b) => {
+        let va: any, vb: any;
+        switch (sortKey) {
+          case 'symbol': va = a.underlying + a.moneyness; vb = b.underlying + b.moneyness; break;
+          case 'strike': va = a.strike; vb = b.strike; break;
+          case 'type': va = a.option_type; vb = b.option_type; break;
+          case 'expiry': va = a.expiry; vb = b.expiry; break;
+          case 'bars': va = a.bars; vb = b.bars; break;
+          case 'premium': va = a.premium_close; vb = b.premium_close; break;
+          case 'status': va = a.fired ? 1 : 0; vb = b.fired ? 1 : 0; break;
+          case 'reason': va = a.reason; vb = b.reason; break;
+          default: return 0;
+        }
+        if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        return sortDir === 'asc' ? va - vb : vb - va;
+      });
+      out.push({ symbol, entries: sorted, firedCount });
+    }
+    out.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    return out;
+  }, [data, sortKey, sortDir]);
+
+  const handleSort = (key: ReportSortKey) => {
+    if (sortKey === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  if (!data || !data.entries.length) {
+    return (
+      <div style={{ padding: '16px 20px', fontSize: 11, color: k.dim, borderBottom: `1px solid ${k.border}` }}>
+        No scan report available — run a scan first.
+      </div>
+    );
+  }
+  const s = data.summary;
+  const fmtPx = (v: number) => v > 0 ? v.toFixed(1) : '—';
+
+  const toggleGroup = (sym: string) => setCollapsed(prev => { const n = new Set(prev); n.has(sym) ? n.delete(sym) : n.add(sym); return n; });
+
+  return (
+    <div style={{ borderBottom: `1px solid ${k.border}`, maxHeight: 420, overflow: 'auto' }}>
+      {/* Summary bar */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', padding: '10px 16px', fontSize: 10.5, color: k.dim, background: k.surfaceHover }}>
+        <span>CE <b style={{ color: k.green }}>{s.fired_ce}</b>/<span style={{ color: k.text }}>{s.total_ce}</span></span>
+        <span>PE <b style={{ color: k.red }}>{s.fired_pe}</b>/<span style={{ color: k.text }}>{s.total_pe}</span></span>
+        <span>charted <b style={{ color: k.text }}>{s.charted}</b></span>
+        <span>no-data <b style={{ color: k.amber }}>{s.no_data}</b></span>
+        <span>bars <b style={{ color: k.text }}>{s.min_bars}–{s.max_bars}</b></span>
+        <span style={{ marginLeft: 'auto', color: k.dim }}>{new Date(s.generated_ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+      </div>
+
+      {/* Table header — sticky */}
+      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10.5 }}>
+        <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+          <tr style={{ color: k.dim, fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            {([
+              ['Symbol', 'symbol'], ['Strike', 'strike'], ['Type', 'type'], ['Expiry', 'expiry'],
+              ['Bars', 'bars'], ['Premium', 'premium'], ['Status', 'status'], ['Reason', 'reason'],
+            ] as [string, ReportSortKey][]).map(([label, key]) => (
+              <th key={key} style={{ padding: '6px 10px', textAlign: key === 'symbol' || key === 'type' ? 'left' : key === 'reason' ? 'left' : 'right', borderBottom: `1px solid ${k.border}`, background: k.bg, whiteSpace: 'nowrap' }}>
+                <SortHeaderDiv label={label} sortKey={key} sort={{ key: sortKey, dir: sortDir }} handleSort={handleSort} align={key === 'symbol' || key === 'type' || key === 'reason' ? 'left' : 'right'} />
+              </th>
+            ))}
+          </tr>
+        </thead>
+      </table>
+
+      {/* Grouped rows */}
+      {grouped.map(g => {
+        const isCollapsed = collapsed.has(g.symbol);
+        const dot = g.firedCount > 0 ? 'var(--t-green)' : 'var(--t-dim)';
+        return (
+          <div key={g.symbol}>
+            <div onClick={() => toggleGroup(g.symbol)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 16px', background: k.surfaceHover, borderBottom: `1px solid ${k.border}`, cursor: 'pointer', userSelect: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: k.text }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: dot, flexShrink: 0 }} />
+                {g.symbol}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: k.dim }}>{g.entries.length} contracts · {g.firedCount} fired</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+            </div>
+            {!isCollapsed && (
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10.5 }}>
+                <tbody>
+                  {g.entries.map((e, i) => {
+                    const firedColor = e.fired ? k.green : k.dim;
+                    const typeColor = e.option_type === 'CE' ? k.green : k.red;
+                    return (
+                      <tr key={i} style={{ borderBottom: `1px solid ${k.border}` }}>
+                        <td style={{ padding: '5px 10px', color: k.text, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                          {e.moneyness}
+                        </td>
+                        <td style={{ padding: '5px 10px', color: k.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{e.strike.toFixed(0)}</td>
+                        <td style={{ padding: '5px 10px', fontWeight: 700, color: typeColor }}>{e.option_type}</td>
+                        <td style={{ padding: '5px 10px', color: k.dim, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{e.expiry.slice(5)}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', color: e.bars > 0 ? k.text : k.dim, fontVariantNumeric: 'tabular-nums' }}>{e.bars || '—'}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', color: k.text, fontVariantNumeric: 'tabular-nums' }}>{fmtPx(e.premium_close)}</td>
+                        <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: firedColor }}>{e.fired ? 'FIRED' : '—'}</td>
+                        <td style={{ padding: '5px 10px', fontSize: 9.5, color: e.fired ? k.green : k.dim, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.reason}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
+  const cancelScan = useCancelScan();
+  const { data: scanReport } = useScanReport();
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const scanLock = React.useRef(false);
+  const doScan = () => {
+    if (scanLock.current || scan.isPending) return;
+    scanLock.current = true;
+    scan.mutate(undefined, { onSettled: () => { scanLock.current = false; } });
+  };
   // Kite-only paper/live, scoped to the active Kite account. Independent of the
   // global top-bar PAPER/LIVE toggle, which is crypto (Delta) only.
   const { data: kiteAccts } = useKiteAccounts();
@@ -706,6 +864,14 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`);
   };
 
+  const toggleExpiry = (e: ScanExpiry) => {
+    if (!cfg) return;
+    const has = cfg.scan_expiries.includes(e);
+    const next = has ? cfg.scan_expiries.filter((x) => x !== e) : [...cfg.scan_expiries, e];
+    const finalNext = next.length ? next : ['weekly', 'monthly'];
+    patch({ scan_expiries: finalNext as ScanExpiry[] }, `Expiries updated to ${finalNext.join(', ')}`);
+  };
+
   // Changing the scan source must re-scan immediately — otherwise the list keeps
   // showing the previous scan's rows (e.g. spot signals) until the 5-min auto-loop
   // runs, which reads as "I switched to derivatives but nothing changed".
@@ -718,7 +884,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     setCfg.mutate({ ...cfg, scan_source: v }, { 
       onSuccess: () => { 
         notifyOrder({ kind: 'info', title: 'Settings updated', message: `Scan source changed to ${v}` });
-        if (!heavy) scan.mutate(); 
+        if (!heavy) doScan(); 
       } 
     });
   };
@@ -865,8 +1031,22 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <ReadyPill count={rows.filter((r) => r.is_active).length} />
-            <HeaderIconBtn title={scan.isPending || scanning ? 'Scanning…' : 'Re-scan now'} disabled={scan.isPending || scanning} onClick={() => scan.mutate()}>
+            {scanning && (
+              <HeaderIconBtn title="Stop scanning" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+              </HeaderIconBtn>
+            )}
+            <HeaderIconBtn title={scan.isPending || scanning ? 'Scanning…' : 'Re-scan now'} disabled={scan.isPending || scanning} onClick={() => doScan()}>
               <RefreshIcon spinning={scan.isPending || scanning} />
+            </HeaderIconBtn>
+            <HeaderIconBtn title="Scan report — per-contract trace" active={reportOpen} onClick={() => setReportOpen((v) => !v)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <line x1="10" y1="9" x2="8" y2="9"/>
+              </svg>
             </HeaderIconBtn>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <HeaderIconBtn title="Grid Layout" active={viewLayout === 'grid'} onClick={() => setViewLayout('grid')} disabled={false}>
@@ -883,6 +1063,13 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           </div>
         </div>
         <ScanStatus signals={signals} />
+      </div>
+
+      {/* ── Scan report drawer ── */}
+      <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: reportOpen ? '1fr' : '0fr' }}>
+        <div style={{ overflow: 'hidden' }}>
+          <ScanReportView data={scanReport} />
+        </div>
       </div>
 
       {rows.length > 0 && (
@@ -996,6 +1183,15 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               />
             </div>
 
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+              <span style={{ fontSize: 11, color: k.dim }} title="Filter option contracts by expiry type — weekly (every Thursday), monthly (last Thursday of the month), or both.">Expiries</span>
+              <Segmented
+                options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                isActive={(v) => cfg?.scan_expiries.includes(v as ScanExpiry) ?? false}
+                onSelect={(v) => toggleExpiry(v as ScanExpiry)}
+              />
+            </div>
+
             {cfg && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 7 }}>
                 <span style={{ fontSize: 11, color: k.dim }} title="Pick exactly which indices and stocks to scan. Applies to both Spot and Derivatives.">Universe</span>
@@ -1078,7 +1274,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-            {scanning ? 'Scanning the universe…' : 'No ready setups right now. The engine re-scans automatically.'}
+            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : 'No ready setups right now. The engine re-scans automatically.'}
           </div>
         ) : (
           groupedRows.map(group => {
