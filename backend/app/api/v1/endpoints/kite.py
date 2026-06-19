@@ -20,7 +20,7 @@ from fastapi.responses import HTMLResponse
 
 from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
-from app.services import live_safety, paper_store
+from app.services import live_safety
 from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite import constants as K
 from app.services.exchanges.kite import session as kite_session
@@ -610,9 +610,11 @@ async def order_trades(order_id: str, user: UserContext = Depends(get_current_us
 def _safety_gate(user: UserContext, idem_parts) -> str:
     """Kill-switch / daily-loss / idempotency gate. Returns the idempotency key."""
     idem_key = live_safety.make_idempotency_key(*idem_parts)
+    # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
     decision = live_safety.assert_safe_to_trade(
-        positions=paper_store.list_positions() if hasattr(paper_store, "list_positions") else [],
+        positions=[],
         idempotency_key=idem_key,
+        check_daily_loss=False,
     )
     if not decision.allowed:
         if decision.code == "duplicate_order":

@@ -194,6 +194,8 @@ class SafetyDecision:
 def assert_safe_to_trade(
     positions: List[Any],
     idempotency_key: Optional[str] = None,
+    *,
+    check_daily_loss: bool = True,
 ) -> SafetyDecision:
     """Composite gate. Call before any live order is placed.
 
@@ -204,18 +206,24 @@ def assert_safe_to_trade(
     Returns allowed=False on any failure with a human-readable reason and
     a stable error code. Idempotency hits return the prior order_id in
     `reason` so callers can short-circuit and reuse it.
+
+    `check_daily_loss` gates the realized-PnL breaker, which is denominated in
+    USD and only meaningful for the crypto (Delta/Sterling) book. Kite (INR)
+    order paths pass `check_daily_loss=False` — they keep the currency-agnostic
+    kill-switch and idempotency guards but skip the dollar daily-loss halt.
     """
     ks = kill_switch_state()
     if ks.get("enabled"):
         return SafetyDecision(False, f"Kill switch active: {ks.get('reason') or 'manual halt'}",
                               "kill_switch")
 
-    dl = daily_loss_state(positions)
-    if dl["level"] == "halt":
-        return SafetyDecision(False,
-                              f"Daily loss circuit breaker tripped: ${dl['pnl_usd']:.2f} "
-                              f"<= ${dl['hard_halt_usd']:.2f}",
-                              "daily_loss_halt")
+    if check_daily_loss:
+        dl = daily_loss_state(positions)
+        if dl["level"] == "halt":
+            return SafetyDecision(False,
+                                  f"Daily loss circuit breaker tripped: ${dl['pnl_usd']:.2f} "
+                                  f"<= ${dl['hard_halt_usd']:.2f}",
+                                  "daily_loss_halt")
 
     if idempotency_key:
         prior = check_idempotency(idempotency_key)

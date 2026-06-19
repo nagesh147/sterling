@@ -224,6 +224,31 @@ class TestAssertSafeToTrade:
         d = assert_safe_to_trade(positions=pos)
         assert d.code == "kill_switch"
 
+    def test_daily_loss_skipped_when_check_disabled(self) -> None:
+        # Kite (INR) order paths pass check_daily_loss=False — the USD breaker is
+        # crypto-only, so a position deep past the halt threshold must NOT block.
+        configure_daily_loss(DailyLossConfig(soft_warn_usd=-100.0, hard_halt_usd=-200.0))
+        pos = [_FakePos(exit_timestamp_ms=_now(), realized_pnl_usd=-300.0)]
+        d = assert_safe_to_trade(positions=pos, check_daily_loss=False)
+        assert d.allowed is True
+        assert d.code == ""
+
+    def test_kill_switch_still_blocks_when_daily_loss_disabled(self) -> None:
+        # Disabling the daily-loss check must NOT weaken the kill switch.
+        set_kill_switch(True, reason="halt")
+        d = assert_safe_to_trade(positions=[], check_daily_loss=False)
+        assert d.allowed is False
+        assert d.code == "kill_switch"
+
+    def test_idempotency_still_blocks_when_daily_loss_disabled(self) -> None:
+        # Idempotency dedupe is currency-agnostic and must survive the flag.
+        record_idempotency("k-dup-kite", "ORD-KITE")
+        d = assert_safe_to_trade(positions=[], idempotency_key="k-dup-kite",
+                                 check_daily_loss=False)
+        assert d.allowed is False
+        assert d.code == "duplicate_order"
+        assert "ORD-KITE" in d.reason
+
 
 # ─── 6. New /trading/* safety endpoints ────────────────────────────────────
 

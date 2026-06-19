@@ -8,11 +8,12 @@ places gated option BUYs through the Kite order path. No other-engine imports.
 from __future__ import annotations
 
 import asyncio
+import re
 
 from app.core.logging import get_logger
 from app.engines.triple_supertrend.config import TripleSupertrendConfig
 from app.engines.triple_supertrend.schemas import EngineConfigModel
-from app.services import live_safety, paper_store
+from app.services import live_safety
 from app.services.kite_engine import state
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
@@ -50,7 +51,9 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
 
     norm = "buy" if side.upper() == "BUY" else "sell"
     idem = live_safety.make_idempotency_key(uid, option_symbol, side.upper(), quantity)
-    decision = live_safety.assert_safe_to_trade(positions=[], idempotency_key=idem)
+    # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
+    decision = live_safety.assert_safe_to_trade(
+        positions=[], idempotency_key=idem, check_daily_loss=False)
     if not decision.allowed and decision.code != "duplicate_order":
         state.log(uid, "order_blocked", f"{side} {option_symbol} blocked: {decision.reason}")
         return {"status": "blocked", "reason": decision.reason, "code": decision.code}
@@ -93,8 +96,9 @@ def _make_place_cb(client, uid: str):
             return
         idem = live_safety.make_idempotency_key(
             uid, args["option_symbol"], "BUY", args["size"], row.timestamp_ms)
-        positions = paper_store.list_positions() if hasattr(paper_store, "list_positions") else []
-        decision = live_safety.assert_safe_to_trade(positions=positions, idempotency_key=idem)
+        # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
+        decision = live_safety.assert_safe_to_trade(
+            positions=[], idempotency_key=idem, check_daily_loss=False)
         if not decision.allowed and decision.code != "duplicate_order":
             state.log(uid, "order_blocked",
                       f"{row.underlying} {args['option_symbol']} blocked: {decision.reason}")
@@ -193,6 +197,74 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         state.log(uid, "error", f"Scan failed: {exc}")
         log.warning("kite-engine scan_user failed for %s: %s", uid, exc)
         raise
+
+
+def _broker_open_slots(positions_net: list) -> set:
+    """Build the set of auto-open guard slots from raw broker positions.
+
+    The guard key is the option tradingsymbol for derivatives slots and the
+    underlying name for spot slots, so we emit BOTH for every position with a
+    non-zero net quantity: the full tradingsymbol and its leading alpha prefix
+    (e.g. ``NIFTY24JUN24000CE`` → ``NIFTY``). Reconcile intersects the persisted
+    guard with this set, so an unmatched key is *cleared* (re-entry allowed) —
+    we err toward emitting more candidate keys to avoid clearing a live slot.
+    """
+    slots: set = set()
+    for p in positions_net or []:
+        try:
+            if int(p.get("quantity", 0) or 0) == 0:
+                continue
+            ts = str(p.get("tradingsymbol", "")).strip()
+            if not ts:
+                continue
+            slots.add(ts)
+            prefix = re.match(r"^[A-Z&-]+", ts.upper())
+            if prefix:
+                slots.add(prefix.group(0))
+        except Exception:
+            continue
+    return slots
+
+
+async def reconcile_user_auto_open(client, uid: str) -> None:
+    """Sync ``uid``'s auto-open guard to the broker's real open positions.
+
+    Called on startup before the scan loop: a server restart loses nothing
+    (the guard is DB-persisted) but the persisted guard may be stale (positions
+    closed / expired while we were down). Fetching ``GET /positions`` and
+    intersecting prevents both a forever-blocked slot and a double-entry.
+    """
+    try:
+        raw = await client.get_positions_raw()
+        broker_slots = _broker_open_slots((raw or {}).get("net", []))
+        before = state.auto_open_underlyings(uid)
+        after = state.reconcile_auto_open(uid, broker_slots)
+        dropped = before - after
+        if dropped:
+            state.log(uid, "info",
+                      f"Auto-open guard reconciled against broker: cleared {len(dropped)} "
+                      f"stale slot(s) ({', '.join(sorted(dropped))}); {len(after)} still open.")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("kite-engine auto-open reconcile failed for %s: %s", uid, exc)
+
+
+async def reconcile_all_auto_open() -> None:
+    """Reconcile every connected account's auto-open guard on startup."""
+    from app.services.exchanges.kite import accounts as kite_accounts
+    from app.services.exchanges.kite.errors import KiteTokenError
+    try:
+        accts = [a for a in kite_accounts._load_from_db() if a.connected]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("kite-engine auto-open reconcile: account load failed: %s", exc)
+        return
+    for acct in accts:
+        try:
+            client = await kite_accounts.acquire_client(acct)
+            await reconcile_user_auto_open(client, acct.user_id)
+        except KiteTokenError:
+            continue
+        except Exception:  # noqa: BLE001
+            continue
 
 
 async def _scan_all_connected_once() -> None:

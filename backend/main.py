@@ -1559,7 +1559,18 @@ async def lifespan(app: FastAPI):
 
     # Kite triple-SuperTrend engine — background auto-scan of connected Kite
     # accounts (advisory by default; gated auto-exec when the user enables it).
-    from app.services.kite_engine.service import auto_scan_loop as _kite_auto_scan
+    # First reconcile each account's auto-open guard against the broker's real
+    # positions: the guard is DB-persisted across restarts, but a position may
+    # have closed/expired while we were down — reconciling prevents both a stale
+    # guard (forever-blocked re-entry) and a dropped guard (double-entry).
+    from app.services.kite_engine.service import (
+        auto_scan_loop as _kite_auto_scan,
+        reconcile_all_auto_open as _kite_reconcile_auto_open,
+    )
+    try:
+        await _kite_reconcile_auto_open()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Kite auto-open startup reconcile failed: %s", exc)
     kite_engine_task = asyncio.create_task(_kite_auto_scan())
     log.info("Kite triple-SuperTrend auto-scan loop started (every 5 min)")
 

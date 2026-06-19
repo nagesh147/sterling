@@ -101,21 +101,63 @@ def set_cooldown(uid: str) -> None:
     s.cancel_cooldown_ms = int(time.time() * 1000 + _COOLDOWN_S * 1000)
 
 
-# ── auto-exec open positions (one per underlying) ───────────────────────────
+# ── auto-exec open positions (one per slot) ─────────────────────────────────
+# A "slot" is the per-underlying key for spot signals and the per-contract option
+# symbol for derivatives. The guard prevents the 5-min scan from re-buying a slot
+# it already holds. It is DB-persisted (key ``kite_engine_auto_open_{uid}``) and
+# reconciled against the broker's real positions on startup so a server restart
+# can't drop the guard and double-enter — see ``reconcile_auto_open``.
+def _load_auto_open(uid: str) -> Set[str]:
+    """Hydrate the in-memory slot set for ``uid`` from DB on first access."""
+    if uid not in _auto_open:
+        try:
+            raw = db.get_config(f"kite_engine_auto_open_{uid}")
+            _auto_open[uid] = set(json.loads(raw)) if raw else set()
+        except Exception:
+            _auto_open[uid] = set()
+    return _auto_open[uid]
+
+
+def _persist_auto_open(uid: str) -> None:
+    try:
+        db.set_config(f"kite_engine_auto_open_{uid}", json.dumps(sorted(_auto_open.get(uid, set()))))
+    except Exception:
+        pass
+
+
 def is_auto_open(uid: str, underlying: str) -> bool:
-    return underlying in _auto_open.get(uid, set())
+    return underlying in _load_auto_open(uid)
 
 
 def mark_auto_open(uid: str, underlying: str) -> None:
-    _auto_open.setdefault(uid, set()).add(underlying)
+    _load_auto_open(uid).add(underlying)
+    _persist_auto_open(uid)
 
 
 def clear_auto_open(uid: str, underlying: str) -> None:
-    _auto_open.get(uid, set()).discard(underlying)
+    _load_auto_open(uid).discard(underlying)
+    _persist_auto_open(uid)
 
 
 def auto_open_underlyings(uid: str) -> Set[str]:
-    return set(_auto_open.get(uid, set()))
+    return set(_load_auto_open(uid))
+
+
+def reconcile_auto_open(uid: str, broker_slots: Set[str]) -> Set[str]:
+    """Sync the auto-open guard to ground truth: keep only slots the broker
+    confirms are still open, drop the rest. Called on startup after fetching
+    ``GET /positions`` so a restart can't leave a stale guard (blocking re-entry
+    forever) or a dropped guard (allowing a double-entry). Returns the new set.
+
+    ``broker_slots`` should contain BOTH the per-contract option symbols (for
+    derivatives slots) and the underlyings (for spot slots) of every open
+    position, since the guard keys can be either. Persists the result.
+    """
+    current = _load_auto_open(uid)
+    reconciled = current & set(broker_slots)
+    _auto_open[uid] = reconciled
+    _persist_auto_open(uid)
+    return reconciled
 
 
 # ── signal cache (DB-persisted for restarts / market-closed hours) ────────

@@ -68,6 +68,74 @@ async def test_scan_user_logs_and_marks_status(monkeypatch):
     assert not st.scanning and st.signal_count == count and st.next_scan_ms > 0
 
 
+class _FakeDB:
+    """In-memory stand-in for app.services.db config storage, so persistence is
+    testable even when the real SQLite layer is unavailable in the test env."""
+    def __init__(self):
+        self.store = {}
+    def get_config(self, key, default=""):
+        return self.store.get(key, default)
+    def set_config(self, key, value):
+        self.store[key] = value
+
+
+def test_auto_open_persists_across_memory_reset(monkeypatch):
+    # mark_auto_open must survive an in-memory reset by reloading from DB —
+    # this is what stops a server restart from dropping the guard.
+    monkeypatch.setattr(state, "db", _FakeDB())
+    state.reset("persist_u")
+    state.mark_auto_open("persist_u", "NIFTY24JUN24000CE")
+    assert state.is_auto_open("persist_u", "NIFTY24JUN24000CE")
+    # drop ONLY the in-memory cache (simulate restart) — DB row remains
+    state._auto_open.pop("persist_u", None)
+    assert state.is_auto_open("persist_u", "NIFTY24JUN24000CE")  # rehydrated from DB
+    # clear also persists
+    state.clear_auto_open("persist_u", "NIFTY24JUN24000CE")
+    state._auto_open.pop("persist_u", None)
+    assert not state.is_auto_open("persist_u", "NIFTY24JUN24000CE")
+
+
+def test_reconcile_auto_open_drops_stale_keeps_live(monkeypatch):
+    monkeypatch.setattr(state, "db", _FakeDB())
+    state.reset("recon_u")
+    state.mark_auto_open("recon_u", "NIFTY24JUN24000CE")  # broker confirms this
+    state.mark_auto_open("recon_u", "BANKNIFTY24JUN50000PE")  # broker says closed
+    after = state.reconcile_auto_open("recon_u", {"NIFTY24JUN24000CE"})
+    assert after == {"NIFTY24JUN24000CE"}
+    assert state.is_auto_open("recon_u", "NIFTY24JUN24000CE")
+    assert not state.is_auto_open("recon_u", "BANKNIFTY24JUN50000PE")
+    # reconciled result is persisted (survives memory reset)
+    state._auto_open.pop("recon_u", None)
+    assert state.auto_open_underlyings("recon_u") == {"NIFTY24JUN24000CE"}
+
+
+def test_broker_open_slots_emits_symbol_and_prefix():
+    from app.services.kite_engine import service
+    net = [
+        {"tradingsymbol": "NIFTY24JUN24000CE", "quantity": 50},
+        {"tradingsymbol": "RELIANCE24JUN3000PE", "quantity": -250},  # short still counts as held
+        {"tradingsymbol": "INFY24JUN1500CE", "quantity": 0},  # flat → excluded
+    ]
+    slots = service._broker_open_slots(net)
+    assert "NIFTY24JUN24000CE" in slots and "NIFTY" in slots
+    assert "RELIANCE24JUN3000PE" in slots and "RELIANCE" in slots
+    assert "INFY24JUN1500CE" not in slots and "INFY" not in slots
+
+
+@pytest.mark.asyncio
+async def test_reconcile_user_auto_open_clears_after_broker_flat():
+    from app.services.kite_engine import service
+    state.reset("recon_live")
+    state.mark_auto_open("recon_live", "NIFTY24JUN24000CE")
+
+    class FlatClient:
+        async def get_positions_raw(self):
+            return {"net": [], "day": []}  # nothing actually open at the broker
+
+    await service.reconcile_user_auto_open(FlatClient(), "recon_live")
+    assert not state.is_auto_open("recon_live", "NIFTY24JUN24000CE")
+
+
 @pytest.mark.asyncio
 async def test_auto_exec_one_position_guard():
     from app.engines.triple_supertrend.schemas import AlignmentChip, EngineSignalRow, OptionLeg
