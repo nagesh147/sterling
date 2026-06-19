@@ -718,8 +718,8 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                     />
                     
                     <div className="mw-prices" style={{ opacity: isExp ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: isExp ? 'none' : 'auto' }}>
-                      {s.showPriceChange && <PriceCell text={chgAbs != null ? chgAbs.toFixed(2) : '—'} value={chgAbs ?? null} color={t.dim} style={{ fontSize: 11 }} />}
-                      {s.showPriceChangePct && <PriceCell text={chgVal != null ? `${chgVal.toFixed(2)}%` : '—'} value={chgVal ?? null} color={t.text} style={{ fontSize: 11, marginLeft: 4 }} />}
+                      {s.showPriceChange && <PriceCell text={chgAbs != null ? chgAbs.toFixed(2) : '—'} value={chgAbs ?? null} color={t.dim} style={{ fontSize: 11, minWidth: 44, textAlign: 'right' }} />}
+                      {s.showPriceChangePct && <PriceCell text={chgVal != null ? `${chgVal.toFixed(2)}%` : '—'} value={chgVal ?? null} color={t.text} style={{ fontSize: 11, marginLeft: 4, minWidth: 48, textAlign: 'right' }} />}
                       {s.showPriceDirection && (
                         <span style={{ color: chgColor, display: 'flex', alignItems: 'center', marginTop: 1, margin: '0 2px' }}>
                           {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}

@@ -41,11 +41,19 @@ export function PriceCell({ text, value, color, style }: PriceCellProps) {
   const prevValueRef = useRef<number | null | undefined>(value);
   const prev = prevValueRef.current;
 
-  // Off path: verbatim span. NOTE we update the ref here too so direction is
-  // correct on the very first frame after Mac Kite turns on.
+  // Tabular figures are the core of stable alignment: every digit then occupies
+  // the SAME advance width, so a same-length tick (e.g. 1,114 → 1,888) keeps an
+  // identical pixel width and the right-aligned price cluster never reflows.
+  const numStyle: React.CSSProperties = { fontVariantNumeric: 'tabular-nums', ...style };
+
+  // Off path: verbatim span. `inline-block` lets the caller's minWidth /
+  // textAlign actually take effect (an inline span silently ignores min-width),
+  // reserving the column so even a digit-count or sign change can't shift the
+  // row. NOTE we update the ref here too so direction is correct on the very
+  // first frame after Mac Kite turns on.
   if (!on) {
     prevValueRef.current = value;
-    return <span style={{ ...style, color }}>{text}</span>;
+    return <span style={{ display: 'inline-block', ...numStyle, color }}>{text}</span>;
   }
 
   let direction: 'up' | 'down' | 'flat' = 'flat';
@@ -55,5 +63,5 @@ export function PriceCell({ text, value, color, style }: PriceCellProps) {
   }
   prevValueRef.current = value;
 
-  return <MacPriceTicker value={text} direction={direction} color={color} style={style} />;
+  return <MacPriceTicker value={text} direction={direction} color={color} style={numStyle} />;
 }
