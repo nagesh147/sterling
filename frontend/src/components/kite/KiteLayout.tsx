@@ -137,11 +137,14 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   }, []);
 
   const resetLayout = useCallback(() => {
+    // In Mac mode the resizable layout isn't rendered — the footer reset instead
+    // restores the Stage Manager arrangement to its default (MacStageLayout listens).
+    if (macOn) { window.dispatchEvent(new CustomEvent('kite-stage-reset')); return; }
     if (isLocked) return;
     setSidebarWidth(DEFAULTS.left);
     setRightSidebarWidth(DEFAULTS.right);
     setBottomBarHeight(DEFAULTS.bottom);
-  }, [isLocked]);
+  }, [isLocked, macOn]);
 
   const resetLayout2 = useCallback(() => {
     if (isLocked) return;
@@ -418,7 +421,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             </button>
           )}
           <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
-          <button onClick={resetLayout} title={isLocked ? 'Unlock to reset panel sizes' : 'Reset panel sizes to defaults'} style={footBtn(false, isLocked)}>
+          <button onClick={resetLayout} title={macOn ? 'Reset Mac stage layout to default' : isLocked ? 'Unlock to reset panel sizes' : 'Reset panel sizes to defaults'} style={footBtn(false, macOn ? false : isLocked)}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>

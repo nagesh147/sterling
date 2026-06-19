@@ -49,6 +49,29 @@ const DEFAULT_MAP: Record<PanelKey, SlotKey> = {
 const ALL_PANELS: PanelKey[] = ['sidebar', 'content', 'rightSidebar', 'bottomBar'];
 const VALID_SLOTS: SlotKey[] = ['left', 'center', 'right', 'bottom'];
 
+/* ── Snap-layout presets ─────────────────────────────────────────────────────
+ * Full arrangements offered as one-click "suggested layouts", and as drop
+ * targets while dragging (drop a panel onto a suggestion to apply that whole
+ * arrangement — macOS/Win11 snap-layout style). Each maps all four panels to a
+ * slot; two panels in the same slot stack within it. */
+interface LayoutPreset {
+  id: string;
+  label: string;
+  map: Record<PanelKey, SlotKey>;
+}
+const LAYOUT_PRESETS: LayoutPreset[] = [
+  { id: 'classic', label: 'Classic', map: { sidebar: 'left', content: 'center', rightSidebar: 'right', bottomBar: 'bottom' } },
+  { id: 'focus', label: 'Focus markets', map: { sidebar: 'left', content: 'center', rightSidebar: 'right', bottomBar: 'center' } },
+  { id: 'rstack', label: 'Right stack', map: { sidebar: 'left', content: 'center', rightSidebar: 'right', bottomBar: 'right' } },
+  { id: 'lstack', label: 'Left stack', map: { sidebar: 'left', content: 'center', rightSidebar: 'left', bottomBar: 'bottom' } },
+  { id: 'twoup', label: 'Two-up center', map: { sidebar: 'left', content: 'center', rightSidebar: 'center', bottomBar: 'bottom' } },
+  { id: 'dock', label: 'Wide + dock', map: { sidebar: 'left', content: 'center', rightSidebar: 'bottom', bottomBar: 'bottom' } },
+];
+
+function mapsEqual(a: Record<PanelKey, SlotKey>, b: Record<PanelKey, SlotKey>): boolean {
+  return ALL_PANELS.every((p) => a[p] === b[p]);
+}
+
 // `useDragControls` is not exposed by MacMotionProvider's context (which only
 // hands out motion / AnimatePresence / LayoutGroup). We resolve it from the same
 // dynamically-imported framer-motion module — never a STATIC import. The provider
@@ -189,6 +212,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
   const [map, setMap] = useState<Record<PanelKey, SlotKey>>(loadMap);
   const [dragging, setDragging] = useState<PanelKey | null>(null);
   const [hoverSlot, setHoverSlot] = useState<SlotKey | null>(null);
+  const [hoverPreset, setHoverPreset] = useState<string | null>(null);
   // Bump once useDragControls resolves so panels re-render with handle-only drag.
   const [controlsReady, setControlsReady] = useState(() => !!useDragControlsRef);
 
@@ -214,6 +238,12 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
   const slotRects = useRef<Partial<Record<SlotKey, DOMRect>>>({});
   const registerSlot = useCallback((slot: SlotKey, el: HTMLElement | null) => {
     if (el) slotRects.current[slot] = el.getBoundingClientRect();
+  }, []);
+
+  // Live geometry of the suggested-layout thumbnails (drop targets while dragging).
+  const presetRects = useRef<Partial<Record<string, DOMRect>>>({});
+  const registerPreset = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) presetRects.current[id] = el.getBoundingClientRect();
   }, []);
 
   const nodeFor = useCallback(
@@ -247,42 +277,78 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     return found;
   }, []);
 
-  const resetLayout = useCallback(() => {
-    const next = { ...DEFAULT_MAP };
+  const hitTestPreset = useCallback((x: number, y: number): string | null => {
+    const rects = presetRects.current;
+    let found: string | null = null;
+    LAYOUT_PRESETS.forEach((p) => {
+      const r = rects[p.id];
+      if (r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) found = p.id;
+    });
+    return found;
+  }, []);
+
+  const applyPreset = useCallback((m: Record<PanelKey, SlotKey>) => {
+    const next = { ...m };
     setMap(next);
     saveMap(next);
   }, []);
+
+  const resetLayout = useCallback(() => {
+    applyPreset(DEFAULT_MAP);
+  }, [applyPreset]);
+
+  // The footer reset button (KiteLayout) drives the stage reset in Mac mode.
+  useEffect(() => {
+    const cb = () => resetLayout();
+    window.addEventListener('kite-stage-reset', cb);
+    return () => window.removeEventListener('kite-stage-reset', cb);
+  }, [resetLayout]);
 
   const onDragStart = useCallback((key: PanelKey) => {
     document.querySelectorAll<HTMLElement>('[data-stage-slot]').forEach((el) => {
       const s = el.getAttribute('data-stage-slot') as SlotKey | null;
       if (s) slotRects.current[s] = el.getBoundingClientRect();
     });
+    document.querySelectorAll<HTMLElement>('[data-stage-preset]').forEach((el) => {
+      const id = el.getAttribute('data-stage-preset');
+      if (id) presetRects.current[id] = el.getBoundingClientRect();
+    });
     setDragging(key);
   }, []);
 
   const onDrag = useCallback(
     (info: { point: { x: number; y: number } }) => {
-      setHoverSlot(hitTest(info.point.x, info.point.y));
+      // A suggested-layout thumbnail under the pointer takes priority over a slot.
+      const preset = hitTestPreset(info.point.x, info.point.y);
+      setHoverPreset(preset);
+      setHoverSlot(preset ? null : hitTest(info.point.x, info.point.y));
     },
-    [hitTest],
+    [hitTest, hitTestPreset],
   );
 
   const onDragEnd = useCallback(
     (key: PanelKey, info: { point: { x: number; y: number } }) => {
-      const target = hitTest(info.point.x, info.point.y);
-      setMap((prev) => {
-        if (target && target !== prev[key]) {
-          const next = { ...prev, [key]: target };
-          saveMap(next);
-          return next;
-        }
-        return prev;
-      });
+      const presetId = hitTestPreset(info.point.x, info.point.y);
+      if (presetId) {
+        // Dropped onto a suggested layout → apply that whole arrangement.
+        const preset = LAYOUT_PRESETS.find((p) => p.id === presetId);
+        if (preset) applyPreset(preset.map);
+      } else {
+        const target = hitTest(info.point.x, info.point.y);
+        setMap((prev) => {
+          if (target && target !== prev[key]) {
+            const next = { ...prev, [key]: target };
+            saveMap(next);
+            return next;
+          }
+          return prev;
+        });
+      }
       setDragging(null);
       setHoverSlot(null);
+      setHoverPreset(null);
     },
-    [hitTest],
+    [hitTest, hitTestPreset, applyPreset],
   );
 
   const MotionDiv = motion?.div;
@@ -369,27 +435,44 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
         }}
       >
         <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>STAGE</span>
-        <span style={{ fontSize: 10, color: '#c4c4c4' }}>drag a panel grip to rearrange</span>
-        <button
-          onClick={resetLayout}
-          title="Reset stage arrangement"
-          style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            height: 20,
-            padding: '0 8px',
-            fontSize: 10,
-            color: '#9b9b9b',
-            background: 'transparent',
-            border: '1px solid #e0e0e0',
-            borderRadius: 4,
-            cursor: 'pointer',
-          }}
-        >
-          Reset
-        </button>
+        <span style={{ fontSize: 10, color: dragging ? '#f06428' : '#c4c4c4', transition: 'color 0.2s' }}>
+          {dragging ? 'drop on a layout below, or into a slot' : 'drag a panel grip to rearrange'}
+        </span>
+
+        {/* Suggested layouts — click to apply, or drop a dragged panel onto one. */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {LAYOUT_PRESETS.map((p) => (
+            <PresetThumb
+              key={p.id}
+              preset={p}
+              active={mapsEqual(map, p.map)}
+              highlighted={hoverPreset === p.id}
+              dragging={dragging !== null}
+              onApply={() => applyPreset(p.map)}
+              registerRef={(el) => registerPreset(p.id, el)}
+            />
+          ))}
+          <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
+          <button
+            onClick={resetLayout}
+            title="Reset stage arrangement to default"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              height: 20,
+              padding: '0 8px',
+              fontSize: 10,
+              color: '#9b9b9b',
+              background: 'transparent',
+              border: '1px solid #e0e0e0',
+              borderRadius: 4,
+              cursor: 'pointer',
+            }}
+          >
+            Reset
+          </button>
+        </div>
       </div>
 
       <Group>
@@ -451,4 +534,69 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
 
 function Dot() {
   return <span style={{ width: 4, height: 4, borderRadius: 2, background: 'currentColor' }} />;
+}
+
+/* A mini diagram of a full arrangement. Click to apply; while a panel is being
+ * dragged it doubles as a drop target (data-stage-preset + registered rect). */
+interface PresetThumbProps {
+  preset: LayoutPreset;
+  active: boolean;
+  highlighted: boolean;
+  dragging: boolean;
+  onApply: () => void;
+  registerRef: (el: HTMLElement | null) => void;
+}
+function PresetThumb({ preset, active, highlighted, dragging, onApply, registerRef }: PresetThumbProps) {
+  const perSlot = (slot: SlotKey) => ALL_PANELS.filter((p) => preset.map[p] === slot);
+  const ORANGE = '#f06428';
+
+  const cells = (slot: SlotKey, dir: 'col' | 'row') => {
+    const n = perSlot(slot).length;
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: dir === 'col' ? 'column' : 'row', gap: 1, minWidth: 0, minHeight: 0 }}>
+        {n === 0
+          ? <div style={{ flex: 1, borderRadius: 1, background: '#f0f0f0' }} />
+          : perSlot(slot).map((p) => (
+              <div key={p} style={{ flex: 1, borderRadius: 1, background: highlighted || active ? ORANGE : '#bcbcbc' }} />
+            ))}
+      </div>
+    );
+  };
+
+  const hasBottom = perSlot('bottom').length > 0;
+  const borderColor = highlighted ? ORANGE : active ? ORANGE : '#e0e0e0';
+
+  return (
+    <button
+      ref={registerRef as any}
+      data-stage-preset={preset.id}
+      onClick={onApply}
+      title={`${preset.label}${active ? ' (current)' : ''}`}
+      style={{
+        width: 46,
+        height: 26,
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        padding: 2,
+        cursor: 'pointer',
+        background: highlighted ? 'rgba(240,100,40,0.10)' : active ? 'rgba(240,100,40,0.06)' : '#fff',
+        border: `1px solid ${borderColor}`,
+        borderRadius: 4,
+        boxShadow: highlighted ? `0 0 0 2px rgba(240,100,40,0.25)` : 'none',
+        transform: dragging && highlighted ? 'scale(1.08)' : 'scale(1)',
+        transition: 'transform 0.18s cubic-bezier(0.16,1,0.3,1), box-shadow 0.18s, background 0.18s, border-color 0.18s',
+      }}
+    >
+      {/* top row: left | center | right */}
+      <div style={{ flex: 1, display: 'flex', gap: 1, minHeight: 0 }}>
+        <div style={{ flexBasis: '28%', display: 'flex', minWidth: 0 }}>{cells('left', 'col')}</div>
+        <div style={{ flex: 1, display: 'flex', minWidth: 0 }}>{cells('center', 'col')}</div>
+        <div style={{ flexBasis: '28%', display: 'flex', minWidth: 0 }}>{cells('right', 'col')}</div>
+      </div>
+      {/* bottom dock */}
+      {hasBottom && <div style={{ height: 6, display: 'flex' }}>{cells('bottom', 'row')}</div>}
+    </button>
+  );
 }
