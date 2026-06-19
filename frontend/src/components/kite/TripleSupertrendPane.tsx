@@ -149,12 +149,41 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
   );
 }
 
-function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: {
+// A long option leg has EXITED once the last scan flagged its SuperTrend as no longer
+// aligned (`is_active` false) OR — between scans, while that flag is frozen — once the
+// LIVE premium has fallen to/through its trailing stop. The cached flag and the entry
+// snapshot are taken at scan time, but the LTP keeps ticking; reconciling against the
+// live price stops a collapsed position from lingering as "running" with a frozen entry
+// sitting next to a wildly different live LTP (the classic entry-971 / LTP-193 gap).
+// `premium_sl` is the trail snapshot AT ENTRY (computed on Heikin-Ashi premium), so this
+// is a conservative check — it only flips to exited when the live price is clearly below
+// it; the next scan recomputes the authoritative trailing exit.
+function legHasExited(
+  leg: any, rowActive: boolean | undefined, ltp: number | null | undefined,
+): boolean {
+  const cachedActive = (leg?.is_active ?? rowActive) ?? false;
+  const stop = leg?.premium_sl;
+  const liveExited = ltp != null && stop != null && stop > 0 && ltp <= stop;
+  return !cachedActive || liveExited;
+}
+
+// A row is "running" once reconciled against live LTP: any derivative leg still live, or
+// — for spot rows that carry no per-leg premium/stop — the row's scan-time flag. Shared
+// by the card visuals and the Active-now/history bucketing so they never disagree.
+function rowIsRunning(row: EngineSignalRow, quotes: any): boolean {
+  if (row.source !== 'derivatives') return !!row.is_active;
+  return row.legs.some(
+    (l) => !legHasExited(l, row.is_active, quotes?.[`${row.exchange}:${(l as any).option_symbol}`]?.last_price ?? null),
+  );
+}
+
+function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, showEnded = true }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
   sort: { key: string; dir: string };
+  showEnded?: boolean;
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -164,6 +193,21 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
   // the contract is the headline and spot/stop_loss are premium values.
   const isDeriv = row.source === 'derivatives';
   const derivLeg = isDeriv ? row.legs[0] : undefined;
+
+  // Live LTP for a leg's contract (no entry-snapshot fallback — we need the live tick
+  // to reconcile the frozen is_active flag, not the frozen entry).
+  const legLtp = (leg: any): number | null => {
+    const q = quotes?.[`${row.exchange}:${leg?.option_symbol}`];
+    return q?.last_price ?? null;
+  };
+  const legIsExited = (leg: any) => legHasExited(leg, row.is_active, legLtp(leg));
+  const legIsActive = (leg: any) => !legIsExited(leg);
+  // Parent "running" = ANY leg still live once reconciled against the live LTP.
+  const rowRunning = rowIsRunning(row, quotes);
+
+  // When "Ended" is off, drop dead legs even if the parent is otherwise live — the row
+  // flag is OR'd across strikes, so a live parent can still carry stopped-out legs.
+  const visibleLegs = showEnded ? row.legs : row.legs.filter(legIsActive);
 
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
 
@@ -206,14 +250,14 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
   return (
     <div
       className="st-parent-row"
-      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: row.is_active ? 'transparent' : tint(k.amber, 5) }}
+      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: rowRunning ? 'transparent' : tint(k.amber, 5) }}
     >
       <div 
         className="st-parent-header" 
         onClick={onClick}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
         onMouseEnter={(e) => (e.currentTarget.style.background = k.surfaceHover)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = row.is_active ? 'transparent' : tint(k.amber, 5))}
+        onMouseLeave={(e) => (e.currentTarget.style.background = rowRunning ? 'transparent' : tint(k.amber, 5))}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           {isDeriv ? (
@@ -243,11 +287,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {row.is_active
+          {rowRunning
             ? <span title="SuperTrend still aligned on the latest 1H bar — trade running"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: k.green }}>
                 <span style={{ width: 6, height: 6, borderRadius: 3, background: k.green }} />running</span>
-            : <span title="The entry's SuperTrend has since flipped — shown for history, not a live entry"
+            : <span title="The entry's SuperTrend has flipped or the live premium has fallen through its stop — shown for history, not a live entry"
                     style={{ fontSize: 10, color: k.dim }}>trend ended</span>}
           {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
           <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
@@ -261,11 +305,12 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
       {/* option legs */}
       {isDeriv && viewLayout === 'grid' ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px', borderTop: `1px solid ${k.border}` }}>
-          {row.legs.map((leg) => {
+          {visibleLegs.map((leg) => {
             const sym = `${row.exchange}:${leg.option_symbol}`;
             const q = quotes?.[sym];
             const lastPx = q?.last_price || (leg as any).premium_spot;
             const slPx = (leg as any).premium_sl;
+            const legEnded = legIsExited(leg);
             const isExp = expanded.has(leg.option_symbol);
             return (
               <div key={leg.option_symbol} style={{ minWidth: 105 }}>
@@ -287,7 +332,8 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
-                    {slPx != null && <span style={{ fontSize: 10, color: k.dim }}>SL {slPx.toFixed(1)}</span>}
+                    {!legEnded && slPx != null && <span style={{ fontSize: 10, color: k.dim }}>SL {slPx.toFixed(1)}</span>}
+                    {legEnded && <span style={{ fontSize: 10, color: k.dim }} title="Trend ended — past setup, not a live order">ended</span>}
                   </div>
                 </div>
                 {isExp && (() => {
@@ -335,11 +381,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
         </div>
       ) : (
       <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
-        {row.legs.length === 0 ? (
+        {visibleLegs.length === 0 ? (
           <span style={{ fontSize: 10, color: k.dim }}>no liquid contract at the selected strikes</span>
         ) : (
           <React.Fragment>
-            {[...row.legs].sort((a, b) => {
+            {[...visibleLegs].sort((a, b) => {
               if (!sort.key || !sort.dir) return 0;
               const symA = `${row.exchange}:${a.option_symbol}`;
               const symB = `${row.exchange}:${b.option_symbol}`;
@@ -405,13 +451,30 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
             }
           }
           const isExp = expanded.has(leg.option_symbol);
+          // The trade's trend has flipped: Entry/Stop are a frozen snapshot from when
+          // the signal fired, so dim them — they're history, not a live order to act on.
+          // Use the LEG's own liveness (the row flag is OR'd across all strikes in the
+          // group, so a dead strike can sit under a "running" parent).
+          const entryPx = (leg as any).premium_spot;
+          const slPx = (leg as any).premium_sl;
+          const ended = legIsExited(leg);
+          const legActive = !ended;
+          // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the
+          // live premium fell through the (entry-snapshot) stop between scans.
+          const liveExited = lastPx != null && slPx != null && slPx > 0 && lastPx <= slPx;
+          // A dead leg has no live trade plan — showing its old entry/stop next to a live
+          // LTP is misleading (e.g. entry 3420 vs LTP 459), so blank them inline and keep
+          // the fire-time values in the tooltip for anyone reviewing the history.
+          const snapTitle = ended
+            ? `Past setup (fired at ${entryPx != null ? entryPx.toFixed(2) : '—'}, stop ${slPx != null ? slPx.toFixed(1) : '—'}) — ${liveExited ? 'live premium has fallen through the stop' : "the entry's SuperTrend has since flipped"}, not a live order.`
+            : undefined;
 
           return (
             <div key={leg.option_symbol}>
               <div 
                 className="st-leg-row" 
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (row.is_active ? 'transparent' : tint(k.amber, 5)) }}
+                style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -426,13 +489,15 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort }: 
                      </span>
                    )}
                    {isDeriv && (
-                     <span style={{ fontSize: 11, fontWeight: 500, color: (leg as any).premium_spot != null ? accent : k.dim, width: 70, textAlign: 'right', flexShrink: 0 }}>
-                       {(leg as any).premium_spot != null ? (leg as any).premium_spot.toFixed(2) : '—'}
+                     // Keep the fired Entry visible even after exit — but dimmed + struck
+                     // through so it reads as history, not a live order to act on.
+                     <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 70, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                       {entryPx != null ? entryPx.toFixed(2) : '—'}
                      </span>
                    )}
                    {isDeriv && (
-                     <span style={{ fontSize: 10, color: k.dim, width: 70, textAlign: 'right', flexShrink: 0 }}>
-                       {(leg as any).premium_sl != null ? (leg as any).premium_sl.toFixed(1) : '—'}
+                     <span title={snapTitle} style={{ fontSize: 10, color: k.dim, width: 70, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                       {slPx != null ? slPx.toFixed(1) : '—'}
                      </span>
                    )}
                 </div>
@@ -1142,6 +1207,27 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     return result;
   }, [rows, query, sortBy]);
 
+  // Live quotes are needed BEFORE bucketing so a position that has exited between scans
+  // (live premium through its stop) drops out of "Active now" instead of lingering there
+  // showing a "trend ended" badge — the same reconciliation the cards use.
+  const optionSymbols = React.useMemo(() => {
+    const syms = new Set<string>();
+    filteredRows.forEach((r) => {
+      const exch = (r.underlying === 'SENSEX' || r.underlying === 'BANKEX') ? 'BSE' : 'NSE';
+      let sym = r.underlying;
+      if (sym === 'NIFTY') sym = 'NIFTY 50';
+      if (sym === 'BANKNIFTY') sym = 'NIFTY BANK';
+      if (sym === 'FINNIFTY') sym = 'NIFTY FIN SERVICE';
+      if (sym === 'MIDCPNIFTY') sym = 'NIFTY MID SELECT';
+      syms.add(`${exch}:${sym}`);
+
+      r.legs.forEach((l) => syms.add(`${r.exchange}:${l.option_symbol}`));
+    });
+    return Array.from(syms);
+  }, [filteredRows]);
+
+  const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
+
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set());
   const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
   const toggleGroup = (label: string) => {
@@ -1162,8 +1248,8 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     // days ago hides under "Last week" and the list reads empty even though there's an
     // active signal. The date buckets below are the history log of entries whose trend
     // has since ended.
-    const active = sorted.filter((r) => r.is_active);
-    const history = sorted.filter((r) => !r.is_active);
+    const active = sorted.filter((r) => rowIsRunning(r, quotes));
+    const history = sorted.filter((r) => !rowIsRunning(r, quotes));
     // Indices first in "Active now", then stocks alphabetically.
     const INDEX_NAMES = new Set(INDEX_OPTS.map(o => o.name));
     const sortedActive = [...active].sort((a, b) => {
@@ -1196,7 +1282,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     }
     if (!showEnded) return buckets.filter(b => b.active);
     return buckets;
-  }, [filteredRows, showEnded]);
+  }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
 
   // Auto-collapse ended groups on first appearance. User can manually expand.
@@ -1214,24 +1300,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupedRows]);
 
-  const optionSymbols = React.useMemo(() => {
-    const syms = new Set<string>();
-    filteredRows.forEach((r) => {
-      const exch = (r.underlying === 'SENSEX' || r.underlying === 'BANKEX') ? 'BSE' : 'NSE';
-      let sym = r.underlying;
-      if (sym === 'NIFTY') sym = 'NIFTY 50';
-      if (sym === 'BANKNIFTY') sym = 'NIFTY BANK';
-      if (sym === 'FINNIFTY') sym = 'NIFTY FIN SERVICE';
-      if (sym === 'MIDCPNIFTY') sym = 'NIFTY MID SELECT';
-      syms.add(`${exch}:${sym}`);
-      
-      r.legs.forEach((l) => syms.add(`${r.exchange}:${l.option_symbol}`));
-    });
-    return Array.from(syms);
-  }, [filteredRows]);
-
-  const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/* ── Console header ── */}
@@ -1245,7 +1313,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>1H</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <ReadyPill count={rows.filter((r) => r.is_active).length} />
+            <ReadyPill count={rows.filter((r) => rowIsRunning(r, quotes)).length} />
             {scanning && (
               <HeaderIconBtn title="Stop scanning" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
@@ -1617,7 +1685,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                   <div className="kv-rows">
                     {group.rows.map((row) => (
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
-                        onSelectSignal={onSelectSignal} sort={legSort}
+                        onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded}
                         onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })} />
                     ))}
                   </div>

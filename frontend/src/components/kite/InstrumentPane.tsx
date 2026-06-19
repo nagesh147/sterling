@@ -283,10 +283,12 @@ function OptionChainView({ symbol }: { symbol: string }) {
   const name = symbol.split(':')[1] || symbol;
   const linkStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', whiteSpace: 'nowrap' };
   const OI_GRID = '1.3fr 1.3fr 96px 1.3fr 1.3fr';
-  const GREEKS_GRID = '1fr 1fr 1fr 1fr 1fr 80px 100px 80px 1fr 1fr 1fr 1fr 1fr';
+  const GREEKS_GRID = '1fr 1fr 1fr 1fr 1fr 132px 92px 132px 1fr 1fr 1fr 1fr 1fr';
 
-  const Chg = ({ v }: { v: number }) => (
-    <span style={{ fontSize: 11.5, color: v >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>{v.toFixed(2)}%</span>
+  const Chg = ({ v }: { v: number | null }) => (
+    v == null
+      ? <span style={{ fontSize: 11.5, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>–</span>
+      : <span style={{ fontSize: 11.5, color: v >= 0 ? k.green : k.red, fontVariantNumeric: 'tabular-nums' }}>{v.toFixed(2)}%</span>
   );
   const Val = ({ children }: { children: React.ReactNode }) => (
     <span style={{ color: k.text, fontVariantNumeric: 'tabular-nums', minWidth: 50, textAlign: 'inherit' }}>{children}</span>
@@ -451,10 +453,15 @@ function OptionChainView({ symbol }: { symbol: string }) {
 
       {/* Table Body */}
       <div style={{ flex: 1, overflowY: 'auto', background: k.bg }}>
-        {MOCK_CHAIN.map((row) => {
+        {rows.length === 0 && (
+          <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 13 }}>
+            No option chain available. Connect a Kite account with an active session to load live data.
+          </div>
+        )}
+        {rows.map((row) => {
           const isHover = hoverRow === row.strike;
-          const itmCall = row.strike < SPOT;   // calls below spot are ITM (shade left)
-          const itmPut = row.strike > SPOT;    // puts above spot are ITM (shade right)
+          const itmCall = row.strike < spot;   // calls below spot are ITM (shade left)
+          const itmPut = row.strike > spot;    // puts above spot are ITM (shade right)
           const callBar = Math.min(46, (Number(row.call.oi) / MAX_OI) * 46);
           const putBar = Math.min(46, (Number(row.put.oi) / MAX_OI) * 46);
           return (
@@ -538,8 +545,9 @@ function OptionChainView({ symbol }: { symbol: string }) {
                   <div style={{ textAlign: 'right', color: k.dim }}>{row.call.theta}</div>
                   <div style={{ textAlign: 'right', color: k.dim }}>{row.call.delta}</div>
                   <div style={{ textAlign: 'right', color: k.text }}>{row.call.iv}</div>
-                  <div style={{ textAlign: 'right', paddingRight: 16, fontWeight: 500, position: 'relative' }}>
-                    {row.call.ltp}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, paddingRight: 16, fontWeight: 500, position: 'relative' }}>
+                    <Chg v={row.call.ltpChg} />
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{row.call.ltp}</span>
                     {isHover && (
                       <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 6, background: k.surfaceHover, padding: '4px 8px', borderRadius: 4, alignItems: 'center' }}>
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, display: 'flex', alignItems: 'center' }} onClick={(e) => handleMenuClick(e, row.strike, 'call')}><Icons.More /></button>
@@ -552,8 +560,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
                   <div style={{ fontWeight: 600, background: row.isAtm ? k.border : k.surface, padding: '4px 0', borderRadius: 4, display: 'inline-block', margin: '0 auto', width: 60 }}>
                     {row.strike}
                   </div>
-                  <div style={{ textAlign: 'left', paddingLeft: 16, fontWeight: 500, position: 'relative' }}>
-                    {row.put.ltp}
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 10, paddingLeft: 16, fontWeight: 500, position: 'relative' }}>
                     {isHover && (
                       <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 6, background: k.surfaceHover, padding: '4px 8px', borderRadius: 4, alignItems: 'center' }}>
                         <button onClick={(e) => handleAction(e, 'put', 'BUY', row)} style={{ background: k.blue, color: '#fff', border: 'none', borderRadius: 3, width: 24, height: 24, fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>B</button>
@@ -562,6 +569,8 @@ function OptionChainView({ symbol }: { symbol: string }) {
                         <button style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: k.dim, display: 'flex', alignItems: 'center' }} onClick={(e) => handleMenuClick(e, row.strike, 'put')}><Icons.More /></button>
                       </div>
                     )}
+                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{row.put.ltp}</span>
+                    <Chg v={row.put.ltpChg} />
                   </div>
                   <div style={{ textAlign: 'left', color: k.text }}>{row.put.iv}</div>
                   <div style={{ textAlign: 'left', color: k.dim }}>{row.put.delta}</div>
@@ -577,7 +586,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
 
       {/* Footer stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: `1px solid ${k.border}`, background: k.bg, padding: '10px 16px' }}>
-        {FOOTER_STATS.map((s) => (
+        {footer.map((s) => (
           <div key={s.label} style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 11, color: k.dim, marginBottom: 3 }}>{s.label}</div>
             <div style={{ fontSize: 13.5, fontWeight: 600, color: '#333', fontVariantNumeric: 'tabular-nums' }}>{s.value}</div>

@@ -232,6 +232,31 @@ def test_evaluate_derivative_contract_buy_only_skips_premium_downtrend():
     assert evaluate_derivative_contract(item, "ATM", pick, candles, cfg) == []
 
 
+def test_evaluate_derivative_contract_old_entry_dead_after_stop_breach():
+    """An entry whose trail later flipped down (premium crashed through the stop) is
+    NOT 'running', even if the premium recovered into a fresh trail-up afterwards.
+
+    Regression: is_active used the latest-bar trail for EVERY historical entry, so a
+    long-dead entry (e.g. bought at 971, premium since collapsed to 200) was shown as
+    a live 'running' signal whenever the trail bounced back up.
+    """
+    cfg = TripleSupertrendConfig()
+    item = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
+    pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
+                      expiry="2026-06-26", dte=8, lot_size=75, token=44001)
+    # rise → fresh entry; crash (trail flips down → entry dead); recover (trail flips up again)
+    path = (list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
+            + list(np.linspace(600, 120, 50)) + list(np.linspace(120, 500, 70)))
+    candles = _candles(path)
+    rows = evaluate_derivative_contract(item, "ATM", pick, candles, cfg)
+    assert len(rows) >= 2, "expected an early entry and a post-crash entry"
+    rows.sort(key=lambda r: r.timestamp_ms)
+    # The earliest entry was stopped out by the crash → must NOT read as running.
+    assert rows[0].is_active is False
+    # The most recent entry (after recovery, trail currently up) is still running.
+    assert rows[-1].is_active is True
+
+
 def test_engine_config_default_offers_itm_and_otm():
     from app.engines.triple_supertrend.schemas import EngineConfigModel
     cfg = EngineConfigModel()
@@ -518,6 +543,41 @@ async def test_deriv_grouping_dedupes_legs_for_repeated_transitions():
     assert len(rows) == 1
     syms = [l.option_symbol for l in rows[0].legs]
     assert syms == ["NIFTY25JUN100CE"]              # ONE leg, not duplicated per transition
+
+
+@pytest.mark.asyncio
+async def test_scan_drops_stopped_out_historical_entries_but_keeps_diag():
+    """A contract whose only entry fired days ago and has since been stopped out is
+    NOT surfaced as a signal row (it's neither fresh nor running) — but the scan still
+    records it in the per-contract diagnostics as 'historical entry only' for the log."""
+    cfg = TripleSupertrendConfig()
+    # fired (proven long path) then collapsed hard → trend broke before the last bar:
+    # an entry exists in history but is_active=False and not fresh.
+    dead = _candles(_fresh_long_path() + list(np.linspace(600, 150, 40)))
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return _candles([100.0] * 40)                     # underlying anchor
+            if inst.zerodha_token == 7001:
+                return dead                                       # ATM CE: dead historical entry
+            return _candles(list(np.linspace(100, 101, 40)))      # PE flat → no transition
+
+    nfo = [
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100CE", "instrument_type": "CE",
+         "strike": 100, "expiry": "2099-01-01", "instrument_token": 7001, "lot_size": 75},
+        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN100PE", "instrument_type": "PE",
+         "strike": 100, "expiry": "2099-01-01", "instrument_token": 7002, "lot_size": 75},
+    ]
+    deriv = [UniverseItem("NIFTY 50", "NIFTY", 100, "INDICES", "NFO", is_index=True)]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], deriv_universe=deriv)
+    snap = sc.snapshot("u1")
+    assert snap.rows == []                          # dead historical entry not surfaced
+    # but the contract trace still records it so the activity log isn't silent
+    ce = [c for c in snap.diag.contracts if c.symbol == "NIFTY25JUN100CE"]
+    assert ce and ce[0].fired is False and "historical entry only" in ce[0].reason
 
 
 @pytest.mark.asyncio

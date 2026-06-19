@@ -78,11 +78,14 @@ def evaluate_item(
     latest_ts = int(candles[-1].timestamp_ms)
     # A trade is "running" until its TRAIL line (the configured target, mid by default)
     # flips — not when full 3-line alignment breaks (the fast ST whipsaws long before
-    # the position would actually exit).
-    trail_now = int(r.trend(cfg.trail_target)[-1])
+    # the position would actually exit). Crucially this must hold for EVERY bar since
+    # the entry: once the trail flips against the entry it has exited, and a later
+    # re-flip is a *new* entry, not a resurrection of the old one.
+    trail = r.trend(cfg.trail_target)
     for i in indices:
         direction = "long" if longs[i] else "short"
         ts = int(candles[i].timestamp_ms)
+        want = 1 if direction == "long" else -1
         rows.append(EngineSignalRow(
             underlying=item.name, token=item.token, exchange=item.option_exchange,
             regime="BULL" if direction == "long" else "BEAR",
@@ -90,8 +93,8 @@ def evaluate_item(
             direction=direction, option_type="CE" if direction == "long" else "PE",
             spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
             score=85.0, timestamp_ms=ts,
-            # trail line still in the entry's direction on the latest bar = trade running
-            is_active=(trail_now == 1 if direction == "long" else trail_now == -1),
+            # running only if the trail held the entry's direction on every bar since
+            is_active=bool(np.all(trail[i:] == want)),
             is_fresh=(ts == latest_ts),
         ))
     return rows
@@ -175,10 +178,15 @@ def evaluate_derivative_contract(
     indices = np.where(longs)[0]
     latest_ts = int(candles[-1].timestamp_ms)
     # "running" until the TRAIL line (configured target) flips down — not when full
-    # alignment breaks (the fast ST whipsaws long before the position would exit).
-    active_now = int(r.trend(cfg.trail_target)[-1]) == 1
+    # alignment breaks (the fast ST whipsaws long before the position would exit). This
+    # must hold for EVERY bar since the entry: once the premium trail flips down the
+    # position has exited (its stop was hit), so a later up-flip is a *new* entry, not
+    # the old one coming back to life. Checking only the latest bar resurrected dead
+    # entries (e.g. bought at 971, premium collapsed to 200, then bounced).
+    trail = r.trend(cfg.trail_target)
     for i in indices:
         ts = int(candles[i].timestamp_ms)
+        active = bool(np.all(trail[i:] == 1))
         rows.append(EngineSignalRow(
             underlying=item.name, token=pick.token, exchange=item.option_exchange,
             regime="BULL" if is_ce else "BEAR",
@@ -187,10 +195,10 @@ def evaluate_derivative_contract(
             legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
                             option_symbol=pick.option_symbol, strike=pick.strike,
                             expiry=pick.expiry, lot_size=pick.lot_size or None,
-                            is_active=active_now)],
+                            is_active=active)],
             spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
             score=85.0, timestamp_ms=ts, source="derivatives",
-            is_active=active_now, is_fresh=(ts == latest_ts),
+            is_active=active, is_fresh=(ts == latest_ts),
         ))
     return rows
 
@@ -445,11 +453,17 @@ class KiteEngineScanner:
                 
                 latest_ts = candles[-1].timestamp_ms
                 for row in eval_rows:
+                    # Only surface LIVE signals: a fresh entry (this bar) or a still-running
+                    # trade. Stopped-out historical entries are dropped at the source —
+                    # they're neither actionable nor open, and carrying them just clutters
+                    # the console with dead rows whose frozen entry sits far from the LTP.
+                    if not (row.is_active or row.is_fresh):
+                        continue
                     attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                                    moneynesses=moneyness, today=today,
                                    expiry_types=_expiry)
                     rows.append(row)
-                    
+
                     is_fresh = (row.timestamp_ms == latest_ts)
                     if is_fresh:
                         if item.is_index:
@@ -583,6 +597,11 @@ class KiteEngineScanner:
                     
                     latest_ts = oc[-1].timestamp_ms
                     for drow in drows:
+                        # Live-only: keep a fresh entry or a still-running trade; drop
+                        # stopped-out historical entries (the diag trace above still records
+                        # them as "historical entry only" for the activity log).
+                        if not (drow.is_active or drow.is_fresh):
+                            continue
                         rows.append(drow)
                         is_fresh = (drow.timestamp_ms == latest_ts)
                         if is_fresh:
