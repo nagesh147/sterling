@@ -359,6 +359,119 @@ async def ltp(i: List[str] = Query(...), user: UserContext = Depends(get_current
     return await _run(user, lambda c: c.get_ltp(i))
 
 
+def _resolve_chain_instrument(underlying: str):
+    """Map a display symbol ("NSE:NIFTY 50", "NIFTY 50", "NIFTY") to an
+    InstrumentMeta the Kite client can build an option chain from.
+
+    Resolution is driven by kite_engine/universe.json so it tracks the same
+    index config the scanner uses (option_name / option_exchange / spot symbol).
+    Non-index F&O names fall through to an NFO equity chain (NSE spot).
+    """
+    from app.schemas.instruments import InstrumentMeta
+    from app.services.kite_engine.universe import load_cfg
+
+    raw = (underlying or "").strip()
+    if ":" in raw:
+        raw = raw.split(":", 1)[1].strip()
+    want = raw.upper()
+    if not want:
+        return None
+
+    def _meta(*, option_name: str, spot_symbol: str, option_exchange: str) -> "InstrumentMeta":
+        spot_prefix = "BSE:" if option_exchange == "BFO" else "NSE:"
+        return InstrumentMeta(
+            underlying=option_name,                       # NFO `name` filter ("NIFTY")
+            index_name=spot_symbol,                       # display/spot name
+            zerodha_index_symbol=f"{spot_prefix}{spot_symbol}",
+            exchange="zerodha", exchange_currency="INR",
+            quote_currency="INR", perp_symbol=option_name,
+            tick_size=0.05, strike_step=50.0,
+            has_options=True, min_dte=0,
+        )
+
+    try:
+        indices = load_cfg().get("indices", [])
+    except Exception:
+        indices = []
+    for ix in indices:
+        names = {str(ix.get("name", "")).upper(), str(ix.get("spot_symbol", "")).upper(),
+                 str(ix.get("option_name", "")).upper()}
+        if want in names:
+            return _meta(option_name=str(ix["option_name"]),
+                         spot_symbol=str(ix["spot_symbol"]),
+                         option_exchange=str(ix.get("option_exchange", "NFO")))
+    # F&O equity fallback (NFO, NSE spot). `name` == option-chain filter == spot.
+    return _meta(option_name=want, spot_symbol=want, option_exchange="NFO")
+
+
+@router.get("/option-chain")
+async def option_chain(underlying: str = Query(...), user: UserContext = Depends(get_current_user)):
+    """Live option chain for an index/stock, grouped by expiry with CE+PE per
+    strike and the full Greek vector. Reuses the client's proven get_option_chain
+    (strikes within ±20% of spot, nearest 3 expiries) + BSM greek enrichment."""
+    from app.engines.risk.option_pricing import enrich_chain
+
+    inst = _resolve_chain_instrument(underlying)
+    if inst is None:
+        raise HTTPException(400, f"Cannot resolve option chain for '{underlying}'")
+
+    async def _build(c):
+        spot = await c.get_index_price(inst)
+        raw = await c.get_option_chain(inst)
+        return float(spot or 0.0), raw
+
+    spot, raw = await _run(user, _build)
+    chain = enrich_chain(raw, spot=spot) if spot > 0 else raw
+
+    step = float(inst.strike_step or 50.0)
+    atm_strike = round(spot / step) * step if spot > 0 else 0.0
+
+    # expiry_date -> strike -> {"call": {...}, "put": {...}}
+    by_expiry: dict = {}
+    dte_by_expiry: dict = {}
+    for o in chain:
+        leg = {
+            "ltp": round(o.mark_price, 2),
+            "oi": round(o.open_interest, 2),
+            "iv": round(o.mark_iv, 2),
+            "delta": round(o.delta, 2),
+            "theta": round(o.theta, 2),
+            "vega": round(o.vega, 2),
+            "gamma": round(o.gamma, 4),
+            "symbol": o.instrument_name,
+        }
+        strikes = by_expiry.setdefault(o.expiry_date, {})
+        row = strikes.setdefault(o.strike, {"strike": o.strike, "call": None, "put": None})
+        row["call" if o.option_type == "call" else "put"] = leg
+        dte_by_expiry[o.expiry_date] = o.dte
+
+    from datetime import datetime as _dt
+    expiries = []
+    chain_out: dict = {}
+    for exp in sorted(by_expiry.keys()):
+        try:
+            d = _dt.strptime(exp[:10], "%Y-%m-%d")
+            label = f"{d.day} {d.strftime('%b')}"
+        except (ValueError, TypeError):
+            label = exp
+        expiries.append({"date": exp, "dte": dte_by_expiry.get(exp, 0), "label": label})
+        rows = []
+        for strike in sorted(by_expiry[exp].keys()):
+            r = by_expiry[exp][strike]
+            r["isAtm"] = abs(strike - atm_strike) < (step / 2)
+            rows.append(r)
+        chain_out[exp] = rows
+
+    return {
+        "underlying": inst.index_name,
+        "spot": round(spot, 2),
+        "atm_strike": atm_strike,
+        "strike_step": step,
+        "expiries": expiries,
+        "chain": chain_out,
+    }
+
+
 @router.get("/historical")
 async def historical(token: int, interval: str, frm: str = Query(..., alias="from"),
                      to: str = Query(...), continuous: bool = False, oi: bool = False,
