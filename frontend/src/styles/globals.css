@@ -357,6 +357,13 @@ html, body { overscroll-behavior: none; }
 .price-flash-up   { animation: price-flash-up   0.4s ease-out; }
 .price-flash-down { animation: price-flash-down 0.4s ease-out; }
 
+/* LIVE-mode badge heartbeat — a quiet pulse on the dot so "real money is on"
+ * reads at a glance without being obnoxious. */
+@keyframes kitePulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
 /* ─────────────────────────────────────────────────────────────────
  * Ticker marquee — the symbols bar auto-scrolls when it overflows,
  * like a business-news ticker. The track holds two copies of the row;

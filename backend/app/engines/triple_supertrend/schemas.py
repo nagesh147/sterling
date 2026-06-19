@@ -232,6 +232,81 @@ class EngineConfigModel(BaseModel):
         return v or ["weekly", "monthly"]
 
 
+# ── Options backtest (workstream H) ──────────────────────────────────────────
+class BacktestRequest(BaseModel):
+    # What to test. For synthetic/both, the symbol is the UNDERLYING (e.g.
+    # "NIFTY 50"); for real, it is an option tradingsymbol (e.g. "NIFTY24JUN24000CE").
+    symbol: str
+    data_mode: Literal["synthetic", "real", "both"] = "both"
+    trail_target: Literal["fast", "mid", "slow"] = "mid"
+    lookback_bars: int = 2000          # 1H bars (synthetic can reach back years)
+    starting_capital: float = 100_000.0
+    qty: int = 50                      # one lot (lot_size) — value/risk scales with this
+    # Synthetic-only knobs:
+    iv: float = 0.18                   # fixed IV assumption for BS pricing (decimal)
+    dte_days: float = 7.0              # weekly option horizon at entry
+    moneyness_offset_pct: float = 0.0  # 0 = ATM; +ve = OTM, signed by direction
+    # Cost overrides (None = schedule defaults):
+    slippage_pct: Optional[float] = None
+    brokerage_per_order: Optional[float] = None
+
+    @field_validator("lookback_bars")
+    @classmethod
+    def _bars_bounds(cls, v):
+        return min(10_000, max(100, int(v)))
+
+
+class BacktestTradeModel(BaseModel):
+    entry_ms: int
+    exit_ms: int
+    direction: str
+    entry_premium: float
+    exit_premium: float
+    qty: int
+    gross_pnl: float
+    costs: float
+    net_pnl: float
+    bars_held: int
+    exit_reason: str
+
+
+class BacktestStatsModel(BaseModel):
+    trades: int = 0
+    wins: int = 0
+    losses: int = 0
+    win_rate: float = 0.0
+    gross_pnl: float = 0.0
+    total_costs: float = 0.0
+    net_pnl: float = 0.0
+    profit_factor: float = 0.0
+    expectancy: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0
+    max_drawdown: float = 0.0
+    sharpe: float = 0.0
+    return_pct: float = 0.0
+    final_capital: float = 0.0
+
+
+class BacktestRunModel(BaseModel):
+    mode: str
+    caveat: str = ""
+    trades: List[BacktestTradeModel] = []
+    equity_curve: List[float] = []
+    stats: BacktestStatsModel
+
+
+class BacktestResponse(BaseModel):
+    symbol: str
+    data_mode: str
+    generated_ms: int
+    runs: List[BacktestRunModel]          # one per executed mode (synthetic / real)
+    # When data_mode="both": mean abs % drift of the live contract's modeled-vs-real
+    # premium (a calibration sanity check on the synthetic assumption).
+    bs_vs_real_drift_pct: Optional[float] = None
+    notes: List[str] = []
+
+
 # ── Per-contract scan report ─────────────────────────────────────────────────
 class ContractScanEntry(BaseModel):
     underlying: str

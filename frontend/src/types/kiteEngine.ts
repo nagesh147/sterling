@@ -145,6 +145,78 @@ export interface EngineConfigModel {
   scan_all_stocks: boolean;
   early_lock: boolean;
   auto_execute: boolean;
+  // Per-trade risk sizing (workstream F)
+  risk_sizing: boolean;
+  risk_pct: number;
+  max_lots: number;
+  // Protective stop mode (workstreams C/D)
+  stop_mode: 'broker' | 'monitor' | 'both';
+}
+
+// ─── Options backtest (workstream H) ─────────────────────────────────────────
+export type BacktestDataMode = 'synthetic' | 'real' | 'both';
+
+export interface BacktestRequest {
+  symbol: string;
+  data_mode: BacktestDataMode;
+  trail_target: TrailTarget;
+  lookback_bars: number;
+  starting_capital: number;
+  qty: number;
+  iv: number;
+  dte_days: number;
+  moneyness_offset_pct: number;
+  slippage_pct?: number | null;
+  brokerage_per_order?: number | null;
+}
+
+export interface BacktestTrade {
+  entry_ms: number;
+  exit_ms: number;
+  direction: string;
+  entry_premium: number;
+  exit_premium: number;
+  qty: number;
+  gross_pnl: number;
+  costs: number;
+  net_pnl: number;
+  bars_held: number;
+  exit_reason: string;
+}
+
+export interface BacktestStats {
+  trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  gross_pnl: number;
+  total_costs: number;
+  net_pnl: number;
+  profit_factor: number;
+  expectancy: number;
+  avg_win: number;
+  avg_loss: number;
+  max_drawdown: number;
+  sharpe: number;
+  return_pct: number;
+  final_capital: number;
+}
+
+export interface BacktestRun {
+  mode: string;
+  caveat: string;
+  trades: BacktestTrade[];
+  equity_curve: number[];
+  stats: BacktestStats;
+}
+
+export interface BacktestResponse {
+  symbol: string;
+  data_mode: string;
+  generated_ms: number;
+  runs: BacktestRun[];
+  bs_vs_real_drift_pct?: number | null;
+  notes: string[];
 }
 
 export interface EngineOrderRequest {

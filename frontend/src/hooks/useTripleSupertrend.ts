@@ -2,11 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import { notifyOrder } from '../store/useKiteNotifications';
 import type {
-  ActivityResponse, EngineConfigModel, EngineDetailResponse, EngineOrderRequest,
-  EngineOrderResponse, LiquidityGroup, ScanReportResponse, SetupChart, SignalsResponse,
+  ActivityResponse, BacktestRequest, BacktestResponse, EngineConfigModel,
+  EngineDetailResponse, EngineOrderRequest, EngineOrderResponse, LiquidityGroup,
+  ScanReportResponse, SetupChart, SignalsResponse,
 } from '../types/kiteEngine';
 
 const E = '/api/v1/kite/engine';
+
+// ─── Options backtest (workstream H) ─────────────────────────────────────────
+export function useEngineBacktest() {
+  return useMutation<BacktestResponse, Error, BacktestRequest>({
+    mutationFn: (req) => api.post<BacktestResponse>(`${E}/backtest`, req),
+  });
+}
 
 // ─── Signals (polled) ────────────────────────────────────────────────────────
 export function useEngineSignals() {

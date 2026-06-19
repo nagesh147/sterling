@@ -12,9 +12,9 @@ from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
 from app.engines.triple_supertrend.config import TripleSupertrendConfig
 from app.engines.triple_supertrend.schemas import (
-    ActivityResponse, ContractScanEntry, EngineConfigModel, EngineDetailResponse,
-    EngineOrderRequest, EngineOrderResponse, ScanReportResponse, ScanReportSummary,
-    SetupChart, SignalsResponse,
+    ActivityResponse, BacktestRequest, BacktestResponse, ContractScanEntry,
+    EngineConfigModel, EngineDetailResponse, EngineOrderRequest, EngineOrderResponse,
+    ScanReportResponse, ScanReportSummary, SetupChart, SignalsResponse,
 )
 from app.services import live_safety
 from app.services.exchanges.kite import accounts as kite_accounts
@@ -53,6 +53,23 @@ async def set_config(body: EngineConfigModel,
 @router.post("/config/reset", response_model=EngineConfigModel)
 async def reset_config(user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     return state.set_config(user.user_id, EngineConfigModel())
+
+
+@router.post("/backtest", response_model=BacktestResponse)
+async def backtest(body: BacktestRequest,
+                   user: UserContext = Depends(get_current_user)) -> BacktestResponse:
+    """Honest options backtest (workstream H). data_mode synthetic | real | both:
+    synthetic replays the signal on real underlying history with BS-modeled premium
+    (full history, modeled price); real replays an actual live-contract premium
+    series (true price, short lookback); both runs each + reports BS-vs-real drift.
+    Read-only: no orders, no live-safety gate."""
+    from app.services.kite_engine import backtest_service
+    client = await _client(user)
+    try:
+        result = await backtest_service.run_backtest(client, body)
+    except KiteError as exc:
+        raise HTTPException(502, f"Kite data fetch failed: {exc}")
+    return BacktestResponse(**result)
 
 
 @router.get("/signals", response_model=SignalsResponse)

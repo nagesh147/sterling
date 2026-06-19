@@ -11,6 +11,7 @@ import { GttPane } from './GttPane';
 import { FundsPane } from './FundsPane';
 import { BidsPane } from './BidsPane';
 import { AlertsPane } from './AlertsPane';
+import { BacktestPane } from './BacktestPane';
 import { InstrumentPane, InstrumentTab } from './InstrumentPane';
 import { KiteNotifications } from './KiteNotifications';
 import { TripleSupertrendPane } from './TripleSupertrendPane';
@@ -68,6 +69,7 @@ export function KiteTab() {
     else if (nav === 'funds') content = <FundsPane />;
     else if (nav === 'mf') content = <MutualFundsPane />;
     else if (nav === 'alerts') content = <AlertsPane />;
+    else if (nav === 'backtest') content = <BacktestPane />;
     else if (nav === 'data') content = <MarketDataPane />;
     else if (nav === 'connect') content = <ConnectPane />;
   }

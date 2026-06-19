@@ -29,6 +29,11 @@ const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
   { value: 'mid', label: 'Balanced', hint: 'Default — trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
   { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
 ];
+const STOP_MODE_OPTS: { value: 'broker' | 'monitor' | 'both'; label: string; hint: string }[] = [
+  { value: 'both', label: 'Both', hint: 'Broker GTT stop + server-side tick monitor. Defense in depth — recommended for real money.' },
+  { value: 'broker', label: 'Broker', hint: 'A GTT/SL-M stop placed at Zerodha. Survives server/laptop/network death; no intrabar trailing.' },
+  { value: 'monitor', label: 'Monitor', hint: 'Server-side tick loop exits on trail breach. Intrabar, but unprotected if the server/WS drops.' },
+];
 const MONEY_OPTS: { value: Moneyness; hint: string }[] = [
   { value: 'ITM5', hint: 'Five strikes in-the-money.' },
   { value: 'ITM4', hint: 'Four strikes in-the-money.' },
@@ -1578,6 +1583,31 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 </span>
                 <span style={{ fontSize: 10, color: k.dim }}>Places real option BUY orders on ready signals (live-safety gated).</span>
               </div>
+            </div>
+            {/* Protective stop mode (workstreams C/D) — how an auto-exec position is guarded. */}
+            <SettingRow label="Protective stop" hint="A broker GTT survives disconnects; the tick monitor exits intrabar. 'Both' is the real-money default.">
+              <Segmented
+                options={STOP_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                isActive={(v) => (cfg.stop_mode ?? 'both') === v}
+                onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Protective stop set to ${v}`)}
+              />
+            </SettingRow>
+            {/* Per-trade risk sizing (workstream F). */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <Switch on={cfg.risk_sizing ?? true} color={k.blue} label="Risk-based sizing"
+                onChange={() => patch({ risk_sizing: !(cfg.risk_sizing ?? true) }, `Risk sizing turned ${!(cfg.risk_sizing ?? true) ? 'ON' : 'OFF'}`)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 11.5, color: k.text, fontWeight: 500 }}>Risk-based sizing</span>
+                <span style={{ fontSize: 10, color: k.dim }}>Sizes lots so premium-at-risk stays within a % of capital (else 1 lot).</span>
+              </div>
+              {(cfg.risk_sizing ?? true) && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: k.dim }}>
+                  Risk %
+                  <input type="number" min={0.1} max={25} step={0.5} value={cfg.risk_pct ?? 1}
+                    onChange={(e) => patch({ risk_pct: Number(e.target.value) }, `Risk per trade set to ${e.target.value}%`)}
+                    style={{ width: 56, padding: '4px 6px', fontSize: 11, border: `1px solid ${k.border}`, borderRadius: 5, background: k.surface, color: k.text, minWidth: 0 }} />
+                </label>
+              )}
             </div>
             {/* Kite-only PAPER ↔ LIVE — independent of the global (crypto/Delta) toggle. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${kiteLive ? tint(k.green, 45) : k.border}`, background: kiteLive ? tint(k.green, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
