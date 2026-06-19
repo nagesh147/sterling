@@ -1,96 +1,142 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useKiteWatchlist, useKiteLtp, watchLtpSymbols } from '../../hooks/useKite';
+import { useKiteWatchlist, useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
-const SEG_COLORS: Record<string, string> = {
-  NSE: '#10B981', NFO: '#8B5CF6', BFO: '#8B5CF6',
-  BSE: '#06B6D4', MCX: '#F59E0B', CDS: '#10B981',
-};
 
-function segColor(sym: string): string {
-  const seg = (sym.split(':')[0] || '').toUpperCase();
-  return SEG_COLORS[seg] || 'var(--t-dim)';
+// Match the Equity balance figure in KiteDashboard's MarginCard, which is the
+// reference for these tiles — it renders in Open Sans. Open Sans is preloaded via
+// the Google Fonts <link> in index.html (weights 400/600/700).
+const TILE_FONT = "'Open Sans', sans-serif";
+
+const UP = '#10B981';
+const DOWN = '#EF4444';
+const SPARK = '#4184f3';
+
+// Per-symbol intraday tick buffer, kept module-level so it accumulates across
+// re-renders/remounts (like the price-flash prevRef). Seeded from the day's open
+// so a sparkline has shape on the very first paint, then grows with each poll —
+// no per-tile history request, so large watchlists stay on the single quote poll.
+const HIST = new Map<string, number[]>();
+const HIST_CAP = 48;
+
+function pushHist(sym: string, seed: number | undefined, px: number | undefined): number[] {
+  let arr = HIST.get(sym);
+  if (!arr) {
+    arr = seed != null && seed > 0 ? [seed] : [];
+    HIST.set(sym, arr);
+  }
+  if (px != null && px > 0 && (arr.length === 0 || arr[arr.length - 1] !== px)) {
+    arr.push(px);
+    if (arr.length > HIST_CAP) arr.shift();
+  }
+  return arr;
 }
 
-
-
-function KiteCard({ sym, name, ltp, prevRef }: {
-  sym: string;
-  name: string;
-  ltp: number | undefined;
-  prevRef: React.MutableRefObject<Record<string, number>>;
+function Sparkline({ points, color, width = 187, height = 34 }: {
+  points: number[]; color: string; width?: number; height?: number;
 }) {
+  if (!points || points.length < 2) return <div style={{ height, marginTop: 8 }} />;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const pad = 3;
+  const h = height - pad * 2;
+  const stepX = width / (points.length - 1);
+  const d = points
+    .map((p, i) => `${(i * stepX).toFixed(1)},${(pad + h - ((p - min) / range) * h).toFixed(1)}`)
+    .join(' ');
+  return (
+    <svg width={width} height={height} style={{ display: 'block', marginTop: 8, overflow: 'visible' }}>
+      <polyline points={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function KiteCard({ sym, q }: { sym: string; q: any }) {
   const flashRef = useRef<HTMLSpanElement>(null);
-  const prev = ltp != null ? (prevRef.current[sym] ?? null) : null;
-  const hasPrice = ltp != null && ltp > 0;
-  const color = hasPrice ? segColor(sym) : 'var(--t-dim)';
-  const isUp = !hasPrice ? true : prev == null ? true : ltp! >= prev;
-  const chgColor = hasPrice ? (isUp ? '#10B981' : '#EF4444') : 'var(--t-dim)';
+  const prevRef = useRef<number | null>(null);
+
+  const last: number | undefined = q?.last_price;
+  const close: number | undefined = q?.ohlc?.close;
+  const open: number | undefined = q?.ohlc?.open;
+  const hasPrice = last != null && last > 0;
+
+  let abs: number | null = null;
+  let pct: number | null = null;
+  if (hasPrice && close && close > 0) {
+    abs = last! - close;
+    pct = (abs / close) * 100;
+  } else if (q?.net_change != null) {
+    abs = q.net_change;
+  }
+  const up = (abs ?? 0) >= 0;
+  const chgColor = abs == null ? 'var(--t-dim)' : up ? UP : DOWN;
+
+  const series = pushHist(sym, close ?? open, last);
 
   useEffect(() => {
-    if (!flashRef.current || !hasPrice || prev == null) return;
-    if (ltp !== prev) {
-      const cls = ltp! > prev ? 'price-flash-up' : 'price-flash-down';
+    const prev = prevRef.current;
+    if (flashRef.current && hasPrice && prev != null && last !== prev) {
+      const cls = last! > prev ? 'price-flash-up' : 'price-flash-down';
       flashRef.current.classList.remove('price-flash-up', 'price-flash-down');
       void flashRef.current.offsetWidth;
       flashRef.current.classList.add(cls);
     }
-    if (ltp != null) prevRef.current[sym] = ltp;
-  }, [ltp]);
-
-  if (ltp != null) prevRef.current[sym] = ltp;
+    if (hasPrice) prevRef.current = last!;
+  }, [last, hasPrice]);
 
   const segments = sym.split(':');
   const exch = segments[0] || '';
   const rawTs = segments.slice(1).join(':') || sym;
 
+  const priceStr = hasPrice
+    ? last!.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '—';
+  const absStr = abs != null ? `${abs >= 0 ? '+' : ''}${abs.toFixed(2)}` : '';
+  const pctStr = pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '';
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
+      display: 'flex', flexDirection: 'column',
       background: 'var(--t-bg3)', border: '1px solid var(--t-border)',
-      borderRadius: 8, padding: '7px 10px', width: 210, flexShrink: 0,
-      position: 'relative', overflow: 'hidden',
+      borderRadius: 8, padding: '12px 14px', width: 215, flexShrink: 0,
     }}>
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-        background: `linear-gradient(90deg, transparent, ${color}40, transparent)`,
-      }} />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{
-            background: color, color: '#fff', fontSize: 9, fontWeight: 800,
-            width: 28, height: 28, borderRadius: '50%', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            {exch.slice(0, 2)}
-          </span>
-          <span style={{
-            fontSize: 13, fontWeight: 800, color: 'var(--t-bright)',
-            letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            <InstrumentLabel symbol={rawTs} />
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-          <span style={{ fontSize: 8, color: 'var(--t-dim)', letterSpacing: '0.04em' }}>{exch}</span>
-          <span ref={flashRef} style={{
-            fontSize: 11, fontWeight: 700, color: chgColor,
-            fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
-          }}>
-            {hasPrice ? `₹${ltp!.toLocaleString('en-IN')}` : 'no data'}
-          </span>
-        </div>
+      <span style={{
+        fontSize: 12, fontWeight: 700, color: 'var(--t-bright)',
+        letterSpacing: '0.04em', textTransform: 'uppercase',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        <InstrumentLabel symbol={rawTs} />
+      </span>
+
+      <span ref={flashRef} style={{
+        fontSize: 24, fontWeight: 300, color: 'var(--t-bright)',
+        fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
+        marginTop: 8, lineHeight: 1.1,
+      }}>
+        {priceStr}
+      </span>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 6, minHeight: 16 }}>
+        {abs != null && (
+          <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{absStr}</span>
+        )}
+        {pct != null && (
+          <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{pctStr}</span>
+        )}
+        {abs == null && <span style={{ fontSize: 11, color: 'var(--t-dim)' }}>{hasPrice ? exch : 'no data'}</span>}
       </div>
+
+      <Sparkline points={series} color={SPARK} />
     </div>
   );
 }
 
 export function KiteTicker() {
   const { items } = useKiteWatchlist();
-  // Share the market-watch sidebar's exact LTP symbol set (watch + underlyings)
-  // so React Query collapses both into a single 5s poll instead of two loops.
-  const symbols = watchLtpSymbols(items);
-  const { data: ltp } = useKiteLtp(symbols, items.length > 0);
-  const prevRef = useRef<Record<string, number>>({});
+  // Quote (not LTP) so each tile shows day-change + a sparkline. The symbol set
+  // matches MarketWatchPane's quote poll, so React Query collapses them into one.
+  const symbols = items.map((w) => w.symbol);
+  const { data: quotes } = useKiteQuote(symbols, items.length > 0);
   const outerRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
@@ -119,6 +165,7 @@ export function KiteTicker() {
       <div style={{
         height: 56, background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)',
         display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0,
+        fontFamily: TILE_FONT,
       }}>
         <span style={{ color: 'var(--t-dim)', fontSize: 11 }}>
           Kite watchlist empty — search &amp; add instruments from Market Watch tab
@@ -127,28 +174,28 @@ export function KiteTicker() {
     );
   }
 
-  const cards = items.map((w) => {
-    const p = ltp?.[w.symbol]?.last_price;
-    return <KiteCard key={w.symbol} sym={w.symbol} name={w.name || w.symbol} ltp={p} prevRef={prevRef} />;
-  });
+  const cards = items.map((w) => (
+    <KiteCard key={w.symbol} sym={w.symbol} q={quotes?.[w.symbol]} />
+  ));
 
-  const GAP = 8;
+  const GAP = 10;
   const duration = Math.min(120, Math.max(12, shift / 45));
 
   return (
     <div ref={outerRef} style={{
       background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)',
-      padding: '6px 20px', flexShrink: 0, overflow: 'hidden',
+      padding: '10px 20px', flexShrink: 0, overflow: 'hidden',
+      fontFamily: TILE_FONT,
     }}>
       <div
         className={overflow ? 'ticker-marquee' : undefined}
         style={{
-          display: 'flex', alignItems: 'center', gap: GAP, width: 'max-content',
+          display: 'flex', alignItems: 'stretch', gap: GAP, width: 'max-content',
           ...(overflow ? { ['--ticker-shift' as string]: `${shift}px`, animationDuration: `${duration}s` } : {}),
         } as React.CSSProperties}
       >
-        <div ref={copyRef} style={{ display: 'flex', alignItems: 'center', gap: GAP }}>{cards}</div>
-        {overflow && <div aria-hidden style={{ display: 'flex', alignItems: 'center', gap: GAP }}>{cards}</div>}
+        <div ref={copyRef} style={{ display: 'flex', alignItems: 'stretch', gap: GAP }}>{cards}</div>
+        {overflow && <div aria-hidden style={{ display: 'flex', alignItems: 'stretch', gap: GAP }}>{cards}</div>}
       </div>
     </div>
   );

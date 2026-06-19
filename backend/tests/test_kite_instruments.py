@@ -63,6 +63,31 @@ async def test_universal_search_ranks_equity_before_options():
     assert res[0]["tradingsymbol"] == "INFY"
 
 
+async def test_universal_search_orders_options_chronologically():
+    # The option flood must come back nearest-expiry-first (CE before PE), NOT
+    # alphabetical-by-symbol (which scrambled JUN/JUL/AUG into 26AUG,26DEC,26JUL,…).
+    csv = (
+        "instrument_token,tradingsymbol,name,expiry,strike,instrument_type,segment,exchange\n"
+        "1,NIFTY26AUG24000CE,NIFTY,2026-08-27,24000,CE,NFO-OPT,NFO\n"
+        "2,NIFTY26JUN24000CE,NIFTY,2026-06-26,24000,CE,NFO-OPT,NFO\n"
+        "3,NIFTY26JUL24000CE,NIFTY,2026-07-30,24000,CE,NFO-OPT,NFO\n"
+        "4,NIFTY26JUN24000PE,NIFTY,2026-06-26,24000,PE,NFO-OPT,NFO\n"
+    )
+
+    async def fetch(ex):
+        return csv
+    c = InstrumentCache(fetch)
+    res = await c.search("NIFTY 24000", exchange="")
+    syms = [r["tradingsymbol"] for r in res]
+    # CE side ordered by expiry (Jun → Jul → Aug); PE comes after all CE.
+    assert syms == [
+        "NIFTY26JUN24000CE",
+        "NIFTY26JUL24000CE",
+        "NIFTY26AUG24000CE",
+        "NIFTY26JUN24000PE",
+    ]
+
+
 async def test_resolve_token_exact():
     c, _ = _cache()
     assert await c.resolve_token("INFY", "NSE") == 408065

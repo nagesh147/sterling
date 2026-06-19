@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { k as t, tint, kStyles, Icons } from '../../styles/kiteUI';
+import { k as t, tint, Icons } from '../../styles/kiteUI';
 import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist, watchLtpSymbols } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
-import { InstrumentLabel } from './InstrumentLabel';
+import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { PriceCell } from './PriceCell';
 import { useKiteSettings } from '../../store/useKiteSettings';
@@ -14,25 +14,8 @@ const S = {
   searchContainer: { padding: '12px 16px', borderBottom: `1px solid ${t.border}`, background: t.bg, display: 'flex', gap: 12, alignItems: 'center', position: 'sticky' as const, top: 0, zIndex: 10 },
   search: { flex: 1, background: t.bg, color: t.text, border: 'none', padding: '8px 32px 8px 12px', fontFamily: 'inherit', fontSize: 13, outline: 'none' },
   listContainer: { flex: 1, overflowY: 'auto' as const },
-  resRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', cursor: 'pointer', borderBottom: `1px solid ${t.border}`, background: t.bg },
   hint: { color: t.dim, fontSize: 12 },
-  btnAction: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 2, cursor: 'pointer', fontSize: 12, fontWeight: 600, border: 'none' },
 };
-
-function pillStyle(col: string): React.CSSProperties {
-  return kStyles.pill(col);
-}
-
-function exColor(ex: string): string {
-  switch ((ex || '').toUpperCase()) {
-    case 'NSE': return t.blue;
-    case 'BSE': return t.cyan;
-    case 'NFO': case 'BFO': return t.purple;
-    case 'MCX': return t.amber;
-    case 'CDS': return t.green;
-    default: return t.dim;
-  }
-}
 
 function instrMeta(i: KiteInstrument) {
   const ty = (i.instrument_type || '').toUpperCase();
@@ -439,6 +422,15 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
     setQuery('');
   };
 
+  // "Market depth" from a search row: pin it to the watchlist (so it streams) and
+  // expand it — clearing the query drops us back to the watchlist showing depth.
+  const addAndExpand = (i: KiteInstrument) => {
+    const sym = `${i.exchange || 'NSE'}:${i.tradingsymbol}`;
+    if (!watch.some((w) => w.symbol === sym)) addInstr(i);
+    else setQuery('');
+    setExpanded((prev) => new Set(prev).add(sym));
+  };
+
   const handleOpenOrder = (symbol: string, initialSide: 'BUY' | 'SELL', lastPx: number | null, lotSize?: number) => {
     const [exchange, tradingsymbol] = symbol.split(':');
     openOrderWindow({
@@ -497,31 +489,82 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
             {search.isFetching && query.trim().length >= 2 && <div style={{ padding: 16, color: t.dim, fontSize: 13 }}>Searching…</div>}
             {search.error && <div style={{ padding: 16, color: t.red, fontSize: 13 }}>✗ {(search.error as Error).message}</div>}
             {search.data && query.trim().length >= 2 && (
-              <div className="kv-rows">
+              <div>
+                <style>{`
+                  .sr-item {
+                    position: relative;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 0 16px;
+                    height: 44px;
+                    box-sizing: border-box;
+                    cursor: pointer;
+                    border-bottom: 1px solid ${t.border};
+                    background: ${t.bg};
+                    transition: background 0.1s;
+                  }
+                  .sr-item:hover { background: ${t.surface}; }
+                  .sr-item.added { background: ${tint(t.green, 4)}; }
+                  .sr-name {
+                    color: ${t.text};
+                    font-size: 13px;
+                    flex: 1;
+                    min-width: 0;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    padding-right: 8px;
+                  }
+                  .sr-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-shrink: 0;
+                  }
+                  .sr-exp { color: ${t.dim}; font-size: 11px; letter-spacing: 0.3px; text-transform: uppercase; }
+                  .sr-exch { color: ${t.dim}; font-size: 10px; background: ${t.surface}; padding: 2px 5px; border-radius: 2px; }
+                  .sr-check { color: ${t.green}; font-size: 15px; width: 16px; text-align: center; }
+                  .sr-item:hover .sr-meta { visibility: hidden; }
+                  .sr-actions {
+                    display: none;
+                    gap: 4px;
+                    align-items: center;
+                    position: absolute;
+                    right: 16px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: ${t.surface};
+                  }
+                  .sr-item:hover .sr-actions { display: flex; }
+                `}</style>
                 {search.data.instruments.map((i) => {
-                  const { kind, detail } = instrMeta(i);
                   const sym = `${i.exchange || 'NSE'}:${i.tradingsymbol}`;
                   const added = watch.some((w) => w.symbol === sym);
+                  const parsed = parseInstrument(i.tradingsymbol);
+                  const expLabel = parsed?.isWeekly && parsed.day && parsed.month
+                    ? `${parsed.day} ${parsed.month} Weekly` : '';
+                  const lastPx = ltp?.[sym]?.last_price ?? null;
                   return (
                     <div
                       key={`${i.exchange}:${i.instrument_token}`}
-                      style={{ ...S.resRow, background: added ? tint(t.green, 4) : t.bg }}
-                      onMouseEnter={(e) => { if (!added) (e.currentTarget as HTMLElement).style.background = tint(t.blue, 4); }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = added ? tint(t.green, 4) : t.bg; }}
+                      className={`sr-item${added ? ' added' : ''}`}
+                      onClick={() => { if (!added) addInstr(i); }}
                     >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                        <span style={{ color: t.text, fontWeight: 500, fontSize: 13 }}>{i.tradingsymbol}</span>
-                        <span style={{ color: t.dim, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><InstrumentLabel symbol={i.tradingsymbol} fallback={i.name} /></span>
+                      <span className="sr-name"><InstrumentLabel symbol={i.tradingsymbol} fallback={i.name} /></span>
+                      <div className="sr-meta">
+                        {expLabel && <span className="sr-exp">{expLabel}</span>}
+                        <span className="sr-exch">{i.exchange}</span>
+                        {added && <span className="sr-check">✓</span>}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                        <span style={pillStyle(t.dim)}>{kind}</span>
-                        <span style={pillStyle(exColor(i.exchange || ''))}>{i.exchange}</span>
-                        {added ? (
-                          <span style={{ color: t.green, fontSize: 16, width: 24, textAlign: 'center' }}>✓</span>
-                        ) : (
-                          <button style={{ ...S.btnAction, background: t.blue, color: '#fff', width: 24, height: 24 }} onClick={() => addInstr(i)}>+</button>
-                        )}
-                      </div>
+                      <KiteActionButtons
+                        className="sr-actions"
+                        onBuy={(e) => { e.stopPropagation(); handleOpenOrder(sym, 'BUY', lastPx, i.lot_size); }}
+                        onSell={(e) => { e.stopPropagation(); handleOpenOrder(sym, 'SELL', lastPx, i.lot_size); }}
+                        onChart={(e) => { e.stopPropagation(); onOpenInstrument?.(sym, 'chart'); }}
+                        onDepth={(e) => { e.stopPropagation(); addAndExpand(i); }}
+                        onAdd={added ? undefined : (e) => { e.stopPropagation(); addInstr(i); }}
+                      />
                     </div>
                   );
                 })}

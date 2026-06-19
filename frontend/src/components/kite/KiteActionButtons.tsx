@@ -8,13 +8,14 @@ interface KiteActionButtonsProps {
   onChart?: (e: React.MouseEvent) => void;
   onDelete?: (e: React.MouseEvent) => void;
   onMore?: (e: React.MouseEvent) => void;
+  onAdd?: (e: React.MouseEvent) => void;
   className?: string;
   variant?: 'short' | 'long';
   buyLabel?: string;
   sellLabel?: string;
 }
 
-export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, onMore, className, variant = 'short', buyLabel, sellLabel }: KiteActionButtonsProps) {
+export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, onMore, onAdd, className, variant = 'short', buyLabel, sellLabel }: KiteActionButtonsProps) {
   const btnAction: React.CSSProperties = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 28, height: 28, borderRadius: 2, cursor: 'pointer',
@@ -50,14 +51,14 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
           {sellLabel || (variant === 'long' ? 'SELL' : 'S')}
         </button>
       )}
-      {onDepth && (
-        <button style={iconBtnStyle} title="Market Depth" onClick={onDepth}>
-          <Icons.Depth />
-        </button>
-      )}
       {onChart && (
         <button style={iconBtnStyle} title="Chart" onClick={onChart}>
           <Icons.Chart />
+        </button>
+      )}
+      {onDepth && (
+        <button style={iconBtnStyle} title="Market Depth" onClick={onDepth}>
+          <Icons.Depth />
         </button>
       )}
       {onDelete && (
@@ -68,6 +69,11 @@ export function KiteActionButtons({ onBuy, onSell, onDepth, onChart, onDelete, o
       {onMore && (
         <button style={iconBtnStyle} title="More" onClick={onMore}>
           <Icons.More />
+        </button>
+      )}
+      {onAdd && (
+        <button style={{ ...btnAction, background: k.green, color: '#fff', fontSize: 16, fontWeight: 600 }} title="Add to watchlist" onClick={onAdd}>
+          +
         </button>
       )}
     </div>

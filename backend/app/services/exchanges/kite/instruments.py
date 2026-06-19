@@ -98,9 +98,13 @@ class InstrumentCache:
         options, indices, currencies, commodities). The query is whitespace-tokenized
         and ALL tokens must appear in the instrument's searchable text
         (tradingsymbol + name + strike + exchange + segment), so
-        ``"nifty 24000 ce"`` matches ``NFO:NIFTY24D2624000CE``. Results are ranked:
-        exact tradingsymbol → prefix match → shorter symbol (equities/indices float
-        above the option flood) → alphabetical.
+        ``"nifty 24000 ce"`` matches ``NFO:NIFTY24D2624000CE``. Results are ranked
+        the way the Kite search dropdown orders them:
+        exact tradingsymbol → prefix match → equities/indices above the option flood
+        → grouped by underlying → CE before PE → **nearest expiry first** → ascending
+        strike. The chronological-by-expiry ordering is what stops the option flood
+        from collapsing into a confusing alphabetical-by-symbol list
+        (``…26AUG…26DEC…26JUL…26JUN…``).
         """
         q = (query or "").strip().upper()
         rows = await self.load(exchange)
@@ -108,6 +112,7 @@ class InstrumentCache:
             return rows[:limit]
         tokens = q.split()
         first = tokens[0]
+        type_order = {"CE": 0, "PE": 1, "FUT": 2}
         scored = []
         for r in rows:
             ts = str(r.get("tradingsymbol", "")).upper()
@@ -116,11 +121,24 @@ class InstrumentCache:
             exch = str(r.get("exchange", "")).upper()
             hay = f"{ts} {nm} {self._strike_str(r.get('strike'))} {exch} {seg}"
             if all(tok in hay for tok in tokens):
+                itype = str(r.get("instrument_type", "")).upper()
+                is_option = 1 if itype in ("CE", "PE", "FUT") else 0
+                # ISO expiry strings sort lexicographically == chronologically;
+                # blank expiry (equities) gets a sentinel so it never jumps ahead.
+                expiry = str(r.get("expiry") or "9999-99-99")
+                try:
+                    strike_v = float(r.get("strike") or 0)
+                except (TypeError, ValueError):
+                    strike_v = 0.0
                 rank = (
-                    0 if ts == q else 1,
-                    0 if (ts.startswith(first) or nm.startswith(first)) else 1,
-                    len(ts),
-                    ts,
+                    0 if ts == q else 1,                                          # exact symbol
+                    0 if (ts.startswith(first) or nm.startswith(first)) else 1,   # prefix match
+                    is_option,                                                    # equities/indices float up
+                    nm,                                                           # group by underlying
+                    type_order.get(itype, 9),                                     # CE → PE → FUT
+                    expiry,                                                        # nearest expiry first
+                    strike_v,                                                      # ascending strike
+                    ts,                                                            # stable tiebreak
                 )
                 scored.append((rank, r))
         scored.sort(key=lambda x: x[0])
