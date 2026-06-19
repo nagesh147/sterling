@@ -197,6 +197,29 @@ class EngineConfigModel(BaseModel):
     scan_all_stocks: bool = False  # default preserves the full spot universe
     early_lock: bool = False
     auto_execute: bool = False
+    # ── Per-trade risk sizing (workstream F) ──────────────────────────────────
+    # When on, auto-exec sizes lots so premium-at-risk ((entry − stop) × qty) stays
+    # within risk_pct% of available FO capital, floored at 1 lot and capped by
+    # max_lots and affordable margin. When off, falls back to a single lot.
+    risk_sizing: bool = True
+    risk_pct: float = 1.0          # % of available FO capital risked per trade
+    max_lots: int = 10             # hard ceiling on auto-exec lots per order
+    # ── Protective stop mode (workstreams C/D) ────────────────────────────────
+    # "broker"  = place a GTT/SL-M stop at Zerodha at entry (survives server death)
+    # "monitor" = tick-driven WS monitor exits on trail breach (intrabar, server-side)
+    # "both"    = both (default; defense in depth for real money)
+    stop_mode: Literal["broker", "monitor", "both"] = "both"
+
+    @field_validator("risk_pct")
+    @classmethod
+    def _risk_pct_bounds(cls, v):
+        # Clamp to a sane 0.1%–25% band; 0/negative would size to nothing.
+        return min(25.0, max(0.1, float(v)))
+
+    @field_validator("max_lots")
+    @classmethod
+    def _max_lots_bounds(cls, v):
+        return min(500, max(1, int(v)))
 
     @field_validator("strike_moneyness")
     @classmethod

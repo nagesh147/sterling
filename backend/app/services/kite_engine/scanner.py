@@ -243,8 +243,15 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
         "option_symbol": leg.option_symbol,
         "side": "buy",
         "size": int(leg.lot_size or 0),
+        "lot_size": int(leg.lot_size or 0),
+        "token": int(leg.token or 0),
         "exchange": row.exchange,
         "stop_loss": float(row.stop_loss),
+        # Premium basis for risk sizing (workstream F). Derivatives legs carry the
+        # option's own premium (premium_spot) + its ST trail (premium_sl); for spot
+        # signals these may be None → risk-sizing degrades to a single lot.
+        "entry_premium": float(leg.premium_spot) if leg.premium_spot is not None else None,
+        "stop_premium": float(leg.premium_sl) if leg.premium_sl is not None else None,
     }
 
 

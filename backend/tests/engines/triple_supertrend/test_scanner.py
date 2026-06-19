@@ -295,7 +295,9 @@ def test_option_order_args_maps_buy_one_lot():
     args = option_order_args(row)  # primary leg
     assert args == {
         "option_symbol": "NIFTY25JUN22000CE", "side": "buy", "size": 75,
-        "exchange": "NFO", "stop_loss": 21900.0,
+        "lot_size": 75, "token": 0, "exchange": "NFO", "stop_loss": 21900.0,
+        # premium basis for risk sizing — None here (no premium_spot/premium_sl on the leg)
+        "entry_premium": None, "stop_premium": None,
     }
     # a put (bear) is still a BUY — this is an options-buying engine
     row.direction = "short"; row.option_type = "PE"

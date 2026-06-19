@@ -14,7 +14,7 @@ from app.core.logging import get_logger
 from app.engines.triple_supertrend.config import TripleSupertrendConfig
 from app.engines.triple_supertrend.schemas import EngineConfigModel
 from app.services import live_safety
-from app.services.kite_engine import state
+from app.services.kite_engine import positions, protective_stop, sizing, state
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
 from app.services.kite_engine.universe import build_universe, select_scan_universe
@@ -82,20 +82,52 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     return {"status": "ok", "order_id": oid, "message": "Order submitted"}
 
 
+async def available_fo_capital(client) -> float:
+    """Available F&O-segment capital (INR) for risk sizing. Falls back to 0 on
+    error — sizing then floors to 1 lot."""
+    try:
+        margins = await client.get_margins("equity")
+        # Kite nests available cash under available.live_balance / available.cash.
+        avail = (margins or {}).get("available", {}) if isinstance(margins, dict) else {}
+        return float(avail.get("live_balance") or avail.get("cash") or 0.0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
 def _make_place_cb(client, uid: str):
-    """Gated auto-exec: 1-lot at-the-money (nearest-spot leg) option BUY under the
-    same live-safety + idempotency checks as manual Kite orders. Logs every outcome."""
+    """Gated auto-exec: risk-sized option BUY (nearest-spot leg) under the same
+    live-safety + idempotency checks as manual Kite orders, with a broker-side
+    protective stop and tick-monitor registration. Logs every outcome."""
     async def _cb(row, item) -> None:
         args = option_order_args(row)  # primary (first) leg
         if not args or not args["option_symbol"] or args["size"] <= 0:
             return
+        cfg = state.get_config(uid)
         # One open auto-position per "slot": per underlying for spot signals, per
         # contract for derivatives (so each fired CE/PE strike is independent).
         guard_key = args["option_symbol"] if row.source == "derivatives" else row.underlying
         if state.is_auto_open(uid, guard_key):
             return
+
+        # ── risk sizing (workstream F) ────────────────────────────────────────
+        qty = int(args["size"])
+        lots = 1
+        if cfg.risk_sizing and args.get("entry_premium") and args.get("stop_premium") is not None:
+            capital = await available_fo_capital(client)
+            sized = sizing.size_position(
+                entry_premium=float(args["entry_premium"]),
+                stop_premium=float(args["stop_premium"]),
+                lot_size=int(args["lot_size"] or 0),
+                available_capital=capital,
+                risk_pct=cfg.risk_pct,
+                max_lots=cfg.max_lots,
+            )
+            if sized.qty > 0:
+                qty, lots = sized.qty, sized.lots
+                state.log(uid, "info", f"{args['option_symbol']} sizing → {sized.reason}")
+
         idem = live_safety.make_idempotency_key(
-            uid, args["option_symbol"], "BUY", args["size"], row.timestamp_ms)
+            uid, args["option_symbol"], "BUY", qty, row.timestamp_ms)
         # Kite is INR; the USD daily-loss breaker is crypto-only (kill-switch + idempotency still apply).
         decision = live_safety.assert_safe_to_trade(
             positions=[], idempotency_key=idem, check_daily_loss=False)
@@ -107,17 +139,46 @@ def _make_place_cb(client, uid: str):
             return  # this signal already executed
         try:
             result = await client.place_order_option(
-                args["option_symbol"], args["side"], args["size"],
+                args["option_symbol"], args["side"], qty,
                 exchange=args["exchange"], stop_loss=args["stop_loss"], tag=idem)
         except Exception as exc:  # noqa: BLE001
             state.log(uid, "order_failed", f"{row.underlying} {args['option_symbol']}: {exc}")
             return
         oid = (result or {}).get("order_id", "")
-        if oid:
-            live_safety.record_idempotency(idem, oid)
-            state.mark_auto_open(uid, guard_key)  # one-position guard (per slot)
-            state.log(uid, "order_placed",
-                      f"BUY {args['size']} {args['option_symbol']} @ market (#{oid})")
+        if not oid:
+            return
+        live_safety.record_idempotency(idem, oid)
+        state.mark_auto_open(uid, guard_key)  # one-position guard (per slot)
+
+        # ── register position for fill-tracking + tick monitor (E / C / D) ─────
+        entry_px = float(args.get("entry_premium") or 0.0)
+        stop_px = float(args.get("stop_premium") or 0.0)
+        p = positions.register(positions.OpenPosition(
+            uid=uid, symbol=args["option_symbol"], exchange=args["exchange"],
+            token=int(args.get("token") or row.token or 0),
+            qty=qty, lot_size=int(args["lot_size"] or 0),
+            entry_premium=entry_px, stop_premium=stop_px,
+            order_id=oid, status=positions.PENDING,
+            stop_mode=cfg.stop_mode, guard_key=guard_key))
+
+        # ── broker-side protective stop (workstream C) ────────────────────────
+        if cfg.stop_mode in ("broker", "both") and stop_px > 0:
+            gtt_id = await protective_stop.place_stop(
+                client, tradingsymbol=args["option_symbol"], exchange=args["exchange"],
+                qty=qty, trigger_premium=stop_px, last_price=entry_px)
+            if gtt_id:
+                positions.update_stop(uid, p.symbol, stop_px, gtt_id=gtt_id)
+                state.log(uid, "info",
+                          f"Protective GTT #{gtt_id} placed for {p.symbol} @ ₹{stop_px:.2f}")
+            elif cfg.stop_mode == "broker":
+                state.log(uid, "info",
+                          f"⚠ Protective GTT failed for {p.symbol}; no broker stop "
+                          f"(enable monitor mode for a server-side backstop)")
+
+        monitor_note = "+monitor" if cfg.stop_mode in ("monitor", "both") else ""
+        state.log(uid, "order_placed",
+                  f"BUY {qty} ({lots} lot) {args['option_symbol']} @ market (#{oid}) "
+                  f"[{cfg.stop_mode} stop{monitor_note}]")
     return _cb
 
 

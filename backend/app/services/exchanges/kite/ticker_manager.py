@@ -21,8 +21,29 @@ log = get_logger(__name__)
 _tickers: Dict[str, KiteTicker] = {}
 
 
+async def _warm_client(user_id: str):
+    """Best-effort warm client for the user's active account (for monitor exits)."""
+    try:
+        acct = _accounts.get_active(user_id)
+        if acct and acct.connected:
+            return await _accounts.acquire_client(acct)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("kite monitor client acquire failed for %s: %s", user_id, exc)
+    return None
+
+
 def _make_broadcaster(user_id: str):
     async def _broadcast(ticks: List[dict]) -> None:
+        # Feed the tick-driven exit monitor FIRST (C/D) — a trail breach must
+        # trigger a server-side exit regardless of whether any UI is listening.
+        try:
+            from app.services.kite_engine import monitor, positions
+            if positions.open_positions(user_id):
+                client = await _warm_client(user_id)
+                if client is not None:
+                    await monitor.on_ticks(user_id, ticks, client=client)
+        except Exception as exc:  # never let the monitor kill the tick loop
+            log.debug("kite monitor on_ticks failed for %s: %s", user_id, exc)
         try:
             from app.api.v1.endpoints.stream import stream_manager
             await stream_manager.broadcast_to_channel(
@@ -36,6 +57,12 @@ def _make_broadcaster(user_id: str):
 
 def _make_order_broadcaster(user_id: str):
     async def _broadcast(order: dict) -> None:
+        # Confirm fills / rejections against our position registry FIRST (E).
+        try:
+            from app.services.kite_engine import monitor
+            await monitor.on_order_update(user_id, order)
+        except Exception as exc:  # never let the monitor kill the WS loop
+            log.debug("kite monitor on_order_update failed for %s: %s", user_id, exc)
         try:
             from app.api.v1.endpoints.stream import stream_manager
             await stream_manager.broadcast_to_channel(
