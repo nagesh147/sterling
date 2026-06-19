@@ -327,22 +327,41 @@ async def _run_scan() -> str:
 
 
 # ── alert push (separate channel from the crypto bot) ─────────────────────────
+def _alert_html(r) -> str:
+    arrow = "🟢▲ LONG" if r.direction == "long" else "🔴▼ SHORT"
+    leg = r.legs[0] if r.legs else None
+    legtxt = f"\n{leg.moneyness} · {leg.option_symbol}" if leg else ""
+    return (f"<b>🇮🇳 Kite signal · {r.underlying}</b>\n{arrow} · {r.option_type}{legtxt}\n"
+            f"<i>{_mode_label()}</i>")
+
+
 async def push_kite_alerts() -> None:
-    """Push NEW active Kite signals to the configured chat. Deduped per
-    token|timestamp so a standing signal isn't re-pushed every cycle."""
-    if not (kite_alerts_enabled and _tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID):
+    """Push NEW active Kite signals to every enabled Kite-specific Telegram target
+    (per-target bot token + chat). Deduped per token|timestamp so a standing signal
+    isn't re-pushed every cycle.
+
+    FALLBACK: if the user has no enabled Kite targets configured, fall back to the
+    legacy shared global bot/chat so existing alerts don't silently stop.
+    """
+    if not kite_alerts_enabled:
         return
+
+    from app.services.notifications import kite_telegram_store as kts
+    targets = kts.enabled_targets(UID)
+    has_targets = bool(targets)
+    legacy_ok = bool(_tg.TELEGRAM_TOKEN and _tg.TELEGRAM_CHAT_ID)
+    if not has_targets and not legacy_ok:
+        return
+
     rows = _ready_rows()
     live_keys = {f"{r.token}|{r.timestamp_ms}" for r in rows}
     _alerted.intersection_update(live_keys)
     fresh = [r for r in rows if f"{r.token}|{r.timestamp_ms}" not in _alerted]
     for r in fresh:
         _alerted.add(f"{r.token}|{r.timestamp_ms}")
-        arrow = "🟢▲ LONG" if r.direction == "long" else "🔴▼ SHORT"
-        leg = r.legs[0] if r.legs else None
-        legtxt = f"\n{leg.moneyness} · {leg.option_symbol}" if leg else ""
-        await _send(
-            f"<b>🇮🇳 Kite signal · {r.underlying}</b>\n{arrow} · {r.option_type}{legtxt}\n"
-            f"<i>{_mode_label()}</i>",
-            str(_tg.TELEGRAM_CHAT_ID), kite_menu_kb(),
-        )
+        html = _alert_html(r)
+        if has_targets:
+            for t in targets:
+                await kts.send_via(t.bot_token, t.chat_id, html)
+        elif legacy_ok:
+            await _send(html, str(_tg.TELEGRAM_CHAT_ID), kite_menu_kb())

@@ -1778,6 +1778,10 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite_engine import router as kite_engine_router
     app.include_router(kite_engine_router, prefix="/api/v1")
 
+    # Kite-specific Telegram alert targets (per-user, separate from crypto bot)
+    from app.api.v1.endpoints.kite_telegram import router as kite_telegram_router
+    app.include_router(kite_telegram_router, prefix="/api/v1")
+
     # V4 WebSocket Manager Router
     from app.api.v1.endpoints import stream
     app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])

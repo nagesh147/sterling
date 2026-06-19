@@ -77,6 +77,24 @@ function scanCost(cfg: EngineConfigModel): string {
   return `${prefix}spot ${fmtTime(instruments)} · deriv ${fmtTime(charts)} (${charts.toLocaleString('en-IN')} charts)/scan`;
 }
 
+// Compact one-line summary built from the current selection, for the drawer header
+// and the collapsed Universe card. e.g. "Derivatives · 11 strikes · 2 idx + 12 stocks · ~2 min/scan".
+function universeSummary(cfg: EngineConfigModel): string {
+  const nIdx = cfg.scan_indices.length;
+  const nStocks = cfg.scan_stocks?.length ?? 0;
+  return `${nIdx} idx + ${nStocks} stocks`;
+}
+function settingsSummary(cfg: EngineConfigModel): string {
+  const sourceLabel = (SCAN_SOURCE_OPTS.find((o) => o.value === cfg.scan_source)?.label) ?? 'Derivatives';
+  const nStrikes = Math.max(1, cfg.strike_moneyness.length);
+  const nIdx = cfg.scan_indices.length;
+  const nStocks = cfg.scan_stocks?.length ?? 0;
+  const instruments = nIdx + nStocks;
+  const charts = instruments * nStrikes * 2;
+  const cost = cfg.scan_source === 'spot' ? fmtTime(instruments) : fmtTime(charts);
+  return `${sourceLabel} · ${nStrikes} strike${nStrikes === 1 ? '' : 's'} · ${universeSummary(cfg)} · ${cost}/scan`;
+}
+
 function timeAgo(ms: number): string {
   if (!ms) return 'never';
   const s = Math.round((Date.now() - ms) / 1000);
@@ -671,6 +689,78 @@ function Chip({ label, active, onClick, dim }: { label: string; active: boolean;
   );
 }
 
+// ── Settings-drawer layout primitives ──────────────────────────────────────
+// A consistent setting row: fixed-width dim uppercase label on the left, control
+// on the right. `align="top"` keeps the label baseline-aligned with tall controls.
+function SettingRow({ label, hint, children, align = 'center', full = false }: {
+  label: string; hint?: string; children: React.ReactNode;
+  align?: 'center' | 'top'; full?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center', gap: 12 }}>
+      <span title={hint} style={{
+        fontSize: 9.5, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase',
+        color: k.dim, width: 78, flexShrink: 0, paddingTop: align === 'top' ? 4 : 0,
+      }}>{label}</span>
+      <div style={{ flex: full ? 1 : undefined, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Tab bar for the 'tabs' layout.
+function SettingsTabs({ active, onSelect, tabs }: {
+  active: string; onSelect: (v: string) => void; tabs: { value: string; label: string }[];
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${k.border}` }}>
+      {tabs.map((t) => {
+        const on = active === t.value;
+        return (
+          <button key={t.value} onClick={() => onSelect(t.value)} aria-pressed={on}
+            style={{
+              fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase',
+              padding: '7px 12px', cursor: 'pointer', border: 'none', background: 'transparent',
+              color: on ? k.orange : k.dim, borderBottom: `2px solid ${on ? k.orange : 'transparent'}`,
+              marginBottom: -1, transition: 'color .15s ease, border-color .15s ease',
+            }}
+            onMouseEnter={(e) => { if (!on) e.currentTarget.style.color = k.text; }}
+            onMouseLeave={(e) => { if (!on) e.currentTarget.style.color = k.dim; }}>
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Collapsible labeled card for the 'cards' layout.
+function Collapsible({ label, summary, open, onToggle, children }: {
+  label: string; summary?: string; open: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div style={{ border: `1px solid ${k.border}`, borderRadius: 7, overflow: 'hidden', background: k.bg }}>
+      <button onClick={onToggle} aria-expanded={open}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+          padding: '8px 11px', cursor: 'pointer', border: 'none', background: open ? k.surfaceHover : k.surface,
+          textAlign: 'left', transition: 'background .15s ease',
+        }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', color: k.text }}>{label}</span>
+          {!open && summary && <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
+        </span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .2s ease', color: k.dim, flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && <div style={{ padding: '11px 12px 13px', borderTop: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 11 }}>{children}</div>}
+    </div>
+  );
+}
+
 function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -897,8 +987,25 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     setLegSort(legSort.key === key ? { key, dir: legSort.dir === 'asc' ? 'desc' : legSort.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
   };
 
+  // Settings-drawer layout (chosen on the Connect tab) + per-layout persisted UI state.
+  const layout = useKiteSettings((st) => st.engineSettingsLayout);
+  const [settingsTab, setSettingsTab] = React.useState<'scan' | 'universe' | 'execution'>(
+    () => (localStorage.getItem('kite_settings_tab') as 'scan' | 'universe' | 'execution') || 'scan'
+  );
+  const [cardOpen, setCardOpen] = React.useState<{ scan: boolean; universe: boolean; execution: boolean }>(() => {
+    try {
+      const raw = localStorage.getItem('kite_settings_cards');
+      if (raw) return { scan: true, universe: false, execution: true, ...JSON.parse(raw) };
+    } catch { /* ignore */ }
+    return { scan: true, universe: false, execution: true };
+  });
+  const toggleCard = (key: 'scan' | 'universe' | 'execution') =>
+    setCardOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+
   React.useEffect(() => { localStorage.setItem('kite_st_settings_open', String(settingsOpen)); }, [settingsOpen]);
   React.useEffect(() => { localStorage.setItem('kite_st_view_layout', viewLayout); }, [viewLayout]);
+  React.useEffect(() => { localStorage.setItem('kite_settings_tab', settingsTab); }, [settingsTab]);
+  React.useEffect(() => { localStorage.setItem('kite_settings_cards', JSON.stringify(cardOpen)); }, [cardOpen]);
 
   const resetCfg = useResetEngineConfig();
 
@@ -1270,145 +1377,140 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
 
       {/* ── Settings drawer (collapsible) ── */}
-      <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
-        <div style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '13px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${k.border}` }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-              <span style={{ fontSize: 11, color: k.dim }} title="Where the SuperTrend runs: the underlying's chart (Spot), each contract's own premium chart (Derivatives), or both.">Scan source</span>
+      {(() => {
+        if (!cfg) {
+          return (
+            <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
+              <div style={{ overflow: 'hidden' }} />
+            </div>
+          );
+        }
+
+        // ── Group bodies (same controls, reused across both layouts) ──────────
+        const scanGroup = (
+          <>
+            <SettingRow label="Source" hint="Where the SuperTrend runs: the underlying's chart (Spot), each contract's own premium chart (Derivatives), or both.">
               <Segmented
                 options={SCAN_SOURCE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg?.scan_source ?? 'derivatives') === v}
+                isActive={(v) => cfg.scan_source === v}
                 onSelect={(v) => changeScanSource(v as ScanSource)}
               />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-              <span style={{ fontSize: 11, color: k.dim }} title="How tightly the position is trailed before exit.">Exit trailing</span>
-              <Segmented
-                options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg?.trail_target ?? 'mid') === v}
-                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Exit trailing changed to ${v}`)}
-              />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
-              <span style={{ fontSize: 11, color: k.dim }} title="Which strikes to resolve per signal — in-the-money (ITM), at-the-money (ATM) or out-of-the-money (OTM). Select one or more.">Strikes</span>
+            </SettingRow>
+            <SettingRow label="Strikes" align="top" full hint="Which strikes to resolve per signal — in-the-money (ITM), at-the-money (ATM) or out-of-the-money (OTM). Select one or more.">
               <Segmented
                 options={MONEY_OPTS.map((o) => ({ value: o.value, label: o.value, hint: o.hint }))}
-                isActive={(v) => cfg?.strike_moneyness.includes(v as Moneyness) ?? false}
+                isActive={(v) => cfg.strike_moneyness.includes(v as Moneyness)}
                 onSelect={(v) => toggleMoneyness(v as Moneyness)}
               />
-            </div>
+            </SettingRow>
+            <SettingRow label="Idx exp." hint="Index option expiries to scan — weekly (every Thursday) and/or monthly.">
+              <Segmented
+                options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                isActive={(v) => (cfg.scan_expiries_indices ?? cfg.scan_expiries ?? ['weekly', 'monthly']).includes(v as ScanExpiry)}
+                onSelect={(v) => toggleExpiryIndices(v as ScanExpiry)}
+              />
+            </SettingRow>
+            <SettingRow label="Stk exp." hint="Stock option expiries — stocks default to monthly only (fewer weekly contracts).">
+              <Segmented
+                options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                isActive={(v) => (cfg.scan_expiries_stocks ?? ['monthly']).includes(v as ScanExpiry)}
+                onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
+              />
+            </SettingRow>
+            <span style={{ fontSize: 10, color: k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span style={{ flexShrink: 0 }}>ℹ</span>
+              <span>{scanCost(cfg)}</span>
+            </span>
+          </>
+        );
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ fontSize: 11, color: k.dim }} title="Which option expiries to scan. Separate controls for indices and stocks — stocks default to monthly only (fewer weekly contracts).">Expiries</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 9.5, color: k.dim }}>Indices</span>
-                  <Segmented
-                    options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                    isActive={(v) => (cfg?.scan_expiries_indices ?? cfg?.scan_expiries ?? ['weekly', 'monthly']).includes(v as ScanExpiry)}
-                    onSelect={(v) => toggleExpiryIndices(v as ScanExpiry)}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ fontSize: 9.5, color: k.dim }}>Stocks</span>
-                  <Segmented
-                    options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                    isActive={(v) => (cfg?.scan_expiries_stocks ?? ['monthly']).includes(v as ScanExpiry) ?? false}
-                    onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
-                  />
-                </div>
+        const universeGroup = (
+          <>
+            <SettingRow label="Indices" align="top" full hint="Pick exactly which indices to scan. Applies to both Spot and Derivatives.">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+                {INDEX_OPTS.map((o) => (
+                  <Chip key={o.name} label={o.label} active={cfg.scan_indices.includes(o.name)} onClick={() => toggleIndex(o.name)} />
+                ))}
               </div>
-            </div>
-
-            {cfg && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 7 }}>
-                <span style={{ fontSize: 11, color: k.dim }} title="Pick exactly which indices and stocks to scan. Applies to both Spot and Derivatives.">Universe</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
-                  <span style={{ fontSize: 9.5, color: k.dim, minWidth: 42 }}>Indices</span>
-                  {INDEX_OPTS.map((o) => (
-                    <Chip key={o.name} label={o.label} active={cfg.scan_indices.includes(o.name)} onClick={() => toggleIndex(o.name)} />
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                  <span style={{ fontSize: 9.5, color: k.dim }}>Stocks</span>
-                  {stockReg && stockReg.map((group: LiquidityGroup) => (
-                    <div key={group.liquidity} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>{group.liquidity.toUpperCase()}</span>
-                        <button onClick={() => {
-                          const names = group.stocks.map(s => s.name);
-                          const allIn = names.every(n => cfg.scan_stocks.includes(n));
-                          if (allIn) {
-                            patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`);
-                          } else {
-                            const next = [...new Set([...cfg.scan_stocks, ...names])];
-                            patch({ scan_stocks: next }, `Added ${group.liquidity} stocks`);
-                          }
-                        }}
-                          style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                          {group.stocks.every(s => cfg.scan_stocks.includes(s.name)) ? '− all' : '+ all'}
-                        </button>
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
-                        {group.stocks.map((st: StockEntry) => (
-                          <Chip key={st.name} label={st.label || st.name} active={cfg.scan_stocks.includes(st.name)}
-                            onClick={() => toggleStock(st.name)} />
-                        ))}
-                      </div>
+            </SettingRow>
+            <SettingRow label="Stocks" align="top" full hint="Pick stocks by liquidity tier, or add any symbol below.">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                {stockReg && stockReg.map((group: LiquidityGroup) => (
+                  <div key={group.liquidity} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>{group.liquidity.toUpperCase()}</span>
+                      <button onClick={() => {
+                        const names = group.stocks.map(s => s.name);
+                        const allIn = names.every(n => cfg.scan_stocks.includes(n));
+                        if (allIn) {
+                          patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`);
+                        } else {
+                          const next = [...new Set([...cfg.scan_stocks, ...names])];
+                          patch({ scan_stocks: next }, `Added ${group.liquidity} stocks`);
+                        }
+                      }}
+                        style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                        {group.stocks.every(s => cfg.scan_stocks.includes(s.name)) ? '− all' : '+ all'}
+                      </button>
                     </div>
-                  ))}
-                  {/* Free-form search + add for stocks outside the registry */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>CUSTOM</span>
-                    <input
-                      style={{ width: 90, fontSize: 9.5, padding: '2px 6px', background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
-                      value={customStock} onChange={e => setCustomStock(e.target.value)}
-                      placeholder="Add stock…"
-                      onKeyDown={e => { if (e.key === 'Enter') addCustomStock(customStock); }}
-                    />
-                    <button onClick={() => addCustomStock(customStock)}
-                      style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add</button>
-                  </div>
-                  {/* Show custom-added stocks not in registry */}
-                  {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
-                      {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).map(n => (
-                        <Chip key={n} label={n} active={true} onClick={() => removeCustomStock(n)} />
+                      {group.stocks.map((st: StockEntry) => (
+                        <Chip key={st.name} label={st.label || st.name} active={cfg.scan_stocks.includes(st.name)}
+                          onClick={() => toggleStock(st.name)} />
                       ))}
                     </div>
-                  )}
+                  </div>
+                ))}
+                {/* Free-form search + add for stocks outside the registry */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>CUSTOM</span>
+                  <input
+                    style={{ width: 90, fontSize: 9.5, padding: '2px 6px', background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
+                    value={customStock} onChange={e => setCustomStock(e.target.value)}
+                    placeholder="Add stock…"
+                    onKeyDown={e => { if (e.key === 'Enter') addCustomStock(customStock); }}
+                  />
+                  <button onClick={() => addCustomStock(customStock)}
+                    style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add</button>
                 </div>
-                {(() => {
-                  return (
-                    <span style={{ fontSize: 10, color: k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                      <span style={{ flexShrink: 0 }}>ℹ</span>
-                      <span>{scanCost(cfg)}</span>
-                    </span>
-                  );
-                })()}
+                {/* Show custom-added stocks not in registry */}
+                {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
+                    {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).map(n => (
+                      <Chip key={n} label={n} active={true} onClick={() => removeCustomStock(n)} />
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </SettingRow>
+          </>
+        );
 
-            <div style={{ height: 1, background: k.border, margin: '1px 0' }} />
-
+        const executionGroup = (
+          <>
+            <SettingRow label="Trailing" hint="How tightly the position is trailed before exit.">
+              <Segmented
+                options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
+                isActive={(v) => (cfg.trail_target ?? 'mid') === v}
+                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Exit trailing changed to ${v}`)}
+              />
+            </SettingRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <Switch on={cfg?.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => patch({ early_lock: !(cfg?.early_lock ?? false) }, `Early lock turned ${!(cfg?.early_lock ?? false) ? 'ON' : 'OFF'}`)} />
+              <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock turned ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <span style={{ fontSize: 11.5, color: k.text, fontWeight: 500 }}>Lock profits early</span>
                 <span style={{ fontSize: 10, color: k.dim }}>Exit on a slow-SuperTrend flip once comfortably in profit.</span>
               </div>
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${cfg?.auto_execute ? tint(k.orange, 40) : k.border}`, background: cfg?.auto_execute ? tint(k.orange, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
-              <Switch on={cfg?.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={toggleAuto} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${cfg.auto_execute ? tint(k.orange, 40) : k.border}`, background: cfg.auto_execute ? tint(k.orange, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
+              <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={toggleAuto} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: cfg?.auto_execute ? k.orange : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <ZapIcon /> Auto-execute {cfg?.auto_execute ? 'ON' : 'OFF'}
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: cfg.auto_execute ? k.orange : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <ZapIcon /> Auto-execute {cfg.auto_execute ? 'ON' : 'OFF'}
                 </span>
                 <span style={{ fontSize: 10, color: k.dim }}>Places real option BUY orders on ready signals (live-safety gated).</span>
               </div>
             </div>
-
             {/* Kite-only PAPER ↔ LIVE — independent of the global (crypto/Delta) toggle. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${kiteLive ? tint(k.green, 45) : k.border}`, background: kiteLive ? tint(k.green, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
               <Switch on={kiteLive} color={k.green} label="Kite live trading" onChange={toggleKiteLive} />
@@ -1423,20 +1525,62 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 </span>
               </div>
             </div>
+          </>
+        );
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 10, color: k.dim, lineHeight: 1.55 }}>
-                Scanning <span style={{ color: k.text, fontWeight: 500 }}>Nifty50 · BankNifty · FinNifty · Sensex</span> stocks + index options on the <span style={{ color: k.text, fontWeight: 500 }}>1H</span> timeframe.
+        // Live summary header + reset, shared by both layouts.
+        const summaryHeader = (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 10.5, color: k.dim, fontWeight: 500, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+              {settingsSummary(cfg)}
+            </span>
+            <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
+              <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}>
+                <Icons.Reload />
+              </span>
+            </HeaderIconBtn>
+          </div>
+        );
+
+        return (
+          <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ padding: '13px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${k.border}` }}>
+                {summaryHeader}
+
+                {layout === 'cards' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')}
+                      summary={`${(SCAN_SOURCE_OPTS.find((o) => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{scanGroup}</div>
+                    </Collapsible>
+                    <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={universeSummary(cfg)}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{universeGroup}</div>
+                    </Collapsible>
+                    <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
+                      summary={`${TRAIL_OPTS.find((o) => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''}${kiteLive ? ' · LIVE' : ''}`}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{executionGroup}</div>
+                    </Collapsible>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <SettingsTabs
+                      active={settingsTab}
+                      onSelect={(v) => setSettingsTab(v as 'scan' | 'universe' | 'execution')}
+                      tabs={[{ value: 'scan', label: 'Scan' }, { value: 'universe', label: 'Universe' }, { value: 'execution', label: 'Execution' }]}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                      {settingsTab === 'scan' && scanGroup}
+                      {settingsTab === 'universe' && universeGroup}
+                      {settingsTab === 'execution' && executionGroup}
+                    </div>
+                  </div>
+                )}
               </div>
-              <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
-                <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}>
-                  <Icons.Reload />
-                </span>
-              </HeaderIconBtn>
             </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Signal list */}
       <div style={{ flex: 1, overflow: 'auto' }}>

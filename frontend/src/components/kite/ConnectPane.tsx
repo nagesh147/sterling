@@ -9,6 +9,8 @@ import {
 import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
+import { KiteTelegramPanel } from './KiteTelegramPanel';
+import { useKiteSettings } from '../../store/useKiteSettings';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 16, marginBottom: 14 },
@@ -420,12 +422,59 @@ function TickerControl() {
   );
 }
 
+function KiteSettings() {
+  const layout = useKiteSettings((s) => s.engineSettingsLayout);
+  const setLayout = useKiteSettings((s) => s.setEngineSettingsLayout);
+  const opts: Array<{ value: 'tabs' | 'cards'; label: string }> = [
+    { value: 'tabs', label: 'Tabs' },
+    { value: 'cards', label: 'Expand-collapse' },
+  ];
+  return (
+    <div style={S.card}>
+      <div style={S.title}>KITE SETTINGS</div>
+
+      <div style={{ marginBottom: 18 }}>
+        <label style={{ ...S.label, marginBottom: 6 }}>SUPERTREND SETTINGS LAYOUT</label>
+        <div style={{ display: 'inline-flex', border: `1px solid #e0e0e0`, borderRadius: 4, overflow: 'hidden' }}>
+          {opts.map((o) => {
+            const sel = layout === o.value;
+            return (
+              <button
+                key={o.value}
+                onClick={() => setLayout(o.value)}
+                style={{
+                  background: sel ? '#f06428' : '#fff',
+                  color: sel ? '#fff' : '#444',
+                  border: 'none',
+                  padding: '6px 16px',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 11,
+                  fontWeight: sel ? 700 : 400,
+                }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ ...S.hint, marginTop: 6 }}>Choose how the Triple SuperTrend settings drawer is laid out.</div>
+      </div>
+
+      <div style={{ paddingTop: 16, borderTop: `1px solid #e0e0e0` }}>
+        <KiteTelegramPanel />
+      </div>
+    </div>
+  );
+}
+
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const active = data?.accounts.find((a) => a.is_active);
   return (
     <div style={{ padding: '24px 32px' }}>
       <StatusBanner />
+      <KiteSettings />
       <TradingModeControls />
       {active && <LoginFlow account={active} />}
       {active?.connected && !active.is_paper && <Funds />}
