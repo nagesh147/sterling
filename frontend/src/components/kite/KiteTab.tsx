@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { KiteLayout, NavItem } from './KiteLayout';
+import { KiteLayout, NavItem, MoreTab } from './KiteLayout';
 import { KiteDashboard } from './KiteDashboard';
 import { MarketWatchPane } from './MarketWatchPane';
 import { MarketDataPane } from './MarketDataPane';
@@ -7,7 +7,6 @@ import { ConnectPane } from './ConnectPane';
 import { MutualFundsPane } from './MutualFundsPane';
 import { PortfolioPane } from './PortfolioPane';
 import { OrdersPane } from './OrdersPane';
-import { GttPane } from './GttPane';
 import { FundsPane } from './FundsPane';
 import { BidsPane } from './BidsPane';
 import { AlertsPane } from './AlertsPane';
@@ -23,14 +22,60 @@ import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { MacMotionProvider } from './mac/MacMotionProvider';
 import { MacSectionFade } from './mac/MacSectionFade';
+import { k } from '../../styles/kiteUI';
+
+const MORE_TABS: { id: MoreTab; label: string }[] = [
+  { id: 'bids', label: 'Bids' },
+  { id: 'funds', label: 'Funds' },
+  { id: 'mf', label: 'Mutual Funds' },
+  { id: 'alerts', label: 'Alerts' },
+  { id: 'backtest', label: 'Backtest' },
+  { id: 'data', label: 'Data' },
+];
+
+function MorePane({ activeTab, onTabChange }: { activeTab: MoreTab; onTabChange: (t: MoreTab) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', borderBottom: `1px solid ${k.border}`, background: k.bg, flexShrink: 0 }}>
+        {MORE_TABS.map((t) => {
+          const active = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => onTabChange(t.id)}
+              style={{
+                padding: '10px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
+                fontSize: 13, fontWeight: active ? 600 : 400,
+                color: active ? '#f06428' : '#666',
+                borderBottom: active ? '2px solid #f06428' : '2px solid transparent',
+                marginBottom: -1, transition: 'color 0.15s',
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {activeTab === 'bids' && <BidsPane />}
+        {activeTab === 'funds' && <FundsPane />}
+        {activeTab === 'mf' && <MutualFundsPane />}
+        {activeTab === 'alerts' && <AlertsPane />}
+        {activeTab === 'backtest' && <BacktestPane />}
+        {activeTab === 'data' && <MarketDataPane />}
+      </div>
+    </div>
+  );
+}
 
 export function KiteTab() {
   const [nav, setNav] = useState<NavItem>('dashboard');
+  const [moreTab, setMoreTab] = useState<MoreTab>('bids');
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
   const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
-  useKiteAutoSession();   // silently auto-recover a lapsed session via the stored refresh token
+  useKiteAutoSession();
 
   const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
 
@@ -42,17 +87,13 @@ export function KiteTab() {
   };
 
   const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain') => {
-    // When opening chart/instrument view, minimize the kite terminal.
-    // On close, restore previous if it was not minimized.
     if (!instrumentView) {
-      // Save current assumed state (default to 'normal' if we were showing terminal)
       setSavedTerminalMode('normal');
       window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'minimized' }));
     }
     setInstrumentView({ symbol, tab: defaultTab as InstrumentTab });
   };
-  
-  // Restore terminal when leaving chart view
+
   const closeChartView = () => {
     if (savedTerminalMode) {
       window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: savedTerminalMode }));
@@ -77,10 +118,10 @@ export function KiteTab() {
     );
   } else if (instrumentView) {
     content = (
-      <InstrumentPane 
-        symbol={instrumentView.symbol} 
-        initialTab={instrumentView.tab} 
-        onSymbolChange={(newSymbol) => setInstrumentView({ symbol: newSymbol, tab: 'chart' })} 
+      <InstrumentPane
+        symbol={instrumentView.symbol}
+        initialTab={instrumentView.tab}
+        onSymbolChange={(newSymbol) => setInstrumentView({ symbol: newSymbol, tab: 'chart' })}
       />
     );
   } else {
@@ -88,20 +129,14 @@ export function KiteTab() {
     else if (nav === 'orders') content = <OrdersPane />;
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
     else if (nav === 'positions') content = <PortfolioPane view="positions" />;
-    else if (nav === 'bids') content = <BidsPane />;
-    else if (nav === 'funds') content = <FundsPane />;
-    else if (nav === 'mf') content = <MutualFundsPane />;
-    else if (nav === 'alerts') content = <AlertsPane />;
-    else if (nav === 'backtest') content = <BacktestPane />;
-    else if (nav === 'data') content = <MarketDataPane />;
+    else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
     else if (nav === 'connect') content = <ConnectPane />;
   }
 
-  // Key that identifies the current center view — drives the Mac nav-section
-  // crossfade (no-op when Mac Kite is off).
   const contentKey = setupView ? `setup:${setupView.token}`
     : detailView ? `detail:${detailView.token}`
     : instrumentView ? `inst:${instrumentView.symbol}`
+    : nav === 'more' ? `more:${moreTab}`
     : `nav:${nav}`;
 
   return (

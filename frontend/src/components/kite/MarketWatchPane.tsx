@@ -82,7 +82,6 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
           <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
              <button onClick={onBuy} style={{ flex: 1, background: '#4184f3', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>BUY</button>
              <button onClick={onSell} style={{ flex: 1, background: '#ff5722', color: '#fff', border: 'none', borderRadius: 3, height: 32, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>SELL</button>
-             <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Market Depth"><Icons.Depth /></button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Chart"><Icons.Chart /></button>
              <button style={{ background: 'transparent', color: t.dim, border: `1px solid ${t.border}`, borderRadius: 3, width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="More"><Icons.More /></button>
           </div>
@@ -256,7 +255,7 @@ export function KiteSearchBar({
       <style>{`
         .kite-radio, .kite-checkbox { display: none; }
       `}</style>
-      <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', borderBottom: `1px solid ${t.border}`, height: 50 }}>
+      <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', height: 50 }}>
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
           <span style={{ position: 'absolute', left: 0, color: t.dim }}><Icons.Search /></span>
           <input

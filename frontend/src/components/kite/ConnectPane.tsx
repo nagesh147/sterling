@@ -661,7 +661,7 @@ export function ConnectPane() {
   const select = (t: ConnectTab) => { setTab(t); localStorage.setItem('kite_connect_tab', t); };
 
   return (
-    <div style={{ padding: '20px 32px 40px', maxWidth: 760, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
+    <div style={{ padding: '20px 32px 40px', width: '100%', boxSizing: 'border-box' }}>
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e0e0e0' }}>
         {TAB_DEFS.map((t) => {

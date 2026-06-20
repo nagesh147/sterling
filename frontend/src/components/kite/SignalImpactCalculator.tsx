@@ -128,7 +128,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
               IF {data.underlying} MOVES {dirWord.toUpperCase()}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="number" value={move} min={1} step={5}
+              <input type="number" value={move} step={5}
                 onChange={(e) => setMove(Math.max(1, Number(e.target.value) || stopDist))}
                 style={{ width: 72, fontSize: 12, padding: '4px 8px', border: `1px solid ${k.border}`, borderRadius: 4, textAlign: 'right', background: k.bg, color: k.text }} />
               <span style={{ fontSize: 11, color: k.dim }}>pts</span>
@@ -194,7 +194,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       )}
                     </div>
                     <div style={{ fontSize: 10, color: k.dim, marginTop: 2 }}>
-                      prem {r.premium.toFixed(2)} · {r.lot}/lot · {r.leg.dte}d
+                      LTP {r.premium.toFixed(2)} · {r.lot}/lot · {r.leg.dte}d
                     </div>
                   </td>
                   <td style={td('right')}>

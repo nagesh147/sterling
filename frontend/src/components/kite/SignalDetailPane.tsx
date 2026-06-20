@@ -24,7 +24,11 @@ interface Props {
 
 function ist(ms: number): string {
   const d = new Date(ms);
-  return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()} ${d.toLocaleDateString('en-US', { day: '2-digit' })} ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+  const date = d.toLocaleDateString('en-US', { day: '2-digit' });
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  return `${time} · ${day} ${date} ${month}`;
 }
 
 function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
@@ -116,7 +120,6 @@ function LegCard({ leg, exchange, underlying, spotPx }: {
               variant="long"
               onBuy={(e) => handleAction(e, 'BUY')}
               onSell={(e) => handleAction(e, 'SELL')}
-              onDepth={(e) => { e.stopPropagation(); setShowDepth(!showDepth); }}
               onChart={(e) => { e.stopPropagation(); }}
               onMore={(e) => { e.stopPropagation(); }}
             />
@@ -169,7 +172,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
   const uQ = data ? quotes?.[`${uExch}:${underlying}`] : undefined;
 
   const bull = data?.regime === 'BULL';
-  const move = data ? data.spot_now - data.spot_at_trigger : 0;
+  const move = (data && data.spot_at_trigger > 0 && data.spot_now > 0) ? data.spot_now - data.spot_at_trigger : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily, overflow: 'auto' }}>
@@ -236,9 +239,9 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
           {/* trigger context */}
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', padding: '12px 16px', background: k.surface, borderRadius: 6, marginBottom: 16 }}>
             <Stat label="Triggered at" value={ist(data.triggered_ms)} />
-            <Stat label="Spot @ trigger" value={data.spot_at_trigger.toFixed(2)} />
-            <Stat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={move >= 0 ? k.green : k.red} />
-            <Stat label="Move since" value={`${move >= 0 ? '+' : ''}${move.toFixed(2)}`} color={move >= 0 ? k.green : k.red} />
+            <Stat label="Spot @ trigger" value={data.spot_at_trigger > 0 ? data.spot_at_trigger.toFixed(2) : '—'} />
+            <Stat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={move != null ? (move >= 0 ? k.green : k.red) : undefined} />
+            <Stat label="Move since" value={move != null ? `${move >= 0 ? '+' : ''}${move.toFixed(2)}` : '—'} color={move != null ? (move >= 0 ? k.green : k.red) : undefined} />
             <Stat label="SL" value={data.stop_loss.toFixed(2)} color={k.amber} />
           </div>
 

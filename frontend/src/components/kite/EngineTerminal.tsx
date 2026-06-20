@@ -31,13 +31,30 @@ function fmtCountdown(nextMs: number): string {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
+const KIND_LABEL: Record<string, string> = {
+  scan_start: 'SCAN START',
+  scan_done: 'SCAN DONE',
+  order_placed: 'ORDER PLACED',
+  order_blocked: 'ORDER BLOCKED',
+  order_failed: 'ORDER FAILED',
+  error: 'ERROR',
+  info: 'INFO',
+};
+
 function Line({ ev, t }: { ev: ActivityEvent; t: typeof THEME.dark }) {
   const color = KIND_COLOR[ev.kind] ?? t.text;
+  const label = KIND_LABEL[ev.kind] ?? ev.kind.toUpperCase();
+  const isImportant = ev.kind === 'order_placed' || ev.kind === 'order_failed' || ev.kind === 'error';
   return (
-    <div style={{ display: 'flex', gap: 10, padding: '2px 0', whiteSpace: 'nowrap' }}>
-      <span style={{ color: t.dim }}>{hhmmss(ev.ts_ms)}</span>
-      <span style={{ color, fontWeight: 600, minWidth: 96 }}>{ev.kind}</span>
-      <span style={{ color: t.text, whiteSpace: 'pre-wrap' }}>{ev.message}</span>
+    <div style={{ display: 'flex', gap: 10, padding: '3px 0', borderBottom: `1px solid ${t.border}`, alignItems: 'baseline' }}>
+      <span style={{ color: t.dim, flexShrink: 0, fontSize: 10.5 }}>{hhmmss(ev.ts_ms)}</span>
+      <span style={{
+        color, fontWeight: 700, minWidth: 100, flexShrink: 0, fontSize: 10,
+        letterSpacing: 0.4,
+        background: isImportant ? `${color}18` : undefined,
+        borderRadius: 3, padding: isImportant ? '1px 5px' : undefined,
+      }}>{label}</span>
+      <span style={{ color: t.text, whiteSpace: 'pre-wrap', fontSize: 11 }}>{ev.message}</span>
     </div>
   );
 }
@@ -114,23 +131,24 @@ export function EngineTerminal() {
       )}
 
       {/* FOOTER */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderTop: mode !== 'minimized' ? `1px solid ${t.border}` : 'none', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '5px 14px', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: t.headTxt }}>
-          <span style={{ width: 8, height: 8, borderRadius: 4, background: dot, boxShadow: data?.scanning ? `0 0 6px ${k.green}` : 'none' }} />
-          {mode === 'minimized' ? 'KITE TERMINAL' : 'INFO'}
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, boxShadow: data?.scanning ? `0 0 5px ${k.green}` : 'none', flexShrink: 0 }} />
+          TERMINAL
         </span>
-        <span>{data?.scanning ? data?.scanning_label || 'scanning…' : data?.auto_scan ? 'auto-scan ON' : 'idle'}</span>
-        <span>last: {data?.last_scan_ms ? hhmmss(data.last_scan_ms) : '—'}</span>
-        <span>next: {fmtCountdown(data?.next_scan_ms ?? 0)}</span>
-
-        {mode === 'minimized' && (
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ color: k.orange }}>{data?.signal_count ?? 0} ready</span>
-            <button onClick={() => setMode('normal')} style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '1px 8px', fontSize: 11, cursor: 'pointer' }}>
-              Restore
+        <span style={{ color: data?.scanning ? k.green : data?.auto_scan ? k.orange : t.headDim, fontWeight: data?.scanning ? 600 : 400 }}>
+          {data?.scanning ? data?.scanning_label || 'scanning…' : data?.auto_scan ? 'auto' : 'idle'}
+        </span>
+        {!data?.scanning && <span style={{ color: t.dim }}>last {data?.last_scan_ms ? hhmmss(data.last_scan_ms) : '—'}</span>}
+        {!data?.scanning && data?.auto_scan && <span style={{ color: t.dim }}>next {fmtCountdown(data?.next_scan_ms ?? 0)}</span>}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          {(data?.signal_count ?? 0) > 0 && <span style={{ color: k.orange, fontWeight: 600 }}>{data?.signal_count} ready</span>}
+          {mode === 'minimized' && (
+            <button onClick={() => setMode('normal')} style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
+              Expand ↑
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

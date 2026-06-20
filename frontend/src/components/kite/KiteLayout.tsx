@@ -4,7 +4,8 @@ import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
 
-export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'bids' | 'funds' | 'data' | 'connect' | 'mf' | 'alerts' | 'backtest';
+export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect';
+export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {
   activeNav: NavItem;
@@ -178,7 +179,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  const navItems: NavItem[] = ['dashboard', 'orders', 'holdings', 'positions', 'bids', 'funds', 'mf', 'alerts', 'backtest', 'data', 'connect'];
+  const navItems: NavItem[] = ['dashboard', 'orders', 'holdings', 'positions', 'more', 'connect'];
 
   const footBtn = (active: boolean, disabled = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -237,7 +238,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
                   textDecoration: 'none'
                 }}
               >
-                {item === 'mf' ? 'Mutual Funds' : item}
+                {item === 'more' ? 'More' : item}
               </div>
           ))}
 
@@ -337,15 +338,19 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             {content}
           </div>
 
-          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ──
-               When minimized, omit entirely so the chart/content above uses full available space. */}
-          {bottomBar && isBottomBarOpen && terminalMode !== 'minimized' && (
+          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ── */}
+          {bottomBar && isBottomBarOpen && (
             terminalMode === 'full' ? (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: '#fff', display: 'flex', flexDirection: 'column' }}>
                 {bottomBar}
               </div>
             ) : terminalMode === 'partial' ? (
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50, background: '#fff', display: 'flex', flexDirection: 'column' }}>
+                {bottomBar}
+              </div>
+            ) : terminalMode === 'minimized' ? (
+              // Minimized: show just the terminal's own footer bar (no log area, no header)
+              <div id="kite-bottom-bar-wrapper" style={{ flexShrink: 0, borderTop: '1px solid #e0e0e0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {bottomBar}
               </div>
             ) : (

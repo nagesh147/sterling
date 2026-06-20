@@ -79,17 +79,20 @@ function fmtTime(charts: number): string {
   return secs < 90 ? `~${secs}s` : `~${Math.round(secs / 60)} min`;
 }
 
-// Simple scan-cost readout from the current selection. Spot = one fetch per
-// instrument; derivatives = one per contract (CE+PE per selected strike).
+// Scan-cost readout: shows what the current universe + strikes will scan.
 function scanCost(cfg: EngineConfigModel): string {
   const nStocks = cfg.scan_stocks?.length ?? 0;
   const nIdx = cfg.scan_indices.length;
+  const nStrikes = Math.max(1, cfg.strike_moneyness.length);
   const instruments = nIdx + nStocks;
-  const charts = instruments * Math.max(1, cfg.strike_moneyness.length) * 2;
-  const prefix = `${nIdx} indices + ${nStocks} stocks → `;
-  if (cfg.scan_source === 'spot') return `${prefix}≈ ${instruments} instruments · ${fmtTime(instruments)}/scan`;
-  if (cfg.scan_source === 'derivatives') return `${prefix}≈ ${charts.toLocaleString('en-IN')} option charts · ${fmtTime(charts)}/scan`;
-  return `${prefix}spot ${fmtTime(instruments)} · deriv ${fmtTime(charts)} (${charts.toLocaleString('en-IN')} charts)/scan`;
+  const charts = instruments * nStrikes * 2; // CE + PE per strike per instrument
+  if (cfg.scan_source === 'spot') {
+    return `${nIdx} indices + ${nStocks} stocks = ${instruments} spot charts · ${fmtTime(instruments)}/scan`;
+  }
+  if (cfg.scan_source === 'derivatives') {
+    return `${nIdx} indices + ${nStocks} stocks × ${nStrikes} strikes × 2 (CE+PE) = ${charts} option charts · ${fmtTime(charts)}/scan`;
+  }
+  return `${instruments} instruments · ${charts} option charts · spot ${fmtTime(instruments)} + deriv ${fmtTime(charts)}/scan`;
 }
 
 // Compact one-line summary built from the current selection, for the drawer header
@@ -326,9 +329,19 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             </span>
           )}
           <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
-          <span style={{ fontSize: 10, color: k.text, paddingLeft: 4, opacity: 0.8 }}>
-            {`${new Date(row.timestamp_ms).toLocaleDateString('en-US', { weekday: 'short' })} ${new Date(row.timestamp_ms).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()} ${new Date(row.timestamp_ms).toLocaleDateString('en-US', { day: '2-digit' })} ${new Date(row.timestamp_ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`}
-          </span>
+          {(() => {
+            const d = new Date(row.timestamp_ms);
+            const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const wday = d.toLocaleDateString('en-US', { weekday: 'short' });
+            const date = d.toLocaleDateString('en-US', { day: '2-digit' });
+            const month = d.toLocaleDateString('en-US', { month: 'short' });
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, paddingLeft: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: k.text }}>{time}</span>
+                <span style={{ fontSize: 10, color: k.dim, opacity: 0.85 }}>{wday} {date} {month}</span>
+              </span>
+            );
+          })()}
         </span>
         
       </div>
@@ -792,7 +805,7 @@ function StrikeBuckets({ selected, onToggle }: {
               color: active ? k.orange : k.text, transition: 'all .13s ease',
             }}>
             {b.label}
-            <span style={{ fontSize: 8.5, opacity: 0.75, marginLeft: 4, fontWeight: 400, color: active ? k.orange : k.dim }}>{b.sub}</span>
+            <span style={{ fontSize: 10, marginLeft: 5, fontWeight: 600, color: active ? k.orange : k.dim }}>{b.sub}</span>
           </button>
         );
       })}
@@ -1346,20 +1359,8 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
 
-  // Auto-collapse ended groups on first appearance. User can manually expand.
-  React.useEffect(() => {
-    const endedLabels = groupedRows.filter(g => !g.active).map(g => g.label);
-    if (endedLabels.length === 0) return;
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const l of endedLabels) {
-        if (!next.has(l)) { next.add(l); changed = true; }
-      }
-      return changed ? next : prev;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupedRows]);
+  // Ended groups stay expanded by default so past rows are visible (light amber bg).
+  // The user can collapse them manually.
 
   // ── Engine master gate ──────────────────────────────────────────────────────
   if (cfg && !cfg.engine_enabled) {
@@ -1782,9 +1783,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                   <div style={{ padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.text }}>Engine settings</span>
-                      <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
-                        <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}><Icons.Reload /></span>
-                      </HeaderIconBtn>
                     </div>
                     <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')}
                       summary={`${(SCAN_SOURCE_OPTS.find(o => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`}>
@@ -1807,12 +1805,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                         onSelect={(v) => setSettingsTab(v as 'scan' | 'universe' | 'execution')}
                         tabs={[{ value: 'scan', label: 'Scan' }, { value: 'universe', label: 'Universe' }, { value: 'execution', label: 'Execution' }]}
                       />
-                      <span style={{ flex: 1, fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8 }}>
-                        {settingsSummary(cfg)}
-                      </span>
-                      <HeaderIconBtn title="Reset all to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
-                        <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}><Icons.Reload /></span>
-                      </HeaderIconBtn>
+                      <div style={{ flex: 1 }} />
                     </div>
                     {/* Scrollable content — capped so it never takes >40% of the panel */}
                     <div style={{ maxHeight: 340, overflowY: 'auto' }}>
