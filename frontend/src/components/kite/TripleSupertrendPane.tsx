@@ -1563,7 +1563,9 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           justify-content: space-between;
           align-items: center;
           gap: 32px;
-          padding: 12px 16px;
+          height: 41px;
+          padding: 0 16px;
+          box-sizing: border-box;
           border-bottom: 1px solid ${k.border};
         }
         .st-leg-row:hover { background-color: ${k.surfaceHover} !important; }

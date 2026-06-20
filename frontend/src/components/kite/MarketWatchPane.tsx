@@ -598,7 +598,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                 border-bottom: 1px solid ${t.border};
                 background: ${t.bg};
                 transition: background 0.1s;
-                height: 44px;
+                height: 41px;
                 box-sizing: border-box;
               }
               .mw-item:hover, .mw-item.expanded {
