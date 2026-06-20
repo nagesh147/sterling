@@ -53,6 +53,8 @@ function kiteErrorHelp(msg: string): string | null {
   return null;
 }
 
+// Legacy LoginFlow removed — merged into AccountCard below.
+
 function StatusBanner() {
   const { data: s } = useKiteStatus();
   if (!s) return null;
@@ -211,20 +213,48 @@ function LoginFlow({ account }: { account: KiteAccount }) {
   );
 }
 
-function AccountRow({ acc }: { acc: KiteAccount }) {
+/** Returns two initials from a label/name string. */
+function initials(s: string): string {
+  const parts = s.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return s.slice(0, 2).toUpperCase();
+}
+
+/** Unified account card — compact row by default, full controls on expand. */
+function AccountCard({ acc }: { acc: KiteAccount }) {
+  const { data: status } = useKiteStatus();
+  const { data: lu } = useKiteLoginUrl(acc.has_credentials);
   const activate = useActivateKiteAccount();
   const del = useDeleteKiteAccount();
   const test = useTestKiteAccount();
   const update = useUpdateKiteAccount();
-  const [edit, setEdit] = useState(false);
+  const gen = useGenerateKiteSession();
+  const logout = useKiteLogout();
+  const refresh = useRefreshKiteSession();
+
+  const [expanded, setExpanded] = useState(false);
+  const [showRelogin, setShowRelogin] = useState(false);
+  const [editKeys, setEditKeys] = useState(false);
+  const [reqToken, setReqToken] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
-  const [paper, setPaper] = useState(acc.is_paper);
 
-  // Inline PAPER/LIVE flip for this row. De-arming (→PAPER) is immediate; arming
-  // (→LIVE) confirms, since it routes orders to the real Zerodha account.
-  const flipPaperLive = (side: 'left' | 'right') => {
-    if (side === 'left') { update.mutate({ id: acc.id, is_paper: true }); return; }
+  const connected = acc.connected
+    && !(status?.account_id === acc.id && status?.connected === false);
+  const isLive = !acc.is_paper;
+
+  // Dot colour: green = live+connected, amber = paper+connected, grey = disconnected
+  const dotColor = connected ? (isLive ? '#4caf50' : '#ff9800') : '#bbb';
+  const modeLabel = connected ? (isLive ? 'LIVE' : 'PAPER') : 'offline';
+
+  // Display name: prefer kite_user_id, fall back to label
+  const displayName = acc.label;
+  const subText = acc.kite_user_id ? `ID ${acc.kite_user_id}` : acc.api_key_hint ?? '';
+
+  const avatarColor = isLive && connected ? '#2e7d32' : connected ? '#1565c0' : '#9e9e9e';
+
+  const flipPaperLive = () => {
+    if (isLive) { update.mutate({ id: acc.id, is_paper: true }); return; }
     if (!acc.has_credentials) return;
     if (window.confirm(`Switch "${acc.label}" to LIVE? Orders will execute on your real Zerodha account.`)) {
       update.mutate({ id: acc.id, is_paper: false });
@@ -232,55 +262,148 @@ function AccountRow({ acc }: { acc: KiteAccount }) {
   };
 
   return (
-    <div style={S.row}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={S.name}>{acc.label}</span>
-          {acc.is_active && <span style={badge('#4caf50')}>ACTIVE</span>}
-          {acc.connected && <span style={badge('#387ed1')}>CONNECTED</span>}
-          {acc.has_credentials && <span style={badge('#9c27b0')}>KEYS SET</span>}
+    <div style={{ border: `1px solid ${expanded ? '#d0d0d0' : '#e8e8e8'}`, borderRadius: 8, marginBottom: 10, overflow: 'hidden', background: '#fff', transition: 'box-shadow .15s', boxShadow: expanded ? '0 2px 8px rgba(0,0,0,.06)' : 'none' }}>
+      {/* ── Collapsed row ── */}
+      <div
+        onClick={() => setExpanded((v) => !v)}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}
+      >
+        {/* Avatar */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: '50%', background: avatarColor,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: 0.5,
+          }}>
+            {initials(displayName)}
+          </div>
+          {/* Status LED */}
+          <span style={{
+            position: 'absolute', bottom: 0, right: 0, width: 10, height: 10,
+            borderRadius: '50%', background: dotColor, border: '2px solid #fff',
+            boxShadow: connected ? `0 0 4px ${dotColor}` : undefined,
+          }} />
         </div>
-        <span style={S.hint}>{acc.api_key_hint}</span>
-      </div>
-      {test.data && (
-        <div style={test.data.connected ? S.ok : S.err}>
-          {test.data.connected ? '✓' : '✗'} {test.data.message ?? test.data.error}
+
+        {/* Name + sub-info */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: '#333', fontSize: 14 }}>{displayName}</span>
+            {acc.is_active && <span style={badge('#f06428')}>ACTIVE</span>}
+          </div>
+          {subText && <div style={{ color: '#999', fontSize: 11, marginTop: 1 }}>{subText}</div>}
         </div>
-      )}
-      <div style={S.actions}>
-        <ModeToggle
-          size="sm" left="PAPER" right="LIVE"
-          value={acc.is_paper ? 'left' : 'right'}
-          onSelect={flipPaperLive}
-          leftColor="#387ed1" rightColor="#4caf50"
-          rightDotWhenActive busy={update.isPending}
-          rightDisabled={!acc.has_credentials}
-          rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
-        />
-        {!acc.is_active && <button style={S.btnGreen} onClick={() => activate.mutate(acc.id)}>SET ACTIVE</button>}
-        <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>{test.isPending ? '…' : 'TEST'}</button>
-        <button style={S.btn} onClick={() => setEdit(!edit)}>{edit ? 'CANCEL' : 'EDIT KEYS'}</button>
-        <button style={S.btnRed} onClick={() => del.mutate(acc.id)}>REMOVE</button>
+
+        {/* Mode badge + chevron */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <span style={{ ...badge(dotColor), fontSize: 9 }}>{modeLabel.toUpperCase()}</span>
+          <span style={{ color: '#ccc', fontSize: 12, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .15s', display: 'inline-block' }}>▼</span>
+        </div>
       </div>
-      {edit && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <input style={S.input} placeholder="New API key (blank = keep)" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" />
-          <input style={S.input} type="password" placeholder="New API secret (blank = keep)" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="new-password" />
-          <label style={{ ...S.label, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
-            <input type="checkbox" checked={paper} onChange={(e) => setPaper(e.target.checked)} /> Paper mode
-          </label>
-          <button
-            style={S.btnGreen}
-            disabled={update.isPending}
-            onClick={() => update.mutate({
-              id: acc.id, is_paper: paper,
-              ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
-              ...(apiSecret.trim() ? { api_secret: apiSecret.trim() } : {}),
-            }, { onSuccess: () => { setEdit(false); setApiKey(''); setApiSecret(''); } })}
-          >
-            {update.isPending ? 'SAVING…' : 'SAVE CREDENTIALS'}
-          </button>
-          {update.error && <div style={S.err}>✗ {update.error.message}</div>}
+
+      {/* ── Expanded body ── */}
+      {expanded && (
+        <div style={{ borderTop: '1px solid #f0f0f0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* Session info */}
+          {connected ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: '#444' }}>
+                Session active{acc.has_refresh_token ? ' · auto-renews' : ' · manual re-login required after 6 AM IST'}
+              </span>
+              {acc.has_refresh_token && (
+                <button style={S.btn} onClick={() => refresh.mutate({ account_id: acc.id })} disabled={refresh.isPending}>
+                  {refresh.isPending ? '…' : '↻ Refresh'}
+                </button>
+              )}
+              <button style={S.btn} onClick={() => setShowRelogin((v) => !v)}>
+                {showRelogin ? 'Cancel' : 'Re-login'}
+              </button>
+              <button style={S.btnRed} onClick={() => logout.mutate()}>Log out</button>
+              {refresh.isSuccess && <span style={S.ok}>✓ Renewed</span>}
+              {refresh.error && <span style={S.err}>✗ {refresh.error.message}</span>}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#999' }}>
+              {acc.has_credentials ? 'Not connected — use Kite Login below to get a session.' : 'Add API keys to enable login.'}
+            </div>
+          )}
+
+          {/* Login flow */}
+          {acc.has_credentials && (!connected || showRelogin) && (
+            <div style={{ background: '#fafafa', border: '1px solid #e8e8e8', borderRadius: 6, padding: 12 }}>
+              <div style={{ ...S.label, marginBottom: 8 }}>KITE LOGIN</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+                <button style={S.btnGreen} disabled={!lu?.login_url} onClick={() => lu?.login_url && window.open(lu.login_url, '_blank', 'noopener')}>
+                  1 · Open Kite Login ↗
+                </button>
+                <span style={S.hint}>Log in, then copy the <code>request_token</code> from the redirect URL.</span>
+              </div>
+              <div style={{ ...S.hint, marginBottom: 8 }}>
+                Or set Redirect URL to <code>http://localhost:8000/api/v1/kite/callback</code> for auto-connect.
+              </div>
+              <label style={S.label}>2 · Paste request_token (manual)</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input style={S.input} value={reqToken} onChange={(e) => setReqToken(e.target.value)} placeholder="request_token from redirect URL" />
+                <button
+                  style={S.btnGreen}
+                  disabled={!reqToken.trim() || gen.isPending}
+                  onClick={() => gen.mutate({ request_token: reqToken.trim(), account_id: acc.id }, { onSuccess: () => { setReqToken(''); setShowRelogin(false); } })}
+                >
+                  {gen.isPending ? '…' : 'Connect'}
+                </button>
+              </div>
+              {gen.isSuccess && <div style={S.ok}>✓ Connected{gen.data?.user_name ? ` — ${gen.data.user_name}` : ''}</div>}
+              {gen.error && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={S.err}>✗ {gen.error.message}</div>
+                  {kiteErrorHelp(gen.error.message) && <div style={{ ...S.hint, marginTop: 4, lineHeight: 1.6 }}>💡 {kiteErrorHelp(gen.error.message)}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PAPER / LIVE toggle + key management */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <ModeToggle
+              size="sm" left="PAPER" right="LIVE"
+              value={acc.is_paper ? 'left' : 'right'}
+              onSelect={(side) => { if (side === 'left') update.mutate({ id: acc.id, is_paper: true }); else flipPaperLive(); }}
+              leftColor="#387ed1" rightColor="#4caf50"
+              rightDotWhenActive busy={update.isPending}
+              rightDisabled={!acc.has_credentials}
+              rightTitle={acc.has_credentials ? undefined : 'Add API keys first to trade live.'}
+            />
+            {!acc.is_active && <button style={S.btn} onClick={() => activate.mutate(acc.id)}>Set active</button>}
+            <button style={S.btn} onClick={() => test.mutate(acc.id)} disabled={test.isPending}>{test.isPending ? '…' : 'Test connection'}</button>
+            <button style={S.btn} onClick={() => setEditKeys((v) => !v)}>{editKeys ? 'Cancel' : 'Edit keys'}</button>
+            <button style={{ ...S.btnRed, marginLeft: 'auto' }} onClick={() => { if (window.confirm(`Remove "${acc.label}"?`)) del.mutate(acc.id); }}>Remove</button>
+          </div>
+
+          {test.data && (
+            <div style={test.data.connected ? S.ok : S.err}>
+              {test.data.connected ? '✓' : '✗'} {test.data.message ?? test.data.error}
+            </div>
+          )}
+
+          {editKeys && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <input style={S.input} placeholder="New API key (blank = keep)" value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" />
+              <input style={S.input} type="password" placeholder="New API secret (blank = keep)" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} autoComplete="new-password" />
+              <button
+                style={S.btnGreen}
+                disabled={update.isPending}
+                onClick={() => update.mutate({
+                  id: acc.id,
+                  ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+                  ...(apiSecret.trim() ? { api_secret: apiSecret.trim() } : {}),
+                }, { onSuccess: () => { setEditKeys(false); setApiKey(''); setApiSecret(''); } })}
+              >
+                {update.isPending ? 'Saving…' : 'Save keys'}
+              </button>
+              {update.error && <div style={S.err}>✗ {update.error.message}</div>}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -580,17 +703,13 @@ export function ConnectPane() {
       {/* Tab content */}
       {tab === 'account' && (
         <>
-          <div style={S.card}>
-            <div style={S.title}>KITE ACCOUNTS</div>
-            {isLoading && <div style={S.hint}>Loading…</div>}
-            {data?.accounts.map((a) => <AccountRow key={a.id} acc={a} />)}
-            {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key & secret to begin.</div>}
-            <AddAccount />
-          </div>
-          {active && <LoginFlow account={active} />}
-          <div style={{ ...S.hint, lineHeight: 1.7 }}>
+          {isLoading && <div style={S.hint}>Loading…</div>}
+          {data?.accounts.map((a) => <AccountCard key={a.id} acc={a} />)}
+          {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key & secret to begin.</div>}
+          <AddAccount />
+          <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 16 }}>
             A Kite Connect app (kite.trade) gives you an <strong>API key + secret</strong>. Each session needs a daily login
-            (token expires ~6 AM IST). Historical data is a paid Kite add-on. Credentials are encrypted at rest and scoped to your user.
+            (token expires ~6 AM IST). Credentials are encrypted at rest and scoped to your user.
           </div>
         </>
       )}
@@ -622,10 +741,12 @@ export function ConnectPane() {
         </>
       )}
 
-      {tab === 'settings' && <KiteSettings />}
-
-      {/* Engine master toggle — always at the very bottom of the Connect page. */}
-      <EngineMasterToggle />
+      {tab === 'settings' && (
+        <>
+          <KiteSettings />
+          <EngineMasterToggle />
+        </>
+      )}
     </div>
   );
 }
