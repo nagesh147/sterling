@@ -769,9 +769,9 @@ function Segmented({ options, isActive, onSelect }: {
   );
 }
 
-// Delta-bucket strike tiles (view/scan filter). Mirrors the look of the Strategy
-// tab's profile tiles. A tile is active when any of its moneyness members are
-// selected; partially-selected tiles get a subtle dashed outline.
+// Delta-bucket strike chips (view/scan filter). Compact inline chips that show
+// the label + delta hint in one line. A chip is active when any of its moneyness
+// members are selected; partially-selected chips get a dashed border.
 function StrikeBuckets({ selected, onToggle }: {
   selected: Moneyness[]; onToggle: (members: Moneyness[]) => void;
 }) {
@@ -817,8 +817,8 @@ function Chip({ label, active, onClick, dim }: { label: string; active: boolean;
 }
 
 // ── Settings-drawer layout primitives ──────────────────────────────────────
-// A consistent setting row: fixed-width dim uppercase label on the left, control
-// on the right. `align="top"` keeps the label baseline-aligned with tall controls.
+// A consistent setting row: tiny caps label inline-left, control to the right.
+// Each row carries its own padding + bottom border for a clean list-of-settings look.
 function SettingRow({ label, hint, children, align = 'center', full = false }: {
   label: string; hint?: string; children: React.ReactNode;
   align?: 'center' | 'top'; full?: boolean;
@@ -1613,19 +1613,17 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         // ── Group bodies (same controls, reused across both layouts) ──────────
         const scanGroup = (
           <>
-            <SettingRow label="Source" hint="Where the SuperTrend runs: the underlying's chart (Spot), each contract's own premium chart (Derivatives), or both.">
+            <SettingRow label="Source" hint="Spot: SuperTrend on underlying chart. Derivatives: on each contract's premium chart. Both: run both.">
               <Segmented
                 options={SCAN_SOURCE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => cfg.scan_source === v}
                 onSelect={(v) => changeScanSource(v as ScanSource)}
               />
             </SettingRow>
-            <SettingRow label="Strikes" align="top" full hint="Which strikes to resolve and show per signal, grouped by delta. This is a VIEW filter — it controls the rows you see, not what auto-execute buys.">
+            <SettingRow label="Strikes" align="top" full hint="VIEW filter — which strikes appear as rows in the signal table. Does not affect what auto-execute buys.">
               <StrikeBuckets selected={cfg.strike_moneyness} onToggle={toggleBucket} />
               <details>
-                <summary style={{ fontSize: 9.5, color: k.dim, cursor: 'pointer', marginTop: 2 }}>
-                  Fine-tune individual strikes
-                </summary>
+                <summary style={{ fontSize: 9.5, color: k.dim, cursor: 'pointer', userSelect: 'none', marginTop: 3 }}>Fine-tune individual strikes</summary>
                 <div style={{ marginTop: 6 }}>
                   <Segmented
                     options={MONEY_OPTS.map((o) => ({ value: o.value, label: o.value, hint: o.hint }))}
@@ -1635,79 +1633,69 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 </div>
               </details>
             </SettingRow>
-            <SettingRow label="Idx exp." hint="Index option expiries to scan — weekly (every Thursday) and/or monthly.">
+            <SettingRow label="Idx exp." hint="Index option expiries to scan.">
               <Segmented
                 options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.scan_expiries_indices ?? cfg.scan_expiries ?? ['weekly', 'monthly']).includes(v as ScanExpiry)}
                 onSelect={(v) => toggleExpiryIndices(v as ScanExpiry)}
               />
             </SettingRow>
-            <SettingRow label="Stk exp." hint="Stock option expiries — stocks default to monthly only (fewer weekly contracts).">
+            <SettingRow label="Stk exp." hint="Stock option expiries — stocks default to monthly only.">
               <Segmented
                 options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.scan_expiries_stocks ?? ['monthly']).includes(v as ScanExpiry)}
                 onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
               />
             </SettingRow>
-            <div style={{ padding: '7px 16px', fontSize: 10, color: k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5, background: k.bg, borderTop: `1px solid ${k.border}` }}>
-              <span style={{ flexShrink: 0 }}>ℹ</span>
-              <span>{scanCost(cfg)}</span>
+            <div style={{ padding: '8px 16px', fontSize: 10, color: k.dim, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <span style={{ opacity: 0.6 }}>ℹ</span> {scanCost(cfg)}
             </div>
           </>
         );
 
         const universeGroup = (
           <>
-            <SettingRow label="Indices" align="top" full hint="Pick exactly which indices to scan. Applies to both Spot and Derivatives.">
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+            <SettingRow label="Indices" align="top" full hint="Which indices to scan.">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {INDEX_OPTS.map((o) => (
                   <Chip key={o.name} label={o.label} active={cfg.scan_indices.includes(o.name)} onClick={() => toggleIndex(o.name)} />
                 ))}
               </div>
             </SettingRow>
-            <SettingRow label="Stocks" align="top" full hint="Pick stocks by liquidity tier, or add any symbol below.">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+            <SettingRow label="Stocks" align="top" full hint="Pick stocks by liquidity tier, or add any symbol.">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
                 {stockReg && stockReg.map((group: LiquidityGroup) => (
-                  <div key={group.liquidity} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>{group.liquidity.toUpperCase()}</span>
+                  <div key={group.liquidity}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 52 }}>{group.liquidity.toUpperCase()}</span>
                       <button onClick={() => {
                         const names = group.stocks.map(s => s.name);
                         const allIn = names.every(n => cfg.scan_stocks.includes(n));
-                        if (allIn) {
-                          patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`);
-                        } else {
-                          const next = [...new Set([...cfg.scan_stocks, ...names])];
-                          patch({ scan_stocks: next }, `Added ${group.liquidity} stocks`);
-                        }
-                      }}
-                        style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                        if (allIn) { patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`); }
+                        else { patch({ scan_stocks: [...new Set([...cfg.scan_stocks, ...names])] }, `Added ${group.liquidity} stocks`); }
+                      }} style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         {group.stocks.every(s => cfg.scan_stocks.includes(s.name)) ? '− all' : '+ all'}
                       </button>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                       {group.stocks.map((st: StockEntry) => (
-                        <Chip key={st.name} label={st.label || st.name} active={cfg.scan_stocks.includes(st.name)}
-                          onClick={() => toggleStock(st.name)} />
+                        <Chip key={st.name} label={st.label || st.name} active={cfg.scan_stocks.includes(st.name)} onClick={() => toggleStock(st.name)} />
                       ))}
                     </div>
                   </div>
                 ))}
-                {/* Free-form search + add for stocks outside the registry */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 55 }}>CUSTOM</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 52 }}>CUSTOM</span>
                   <input
-                    style={{ width: 90, fontSize: 9.5, padding: '2px 6px', background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
+                    style={{ width: 88, fontSize: 9.5, padding: '2px 6px', background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
                     value={customStock} onChange={e => setCustomStock(e.target.value)}
-                    placeholder="Add stock…"
+                    placeholder="Symbol…"
                     onKeyDown={e => { if (e.key === 'Enter') addCustomStock(customStock); }}
                   />
-                  <button onClick={() => addCustomStock(customStock)}
-                    style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add</button>
+                  <button onClick={() => addCustomStock(customStock)} style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add</button>
                 </div>
-                {/* Show custom-added stocks not in registry */}
                 {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 0 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).map(n => (
                       <Chip key={n} label={n} active={true} onClick={() => removeCustomStock(n)} />
                     ))}
@@ -1720,18 +1708,18 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
         const executionGroup = (
           <>
-            <SettingRow label="Trailing" hint="How tightly the position is trailed before exit.">
+            <SettingRow label="Trail" hint="How tightly the position is trailed before exit.">
               <Segmented
                 options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.trail_target ?? 'mid') === v}
-                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Exit trailing changed to ${v}`)}
+                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`)}
               />
             </SettingRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
               onClick={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)}>
               <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => {}} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, color: k.text, fontWeight: 600, display: 'block' }}>Lock profits early</span>
+                <span style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Lock profits early</span>
                 <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Exit on slow-ST flip once comfortably in profit.</span>
               </div>
             </div>
@@ -1749,21 +1737,21 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               <Segmented
                 options={STOP_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.stop_mode ?? 'both') === v}
-                onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Stop: ${v}`)}
+                onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Stop mode: ${v}`)}
               />
             </SettingRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
               onClick={() => patch({ risk_sizing: !(cfg.risk_sizing ?? true) }, `Risk sizing ${!(cfg.risk_sizing ?? true) ? 'ON' : 'OFF'}`)}>
               <Switch on={cfg.risk_sizing ?? true} color={k.blue} label="Risk-based sizing" onChange={() => {}} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, color: k.text, fontWeight: 600, display: 'block' }}>Risk-based sizing</span>
+                <span style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Risk-based sizing</span>
                 <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Lots sized so premium risk stays within % of capital.</span>
               </div>
               {(cfg.risk_sizing ?? true) && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: k.dim, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                   Risk %
                   <input type="number" min={0.1} max={25} step={0.5} value={cfg.risk_pct ?? 1}
-                    onChange={(e) => patch({ risk_pct: Number(e.target.value) }, `Risk → ${e.target.value}%`)}
+                    onChange={(e) => patch({ risk_pct: Number(e.target.value) }, `Risk % → ${e.target.value}`)}
                     style={{ width: 48, padding: '3px 5px', fontSize: 11, border: `1px solid ${k.border}`, borderRadius: 4, background: k.surface, color: k.text, textAlign: 'right', outline: 'none' }} />
                 </label>
               )}
@@ -1784,57 +1772,48 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           </>
         );
 
-        // Per-tab one-line summary shown in the toolbar — tells the user what's
-        // configured on the tab they're NOT looking at, without opening it.
-        const tabSummary: Record<'scan' | 'universe' | 'execution', string> = {
-          scan: `${(SCAN_SOURCE_OPTS.find((o) => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`,
-          universe: universeSummary(cfg),
-          execution: `${TRAIL_OPTS.find((o) => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`,
-        };
-
         return (
           <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+              <div style={{ background: k.bg, borderBottom: `1px solid ${k.border}` }}>
                 {layout === 'cards' ? (
-                  <div style={{ padding: '13px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: k.text }}>Engine settings</span>
+                  <div style={{ padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.text }}>Engine settings</span>
                       <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
                         <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}><Icons.Reload /></span>
                       </HeaderIconBtn>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')} summary={tabSummary.scan}>
-                        <div>{scanGroup}</div>
-                      </Collapsible>
-                      <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={tabSummary.universe}>
-                        <div>{universeGroup}</div>
-                      </Collapsible>
-                      <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')} summary={tabSummary.execution}>
-                        <div>{executionGroup}</div>
-                      </Collapsible>
-                    </div>
+                    <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')}
+                      summary={`${(SCAN_SOURCE_OPTS.find(o => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>{scanGroup}</div>
+                    </Collapsible>
+                    <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={universeSummary(cfg)}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>{universeGroup}</div>
+                    </Collapsible>
+                    <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
+                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>{executionGroup}</div>
+                    </Collapsible>
                   </div>
                 ) : (
                   <>
-                    {/* Unified toolbar — pill tabs left, reset right */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 16px 10px' }}>
+                    {/* Unified toolbar: pill tabs left, summary center, reset right */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, background: k.surface }}>
                       <PillTabs
                         active={settingsTab}
                         onSelect={(v) => setSettingsTab(v as 'scan' | 'universe' | 'execution')}
                         tabs={[{ value: 'scan', label: 'Scan' }, { value: 'universe', label: 'Universe' }, { value: 'execution', label: 'Execution' }]}
                       />
-                      <HeaderIconBtn title="Reset all settings to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
+                      <span style={{ flex: 1, fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8 }}>
+                        {settingsSummary(cfg)}
+                      </span>
+                      <HeaderIconBtn title="Reset all to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
                         <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}><Icons.Reload /></span>
                       </HeaderIconBtn>
                     </div>
-                    {/* Quiet summary strip — current scan footprint */}
-                    <div style={{ padding: '7px 16px', fontSize: 10.5, color: k.dim, fontWeight: 500, fontVariantNumeric: 'tabular-nums', background: k.bg, borderTop: `1px solid ${k.border}`, borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
-                      <span style={{ flexShrink: 0, opacity: 0.7 }}>ℹ</span>{settingsSummary(cfg)}
-                    </div>
-                    {/* Content — no outer padding; each SettingRow self-pads */}
-                    <div style={{ maxHeight: 360, overflowY: 'auto', maxWidth: 720 }}>
+                    {/* Scrollable content — capped so it never takes >40% of the panel */}
+                    <div style={{ maxHeight: 340, overflowY: 'auto' }}>
                       {settingsTab === 'scan' && scanGroup}
                       {settingsTab === 'universe' && universeGroup}
                       {settingsTab === 'execution' && executionGroup}
