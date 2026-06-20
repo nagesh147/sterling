@@ -300,6 +300,22 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             : <span title="The entry's SuperTrend has flipped or the live premium has fallen through its stop — shown for history, not a live entry"
                     style={{ fontSize: 10, color: k.dim }}>trend ended</span>}
           {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
+          {row.adx != null && (
+            <span title={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}
+                  style={{ fontSize: 10, color: row.adx >= 25 ? k.green : k.dim,
+                           background: row.adx >= 25 ? '#e8f5e9' : undefined,
+                           borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
+              ADX {row.adx.toFixed(0)}
+            </span>
+          )}
+          {row.atr_pct != null && (
+            <span title={`ATR percentile ${row.atr_pct.toFixed(0)}% — volatility rank vs past 1Y (higher = more volatile)`}
+                  style={{ fontSize: 10, color: row.atr_pct >= 50 ? k.orange : k.dim,
+                           background: row.atr_pct >= 50 ? '#fff3e0' : undefined,
+                           borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
+              ATR {row.atr_pct.toFixed(0)}%
+            </span>
+          )}
           <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
           <span style={{ fontSize: 10, color: k.text, paddingLeft: 4, opacity: 0.8 }}>
             {`${new Date(row.timestamp_ms).toLocaleDateString('en-US', { weekday: 'short' })} ${new Date(row.timestamp_ms).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()} ${new Date(row.timestamp_ms).toLocaleDateString('en-US', { day: '2-digit' })} ${new Date(row.timestamp_ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`}

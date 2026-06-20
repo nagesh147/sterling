@@ -43,6 +43,8 @@ export interface EngineSignalRow {
   source?: 'spot' | 'derivatives';
   is_active?: boolean; // SuperTrend still aligned on the latest bar (trade running)
   is_fresh?: boolean;  // entered on the latest closed bar (the live "ready now" trigger)
+  adx?: number | null;      // ADX at signal time (trend strength, 0–100)
+  atr_pct?: number | null;  // ATR percentile at signal time (volatility rank)
 }
 
 export interface SignalsResponse {
