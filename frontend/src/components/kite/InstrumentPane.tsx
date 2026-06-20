@@ -1,15 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { k, Icons } from '../../styles/kiteUI';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { k, Icons, tint } from '../../styles/kiteUI';
 import { useCandles } from '../../hooks/useCandles';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { useKitePositions } from '../../hooks/useKite';
 import { useKiteOptionChain } from '../../hooks/useKiteOptionChain';
+import { api } from '../../utils/api';
+import { heikinAshi, type Candle } from '../../utils/indicators';
+import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
+import { TradingViewKiteChart } from '../charts/TradingViewKiteChart';
 
 export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals';
 
 interface InstrumentPaneProps {
   symbol: string;
   initialTab?: InstrumentTab;
+  onSymbolChange?: (symbol: string) => void;
 }
 
 const TABS: { id: InstrumentTab; label: string }[] = [
@@ -18,7 +23,7 @@ const TABS: { id: InstrumentTab; label: string }[] = [
   { id: 'fundamentals', label: 'Fundamentals' },
 ];
 
-export function InstrumentPane({ symbol, initialTab = 'chart' }: InstrumentPaneProps) {
+export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange }: InstrumentPaneProps) {
   const [tab, setTab] = useState<InstrumentTab>(initialTab);
 
   useEffect(() => {
@@ -50,7 +55,7 @@ export function InstrumentPane({ symbol, initialTab = 'chart' }: InstrumentPaneP
 
       {/* ── Content ── */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {tab === 'chart' && <ChartView symbol={symbol} />}
+        {tab === 'chart' && <ChartView symbol={symbol} onSymbolChange={onSymbolChange} />}
         {tab === 'option-chain' && <OptionChainView symbol={symbol} />}
         {tab === 'fundamentals' && (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim }}>Fundamentals data not available.</div>
@@ -62,102 +67,238 @@ export function InstrumentPane({ symbol, initialTab = 'chart' }: InstrumentPaneP
 
 // ─── Chart View ─────────────────────────────────────────────────────────────
 
-function ChartView({ symbol }: { symbol: string }) {
-  const [tf, setTf] = useState('5m');
-  const { data: candles } = useCandles(symbol, tf, 500);
-  const containerRef = useRef<HTMLDivElement>(null);
+type IndicatorKey = 'ema' | 'bb' | 'st' | 'vwap' | 'vol' | 'rsi' | 'macd';
+
+const ALL_TFS = ['1m', '5m', '15m', '30m', '1H', '4H', 'D'];
+const INDICATOR_LABELS: Record<IndicatorKey, string> = {
+  ema: 'EMA',
+  bb: 'BB',
+  st: 'SuperTrend',
+  vwap: 'VWAP',
+  vol: 'Volume',
+  rsi: 'RSI',
+  macd: 'MACD',
+};
+
+function ChartView({ symbol, onSymbolChange }: { symbol: string; onSymbolChange?: (symbol: string) => void }) {
+  const [tf, setTf] = useState('15m');
+  const [active, setActive] = useState<Set<IndicatorKey>>(
+    () => new Set<IndicatorKey>(['ema', 'vol', 'st'])
+  );
+  const [isHA, setIsHA] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+  const [params, setParams] = useState({
+    ema1: 9, ema2: 21,
+    bbPeriod: 20, bbStd: 2,
+    stPeriod: 10, stMult: 3,
+    rsiPeriod: 14,
+    macdFast: 12, macdSlow: 26, macdSig: 9,
+  });
+  const [showVP, setShowVP] = useState(false);
+  const [isLogScale, setIsLogScale] = useState(false);
+
+  const { data: rawCandles = [] } = useCandles(symbol, tf, 800);
+  const { data: kitePosData } = useKitePositions();
+
+  // Refs and low-level chart instances now inside <TradingViewKiteChart> shared component
+  // (no direct access needed at this level)
+
+  const candles = React.useMemo(() => {
+    const valid = rawCandles.filter((c: any) => c.time != null && !isNaN(c.time));
+    return [...valid].sort((a: any, b: any) => a.time - b.time)
+      .filter((v: any, i: number, a: any[]) => i === 0 || v.time !== a[i - 1].time);
+  }, [rawCandles]);
+
+  const baseCandles = React.useMemo(() => {
+    return isHA ? heikinAshi(candles as Candle[]) : (candles as Candle[]);
+  }, [candles, isHA]);
+
+  const theme = React.useMemo(() => {
+    if (!isDark) return k;
+    return {
+      ...k,
+      bg: '#0d1117',
+      surface: '#161b22',
+      surfaceHover: '#21262d',
+      border: '#30363d',
+      text: '#c9d1d9',
+      dim: '#8b949e',
+      blue: '#58a6ff',
+      red: '#f85149',
+      green: '#3fb950',
+      amber: '#d29922',
+      orange: '#f0883e',
+      cyan: '#39c5cf',
+      purple: '#a371f7',
+    };
+  }, [isDark]);
+
+  // Simple position for current symbol (approx match)
+  const symbolPos = React.useMemo(() => {
+    const nets = (kitePosData as any)?.net || [];
+    if (!nets.length) return null;
+    const shortSym = (symbol.split(':').pop() || symbol).toUpperCase();
+    return nets.find((p: any) => 
+      (p.tradingsymbol || '').toUpperCase().includes(shortSym) ||
+      (p.symbol || '').toUpperCase().includes(shortSym)
+    ) || null;
+  }, [kitePosData, symbol]);
+
+  // Drawings via shared hook (for persist integration)
+  const {
+    drawings,
+    setDrawings,
+    drawMode,
+    setDrawMode,
+    drawingPoints,
+    setDrawingPoints,
+    selectedDrawingId,
+    setSelectedDrawingId,
+    isDragging,
+    clearDrawings: hookClear,
+  } = useKiteDrawings({ initialDrawings: [], onChange: (d) => { /* parent sees via prop */ } });
+
+  // Proper debounced save for backend (always a function)
+  const saveTimeoutRef = useRef<any>(null);
+  const saveChartStateRef = useRef<any>(null);
+  const saveChartState = useCallback((zoomArg?: any, drawingsArg?: any) => {
+    const payload = {
+      zoom: zoomArg ?? null,
+      drawings: drawingsArg ?? drawings,
+      tf,
+      active: Array.from(active),
+      isHA,
+      isLogScale,
+      showVP,
+      params,
+    };
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      api.post(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`, payload).catch(() => {});
+    }, 700);
+  }, [drawings, symbol, tf, active, isHA, isLogScale, showVP, params]);
 
   useEffect(() => {
-    if (!containerRef.current || !candles?.length) return;
+    saveChartStateRef.current = saveChartState;
+  }, [saveChartState]);
 
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: k.bg },
-        textColor: k.dim,
-        fontFamily: k.fontFamily,
-      },
-      grid: {
-        vertLines: { color: k.border },
-        horzLines: { color: k.border },
-      },
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true },
-      width: containerRef.current.clientWidth,
-      height: containerRef.current.clientHeight,
-    });
-
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#fff',
-      downColor: k.red,
-      borderUpColor: k.green,
-      borderDownColor: k.red,
-      wickUpColor: k.green,
-      wickDownColor: k.red,
-    });
-
-    const validCandles = candles.filter(c => c.time != null && !isNaN(c.time));
-    const sorted = [...validCandles].sort((a, b) => a.time - b.time);
-    const unique = sorted.filter((v, i, a) => i === 0 || v.time !== a[i - 1].time);
-
-    const data = unique.map((b) => ({
-      time: b.time as any,
-      open: b.open,
-      high: b.high,
-      low: b.low,
-      close: b.close,
-    }));
-    series.setData(data);
-    chart.timeScale().fitContent();
-
-    const ro = new ResizeObserver(() => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight });
-      }
-    });
-    ro.observe(containerRef.current);
-
+  useEffect(() => {
     return () => {
-      ro.disconnect();
-      chart.remove();
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [candles]);
+  }, []);
+
+  // Persisted state from backend (zoom + drawings per symbol)
+  const [persistedZoom, setPersistedZoom] = useState<any>(null);
+  const [chartStateLoaded, setChartStateLoaded] = useState(false);
+
+  // TradingView-style current bar info (OHLC + indicators)
+  const [currentBarInfo, setCurrentBarInfo] = useState<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Reset to sensible defaults for the new symbol
+      setTf('15m');
+      setActive(new Set<IndicatorKey>(['ema', 'vol', 'st']));
+      setIsHA(false);
+      setIsLogScale(false);
+      setShowVP(false);
+      setPersistedZoom(null);
+      setDrawings([]);
+
+      try {
+        const res: any = await api.get(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`);
+        if (!cancelled && res) {
+          if (res.tf) setTf(res.tf);
+          if (Array.isArray(res.active)) setActive(new Set(res.active));
+          if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
+          if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
+          if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
+          if (res.zoom) setPersistedZoom(res.zoom);
+          if (Array.isArray(res.drawings)) setDrawings(res.drawings);
+        }
+      } catch {}
+      if (!cancelled) setChartStateLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  // Save drawings when they change (outside of click path) - use ref to get latest fn
+  useEffect(() => {
+    if (chartStateLoaded && saveChartStateRef.current) {
+      saveChartStateRef.current(undefined, drawings);
+    }
+  }, [drawings, chartStateLoaded]);
+
+  // Save other config when they change (tf, indicators, toggles, params)
+  useEffect(() => {
+    if (chartStateLoaded && saveChartStateRef.current) {
+      saveChartStateRef.current();
+    }
+  }, [tf, active, isHA, isLogScale, showVP, params, chartStateLoaded]);
+
+  const toggleIndicator = (key: IndicatorKey) => {
+    setActive((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Chart rendering fully delegated to shared <TradingViewKiteChart>
+  // (includes candles, all indicators, drawings, VP full histo, drag handles, subpanes, precise crosshair, snap)
+  // We keep only persistence + control state here.
+
+  // Sub-panes + sync logic now inside TradingViewKiteChart (delegated)
+
+  // Drawing state (drag helpers) kept minimal - delegated to shared TradingViewKiteChart + useKiteDrawings
+  // (old snap/find/mouse fns removed; logic lives in shared component + hook)
+
+  // Simple param quick adjust (for demo; full popover could be added)
+  const updateParam = (key: keyof typeof params, delta: number) => {
+    setParams(p => ({ ...p, [key]: Math.max(1, Math.round((p[key] as number) + delta)) }));
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: k.fontFamily }}>
-      {/* Chart toolbar */}
-      <div style={{ padding: '8px 16px', borderBottom: `1px solid ${k.border}`, display: 'flex', gap: 16, alignItems: 'center', background: k.bg }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: k.text }}>{symbol.split(':')[1] || symbol}</span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {['1m', '5m', '15m'].map((t) => (
-            <button
-              key={t}
-              onClick={() => setTf(t)}
-              style={{
-                background: tf === t ? k.surfaceHover : k.bg,
-                border: `1px solid ${k.border}`,
-                color: tf === t ? k.orange : k.text,
-                borderRadius: 4,
-                padding: '4px 8px',
-                fontSize: 12,
-                cursor: 'pointer',
-                fontWeight: tf === t ? 500 : 400
-              }}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <span style={{ color: k.blue, fontSize: 12, cursor: 'pointer' }}>Indicators ⊞</span>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: theme.fontFamily, overflow: 'hidden' }}>
+      {/* Parent control toolbar (tf, indicators, HA, dark, log, vp, param tweaks) - drawing tools live inside shared chart */}
+      {/* Minimal header - full TV UX is inside the shared TradingViewKiteChart component */}
+      <div style={{ padding: '2px 8px', borderBottom: `1px solid ${theme.border}`, display: 'flex', gap: 6, alignItems: 'center', background: theme.bg, fontSize: 10, color: theme.dim }}>
+        <span style={{ fontWeight: 500 }}>{symbol.split(':')[1] || symbol}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 9 }}>{baseCandles.length} bars {isHA ? 'HA' : ''}</span>
       </div>
-      {/* Chart Body */}
-      <div style={{ flex: 1, position: 'relative', background: k.bg, overflow: 'hidden' }}>
-        {!candles?.length && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: k.dim }}>
-            Loading chart data...
-          </div>
-        )}
-        <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+
+      {/* The true shared advanced chart */}
+      <div style={{ flex: 1, minHeight: 220 }}>
+        <TradingViewKiteChart
+          symbol={symbol}
+          rawCandles={rawCandles}
+          tf={tf}
+          isHA={isHA}
+          isLogScale={isLogScale}
+          isDark={isDark}
+          theme={theme}
+          activeIndicators={active}
+          params={params}
+          drawings={drawings}
+          onDrawingsChange={(d: Drawing[]) => {
+            setDrawings(d);
+            if (chartStateLoaded) saveChartState(undefined, d);
+          }}
+          onZoomChange={(range: any) => { if (chartStateLoaded) saveChartState(range); }}
+          showVP={showVP}
+          symbolPos={symbolPos}
+          persistedZoom={persistedZoom}
+          onTfChange={setTf}
+          onIsHAChange={setIsHA}
+          onIsLogScaleChange={setIsLogScale}
+          onSymbolChange={onSymbolChange}
+          onToggleIndicator={toggleIndicator as any}
+        />
       </div>
     </div>
   );

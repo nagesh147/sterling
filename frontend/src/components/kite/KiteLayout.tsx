@@ -151,7 +151,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     
     // Using exact pixel values requested to prevent layout breakage
     setSidebarWidth(425);
-    setRightSidebarWidth(900);
+    setRightSidebarWidth(1050);
     setBottomBarHeight(425);
   }, [isLocked]);
 
@@ -347,12 +347,13 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           position: 'relative',
           borderLeft: (sidebar && isSidebarOpen) ? '1px solid #e0e0e0' : 'none'
         }}>
-          <div style={{ flex: 1, background: '#fff', overflow: 'auto' }}>
+          <div style={{ flex: 1, background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {content}
           </div>
 
-          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ── */}
-          {bottomBar && isBottomBarOpen && (
+          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ──
+               When minimized, omit entirely so the chart/content above uses full available space. */}
+          {bottomBar && isBottomBarOpen && terminalMode !== 'minimized' && (
             terminalMode === 'full' ? (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: '#fff', display: 'flex', flexDirection: 'column' }}>
                 {bottomBar}
@@ -369,7 +370,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
                   onMouseEnter={(e) => { if (!isLocked) e.currentTarget.style.background = 'rgba(240, 100, 40, 0.2)'; }}
                   onMouseLeave={(e) => { if (!isDraggingBottom.current) e.currentTarget.style.background = 'transparent'; }}
                 />
-                <div id="kite-bottom-bar-wrapper" style={{ height: terminalMode === 'minimized' ? 33 : bottomBarHeight, flexShrink: 0, borderTop: '1px solid #e0e0e0', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'height 0.2s ease-out' }}>
+                <div id="kite-bottom-bar-wrapper" style={{ height: bottomBarHeight, flexShrink: 0, borderTop: '1px solid #e0e0e0', overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'height 0.2s ease-out' }}>
                   {bottomBar}
                 </div>
               </>
@@ -418,14 +419,14 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           <MacKiteToggle />
           <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
           {sidebar && (
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} title="Show / hide left sidebar" style={footBtn(isSidebarOpen)}>
+            <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); window.dispatchEvent(new CustomEvent('kite-pane-toggle')); }} title="Show / hide left sidebar" style={footBtn(isSidebarOpen)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="9" y1="3" x2="9" y2="21" />
               </svg>
             </button>
           )}
           {rightSidebar && (
-            <button onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)} title="Show / hide right sidebar" style={footBtn(isRightSidebarOpen)}>
+            <button onClick={() => { setIsRightSidebarOpen(!isRightSidebarOpen); window.dispatchEvent(new CustomEvent('kite-pane-toggle')); }} title="Show / hide right sidebar" style={footBtn(isRightSidebarOpen)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="15" y1="3" x2="15" y2="21" />
               </svg>
@@ -433,7 +434,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           )}
           {rightSidebar && (
             <button
-              onClick={toggleRightCompact}
+              onClick={() => { toggleRightCompact(); window.dispatchEvent(new CustomEvent('kite-pane-toggle')); }}
               title={isLocked ? 'Unlock to resize panes' : isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT ? 'Right pane: back to default width' : 'Right pane: compact (450px)'}
               style={footBtn(isRightSidebarOpen && rightSidebarWidth === RIGHT_COMPACT, isLocked)}
             >
@@ -445,7 +446,19 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             </button>
           )}
           {bottomBar && (
-            <button onClick={() => setIsBottomBarOpen(!isBottomBarOpen)} title="Show / hide Kite terminal" style={footBtn(isBottomBarOpen)}>
+            <button 
+              onClick={() => {
+                if (terminalMode === 'minimized') {
+                  window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'normal' }));
+                  setIsBottomBarOpen(true);
+                } else {
+                  setIsBottomBarOpen(!isBottomBarOpen);
+                }
+                window.dispatchEvent(new CustomEvent('kite-pane-toggle'));
+              }} 
+              title={terminalMode === 'minimized' ? 'Restore Kite terminal' : 'Show / hide Kite terminal'} 
+              style={footBtn(isBottomBarOpen || terminalMode === 'minimized')}
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="15" x2="21" y2="15" />
               </svg>

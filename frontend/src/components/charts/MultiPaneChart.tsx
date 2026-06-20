@@ -39,6 +39,8 @@ interface MultiPaneChartProps {
 
 export function MultiPaneChart({ underlying, tf: defaultTf = '15m', position, reason }: MultiPaneChartProps) {
   const [activeTf, setActiveTf] = useState(defaultTf);
+  const [isLog, setIsLog] = useState(false);
+  const [showDrawings, setShowDrawings] = useState(false);
   const { data: candles = [], isLoading } = useCandles(underlying, activeTf, 1825);
 
   const last = candles[candles.length - 1];
@@ -55,6 +57,8 @@ export function MultiPaneChart({ underlying, tf: defaultTf = '15m', position, re
             {tf}
           </button>
         ))}
+        <button onClick={() => setIsLog(!isLog)} style={{...tfBtnStyle(false), marginLeft: 8}}>{isLog ? 'Linear' : 'Log'}</button>
+        <button onClick={() => setShowDrawings(!showDrawings)} style={{...tfBtnStyle(false), marginLeft: 4}}>{showDrawings ? 'NoDraw' : 'Draw'}</button>
       </div>
 
       <div style={styles.statRow}>
@@ -89,6 +93,13 @@ export function MultiPaneChart({ underlying, tf: defaultTf = '15m', position, re
           candles={candles}
           height={380}
           position={position}
+          showEma
+          showSupertrend
+          showVwap
+          isLogScale={isLog}
+          showDrawToolbar={showDrawings}
+          drawings={undefined}
+          onDrawingsChange={undefined}
         />
       )}
     </div>

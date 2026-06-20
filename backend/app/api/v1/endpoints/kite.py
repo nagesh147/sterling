@@ -853,3 +853,45 @@ async def ticker_unsubscribe(body: TickerSubscribeRequest, user: UserContext = D
 @router.get("/ticker/status")
 async def ticker_status(user: UserContext = Depends(get_current_user)):
     return ticker_manager.status(user.user_id)
+
+
+# ─── Chart state persistence (zoom + drawings per symbol, user-scoped) ────────
+import json
+
+@router.get("/chart-state/{symbol}")
+async def get_chart_state(
+    symbol: str, user: UserContext = Depends(get_current_user)
+) -> dict:
+    """Load persisted chart view state for a symbol (zoom range + drawings).
+
+    Used by InstrumentPane to restore zoom and user drawings across sessions.
+    """
+    from app.services import db as app_db
+    key = f"kite_chart_state_{user.user_id}_{symbol}"
+    raw = app_db.get_config(key, "{}")
+    try:
+        state = json.loads(raw) if raw else {}
+    except Exception:
+        state = {}
+    state.setdefault("symbol", symbol)
+    state.setdefault("zoom", None)
+    state.setdefault("drawings", [])
+    return state
+
+
+@router.post("/chart-state/{symbol}")
+async def save_chart_state(
+    symbol: str,
+    body: dict = Body(...),
+    user: UserContext = Depends(get_current_user),
+) -> dict:
+    """Save chart view state (zoom + drawings). Debounce on frontend recommended."""
+    from app.services import db as app_db
+    key = f"kite_chart_state_{user.user_id}_{symbol}"
+    data = {
+        "symbol": symbol,
+        "zoom": body.get("zoom"),
+        "drawings": body.get("drawings", []),
+    }
+    app_db.set_config(key, json.dumps(data))
+    return {"ok": True}

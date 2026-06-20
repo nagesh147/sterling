@@ -216,6 +216,18 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
   // Bump once useDragControls resolves so panels re-render with handle-only drag.
   const [controlsReady, setControlsReady] = useState(() => !!useDragControlsRef);
 
+  // Listen to terminal minimize so we can collapse the bottom slot height and give space to chart/content.
+  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+  useEffect(() => {
+    const cb = (e: any) => {
+      setTerminalMode(e.detail);
+      // Deeper sync: notify charts to resize when terminal min/max affects space
+      window.dispatchEvent(new CustomEvent('kite-pane-toggle'));
+    };
+    window.addEventListener('kite-terminal-mode', cb);
+    return () => window.removeEventListener('kite-terminal-mode', cb);
+  }, []);
+
   // Resolve useDragControls from the (already cached) framer-motion module.
   useEffect(() => {
     if (useDragControlsRef) {
@@ -363,6 +375,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     const panels = panelsInSlot(slot);
     const isBottom = slot === 'bottom';
     const isTarget = hoverSlot === slot && dragging !== null;
+    const bottomHeight = isBottom && terminalMode === 'minimized' ? 33 : 220;
     return (
       <MotionDiv
         layout
@@ -377,7 +390,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
           minWidth: 0,
           minHeight: 0,
           ...(isBottom
-            ? { height: 220, flexShrink: 0 }
+            ? { height: bottomHeight, flexShrink: 0 }
             : { flex: panels.length === 0 ? '0 0 0px' : flexBasis }),
         }}
       >

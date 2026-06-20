@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  createChart, createSeriesMarkers, CandlestickSeries, LineSeries, ColorType,
+  createChart, createSeriesMarkers, CandlestickSeries, LineSeries, ColorType, PriceScaleMode,
 } from 'lightweight-charts';
 import { k } from '../../styles/kiteUI';
 import { MacChartSwitch } from './mac/MacChartSwitch';
@@ -64,11 +64,52 @@ function draw(container: HTMLDivElement, data: SetupChartData) {
 export function SetupChart({ token, underlying, onClose }: Props) {
   const { data, isLoading, isError } = useEngineSetup(token, underlying, true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isLog, setIsLog] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || !data?.candles?.length) return;
-    return draw(containerRef.current, data);
-  }, [data]);
+    const chart = createChart(containerRef.current, {
+      layout: { background: { type: ColorType.Solid, color: k.bg }, textColor: k.dim, fontFamily: k.fontFamily },
+      grid: { vertLines: { color: k.border }, horzLines: { color: k.border } },
+      crosshair: { mode: 1 },
+      rightPriceScale: { borderVisible: false, mode: isLog ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
+      timeScale: { borderVisible: false, timeVisible: true },
+      width: containerRef.current.clientWidth,
+      height: containerRef.current.clientHeight,
+    });
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: k.green, downColor: k.red, borderUpColor: k.green,
+      borderDownColor: k.red, wickUpColor: k.green, wickDownColor: k.red,
+    });
+    candleSeries.setData(dedupeSorted(data.candles).map((b) => ({
+      time: b.time as any, open: b.open, high: b.high, low: b.low, close: b.close,
+    })));
+
+    const addLine = (rows: { time: number; value: number }[], color: string, title: string) => {
+      const s = chart.addSeries(LineSeries, { color, lineWidth: 2, title, priceLineVisible: false, lastValueVisible: false });
+      s.setData(dedupeSorted(rows).map((p) => ({ time: p.time as any, value: p.value })));
+    };
+    addLine(data.st_fast, k.blue, 'ST fast (21,1)');
+    addLine(data.st_mid, k.orange, 'ST mid (14,2)');
+    addLine(data.st_slow, k.dim, 'ST slow (7,3)');
+
+    if (data.entry_index != null && data.candles[data.entry_index]) {
+      createSeriesMarkers(candleSeries, [{
+        time: data.candles[data.entry_index].time as any,
+        position: 'belowBar', color: k.orange, shape: 'arrowUp', text: 'Entry',
+      }]);
+    }
+
+    chart.timeScale().fitContent();
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight });
+      }
+    });
+    ro.observe(containerRef.current!);
+    return () => { ro.disconnect(); chart.remove(); };
+  }, [data, isLog]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily }}>
@@ -80,6 +121,7 @@ export function SetupChart({ token, underlying, onClose }: Props) {
           <span style={{ color: k.blue }}>— fast</span>
           <span style={{ color: k.orange }}>— mid</span>
           <span style={{ color: k.dim }}>— slow</span>
+          <button onClick={() => setIsLog(!isLog)} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${k.border}`, background: isLog ? '#e0e0e0' : 'transparent' }}>Log</button>
         </span>
       </div>
       <div style={{ flex: 1, position: 'relative' }}>

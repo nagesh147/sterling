@@ -29,37 +29,60 @@ export function KiteTab() {
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
   const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
+  const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
   useKiteAutoSession();   // silently auto-recover a lapsed session via the stored refresh token
 
   const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
 
   const handleNavClick = (n: NavItem) => {
+    closeChartView();
     setNav(n);
-    setInstrumentView(null);
     setSetupView(null);
     setDetailView(null);
   };
 
   const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain') => {
+    // When opening chart/instrument view, minimize the kite terminal.
+    // On close, restore previous if it was not minimized.
+    if (!instrumentView) {
+      // Save current assumed state (default to 'normal' if we were showing terminal)
+      setSavedTerminalMode('normal');
+      window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'minimized' }));
+    }
     setInstrumentView({ symbol, tab: defaultTab as InstrumentTab });
   };
   
+  // Restore terminal when leaving chart view
+  const closeChartView = () => {
+    if (savedTerminalMode) {
+      window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: savedTerminalMode }));
+      setSavedTerminalMode(null);
+    }
+    setInstrumentView(null);
+  };
+
   let content = null;
   if (setupView) {
-    content = <SetupChart token={setupView.token} underlying={setupView.underlying} onClose={() => setSetupView(null)} />;
+    content = <SetupChart token={setupView.token} underlying={setupView.underlying} onClose={() => { closeChartView(); setSetupView(null); }} />;
   } else if (detailView) {
     content = (
       <SignalDetailPane
         token={detailView.token}
         underlying={detailView.underlying}
         timestamp_ms={detailView.timestamp_ms}
-        onClose={() => setDetailView(null)}
+        onClose={() => { closeChartView(); setDetailView(null); }}
         onShowSetup={() => setSetupView(detailView)}
-        onShowOptionChain={(u) => { setDetailView(null); setInstrumentView({ symbol: u, tab: 'option-chain' }); }}
+        onShowOptionChain={(u) => { closeChartView(); setInstrumentView({ symbol: u, tab: 'option-chain' }); }}
       />
     );
   } else if (instrumentView) {
-    content = <InstrumentPane symbol={instrumentView.symbol} initialTab={instrumentView.tab} />;
+    content = (
+      <InstrumentPane 
+        symbol={instrumentView.symbol} 
+        initialTab={instrumentView.tab} 
+        onSymbolChange={(newSymbol) => setInstrumentView({ symbol: newSymbol, tab: 'chart' })} 
+      />
+    );
   } else {
     if (nav === 'dashboard') content = <KiteDashboard />;
     else if (nav === 'orders') content = <OrdersPane />;
