@@ -14,12 +14,13 @@ from app.engines.triple_supertrend.config import TripleSupertrendConfig
 from app.engines.triple_supertrend.schemas import (
     ActivityResponse, BacktestRequest, BacktestResponse, ContractScanEntry,
     EngineConfigModel, EngineDetailResponse, EngineOrderRequest, EngineOrderResponse,
+    OpenPositionRecord, OpenPositionsResponse,
     ScanReportResponse, ScanReportSummary, SetupChart, SignalsResponse,
 )
 from app.services import live_safety
 from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite.errors import KiteError
-from app.services.kite_engine import service, state
+from app.services.kite_engine import positions as kite_positions, service, state
 from app.services.kite_engine.detail import build_detail
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import build_setup_chart, scanner
@@ -194,6 +195,44 @@ async def scan_report(user: UserContext = Depends(get_current_user)) -> ScanRepo
         fired_pe=fired_pe,
     )
     return ScanReportResponse(summary=summary, entries=entries)
+
+
+@router.get("/open-positions", response_model=OpenPositionsResponse)
+async def open_positions(user: UserContext = Depends(get_current_user)) -> OpenPositionsResponse:
+    """Return the engine's currently tracked open positions including vehicle/direction labels."""
+    uid = user.user_id
+    records = [
+        OpenPositionRecord(
+            symbol=p.symbol, exchange=p.exchange, token=p.token,
+            qty=p.qty, lot_size=p.lot_size,
+            entry_premium=p.entry_premium, fill_price=p.fill_price,
+            stop_premium=p.stop_premium, status=p.status,
+            direction=p.direction, vehicle=p.vehicle, underlying=p.underlying,
+            opened_ms=p.opened_ms, exit_reason=p.exit_reason, order_id=p.order_id,
+        )
+        for p in kite_positions.open_positions(uid)
+    ]
+    return OpenPositionsResponse(positions=records)
+
+
+@router.delete("/open-positions/{symbol}", response_model=OpenPositionsResponse)
+async def close_position(symbol: str, user: UserContext = Depends(get_current_user)) -> OpenPositionsResponse:
+    """Manually close (mark-closed) a tracked position without placing a broker order.
+    Use when an order was filled outside the engine or to clean up stale entries."""
+    uid = user.user_id
+    kite_positions.close(uid, symbol, reason="manual_close")
+    records = [
+        OpenPositionRecord(
+            symbol=p.symbol, exchange=p.exchange, token=p.token,
+            qty=p.qty, lot_size=p.lot_size,
+            entry_premium=p.entry_premium, fill_price=p.fill_price,
+            stop_premium=p.stop_premium, status=p.status,
+            direction=p.direction, vehicle=p.vehicle, underlying=p.underlying,
+            opened_ms=p.opened_ms, exit_reason=p.exit_reason, order_id=p.order_id,
+        )
+        for p in kite_positions.open_positions(uid)
+    ]
+    return OpenPositionsResponse(positions=records)
 
 
 @router.get("/stock-registry")

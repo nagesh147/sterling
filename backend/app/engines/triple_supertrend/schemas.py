@@ -64,6 +64,28 @@ class SignalsResponse(BaseModel):
     market_open: bool = True
 
 
+class OpenPositionRecord(BaseModel):
+    symbol: str
+    exchange: str
+    token: int = 0
+    qty: int = 0
+    lot_size: int = 0
+    entry_premium: float = 0.0
+    fill_price: float = 0.0
+    stop_premium: float = 0.0
+    status: str = ""
+    direction: str = "long"
+    vehicle: str = "otm_options"
+    underlying: str = ""
+    opened_ms: int = 0
+    exit_reason: str = ""
+    order_id: str = ""
+
+
+class OpenPositionsResponse(BaseModel):
+    positions: List[OpenPositionRecord]
+
+
 class SetupPoint(BaseModel):
     time: int  # epoch seconds (lightweight-charts)
     open: float

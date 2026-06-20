@@ -298,3 +298,28 @@ export interface ScanReportResponse {
   summary: ScanReportSummary;
   entries: ContractScanEntry[];
 }
+
+// ─── Engine open positions ────────────────────────────────────────────────────
+export type EngineVehicle = 'otm_options' | 'deep_itm_options' | 'futures';
+
+export interface EngineOpenPosition {
+  symbol: string;
+  exchange: string;
+  token: number;
+  qty: number;
+  lot_size: number;
+  entry_premium: number;
+  fill_price: number;
+  stop_premium: number;
+  status: string;
+  direction: 'long' | 'short';
+  vehicle: EngineVehicle;
+  underlying: string;
+  opened_ms: number;
+  exit_reason: string;
+  order_id: string;
+}
+
+export interface OpenPositionsResponse {
+  positions: EngineOpenPosition[];
+}

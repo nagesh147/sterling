@@ -4,7 +4,7 @@ import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   ActivityResponse, BacktestRequest, BacktestResponse, EngineConfigModel,
   EngineDetailResponse, EngineOrderRequest, EngineOrderResponse, LiquidityGroup,
-  ScanReportResponse, SetupChart, SignalsResponse,
+  OpenPositionsResponse, ScanReportResponse, SetupChart, SignalsResponse,
 } from '../types/kiteEngine';
 
 const E = '/api/v1/kite/engine';
@@ -140,5 +140,22 @@ export function useEngineDetail(token: number | null, timestamp_ms: number | nul
     queryFn: () => api.get<EngineDetailResponse>(`${E}/detail/${token}?timestamp_ms=${timestamp_ms || 0}`),
     enabled: enabled && token != null,
     refetchInterval: 15_000,
+  });
+}
+
+// ─── Engine open positions (vehicle + direction labels) ───────────────────────
+export function useEngineOpenPositions() {
+  return useQuery<OpenPositionsResponse>({
+    queryKey: ['kite-engine-open-positions'],
+    queryFn: () => api.get<OpenPositionsResponse>(`${E}/open-positions`),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useCloseEnginePosition() {
+  const qc = useQueryClient();
+  return useMutation<OpenPositionsResponse, Error, string>({
+    mutationFn: (symbol) => api.delete<OpenPositionsResponse>(`${E}/open-positions/${encodeURIComponent(symbol)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-engine-open-positions'] }),
   });
 }

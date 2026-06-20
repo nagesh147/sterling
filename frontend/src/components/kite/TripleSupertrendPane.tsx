@@ -2,8 +2,9 @@ import React from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
-  useScanReport, useStockRegistry,
+  useScanReport, useStockRegistry, useEngineOpenPositions,
 } from '../../hooks/useTripleSupertrend';
+import { EnginePositionsPane } from './EnginePositionsPane';
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
@@ -1032,7 +1033,10 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const scan = useRunScan();
   const cancelScan = useCancelScan();
   const { data: scanReport } = useScanReport();
+  const { data: openPos } = useEngineOpenPositions();
+  const openPosCount = openPos?.positions?.length ?? 0;
   const [reportOpen, setReportOpen] = React.useState(false);
+  const [posOpen, setPosOpen] = React.useState(false);
   const scanLock = React.useRef(false);
   const doScan = () => {
     if (scanLock.current || scan.isPending) return;
@@ -1357,6 +1361,37 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: reportOpen ? '1fr' : '0fr' }}>
         <div style={{ overflow: 'hidden' }}>
           <ScanReportView data={scanReport} />
+        </div>
+      </div>
+
+      {/* ── Open positions section ── */}
+      <div
+        style={{
+          borderBottom: `1px solid ${k.border}`,
+          cursor: 'pointer', userSelect: 'none',
+        }}
+        onClick={() => setPosOpen((v) => !v)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 16px' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: '#888', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            Open Positions
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {openPosCount > 0 && (
+              <span style={{
+                background: '#1565c0', color: '#fff', borderRadius: 10,
+                padding: '1px 7px', fontSize: 10, fontWeight: 700,
+              }}>
+                {openPosCount}
+              </span>
+            )}
+            <span style={{ fontSize: 10, color: '#bbb' }}>{posOpen ? '▲' : '▼'}</span>
+          </div>
+        </div>
+      </div>
+      <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: posOpen ? '1fr' : '0fr' }}>
+        <div style={{ overflow: 'hidden' }}>
+          <EnginePositionsPane />
         </div>
       </div>
 
