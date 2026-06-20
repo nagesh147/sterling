@@ -776,21 +776,23 @@ function StrikeBuckets({ selected, onToggle }: {
   selected: Moneyness[]; onToggle: (members: Moneyness[]) => void;
 }) {
   return (
-    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
       {STRIKE_BUCKETS.map((b) => {
         const inCount = b.members.filter((m) => selected.includes(m)).length;
         const active = inCount > 0;
         const partial = active && inCount < b.members.length;
         return (
           <button key={b.id} onClick={() => onToggle(b.members)} aria-pressed={active}
-            title={`${b.label} — ${b.members.join(', ')}`}
+            title={`${b.label} (${b.members.join(', ')})`}
             style={{
-              flex: '1 1 64px', minWidth: 64, padding: '7px 6px', borderRadius: 6, cursor: 'pointer',
-              border: `${partial ? '2px dashed' : '2px solid'} ${active ? k.orange : k.border}`,
-              background: active ? tint(k.orange, 12) : k.bg, transition: 'all .14s ease', textAlign: 'center',
+              fontSize: 11, fontWeight: active ? 700 : 500, padding: '3px 9px',
+              borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap',
+              border: `1px ${partial ? 'dashed' : 'solid'} ${active ? k.orange : k.border}`,
+              background: active ? tint(k.orange, 10) : k.bg,
+              color: active ? k.orange : k.text, transition: 'all .13s ease',
             }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: active ? k.orange : k.text }}>{b.label}</div>
-            <div style={{ fontSize: 9, color: active ? k.orange : k.dim, marginTop: 2 }}>{b.sub}</div>
+            {b.label}
+            <span style={{ fontSize: 8.5, opacity: 0.75, marginLeft: 4, fontWeight: 400, color: active ? k.orange : k.dim }}>{b.sub}</span>
           </button>
         );
       })}
@@ -822,14 +824,9 @@ function SettingRow({ label, hint, children, align = 'center', full = false }: {
   align?: 'center' | 'top'; full?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center', gap: 12 }}>
-      <span title={hint} style={{
-        fontSize: 9.5, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase',
-        color: k.dim, width: 78, flexShrink: 0, paddingTop: align === 'top' ? 4 : 0,
-      }}>{label}</span>
-      <div style={{ flex: full ? 1 : undefined, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {children}
-      </div>
+    <div style={{ display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${k.border}` }}>
+      <span title={hint} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.dim, width: 62, flexShrink: 0, lineHeight: 1.4, paddingTop: align === 'top' ? 1 : 0 }}>{label}</span>
+      <div style={{ flex: full ? 1 : undefined, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>{children}</div>
     </div>
   );
 }
@@ -1652,10 +1649,10 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
               />
             </SettingRow>
-            <span style={{ fontSize: 10, color: k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <div style={{ padding: '7px 16px', fontSize: 10, color: k.dim, lineHeight: 1.5, display: 'flex', alignItems: 'baseline', gap: 5, background: k.bg, borderTop: `1px solid ${k.border}` }}>
               <span style={{ flexShrink: 0 }}>ℹ</span>
               <span>{scanCost(cfg)}</span>
-            </span>
+            </div>
           </>
         );
 
@@ -1730,58 +1727,57 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Exit trailing changed to ${v}`)}
               />
             </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock turned ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <span style={{ fontSize: 11.5, color: k.text, fontWeight: 500 }}>Lock profits early</span>
-                <span style={{ fontSize: 10, color: k.dim }}>Exit on a slow-SuperTrend flip once comfortably in profit.</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
+              onClick={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)}>
+              <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => {}} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 11, color: k.text, fontWeight: 600, display: 'block' }}>Lock profits early</span>
+                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Exit on slow-ST flip once comfortably in profit.</span>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${cfg.auto_execute ? tint(k.orange, 40) : k.border}`, background: cfg.auto_execute ? tint(k.orange, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
-              <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={toggleAuto} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: cfg.auto_execute ? k.orange : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
+              onClick={toggleAuto}>
+              <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={() => {}} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: cfg.auto_execute ? k.orange : k.text, display: 'flex', alignItems: 'center', gap: 4 }}>
                   <ZapIcon /> Auto-execute {cfg.auto_execute ? 'ON' : 'OFF'}
                 </span>
-                <span style={{ fontSize: 10, color: k.dim }}>Places real option BUY orders on ready signals (live-safety gated).</span>
+                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Places option BUY orders on ready signals (live-safety gated).</span>
               </div>
             </div>
-            {/* Protective stop mode (workstreams C/D) — how an auto-exec position is guarded. */}
-            <SettingRow label="Protective stop" hint="A broker GTT survives disconnects; the tick monitor exits intrabar. 'Both' is the real-money default.">
+            <SettingRow label="Stop" hint="GTT broker stop survives disconnects; tick monitor exits intrabar. Both = recommended for real money.">
               <Segmented
                 options={STOP_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.stop_mode ?? 'both') === v}
-                onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Protective stop set to ${v}`)}
+                onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Stop: ${v}`)}
               />
             </SettingRow>
-            {/* Per-trade risk sizing (workstream F). */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <Switch on={cfg.risk_sizing ?? true} color={k.blue} label="Risk-based sizing"
-                onChange={() => patch({ risk_sizing: !(cfg.risk_sizing ?? true) }, `Risk sizing turned ${!(cfg.risk_sizing ?? true) ? 'ON' : 'OFF'}`)} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11.5, color: k.text, fontWeight: 500 }}>Risk-based sizing</span>
-                <span style={{ fontSize: 10, color: k.dim }}>Sizes lots so premium-at-risk stays within a % of capital (else 1 lot).</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
+              onClick={() => patch({ risk_sizing: !(cfg.risk_sizing ?? true) }, `Risk sizing ${!(cfg.risk_sizing ?? true) ? 'ON' : 'OFF'}`)}>
+              <Switch on={cfg.risk_sizing ?? true} color={k.blue} label="Risk-based sizing" onChange={() => {}} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 11, color: k.text, fontWeight: 600, display: 'block' }}>Risk-based sizing</span>
+                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Lots sized so premium risk stays within % of capital.</span>
               </div>
               {(cfg.risk_sizing ?? true) && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: k.dim }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: k.dim, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                   Risk %
                   <input type="number" min={0.1} max={25} step={0.5} value={cfg.risk_pct ?? 1}
-                    onChange={(e) => patch({ risk_pct: Number(e.target.value) }, `Risk per trade set to ${e.target.value}%`)}
-                    style={{ width: 56, padding: '4px 6px', fontSize: 11, border: `1px solid ${k.border}`, borderRadius: 5, background: k.surface, color: k.text, minWidth: 0 }} />
+                    onChange={(e) => patch({ risk_pct: Number(e.target.value) }, `Risk → ${e.target.value}%`)}
+                    style={{ width: 48, padding: '3px 5px', fontSize: 11, border: `1px solid ${k.border}`, borderRadius: 4, background: k.surface, color: k.text, textAlign: 'right', outline: 'none' }} />
                 </label>
               )}
             </div>
-            {/* Kite-only PAPER ↔ LIVE — independent of the global (crypto/Delta) toggle. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 7, border: `1px solid ${kiteLive ? tint(k.green, 45) : k.border}`, background: kiteLive ? tint(k.green, 8) : k.surface, transition: 'background .18s ease, border-color .18s ease' }}>
-              <Switch on={kiteLive} color={k.green} label="Kite live trading" onChange={toggleKiteLive} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: kiteLive ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 4, background: kiteLive ? k.green : k.amber, flexShrink: 0 }} /> Kite {kiteLive ? 'LIVE' : 'PAPER'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', background: kiteLive ? tint(k.green, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
+              onClick={toggleKiteLive}>
+              <Switch on={kiteLive} color={k.green} label="Kite live" onChange={() => {}} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: kiteLive ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: kiteLive ? k.green : k.amber, flexShrink: 0 }} />
+                  Kite {kiteLive ? 'LIVE' : 'PAPER'}
                 </span>
-                <span style={{ fontSize: 10, color: k.dim }}>
-                  {kiteLive
-                    ? 'Orders execute on your real Zerodha account. Separate from the crypto (Delta) toggle.'
-                    : 'Simulated — no real money. Controls Kite only, not crypto (Delta).'}
+                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>
+                  {kiteLive ? 'Orders go to real Zerodha account.' : 'Simulated — no real money.'}
                 </span>
               </div>
             </div>
@@ -1810,13 +1806,13 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')} summary={tabSummary.scan}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>{scanGroup}</div>
+                        <div>{scanGroup}</div>
                       </Collapsible>
                       <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={tabSummary.universe}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>{universeGroup}</div>
+                        <div>{universeGroup}</div>
                       </Collapsible>
                       <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')} summary={tabSummary.execution}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>{executionGroup}</div>
+                        <div>{executionGroup}</div>
                       </Collapsible>
                     </div>
                   </div>
@@ -1837,8 +1833,8 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                     <div style={{ padding: '7px 16px', fontSize: 10.5, color: k.dim, fontWeight: 500, fontVariantNumeric: 'tabular-nums', background: k.bg, borderTop: `1px solid ${k.border}`, borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
                       <span style={{ flexShrink: 0, opacity: 0.7 }}>ℹ</span>{settingsSummary(cfg)}
                     </div>
-                    {/* Content — constrained width so tiles/chips don't stretch edge-to-edge */}
-                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 720 }}>
+                    {/* Content — no outer padding; each SettingRow self-pads */}
+                    <div style={{ maxHeight: 360, overflowY: 'auto', maxWidth: 720 }}>
                       {settingsTab === 'scan' && scanGroup}
                       {settingsTab === 'universe' && universeGroup}
                       {settingsTab === 'execution' && executionGroup}
