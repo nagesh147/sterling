@@ -246,50 +246,36 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
           {/* Right side icons/profile (panel controls live in the Kite footer below) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            {/* Always-visible PAPER/LIVE mode badge — LIVE means real money is at
-                risk, so it is loud (solid green, pulsing dot) vs the muted amber
-                PAPER tint. Only shown once an account is connected. */}
-            {status?.connected && (() => {
-              const live = !status.is_paper;
-              return (
-                <div
-                  title={live
-                    ? 'LIVE — real-money orders are enabled'
-                    : 'PAPER — orders are simulated; no real money at risk'}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '4px 12px', borderRadius: 4, userSelect: 'none',
-                    background: live ? '#4caf50' : 'rgba(255, 152, 0, 0.12)',
-                    border: `1px solid ${live ? '#3c9c40' : '#ff9800'}`,
-                  }}
-                >
-                  <span style={{
-                    width: 7, height: 7, borderRadius: '50%',
-                    background: live ? '#fff' : '#ff9800',
-                    animation: live ? 'kitePulse 1.6s ease-in-out infinite' : undefined,
-                  }} />
-                  <span style={{
-                    fontSize: 11, fontWeight: 800, letterSpacing: '0.08em',
-                    color: live ? '#fff' : '#ff9800',
-                  }}>
-                    {live ? 'LIVE' : 'PAPER'}
-                  </span>
-                </div>
-              );
-            })()}
             <div className="kite-icon-btn" style={{ color: '#444', cursor: 'pointer', fontSize: 16 }}>🔔</div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              cursor: 'pointer'
-            }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: 14, background: 'rgba(240, 100, 40, 0.1)',
-                color: '#f06428', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 500
-              }}>
-                {status?.user_name ? status.user_name.substring(0, 2).toUpperCase() : 'SK'}
+            {/* Profile avatar with a trading-mode LED. Green pulsing = LIVE (real
+                money), amber = PAPER. Replaces the old loud LIVE/PAPER badge. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <div style={{ position: 'relative' }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 14, background: 'rgba(240, 100, 40, 0.1)',
+                  color: '#f06428', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: 500
+                }}>
+                  {status?.user_name ? status.user_name.substring(0, 2).toUpperCase() : 'SK'}
+                </div>
+                {status?.connected && (() => {
+                  const live = !status.is_paper;
+                  return (
+                    <span
+                      title={live
+                        ? 'LIVE — real-money orders are enabled'
+                        : 'PAPER — orders are simulated; no real money at risk'}
+                      style={{
+                        position: 'absolute', bottom: -1, right: -1,
+                        width: 10, height: 10, borderRadius: '50%',
+                        background: live ? '#4caf50' : '#ff9800',
+                        border: '2px solid #fff',
+                        boxShadow: live ? '0 0 4px #4caf50' : undefined,
+                        animation: live ? 'kitePulse 1.6s ease-in-out infinite' : undefined,
+                      }}
+                    />
+                  );
+                })()}
               </div>
               <div style={{ fontSize: 12, color: '#444' }}>
                 {status?.user_name ? status.user_name.split(' ')[0] : 'Guest'}
@@ -347,7 +333,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           position: 'relative',
           borderLeft: (sidebar && isSidebarOpen) ? '1px solid #e0e0e0' : 'none'
         }}>
-          <div style={{ flex: 1, background: '#fff', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, background: '#fff', overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {content}
           </div>
 

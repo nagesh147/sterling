@@ -6,7 +6,7 @@ import {
   useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
-import { useEngineConfig, useSetEngineConfig } from '../../hooks/useTripleSupertrend';
+import { useEngineConfig, useSetEngineConfig, useEngineSignals } from '../../hooks/useTripleSupertrend';
 import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
@@ -472,41 +472,160 @@ function KiteSettings() {
 
 function DirectionalModePanelWrapper() {
   const { data: cfgData } = useEngineConfig();
+  const { data: signals } = useEngineSignals();
   const setCfg = useSetEngineConfig();
   if (!cfgData) return null;
+
+  // Pull a representative lot size + ATM premium from the freshest ready signal so
+  // the impact calculator opens with real numbers. Prefer a fresh/active row.
+  const rows = signals?.rows ?? [];
+  const pick = rows.find((r) => r.is_fresh) ?? rows.find((r) => r.is_active) ?? rows[0];
+  const leg = pick?.legs?.find((l) => l.moneyness === 'ATM') ?? pick?.legs?.[0];
+
   return (
     <DirectionalModePanel
       cfg={cfgData}
       onUpdate={(patch) => setCfg.mutate({ ...cfgData, ...patch })}
       busy={setCfg.isPending}
+      liveLotSize={leg?.lot_size ?? undefined}
+      livePremium={leg?.premium_spot ?? undefined}
+      liveUnderlying={pick?.underlying}
     />
   );
 }
 
+// Master ON/OFF for the whole Triple-SuperTrend engine. Sits at the very bottom of
+// the Connect page. OFF = Kite behaves as a normal manual-trading platform.
+function EngineMasterToggle() {
+  const { data: cfg } = useEngineConfig();
+  const setCfg = useSetEngineConfig();
+  if (!cfg) return null;
+  const on = cfg.engine_enabled;
+  return (
+    <div style={{ ...S.card, borderColor: on ? '#4caf50' : '#e0e0e0', borderWidth: 2 }}>
+      <div style={S.title}>TRIPLE SUPERTREND ENGINE</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => setCfg.mutate({ ...cfg, engine_enabled: !on })}
+          disabled={setCfg.isPending}
+          style={{
+            width: 52, height: 28, borderRadius: 14, border: 'none', position: 'relative',
+            cursor: 'pointer', background: on ? '#4caf50' : '#bbb', transition: 'background .2s', flexShrink: 0,
+          }}
+        >
+          <span style={{
+            position: 'absolute', top: 3, left: on ? 27 : 3, width: 22, height: 22, borderRadius: 11,
+            background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)',
+          }} />
+        </button>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: on ? '#2e7d32' : '#888' }}>
+            {on ? 'Engine ON — scanning, signals & auto-execute active' : 'Engine OFF — normal manual Kite only'}
+          </div>
+          <div style={{ ...S.hint, marginTop: 2 }}>
+            {on
+              ? 'The strategy scans the market and surfaces signals. Auto-execute (if armed) places orders.'
+              : 'No scanning, no signals, no auto-orders. Market watch, charts and manual orders work as usual.'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tabbed Connect page ────────────────────────────────────────────────────────
+type ConnectTab = 'account' | 'strategy' | 'tools' | 'settings';
+
+const TAB_DEFS: { id: ConnectTab; label: string; icon: string }[] = [
+  { id: 'account',  label: 'Account',  icon: '👤' },
+  { id: 'strategy', label: 'Strategy', icon: '🎯' },
+  { id: 'tools',    label: 'Tools',    icon: '🧰' },
+  { id: 'settings', label: 'Settings', icon: '⚙️' },
+];
+
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const active = data?.accounts.find((a) => a.is_active);
+  const liveTools = active?.connected && !active.is_paper;
+  const [tab, setTab] = useState<ConnectTab>(() =>
+    (localStorage.getItem('kite_connect_tab') as ConnectTab) || 'account');
+  const select = (t: ConnectTab) => { setTab(t); localStorage.setItem('kite_connect_tab', t); };
+
   return (
-    <div style={{ padding: '24px 32px' }}>
+    <div style={{ padding: '20px 32px 40px', maxWidth: 760, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
       <StatusBanner />
-      <KiteSettings />
-      <TradingModeControls />
-      <DirectionalModePanelWrapper />
-      {active && <LoginFlow account={active} />}
-      {active?.connected && !active.is_paper && <Funds />}
-      {active?.connected && !active.is_paper && <MarginCalc />}
-      {active?.connected && !active.is_paper && <TickerControl />}
-      <div style={S.card}>
-        <div style={S.title}>KITE ACCOUNTS</div>
-        {isLoading && <div style={S.hint}>Loading…</div>}
-        {data?.accounts.map((a) => <AccountRow key={a.id} acc={a} />)}
-        {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key & secret to begin.</div>}
-        <AddAccount />
+
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e0e0e0' }}>
+        {TAB_DEFS.map((t) => {
+          const sel = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => select(t.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
+                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                fontSize: 12.5, fontWeight: sel ? 700 : 500, color: sel ? '#f06428' : '#888',
+                borderBottom: `2px solid ${sel ? '#f06428' : 'transparent'}`, marginBottom: -1,
+                transition: 'all .15s',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>{t.icon}</span>{t.label}
+            </button>
+          );
+        })}
       </div>
-      <div style={{ ...S.hint, lineHeight: 1.7 }}>
-        A Kite Connect app (kite.trade) gives you an <strong>API key + secret</strong>. Each session needs a daily login
-        (token expires ~6 AM IST). Historical data is a paid Kite add-on. Credentials are encrypted at rest and scoped to your user.
-      </div>
+
+      {/* Tab content */}
+      {tab === 'account' && (
+        <>
+          <div style={S.card}>
+            <div style={S.title}>KITE ACCOUNTS</div>
+            {isLoading && <div style={S.hint}>Loading…</div>}
+            {data?.accounts.map((a) => <AccountRow key={a.id} acc={a} />)}
+            {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key & secret to begin.</div>}
+            <AddAccount />
+          </div>
+          {active && <LoginFlow account={active} />}
+          <div style={{ ...S.hint, lineHeight: 1.7 }}>
+            A Kite Connect app (kite.trade) gives you an <strong>API key + secret</strong>. Each session needs a daily login
+            (token expires ~6 AM IST). Historical data is a paid Kite add-on. Credentials are encrypted at rest and scoped to your user.
+          </div>
+        </>
+      )}
+
+      {tab === 'strategy' && (
+        <>
+          <TradingModeControls />
+          <DirectionalModePanelWrapper />
+        </>
+      )}
+
+      {tab === 'tools' && (
+        <>
+          {liveTools ? (
+            <>
+              <Funds />
+              <MarginCalc />
+              <TickerControl />
+            </>
+          ) : (
+            <div style={{ ...S.card }}>
+              <div style={S.title}>TOOLS</div>
+              <div style={S.hint}>
+                Funds, the margin/charges calculator and the WebSocket ticker appear here once an
+                account is <strong>connected and in LIVE mode</strong>.
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'settings' && <KiteSettings />}
+
+      {/* Engine master toggle — always at the very bottom of the Connect page. */}
+      <EngineMasterToggle />
     </div>
   );
 }

@@ -98,15 +98,19 @@ const ITM_DEPTH_OPTIONS: { value: DeepItmMoneyness; label: string; desc: string 
 ];
 
 // Derive which profile the current config represents.
+// NOTE: target_delta is clamped to [0.50, 0.99] by the backend, so it cannot
+// distinguish OTM (≈0.28) from ATM (≈0.50). OTM vs ATM is therefore tracked via
+// strike_moneyness, which round-trips cleanly.
 function deriveActiveProfile(cfg: EngineConfigModel): ProfileId {
   if (cfg.vehicle === 'futures' && cfg.directional_mode) return 'futures';
   if (cfg.vehicle === 'deep_itm_options' && cfg.directional_mode) {
     const d = cfg.target_delta ?? 0.85;
     return d >= 0.78 ? 'deep_itm' : 'slight_itm';
   }
-  // otm_options path — use target_delta as profile marker (backend ignores it for this vehicle)
-  const d = cfg.target_delta ?? 0.50;
-  return d <= 0.35 ? 'otm' : 'atm';
+  // otm_options path — OTM if every selected strike is out-of-the-money.
+  const sm = cfg.strike_moneyness ?? [];
+  const allOtm = sm.length > 0 && sm.every(m => m.startsWith('OTM'));
+  return allOtm ? 'otm' : 'atm';
 }
 
 // Build the config patch for selecting a profile.
@@ -116,6 +120,9 @@ function profilePatch(p: ProfileDef, cfg: EngineConfigModel): Partial<EngineConf
     directional_mode: p.directional,
     target_delta: p.targetDelta,
   };
+  // OTM vs ATM is persisted through the scan ladder (target_delta can't hold it).
+  if (p.id === 'otm')      patch.strike_moneyness = ['OTM1', 'OTM2'];
+  else if (p.id === 'atm') patch.strike_moneyness = ['ATM'];
   // Auto-enable the vehicle in the allow-list if it isn't already.
   if (!cfg.enabled_vehicles.includes(p.vehicle)) {
     patch.enabled_vehicles = [...cfg.enabled_vehicles, p.vehicle];
@@ -144,13 +151,27 @@ interface Props {
   cfg: EngineConfigModel;
   onUpdate: (patch: Partial<EngineConfigModel>) => void;
   busy?: boolean;
+  // Live values pulled from the latest ready signal so the calculator pre-fills
+  // with real numbers instead of generic defaults. Undefined = no live signal yet.
+  liveLotSize?: number;
+  livePremium?: number;
+  liveUnderlying?: string;
 }
 
-export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
+export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePremium, liveUnderlying }: Props) {
   const [simMove, setSimMove]       = useState(100);   // underlying pts to simulate
-  const [simPremium, setSimPremium] = useState(150);   // ₹ entry premium to simulate (ATM-equiv)
-  const [lotSize, setLotSize]       = useState(75);    // contract lot size (Nifty=75)
+  const [simPremium, setSimPremium] = useState(livePremium && livePremium > 0 ? Math.round(livePremium) : 150);
+  const [lotSize, setLotSize]       = useState(liveLotSize && liveLotSize > 0 ? liveLotSize : 75);
   const [customDelta, setCustomDelta] = useState('');  // delta override input
+  const [userEdited, setUserEdited] = useState(false); // once true, stop auto-syncing from live
+
+  // Pre-fill from the live signal when it arrives — but never clobber a value the
+  // user has typed themselves.
+  React.useEffect(() => {
+    if (userEdited) return;
+    if (livePremium && livePremium > 0) setSimPremium(Math.round(livePremium));
+    if (liveLotSize && liveLotSize > 0) setLotSize(liveLotSize);
+  }, [livePremium, liveLotSize, userEdited]);
 
   const activeId      = deriveActiveProfile(cfg);
   const activeProfile = PROFILES.find(p => p.id === activeId)!;
@@ -310,7 +331,9 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
       <div style={S.divider} />
       <div style={S.section}>TRADE IMPACT CALCULATOR</div>
       <div style={{ ...S.hint, marginBottom: 10 }}>
-        Adjust the inputs below to see how this profile behaves on your trade.
+        {(livePremium || liveLotSize) && !userEdited
+          ? <>Pre-filled from the latest ready signal{liveUnderlying ? ` (${liveUnderlying})` : ''}. Edit any field to explore other scenarios.</>
+          : <>Adjust the inputs below to see how this profile behaves on your trade.</>}
       </div>
 
       {/* Simulator inputs */}
@@ -331,7 +354,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
               <span style={S.hint}>₹</span>
               <input type="number" style={{ ...S.numInput, flex: 1 }}
                 value={simPremium} min={10} max={5000} step={10}
-                onChange={e => setSimPremium(Math.max(10, Number(e.target.value) || 150))} />
+                onChange={e => { setUserEdited(true); setSimPremium(Math.max(10, Number(e.target.value) || 150)); }} />
             </div>
           </div>
         )}
@@ -340,7 +363,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <input type="number" style={{ ...S.numInput, flex: 1 }}
               value={lotSize} min={1} max={10000} step={5}
-              onChange={e => setLotSize(Math.max(1, Number(e.target.value) || 75))} />
+              onChange={e => { setUserEdited(true); setLotSize(Math.max(1, Number(e.target.value) || 75)); }} />
             <span style={S.hint}>qty/lot</span>
           </div>
         </div>
