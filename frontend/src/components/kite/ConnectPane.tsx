@@ -55,24 +55,6 @@ function kiteErrorHelp(msg: string): string | null {
 
 // Legacy LoginFlow removed — merged into AccountCard below.
 
-function StatusBanner() {
-  const { data: s } = useKiteStatus();
-  if (!s) return null;
-  const col = s.connected ? (s.is_paper ? '#ff9800' : '#4caf50') : '#e53935';
-  return (
-    <div style={{ ...S.card, borderColor: col, background: '#f9f9f9' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ width: 9, height: 9, borderRadius: 5, background: col, display: 'inline-block' }} />
-        <span style={{ fontWeight: 700, color: '#444', fontSize: 13 }}>
-          {s.connected ? (s.is_paper ? 'Paper mode' : `Connected${s.user_name ? ` — ${s.user_name}` : ''}`) : 'Not connected'}
-        </span>
-        {s.kite_user_id && <span style={S.hint}>· {s.kite_user_id}</span>}
-      </div>
-      <div style={{ ...S.hint, marginTop: 4 }}>{s.message}</div>
-    </div>
-  );
-}
-
 function Funds() {
   const { data: m } = useKiteMargins(true);
   if (!m || typeof m !== 'object') return null;
@@ -247,9 +229,13 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
   const dotColor = connected ? (isLive ? '#4caf50' : '#ff9800') : '#bbb';
   const modeLabel = connected ? (isLive ? 'LIVE' : 'PAPER') : 'offline';
 
-  // Display name: prefer kite_user_id, fall back to label
-  const displayName = acc.label;
-  const subText = acc.kite_user_id ? `ID ${acc.kite_user_id}` : acc.api_key_hint ?? '';
+  // Real Zerodha account holder name comes from /status (only for the connected
+  // account). Prefer it over the user-chosen label, then fall back to the label.
+  const statusName = status?.account_id === acc.id ? status?.user_name : null;
+  const kiteId = statusName ? status?.kite_user_id ?? acc.kite_user_id : acc.kite_user_id;
+  const displayName = statusName || acc.label;
+  const subText = [kiteId ? `ID ${kiteId}` : null, displayName !== acc.label ? acc.label : null]
+    .filter(Boolean).join(' · ') || acc.api_key_hint || '';
 
   const avatarColor = isLive && connected ? '#2e7d32' : connected ? '#1565c0' : '#9e9e9e';
 
@@ -676,8 +662,6 @@ export function ConnectPane() {
 
   return (
     <div style={{ padding: '20px 32px 40px', maxWidth: 760, margin: '0 auto', width: '100%', boxSizing: 'border-box' }}>
-      <StatusBanner />
-
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e0e0e0' }}>
         {TAB_DEFS.map((t) => {
