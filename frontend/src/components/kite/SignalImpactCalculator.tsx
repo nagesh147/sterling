@@ -58,9 +58,10 @@ const inr = (n: number) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 interface Props {
   data: EngineDetailResponse;
   onBuy?: (leg: OptionDetail) => void;
+  updatedAt?: number; // ms epoch of the snapshot these greeks came from
 }
 
-export function SignalImpactCalculator({ data, onBuy }: Props) {
+export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
   // Natural "1R" unit = distance from spot to the signal's stop. Falls back to
   // ~0.5% of spot when no stop is available.
   const stopDist = useMemo(() => {
@@ -111,6 +112,13 @@ export function SignalImpactCalculator({ data, onBuy }: Props) {
             Live greeks · {data.option_type} · {data.underlying} {data.spot_now ? data.spot_now.toFixed(0) : ''} ·
             stop {data.stop_loss.toFixed(0)} ({stopDist} pts = 1R)
           </span>
+          {updatedAt && (
+            <span title="These greeks are a snapshot. The detail auto-refreshes every 15s; reopening always re-fetches."
+              style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green, display: 'inline-block' }} />
+              as of {new Date(updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} · refreshes 15s
+            </span>
+          )}
         </div>
 
         {/* Move + lots controls */}

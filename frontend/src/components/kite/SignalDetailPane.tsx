@@ -149,7 +149,7 @@ function LegCard({ leg, exchange, underlying, spotPx }: {
 }
 
 export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onShowSetup, onShowOptionChain }: Props) {
-  const { data, isLoading, isError } = useEngineDetail(token, timestamp_ms, true);
+  const { data, isLoading, isError, dataUpdatedAt } = useEngineDetail(token, timestamp_ms, true);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const [pinned, setPinned] = useState<boolean>(() => {
     try { return JSON.parse(localStorage.getItem('kite_engine_pins') || '[]').includes(token); } catch { return false; }
@@ -245,6 +245,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
           {/* Trade impact calculator — pick the best strike with live greeks */}
           <SignalImpactCalculator
             data={data}
+            updatedAt={dataUpdatedAt}
             onBuy={(leg) => openOrderWindow({
               symbol: leg.option_symbol,
               exchange: data.exchange,
