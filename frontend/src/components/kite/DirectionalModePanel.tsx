@@ -5,33 +5,33 @@ import type { EngineConfigModel, Vehicle, DeepItmMoneyness } from '../../types/k
 
 const VEHICLE_INFO: Record<Vehicle, { label: string; badge: string; badgeColor: string; desc: string; risk: string }> = {
   otm_options: {
-    label: 'OTM Options (Default)',
+    label: 'Standard Options (Default)',
     badge: '✓ Validated',
     badgeColor: '#4caf50',
-    desc: 'Buy out-of-the-money calls/puts. Low cost per lot, but theta decay and IV crush work against you. The existing engine behavior.',
-    risk: 'Max loss = premium paid. Theta bleeds ~0.5-2%/day. Edge is consumed by the option wrapper.',
+    desc: 'Bull signal → buy a Call. Bear signal → buy a Put. Cheaper per lot, but the option loses value every day even if the market stays flat.',
+    risk: 'Max loss is fixed — only what you paid for the option. Suitable for beginners.',
   },
   deep_itm_options: {
-    label: 'Deep-ITM Options',
+    label: 'Deep In-the-Money Options',
     badge: '⚠ Experimental',
     badgeColor: '#ff9800',
-    desc: 'Buy deep-in-the-money options (δ ≈ 0.85–0.95). Moves nearly 1:1 with the underlying, minimal theta bleed, but higher premium = fewer lots.',
-    risk: 'Max loss = premium paid (larger than OTM). Reduced theta drag. Better capture of the directional edge.',
+    desc: 'Same as above — buy a Call or Put — but picks a strike deep in the money so it moves almost point-for-point with Nifty/BankNifty. Costs more per lot.',
+    risk: 'Max loss is still fixed — only what you paid. Higher upfront cost but far less daily time decay. Closer to trading the index directly.',
   },
   futures: {
     label: 'Index Futures',
     badge: '⚠ Experimental',
     badgeColor: '#f44336',
-    desc: 'Trade near-month index futures (δ = 1.0). Full directional exposure with no time decay. Two-sided: can go long or short.',
-    risk: 'Notional risk = (entry − stop) × lot_size. No premium decay. Requires margin (≈12-15% of contract). True delta-1 exposure.',
+    desc: 'Bull signal → BUY the future. Bear signal → SELL the future. No option premium — you trade the index directly. Losses are not capped.',
+    risk: 'Loss grows the further the market moves against you. Requires margin. Not suitable unless you understand futures and have a hard stop in place.',
   },
 };
 
 const ITM_DEPTH_OPTIONS: { value: DeepItmMoneyness; label: string; desc: string }[] = [
-  { value: 'ITM5',  label: 'ITM-5',  desc: '5 strikes in-the-money (~δ0.75)' },
-  { value: 'ITM10', label: 'ITM-10', desc: '10 strikes in-the-money (~δ0.85)' },
-  { value: 'ITM15', label: 'ITM-15', desc: '15 strikes in-the-money (~δ0.92)' },
-  { value: 'ITM20', label: 'ITM-20', desc: '20 strikes in-the-money (~δ0.96)' },
+  { value: 'ITM5',  label: 'ITM-5',  desc: '5 strikes deep — moves ~75% of Nifty' },
+  { value: 'ITM10', label: 'ITM-10', desc: '10 strikes deep — moves ~85% of Nifty' },
+  { value: 'ITM15', label: 'ITM-15', desc: '15 strikes deep — moves ~92% of Nifty' },
+  { value: 'ITM20', label: 'ITM-20', desc: '20 strikes deep — moves ~96% of Nifty (closest to futures)' },
 ];
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -82,14 +82,14 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
         </span>
         <span style={S.hint}>
           {enabled
-            ? 'Monetize the signal through high-delta instruments.'
-            : 'Standard OTM option buying (existing behavior).'}
+            ? 'Choose what to trade when a signal fires — options or futures.'
+            : 'Signal fires → buy a Call (bull) or Put (bear). Premium is your max loss.'}
         </span>
       </div>
 
       {!enabled && (
         <div style={{ ...S.hint, marginTop: 4, padding: '6px 10px', background: '#f7f7f7', borderRadius: 3 }}>
-          When OFF, the engine runs identically to the default — no code path changes.
+          Off = buy CE on a bull signal, buy PE on a bear signal. Your risk is capped at the premium you pay. Turn ON to trade deep ITM options or futures instead.
         </div>
       )}
 
