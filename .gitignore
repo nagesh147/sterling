@@ -62,3 +62,4 @@ backend/data/ohlcv_full/
 # Equity-index history (regenerate via study.equity_pipeline)
 backend/data/equity/
 antigravity-claude-proxy/
+.claude/worktrees/
