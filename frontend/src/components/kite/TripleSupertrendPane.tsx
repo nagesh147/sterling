@@ -2,9 +2,8 @@ import React from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
-  useScanReport, useStockRegistry, useEngineOpenPositions,
+  useScanReport, useStockRegistry,
 } from '../../hooks/useTripleSupertrend';
-import { EnginePositionsPane } from './EnginePositionsPane';
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
@@ -905,40 +904,26 @@ function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
   );
 }
 
-// Status line + live "time to next scan" bar. Ticks on its own 1s interval so
-// the rest of the pane (and the signal list) don't re-render every second.
-function ScanStatus({ signals }: { signals?: SignalsResponse }) {
+// Thin progress bar that ticks independently so the rest of the pane doesn't re-render every second.
+function ScanProgressBar({ signals }: { signals?: SignalsResponse }) {
   const [, tick] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => { const id = setInterval(tick, 1000); return () => clearInterval(id); }, []);
 
   const scanning = signals?.scanning ?? false;
   const auto = signals?.auto_scan ?? false;
-  const marketOpen = signals?.market_open ?? true;
   const gen = signals?.generated_ms ?? 0;
   const next = signals?.next_scan_ms ?? 0;
   const interval = next - gen;
   const frac = interval > 0 ? Math.min(1, Math.max(0, (Date.now() - gen) / interval)) : 0;
-  const dotColor = scanning ? k.green : auto ? k.blue : k.dim;
 
   return (
-    <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-        <span className={scanning ? 'st-pulse' : undefined} style={{ width: 7, height: 7, borderRadius: 4, background: dotColor, flexShrink: 0 }} />
-        <span style={{ color: scanning ? k.green : auto ? k.text : k.dim, fontWeight: 500 }}>
-          {scanning ? signals?.scanning_label || (signals?.scanning ? 'scanning…' : '') : auto ? 'auto-scan on' : !marketOpen ? 'market closed' : 'manual'}
-        </span>
-        {!scanning && gen > 0 && <span>· last {timeAgo(gen)}</span>}
-        {!scanning && auto && next > 0 && <span>· next {countdown(next)}</span>}
-      </div>
-      {/* live countdown — doubles as the header divider */}
-      <div style={{ height: 2, background: k.border, position: 'relative', overflow: 'hidden', marginTop: 9, marginLeft: -16, marginRight: -16 }}>
-        {scanning
+    <div style={{ height: 2, background: k.border, position: 'relative', overflow: 'hidden' }}>
+      {scanning
           ? <div className="st-scan-bar" />
           : auto && interval > 0
             ? <div key={gen} style={{ height: '100%', width: `${frac * 100}%`, background: k.orange, transition: 'width 1s linear' }} />
             : null}
-      </div>
-    </>
+    </div>
   );
 }
 
@@ -1088,10 +1073,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const scan = useRunScan();
   const cancelScan = useCancelScan();
   const { data: scanReport } = useScanReport();
-  const { data: openPos } = useEngineOpenPositions();
-  const openPosCount = openPos?.positions?.length ?? 0;
   const [reportOpen, setReportOpen] = React.useState(false);
-  const [posOpen, setPosOpen] = React.useState(false);
   const scanLock = React.useRef(false);
   const doScan = () => {
     if (scanLock.current || scan.isPending) return;
@@ -1428,89 +1410,102 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     );
   }
 
+  const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
+  const autoScan = signals?.auto_scan ?? false;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
-      {/* ── Console header ── */}
-      <div style={{ padding: '12px 16px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-            <EngineMark />
-            <span title={UNIVERSE_TIP} style={{ fontSize: 14, fontWeight: 600, color: k.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Triple SuperTrend
+      {/* ── Compact two-row header ── */}
+      <div style={{ borderBottom: `1px solid ${k.border}`, flexShrink: 0 }}>
+        {/* Row 1: identity + live count + settings */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
+          <EngineMark />
+          <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, fontWeight: 700, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
+            Triple SuperTrend
+          </span>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
+          <div style={{ flex: 1 }} />
+          {liveCount > 0 && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999,
+              fontSize: 10.5, fontWeight: 700, color: k.green,
+              background: tint(k.green, 10), border: `1px solid ${tint(k.green, 30)}`,
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
+              {liveCount} live
             </span>
-            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>1H</span>
+          )}
+          <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+            <Icons.Settings />
+          </HeaderIconBtn>
+        </div>
+
+        {/* Row 2: scan status + action icons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 14px 8px' }}>
+          {/* Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
+            <span className={scanning ? 'st-pulse' : undefined} style={{
+              width: 6, height: 6, borderRadius: 3, flexShrink: 0,
+              background: scanning ? k.green : autoScan ? k.orange : k.dim,
+            }} />
+            <span style={{ color: scanning ? k.green : autoScan ? k.text : k.dim, fontWeight: scanning || autoScan ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {scanning
+                ? (signals?.scanning_label || 'scanning…')
+                : autoScan
+                  ? 'auto'
+                  : !(signals?.market_open ?? true)
+                    ? 'closed'
+                    : 'manual'}
+            </span>
+            {!scanning && (signals?.generated_ms ?? 0) > 0 && (
+              <span style={{ opacity: 0.7 }}>· last {timeAgo(signals!.generated_ms!)}</span>
+            )}
+            {!scanning && autoScan && (signals?.next_scan_ms ?? 0) > 0 && (
+              <span style={{ opacity: 0.7 }}>· next {countdown(signals!.next_scan_ms!)}</span>
+            )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <ReadyPill count={rows.filter((r) => rowIsRunning(r, quotes)).length} />
-            {scanning && (
-              <HeaderIconBtn title="Stop scanning" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            {scanning ? (
+              <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+              </HeaderIconBtn>
+            ) : (
+              <HeaderIconBtn title="Re-scan now" disabled={scan.isPending} onClick={() => doScan()}>
+                <RefreshIcon spinning={scan.isPending} />
               </HeaderIconBtn>
             )}
-            <HeaderIconBtn title={scan.isPending || scanning ? 'Scanning…' : 'Re-scan now'} disabled={scan.isPending || scanning} onClick={() => doScan()}>
-              <RefreshIcon spinning={scan.isPending || scanning} />
-            </HeaderIconBtn>
-            <HeaderIconBtn title="Scan report — per-contract trace" active={reportOpen} onClick={() => setReportOpen((v) => !v)}>
+            <HeaderIconBtn title="Scan report" active={reportOpen} onClick={() => setReportOpen((v) => !v)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
                 <line x1="16" y1="13" x2="8" y2="13"/>
                 <line x1="16" y1="17" x2="8" y2="17"/>
-                <line x1="10" y1="9" x2="8" y2="9"/>
               </svg>
             </HeaderIconBtn>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <HeaderIconBtn title="Grid Layout" active={viewLayout === 'grid'} onClick={() => setViewLayout('grid')} disabled={false}>
+            {/* Grid / List toggle as a single compact segmented control */}
+            <div style={{ display: 'inline-flex', border: `1px solid ${k.border}`, borderRadius: 6, overflow: 'hidden', background: k.bg, marginLeft: 2 }}>
+              <button title="Grid layout" aria-pressed={viewLayout === 'grid'} onClick={() => setViewLayout('grid')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, border: 'none', cursor: 'pointer', background: viewLayout === 'grid' ? tint(k.orange, 15) : 'transparent', color: viewLayout === 'grid' ? k.orange : k.dim, transition: 'all .15s' }}>
                 <GridIcon />
-              </HeaderIconBtn>
-              <HeaderIconBtn title="List Layout" active={viewLayout === 'list'} onClick={() => setViewLayout('list')} disabled={false}>
+              </button>
+              <button title="List layout" aria-pressed={viewLayout === 'list'} onClick={() => setViewLayout('list')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, border: 'none', borderLeft: `1px solid ${k.border}`, cursor: 'pointer', background: viewLayout === 'list' ? tint(k.orange, 15) : 'transparent', color: viewLayout === 'list' ? k.orange : k.dim, transition: 'all .15s' }}>
                 <ListIcon />
-              </HeaderIconBtn>
+              </button>
             </div>
-
-            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-              <Icons.Settings />
-            </HeaderIconBtn>
           </div>
         </div>
-        <ScanStatus signals={signals} />
+
+        {/* Progress bar — scan countdown */}
+        <ScanProgressBar signals={signals} />
       </div>
 
       {/* ── Scan report drawer ── */}
       <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: reportOpen ? '1fr' : '0fr' }}>
         <div style={{ overflow: 'hidden' }}>
           <ScanReportView data={scanReport} />
-        </div>
-      </div>
-
-      {/* ── Open positions section ── */}
-      <div
-        style={{
-          borderBottom: `1px solid ${k.border}`,
-          cursor: 'pointer', userSelect: 'none',
-        }}
-        onClick={() => setPosOpen((v) => !v)}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 16px' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#888', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-            Open Positions
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {openPosCount > 0 && (
-              <span style={{
-                background: '#1565c0', color: '#fff', borderRadius: 10,
-                padding: '1px 7px', fontSize: 10, fontWeight: 700,
-              }}>
-                {openPosCount}
-              </span>
-            )}
-            <span style={{ fontSize: 10, color: '#bbb' }}>{posOpen ? '▲' : '▼'}</span>
-          </div>
-        </div>
-      </div>
-      <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: posOpen ? '1fr' : '0fr' }}>
-        <div style={{ overflow: 'hidden' }}>
-          <EnginePositionsPane />
         </div>
       </div>
 

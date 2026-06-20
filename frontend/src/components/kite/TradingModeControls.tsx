@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
 import { useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { useEngineConfig, useSetEngineConfig } from '../../hooks/useTripleSupertrend';
+import type { EngineConfigModel } from '../../types/kiteEngine';
 import { ModeToggle } from './ModeToggle';
+
+function vehicleOrderLabel(cfg?: EngineConfigModel | null): string {
+  if (!cfg) return 'option BUY orders';
+  if (cfg.vehicle === 'futures') return 'futures BUY orders';
+  if (cfg.vehicle === 'deep_itm_options') return 'Deep ITM option BUY orders';
+  const d = cfg.target_delta;
+  if (d != null && d < 0.35) return 'OTM option BUY orders';
+  if (d != null && d > 0.65) return 'ITM option BUY orders';
+  return 'ATM option BUY orders';
+}
 
 // Central trading-mode panel for the active Kite account. Two orthogonal axes:
 //   • EXECUTION  — PAPER vs LIVE  (account.is_paper; where orders actually go)
@@ -135,7 +146,7 @@ export function TradingModeControls() {
           title="⚡ Enable AUTO-execute" accent="#ff9800" busy={autoBusy}
           confirmLabel={autoBusy ? 'Enabling…' : 'Enable Auto'}
           onCancel={() => setConfirm(null)} onConfirm={confirmEnableAuto}
-          body={<>Ready signals will place <strong>1-lot ATM/ITM option BUY orders</strong> on{' '}
+          body={<>Ready signals will place <strong>1-lot {vehicleOrderLabel(cfg)}</strong> on{' '}
             {isLive ? <strong>your real Zerodha account</strong> : 'the paper account'} under the live-safety gate. Continue?</>}
         />
       )}

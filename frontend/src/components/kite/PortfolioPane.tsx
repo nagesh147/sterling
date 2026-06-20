@@ -7,6 +7,7 @@ import {
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { EnginePositionsPane } from './EnginePositionsPane';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -347,6 +348,12 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {showPositions && (
+        <div style={{ marginBottom: 32 }}>
+          <EnginePositionsPane />
         </div>
       )}
 
