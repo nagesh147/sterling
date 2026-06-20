@@ -223,6 +223,32 @@ def test_correlation_penalty_downsizes_correlated_entry():
     assert state.correlation_penalty("nobody", "NIFTY 50", ["NIFTY BANK"]) == 1.0
 
 
+def test_monitor_mode_auto_subscribes_token(monkeypatch):
+    """When stop_mode includes 'monitor', the position token is auto-subscribed."""
+    subscribed = []
+
+    import app.services.exchanges.kite.ticker_manager as _tm
+
+    async def _fake_subscribe(uid, tokens, mode="ltp"):
+        subscribed.extend(tokens)
+
+    monkeypatch.setattr(_tm, "subscribe", _fake_subscribe)
+
+    cfg = EngineConfigModel(auto_execute=True, stop_mode="monitor",
+                            directional_mode=True, vehicle="futures",
+                            enabled_vehicles=["futures"])
+    client = FakeClient(instruments=_fut_dump())
+    state.reset(UID)
+    positions._positions.pop(UID, None)
+    live_safety._IDEMPOTENCY_CACHE.clear()
+    state.set_config(UID, cfg)
+    cb = service._make_place_cb(client, UID)
+    asyncio.run(cb(_bear_row(), _item()))
+    open_pos = positions.open_positions(UID)
+    assert open_pos, "position should be registered"
+    assert open_pos[0].token in subscribed, "position token should be subscribed to ticker"
+
+
 def _run_keep_breaker(cfg, row, client, item=None):
     """Like _run but does NOT reset state (keeps the breaker peak primed)."""
     positions._positions.pop(UID, None)

@@ -72,9 +72,13 @@ class _FakeClient:
     def __init__(self):
         self.sells = []
         self.cancelled = []
+        self.futures_exits = []
     async def place_order_option(self, sym, side, size, **kw):
         self.sells.append((sym, side, size))
         return {"order_id": "EXIT-1"}
+    async def place_order_future(self, sym, side, size, **kw):
+        self.futures_exits.append((sym, side, size))
+        return {"order_id": "EXIT-F"}
     async def delete_gtt(self, tid):
         self.cancelled.append(tid)
         return {"trigger_id": tid}
@@ -102,6 +106,53 @@ async def test_tick_exit_sells_and_cancels_gtt(monkeypatch):
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
     assert client.cancelled == [555]
     assert pos.get("m1", "NIFTY24JUN24000CE").status == pos.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_futures_long_tick_exit_sells(monkeypatch):
+    """Futures long position: stop breach calls place_order_future with 'sell'."""
+    pos.reset("mf1")
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    pos.register(pos.OpenPosition(
+        uid="mf1", symbol="NIFTY25JULFUT", exchange="NFO", token=888,
+        qty=50, lot_size=50, entry_premium=24000, stop_premium=23800,
+        status=pos.OPEN, direction="long", vehicle="futures"))
+    client = _FakeClient()
+
+    # above stop → no exit
+    out = await monitor.on_tick("mf1", 888, 23900.0, client=client)
+    assert out is None and client.futures_exits == []
+
+    # at/below stop → exit via SELL (close long)
+    out = await monitor.on_tick("mf1", 888, 23750.0, client=client)
+    assert out == "NIFTY25JULFUT"
+    assert client.futures_exits == [("NIFTY25JULFUT", "sell", 50)]
+    assert client.sells == []   # options path NOT used
+    assert pos.get("mf1", "NIFTY25JULFUT").status == pos.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_futures_short_tick_exit_buys(monkeypatch):
+    """Futures short position: stop breach calls place_order_future with 'buy'."""
+    pos.reset("mf2")
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    pos.register(pos.OpenPosition(
+        uid="mf2", symbol="BANKNIFTY25JULFUT", exchange="NFO", token=999,
+        qty=15, lot_size=15, entry_premium=48000, stop_premium=48500,
+        status=pos.OPEN, direction="short", vehicle="futures"))
+    client = _FakeClient()
+
+    # below stop (short: breach is price ≥ stop) → no exit
+    out = await monitor.on_tick("mf2", 999, 48200.0, client=client)
+    assert out is None
+
+    # at/above stop → exit via BUY (cover short)
+    out = await monitor.on_tick("mf2", 999, 48600.0, client=client)
+    assert out == "BANKNIFTY25JULFUT"
+    assert client.futures_exits == [("BANKNIFTY25JULFUT", "buy", 15)]
+    assert pos.get("mf2", "BANKNIFTY25JULFUT").status == pos.CLOSED
 
 
 @pytest.mark.asyncio

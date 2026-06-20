@@ -350,6 +350,16 @@ def _make_place_cb(client, uid: str):
             stop_mode=cfg.stop_mode, guard_key=guard_key,
             direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying))
 
+        # ── auto-subscribe the position's token to the ticker (tick monitor) ──
+        if trade_token and cfg.stop_mode in ("monitor", "both"):
+            try:
+                from app.services.exchanges.kite import ticker_manager, constants as K
+                await ticker_manager.subscribe(uid, [trade_token], mode=K.MODE_LTP)
+                state.log(uid, "info",
+                          f"Subscribed token {trade_token} ({trade_symbol}) to tick monitor")
+            except Exception as _te:  # noqa: BLE001
+                log.debug("kite monitor auto-subscribe failed for %s: %s", uid, _te)
+
         # ── broker-side protective stop (workstream C) ────────────────────────
         if cfg.stop_mode in ("broker", "both") and stop_px > 0:
             gtt_id = await protective_stop.place_stop(
