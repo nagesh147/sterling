@@ -9,6 +9,7 @@ import { QuoteDetail } from './MarketWatchPane';
 import { AlignmentChips } from './TripleSupertrendPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
+import { SignalImpactCalculator } from './SignalImpactCalculator';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
@@ -149,6 +150,7 @@ function LegCard({ leg, exchange, underlying, spotPx }: {
 
 export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onShowSetup, onShowOptionChain }: Props) {
   const { data, isLoading, isError } = useEngineDetail(token, timestamp_ms, true);
+  const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const [pinned, setPinned] = useState<boolean>(() => {
     try { return JSON.parse(localStorage.getItem('kite_engine_pins') || '[]').includes(token); } catch { return false; }
   });
@@ -239,6 +241,18 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             <Stat label="Move since" value={`${move >= 0 ? '+' : ''}${move.toFixed(2)}`} color={move >= 0 ? k.green : k.red} />
             <Stat label="SL" value={data.stop_loss.toFixed(2)} color={k.amber} />
           </div>
+
+          {/* Trade impact calculator — pick the best strike with live greeks */}
+          <SignalImpactCalculator
+            data={data}
+            onBuy={(leg) => openOrderWindow({
+              symbol: leg.option_symbol,
+              exchange: data.exchange,
+              initialSide: 'BUY',
+              lotSize: leg.lot_size || 1,
+              lastPrice: leg.last_price || 0,
+            })}
+          />
 
           {/* option legs */}
           {data.options.length === 0 ? (

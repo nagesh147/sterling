@@ -208,8 +208,10 @@ class TestFuturesSizer:
 
 class TestValidators:
     def test_target_delta_clamp_low(self):
-        cfg = EngineConfigModel(target_delta=0.3)
-        assert cfg.target_delta == 0.5
+        # OTM execution targets (δ ~0.2–0.45) are now valid and pass through;
+        # only sub-0.05 degenerate deltas are clamped up.
+        assert EngineConfigModel(target_delta=0.3).target_delta == 0.3
+        assert EngineConfigModel(target_delta=0.01).target_delta == 0.05
 
     def test_target_delta_clamp_high(self):
         cfg = EngineConfigModel(target_delta=1.5)

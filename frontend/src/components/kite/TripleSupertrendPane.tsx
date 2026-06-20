@@ -48,6 +48,16 @@ const MONEY_OPTS: { value: Moneyness; hint: string }[] = [
   { value: 'OTM4', hint: 'Four strikes out-of-the-money.' },
   { value: 'OTM5', hint: 'Five strikes out-of-the-money — cheapest, lottery-like.' },
 ];
+// Delta-themed strike buckets — a friendlier face on the 11 raw ITM/OTM steps.
+// Each tile selects a group of moneyness steps; "active" = any member selected.
+// This is the VIEW/SCAN filter: which strikes get resolved and shown as rows.
+const STRIKE_BUCKETS: { id: string; label: string; sub: string; members: Moneyness[] }[] = [
+  { id: 'deep_itm', label: 'Deep ITM', sub: 'δ ≈ 0.80+',     members: ['ITM5', 'ITM4'] },
+  { id: 'itm',      label: 'ITM',      sub: 'δ ≈ 0.60–0.80', members: ['ITM3', 'ITM2', 'ITM1'] },
+  { id: 'atm',      label: 'ATM',      sub: 'δ ≈ 0.50',       members: ['ATM'] },
+  { id: 'otm',      label: 'OTM',      sub: 'δ ≈ 0.30–0.45', members: ['OTM1', 'OTM2'] },
+  { id: 'far_otm',  label: 'Far OTM',  sub: 'δ ≲ 0.25',       members: ['OTM3', 'OTM4', 'OTM5'] },
+];
 const EXPIRY_OPTS: { value: ScanExpiry; label: string; hint: string }[] = [
   { value: 'weekly', label: 'Weekly', hint: 'Weekly contracts expiring every Thursday (including current week).' },
   { value: 'monthly', label: 'Monthly', hint: 'Monthly contracts expiring on the last Thursday of the month.' },
@@ -760,6 +770,35 @@ function Segmented({ options, isActive, onSelect }: {
   );
 }
 
+// Delta-bucket strike tiles (view/scan filter). Mirrors the look of the Strategy
+// tab's profile tiles. A tile is active when any of its moneyness members are
+// selected; partially-selected tiles get a subtle dashed outline.
+function StrikeBuckets({ selected, onToggle }: {
+  selected: Moneyness[]; onToggle: (members: Moneyness[]) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+      {STRIKE_BUCKETS.map((b) => {
+        const inCount = b.members.filter((m) => selected.includes(m)).length;
+        const active = inCount > 0;
+        const partial = active && inCount < b.members.length;
+        return (
+          <button key={b.id} onClick={() => onToggle(b.members)} aria-pressed={active}
+            title={`${b.label} — ${b.members.join(', ')}`}
+            style={{
+              flex: '1 1 64px', minWidth: 64, padding: '7px 6px', borderRadius: 6, cursor: 'pointer',
+              border: `${partial ? '2px dashed' : '2px solid'} ${active ? k.orange : k.border}`,
+              background: active ? tint(k.orange, 12) : k.bg, transition: 'all .14s ease', textAlign: 'center',
+            }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: active ? k.orange : k.text }}>{b.label}</div>
+            <div style={{ fontSize: 9, color: active ? k.orange : k.dim, marginTop: 2 }}>{b.sub}</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Pill toggle for the granular universe pickers (multi-select chips).
 function Chip({ label, active, onClick, dim }: { label: string; active: boolean; onClick: () => void; dim?: boolean }) {
   return (
@@ -1115,6 +1154,19 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     const next = has ? cfg.strike_moneyness.filter((x) => x !== m) : [...cfg.strike_moneyness, m];
     const finalNext = next.length ? next : ['ATM', 'ITM1', 'ITM2', 'ITM3', 'OTM1', 'OTM2', 'OTM3'];
     patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`);
+  };
+
+  // Toggle a whole delta bucket: if every member is already selected, remove them
+  // all; otherwise add the missing ones. Never lets the selection go empty.
+  const toggleBucket = (members: Moneyness[]) => {
+    if (!cfg) return;
+    const cur = cfg.strike_moneyness;
+    const allIn = members.every((m) => cur.includes(m));
+    let next = allIn
+      ? cur.filter((m) => !members.includes(m))
+      : [...new Set([...cur, ...members])];
+    if (!next.length) next = ['ATM'];
+    patch({ strike_moneyness: next as Moneyness[] }, `Strikes updated to ${next.join(', ')}`);
   };
 
   const toggleExpiry = (e: ScanExpiry) => {
@@ -1571,12 +1623,20 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 onSelect={(v) => changeScanSource(v as ScanSource)}
               />
             </SettingRow>
-            <SettingRow label="Strikes" align="top" full hint="Which strikes to resolve per signal — in-the-money (ITM), at-the-money (ATM) or out-of-the-money (OTM). Select one or more.">
-              <Segmented
-                options={MONEY_OPTS.map((o) => ({ value: o.value, label: o.value, hint: o.hint }))}
-                isActive={(v) => cfg.strike_moneyness.includes(v as Moneyness)}
-                onSelect={(v) => toggleMoneyness(v as Moneyness)}
-              />
+            <SettingRow label="Strikes" align="top" full hint="Which strikes to resolve and show per signal, grouped by delta. This is a VIEW filter — it controls the rows you see, not what auto-execute buys.">
+              <StrikeBuckets selected={cfg.strike_moneyness} onToggle={toggleBucket} />
+              <details>
+                <summary style={{ fontSize: 9.5, color: k.dim, cursor: 'pointer', marginTop: 2 }}>
+                  Fine-tune individual strikes
+                </summary>
+                <div style={{ marginTop: 6 }}>
+                  <Segmented
+                    options={MONEY_OPTS.map((o) => ({ value: o.value, label: o.value, hint: o.hint }))}
+                    isActive={(v) => cfg.strike_moneyness.includes(v as Moneyness)}
+                    onSelect={(v) => toggleMoneyness(v as Moneyness)}
+                  />
+                </div>
+              </details>
             </SettingRow>
             <SettingRow label="Idx exp." hint="Index option expiries to scan — weekly (every Thursday) and/or monthly.">
               <Segmented

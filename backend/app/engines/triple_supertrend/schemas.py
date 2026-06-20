@@ -296,7 +296,10 @@ class EngineConfigModel(BaseModel):
     def _target_delta_bounds(cls, v):
         if v is None:
             return v
-        return min(0.99, max(0.50, float(v)))
+        # Any delta in (0,1) is a valid option strike target. OTM buys sit ~0.20–0.45,
+        # ATM ~0.50, deep-ITM ~0.80+. The resolver (pick_by_delta) simply picks the
+        # nearest strike, so the full band is allowed.
+        return min(0.99, max(0.05, float(v)))
 
     @field_validator("adx_min")
     @classmethod

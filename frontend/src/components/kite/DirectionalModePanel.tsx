@@ -97,32 +97,29 @@ const ITM_DEPTH_OPTIONS: { value: DeepItmMoneyness; label: string; desc: string 
   { value: 'ITM20', label: 'ITM-20', desc: 'δ ≈ 0.96 — closest to trading futures outright' },
 ];
 
-// Derive which profile the current config represents.
-// NOTE: target_delta is clamped to [0.50, 0.99] by the backend, so it cannot
-// distinguish OTM (≈0.28) from ATM (≈0.50). OTM vs ATM is therefore tracked via
-// strike_moneyness, which round-trips cleanly.
+// Derive which profile the current config represents. Execution is now fully
+// described by vehicle + target_delta (the backend allows the whole 0.05–0.99
+// delta band), so this no longer reads strike_moneyness — that belongs to the
+// signal-table VIEW filter and is independent of what auto-execute buys.
 function deriveActiveProfile(cfg: EngineConfigModel): ProfileId {
   if (cfg.vehicle === 'futures' && cfg.directional_mode) return 'futures';
+  const d = cfg.target_delta;
   if (cfg.vehicle === 'deep_itm_options' && cfg.directional_mode) {
-    const d = cfg.target_delta ?? 0.85;
-    return d >= 0.78 ? 'deep_itm' : 'slight_itm';
+    return (d ?? 0.85) >= 0.78 ? 'deep_itm' : 'slight_itm';
   }
-  // otm_options path — OTM if every selected strike is out-of-the-money.
-  const sm = cfg.strike_moneyness ?? [];
-  const allOtm = sm.length > 0 && sm.every(m => m.startsWith('OTM'));
-  return allOtm ? 'otm' : 'atm';
+  // otm_options path — distinguish OTM vs ATM purely by the execution delta.
+  if (d != null && d < 0.45) return 'otm';
+  return 'atm';
 }
 
-// Build the config patch for selecting a profile.
+// Build the config patch for selecting a profile. Execution-only: sets the
+// vehicle, directional flag and target delta. Never touches strike_moneyness.
 function profilePatch(p: ProfileDef, cfg: EngineConfigModel): Partial<EngineConfigModel> {
   const patch: Partial<EngineConfigModel> = {
     vehicle: p.vehicle,
     directional_mode: p.directional,
     target_delta: p.targetDelta,
   };
-  // OTM vs ATM is persisted through the scan ladder (target_delta can't hold it).
-  if (p.id === 'otm')      patch.strike_moneyness = ['OTM1', 'OTM2'];
-  else if (p.id === 'atm') patch.strike_moneyness = ['ATM'];
   // Auto-enable the vehicle in the allow-list if it isn't already.
   if (!cfg.enabled_vehicles.includes(p.vehicle)) {
     patch.enabled_vehicles = [...cfg.enabled_vehicles, p.vehicle];
@@ -235,8 +232,26 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
       <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
-        HOW DO YOU WANT TO TRADE THE SIGNAL?
+        HOW SHOULD AUTO-EXECUTE TRADE THE SIGNAL?
         <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
+      </div>
+
+      {/* What this panel controls — and what it does NOT. */}
+      <div style={{
+        fontSize: 11, lineHeight: 1.55, color: '#555', marginBottom: 10,
+        padding: '8px 11px', borderRadius: 5,
+        background: cfg.auto_execute ? '#e8f5e9' : '#fff8e1',
+        border: `1px solid ${cfg.auto_execute ? '#a5d6a7' : '#ffe082'}`,
+      }}>
+        {cfg.auto_execute ? (
+          <><strong style={{ color: '#2e7d32' }}>AUTO is ON.</strong> The engine will buy the instrument
+            below for each fresh signal. This is purely an <strong>execution</strong> choice — it does
+            <em> not</em> change which signals or strikes you see (set those in the signal table).</>
+        ) : (
+          <><strong style={{ color: '#e65100' }}>You're in MANUAL mode.</strong> These settings only kick in
+            once you switch <strong>SIGNALS → AUTO</strong> above. In MANUAL you pick the strike yourself
+            from each signal (use the Trade Impact Calculator), so the choice below is just pre-configuration.</>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' as const }}>
