@@ -1,55 +1,141 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { EngineConfigModel, Vehicle, DeepItmMoneyness } from '../../types/kiteEngine';
 
-// ─── Vehicle info cards — only vehicles that differ from the default OTM path ─
-// otm_options is intentionally excluded: it is identical to directional_mode=OFF
-// and showing it as a selectable vehicle would be misleading.
+// ─── Profile definitions ──────────────────────────────────────────────────────
+// Each profile maps to specific backend config fields. The user picks a profile;
+// the internal directional_mode / vehicle / target_delta fields are derived.
 
-type SelectableVehicle = Exclude<Vehicle, 'otm_options'>;
+type ProfileId = 'otm' | 'atm' | 'slight_itm' | 'deep_itm' | 'futures';
 
-const VEHICLE_INFO: Record<SelectableVehicle, { label: string; badge: string; badgeColor: string; desc: string; risk: string }> = {
-  deep_itm_options: {
-    label: 'Deep ITM Options',
-    badge: '⚠ Experimental',
-    badgeColor: '#ff9800',
-    desc: 'Buys calls/puts deep in the money (δ ≈ 0.85–0.95). The option moves nearly 1:1 with Nifty so you capture most of the underlying\'s move — and theta barely touches you. Costs more per lot than OTM, so you get fewer lots for the same capital.',
-    risk: 'Still a defined-risk trade — max loss is the premium paid. You\'re buying the index move through an options wrapper rather than futures margin.',
+interface ProfileDef {
+  id: ProfileId;
+  label: string;
+  sublabel: string;
+  delta: number;          // representative mid-range delta for this profile
+  deltaLabel: string;     // display string
+  thetaPctPerDay: number; // rough % of premium lost per day to theta
+  color: string;
+  desc: string;
+  risk: string;
+  isExperimental: boolean;
+  // backend fields this profile sets
+  vehicle: Vehicle;
+  directional: boolean;
+  targetDelta: number | null;
+}
+
+const PROFILES: ProfileDef[] = [
+  {
+    id: 'otm',
+    label: 'OTM',
+    sublabel: 'Out of the Money',
+    delta: 0.28, deltaLabel: 'δ 0.20 – 0.35',
+    thetaPctPerDay: 3.5,
+    color: '#1565c0',
+    desc: 'Cheapest entry per lot. High leverage if a big move comes fast — but theta decay is brutal. The option loses ~3–4% of its premium every single day the market does nothing. You need the move to happen quickly.',
+    risk: 'Max loss is exactly what you paid — nothing more. But time decay is your biggest enemy.',
+    isExperimental: false,
+    vehicle: 'otm_options', directional: false, targetDelta: 0.28,
   },
-  futures: {
-    label: 'Index Futures',
-    badge: '⚠ Experimental',
-    badgeColor: '#f44336',
-    desc: 'Bull signal → buys the future. Bear signal → sells the future short. Delta-1, no IV, no theta — pure price exposure. The stop is in index points (not premium), and the engine sizes lots to keep your risk within budget.',
-    risk: 'Losses scale with every point the market moves against you — there is no premium floor. Requires margin (~12–15% of contract value). Only use if you are comfortable with futures and trust the stop discipline.',
+  {
+    id: 'atm',
+    label: 'ATM',
+    sublabel: 'At the Money',
+    delta: 0.50, deltaLabel: 'δ 0.45 – 0.55',
+    thetaPctPerDay: 2.0,
+    color: '#2e7d32',
+    desc: 'The default. Best liquidity and tightest bid-ask spreads. You capture roughly half of every point the underlying moves. Theta is still present (~2%/day) but more manageable than OTM.',
+    risk: 'Max loss is the premium paid. Standard risk-reward. Most traders start here.',
+    isExperimental: false,
+    vehicle: 'otm_options', directional: false, targetDelta: 0.50,
   },
-};
-
-const ITM_DEPTH_OPTIONS: { value: DeepItmMoneyness; label: string; desc: string }[] = [
-  { value: 'ITM5',  label: 'ITM-5',  desc: '5 strikes ITM — δ ≈ 0.75, some theta still present' },
-  { value: 'ITM10', label: 'ITM-10', desc: '10 strikes ITM — δ ≈ 0.85, minimal theta bleed' },
-  { value: 'ITM15', label: 'ITM-15', desc: '15 strikes ITM — δ ≈ 0.92, near-futures behaviour' },
-  { value: 'ITM20', label: 'ITM-20', desc: '20 strikes ITM — δ ≈ 0.96, closest to trading the future outright' },
+  {
+    id: 'slight_itm',
+    label: 'Slight ITM',
+    sublabel: 'In the Money',
+    delta: 0.65, deltaLabel: 'δ 0.60 – 0.70',
+    thetaPctPerDay: 1.0,
+    color: '#e65100',
+    desc: 'More intrinsic value, less time value. Theta slows down significantly. You pay more upfront, but a larger chunk of your premium is "real" value that doesn\'t melt away with time.',
+    risk: 'Max loss is the premium paid. Higher cost per lot means fewer lots for the same capital.',
+    isExperimental: true,
+    vehicle: 'deep_itm_options', directional: true, targetDelta: 0.65,
+  },
+  {
+    id: 'deep_itm',
+    label: 'Deep ITM',
+    sublabel: 'High Delta',
+    delta: 0.87, deltaLabel: 'δ 0.80 – 0.95',
+    thetaPctPerDay: 0.2,
+    color: '#6a1b9a',
+    desc: 'Moves almost point-for-point with the index. Barely any theta — most of the premium is intrinsic value. Expensive per lot, but behaves the closest to trading the index itself with a defined-risk wrapper.',
+    risk: 'Max loss is the premium paid (which is large per lot). Very few lots affordable per ₹1L of capital.',
+    isExperimental: true,
+    vehicle: 'deep_itm_options', directional: true, targetDelta: 0.87,
+  },
+  {
+    id: 'futures',
+    label: 'Futures',
+    sublabel: 'Index Future',
+    delta: 1.0, deltaLabel: 'δ = 1.00',
+    thetaPctPerDay: 0,
+    color: '#b71c1c',
+    desc: 'Pure index exposure. Every point the index moves, you gain or lose that exact amount. No premium, no theta, no IV crush. Bear signal goes short, bull goes long. The trail stop is your only protection.',
+    risk: 'No premium floor — losses are unlimited beyond the stop. Requires margin (~12–15% of contract value). Validate in Paper mode first.',
+    isExperimental: true,
+    vehicle: 'futures', directional: true, targetDelta: null,
+  },
 ];
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+const ITM_DEPTH_OPTIONS: { value: DeepItmMoneyness; label: string; desc: string }[] = [
+  { value: 'ITM5',  label: 'ITM-5',  desc: 'δ ≈ 0.75 — some theta still present' },
+  { value: 'ITM10', label: 'ITM-10', desc: 'δ ≈ 0.85 — minimal theta bleed' },
+  { value: 'ITM15', label: 'ITM-15', desc: 'δ ≈ 0.92 — near-futures behaviour' },
+  { value: 'ITM20', label: 'ITM-20', desc: 'δ ≈ 0.96 — closest to trading futures outright' },
+];
 
+// Derive which profile the current config represents.
+function deriveActiveProfile(cfg: EngineConfigModel): ProfileId {
+  if (cfg.vehicle === 'futures' && cfg.directional_mode) return 'futures';
+  if (cfg.vehicle === 'deep_itm_options' && cfg.directional_mode) {
+    const d = cfg.target_delta ?? 0.85;
+    return d >= 0.78 ? 'deep_itm' : 'slight_itm';
+  }
+  // otm_options path — use target_delta as profile marker (backend ignores it for this vehicle)
+  const d = cfg.target_delta ?? 0.50;
+  return d <= 0.35 ? 'otm' : 'atm';
+}
+
+// Build the config patch for selecting a profile.
+function profilePatch(p: ProfileDef, cfg: EngineConfigModel): Partial<EngineConfigModel> {
+  const patch: Partial<EngineConfigModel> = {
+    vehicle: p.vehicle,
+    directional_mode: p.directional,
+    target_delta: p.targetDelta,
+  };
+  // Auto-enable the vehicle in the allow-list if it isn't already.
+  if (!cfg.enabled_vehicles.includes(p.vehicle)) {
+    patch.enabled_vehicles = [...cfg.enabled_vehicles, p.vehicle];
+  }
+  return patch;
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 4, padding: 16, marginBottom: 14 },
-  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 1, marginBottom: 12, fontWeight: 700 },
-  hint: { color: '#9b9b9b', fontSize: 11, lineHeight: 1.5 },
-  row: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 },
-  toggle: { width: 36, height: 18, borderRadius: 9, cursor: 'pointer', border: 'none', position: 'relative' as const, transition: 'background 0.2s' },
-  toggleDot: { width: 14, height: 14, borderRadius: 7, background: '#fff', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' },
-  vehicleCard: { border: '1px solid #e0e0e0', borderRadius: 4, padding: '10px 12px', cursor: 'pointer', transition: 'all 0.15s', marginBottom: 6 },
-  vehicleCardActive: { border: '1px solid #387ed1', background: '#f5f9ff' },
-  badge: { fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: '2px 6px', borderRadius: 3, color: '#fff', display: 'inline-block', marginLeft: 6 },
-  sectionLabel: { fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#9b9b9b', marginBottom: 6, marginTop: 14 },
-  select: { fontSize: 12, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 3, background: '#fff', fontFamily: 'inherit' },
-  filterRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
-  filterLabel: { fontSize: 11, color: '#444' },
-  filterInput: { width: 60, fontSize: 11, padding: '3px 6px', border: '1px solid #ddd', borderRadius: 3, textAlign: 'right' as const, fontFamily: 'inherit' },
-  divider: { height: 1, background: '#eee', margin: '10px 0' },
+  card:        { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, padding: 16, marginBottom: 14 },
+  section:     { fontSize: 10, fontWeight: 700, letterSpacing: 1.2, color: '#9b9b9b', textTransform: 'uppercase' as const, marginBottom: 10 },
+  hint:        { fontSize: 11, color: '#9b9b9b', lineHeight: 1.5 },
+  divider:     { height: 1, background: '#f0f0f0', margin: '14px 0' },
+  row:         { display: 'flex', alignItems: 'center', gap: 8 },
+  filterRow:   { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
+  filterLabel: { fontSize: 11, color: '#444', lineHeight: 1.5 },
+  numInput:    { width: 64, fontSize: 11, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, textAlign: 'right' as const, fontFamily: 'inherit' },
+  select:      { fontSize: 11, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', fontFamily: 'inherit' },
+  toggle:      { width: 36, height: 18, borderRadius: 9, cursor: 'pointer', border: 'none', position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0 },
+  toggleDot:   { width: 14, height: 14, borderRadius: 7, background: '#fff', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
 };
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
   cfg: EngineConfigModel;
@@ -58,221 +144,309 @@ interface Props {
 }
 
 export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
-  const enabled = cfg.directional_mode;
+  const [simMove, setSimMove]       = useState(100);   // underlying pts to simulate
+  const [simPremium, setSimPremium] = useState(150);   // ₹ entry premium to simulate
+  const [customDelta, setCustomDelta] = useState('');  // delta override input
+
+  const activeId      = deriveActiveProfile(cfg);
+  const activeProfile = PROFILES.find(p => p.id === activeId)!;
+  const isFutures     = activeId === 'futures';
+
+  const effectiveDelta  = customDelta ? parseFloat(customDelta) || activeProfile.delta : activeProfile.delta;
+  const optionMove      = +(effectiveDelta * simMove).toFixed(1);
+  const thetaDaily      = +(activeProfile.thetaPctPerDay / 100 * simPremium).toFixed(1);
+  const breakEvenPts    = isFutures ? 0 : Math.round(simPremium / effectiveDelta);
+  const daysToEatGain   = thetaDaily > 0 && optionMove > 0 ? Math.floor(optionMove / thetaDaily) : null;
+
+  // Rough intrinsic / time-value split: intrinsicFraction ≈ max(0, (delta-0.5)×2)
+  const intrinsicFrac   = Math.max(0, Math.min(1, (effectiveDelta - 0.5) * 2));
+  const intrinsicAmt    = Math.round(simPremium * intrinsicFrac);
+  const timeValueAmt    = simPremium - intrinsicAmt;
 
   return (
     <div style={S.card}>
-      <div style={S.title}>DIRECTIONAL MODE</div>
 
-      {/* Master toggle */}
-      <div style={S.row}>
-        <button
-          style={{ ...S.toggle, background: enabled ? '#387ed1' : '#ccc' }}
-          onClick={() => onUpdate(enabled
-            ? { directional_mode: false, vehicle: 'otm_options' }  // reset vehicle when turning off
-            : { directional_mode: true, vehicle: cfg.vehicle === 'otm_options' ? 'deep_itm_options' : cfg.vehicle }
-          )}
-          disabled={busy}
-          title={enabled ? 'Disable directional mode (revert to standard options)' : 'Enable directional mode'}
-        >
-          <span style={{ ...S.toggleDot, left: enabled ? 20 : 2 }} />
-        </button>
-        <span style={{ fontSize: 12, fontWeight: 600, color: enabled ? '#387ed1' : '#999' }}>
-          {enabled ? 'ON' : 'OFF'}
-        </span>
-        <span style={S.hint}>
-          {enabled
-            ? 'Standard OTM options are replaced by the vehicle you select below.'
-            : 'Signals are traded as standard OTM option buys — CE on bull, PE on bear.'}
-        </span>
+      {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
+      <div style={S.section}>HOW DO YOU WANT TO TRADE THE SIGNAL?</div>
+
+      <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' as const }}>
+        {PROFILES.map(p => {
+          const active = p.id === activeId;
+          return (
+            <button
+              key={p.id}
+              disabled={busy}
+              onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
+              style={{
+                flex: '1 1 56px', padding: '8px 4px', borderRadius: 6,
+                border: `2px solid ${active ? p.color : '#e0e0e0'}`,
+                background: active ? p.color + '14' : '#fafafa',
+                cursor: busy ? 'default' : 'pointer',
+                textAlign: 'center' as const, transition: 'all 0.15s',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700, color: active ? p.color : '#555' }}>{p.label}</div>
+              <div style={{ fontSize: 9, color: active ? p.color : '#bbb', marginTop: 2 }}>{p.deltaLabel}</div>
+            </button>
+          );
+        })}
       </div>
 
-      {!enabled && (
-        <div style={{ ...S.hint, marginTop: 4, padding: '6px 10px', background: '#f7f7f7', borderRadius: 3 }}>
-          Buy OTM calls/puts. Cheap per lot, but theta decay and IV crush eat into your premium every day — the move needs to happen soon. Max loss is capped at what you paid. Turn ON to trade deep ITM options or futures instead.
+      {/* Active profile description card */}
+      <div style={{
+        padding: '10px 12px', borderRadius: 5, marginBottom: 10,
+        background: activeProfile.color + '0d', border: `1px solid ${activeProfile.color}33`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: activeProfile.color }}>{activeProfile.sublabel}</span>
+          {activeProfile.isExperimental && (
+            <span style={{ fontSize: 9, fontWeight: 700, background: activeProfile.color, color: '#fff', padding: '1px 5px', borderRadius: 3 }}>
+              EXPERIMENTAL
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: '#444', lineHeight: 1.55, marginBottom: 5 }}>{activeProfile.desc}</div>
+        <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4 }}>⚡ {activeProfile.risk}</div>
+      </div>
+
+      {/* Custom delta override */}
+      {!isFutures && (
+        <div style={{ ...S.row, marginBottom: 4, flexWrap: 'wrap' as const }}>
+          <span style={{ ...S.hint, flexShrink: 0 }}>Custom delta override:</span>
+          <input
+            type="number"
+            style={{ ...S.numInput, width: 72 }}
+            value={customDelta}
+            placeholder={activeProfile.delta.toFixed(2)}
+            step={0.05} min={0.10} max={0.99}
+            onChange={e => {
+              setCustomDelta(e.target.value);
+              const d = parseFloat(e.target.value);
+              if (d >= 0.10 && d <= 0.99) {
+                const v: Vehicle = d >= 0.55 ? 'deep_itm_options' : 'otm_options';
+                onUpdate({ target_delta: d, vehicle: v, directional_mode: d >= 0.55 });
+              }
+            }}
+            disabled={busy}
+          />
+          {customDelta && (
+            <button
+              style={{ fontSize: 10, color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+              onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
+            >✕ clear</button>
+          )}
+          <span style={{ ...S.hint }}>Overrides the profile's default strike selection.</span>
         </div>
       )}
 
-      {enabled && (
+      {/* ── 2. Vehicle-specific config ─────────────────────────────────────── */}
+      {(activeId === 'slight_itm' || activeId === 'deep_itm') && (
         <>
-          {/* Vehicle selector — only vehicles that differ from the default OTM path */}
-          <div style={S.sectionLabel}>VEHICLE</div>
-          {(Object.keys(VEHICLE_INFO) as SelectableVehicle[]).map((v) => {
-            const info = VEHICLE_INFO[v];
-            const isEnabled = cfg.enabled_vehicles.includes(v);
-            const isActive = cfg.vehicle === v;
-            return (
-              <div
-                key={v}
-                style={{
-                  ...S.vehicleCard,
-                  ...(isActive ? S.vehicleCardActive : {}),
-                  opacity: isEnabled ? 1 : 0.5,
-                }}
-                onClick={() => {
-                  if (!isEnabled || busy) return;
-                  onUpdate({ vehicle: v });
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                  <input
-                    type="checkbox"
-                    checked={isEnabled}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      const next = e.target.checked
-                        ? [...cfg.enabled_vehicles, v]
-                        : cfg.enabled_vehicles.filter((x) => x !== v);
-                      // Must have at least one vehicle enabled
-                      if (next.length === 0) return;
-                      const patch: Partial<EngineConfigModel> = { enabled_vehicles: next };
-                      // If deactivating the current vehicle, switch to another
-                      if (!e.target.checked && cfg.vehicle === v) {
-                        patch.vehicle = next[0];
-                      }
-                      onUpdate(patch);
-                    }}
-                    style={{ marginRight: 6 }}
-                    disabled={busy}
-                  />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: isActive ? '#387ed1' : '#333' }}>
-                    {info.label}
-                  </span>
-                  <span style={{ ...S.badge, background: info.badgeColor }}>{info.badge}</span>
-                  {isActive && (
-                    <span style={{ ...S.badge, background: '#387ed1', marginLeft: 4 }}>ACTIVE</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 11, color: '#666', lineHeight: 1.4, marginBottom: 4 }}>{info.desc}</div>
-                <div style={{ fontSize: 10, color: '#999', lineHeight: 1.4 }}>⚡ {info.risk}</div>
-              </div>
-            );
-          })}
-
           <div style={S.divider} />
-
-          {/* Deep-ITM config (only visible when deep_itm_options is selected) */}
-          {cfg.vehicle === 'deep_itm_options' && (
-            <>
-              <div style={S.sectionLabel}>DEEP-ITM DEPTH</div>
-              <div style={S.filterRow}>
-                <span style={S.filterLabel}>Strike depth:</span>
-                <select
-                  style={S.select}
-                  value={cfg.itm_depth || 'ITM10'}
-                  onChange={(e) => onUpdate({ itm_depth: e.target.value as DeepItmMoneyness })}
-                  disabled={busy}
-                >
-                  {ITM_DEPTH_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={S.filterRow}>
-                <span style={S.filterLabel}>Target delta (override):</span>
-                <input
-                  type="number"
-                  style={S.filterInput}
-                  value={cfg.target_delta ?? ''}
-                  placeholder="e.g. 0.90"
-                  step={0.05}
-                  min={0.5}
-                  max={0.99}
-                  onChange={(e) => {
-                    const v = e.target.value ? parseFloat(e.target.value) : null;
-                    onUpdate({ target_delta: v });
-                  }}
-                  disabled={busy}
-                />
-              </div>
-              <div style={{ ...S.hint, marginTop: 2 }}>
-                When set, picks the strike with BS delta closest to this value (overrides depth).
-              </div>
-            </>
-          )}
-
-          {/* Futures config */}
-          {cfg.vehicle === 'futures' && (
-            <>
-              <div style={S.sectionLabel}>FUTURES EXPIRY</div>
-              <div style={S.filterRow}>
-                <span style={S.filterLabel}>Expiry:</span>
-                <select
-                  style={S.select}
-                  value={cfg.futures_expiry}
-                  onChange={(e) => onUpdate({ futures_expiry: e.target.value as 'near' | 'next' })}
-                  disabled={busy}
-                >
-                  <option value="near">Near-month (lowest spread)</option>
-                  <option value="next">Next-month (more time)</option>
-                </select>
-              </div>
-            </>
-          )}
-
-          {/* Paper-first warning */}
-          <div style={{
-            marginTop: 14, padding: '8px 11px', borderRadius: 4,
-            background: '#fff3e0', border: '1px solid #ff980055',
-            fontSize: 11, color: '#e65100', lineHeight: 1.5,
-          }}>
-            ⚠ <strong>PAPER-FIRST</strong> — Validate in Paper mode before going live.
+          <div style={S.section}>STRIKE DEPTH (FALLBACK)</div>
+          <div style={S.filterRow}>
+            <span style={S.filterLabel}>
+              Used when no live delta match is available.
+            </span>
+            <select
+              style={S.select}
+              value={cfg.itm_depth || 'ITM10'}
+              onChange={e => onUpdate({ itm_depth: e.target.value as DeepItmMoneyness })}
+              disabled={busy}
+            >
+              {ITM_DEPTH_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
+              ))}
+            </select>
           </div>
         </>
       )}
 
-      {/* ── Entry quality filters — apply regardless of vehicle or directional mode ── */}
+      {activeId === 'futures' && (
+        <>
+          <div style={S.divider} />
+          <div style={S.section}>FUTURES EXPIRY</div>
+          <div style={S.filterRow}>
+            <span style={S.filterLabel}>Which contract series to trade.</span>
+            <select
+              style={S.select}
+              value={cfg.futures_expiry}
+              onChange={e => onUpdate({ futures_expiry: e.target.value as 'near' | 'next' })}
+              disabled={busy}
+            >
+              <option value="near">Near-month — lowest spread, most liquid</option>
+              <option value="next">Next-month — more time before expiry</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {/* ── 3. Trade impact calculator ─────────────────────────────────────── */}
       <div style={S.divider} />
-      <div style={S.sectionLabel}>ENTRY QUALITY FILTERS</div>
-      <div style={{ ...S.hint, marginBottom: 8 }}>
-        Optional. When set, the engine skips entries where the trend is too weak.
-        These apply to all vehicles — OTM options, deep ITM, and futures alike.
+      <div style={S.section}>TRADE IMPACT CALCULATOR</div>
+      <div style={{ ...S.hint, marginBottom: 10 }}>
+        Adjust the inputs below to see how this profile behaves on your trade.
       </div>
+
+      {/* Simulator inputs */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' as const }}>
+        <div style={{ flex: '1 1 120px' }}>
+          <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>UNDERLYING MOVES</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <input type="number" style={{ ...S.numInput, flex: 1 }}
+              value={simMove} min={10} max={2000} step={25}
+              onChange={e => setSimMove(Math.max(10, Number(e.target.value) || 100))} />
+            <span style={S.hint}>pts</span>
+          </div>
+        </div>
+        {!isFutures && (
+          <div style={{ flex: '1 1 120px' }}>
+            <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>YOUR ENTRY PREMIUM</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={S.hint}>₹</span>
+              <input type="number" style={{ ...S.numInput, flex: 1 }}
+                value={simPremium} min={10} max={5000} step={10}
+                onChange={e => setSimPremium(Math.max(10, Number(e.target.value) || 150))} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Impact rows */}
+      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 7 }}>
+
+        <ImpactRow icon="📈" color="#2e7d32"
+          label={`Underlying moves ${simMove} pts in your direction`}
+          value={isFutures ? `+₹${simMove} / share` : `+₹${optionMove} / share`}
+          sub={isFutures
+            ? `δ = 1.00 — moves exactly 1:1 with the index. No slippage from delta.`
+            : `δ ${effectiveDelta.toFixed(2)} × ${simMove} pts. The rest of the move doesn't reach you.`}
+        />
+
+        <ImpactRow icon="📉" color="#c62828"
+          label={`Underlying moves ${simMove} pts against you`}
+          value={isFutures ? `−₹${simMove} / share (until trail stop fires)` : `−₹${optionMove} / share premium loss`}
+          sub={isFutures
+            ? `Stop exits at the trail level — loss is capped at (entry − stop) × lot size.`
+            : `Your option still has remaining value. Actual P&L also depends on IV at exit.`}
+        />
+
+        {!isFutures && (
+          <ImpactRow icon="⏳" color="#e65100"
+            label="Daily theta — what you lose if the market does nothing"
+            value={`−₹${thetaDaily} / share / day`}
+            sub={`≈ ${activeProfile.thetaPctPerDay}% of your ₹${simPremium} premium disappears each calendar day. Weekend included.`}
+          />
+        )}
+
+        {isFutures && (
+          <ImpactRow icon="⏳" color="#2e7d32"
+            label="Daily theta — what you lose if the market does nothing"
+            value="₹0 — zero time decay"
+            sub="Futures carry no premium, so there is no theta. You hold with margin instead of paying for time."
+          />
+        )}
+
+        {!isFutures && (
+          <ImpactRow icon="⚖️" color="#1565c0"
+            label="Break-even — underlying must move at least"
+            value={`${breakEvenPts} pts in your direction`}
+            sub={`₹${simPremium} premium ÷ δ ${effectiveDelta.toFixed(2)} = ${breakEvenPts} pts just to recover your entry cost at expiry.`}
+          />
+        )}
+
+        {!isFutures && daysToEatGain !== null && (
+          <ImpactRow icon="🕐" color="#6a1b9a"
+            label={`If underlying moves ${simMove} pts today, theta erodes that gain in`}
+            value={`${daysToEatGain} day${daysToEatGain !== 1 ? 's' : ''} of flat market`}
+            sub={`₹${optionMove} gain ÷ ₹${thetaDaily}/day decay. Don't let a winning trade sit and bleed to theta.`}
+          />
+        )}
+
+        <ImpactRow icon="🛡️" color={isFutures ? '#c62828' : '#555'}
+          label="Maximum possible loss"
+          value={isFutures ? 'Trail stop distance × lot size' : `₹${simPremium} / share — what you paid`}
+          sub={isFutures
+            ? `No floor. The trail stop is the only thing limiting your loss — honour it.`
+            : `Options cannot go below zero. Your loss is always capped at the premium paid.`}
+        />
+
+      </div>
+
+      {/* Premium breakdown bar (options only) */}
+      {!isFutures && (
+        <>
+          <div style={{ ...S.divider, marginTop: 12 }} />
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#9b9b9b', marginBottom: 8 }}>
+            PREMIUM BREAKDOWN (APPROXIMATE) — ₹{simPremium} total
+          </div>
+          <div style={{ height: 14, borderRadius: 7, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+            <div style={{ width: `${intrinsicFrac * 100}%`, background: '#2e7d32', transition: 'width 0.35s', minWidth: intrinsicFrac > 0 ? 4 : 0 }} />
+            <div style={{ flex: 1, background: '#e65100', opacity: 0.75 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' as const }}>
+            <span style={{ fontSize: 10, color: '#2e7d32' }}>
+              ■ Intrinsic value ≈ ₹{intrinsicAmt}
+              <span style={{ color: '#9b9b9b' }}> — real value, doesn't decay</span>
+            </span>
+            <span style={{ fontSize: 10, color: '#e65100' }}>
+              ■ Time value ≈ ₹{timeValueAmt}
+              <span style={{ color: '#9b9b9b' }}> — theta eats this daily</span>
+            </span>
+          </div>
+          {intrinsicFrac === 0 && (
+            <div style={{ ...S.hint, marginTop: 6 }}>
+              OTM options have zero intrinsic value — your entire ₹{simPremium} is time value subject to decay.
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── 4. Entry quality filters ────────────────────────────────────────── */}
+      <div style={S.divider} />
+      <div style={S.section}>ENTRY QUALITY FILTERS</div>
+      <div style={{ ...S.hint, marginBottom: 12 }}>
+        Optional gates. When set, the engine skips signals where the trend is too weak or
+        volatility too low. Applies to all profiles — OTM, deep ITM, and futures alike.
+      </div>
+
       <div style={S.filterRow}>
         <span style={S.filterLabel}>
           Min ADX
-          <span style={{ ...S.hint, display: 'block' }}>Trend strength. 20+ = decent trend, 30+ = strong.</span>
+          <span style={{ ...S.hint, display: 'block' }}>
+            Trend strength (0–100). 20 = decent trend forming. 30 = strong.
+            40+ = very strong, rare. Leave blank to accept all signals.
+          </span>
         </span>
-        <input
-          type="number"
-          style={S.filterInput}
-          value={cfg.adx_min ?? ''}
-          placeholder="off"
-          step={1}
-          min={5}
-          max={50}
-          onChange={(e) => {
-            const v = e.target.value ? parseFloat(e.target.value) : null;
-            onUpdate({ adx_min: v });
-          }}
-          disabled={busy}
-        />
-      </div>
-      <div style={S.filterRow}>
-        <span style={S.filterLabel}>
-          Min ATR %ile
-          <span style={{ ...S.hint, display: 'block' }}>Volatility rank vs past year. 50 = above median.</span>
-        </span>
-        <input
-          type="number"
-          style={S.filterInput}
-          value={cfg.atr_pct_min ?? ''}
-          placeholder="off"
-          step={5}
-          min={10}
-          max={95}
-          onChange={(e) => {
-            const v = e.target.value ? parseFloat(e.target.value) : null;
-            onUpdate({ atr_pct_min: v });
-          }}
+        <input type="number" style={S.numInput}
+          value={cfg.adx_min ?? ''} placeholder="off"
+          step={1} min={5} max={50}
+          onChange={e => onUpdate({ adx_min: e.target.value ? parseFloat(e.target.value) : null })}
           disabled={busy}
         />
       </div>
 
-      {/* ── Risk infrastructure — also applies to all vehicles ── */}
+      <div style={S.filterRow}>
+        <span style={S.filterLabel}>
+          Min ATR %ile
+          <span style={{ ...S.hint, display: 'block' }}>
+            Volatility rank vs the past year (0–100). 50 = market is moving more
+            than half its historical range. Higher = only trade when it's volatile.
+          </span>
+        </span>
+        <input type="number" style={S.numInput}
+          value={cfg.atr_pct_min ?? ''} placeholder="off"
+          step={5} min={10} max={95}
+          onChange={e => onUpdate({ atr_pct_min: e.target.value ? parseFloat(e.target.value) : null })}
+          disabled={busy}
+        />
+      </div>
+
+      {/* ── 5. Risk infrastructure ──────────────────────────────────────────── */}
       <div style={S.divider} />
-      <div style={S.sectionLabel}>RISK INFRASTRUCTURE</div>
-      <div style={S.row}>
+      <div style={S.section}>RISK INFRASTRUCTURE</div>
+
+      <div style={{ ...S.row, marginBottom: 8 }}>
         <button
           style={{ ...S.toggle, background: cfg.wire_risk_infra ? '#ff9800' : '#ccc' }}
           onClick={() => onUpdate({ wire_risk_infra: !cfg.wire_risk_infra })}
@@ -285,9 +459,34 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
         </span>
       </div>
       <div style={S.hint}>
-        Wires the drawdown circuit breaker and cross-asset correlation penalty into sizing.
-        If your account drops 5%/10%/15%, position sizes are scaled down or halted.
-        Applies to all vehicles. Recommended once you are trading more than one position at a time.
+        Wires two safety layers into every entry:
+        <br />• <strong>Drawdown circuit breaker</strong> — if your account drops 5%/10%/15%, new position
+        sizes are scaled down automatically, then entries are halted.
+        <br />• <strong>Correlation penalty</strong> — if you already hold a position correlated with the
+        new signal (e.g. Nifty and BankNifty moving together), the new lot size is reduced to avoid
+        doubling up on the same risk.
+        <br /><br />Applies to all profiles. Recommended once you run more than one position at a time.
+      </div>
+
+    </div>
+  );
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ImpactRow({ icon, label, value, sub, color }: {
+  icon: string; label: string; value: string; sub: string; color: string;
+}) {
+  return (
+    <div style={{
+      display: 'flex', gap: 10, padding: '9px 11px',
+      background: '#fafafa', borderRadius: 6, border: '1px solid #f0f0f0',
+    }}>
+      <span style={{ fontSize: 15, flexShrink: 0, lineHeight: '1.5', paddingTop: 1 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 3 }}>{value}</div>
+        <div style={{ fontSize: 10, color: '#999', lineHeight: 1.45 }}>{sub}</div>
       </div>
     </div>
   );
