@@ -130,6 +130,35 @@ function profilePatch(p: ProfileDef, cfg: EngineConfigModel): Partial<EngineConf
   return patch;
 }
 
+// ─── Config defaults (mirror EngineConfigModel) ───────────────────────────────
+// Used to flag when a setting has been changed from its default and to show the
+// user what the default was. Keep in sync with backend schemas.py.
+const DEFAULTS = {
+  profile: 'atm' as ProfileId,
+  itm_depth: 'ITM10',
+  futures_expiry: 'near',
+  adx_min: null as number | null,
+  atr_pct_min: null as number | null,
+  wire_risk_infra: false,
+};
+const PROFILE_LABEL: Record<ProfileId, string> = {
+  otm: 'OTM', atm: 'ATM', slight_itm: 'Slight ITM', deep_itm: 'Deep ITM', futures: 'Futures',
+};
+
+// A small inline "changed from default" chip. Renders nothing when at default.
+function DefaultNote({ changed, defaultText }: { changed: boolean; defaultText: string }) {
+  if (!changed) return null;
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, color: '#e65100', background: '#fff3e0',
+      border: '1px solid #ffcc80', borderRadius: 3, padding: '1px 6px',
+      marginLeft: 6, whiteSpace: 'nowrap',
+    }}>
+      ● CHANGED · default {defaultText}
+    </span>
+  );
+}
+
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
   card:        { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, padding: 16, marginBottom: 14 },
@@ -205,7 +234,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
     <div style={S.card}>
 
       {/* ── 1. Profile selector ─────────────────────────────────────────────── */}
-      <div style={S.section}>HOW DO YOU WANT TO TRADE THE SIGNAL?</div>
+      <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
+        HOW DO YOU WANT TO TRADE THE SIGNAL?
+        <DefaultNote changed={activeId !== DEFAULTS.profile} defaultText={PROFILE_LABEL[DEFAULTS.profile]} />
+      </div>
 
       <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' as const }}>
         {PROFILES.map(p => {
@@ -261,7 +293,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
           <span style={{ ...S.hint, flexShrink: 0 }}>Custom delta override:</span>
           <input
             type="number"
-            style={{ ...S.numInput, width: 72 }}
+            style={{
+              ...S.numInput, width: 72,
+              ...(customDelta ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}),
+            }}
             value={customDelta}
             placeholder={activeProfile.delta.toFixed(2)}
             step={0.05} min={0.10} max={0.99}
@@ -281,7 +316,8 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(activeProfile, cfg)); }}
             >✕ clear</button>
           )}
-          <span style={{ ...S.hint }}>Overrides the profile's default strike selection.</span>
+          <DefaultNote changed={!!customDelta} defaultText={`profile δ ${activeProfile.delta.toFixed(2)}`} />
+          {!customDelta && <span style={{ ...S.hint }}>Overrides the profile's default strike selection.</span>}
         </div>
       )}
 
@@ -289,7 +325,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {(activeId === 'slight_itm' || activeId === 'deep_itm') && (
         <>
           <div style={S.divider} />
-          <div style={S.section}>STRIKE DEPTH (FALLBACK)</div>
+          <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
+            STRIKE DEPTH (FALLBACK)
+            <DefaultNote changed={(cfg.itm_depth || 'ITM10') !== DEFAULTS.itm_depth} defaultText={DEFAULTS.itm_depth} />
+          </div>
           <div style={S.filterRow}>
             <span style={S.filterLabel}>
               Used when no live delta match is available.
@@ -311,7 +350,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
       {activeId === 'futures' && (
         <>
           <div style={S.divider} />
-          <div style={S.section}>FUTURES EXPIRY</div>
+          <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
+            FUTURES EXPIRY
+            <DefaultNote changed={cfg.futures_expiry !== DEFAULTS.futures_expiry} defaultText="near-month" />
+          </div>
           <div style={S.filterRow}>
             <span style={S.filterLabel}>Which contract series to trade.</span>
             <select
@@ -520,13 +562,17 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       <div style={S.filterRow}>
         <span style={S.filterLabel}>
-          Min ADX
+          <span style={{ display: 'flex', alignItems: 'center' }}>
+            Min ADX
+            <DefaultNote changed={cfg.adx_min !== DEFAULTS.adx_min} defaultText="off" />
+          </span>
           <span style={{ ...S.hint, display: 'block' }}>
             Trend strength (0–100). 20 = decent trend forming. 30 = strong.
             40+ = very strong, rare. Leave blank to accept all signals.
           </span>
         </span>
-        <input type="number" style={S.numInput}
+        <input type="number"
+          style={{ ...S.numInput, ...(cfg.adx_min !== DEFAULTS.adx_min ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}) }}
           value={cfg.adx_min ?? ''} placeholder="off"
           step={1} min={5} max={50}
           onChange={e => onUpdate({ adx_min: e.target.value ? parseFloat(e.target.value) : null })}
@@ -536,13 +582,17 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       <div style={S.filterRow}>
         <span style={S.filterLabel}>
-          Min ATR %ile
+          <span style={{ display: 'flex', alignItems: 'center' }}>
+            Min ATR %ile
+            <DefaultNote changed={cfg.atr_pct_min !== DEFAULTS.atr_pct_min} defaultText="off" />
+          </span>
           <span style={{ ...S.hint, display: 'block' }}>
             Volatility rank vs the past year (0–100). 50 = market is moving more
             than half its historical range. Higher = only trade when it's volatile.
           </span>
         </span>
-        <input type="number" style={S.numInput}
+        <input type="number"
+          style={{ ...S.numInput, ...(cfg.atr_pct_min !== DEFAULTS.atr_pct_min ? { borderColor: '#e65100', background: '#fff8f2', fontWeight: 700 } : {}) }}
           value={cfg.atr_pct_min ?? ''} placeholder="off"
           step={5} min={10} max={95}
           onChange={e => onUpdate({ atr_pct_min: e.target.value ? parseFloat(e.target.value) : null })}
@@ -552,7 +602,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       {/* ── 5. Risk infrastructure ──────────────────────────────────────────── */}
       <div style={S.divider} />
-      <div style={S.section}>RISK INFRASTRUCTURE</div>
+      <div style={{ ...S.section, display: 'flex', alignItems: 'center' }}>
+        RISK INFRASTRUCTURE
+        <DefaultNote changed={cfg.wire_risk_infra !== DEFAULTS.wire_risk_infra} defaultText="off" />
+      </div>
 
       <div style={{ ...S.row, marginBottom: 8 }}>
         <button
