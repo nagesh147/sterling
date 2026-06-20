@@ -210,79 +210,85 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
             </>
           )}
 
-          <div style={S.divider} />
-
-          {/* Entry filters */}
-          <div style={S.sectionLabel}>ENTRY QUALITY FILTERS</div>
-          <div style={S.hint}>Optional gates — set a minimum to reject weak-trend entries.</div>
-          <div style={S.filterRow}>
-            <span style={S.filterLabel}>Min ADX:</span>
-            <input
-              type="number"
-              style={S.filterInput}
-              value={cfg.adx_min ?? ''}
-              placeholder="off"
-              step={1}
-              min={5}
-              max={50}
-              onChange={(e) => {
-                const v = e.target.value ? parseFloat(e.target.value) : null;
-                onUpdate({ adx_min: v });
-              }}
-              disabled={busy}
-            />
-          </div>
-          <div style={S.filterRow}>
-            <span style={S.filterLabel}>Min ATR %ile:</span>
-            <input
-              type="number"
-              style={S.filterInput}
-              value={cfg.atr_pct_min ?? ''}
-              placeholder="off"
-              step={5}
-              min={10}
-              max={95}
-              onChange={(e) => {
-                const v = e.target.value ? parseFloat(e.target.value) : null;
-                onUpdate({ atr_pct_min: v });
-              }}
-              disabled={busy}
-            />
-          </div>
-
-          <div style={S.divider} />
-
-          {/* Risk infra */}
-          <div style={S.sectionLabel}>RISK INFRASTRUCTURE</div>
-          <div style={S.row}>
-            <button
-              style={{ ...S.toggle, background: cfg.wire_risk_infra ? '#ff9800' : '#ccc' }}
-              onClick={() => onUpdate({ wire_risk_infra: !cfg.wire_risk_infra })}
-              disabled={busy}
-            >
-              <span style={{ ...S.toggleDot, left: cfg.wire_risk_infra ? 20 : 2 }} />
-            </button>
-            <span style={{ fontSize: 12, fontWeight: 600, color: cfg.wire_risk_infra ? '#ff9800' : '#999' }}>
-              {cfg.wire_risk_infra ? 'ON' : 'OFF'}
-            </span>
-          </div>
-          <div style={S.hint}>
-            Wires the drawdown circuit breaker (5%/10%/15% thresholds) and cross-asset
-            correlation penalty into position sizing. Recommended for multi-position portfolios.
-          </div>
-
           {/* Paper-first warning */}
           <div style={{
             marginTop: 14, padding: '8px 11px', borderRadius: 4,
             background: '#fff3e0', border: '1px solid #ff980055',
             fontSize: 11, color: '#e65100', lineHeight: 1.5,
           }}>
-            ⚠ <strong>PAPER-FIRST</strong> — All non-default vehicles must be validated
-            in Paper mode before live trading is permitted. New vehicle paths are gated by
-            the execution mode toggle above.
+            ⚠ <strong>PAPER-FIRST</strong> — Validate in Paper mode before going live.
           </div>
         </>
       )}
+
+      {/* ── Entry quality filters — apply regardless of vehicle or directional mode ── */}
+      <div style={S.divider} />
+      <div style={S.sectionLabel}>ENTRY QUALITY FILTERS</div>
+      <div style={{ ...S.hint, marginBottom: 8 }}>
+        Optional. When set, the engine skips entries where the trend is too weak.
+        These apply to all vehicles — OTM options, deep ITM, and futures alike.
+      </div>
+      <div style={S.filterRow}>
+        <span style={S.filterLabel}>
+          Min ADX
+          <span style={{ ...S.hint, display: 'block' }}>Trend strength. 20+ = decent trend, 30+ = strong.</span>
+        </span>
+        <input
+          type="number"
+          style={S.filterInput}
+          value={cfg.adx_min ?? ''}
+          placeholder="off"
+          step={1}
+          min={5}
+          max={50}
+          onChange={(e) => {
+            const v = e.target.value ? parseFloat(e.target.value) : null;
+            onUpdate({ adx_min: v });
+          }}
+          disabled={busy}
+        />
+      </div>
+      <div style={S.filterRow}>
+        <span style={S.filterLabel}>
+          Min ATR %ile
+          <span style={{ ...S.hint, display: 'block' }}>Volatility rank vs past year. 50 = above median.</span>
+        </span>
+        <input
+          type="number"
+          style={S.filterInput}
+          value={cfg.atr_pct_min ?? ''}
+          placeholder="off"
+          step={5}
+          min={10}
+          max={95}
+          onChange={(e) => {
+            const v = e.target.value ? parseFloat(e.target.value) : null;
+            onUpdate({ atr_pct_min: v });
+          }}
+          disabled={busy}
+        />
+      </div>
+
+      {/* ── Risk infrastructure — also applies to all vehicles ── */}
+      <div style={S.divider} />
+      <div style={S.sectionLabel}>RISK INFRASTRUCTURE</div>
+      <div style={S.row}>
+        <button
+          style={{ ...S.toggle, background: cfg.wire_risk_infra ? '#ff9800' : '#ccc' }}
+          onClick={() => onUpdate({ wire_risk_infra: !cfg.wire_risk_infra })}
+          disabled={busy}
+        >
+          <span style={{ ...S.toggleDot, left: cfg.wire_risk_infra ? 20 : 2 }} />
+        </button>
+        <span style={{ fontSize: 12, fontWeight: 600, color: cfg.wire_risk_infra ? '#ff9800' : '#999' }}>
+          {cfg.wire_risk_infra ? 'ON' : 'OFF'}
+        </span>
+      </div>
+      <div style={S.hint}>
+        Wires the drawdown circuit breaker and cross-asset correlation penalty into sizing.
+        If your account drops 5%/10%/15%, position sizes are scaled down or halted.
+        Applies to all vehicles. Recommended once you are trading more than one position at a time.
+      </div>
     </div>
   );
 }
