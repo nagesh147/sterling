@@ -465,6 +465,8 @@ async def _update_open_position_trails(client, uid: str) -> None:
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) -> int:
     """Run one full scan for ``uid`` with ``client``. Returns the signal count."""
     cfg_model = state.get_config(uid)
+    if not cfg_model.engine_enabled:
+        return 0  # engine is OFF — preserve existing Kite behaviour, no scanning
     if state.status(uid).scanning:
         state.log(uid, "info", "Scan skipped — another scan is already in progress for this account.")
         return 0

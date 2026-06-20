@@ -208,6 +208,10 @@ DeepItmMoneyness = Literal["ITM5", "ITM10", "ITM15", "ITM20"]
 
 
 class EngineConfigModel(BaseModel):
+    # Master gate. False (default) = engine is OFF; the Kite platform runs as normal
+    # (manual trading only). True = Triple-SuperTrend engine active (scanning, signals,
+    # auto-execute). Must be explicitly enabled by the user.
+    engine_enabled: bool = False
     trail_target: Literal["fast", "mid", "slow"] = "mid"
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
     # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.

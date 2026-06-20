@@ -61,6 +61,7 @@ async def test_scan_user_logs_and_marks_status(monkeypatch):
             return trimmed if inst.zerodha_token == 1 else _candles(list(np.linspace(100, 101, 30)))
 
     state.reset("u3")
+    state.set_config("u3", state.get_config("u3").model_copy(update={"engine_enabled": True}))
     count = await service.scan_user(FakeClient(), "u3", interval_s=120)
     kinds = [e.kind for e in state.activity("u3")]
     assert "scan_start" in kinds and "scan_done" in kinds

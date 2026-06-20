@@ -1325,6 +1325,57 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupedRows]);
 
+  // ── Engine master gate ──────────────────────────────────────────────────────
+  if (cfg && !cfg.engine_enabled) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
+                    background: k.bg, fontFamily: k.fontFamily }}>
+        {/* minimal header — same chrome as the live pane */}
+        <div style={{ padding: '12px 16px 8px', borderBottom: `1px solid ${k.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <EngineMark />
+            <span style={{ fontSize: 14, fontWeight: 600, color: k.text }}>Triple SuperTrend</span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim,
+                           border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px' }}>1H</span>
+          </div>
+        </div>
+        {/* off-state body */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      justifyContent: 'center', gap: 20, padding: 32 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 26, background: k.border,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={k.dim}
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+            </svg>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: k.text, marginBottom: 6 }}>
+              Engine is off
+            </div>
+            <div style={{ fontSize: 12, color: k.dim, lineHeight: 1.6, maxWidth: 260 }}>
+              The Triple SuperTrend strategy is disabled. Kite runs in normal mode
+              — manual trading, market watch, and existing flows are unaffected.
+            </div>
+          </div>
+          <button
+            onClick={() => patch({ engine_enabled: true }, 'Triple SuperTrend engine enabled')}
+            disabled={setCfg.isPending}
+            style={{ padding: '10px 28px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                     background: k.green, color: '#fff', fontSize: 13, fontWeight: 700,
+                     opacity: setCfg.isPending ? 0.6 : 1, transition: 'opacity 0.15s' }}>
+            Enable Engine
+          </button>
+          <div style={{ fontSize: 11, color: k.dim, textAlign: 'center', maxWidth: 240 }}>
+            Scanning, signals, and auto-execute are gated behind this toggle.
+            You can disable it again from the settings header at any time.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
       {/* ── Console header ── */}
@@ -1367,6 +1418,15 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
             <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
               <Icons.Settings />
+            </HeaderIconBtn>
+            <HeaderIconBtn
+              title="Turn engine OFF — scanning and auto-execute will stop; Kite returns to normal mode"
+              onClick={() => patch({ engine_enabled: false }, 'Triple SuperTrend engine disabled')}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={k.red}
+                   strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.75 }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+              </svg>
             </HeaderIconBtn>
           </div>
         </div>

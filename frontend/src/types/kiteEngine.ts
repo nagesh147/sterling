@@ -138,6 +138,7 @@ export interface EngineDetailResponse {
 }
 
 export interface EngineConfigModel {
+  engine_enabled: boolean;
   trail_target: TrailTarget;
   strike_moneyness: Moneyness[];
   scan_source: ScanSource;
