@@ -835,24 +835,29 @@ function SettingRow({ label, hint, children, align = 'center', full = false }: {
 }
 
 // Tab bar for the 'tabs' layout.
-function SettingsTabs({ active, onSelect, tabs }: {
-  active: string; onSelect: (v: string) => void; tabs: { value: string; label: string }[];
+// Polished pill-style tab bar for the settings drawer. The active pill gets a
+// solid surface lift + orange label; inactive ones are quiet until hovered.
+function PillTabs({ active, onSelect, tabs }: {
+  active: string; onSelect: (v: string) => void; tabs: { value: string; label: string; icon?: React.ReactNode }[];
 }) {
   return (
-    <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${k.border}` }}>
+    <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: 8, background: k.bg, border: `1px solid ${k.border}` }}>
       {tabs.map((t) => {
         const on = active === t.value;
         return (
           <button key={t.value} onClick={() => onSelect(t.value)} aria-pressed={on}
             style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase',
-              padding: '7px 12px', cursor: 'pointer', border: 'none', background: 'transparent',
-              color: on ? k.orange : k.dim, borderBottom: `2px solid ${on ? k.orange : 'transparent'}`,
-              marginBottom: -1, transition: 'color .15s ease, border-color .15s ease',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 11, fontWeight: on ? 700 : 600, letterSpacing: 0.2,
+              padding: '5px 13px', cursor: 'pointer', border: 'none', borderRadius: 6,
+              background: on ? k.surface : 'transparent',
+              color: on ? k.orange : k.dim,
+              boxShadow: on ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+              transition: 'color .15s ease, background .15s ease',
             }}
             onMouseEnter={(e) => { if (!on) e.currentTarget.style.color = k.text; }}
             onMouseLeave={(e) => { if (!on) e.currentTarget.style.color = k.dim; }}>
-            {t.label}
+            {t.icon}{t.label}
           </button>
         );
       })}
@@ -1783,53 +1788,62 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
           </>
         );
 
-        // Live summary header + reset, shared by both layouts.
-        const summaryHeader = (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 10.5, color: k.dim, fontWeight: 500, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-              {settingsSummary(cfg)}
-            </span>
-            <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
-              <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}>
-                <Icons.Reload />
-              </span>
-            </HeaderIconBtn>
-          </div>
-        );
+        // Per-tab one-line summary shown in the toolbar — tells the user what's
+        // configured on the tab they're NOT looking at, without opening it.
+        const tabSummary: Record<'scan' | 'universe' | 'execution', string> = {
+          scan: `${(SCAN_SOURCE_OPTS.find((o) => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`,
+          universe: universeSummary(cfg),
+          execution: `${TRAIL_OPTS.find((o) => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`,
+        };
 
         return (
           <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ padding: '13px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12, borderBottom: `1px solid ${k.border}` }}>
-                {summaryHeader}
-
+              <div style={{ background: k.surface, borderBottom: `1px solid ${k.border}` }}>
                 {layout === 'cards' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')}
-                      summary={`${(SCAN_SOURCE_OPTS.find((o) => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{scanGroup}</div>
-                    </Collapsible>
-                    <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={universeSummary(cfg)}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{universeGroup}</div>
-                    </Collapsible>
-                    <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
-                      summary={`${TRAIL_OPTS.find((o) => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''}${kiteLive ? ' · LIVE' : ''}`}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>{executionGroup}</div>
-                    </Collapsible>
+                  <div style={{ padding: '13px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: k.text }}>Engine settings</span>
+                      <HeaderIconBtn title="Reset to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
+                        <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}><Icons.Reload /></span>
+                      </HeaderIconBtn>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')} summary={tabSummary.scan}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>{scanGroup}</div>
+                      </Collapsible>
+                      <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={tabSummary.universe}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>{universeGroup}</div>
+                      </Collapsible>
+                      <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')} summary={tabSummary.execution}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>{executionGroup}</div>
+                      </Collapsible>
+                    </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <SettingsTabs
-                      active={settingsTab}
-                      onSelect={(v) => setSettingsTab(v as 'scan' | 'universe' | 'execution')}
-                      tabs={[{ value: 'scan', label: 'Scan' }, { value: 'universe', label: 'Universe' }, { value: 'execution', label: 'Execution' }]}
-                    />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                  <>
+                    {/* Unified toolbar — pill tabs left, reset right */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '11px 16px 10px' }}>
+                      <PillTabs
+                        active={settingsTab}
+                        onSelect={(v) => setSettingsTab(v as 'scan' | 'universe' | 'execution')}
+                        tabs={[{ value: 'scan', label: 'Scan' }, { value: 'universe', label: 'Universe' }, { value: 'execution', label: 'Execution' }]}
+                      />
+                      <HeaderIconBtn title="Reset all settings to defaults" disabled={resetCfg.isPending} onClick={() => resetCfg.mutate()}>
+                        <span style={{ display: 'flex', width: 15, height: 15, color: 'inherit' }}><Icons.Reload /></span>
+                      </HeaderIconBtn>
+                    </div>
+                    {/* Quiet summary strip — current scan footprint */}
+                    <div style={{ padding: '7px 16px', fontSize: 10.5, color: k.dim, fontWeight: 500, fontVariantNumeric: 'tabular-nums', background: k.bg, borderTop: `1px solid ${k.border}`, borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+                      <span style={{ flexShrink: 0, opacity: 0.7 }}>ℹ</span>{settingsSummary(cfg)}
+                    </div>
+                    {/* Content — constrained width so tiles/chips don't stretch edge-to-edge */}
+                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 720 }}>
                       {settingsTab === 'scan' && scanGroup}
                       {settingsTab === 'universe' && universeGroup}
                       {settingsTab === 'execution' && executionGroup}
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             </div>
