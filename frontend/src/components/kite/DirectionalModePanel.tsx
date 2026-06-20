@@ -18,6 +18,9 @@ interface ProfileDef {
   desc: string;
   risk: string;
   isExperimental: boolean;
+  // Rough premium relative to an ATM option (=1.0), used only for the
+  // at-a-glance comparison. Real prices always come from the live chain.
+  premiumMult: number;
   // backend fields this profile sets
   vehicle: Vehicle;
   directional: boolean;
@@ -34,7 +37,7 @@ const PROFILES: ProfileDef[] = [
     color: '#1565c0',
     desc: 'Cheapest entry per lot. High leverage if a big move comes fast — but theta decay is brutal. The option loses ~3–4% of its premium every single day the market does nothing. You need the move to happen quickly.',
     risk: 'Max loss is exactly what you paid — nothing more. But time decay is your biggest enemy.',
-    isExperimental: false,
+    isExperimental: false, premiumMult: 0.4,
     vehicle: 'otm_options', directional: false, targetDelta: 0.28,
   },
   {
@@ -46,7 +49,7 @@ const PROFILES: ProfileDef[] = [
     color: '#2e7d32',
     desc: 'The default. Best liquidity and tightest bid-ask spreads. You capture roughly half of every point the underlying moves. Theta is still present (~2%/day) but more manageable than OTM.',
     risk: 'Max loss is the premium paid. Standard risk-reward. Most traders start here.',
-    isExperimental: false,
+    isExperimental: false, premiumMult: 1.0,
     vehicle: 'otm_options', directional: false, targetDelta: 0.50,
   },
   {
@@ -58,7 +61,7 @@ const PROFILES: ProfileDef[] = [
     color: '#e65100',
     desc: 'More intrinsic value, less time value. Theta slows down significantly. You pay more upfront, but a larger chunk of your premium is "real" value that doesn\'t melt away with time.',
     risk: 'Max loss is the premium paid. Higher cost per lot means fewer lots for the same capital.',
-    isExperimental: true,
+    isExperimental: true, premiumMult: 1.8,
     vehicle: 'deep_itm_options', directional: true, targetDelta: 0.65,
   },
   {
@@ -70,7 +73,7 @@ const PROFILES: ProfileDef[] = [
     color: '#6a1b9a',
     desc: 'Moves almost point-for-point with the index. Barely any theta — most of the premium is intrinsic value. Expensive per lot, but behaves the closest to trading the index itself with a defined-risk wrapper.',
     risk: 'Max loss is the premium paid (which is large per lot). Very few lots affordable per ₹1L of capital.',
-    isExperimental: true,
+    isExperimental: true, premiumMult: 4.0,
     vehicle: 'deep_itm_options', directional: true, targetDelta: 0.87,
   },
   {
@@ -82,7 +85,7 @@ const PROFILES: ProfileDef[] = [
     color: '#b71c1c',
     desc: 'Pure index exposure. Every point the index moves, you gain or lose that exact amount. No premium, no theta, no IV crush. Bear signal goes short, bull goes long. The trail stop is your only protection.',
     risk: 'No premium floor — losses are unlimited beyond the stop. Requires margin (~12–15% of contract value). Validate in Paper mode first.',
-    isExperimental: true,
+    isExperimental: true, premiumMult: 0,
     vehicle: 'futures', directional: true, targetDelta: null,
   },
 ];
@@ -145,7 +148,8 @@ interface Props {
 
 export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
   const [simMove, setSimMove]       = useState(100);   // underlying pts to simulate
-  const [simPremium, setSimPremium] = useState(150);   // ₹ entry premium to simulate
+  const [simPremium, setSimPremium] = useState(150);   // ₹ entry premium to simulate (ATM-equiv)
+  const [lotSize, setLotSize]       = useState(75);    // contract lot size (Nifty=75)
   const [customDelta, setCustomDelta] = useState('');  // delta override input
 
   const activeId      = deriveActiveProfile(cfg);
@@ -162,6 +166,19 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
   const intrinsicFrac   = Math.max(0, Math.min(1, (effectiveDelta - 0.5) * 2));
   const intrinsicAmt    = Math.round(simPremium * intrinsicFrac);
   const timeValueAmt    = simPremium - intrinsicAmt;
+
+  // δ ≈ probability the option finishes in-the-money at expiry (option buyer's
+  // rough win-odds if held to expiry). Futures have no such notion.
+  const probItm         = Math.round(effectiveDelta * 100);
+
+  // Per-lot rupee figures — what the per-share numbers actually mean in money.
+  const perLotGain      = Math.round((isFutures ? simMove : optionMove) * lotSize);
+  const perLotCost      = isFutures ? null : Math.round(simPremium * lotSize);
+  const perLotThetaDay  = isFutures ? 0 : Math.round(thetaDaily * lotSize);
+
+  // The active profile's anchor multiple, so other profiles scale relative to
+  // whatever ATM-equivalent premium the user typed.
+  const anchorMult      = activeProfile.premiumMult || 1;
 
   return (
     <div style={S.card}>
@@ -206,7 +223,15 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
           )}
         </div>
         <div style={{ fontSize: 11, color: '#444', lineHeight: 1.55, marginBottom: 5 }}>{activeProfile.desc}</div>
-        <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4 }}>⚡ {activeProfile.risk}</div>
+        <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4, marginBottom: isFutures ? 0 : 5 }}>⚡ {activeProfile.risk}</div>
+        {!isFutures && (
+          <div style={{ fontSize: 10, color: activeProfile.color, lineHeight: 1.4, fontWeight: 600 }}>
+            🎯 δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing in-the-money at expiry.
+            {probItm < 40 && ' Most OTM buys expire worthless — you win big occasionally, lose small often.'}
+            {probItm >= 40 && probItm < 60 && ' Roughly coin-flip odds at expiry, but you only need a quick move, not expiry.'}
+            {probItm >= 60 && ' Favourable odds — you are paying up for a higher-probability position.'}
+          </div>
+        )}
       </div>
 
       {/* Custom delta override */}
@@ -310,6 +335,15 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
             </div>
           </div>
         )}
+        <div style={{ flex: '1 1 100px' }}>
+          <div style={{ fontSize: 10, color: '#9b9b9b', marginBottom: 4, fontWeight: 600 }}>LOT SIZE</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <input type="number" style={{ ...S.numInput, flex: 1 }}
+              value={lotSize} min={1} max={10000} step={5}
+              onChange={e => setLotSize(Math.max(1, Number(e.target.value) || 75))} />
+            <span style={S.hint}>qty/lot</span>
+          </div>
+        </div>
       </div>
 
       {/* Impact rows */}
@@ -317,25 +351,25 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
 
         <ImpactRow icon="📈" color="#2e7d32"
           label={`Underlying moves ${simMove} pts in your direction`}
-          value={isFutures ? `+₹${simMove} / share` : `+₹${optionMove} / share`}
+          value={`+₹${perLotGain.toLocaleString('en-IN')} / lot`}
           sub={isFutures
-            ? `δ = 1.00 — moves exactly 1:1 with the index. No slippage from delta.`
-            : `δ ${effectiveDelta.toFixed(2)} × ${simMove} pts. The rest of the move doesn't reach you.`}
+            ? `δ = 1.00 — moves exactly 1:1 with the index. +₹${isFutures ? simMove : optionMove}/share × ${lotSize} qty.`
+            : `δ ${effectiveDelta.toFixed(2)} × ${simMove} pts = +₹${optionMove}/share × ${lotSize} qty. The rest of the move doesn't reach you.`}
         />
 
         <ImpactRow icon="📉" color="#c62828"
           label={`Underlying moves ${simMove} pts against you`}
-          value={isFutures ? `−₹${simMove} / share (until trail stop fires)` : `−₹${optionMove} / share premium loss`}
+          value={isFutures ? `−₹${perLotGain.toLocaleString('en-IN')} / lot (until stop)` : `−₹${perLotGain.toLocaleString('en-IN')} / lot premium loss`}
           sub={isFutures
-            ? `Stop exits at the trail level — loss is capped at (entry − stop) × lot size.`
+            ? `Stop exits at the trail level — loss is capped at (entry − stop) × ${lotSize} qty, not this full amount.`
             : `Your option still has remaining value. Actual P&L also depends on IV at exit.`}
         />
 
         {!isFutures && (
           <ImpactRow icon="⏳" color="#e65100"
             label="Daily theta — what you lose if the market does nothing"
-            value={`−₹${thetaDaily} / share / day`}
-            sub={`≈ ${activeProfile.thetaPctPerDay}% of your ₹${simPremium} premium disappears each calendar day. Weekend included.`}
+            value={`−₹${perLotThetaDay.toLocaleString('en-IN')} / lot / day`}
+            sub={`≈ ${activeProfile.thetaPctPerDay}% of your ₹${simPremium} premium (₹${thetaDaily}/share) disappears each calendar day. Weekends included.`}
           />
         )}
 
@@ -365,10 +399,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
 
         <ImpactRow icon="🛡️" color={isFutures ? '#c62828' : '#555'}
           label="Maximum possible loss"
-          value={isFutures ? 'Trail stop distance × lot size' : `₹${simPremium} / share — what you paid`}
+          value={isFutures ? 'Trail stop distance × lot — no fixed cap' : `₹${perLotCost?.toLocaleString('en-IN')} / lot — what you paid`}
           sub={isFutures
             ? `No floor. The trail stop is the only thing limiting your loss — honour it.`
-            : `Options cannot go below zero. Your loss is always capped at the premium paid.`}
+            : `Options cannot go below zero. Your loss is always capped at the ₹${simPremium}/share premium (₹${perLotCost?.toLocaleString('en-IN')}/lot).`}
         />
 
       </div>
@@ -399,8 +433,59 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
               OTM options have zero intrinsic value — your entire ₹{simPremium} is time value subject to decay.
             </div>
           )}
+          <div style={{ ...S.hint, marginTop: 8, padding: '6px 9px', background: '#fff8e1', borderRadius: 4, border: '1px solid #ffe082' }}>
+            ⚡ <strong>IV crush risk:</strong> that ₹{timeValueAmt} of time value is also sensitive to implied
+            volatility. After a big expected event (results, budget, RBI) IV often collapses — your option can
+            lose value <em>even if the underlying moves your way</em>. Higher-delta profiles carry less time
+            value and so less IV-crush exposure.
+          </div>
         </>
       )}
+
+      {/* ── 3b. At-a-glance profile comparison ──────────────────────────────── */}
+      <div style={S.divider} />
+      <div style={S.section}>SAME {simMove}-PT MOVE — EVERY PROFILE COMPARED</div>
+      <div style={{ ...S.hint, marginBottom: 8 }}>
+        How each profile would behave on this exact move. Premiums are rough estimates
+        anchored to your ₹{simPremium} input — real prices come from the live chain.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+        {PROFILES.map(p => {
+          const d         = p.id === 'futures' ? 1 : p.delta;
+          const gainSh    = +(d * simMove).toFixed(0);
+          const estPrem   = p.id === 'futures' ? null : Math.round(simPremium * (p.premiumMult / anchorMult));
+          // Capital efficiency: ₹ gain per ₹100 of premium deployed (options only).
+          const effic     = estPrem && estPrem > 0 ? Math.round((gainSh / estPrem) * 100) : null;
+          const isActiveP = p.id === activeId;
+          return (
+            <div key={p.id}
+              onClick={() => { if (!busy) { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); } }}
+              style={{
+                display: 'grid', gridTemplateColumns: '74px 1fr 1fr 1fr', gap: 6, alignItems: 'center',
+                padding: '7px 9px', borderRadius: 5, cursor: busy ? 'default' : 'pointer',
+                background: isActiveP ? p.color + '14' : '#fafafa',
+                border: `1px solid ${isActiveP ? p.color + '55' : '#f0f0f0'}`,
+              }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: p.color }}>{p.label}</span>
+              <span style={{ fontSize: 10, color: '#444' }}>
+                <span style={{ color: '#999' }}>gain</span> +₹{gainSh}/sh
+              </span>
+              <span style={{ fontSize: 10, color: '#444' }}>
+                <span style={{ color: '#999' }}>cost</span> {estPrem === null ? 'margin' : `₹${estPrem}/sh`}
+              </span>
+              <span style={{ fontSize: 10, color: '#444' }}>
+                {p.id === 'futures'
+                  ? <><span style={{ color: '#999' }}>decay</span> none</>
+                  : <><span style={{ color: '#999' }}>×eff</span> {effic}%</>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ ...S.hint, marginTop: 6 }}>
+        <strong>gain</strong> = δ × move captured per share · <strong>cost</strong> = est. premium per share ·
+        <strong> ×eff</strong> = ₹ gain per ₹100 of premium (higher = more leverage, but more decay/IV risk).
+      </div>
 
       {/* ── 4. Entry quality filters ────────────────────────────────────────── */}
       <div style={S.divider} />
