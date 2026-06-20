@@ -348,7 +348,7 @@ def _make_place_cb(client, uid: str):
             entry_premium=entry_px, stop_premium=stop_px,
             order_id=oid, status=positions.PENDING,
             stop_mode=cfg.stop_mode, guard_key=guard_key,
-            direction=pos_direction, vehicle=vehicle_label))
+            direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying))
 
         # ── broker-side protective stop (workstream C) ────────────────────────
         if cfg.stop_mode in ("broker", "both") and stop_px > 0:

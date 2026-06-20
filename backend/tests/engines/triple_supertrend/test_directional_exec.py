@@ -209,6 +209,20 @@ def test_breaker_halts_after_drawdown():
     assert not client.opt_placed
 
 
+def test_correlation_penalty_downsizes_correlated_entry():
+    state.reset(UID)
+    # two perfectly-correlated underlyings
+    for k in range(60):
+        state.feed_correlation(UID, "NIFTY 50", 100.0 + k)
+        state.feed_correlation(UID, "NIFTY BANK", 200.0 + 2 * k)
+    # correlated with an open position → downsized (< 1.0)
+    assert state.correlation_penalty(UID, "NIFTY 50", ["NIFTY BANK"]) < 1.0
+    # nothing open → no penalty
+    assert state.correlation_penalty(UID, "NIFTY 50", []) == 1.0
+    # cold tracker (unknown user) → no penalty
+    assert state.correlation_penalty("nobody", "NIFTY 50", ["NIFTY BANK"]) == 1.0
+
+
 def _run_keep_breaker(cfg, row, client, item=None):
     """Like _run but does NOT reset state (keeps the breaker peak primed)."""
     positions._positions.pop(UID, None)
