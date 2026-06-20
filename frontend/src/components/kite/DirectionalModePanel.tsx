@@ -1,29 +1,26 @@
 import React from 'react';
 import type { EngineConfigModel, Vehicle, DeepItmMoneyness } from '../../types/kiteEngine';
 
-// ─── Vehicle info cards with plain-English explanations ──────────────────────
+// ─── Vehicle info cards — only vehicles that differ from the default OTM path ─
+// otm_options is intentionally excluded: it is identical to directional_mode=OFF
+// and showing it as a selectable vehicle would be misleading.
 
-const VEHICLE_INFO: Record<Vehicle, { label: string; badge: string; badgeColor: string; desc: string; risk: string }> = {
-  otm_options: {
-    label: 'OTM Options (Default)',
-    badge: '✓ Validated',
-    badgeColor: '#4caf50',
-    desc: 'Buy OTM calls on bull signals, OTM puts on bear signals. Cheap per lot so you can size up, but theta decay and IV crush eat into your premium every day — the move needs to happen soon.',
-    risk: 'Max loss is capped at the premium paid, nothing more. The trade-off is that time is always working against you.',
-  },
+type SelectableVehicle = Exclude<Vehicle, 'otm_options'>;
+
+const VEHICLE_INFO: Record<SelectableVehicle, { label: string; badge: string; badgeColor: string; desc: string; risk: string }> = {
   deep_itm_options: {
     label: 'Deep ITM Options',
     badge: '⚠ Experimental',
     badgeColor: '#ff9800',
-    desc: 'Same call/put buying, but deep in the money (δ ≈ 0.85–0.95). The option moves nearly 1:1 with Nifty, so you capture most of the underlying\'s move — and theta barely touches you. Costs more upfront though, so fewer lots for the same capital.',
-    risk: 'Still a defined-risk trade — max loss is the premium paid. You\'re essentially buying the index move with an options wrapper instead of futures margin.',
+    desc: 'Buys calls/puts deep in the money (δ ≈ 0.85–0.95). The option moves nearly 1:1 with Nifty so you capture most of the underlying\'s move — and theta barely touches you. Costs more per lot than OTM, so you get fewer lots for the same capital.',
+    risk: 'Still a defined-risk trade — max loss is the premium paid. You\'re buying the index move through an options wrapper rather than futures margin.',
   },
   futures: {
     label: 'Index Futures',
     badge: '⚠ Experimental',
     badgeColor: '#f44336',
-    desc: 'Bull signal → buy the future. Bear signal → sell the future short. Delta-1, no IV, no theta — pure price exposure. The stop is in index points, not premium, and the engine sizes lots to keep risk within your budget.',
-    risk: 'Losses scale with every point the market moves against you — there is no premium floor. Requires margin (~12–15% of contract value). Only use if you\'re comfortable with futures and trust the stop.',
+    desc: 'Bull signal → buys the future. Bear signal → sells the future short. Delta-1, no IV, no theta — pure price exposure. The stop is in index points (not premium), and the engine sizes lots to keep your risk within budget.',
+    risk: 'Losses scale with every point the market moves against you — there is no premium floor. Requires margin (~12–15% of contract value). Only use if you are comfortable with futures and trust the stop discipline.',
   },
 };
 
@@ -71,7 +68,10 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
       <div style={S.row}>
         <button
           style={{ ...S.toggle, background: enabled ? '#387ed1' : '#ccc' }}
-          onClick={() => onUpdate({ directional_mode: !enabled })}
+          onClick={() => onUpdate(enabled
+            ? { directional_mode: false, vehicle: 'otm_options' }  // reset vehicle when turning off
+            : { directional_mode: true, vehicle: cfg.vehicle === 'otm_options' ? 'deep_itm_options' : cfg.vehicle }
+          )}
           disabled={busy}
           title={enabled ? 'Disable directional mode (revert to standard options)' : 'Enable directional mode'}
         >
@@ -82,22 +82,22 @@ export function DirectionalModePanel({ cfg, onUpdate, busy }: Props) {
         </span>
         <span style={S.hint}>
           {enabled
-            ? 'Pick your vehicle below — OTM options, deep ITM, or futures.'
-            : 'Buys OTM calls on bull signals, OTM puts on bear signals. Risk is capped at the premium you pay.'}
+            ? 'Standard OTM options are replaced by the vehicle you select below.'
+            : 'Signals are traded as standard OTM option buys — CE on bull, PE on bear.'}
         </span>
       </div>
 
       {!enabled && (
         <div style={{ ...S.hint, marginTop: 4, padding: '6px 10px', background: '#f7f7f7', borderRadius: 3 }}>
-          The engine trades the signal the straightforward way — buy a CE or PE, let it run to the trail stop. Turn ON if you want to switch to deep ITM options or trade futures directly.
+          Buy OTM calls/puts. Cheap per lot, but theta decay and IV crush eat into your premium every day — the move needs to happen soon. Max loss is capped at what you paid. Turn ON to trade deep ITM options or futures instead.
         </div>
       )}
 
       {enabled && (
         <>
-          {/* Vehicle selector */}
+          {/* Vehicle selector — only vehicles that differ from the default OTM path */}
           <div style={S.sectionLabel}>VEHICLE</div>
-          {(Object.keys(VEHICLE_INFO) as Vehicle[]).map((v) => {
+          {(Object.keys(VEHICLE_INFO) as SelectableVehicle[]).map((v) => {
             const info = VEHICLE_INFO[v];
             const isEnabled = cfg.enabled_vehicles.includes(v);
             const isActive = cfg.vehicle === v;
