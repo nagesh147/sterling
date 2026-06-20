@@ -234,9 +234,11 @@ def reset(uid: str = "") -> None:
     """Test helper."""
     if uid:
         _config.pop(uid, None); _activity.pop(uid, None)
-        _status.pop(uid, None); _auto_open.pop(uid, None); _breakers.pop(uid, None)
+        _status.pop(uid, None); _auto_open.pop(uid, None)
+        _breakers.pop(uid, None); _correlation.pop(uid, None)
     else:
-        _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear(); _breakers.clear()
+        _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear()
+        _breakers.clear(); _correlation.clear()
 
 
 def load_signal_cache(uid: str):

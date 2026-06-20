@@ -301,6 +301,16 @@ def _make_place_cb(client, uid: str):
                 qty = lots * trade_lot if trade_lot > 0 else qty
                 state.log(uid, "info", f"{row.underlying}: breaker [{brk}] → size ×{mult:.1f} ({lots} lot)")
 
+            # correlation penalty: downsize an entry correlated with an open position
+            open_assets = [op.underlying for op in positions.open_positions(uid)
+                           if op.underlying and op.underlying != row.underlying]
+            cmult = state.correlation_penalty(uid, row.underlying, open_assets)
+            if cmult < 1.0:
+                lots = max(1, int(lots * cmult))
+                qty = lots * trade_lot if trade_lot > 0 else qty
+                state.log(uid, "info",
+                          f"{row.underlying}: correlation ×{cmult:.1f} vs open {open_assets} ({lots} lot)")
+
         # ── live safety (Kite is INR; USD daily-loss breaker is crypto-only) ───
         trade_side = "BUY" if (not use_futures or signal_dir == "long") else "SELL"
         idem = live_safety.make_idempotency_key(uid, trade_symbol, trade_side, qty, row.timestamp_ms)
@@ -403,7 +413,9 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             expiry_types_indices=cfg_model.scan_expiries_indices,
             expiry_types_stocks=cfg_model.scan_expiries_stocks,
             place_cb=place_cb,
-            deriv_universe=deriv_universe, log_cb=lambda msg: state.log(uid, "info", msg))
+            deriv_universe=deriv_universe, log_cb=lambda msg: state.log(uid, "info", msg),
+            close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
+                        if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
         count = len(snap.rows)
         d = snap.diag

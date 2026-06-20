@@ -421,6 +421,7 @@ class KiteEngineScanner:
         place_cb: Optional[PlaceCb] = None,
         deriv_universe: Optional[List[UniverseItem]] = None,
         log_cb: Optional[Callable[[str], None]] = None,
+        close_feed: Optional[Callable[[str, float], None]] = None,
     ) -> None:
         us = self._user(uid, cfg)
         us.engine.cfg = cfg
@@ -455,6 +456,9 @@ class KiteEngineScanner:
                         log.warning("kite-engine scan candle fail %s: %s", item.name, exc)
                         _no_data(item)
                         return
+                # Feed the correlation tracker the latest underlying close (opt-in).
+                if close_feed and candles:
+                    close_feed(item.name, float(candles[-1].close))
                 # Too few bars to run the engine → a silent drop unless we record it.
                 if len(candles) <= cfg.warmup + 1:
                     _no_data(item)
@@ -536,6 +540,8 @@ class KiteEngineScanner:
                     if log_cb:
                         log_cb(f"⚠ {item.name}: spot unavailable (candles + quote both empty) — derivatives skipped")
                     return
+                if close_feed:
+                    close_feed(item.name, spot)
                 option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
                 chain = chain_rows_for(option_rows, item.tradingsymbol, today)
                 _expiry = expiry_types_indices if (expiry_types_indices is not None and item.is_index) else expiry_types_stocks if (expiry_types_stocks is not None and not item.is_index) else expiry_types
