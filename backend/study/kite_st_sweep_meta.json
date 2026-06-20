@@ -1,0 +1,90 @@
+{
+  "is_oos_corr": 0.354,
+  "best": {
+    "underlying": "NIFTY FIN SERVICE",
+    "trail": "fast",
+    "lock": "off",
+    "moneyness": "OTM2",
+    "moneyness_pct": 0.545,
+    "trades": 553,
+    "win_rate": 31.8,
+    "ret_pct": 246.44,
+    "net_pnl": 246444.46,
+    "profit_factor": 1.186,
+    "sharpe": 1.104,
+    "max_dd": 37.88,
+    "expectancy": 445.65,
+    "is_ret": 257.56,
+    "is_trades": 392,
+    "is_pf": 1.304,
+    "oos_ret": -12.03,
+    "oos_trades": 159,
+    "oos_pf": 0.975
+  },
+  "sensitivity": {
+    "iv": [
+      {
+        "iv": 0.1,
+        "ret": 836.67,
+        "pf": 1.818,
+        "sharpe": 2.208
+      },
+      {
+        "iv": 0.14,
+        "ret": 508.63,
+        "pf": 1.426,
+        "sharpe": 1.649
+      },
+      {
+        "iv": 0.18,
+        "ret": 246.44,
+        "pf": 1.186,
+        "sharpe": 1.104
+      },
+      {
+        "iv": 0.22,
+        "ret": 20.82,
+        "pf": 1.014,
+        "sharpe": 0.513
+      },
+      {
+        "iv": 0.28,
+        "ret": -278.25,
+        "pf": 0.827,
+        "sharpe": -0.603
+      }
+    ],
+    "dte": [
+      {
+        "dte": 7.0,
+        "ret": 422.84,
+        "pf": 1.339,
+        "sharpe": 1.465
+      },
+      {
+        "dte": 14.0,
+        "ret": 340.12,
+        "pf": 1.268,
+        "sharpe": 1.309
+      },
+      {
+        "dte": 30.0,
+        "ret": 246.44,
+        "pf": 1.186,
+        "sharpe": 1.104
+      },
+      {
+        "dte": 45.0,
+        "ret": 185.95,
+        "pf": 1.136,
+        "sharpe": 0.958
+      },
+      {
+        "dte": 60.0,
+        "ret": 137.3,
+        "pf": 1.098,
+        "sharpe": 0.835
+      }
+    ]
+  }
+}

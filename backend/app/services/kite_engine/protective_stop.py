@@ -24,12 +24,14 @@ from app.services.exchanges.kite import constants as K
 log = get_logger(__name__)
 
 
-def _sell_order(tradingsymbol: str, exchange: str, qty: int) -> dict:
-    """One GTT order leg: market SELL of the full quantity (exit the long)."""
+def _exit_order(tradingsymbol: str, exchange: str, qty: int, direction: str = "long") -> dict:
+    """One GTT order leg: market exit of the full quantity.
+    Long position → SELL to exit. Short position → BUY to cover."""
+    txn = K.TXN_SELL if direction == "long" else K.TXN_BUY
     return {
         "exchange": exchange,
         "tradingsymbol": tradingsymbol,
-        "transaction_type": K.TXN_SELL,
+        "transaction_type": txn,
         "quantity": int(qty),
         "order_type": K.ORDER_TYPE_MARKET,
         "product": K.PRODUCT_NRML,
@@ -37,9 +39,11 @@ def _sell_order(tradingsymbol: str, exchange: str, qty: int) -> dict:
 
 
 async def place_stop(client, *, tradingsymbol: str, exchange: str, qty: int,
-                     trigger_premium: float, last_price: float) -> Optional[int]:
-    """Place a single-leg GTT SELL stop at ``trigger_premium``. Returns the
-    trigger_id, or None on failure (caller falls back to the tick monitor)."""
+                     trigger_premium: float, last_price: float,
+                     direction: str = "long") -> Optional[int]:
+    """Place a single-leg GTT stop at ``trigger_premium``. Returns the
+    trigger_id, or None on failure (caller falls back to the tick monitor).
+    Direction-aware: long → SELL on downside, short → BUY on upside."""
     if qty <= 0 or trigger_premium <= 0:
         return None
     try:
@@ -49,7 +53,7 @@ async def place_stop(client, *, tradingsymbol: str, exchange: str, qty: int,
             exchange=exchange,
             last_price=float(last_price or trigger_premium),
             trigger_values=[float(trigger_premium)],
-            orders=[_sell_order(tradingsymbol, exchange, qty)],
+            orders=[_exit_order(tradingsymbol, exchange, qty, direction)],
         )
         tid = int((res or {}).get("trigger_id") or 0)
         return tid or None
@@ -60,8 +64,10 @@ async def place_stop(client, *, tradingsymbol: str, exchange: str, qty: int,
 
 
 async def move_stop(client, *, trigger_id: int, tradingsymbol: str, exchange: str,
-                    qty: int, trigger_premium: float, last_price: float) -> bool:
-    """Trail the GTT up to a tighter ``trigger_premium``. Returns True on success."""
+                    qty: int, trigger_premium: float, last_price: float,
+                    direction: str = "long") -> bool:
+    """Trail the GTT to a tighter ``trigger_premium``. Returns True on success.
+    Direction-aware: uses the correct exit side for the GTT order leg."""
     if trigger_id <= 0 or trigger_premium <= 0:
         return False
     try:
@@ -72,7 +78,7 @@ async def move_stop(client, *, trigger_id: int, tradingsymbol: str, exchange: st
             exchange=exchange,
             last_price=float(last_price or trigger_premium),
             trigger_values=[float(trigger_premium)],
-            orders=[_sell_order(tradingsymbol, exchange, qty)],
+            orders=[_exit_order(tradingsymbol, exchange, qty, direction)],
         )
         return True
     except Exception as exc:  # noqa: BLE001

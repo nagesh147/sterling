@@ -47,6 +47,11 @@ class EngineSignalRow(BaseModel):
     # "spot" = SuperTrend on the underlying chart (legs are candidate strikes to BUY);
     # "derivatives" = SuperTrend on this contract's OWN premium chart (single leg, BUY-only).
     source: Literal["spot", "derivatives"] = "spot"
+    # Trend-quality readings at the entry bar (for the optional directional-mode
+    # entry filters). None when not computed; never gates anything unless adx_min /
+    # atr_pct_min are set in the engine config.
+    adx: Optional[float] = None
+    atr_pct: Optional[float] = None
 
 
 class SignalsResponse(BaseModel):
@@ -176,6 +181,10 @@ class HistoryResponse(BaseModel):
     signals: List[HistorySignal]
 
 
+Vehicle = Literal["otm_options", "deep_itm_options", "futures"]
+DeepItmMoneyness = Literal["ITM5", "ITM10", "ITM15", "ITM20"]
+
+
 class EngineConfigModel(BaseModel):
     trail_target: Literal["fast", "mid", "slow"] = "mid"
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
@@ -210,6 +219,31 @@ class EngineConfigModel(BaseModel):
     # "both"    = both (default; defense in depth for real money)
     stop_mode: Literal["broker", "monitor", "both"] = "both"
 
+    # ── Directional mode (additive, opt-in) ───────────────────────────────────
+    # Master toggle. False ⇒ existing engine, untouched (byte-identical).
+    # True ⇒ monetize the signal through the selected vehicle instead.
+    directional_mode: bool = False
+    # Which vehicle to trade when directional_mode is ON.
+    # otm_options = existing behavior; deep_itm_options = high-delta ITM;
+    # futures = index futures (delta-1, two-sided).
+    vehicle: Vehicle = "otm_options"
+    # Which vehicles the user has enabled (checkboxes in the UI). The active
+    # `vehicle` must be in this set. Futures is opt-in — default is options only.
+    enabled_vehicles: List[Vehicle] = ["otm_options", "deep_itm_options"]
+    # ── Deep-ITM options config ───────────────────────────────────────────────
+    # How many strike steps into the money (ITM5 / ITM10 / ITM15 / ITM20).
+    itm_depth: Optional[DeepItmMoneyness] = "ITM10"
+    # Alternatively, pick the strike nearest to a target BS delta (overrides itm_depth).
+    target_delta: Optional[float] = None   # e.g. 0.90 for ~delta-0.9
+    # ── Futures config ────────────────────────────────────────────────────────
+    futures_expiry: Literal["near", "next"] = "near"
+    # ── Entry quality filters (Phase-0 survivors; None = off) ─────────────────
+    adx_min: Optional[float] = None          # minimum ADX to allow entry (e.g. 20)
+    atr_pct_min: Optional[float] = None      # minimum ATR percentile (e.g. 50)
+    # ── Risk infrastructure wiring ────────────────────────────────────────────
+    # Wires the drawdown circuit breaker + correlation penalty into sizing.
+    wire_risk_infra: bool = False
+
     @field_validator("risk_pct")
     @classmethod
     def _risk_pct_bounds(cls, v):
@@ -230,6 +264,27 @@ class EngineConfigModel(BaseModel):
     @classmethod
     def _at_least_one_expiry(cls, v):
         return v or ["weekly", "monthly"]
+
+    @field_validator("target_delta")
+    @classmethod
+    def _target_delta_bounds(cls, v):
+        if v is None:
+            return v
+        return min(0.99, max(0.50, float(v)))
+
+    @field_validator("adx_min")
+    @classmethod
+    def _adx_bounds(cls, v):
+        if v is None:
+            return v
+        return min(50.0, max(5.0, float(v)))
+
+    @field_validator("atr_pct_min")
+    @classmethod
+    def _atr_pct_bounds(cls, v):
+        if v is None:
+            return v
+        return min(95.0, max(10.0, float(v)))
 
 
 # ── Options backtest (workstream H) ──────────────────────────────────────────

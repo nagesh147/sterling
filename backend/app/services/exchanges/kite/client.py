@@ -377,6 +377,19 @@ class KiteClient(TradingExchangeAdapter):
             exchange=exchange, product=K.PRODUCT_NRML, stop_loss=stop_loss, tag=tag,
         )
 
+    async def place_order_future(
+        self, tradingsymbol: str, side: str, size: float,
+        order_type: str = "market_order", limit_price: Optional[float] = None,
+        exchange: str = K.EXCHANGE_NFO, tag: Optional[str] = None,
+    ) -> dict:
+        """Place a futures order (BUY or SELL). Two-sided: directional mode
+        opens with BUY (long) or SELL (short) and exits with the opposite.
+        Uses NRML product for overnight carry."""
+        return await self.place_order(
+            tradingsymbol, side, size, order_type=order_type, limit_price=limit_price,
+            exchange=exchange, product=K.PRODUCT_NRML, tag=tag,
+        )
+
     async def cancel_order(self, order_id: str, product_id: int = 0, variety: str = K.VARIETY_REGULAR) -> dict:
         """Cancel an order. ``product_id`` is unused for Kite (kept to satisfy the
         TradingExchangeAdapter contract); cancellation needs ``variety``+order_id."""

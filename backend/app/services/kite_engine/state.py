@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Set
 import json
 
+from app.engines.analytics.correlation import CorrelationTracker
+from app.engines.risk.circuit_breaker import CircuitBreakerConfig, DrawdownCircuitBreaker
 from app.engines.triple_supertrend.schemas import ActivityEvent, EngineConfigModel
 from app.services import db
 
@@ -29,6 +31,13 @@ _activity: Dict[str, Deque[ActivityEvent]] = {}
 _status: Dict[str, _Status] = {}
 # Underlyings with an auto-executed position open (one position per underlying).
 _auto_open: Dict[str, Set[str]] = {}
+# Per-user portfolio drawdown breaker (directional mode, opt-in). Persists its
+# peak across scans so the drawdown is measured against the real high-water mark.
+_breakers: Dict[str, DrawdownCircuitBreaker] = {}
+# Per-user EWM correlation tracker (directional mode, opt-in). Fed each scanned
+# underlying's latest 1H close so a new entry that's highly correlated with an
+# already-open position is downsized (don't stack 3 full-size correlated longs).
+_correlation: Dict[str, CorrelationTracker] = {}
 
 
 # ── config ──────────────────────────────────────────────────────────────────
@@ -160,6 +169,45 @@ def reconcile_auto_open(uid: str, broker_slots: Set[str]) -> Set[str]:
     return reconciled
 
 
+# ── portfolio drawdown breaker (directional mode, opt-in & fail-safe) ────────
+def drawdown_multiplier(uid: str, portfolio_value: float) -> tuple:
+    """Feed the per-user breaker the latest portfolio value and return
+    ``(size_multiplier, state_label)``. CLEAR→1.0, WARNING→0.5, HALT/RESET→0.0.
+    The breaker only ever REDUCES size or blocks new entries (fail-safe). A
+    non-positive value is treated as 'unknown' → no throttle."""
+    if portfolio_value <= 0:
+        return 1.0, "clear"
+    brk = _breakers.get(uid)
+    if brk is None:
+        brk = DrawdownCircuitBreaker(CircuitBreakerConfig(), portfolio_value)
+        _breakers[uid] = brk
+    st = brk.update(portfolio_value)
+    return brk.size_multiplier(), st.value
+
+
+def feed_correlation(uid: str, asset: str, close: float) -> None:
+    """Feed the per-user correlation tracker one 1H close for ``asset``."""
+    if close <= 0:
+        return
+    trk = _correlation.get(uid)
+    if trk is None:
+        trk = CorrelationTracker(assets=[])
+        _correlation[uid] = trk
+    trk.update(asset, float(close))
+
+
+def correlation_penalty(uid: str, new_asset: str, open_assets: list) -> float:
+    """Size multiplier (1.0 / 0.7 / 0.4) for a new entry given the underlyings of
+    already-open positions. 1.0 when the tracker is cold or nothing is open."""
+    trk = _correlation.get(uid)
+    if trk is None or not open_assets:
+        return 1.0
+    try:
+        return float(trk.portfolio_correlation_penalty(new_asset, list(open_assets)))
+    except Exception:
+        return 1.0
+
+
 # ── signal cache (DB-persisted for restarts / market-closed hours) ────────
 def save_signal_cache(uid: str, rows: list, generated_ms: int) -> None:
     """Persist the latest scan rows. ``rows`` is a list of plain dicts
@@ -186,9 +234,9 @@ def reset(uid: str = "") -> None:
     """Test helper."""
     if uid:
         _config.pop(uid, None); _activity.pop(uid, None)
-        _status.pop(uid, None); _auto_open.pop(uid, None)
+        _status.pop(uid, None); _auto_open.pop(uid, None); _breakers.pop(uid, None)
     else:
-        _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear()
+        _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear(); _breakers.clear()
 
 
 def load_signal_cache(uid: str):

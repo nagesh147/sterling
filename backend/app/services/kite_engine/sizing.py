@@ -86,3 +86,64 @@ def size_position(
                   f"({risk_pct:.1f}% of ₹{available_capital:.0f})")
 
     return SizingResult(lots, qty, risk_per_lot, est_risk, entry * qty, reason)
+
+
+def size_future_position(
+    *,
+    entry_price: float,
+    stop_price: float,
+    lot_size: int,
+    available_capital: float,
+    risk_pct: float,
+    max_lots: int,
+) -> SizingResult:
+    """Decide lots for one futures position (directional mode).
+
+    Risk basis is ``(entry − stop) × lot_size`` (notional loss at stop).
+    Same floor/cap logic as the options sizer: floor at 1 lot, cap by max_lots
+    and margin affordability. Margin for futures ≈ SPAN margin (~10-15% of
+    contract value); we conservatively use 15% for affordability check.
+    """
+    lot_size = int(lot_size or 0)
+    if lot_size <= 0:
+        return SizingResult(0, 0, 0.0, 0.0, 0.0, "no lot size — cannot size")
+
+    entry = float(entry_price or 0.0)
+    stop = float(stop_price or 0.0)
+    risk_per_unit = abs(entry - stop)
+    risk_per_lot = risk_per_unit * lot_size
+
+    if risk_per_unit <= 0 or entry <= 0:
+        qty = lot_size
+        return SizingResult(1, qty, max(0.0, risk_per_lot), max(0.0, risk_per_lot),
+                            entry * qty * 0.15,
+                            "stop = entry — risk undefined, defaulting to 1 lot")
+
+    budget = max(0.0, float(available_capital or 0.0)) * (float(risk_pct) / 100.0)
+    by_risk = int(budget // risk_per_lot) if risk_per_lot > 0 else 0
+
+    # Margin affordability: SPAN margin ≈ 15% of contract value.
+    margin_per_lot = entry * lot_size * 0.15
+    by_margin = int(float(available_capital or 0.0) // margin_per_lot) if margin_per_lot > 0 else 0
+
+    lots = max(1, by_risk)
+    lots = min(lots, int(max_lots))
+    if by_margin >= 1:
+        lots = min(lots, by_margin)
+
+    qty = lots * lot_size
+    est_risk = risk_per_lot * lots
+
+    if by_risk < 1:
+        reason = (f"risk/lot ₹{risk_per_lot:.0f} > budget ₹{budget:.0f} "
+                  f"({risk_pct:.1f}% of ₹{available_capital:.0f}) — floored to 1 lot")
+    elif lots == int(max_lots) and by_risk > int(max_lots):
+        reason = f"risk allows {by_risk} lots, capped at max_lots={max_lots}"
+    elif by_margin >= 1 and lots == by_margin and by_margin < max(1, by_risk):
+        reason = f"margin affords {by_margin} lots (risk allowed {by_risk})"
+    else:
+        reason = (f"{lots} lot(s): risk ₹{est_risk:.0f} ≤ budget ₹{budget:.0f} "
+                  f"({risk_pct:.1f}% of ₹{available_capital:.0f})")
+
+    return SizingResult(lots, qty, risk_per_lot, est_risk, margin_per_lot * lots, reason)
+

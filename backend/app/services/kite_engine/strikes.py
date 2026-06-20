@@ -10,10 +10,19 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List, Literal, Optional, Sequence
 
-Moneyness = Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]
+Moneyness = Literal[
+    "ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5",
+    "ITM10", "ITM15", "ITM20",
+    "OTM1", "OTM2", "OTM3", "OTM4", "OTM5",
+]
 ExpiryType = Literal["weekly", "monthly"]
 # Signed "into-the-money" offset (in strike steps): positive = ITM, negative = OTM.
-_ITM_OFFSET = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5, "OTM1": -1, "OTM2": -2, "OTM3": -3, "OTM4": -4, "OTM5": -5}
+_ITM_OFFSET = {
+    "ATM": 0,
+    "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5,
+    "ITM10": 10, "ITM15": 15, "ITM20": 20,
+    "OTM1": -1, "OTM2": -2, "OTM3": -3, "OTM4": -4, "OTM5": -5,
+}
 
 
 def _expiry_date_set(chain: Sequence[dict], today: date) -> dict:
@@ -223,3 +232,64 @@ def pick_contracts(
                 seen.add(pick.option_symbol)
                 out.append((m, pick))
     return out
+
+
+def pick_by_delta(
+    chain: Sequence[dict], *, spot: float, direction: str,
+    target_delta: float = 0.90, iv: float = 0.18,
+    min_dte: int = 0, expiry_types: Sequence[ExpiryType] = (),
+    today: Optional[date] = None,
+) -> Optional[OptionPick]:
+    """Pick the CE (bull) / PE (bear) whose BS delta is closest to ``target_delta``.
+
+    Uses the same chain format as ``pick_strike``. ``iv`` is a decimal
+    (0.18 = 18%); when unknown, the caller passes a conservative estimate.
+    Returns ``None`` if the chain is empty or all candidates have degenerate delta.
+    """
+    from app.services.kite_engine.greeks import black_scholes_greeks
+
+    want_call = direction == "long"
+    want_type = "call" if want_call else "put"
+    rows = [
+        r for r in chain
+        if str(r.get("option_type", "")).lower() == want_type
+        and int(r.get("dte", 0)) >= min_dte
+    ]
+    if expiry_types and set(expiry_types) != {"weekly", "monthly"}:
+        _today = today or date.today()
+        rows = _filter_chain_by_expiry(rows, expiry_types, _today)
+    if not rows:
+        return None
+
+    # nearest expiry only (same as pick_strike)
+    near_dte = min(int(r["dte"]) for r in rows)
+    rows = [r for r in rows if int(r["dte"]) == near_dte]
+    if not rows:
+        return None
+
+    abs_target = abs(target_delta)
+    best_row = None
+    best_dist = float("inf")
+    for r in rows:
+        strike = float(r.get("strike", 0))
+        dte_d = max(1.0, float(r.get("dte", 1)))
+        g = black_scholes_greeks(spot=spot, strike=strike, dte_days=dte_d,
+                                  iv=iv, option_type="CE" if want_call else "PE")
+        delta_abs = abs(g.delta)
+        dist = abs(delta_abs - abs_target)
+        if dist < best_dist:
+            best_dist = dist
+            best_row = r
+
+    if best_row is None:
+        return None
+    return OptionPick(
+        option_symbol=str(best_row.get("instrument_name", "")),
+        strike=float(best_row["strike"]),
+        option_type="CE" if want_call else "PE",
+        expiry=str(best_row.get("expiry_date", "")),
+        dte=int(best_row.get("dte", 0)),
+        lot_size=int(best_row.get("lot_size", 0) or 0),
+        token=int(best_row.get("token", 0) or 0),
+    )
+

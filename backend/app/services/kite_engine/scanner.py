@@ -21,6 +21,8 @@ import numpy as np
 
 from app.core.logging import get_logger
 from app.domain.models import Candle
+from app.engines.indicators.adx import adx as _adx
+from app.engines.indicators.atr import atr_percentile as _atr_pct, compute_atr as _compute_atr
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
 from app.engines.triple_supertrend.config import TripleSupertrendConfig
 from app.engines.triple_supertrend.engine import TripleSupertrendEngine
@@ -82,6 +84,10 @@ def evaluate_item(
     # the entry: once the trail flips against the entry it has exited, and a later
     # re-flip is a *new* entry, not a resurrection of the old one.
     trail = r.trend(cfg.trail_target)
+    # Trend-quality readings for the optional directional-mode entry filters
+    # (computed once over the raw OHLC; never gate anything on their own).
+    adx_arr = _adx(h, l, c, 14)
+    atr_arr = _compute_atr(h, l, c, 14)
     for i in indices:
         direction = "long" if longs[i] else "short"
         ts = int(candles[i].timestamp_ms)
@@ -96,13 +102,17 @@ def evaluate_item(
             # running only if the trail held the entry's direction on every bar since
             is_active=bool(np.all(trail[i:] == want)),
             is_fresh=(ts == latest_ts),
+            adx=float(adx_arr[i]) if i < len(adx_arr) else None,
+            atr_pct=float(_atr_pct(atr_arr[: i + 1])) if i >= 14 else None,
         ))
     return rows
 
 
 # Fixed display/priority order: ATM first (the auto-exec primary), then ITM
 # inwards, then OTM outwards — independent of the order the UI sends them in.
-_MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5, "OTM1": 6, "OTM2": 7, "OTM3": 8, "OTM4": 9, "OTM5": 10}
+_MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5,
+                    "ITM10": 5.3, "ITM15": 5.6, "ITM20": 5.9,
+                    "OTM1": 6, "OTM2": 7, "OTM3": 8, "OTM4": 9, "OTM5": 10}
 
 
 def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:

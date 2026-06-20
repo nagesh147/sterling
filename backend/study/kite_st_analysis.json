@@ -1,0 +1,200 @@
+{
+  "per_index_best": {
+    "NIFTY 50": {
+      "underlying": "NIFTY 50",
+      "trail": "fast",
+      "lock": "off",
+      "moneyness": "OTM2",
+      "moneyness_pct": "0.564",
+      "trades": 547,
+      "win_rate": 30.0,
+      "ret_pct": 58.39,
+      "net_pnl": "58394.26",
+      "profit_factor": 1.054,
+      "sharpe": 0.596,
+      "max_dd": 48.27,
+      "expectancy": 106.75,
+      "is_ret": 118.03,
+      "is_trades": 386,
+      "is_pf": "1.174",
+      "oos_ret": -60.55,
+      "oos_trades": 159,
+      "oos_pf": 0.849
+    },
+    "NIFTY BANK": {
+      "underlying": "NIFTY BANK",
+      "trail": "mid",
+      "lock": "off",
+      "moneyness": "OTM2",
+      "moneyness_pct": "0.505",
+      "trades": 332,
+      "win_rate": 33.4,
+      "ret_pct": 961.44,
+      "net_pnl": "961444.28",
+      "profit_factor": 1.396,
+      "sharpe": 1.008,
+      "max_dd": 82.04,
+      "expectancy": 2895.92,
+      "is_ret": 1005.69,
+      "is_trades": 230,
+      "is_pf": "1.678",
+      "oos_ret": -46.49,
+      "oos_trades": 102,
+      "oos_pf": 0.951
+    },
+    "NIFTY FIN SERVICE": {
+      "underlying": "NIFTY FIN SERVICE",
+      "trail": "fast",
+      "lock": "off",
+      "moneyness": "OTM2",
+      "moneyness_pct": "0.545",
+      "trades": 553,
+      "win_rate": 31.8,
+      "ret_pct": 246.44,
+      "net_pnl": "246444.46",
+      "profit_factor": 1.186,
+      "sharpe": 1.104,
+      "max_dd": 37.88,
+      "expectancy": 445.65,
+      "is_ret": 257.56,
+      "is_trades": 392,
+      "is_pf": "1.304",
+      "oos_ret": -12.03,
+      "oos_trades": 159,
+      "oos_pf": 0.975
+    },
+    "SENSEX": {
+      "underlying": "SENSEX",
+      "trail": "mid",
+      "lock": "off",
+      "moneyness": "OTM2",
+      "moneyness_pct": "0.335",
+      "trades": 358,
+      "win_rate": 30.2,
+      "ret_pct": -86.64,
+      "net_pnl": "-86639.87",
+      "profit_factor": 0.975,
+      "sharpe": -1.593,
+      "max_dd": 113.05,
+      "expectancy": -242.01,
+      "is_ret": 87.88,
+      "is_trades": 252,
+      "is_pf": "1.04",
+      "oos_ret": -206.72,
+      "oos_trades": 107,
+      "oos_pf": 0.847
+    }
+  },
+  "aggregates": {
+    "full_pos": 45,
+    "oos_pos": 0,
+    "oos_pf_pos": 0,
+    "n": 60
+  },
+  "signal_isolation": {
+    "NIFTY 50": {
+      "fast": {
+        "full_ret": 72.34,
+        "full_pf": 1.31,
+        "full_wr": 39.7,
+        "n": 547,
+        "oos_ret": 9.84,
+        "oos_pf": 1.158
+      },
+      "mid": {
+        "full_ret": 72.93,
+        "full_pf": 1.357,
+        "full_wr": 39.1,
+        "n": 361,
+        "oos_ret": 6.2,
+        "oos_pf": 1.104
+      },
+      "slow": {
+        "full_ret": 0.66,
+        "full_pf": 1.004,
+        "full_wr": 34.3,
+        "n": 204,
+        "oos_ret": -11.09,
+        "oos_pf": 0.757
+      }
+    },
+    "NIFTY BANK": {
+      "fast": {
+        "full_ret": 87.25,
+        "full_pf": 1.276,
+        "full_wr": 41.2,
+        "n": 549,
+        "oos_ret": 3.38,
+        "oos_pf": 1.042
+      },
+      "mid": {
+        "full_ret": 94.68,
+        "full_pf": 1.372,
+        "full_wr": 42.2,
+        "n": 332,
+        "oos_ret": 3.7,
+        "oos_pf": 1.052
+      },
+      "slow": {
+        "full_ret": 24.12,
+        "full_pf": 1.12,
+        "full_wr": 34.9,
+        "n": 189,
+        "oos_ret": -22.53,
+        "oos_pf": 0.613
+      }
+    },
+    "NIFTY FIN SERVICE": {
+      "fast": {
+        "full_ret": 73.39,
+        "full_pf": 1.244,
+        "full_wr": 39.2,
+        "n": 553,
+        "oos_ret": 10.94,
+        "oos_pf": 1.15
+      },
+      "mid": {
+        "full_ret": 59.47,
+        "full_pf": 1.213,
+        "full_wr": 35.6,
+        "n": 351,
+        "oos_ret": -13.25,
+        "oos_pf": 0.846
+      },
+      "slow": {
+        "full_ret": 3.37,
+        "full_pf": 1.016,
+        "full_wr": 34.7,
+        "n": 196,
+        "oos_ret": -18.61,
+        "oos_pf": 0.682
+      }
+    },
+    "SENSEX": {
+      "fast": {
+        "full_ret": 60.13,
+        "full_pf": 1.248,
+        "full_wr": 37.8,
+        "n": 545,
+        "oos_ret": 8.95,
+        "oos_pf": 1.139
+      },
+      "mid": {
+        "full_ret": 39.9,
+        "full_pf": 1.181,
+        "full_wr": 37.4,
+        "n": 358,
+        "oos_ret": 4.46,
+        "oos_pf": 1.072
+      },
+      "slow": {
+        "full_ret": -2.53,
+        "full_pf": 0.984,
+        "full_wr": 34.3,
+        "n": 201,
+        "oos_ret": -13.24,
+        "oos_pf": 0.714
+      }
+    }
+  }
+}

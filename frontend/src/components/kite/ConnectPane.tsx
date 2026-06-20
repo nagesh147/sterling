@@ -6,9 +6,11 @@ import {
   useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
+import { useEngineConfig, useSetEngineConfig } from '../../hooks/useTripleSupertrend';
 import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
+import { DirectionalModePanel } from './DirectionalModePanel';
 import { KiteTelegramPanel } from './KiteTelegramPanel';
 import { useKiteSettings } from '../../store/useKiteSettings';
 
@@ -468,6 +470,19 @@ function KiteSettings() {
   );
 }
 
+function DirectionalModePanelWrapper() {
+  const { data: cfgData } = useEngineConfig();
+  const setCfg = useSetEngineConfig();
+  if (!cfgData) return null;
+  return (
+    <DirectionalModePanel
+      cfg={cfgData}
+      onUpdate={(patch) => setCfg.mutate({ ...cfgData, ...patch })}
+      busy={setCfg.isPending}
+    />
+  );
+}
+
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
   const active = data?.accounts.find((a) => a.is_active);
@@ -476,6 +491,7 @@ export function ConnectPane() {
       <StatusBanner />
       <KiteSettings />
       <TradingModeControls />
+      <DirectionalModePanelWrapper />
       {active && <LoginFlow account={active} />}
       {active?.connected && !active.is_paper && <Funds />}
       {active?.connected && !active.is_paper && <MarginCalc />}

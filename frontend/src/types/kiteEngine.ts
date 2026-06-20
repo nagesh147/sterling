@@ -2,9 +2,11 @@
 // Mirrors backend app/engines/triple_supertrend/schemas.py.
 
 export type TrailTarget = 'fast' | 'mid' | 'slow';
-export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
+export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
 export type ScanSource = 'spot' | 'derivatives' | 'both';
 export type ScanExpiry = 'weekly' | 'monthly';
+export type Vehicle = 'otm_options' | 'deep_itm_options' | 'futures';
+export type DeepItmMoneyness = 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20';
 
 export interface AlignmentChip {
   fast: number; // +1 / -1 / 0
@@ -151,6 +153,16 @@ export interface EngineConfigModel {
   max_lots: number;
   // Protective stop mode (workstreams C/D)
   stop_mode: 'broker' | 'monitor' | 'both';
+  // ── Directional mode (additive, opt-in) ────────────────────────────────
+  directional_mode: boolean;
+  vehicle: Vehicle;
+  enabled_vehicles: Vehicle[];
+  itm_depth: DeepItmMoneyness | null;
+  target_delta: number | null;
+  futures_expiry: 'near' | 'next';
+  adx_min: number | null;
+  atr_pct_min: number | null;
+  wire_risk_infra: boolean;
 }
 
 // ─── Options backtest (workstream H) ─────────────────────────────────────────

@@ -63,21 +63,31 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 
 
 async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float) -> None:
-    """Market-SELL the full quantity and cancel any broker GTT (trail breach)."""
+    """Market-exit the full quantity and cancel any broker GTT (trail breach).
+    For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short)."""
+    is_futures = p.vehicle == "futures"
+    exit_side = "sell" if p.direction == "long" else "buy"
     try:
-        await client.place_order_option(
-            p.symbol, "sell", p.qty, exchange=p.exchange,
-            tag=f"trailexit:{p.symbol}")
+        if is_futures:
+            await client.place_order_future(
+                p.symbol, exit_side, p.qty, exchange=p.exchange,
+                tag=f"trailexit:{p.symbol}")
+        else:
+            await client.place_order_option(
+                p.symbol, "sell", p.qty, exchange=p.exchange,
+                tag=f"trailexit:{p.symbol}")
     except Exception as exc:  # noqa: BLE001
-        state.log(uid, "order_failed", f"Trail exit SELL {p.symbol} failed: {exc}")
+        state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
         return
     if p.gtt_id:
         await pstop.cancel_stop(client, p.gtt_id)
-    pos.close(uid, p.symbol, reason=f"trail breach @ ₹{ltp:.2f} ≤ ₹{p.stop_premium:.2f}")
+    breach_dir = "≥" if p.direction == "short" else "≤"
+    pos.close(uid, p.symbol, reason=f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}")
     if p.guard_key:
         state.clear_auto_open(uid, p.guard_key)
     state.log(uid, "order_placed",
-              f"SELL {p.qty} {p.symbol} @ market — trail breach (₹{ltp:.2f} ≤ ₹{p.stop_premium:.2f})")
+              f"{exit_side.upper()} {p.qty} {p.symbol} @ market — trail breach "
+              f"(₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f})")
 
 
 async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
@@ -93,7 +103,7 @@ async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
                 continue
             if p.status != pos.OPEN:
                 return None  # not filled yet — nothing to protect
-            if pos.should_exit(p.stop_premium, ltp):
+            if pos.should_exit(p.stop_premium, ltp, p.direction):
                 await _exit_position(client, uid, p, ltp)
                 return p.symbol
             return None

@@ -33,19 +33,22 @@ REJECTED = "rejected"   # broker rejected/cancelled the entry order
 @dataclass
 class OpenPosition:
     uid: str
-    symbol: str                 # option tradingsymbol
+    symbol: str                 # option tradingsymbol or futures tradingsymbol
     exchange: str               # NFO / BFO
     token: int = 0              # instrument token (for tick subscription)
     qty: int = 0                # total quantity (lots × lot_size)
     lot_size: int = 0
-    entry_premium: float = 0.0  # intended entry (scan-time premium)
-    stop_premium: float = 0.0   # current trail level (premium ST trail)
+    entry_premium: float = 0.0  # intended entry (scan-time premium or futures price)
+    stop_premium: float = 0.0   # current trail level (premium ST trail or futures stop)
     order_id: str = ""
     fill_price: float = 0.0     # actual avg fill (from WS order update)
     status: str = PENDING
     gtt_id: int = 0             # broker-side protective stop id (0 = none)
     stop_mode: str = "both"     # broker | monitor | both
     guard_key: str = ""         # the state.auto_open slot this position guards
+    direction: str = "long"     # "long" | "short" — options are always long; futures can be either
+    vehicle: str = "otm_options" # otm_options | deep_itm_options | futures
+    underlying: str = ""        # display underlying ("NIFTY 50") — for correlation grouping
     opened_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     closed_ms: int = 0
     exit_reason: str = ""
@@ -55,16 +58,18 @@ _positions: Dict[str, Dict[str, OpenPosition]] = {}   # uid → {symbol → Open
 
 
 # ── pure exit predicate ──────────────────────────────────────────────────────
-def should_exit(stop_premium: float, ltp: float) -> bool:
-    """True when a long option's live premium has breached (≤) its trail.
+def should_exit(stop_premium: float, ltp: float, direction: str = "long") -> bool:
+    """True when a position's live price has breached its trail.
 
-    Auto-exec only ever BUYS options, so protection is a downside stop: exit when
-    the last traded premium falls to or below the trail. A non-positive stop means
-    'no stop set' → never auto-exit on it. A non-positive ltp is treated as a stale
-    tick and ignored (don't exit on a bad print).
+    For long positions (options + long futures): exit when LTP ≤ stop (downside).
+    For short futures: exit when LTP ≥ stop (upside, buy-to-cover).
+    A non-positive stop means 'no stop set' → never auto-exit on it.
+    A non-positive ltp is treated as a stale tick and ignored.
     """
     if stop_premium <= 0 or ltp <= 0:
         return False
+    if direction == "short":
+        return ltp >= stop_premium
     return ltp <= stop_premium
 
 
