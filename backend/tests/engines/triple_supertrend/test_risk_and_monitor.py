@@ -4,6 +4,7 @@ import pytest
 from app.services.kite_engine import sizing
 from app.services.kite_engine import positions as pos
 from app.services.kite_engine import monitor
+import app.services.exchanges.kite.ticker_manager as _ticker_manager
 
 
 # ── F: risk sizing ───────────────────────────────────────────────────────────
@@ -73,6 +74,7 @@ class _FakeClient:
         self.sells = []
         self.cancelled = []
         self.futures_exits = []
+        self.unsubscribed = []
     async def place_order_option(self, sym, side, size, **kw):
         self.sells.append((sym, side, size))
         return {"order_id": "EXIT-1"}
@@ -82,6 +84,14 @@ class _FakeClient:
     async def delete_gtt(self, tid):
         self.cancelled.append(tid)
         return {"trigger_id": tid}
+
+
+@pytest.fixture(autouse=True)
+def _patch_ticker_unsubscribe(monkeypatch):
+    """Prevent all monitor tests from making real ticker network calls."""
+    async def _noop(uid, tokens):
+        return {"ok": True}
+    monkeypatch.setattr(_ticker_manager, "unsubscribe", _noop)
 
 
 @pytest.mark.asyncio
@@ -106,6 +116,26 @@ async def test_tick_exit_sells_and_cancels_gtt(monkeypatch):
     assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
     assert client.cancelled == [555]
     assert pos.get("m1", "NIFTY24JUN24000CE").status == pos.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_tick_exit_unsubscribes_token(monkeypatch):
+    """On trail breach, the position's token is unsubscribed from the ticker."""
+    unsubbed = []
+
+    async def _capture(uid, tokens):
+        unsubbed.extend(tokens)
+    monkeypatch.setattr(_ticker_manager, "unsubscribe", _capture)
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+
+    pos.reset("mu1")
+    pos.register(pos.OpenPosition(
+        uid="mu1", symbol="NIFTY24JUN24000CE", exchange="NFO", token=999,
+        qty=50, stop_premium=80, status=pos.OPEN))
+    client = _FakeClient()
+    await monitor.on_tick("mu1", 999, 75.0, client=client)
+    assert 999 in unsubbed, "token should be unsubscribed after exit"
 
 
 @pytest.mark.asyncio

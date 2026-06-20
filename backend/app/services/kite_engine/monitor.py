@@ -88,6 +88,13 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float) -> N
     state.log(uid, "order_placed",
               f"{exit_side.upper()} {p.qty} {p.symbol} @ market — trail breach "
               f"(₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f})")
+    # Unsubscribe the token now that we no longer hold this position.
+    if p.token:
+        try:
+            from app.services.exchanges.kite import ticker_manager
+            await ticker_manager.unsubscribe(uid, [p.token])
+        except Exception:  # noqa: BLE001
+            pass
 
 
 async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:

@@ -170,3 +170,99 @@ async def test_auto_exec_one_position_guard():
     state.clear_auto_open("g1", "RELIANCE")
     await cb(_row(3000), None)
     assert len(placed) == 2  # re-enters after the position is cleared
+
+
+# ── _update_open_position_trails integration ─────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_update_trails_tightens_futures_stop_and_moves_gtt(monkeypatch):
+    """_update_open_position_trails updates in-memory stop and calls move_stop."""
+    from app.engines.triple_supertrend.schemas import (
+        AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
+    )
+    from app.services.kite_engine import positions, service, state
+    from app.services.kite_engine.scanner import scanner
+
+    uid = "trail-test"
+    state.reset(uid)
+    positions._positions.pop(uid, None)
+    state.set_config(uid, EngineConfigModel(auto_execute=True, stop_mode="both"))
+
+    # register an open futures long at stop 24700
+    positions.register(positions.OpenPosition(
+        uid=uid, symbol="NIFTY26JUNFUT", exchange="NFO", token=5001,
+        qty=75, lot_size=75, stop_premium=24700.0, direction="long",
+        vehicle="futures", underlying="NIFTY 50",
+        status=positions.OPEN, gtt_id=42))
+
+    # inject a fresh scan row at stop 24850 (tighter for long)
+    row = EngineSignalRow(
+        underlying="NIFTY 50", token=256265, exchange="NFO",
+        regime="BULL", alignment=AlignmentChip(fast=1, mid=1, slow=1),
+        direction="long", option_type="CE",
+        legs=[OptionLeg(moneyness="ATM", option_type="CE",
+                        option_symbol="NIFTY26JUN25000CE", strike=25000,
+                        expiry="2026-06-26", premium_sl=120.0, token=111)],
+        spot=25100.0, stop_loss=24850.0, score=90.0,
+        timestamp_ms=1_700_000_000_000)
+    us = scanner.snapshot(uid)
+    us.rows = [row]
+
+    gtt_moved = []
+
+    class _FakeClient:
+        async def get_ltp(self, syms):
+            return {s: {"last_price": 25100.0} for s in syms}
+        async def modify_gtt(self, tid, **kw):
+            gtt_moved.append((tid, kw.get("trigger_values")))
+            return {"trigger_id": tid}
+
+    await service._update_open_position_trails(_FakeClient(), uid)
+
+    p = positions.open_positions(uid)[0]
+    assert p.stop_premium == 24850.0, "in-memory stop should be tightened"
+    assert gtt_moved, "GTT should have been modified"
+    assert gtt_moved[0] == (42, [24850.0])
+
+
+@pytest.mark.asyncio
+async def test_update_trails_does_not_widen_stop(monkeypatch):
+    """_update_open_position_trails never widens an existing stop."""
+    from app.engines.triple_supertrend.schemas import (
+        AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
+    )
+    from app.services.kite_engine import positions, service, state
+    from app.services.kite_engine.scanner import scanner
+
+    uid = "trail-nowiden"
+    state.reset(uid)
+    positions._positions.pop(uid, None)
+    state.set_config(uid, EngineConfigModel(auto_execute=True, stop_mode="both"))
+
+    positions.register(positions.OpenPosition(
+        uid=uid, symbol="NIFTY26JUNFUT", exchange="NFO", token=5001,
+        qty=75, lot_size=75, stop_premium=24900.0, direction="long",
+        vehicle="futures", underlying="NIFTY 50",
+        status=positions.OPEN, gtt_id=43))
+
+    # row has a WORSE (lower) stop than what we already have
+    row = EngineSignalRow(
+        underlying="NIFTY 50", token=256265, exchange="NFO",
+        regime="BULL", alignment=AlignmentChip(fast=1, mid=1, slow=1),
+        direction="long", option_type="CE",
+        legs=[OptionLeg(moneyness="ATM", option_type="CE",
+                        option_symbol="NIFTY26JUN25000CE", strike=25000,
+                        expiry="2026-06-26", premium_sl=100.0, token=111)],
+        spot=25100.0, stop_loss=24700.0, score=90.0,
+        timestamp_ms=1_700_000_000_000)
+    us = scanner.snapshot(uid)
+    us.rows = [row]
+
+    class _FakeClient:
+        async def get_ltp(self, syms):
+            return {s: {"last_price": 25100.0} for s in syms}
+
+    await service._update_open_position_trails(_FakeClient(), uid)
+
+    p = positions.open_positions(uid)[0]
+    assert p.stop_premium == 24900.0, "stop must not be widened"

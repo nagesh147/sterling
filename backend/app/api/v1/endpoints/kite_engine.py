@@ -218,8 +218,21 @@ async def open_positions(user: UserContext = Depends(get_current_user)) -> OpenP
 @router.delete("/open-positions/{symbol}", response_model=OpenPositionsResponse)
 async def close_position(symbol: str, user: UserContext = Depends(get_current_user)) -> OpenPositionsResponse:
     """Manually close (mark-closed) a tracked position without placing a broker order.
+    Cancels any live broker GTT stop before closing, so it can't fire after removal.
     Use when an order was filled outside the engine or to clean up stale entries."""
     uid = user.user_id
+    from app.services.kite_engine import protective_stop as pstop
+    from app.services.exchanges.kite import ticker_manager
+    p = kite_positions.get(uid, symbol)
+    if p:
+        try:
+            client = await _client(user)
+            if p.gtt_id:
+                await pstop.cancel_stop(client, p.gtt_id)
+            if p.token:
+                await ticker_manager.unsubscribe(uid, [p.token])
+        except Exception:  # noqa: BLE001
+            pass
     kite_positions.close(uid, symbol, reason="manual_close")
     records = [
         OpenPositionRecord(

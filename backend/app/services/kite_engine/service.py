@@ -384,6 +384,84 @@ def _make_place_cb(client, uid: str):
     return _cb
 
 
+def _new_trail_for_open(p, rows) -> Optional[float]:
+    """Given an open position ``p``, find the matching fresh signal row and return
+    the updated trail stop price.  Returns None if no match or no improvement.
+
+    - Futures: trail is the underlying ST index level (``row.stop_loss``), and it
+      tightens monotonically only for the correct direction:
+        long  → trail moves UP   → take max(p.stop_premium, new)
+        short → trail moves DOWN → take min(p.stop_premium, new)
+    - OTM options (long premium): trail is ``leg.premium_sl`` from the matching
+      leg in the signal row — tighter means higher (we take max).
+    - Deep-ITM: no intra-scan re-price here (premium_sl is not in the deep-ITM
+      row; the tick monitor handles the actual exit granularly).
+    """
+    for row in rows:
+        if row.underlying != p.underlying:
+            continue
+        if p.vehicle == "futures":
+            new_sl = float(row.stop_loss or 0.0)
+            if new_sl <= 0:
+                return None
+            if p.direction == "long":
+                return new_sl if new_sl > p.stop_premium else None
+            else:
+                return new_sl if new_sl < p.stop_premium else None
+        elif p.vehicle == "otm_options":
+            for leg in row.legs:
+                if leg.option_symbol == p.symbol and (leg.premium_sl or 0) > 0:
+                    new_sl = float(leg.premium_sl)
+                    # OTM option long: stop is a floor price — tighter = higher floor
+                    return new_sl if new_sl > p.stop_premium else None
+    return None
+
+
+async def _update_open_position_trails(client, uid: str) -> None:
+    """After each scan, push tightened trail stops to open positions.
+
+    Covers the in-scan trail-update gap: the scanner computes fresh ST levels
+    every 5 min but the original entry stop was never updated.  This pass:
+      1. Reads the freshly-computed signal rows from the scanner snapshot.
+      2. For each open position, computes whether the trail has tightened.
+      3. Updates the in-memory stop (positions.update_stop).
+      4. Moves the broker GTT if one is registered (protective_stop.move_stop).
+      5. Re-subscribes the tick subscription (no-op if already subscribed).
+    """
+    open_pos = positions.open_positions(uid)
+    if not open_pos:
+        return
+    snap = scanner.snapshot(uid)
+    rows = snap.rows
+    cfg = state.get_config(uid)
+    for p in open_pos:
+        if p.status != positions.OPEN:
+            continue
+        new_sl = _new_trail_for_open(p, rows)
+        if new_sl is None:
+            continue
+        old_sl = p.stop_premium
+        positions.update_stop(uid, p.symbol, new_sl)
+        state.log(uid, "info",
+                  f"Trail updated {p.symbol} ({p.vehicle}): "
+                  f"₹{old_sl:.2f} → ₹{new_sl:.2f}")
+        if p.gtt_id and cfg.stop_mode in ("broker", "both"):
+            try:
+                ltp_key = f"{p.exchange}:{p.symbol}"
+                ltp_data = await client.get_ltp([ltp_key])
+                ltp = float((ltp_data or {}).get(ltp_key, {}).get("last_price") or new_sl)
+            except Exception:  # noqa: BLE001
+                ltp = new_sl
+            moved = await protective_stop.move_stop(
+                client, trigger_id=p.gtt_id,
+                tradingsymbol=p.symbol, exchange=p.exchange,
+                qty=p.qty, trigger_premium=new_sl, last_price=ltp,
+                direction=p.direction)
+            if moved:
+                state.log(uid, "info",
+                          f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")
+
+
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) -> int:
     """Run one full scan for ``uid`` with ``client``. Returns the signal count."""
     cfg_model = state.get_config(uid)
@@ -452,6 +530,9 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             if d.deriv_resolved == 0 and d.deriv_no_spot == 0:
                 dv += " — no option contracts resolved from chains"
             parts.append(dv)
+        # Trail-update pass: push tightened stops to open positions.
+        if cfg_model.auto_execute:
+            await _update_open_position_trails(client, uid)
         state.log(uid, "scan_done",
                   f"Scan complete — {count} ready signal(s) / {len(selected)} instruments "
                   f"[{source}] ({mode}) · {' · '.join(parts)}")

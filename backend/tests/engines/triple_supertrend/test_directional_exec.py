@@ -256,3 +256,84 @@ def _run_keep_breaker(cfg, row, client, item=None):
     cb = service._make_place_cb(client, UID)
     asyncio.run(cb(row, item or _item()))
     return positions.open_positions(UID)
+
+
+# ── Trail update (_new_trail_for_open) ────────────────────────────────────────
+
+def _make_signal_row(underlying="NIFTY 50", stop_loss=24800.0, symbol="NIFTY2562625000PE",
+                     premium_sl=85.0):
+    return EngineSignalRow(
+        underlying=underlying, token=256265, exchange="NFO",
+        regime="BEAR", alignment=AlignmentChip(fast=-1, mid=-1, slow=-1),
+        direction="short", option_type="PE",
+        legs=[OptionLeg(moneyness="ATM", option_type="PE",
+                        option_symbol=symbol, strike=25000, expiry="2026-06-26",
+                        premium_spot=120.0, premium_sl=premium_sl, token=111)],
+        spot=25000.0, stop_loss=stop_loss, score=85.0,
+        timestamp_ms=1_700_000_000_000)
+
+
+def test_new_trail_futures_long_tightens():
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY26JUNFUT", exchange="NFO", token=1,
+        qty=75, stop_premium=24700.0, direction="long", vehicle="futures",
+        underlying="NIFTY 50", status=positions.OPEN)
+    row = _make_signal_row(stop_loss=24850.0)  # higher → tighter for a long
+    new_sl = service._new_trail_for_open(p, [row])
+    assert new_sl == 24850.0
+
+
+def test_new_trail_futures_long_no_update_when_wider():
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY26JUNFUT", exchange="NFO", token=1,
+        qty=75, stop_premium=24900.0, direction="long", vehicle="futures",
+        underlying="NIFTY 50", status=positions.OPEN)
+    row = _make_signal_row(stop_loss=24700.0)  # lower → would widen — skip
+    assert service._new_trail_for_open(p, [row]) is None
+
+
+def test_new_trail_futures_short_tightens():
+    p = positions.OpenPosition(
+        uid="tx", symbol="BANKNIFTY25JULFUT", exchange="NFO", token=2,
+        qty=15, stop_premium=48500.0, direction="short", vehicle="futures",
+        underlying="NIFTY BANK", status=positions.OPEN)
+    row = _make_signal_row(underlying="NIFTY BANK", stop_loss=48200.0)  # lower → tighter for short
+    new_sl = service._new_trail_for_open(p, [row])
+    assert new_sl == 48200.0
+
+
+def test_new_trail_futures_short_no_update_when_wider():
+    p = positions.OpenPosition(
+        uid="tx", symbol="BANKNIFTY25JULFUT", exchange="NFO", token=2,
+        qty=15, stop_premium=48000.0, direction="short", vehicle="futures",
+        underlying="NIFTY BANK", status=positions.OPEN)
+    row = _make_signal_row(underlying="NIFTY BANK", stop_loss=48800.0)  # higher → would widen
+    assert service._new_trail_for_open(p, [row]) is None
+
+
+def test_new_trail_otm_options_tightens():
+    """OTM option long: stop is a premium floor — tighter = higher floor."""
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY2562625000PE", exchange="NFO", token=111,
+        qty=75, stop_premium=80.0, direction="long", vehicle="otm_options",
+        underlying="NIFTY 50", status=positions.OPEN)
+    row = _make_signal_row(symbol="NIFTY2562625000PE", premium_sl=90.0)  # higher → tighter floor
+    assert service._new_trail_for_open(p, [row]) == 90.0
+
+
+def test_new_trail_otm_options_no_update_when_lower():
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY2562625000PE", exchange="NFO", token=111,
+        qty=75, stop_premium=95.0, direction="long", vehicle="otm_options",
+        underlying="NIFTY 50", status=positions.OPEN)
+    row = _make_signal_row(symbol="NIFTY2562625000PE", premium_sl=85.0)
+    assert service._new_trail_for_open(p, [row]) is None
+
+
+def test_new_trail_no_matching_row():
+    p = positions.OpenPosition(
+        uid="tx", symbol="NIFTY26JUNFUT", exchange="NFO", token=1,
+        qty=75, stop_premium=24700.0, direction="long", vehicle="futures",
+        underlying="NIFTY 50", status=positions.OPEN)
+    row = _make_signal_row(underlying="NIFTY BANK")  # different asset
+    assert service._new_trail_for_open(p, [row]) is None
