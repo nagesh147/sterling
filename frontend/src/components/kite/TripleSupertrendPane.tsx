@@ -434,7 +434,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
                       {leg.option_symbol === bestRRSym && (
                         <span title="Best reward-to-risk among these strikes for a 1R move"
-                          style={{ fontSize: 8, fontWeight: 700, color: '#fff', background: k.green, padding: '0px 4px', borderRadius: 3 }}>★</span>
+                          style={{ fontSize: 12, color: k.blue, lineHeight: 1 }}>★</span>
                       )}
                     </span>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
@@ -600,7 +600,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {leg.option_symbol === bestRRSym && (
                        <span title="Best reward-to-risk among these strikes for a 1R move"
-                         style={{ fontSize: 8.5, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>★</span>
+                         style={{ fontSize: 13, color: k.blue, lineHeight: 1, flexShrink: 0 }}>★</span>
                      )}
                    </span>
                    {s.showExchange && (

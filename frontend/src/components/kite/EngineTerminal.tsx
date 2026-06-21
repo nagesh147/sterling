@@ -59,19 +59,27 @@ function Line({ ev, t }: { ev: ActivityEvent; t: typeof THEME.dark }) {
   );
 }
 
+// Mode is persisted module-side because the layout swaps EngineTerminal between
+// structurally different wrappers (e.g. minimized vs normal), which REMOUNTS this
+// component. Without this, a remount would reset mode to 'normal' and the terminal
+// would render full-height inside the minimized slot — looking like it went full
+// screen right after the user clicked minimize.
+let lastTerminalMode: 'minimized' | 'normal' | 'partial' | 'full' = 'normal';
+
 export function EngineTerminal() {
   const { data } = useEngineActivity();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('kite_terminal_theme') as Theme) || 'dark');
-  const [mode, setModeState] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+  const [mode, setModeState] = useState<'minimized' | 'normal' | 'partial' | 'full'>(lastTerminalMode);
 
   const setMode = (m: 'minimized' | 'normal' | 'partial' | 'full') => {
+    lastTerminalMode = m;
     setModeState(m);
     window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: m }));
   };
 
   useEffect(() => {
-    const cb = (e: any) => setModeState(e.detail);
+    const cb = (e: any) => { lastTerminalMode = e.detail; setModeState(e.detail); };
     window.addEventListener('kite-terminal-mode', cb);
     return () => window.removeEventListener('kite-terminal-mode', cb);
   }, []);
