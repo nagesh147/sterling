@@ -22,7 +22,6 @@ import { GrokTab } from '../components/GrokTab';
 import { SterlingV2Tab } from '../components/SterlingV2Tab';
 import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { KiteTab } from '../components/kite/KiteTab';
-import { KiteTicker } from '../components/kite/KiteTicker';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
@@ -228,33 +227,32 @@ export function SimpleTerminal() {
             </button>
           )}
 
-          {/* Kite nav items — shown inline when KITE tab is active */}
-          {activeTopTab === 'kite' && (
-            <>
-              <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 12px' }} />
-              {(['dashboard', 'orders', 'holdings', 'positions', 'more', 'connect'] as NavItem[]).map((nav) => (
-                <button
-                  key={nav}
-                  onClick={() => handleKiteNav(nav)}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    fontFamily: 'inherit', fontSize: 12, fontWeight: kiteNav === nav ? 600 : 400,
-                    letterSpacing: '0.06em', textTransform: 'capitalize',
-                    color: kiteNav === nav ? 'var(--t-bright)' : 'var(--t-dim)',
-                    padding: '0 10px', height: '100%',
-                    borderBottom: kiteNav === nav ? '2px solid var(--t-bright)' : '2px solid transparent',
-                    transition: 'color .15s ease',
-                    marginBottom: -1,
-                  }}
-                >
-                  {nav === 'more' ? 'More' : nav}
-                </button>
-              ))}
-            </>
-          )}
-
           <div style={{ flex: 1 }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: '100%' }}>
+            {/* Kite nav items — pushed to the right when KITE tab is active */}
+            {activeTopTab === 'kite' && (
+              <>
+                {(['dashboard', 'orders', 'holdings', 'positions', 'more', 'connect'] as NavItem[]).map((nav) => (
+                  <button
+                    key={nav}
+                    onClick={() => handleKiteNav(nav)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: kiteNav === nav ? 600 : 400,
+                      letterSpacing: '0.06em', textTransform: 'capitalize',
+                      color: kiteNav === nav ? 'var(--t-bright)' : 'var(--t-dim)',
+                      padding: '0 9px', height: '100%',
+                      borderBottom: kiteNav === nav ? '2px solid var(--t-bright)' : '2px solid transparent',
+                      transition: 'color .15s ease',
+                      marginBottom: -1,
+                    }}
+                  >
+                    {nav === 'more' ? 'More' : nav}
+                  </button>
+                ))}
+                <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 8px' }} />
+              </>
+            )}
             {/* Bell — always visible in kite mode; conditional in crypto */}
             {(activeTopTab === 'kite' || scalpOn) && (
               <button onClick={() => scalpOn ? setShowLive(true) : undefined} title="Notifications" style={{
@@ -350,7 +348,8 @@ export function SimpleTerminal() {
       {/* ── Content ──────────────────────────────────────────────── */}
       {activeTopTab === 'kite' && (
         <>
-          <KiteTicker />
+          {/* KiteTicker now renders inside KiteTab's center column so the right-side
+              Triple SuperTrend panel starts at the top bar's bottom (not below the ticker). */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <KiteTab />
           </div>

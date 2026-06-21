@@ -19,6 +19,7 @@ import { TripleSupertrendPane } from './TripleSupertrendPane';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
 import { EngineTerminal } from './EngineTerminal';
+import { KiteTicker } from './KiteTicker';
 import { useKiteAutoSession } from '../../hooks/useKite';
 import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -157,6 +158,7 @@ export function KiteTab() {
         sidebar={<MarketWatchPane onOpenInstrument={handleOpenInstrument} />}
         rightSidebar={<TripleSupertrendPane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} />}
         bottomBar={<EngineTerminal />}
+        centerTopBar={<KiteTicker />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
       />
       <KiteNotifications />

@@ -13,10 +13,13 @@ interface KiteLayoutProps {
   sidebar?: React.ReactNode;
   rightSidebar?: React.ReactNode;
   bottomBar?: React.ReactNode;
+  /** Bar pinned to the top of the center column (e.g. the ticker strip). Kept inside
+      the center column so the left/right sidebars start at the top bar's bottom. */
+  centerTopBar?: React.ReactNode;
   content: React.ReactNode;
 }
 
-export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, content }: KiteLayoutProps) {
+export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content }: KiteLayoutProps) {
   const { on: macOn } = useMacKite();
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -190,7 +193,10 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', fontFamily: k.fontFamily }}>
       {/* ── MAIN LAYOUT ── (mac-canvas: dims + scales 2% behind the order ticket) */}
       {macOn ? (
-        <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
+          <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
+        </div>
       ) : (
       <div className="mac-canvas" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left Sidebar (Watchlist) */}
@@ -236,6 +242,9 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           position: 'relative',
           borderLeft: (sidebar && isSidebarOpen) ? '1px solid #e0e0e0' : 'none'
         }}>
+          {/* Ticker strip pinned to the top of the center column (left/right sidebars
+              start at the top bar's bottom, alongside it). */}
+          {centerTopBar && <div style={{ flexShrink: 0 }}>{centerTopBar}</div>}
           {/* scrollbarGutter: stable reserves the scrollbar track so the content
               doesn't shift horizontally when resizing the terminal toggles the
               vertical scrollbar on/off. */}
