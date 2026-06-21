@@ -132,6 +132,15 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
     return scored[0]?.leg.option_symbol ?? null;
   }, [rows]);
 
+  // Best delta: leg whose |delta| is closest to 0.50 (optimal sensitivity —
+  // moves enough to profit without being overpriced like deep ITM).
+  const bestDeltaSym = useMemo(() => {
+    if (!rows.length) return null;
+    return rows.reduce((best, r) =>
+      Math.abs(Math.abs(r.leg.delta) - 0.5) < Math.abs(Math.abs(best.leg.delta) - 0.5) ? r : best
+    ).leg.option_symbol;
+  }, [rows]);
+
   if (!data.options.length) return null;
 
   const dirWord = data.direction === 'long' ? 'up' : 'down';
@@ -245,6 +254,12 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                         <span title="Best reward-to-risk for this move"
                           style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3 }}>
                           ★ BEST R:R
+                        </span>
+                      )}
+                      {r.leg.option_symbol === bestDeltaSym && (
+                        <span title="Delta closest to 0.50 — optimal sensitivity: moves meaningfully without overpaying for deep ITM"
+                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3 }}>
+                          ◆ BEST Δ
                         </span>
                       )}
                     </div>

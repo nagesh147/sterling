@@ -45,11 +45,12 @@ function StripDiv() {
   return <div style={{ width: 1, alignSelf: 'stretch', background: k.border, opacity: 0.6 }} />;
 }
 
-function LegCard({ leg, exchange, underlying, spotPx, isBest }: {
+function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
   leg: OptionDetail; exchange: string;
   underlying: string;
   spotPx?: number;
   isBest?: boolean;
+  isBestDelta?: boolean;
 }) {
   const [showDepth, setShowDepth] = useState(false);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -106,6 +107,12 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest }: {
             <span title="Best reward-to-risk among these strikes for a 1R move"
               style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
               ★ BEST R:R
+            </span>
+          )}
+          {isBestDelta && (
+            <span title="Delta closest to 0.50 — optimal sensitivity: moves meaningfully without overpaying for deep ITM"
+              style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
+              ◆ BEST Δ
             </span>
           )}
           <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>
@@ -302,15 +309,19 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                 const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
                 let bestSym: string | null = null;
                 let bestVal = -Infinity;
+                let bestDeltaSym: string | null = null;
+                let bestDeltaDist = Infinity;
                 for (const leg of data.options) {
                   const premium = leg.last_price || 0;
                   if (premium <= 0) continue;
                   const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
                   const v = rrScore(rr, effPct);
                   if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
+                  const dd = Math.abs(Math.abs(leg.delta) - 0.5);
+                  if (dd < bestDeltaDist) { bestDeltaDist = dd; bestDeltaSym = leg.option_symbol; }
                 }
                 return data.options.map((leg) => (
-                  <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} />
+                  <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
                 ));
               })()
             )}

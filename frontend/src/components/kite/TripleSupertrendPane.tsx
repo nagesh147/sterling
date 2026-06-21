@@ -284,11 +284,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
   // badge stays in sync with the detail page (which marks the best strike for
   // both spot- and derivatives-source signals). The greeks use the underlying
   // spot, so a 1R underlying move is meaningful regardless of signal source.
-  const bestRRSym = React.useMemo(() => {
+  const { bestRRSym, bestDeltaSym } = React.useMemo(() => {
     const spot = uLastPx ?? row.spot ?? 0;
     const sd = stopDistance(spot, row.stop_loss ?? 0);
-    let best: string | null = null;
-    let bestVal = -Infinity;
+    let bestRR: string | null = null;
+    let bestRRVal = -Infinity;
+    let bestDelta: string | null = null;
+    let bestDeltaDist = Infinity;
     for (const leg of visibleLegs) {
       const lq = quotes?.[`${row.exchange}:${leg.option_symbol}`];
       const premium = lq?.last_price ?? (leg as any).premium_spot ?? 0;
@@ -297,9 +299,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
       if (!g) continue;
       const { rr, effPct } = computeLegRR(g.delta, g.gamma, premium, sd);
       const v = rrScore(rr, effPct);
-      if (v > bestVal) { bestVal = v; best = leg.option_symbol; }
+      if (v > bestRRVal) { bestRRVal = v; bestRR = leg.option_symbol; }
+      const dd = Math.abs(Math.abs(g.delta) - 0.5);
+      if (dd < bestDeltaDist) { bestDeltaDist = dd; bestDelta = leg.option_symbol; }
     }
-    return best;
+    return { bestRRSym: bestRR, bestDeltaSym: bestDelta };
   }, [uLastPx, row, visibleLegs, quotes]);
 
   return (
@@ -428,6 +432,10 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                       {leg.option_symbol === bestRRSym && (
                         <span title="Best reward-to-risk among these strikes for a 1R move"
                           style={{ fontSize: 12, color: k.blue, lineHeight: 1 }}>★</span>
+                      )}
+                      {leg.option_symbol === bestDeltaSym && (
+                        <span title="Delta closest to 0.50 — optimal sensitivity"
+                          style={{ fontSize: 11, color: k.blue, lineHeight: 1, opacity: 0.75 }}>◆</span>
                       )}
                     </span>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
@@ -594,6 +602,10 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                      {leg.option_symbol === bestRRSym && (
                        <span title="Best reward-to-risk among these strikes for a 1R move"
                          style={{ fontSize: 13, color: k.blue, lineHeight: 1, flexShrink: 0 }}>★</span>
+                     )}
+                     {leg.option_symbol === bestDeltaSym && (
+                       <span title="Delta closest to 0.50 — optimal sensitivity"
+                         style={{ fontSize: 12, color: k.blue, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>◆</span>
                      )}
                    </span>
                    {s.showExchange && (
