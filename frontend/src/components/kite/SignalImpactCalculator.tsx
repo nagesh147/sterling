@@ -131,7 +131,11 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
 
   if (!data.options.length) return null;
 
-  const dirWord = data.direction === 'long' ? 'up' : 'down';
+  // Favourable direction is set by the option you'd BUY here, not the signal's
+  // bias: a long call gains as the underlying rises, a long put as it falls. The
+  // projected-gain maths uses |delta| (always a favourable move), so the label
+  // must match the option type or it reads as a contradiction (e.g. a PE "moving up").
+  const dirWord = data.option_type === 'PE' ? 'down' : 'up';
   const quickMoves: { label: string; v: number }[] = hasStop
     ? [
         { label: '½R', v: Math.round(stopDist / 2) },
@@ -232,44 +236,34 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
               const totalTheta = r.thetaPerLotDay * lotsMult;
               return (
                 <tr key={r.leg.option_symbol}
-                  style={{ borderBottom: `1px solid ${k.border}`, background: 'transparent' }}>
-                  <td style={td('left')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  style={{ borderBottom: `1px solid ${k.border}`, background: 'transparent', height: 41 }}>
+                  <td style={td('left')} title={`LTP ${r.premium.toFixed(2)} · ${r.lot}/lot · ${r.leg.dte}d to expiry`}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                       <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>
                         {r.leg.moneyness}
                       </span>
-                      <span style={{ fontSize: 12, color: dirColor(legQuotes?.[`${data.exchange}:${r.leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={`${data.exchange}:${r.leg.option_symbol}`} /></span>
+                      <span style={{ fontSize: 12, color: dirColor(legQuotes?.[`${data.exchange}:${r.leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400 }}><InstrumentLabel symbol={`${data.exchange}:${r.leg.option_symbol}`} /></span>
                       {isRec && (
-                        <span title="Best reward-to-risk for this move"
-                          style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
-                          ✝
-                        </span>
+                        <span title="Best reward-to-risk for this move" style={{ fontSize: 13, fontWeight: 700, color: k.blue }}>✝</span>
                       )}
                       {r.leg.option_symbol === bestDeltaSym && (
-                        <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
-                          style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
-                          ▲
-                        </span>
+                        <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)" style={{ fontSize: 13, fontWeight: 700, color: k.blue }}>▲</span>
                       )}
-                    </div>
-                    <div style={{ fontSize: 10, color: k.dim, marginTop: 4 }}>
-                      LTP {r.premium.toFixed(2)} · {r.lot}/lot · {r.leg.dte}d
-                    </div>
+                    </span>
+                  </td>
+                  <td style={td('right')} title="Cost deployed per move = max loss">
+                    <span style={{ fontWeight: 500, fontSize: 11 }}>{inr(totalCost)}</span>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ fontWeight: 500, fontSize: 11 }}>{inr(totalCost)}</div>
-                    <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>max loss</div>
+                    <span style={{ fontSize: 11, fontWeight: 500 }}>{r.leg.delta.toFixed(2)}</span>
+                    <span style={{ fontSize: 10, color: k.dim, marginLeft: 6 }}>{r.probItm}%</span>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ fontSize: 11, fontWeight: 500 }}>{r.leg.delta.toFixed(2)}</div>
-                    <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>{r.probItm}%</div>
+                    <span style={{ color: k.green, fontWeight: 500, fontSize: 11 }}>+{inr(totalGain)}</span>
+                    <span style={{ fontSize: 10, color: k.dim, marginLeft: 6 }}>{r.effPct.toFixed(0)}%</span>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ color: k.green, fontWeight: 500, fontSize: 11 }}>+{inr(totalGain)}</div>
-                    <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>{r.effPct.toFixed(0)}% on cost</div>
-                  </td>
-                  <td style={td('right')}>
-                    <div style={{ color: k.red, fontWeight: 500, fontSize: 11 }}>−{inr(totalRisk)}</div>
+                    <span style={{ color: k.red, fontWeight: 500, fontSize: 11 }}>−{inr(totalRisk)}</span>
                   </td>
                   <td style={td('right')}>
                     <span style={{
@@ -288,7 +282,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                   <td style={td('right')}>
                     {onBuy && (
                       <button onClick={() => onBuy(r.leg)}
-                        style={{ fontSize: 11, padding: '6px 18px', background: k.blue, color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
+                        style={{ fontSize: 11, padding: '5px 16px', background: k.blue, color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
                         BUY
                       </button>
                     )}
@@ -393,9 +387,9 @@ export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
               const isRec = leg.option_symbol === recSym;
               const isBestDelta = leg.option_symbol === bestDeltaSym;
               return (
-                <tr key={leg.option_symbol} style={{ borderBottom: `1px solid ${k.border}` }}>
+                <tr key={leg.option_symbol} style={{ borderBottom: `1px solid ${k.border}`, height: 41 }}>
                   {/* instrument */}
-                  <td style={{ padding: '10px 14px 10px 0', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                  <td style={{ padding: '0 14px 0 0', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
                       <span style={{ fontSize: 12, color: dirColor(legQuotes?.[`${data.exchange}:${leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400 }}><InstrumentLabel symbol={`${data.exchange}:${leg.option_symbol}`} /></span>
@@ -404,9 +398,9 @@ export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
                     </span>
                   </td>
                   {/* premium total */}
-                  <td style={{ padding: '10px 16px 10px 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12, color: k.text, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>₹{premium.toFixed(2)}</td>
+                  <td style={{ padding: '0 16px 0 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12, color: k.text, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>₹{premium.toFixed(2)}</td>
                   {/* intrinsic vs time-value bar — absorbs remaining width */}
-                  <td style={{ padding: '10px 16px', width: '100%', verticalAlign: 'middle' }}>
+                  <td style={{ padding: '0 16px', width: '100%', verticalAlign: 'middle' }}>
                     <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', display: 'flex' }}>
                       <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
                         style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
@@ -415,9 +409,9 @@ export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
                     </div>
                   </td>
                   {/* intrinsic */}
-                  <td style={{ padding: '10px 16px 10px 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 11, color: k.green, fontWeight: 600, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</td>
+                  <td style={{ padding: '0 16px 0 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 11, color: k.green, fontWeight: 600, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</td>
                   {/* time value */}
-                  <td style={{ padding: '10px 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 11, color: k.orange, fontWeight: 600, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>■ Time value ₹{tv.toFixed(0)}</td>
+                  <td style={{ padding: '0 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 11, color: k.orange, fontWeight: 600, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>■ Time value ₹{tv.toFixed(0)}</td>
                 </tr>
               );
             })}
@@ -433,7 +427,9 @@ function th(align: 'left' | 'right'): React.CSSProperties {
   return { padding: '10px 14px', textAlign: align, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: 0.3, textTransform: 'uppercase' };
 }
 function td(align: 'left' | 'right'): React.CSSProperties {
-  return { padding: '13px 14px', textAlign: align, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', verticalAlign: 'middle' };
+  // No vertical padding — single-line rows get their height from the <tr> (41px),
+  // content vertically centred via verticalAlign middle.
+  return { padding: '0 14px', textAlign: align, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', verticalAlign: 'middle' };
 }
 
 export default SignalImpactCalculator;

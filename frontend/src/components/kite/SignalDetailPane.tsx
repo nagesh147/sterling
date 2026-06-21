@@ -202,8 +202,8 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 10px 18px;
-          height: 56px;
+          padding: 0 18px;
+          height: 41px;
           cursor: pointer;
           box-sizing: border-box;
         }
@@ -278,8 +278,6 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                 <StripStat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={moveColor} />
                 <StripDiv />
                 <StripStat label="Move since" value={moveLabel} color={moveColor} />
-                <StripDiv />
-                <StripStat label="Stop loss" value={data.stop_loss > 0 ? data.stop_loss.toFixed(2) : '—'} color={data.stop_loss > 0 ? k.amber : k.dim} />
               </div>
             );
           })()}
