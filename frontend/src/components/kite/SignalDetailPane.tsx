@@ -31,13 +31,18 @@ function ist(ms: number): string {
   return `${time} · ${day} ${date} ${month}`;
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+// Compact stat used in the trigger-context strip; even spacing + thin dividers.
+function StripStat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: 10, color: k.dim, textTransform: 'uppercase' }}>{label}</span>
-      <span style={{ fontSize: 14, fontWeight: 600, color: color ?? k.text }}>{value}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 16px', justifyContent: 'center' }}>
+      <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   );
+}
+
+function StripDiv() {
+  return <div style={{ width: 1, alignSelf: 'stretch', background: k.border, opacity: 0.6 }} />;
 }
 
 function LegCard({ leg, exchange, underlying, spotPx, isBest }: {
@@ -243,14 +248,30 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
 
       {data && (
         <div style={{ padding: 16 }}>
-          {/* trigger context */}
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', padding: '12px 16px', background: k.surface, borderRadius: 6, marginBottom: 16 }}>
-            <Stat label="Triggered at" value={ist(data.triggered_ms)} />
-            <Stat label="Spot @ trigger" value={data.spot_at_trigger > 0 ? data.spot_at_trigger.toFixed(2) : '—'} />
-            <Stat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={move != null ? (move >= 0 ? k.green : k.red) : undefined} />
-            <Stat label="Move since" value={move != null ? `${move >= 0 ? '+' : ''}${move.toFixed(2)}` : '—'} color={move != null ? (move >= 0 ? k.green : k.red) : undefined} />
-            <Stat label="SL" value={data.stop_loss.toFixed(2)} color={k.amber} />
-          </div>
+          {/* trigger context — compact inline strip with separators */}
+          {(() => {
+            // Trigger spot can be absent on older/aged signals; fall back to the
+            // live spot so the field never renders as a lonely blank dash.
+            const trigSpot = data.spot_at_trigger > 0 ? data.spot_at_trigger : (data.spot_now || 0);
+            const movePct = (trigSpot > 0 && move != null) ? (move / trigSpot) * 100 : null;
+            const moveColor = move != null ? (move >= 0 ? k.green : k.red) : k.dim;
+            return (
+              <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 0, padding: '10px 16px', background: k.surface, borderRadius: 6, marginBottom: 16 }}>
+                <StripStat label="Triggered" value={ist(data.triggered_ms)} />
+                <StripDiv />
+                <StripStat label="Spot @ trigger" value={trigSpot > 0 ? trigSpot.toFixed(2) : '—'} />
+                <StripDiv />
+                <StripStat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={moveColor} />
+                <StripDiv />
+                <StripStat
+                  label="Move since"
+                  value={move != null ? `${move >= 0 ? '+' : ''}${move.toFixed(2)}${movePct != null ? `  (${move >= 0 ? '+' : ''}${movePct.toFixed(2)}%)` : ''}` : 'flat'}
+                  color={moveColor} />
+                <StripDiv />
+                <StripStat label="Stop loss" value={data.stop_loss > 0 ? data.stop_loss.toFixed(2) : '—'} color={data.stop_loss > 0 ? k.amber : k.dim} />
+              </div>
+            );
+          })()}
 
           {/* Trade impact calculator — pick the best strike with live greeks */}
           <SignalImpactCalculator

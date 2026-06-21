@@ -169,35 +169,42 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           )}
         </div>
 
-        {/* Move + lots controls */}
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap', marginTop: 10 }}>
-          <div>
-            <div style={{ fontSize: 10, color: k.dim, marginBottom: 4, fontWeight: 600 }}>
-              IF {data.underlying} MOVES {dirWord.toUpperCase()}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="number" value={move} step={5}
-                onChange={(e) => setMove(Math.max(1, Number(e.target.value) || stopDist))}
-                style={{ width: 72, fontSize: 12, padding: '4px 8px', border: `1px solid ${k.border}`, borderRadius: 4, textAlign: 'right', background: k.bg, color: k.text }} />
-              <span style={{ fontSize: 11, color: k.dim }}>pts</span>
-              <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
-                {quickMoves.map((q) => (
-                  <button key={q.label} onClick={() => setMove(q.v)}
-                    style={{
-                      fontSize: 10, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
-                      border: `1px solid ${move === q.v ? k.orange : k.border}`,
-                      background: move === q.v ? k.orange : k.bg,
-                      color: move === q.v ? '#fff' : k.dim, fontWeight: 600,
-                    }}>{q.label}</button>
-                ))}
-              </div>
-            </div>
+        {/* Move + lots controls — one compact, aligned row */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
+          <span style={{ fontSize: 10, color: k.dim, fontWeight: 700, letterSpacing: 0.4 }}>
+            IF {data.underlying} MOVES {dirWord.toUpperCase()}
+          </span>
+
+          {/* Segmented quick-move presets */}
+          <div style={{ display: 'inline-flex', border: `1px solid ${k.border}`, borderRadius: 6, overflow: 'hidden' }}>
+            {quickMoves.map((q, i) => {
+              const active = move === q.v;
+              return (
+                <button key={q.label} onClick={() => setMove(q.v)}
+                  style={{
+                    fontSize: 11, padding: '4px 11px', cursor: 'pointer', fontWeight: 600,
+                    border: 'none', borderLeft: i === 0 ? 'none' : `1px solid ${k.border}`,
+                    background: active ? k.orange : k.bg,
+                    color: active ? '#fff' : k.dim,
+                  }}>{q.label}</button>
+              );
+            })}
           </div>
-          <div>
-            <div style={{ fontSize: 10, color: k.dim, marginBottom: 4, fontWeight: 600 }}>LOTS</div>
+
+          {/* Exact move stepper */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${k.border}`, borderRadius: 6, padding: '2px 4px 2px 8px', background: k.bg }}>
+            <input type="number" value={move} step={5}
+              onChange={(e) => setMove(Math.max(1, Number(e.target.value) || stopDist))}
+              style={{ width: 52, fontSize: 12, fontWeight: 600, border: 'none', outline: 'none', textAlign: 'right', background: 'transparent', color: k.text }} />
+            <span style={{ fontSize: 10, color: k.dim }}>pts</span>
+          </div>
+
+          {/* Lots */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${k.border}`, borderRadius: 6, padding: '2px 4px 2px 8px', background: k.bg, marginLeft: 'auto' }}>
+            <span style={{ fontSize: 10, color: k.dim, fontWeight: 600 }}>LOTS</span>
             <input type="number" value={lotsMult} min={1} step={1}
               onChange={(e) => setLotsMult(Math.max(1, Number(e.target.value) || 1))}
-              style={{ width: 56, fontSize: 12, padding: '4px 8px', border: `1px solid ${k.border}`, borderRadius: 4, textAlign: 'right', background: k.bg, color: k.text }} />
+              style={{ width: 36, fontSize: 12, fontWeight: 600, border: 'none', outline: 'none', textAlign: 'right', background: 'transparent', color: k.text }} />
           </div>
         </div>
       </div>
@@ -303,9 +310,9 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
             <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
               PREMIUM BREAKDOWN (APPROXIMATE) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
             </div>
-            <div style={{ height: 14, borderRadius: 7, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
+            <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
               <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
-                style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 4 : 0, transition: 'width .3s' }} />
+                style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
               <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
                 style={{ flex: 1, background: k.orange, opacity: 0.8 }} />
             </div>
@@ -325,7 +332,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
             <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
               SAME {move}-PT MOVE — EVERY STRIKE COMPARED
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {rows.map((r) => {
                 const gain = r.projGainPerLot * lotsMult;
                 const isRec = r.leg.option_symbol === recommended;
@@ -336,8 +343,8 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                     <span style={{ fontSize: 10, fontWeight: isRec ? 700 : 500, color: isRec ? k.green : k.text }}>
                       {r.leg.moneyness} {r.leg.strike}
                     </span>
-                    <div style={{ height: 12, background: k.bg, borderRadius: 6, overflow: 'hidden' }}>
-                      <div style={{ width: `${w}%`, height: '100%', background: isRec ? k.green : k.blue, opacity: isRec ? 1 : 0.5, transition: 'width .3s' }} />
+                    <div style={{ height: 4, background: k.border, borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ width: `${w}%`, height: '100%', background: isRec ? k.green : k.blue, opacity: isRec ? 1 : 0.55, transition: 'width .3s' }} />
                     </div>
                     <span style={{ fontSize: 10, textAlign: 'right', color: k.green, fontWeight: 600 }}>+{inr(gain)}</span>
                   </div>
