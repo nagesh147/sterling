@@ -35,15 +35,15 @@ function ist(ms: number): string {
 // Compact stat used in the trigger-context strip; even spacing + thin dividers.
 function StripStat({ label, value, color, title }: { label: string; value: string; color?: string; title?: string }) {
   return (
-    <div title={title} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 16px', justifyContent: 'center' }}>
-      <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
+    <div title={title} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 22px', justifyContent: 'center' }}>
+      <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>{label}</span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   );
 }
 
 function StripDiv() {
-  return <div style={{ width: 1, alignSelf: 'stretch', background: k.border, opacity: 0.6 }} />;
+  return <div style={{ width: 1, alignSelf: 'center', height: 28, background: k.border, opacity: 0.7 }} />;
 }
 
 function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
@@ -202,8 +202,8 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 6px 16px;
-          height: 44px;
+          padding: 10px 18px;
+          height: 56px;
           cursor: pointer;
           box-sizing: border-box;
         }
@@ -255,7 +255,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
       {isError && <div style={{ padding: 32, color: k.red }}>No live detail (signal may have aged out of the latest scan, or market is closed).</div>}
 
       {data && (
-        <div style={{ padding: 16 }}>
+        <div style={{ padding: 20 }}>
           {/* trigger context — compact inline strip with separators */}
           {(() => {
             const trigSpot = data.spot_at_trigger > 0 ? data.spot_at_trigger : null;
@@ -268,7 +268,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
               ? `${realMove >= 0 ? '+' : ''}${realMove.toFixed(2)}${movePct != null ? `  (${realMove >= 0 ? '+' : ''}${movePct.toFixed(2)}%)` : ''}`
               : 'n/a';
             return (
-              <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 0, padding: '10px 16px', background: k.surface, borderRadius: 6, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 0, padding: '16px 8px', background: k.surface, borderRadius: 10, marginBottom: 16, border: `1px solid ${k.border}` }}>
                 <StripStat label="Triggered" value={ist(data.triggered_ms)} />
                 <StripDiv />
                 <StripStat label="Spot @ trigger"
@@ -298,8 +298,8 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
           />
 
           {/* option legs — own section, spaced clear of the calculator above */}
-          <div style={{ marginTop: 20, border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.4, textTransform: 'uppercase', padding: '10px 16px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+          <div style={{ marginTop: 20, border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
               Option legs
             </div>
             {data.options.length === 0 ? (
@@ -327,7 +327,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
               })()
             )}
           </div>
-          <div style={{ fontSize: 10, color: k.dim, marginTop: 14, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 10, color: k.dim, marginTop: 18, lineHeight: 1.7 }}>
             Greeks are Black-Scholes from live IV (or backed out of last price when the market is closed). BUY/SELL place real MARKET orders on your Kite account.
           </div>
         </div>

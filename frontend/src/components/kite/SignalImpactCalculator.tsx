@@ -124,11 +124,11 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
       ];
 
   return (
-    <div style={{ border: `1px solid ${k.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: k.text }}>Trade Impact Calculator</span>
-          <span style={{ fontSize: 11, color: k.dim }}>
+    <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, marginBottom: 16, overflow: 'hidden', background: k.bg }}>
+      <div style={{ padding: '18px 20px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>
+          <span style={{ fontSize: 11, color: k.dim, lineHeight: 1.5 }}>
             Live greeks · {data.option_type} · {data.underlying} {data.spot_now ? data.spot_now.toFixed(0) : ''} ·
             {hasStop
               ? ` stop ${data.stop_loss.toFixed(0)} (${stopDist} pts = 1R)`
@@ -136,37 +136,37 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           </span>
           {updatedAt && (
             <span title="These greeks are a snapshot. The detail auto-refreshes every 15s; reopening always re-fetches."
-              style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green, display: 'inline-block' }} />
               as of {new Date(updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} · refreshes 15s
             </span>
           )}
         </div>
 
-        {/* Move + lots controls — one compact, aligned row */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-          <span style={{ fontSize: 10, color: k.dim, fontWeight: 700, letterSpacing: 0.4 }}>
+        {/* Move + lots controls — one aligned row with generous spacing */}
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+          <span style={{ fontSize: 10, color: k.dim, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             IF {data.underlying} MOVES {dirWord.toUpperCase()}
           </span>
 
           {/* Segmented quick-move presets */}
-          <div style={{ display: 'inline-flex', border: `1px solid ${k.border}`, borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ display: 'inline-flex', border: `1px solid ${k.border}`, borderRadius: 7, overflow: 'hidden', background: k.bg }}>
             {quickMoves.map((q, i) => {
               const active = move === q.v;
               return (
                 <button key={q.label} onClick={() => setMove(q.v)}
                   style={{
-                    fontSize: 11, padding: '4px 11px', cursor: 'pointer', fontWeight: 600,
+                    fontSize: 11, padding: '6px 14px', cursor: 'pointer', fontWeight: 600,
                     border: 'none', borderLeft: i === 0 ? 'none' : `1px solid ${k.border}`,
-                    background: active ? k.orange : k.bg,
-                    color: active ? '#fff' : k.dim,
+                    background: active ? k.orange : 'transparent',
+                    color: active ? '#fff' : k.dim, transition: 'background .15s, color .15s',
                   }}>{q.label}</button>
               );
             })}
           </div>
 
           {/* Exact move stepper */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${k.border}`, borderRadius: 6, padding: '2px 4px 2px 8px', background: k.bg }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${k.border}`, borderRadius: 7, padding: '5px 10px', background: k.bg }}>
             <input type="number" value={move} step={5}
               onChange={(e) => setMove(Math.max(1, Number(e.target.value) || stopDist))}
               style={{ width: 52, fontSize: 12, fontWeight: 600, border: 'none', outline: 'none', textAlign: 'right', background: 'transparent', color: k.text }} />
@@ -174,8 +174,8 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           </div>
 
           {/* Lots */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${k.border}`, borderRadius: 6, padding: '2px 4px 2px 8px', background: k.bg, marginLeft: 'auto' }}>
-            <span style={{ fontSize: 10, color: k.dim, fontWeight: 600 }}>LOTS</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${k.border}`, borderRadius: 7, padding: '5px 10px', background: k.bg, marginLeft: 'auto' }}>
+            <span style={{ fontSize: 10, color: k.dim, fontWeight: 700, letterSpacing: 0.4 }}>LOTS</span>
             <input type="number" value={lotsMult} min={1} step={1}
               onChange={(e) => setLotsMult(Math.max(1, Number(e.target.value) || 1))}
               style={{ width: 36, fontSize: 12, fontWeight: 600, border: 'none', outline: 'none', textAlign: 'right', background: 'transparent', color: k.text }} />
@@ -184,7 +184,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
       </div>
 
       {/* Per-strike comparison */}
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', padding: '4px 0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ color: k.dim, fontSize: 10, borderBottom: `1px solid ${k.border}` }}>
@@ -208,41 +208,41 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
               const totalTheta = r.thetaPerLotDay * lotsMult;
               return (
                 <tr key={r.leg.option_symbol}
-                  style={{ borderBottom: `1px solid ${k.border}`, background: isRec ? 'rgba(46,125,50,0.06)' : 'transparent' }}>
+                  style={{ borderBottom: `1px solid ${k.border}`, background: isRec ? 'rgba(76,175,80,0.07)' : 'transparent' }}>
                   <td style={td('left')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, fontWeight: 700, background: 'rgba(240,100,40,0.12)', color: k.orange }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 700, background: 'rgba(240,100,40,0.12)', color: k.orange }}>
                         {r.leg.moneyness}
                       </span>
-                      <span style={{ fontWeight: 500 }}>{r.leg.strike}</span>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{r.leg.strike}</span>
                       {isRec && (
                         <span title="Best reward-to-risk for this move"
-                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3 }}>
+                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '2px 7px', borderRadius: 4, letterSpacing: 0.3 }}>
                           ✝ BEST R:R
                         </span>
                       )}
                       {r.leg.option_symbol === bestDeltaSym && (
                         <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
-                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3 }}>
+                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '2px 7px', borderRadius: 4, letterSpacing: 0.3 }}>
                           ▲ BEST Δ
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: 10, color: k.dim, marginTop: 2 }}>
+                    <div style={{ fontSize: 10, color: k.dim, marginTop: 4 }}>
                       LTP {r.premium.toFixed(2)} · {r.lot}/lot · {r.leg.dte}d
                     </div>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ fontWeight: 600 }}>{inr(totalCost)}</div>
-                    <div style={{ fontSize: 10, color: k.dim }}>max loss</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{inr(totalCost)}</div>
+                    <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>max loss</div>
                   </td>
                   <td style={td('right')}>
-                    <div>{r.leg.delta.toFixed(2)}</div>
-                    <div style={{ fontSize: 10, color: k.dim }}>{r.probItm}%</div>
+                    <div style={{ fontSize: 13 }}>{r.leg.delta.toFixed(2)}</div>
+                    <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>{r.probItm}%</div>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ color: k.green, fontWeight: 700 }}>+{inr(totalGain)}</div>
-                    <div style={{ fontSize: 10, color: k.dim }}>{r.effPct.toFixed(0)}% on cost</div>
+                    <div style={{ color: k.green, fontWeight: 700, fontSize: 13 }}>+{inr(totalGain)}</div>
+                    <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>{r.effPct.toFixed(0)}% on cost</div>
                   </td>
                   <td style={td('right')}>
                     <div style={{ color: k.red, fontWeight: 600 }}>−{inr(totalRisk)}</div>
@@ -264,7 +264,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                   <td style={td('right')}>
                     {onBuy && (
                       <button onClick={() => onBuy(r.leg)}
-                        style={{ fontSize: 11, padding: '3px 12px', background: k.blue, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600 }}>
+                        style={{ fontSize: 11, padding: '6px 18px', background: k.blue, color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
                         BUY
                       </button>
                     )}
@@ -286,19 +286,19 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         const tv = Math.max(0, rec.premium - intrinsic);
         const intrinsicFrac = rec.premium > 0 ? intrinsic / rec.premium : 0;
         return (
-          <div style={{ padding: '12px 16px', borderTop: `1px solid ${k.border}` }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
-              PREMIUM BREAKDOWN (APPROXIMATE) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
+          <div style={{ padding: '16px 20px', borderTop: `1px solid ${k.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 12, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+              Premium breakdown (approximate) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
             </div>
-            <div style={{ height: 4, borderRadius: 2, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
+            <div style={{ height: 8, borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 10 }}>
               <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
                 style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
               <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
-                style={{ flex: 1, background: k.orange, opacity: 0.8 }} />
+                style={{ flex: 1, background: k.orange, opacity: 0.85 }} />
             </div>
-            <div style={{ display: 'flex', gap: 16, fontSize: 10, flexWrap: 'wrap' }}>
-              <span style={{ color: k.green }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</span>
-              <span style={{ color: k.orange }}>■ Time value ₹{tv.toFixed(0)} <span style={{ color: k.dim }}>— theta decays this daily</span></span>
+            <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
+              <span style={{ color: k.green, fontWeight: 600 }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</span>
+              <span style={{ color: k.orange, fontWeight: 600 }}>■ Time value ₹{tv.toFixed(0)} <span style={{ color: k.dim, fontWeight: 400 }}>— theta decays this daily</span></span>
             </div>
           </div>
         );
@@ -308,25 +308,25 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
       {(() => {
         const maxGain = Math.max(...rows.map((r) => r.projGainPerLot * lotsMult), 1);
         return (
-          <div style={{ padding: '12px 16px', borderTop: `1px solid ${k.border}`, background: k.surface }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
-              SAME {move}-PT MOVE — EVERY STRIKE COMPARED
+          <div style={{ padding: '16px 20px', borderTop: `1px solid ${k.border}`, background: k.surface }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 14, letterSpacing: 0.4, textTransform: 'uppercase' }}>
+              Same {move}-pt move — every strike compared
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {rows.map((r) => {
                 const gain = r.projGainPerLot * lotsMult;
                 const isRec = r.leg.option_symbol === recommended;
                 const w = (gain / maxGain) * 100;
                 return (
                   <div key={r.leg.option_symbol}
-                    style={{ display: 'grid', gridTemplateColumns: '96px 1fr 78px', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, fontWeight: isRec ? 700 : 500, color: isRec ? k.green : k.text }}>
+                    style={{ display: 'grid', gridTemplateColumns: '110px 1fr 84px', gap: 12, alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, fontWeight: isRec ? 700 : 500, color: isRec ? k.green : k.text }}>
                       {r.leg.moneyness} {r.leg.strike}
                     </span>
-                    <div style={{ height: 3, background: k.border, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: 6, background: k.border, borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{ width: `${w}%`, height: '100%', background: isRec ? k.green : k.blue, opacity: isRec ? 1 : 0.55, transition: 'width .3s' }} />
                     </div>
-                    <span style={{ fontSize: 10, textAlign: 'right', color: k.green, fontWeight: 600 }}>+{inr(gain)}</span>
+                    <span style={{ fontSize: 11, textAlign: 'right', color: k.green, fontWeight: 700 }}>+{inr(gain)}</span>
                   </div>
                 );
               })}
@@ -340,7 +340,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         const rec = rows.find((r) => r.leg.option_symbol === recommended);
         if (!rec) return null;
         return (
-          <div style={{ padding: '10px 16px', fontSize: 11, color: k.dim, lineHeight: 1.6, borderTop: `1px solid ${k.border}`, background: k.surface }}>
+          <div style={{ padding: '16px 20px', fontSize: 11.5, color: k.dim, lineHeight: 1.7, borderTop: `1px solid ${k.border}`, background: k.surface }}>
             <strong style={{ color: k.text }}>Read:</strong> the <strong>{rec.leg.moneyness} {rec.leg.strike}</strong> gives the best
             reward-to-risk here — a {move}-pt move {dirWord} turns ~{inr(rec.costPerLot * lotsMult)} of premium into
             <strong style={{ color: k.green }}> +{inr(rec.projGainPerLot * lotsMult)}</strong>, against
@@ -356,10 +356,10 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
 }
 
 function th(align: 'left' | 'right'): React.CSSProperties {
-  return { padding: '6px 10px', textAlign: align, fontWeight: 500, whiteSpace: 'nowrap' };
+  return { padding: '10px 14px', textAlign: align, fontWeight: 600, whiteSpace: 'nowrap', letterSpacing: 0.3, textTransform: 'uppercase' };
 }
 function td(align: 'left' | 'right'): React.CSSProperties {
-  return { padding: '8px 10px', textAlign: align, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' };
+  return { padding: '13px 14px', textAlign: align, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', verticalAlign: 'middle' };
 }
 
 export default SignalImpactCalculator;
