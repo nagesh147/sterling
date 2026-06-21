@@ -20,6 +20,7 @@ import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { useTickerPins } from '../../store/useTickerPins';
+import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 
 
 interface Props {
@@ -1660,7 +1661,11 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   }
 
   const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
-  const autoScan = signals?.auto_scan ?? false;
+
+  // Publish the running count to the Kite footer (rendered in a different tree).
+  const setLiveCount = useLiveSignalCount((s) => s.setCount);
+  React.useEffect(() => { setLiveCount(liveCount); }, [liveCount, setLiveCount]);
+  React.useEffect(() => () => setLiveCount(0), [setLiveCount]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
@@ -1673,40 +1678,9 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
             Triple SuperTrend
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
-          {/* Scan status — moved up next to the title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 13, color: '#444', fontVariantNumeric: 'tabular-nums' }}>
-            <span className={scanning ? 'st-pulse' : undefined} style={{
-              width: 6, height: 6, borderRadius: 3, flexShrink: 0,
-              background: scanning ? k.green : autoScan ? k.orange : k.dim,
-            }} />
-            <span style={{ color: scanning ? k.green : autoScan ? '#444' : '#444', fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {scanning
-                ? (signals?.scanning_label || 'scanning…')
-                : autoScan
-                  ? 'Auto'
-                  : !(signals?.market_open ?? true)
-                    ? 'Closed'
-                    : 'Manual'}
-            </span>
-            {!scanning && (signals?.generated_ms ?? 0) > 0 && (
-              <span style={{ color: '#444', fontWeight: 400, whiteSpace: 'nowrap' }}>· {timeAgo(signals!.generated_ms!)}</span>
-            )}
-            {!scanning && autoScan && (signals?.next_scan_ms ?? 0) > 0 && (
-              <span style={{ color: '#444', fontWeight: 400, whiteSpace: 'nowrap' }}>· next {countdown(signals!.next_scan_ms!)}</span>
-            )}
-          </div>
+          {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
-          {liveCount > 0 && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999,
-              fontSize: 10.5, fontWeight: 700, color: k.green,
-              background: tint(k.green, 10), border: `1px solid ${tint(k.green, 30)}`,
-            }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
-              {liveCount} live
-            </span>
-          )}
-          {/* Actions: rescan / scan report / grid·list — moved next to the live badge */}
+          {/* Actions: rescan / scan report / grid·list */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
               <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>

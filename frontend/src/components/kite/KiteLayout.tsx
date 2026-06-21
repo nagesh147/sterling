@@ -4,6 +4,7 @@ import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
 import { useEngineActivity } from '../../hooks/useTripleSupertrend';
+import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 
 export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
@@ -58,6 +59,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   const { data: activity } = useEngineActivity();
   const scanning = !!activity?.scanning;
   const autoScan = !!activity?.auto_scan;
+  const liveCount = useLiveSignalCount((s) => s.count);
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('kite_sidebar_width');
@@ -430,6 +432,16 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
         {/* Scan status — bottom-right */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#777', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           <style>{KL_SCAN_CSS}</style>
+          {liveCount > 0 && (
+            <>
+              <span title={`${liveCount} signal${liveCount === 1 ? '' : 's'} currently running`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, color: k.green }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green, flexShrink: 0 }} />
+                {liveCount} live
+              </span>
+              <span style={{ width: 1, height: 14, background: '#e0e0e0' }} />
+            </>
+          )}
           <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : autoScan ? k.orange : '#bbb' }} />
           <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
             {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}
