@@ -89,7 +89,15 @@ export function EngineTerminal() {
   const btnStyle = { background: 'none', border: 'none', color: t.headDim, cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: t.bg, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      // When minimized, collapse to just the footer bar (auto height) so the
+      // terminal can never balloon to fill a tall container — that bug made
+      // "minimize" look like it went full screen. Otherwise fill the pane.
+      height: mode === 'minimized' ? 'auto' : '100%',
+      flexShrink: 0,
+      background: t.bg, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    }}>
       {/* HEADER */}
       {mode !== 'minimized' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim, flexShrink: 0 }}>

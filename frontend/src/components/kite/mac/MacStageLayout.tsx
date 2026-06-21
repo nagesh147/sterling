@@ -114,6 +114,7 @@ interface StagePanelProps {
   panelKey: PanelKey;
   child: React.ReactNode;
   isDragging: boolean;
+  collapsed?: boolean;
   motion: any;
   stage: any;
   onDragStart: (key: PanelKey) => void;
@@ -127,6 +128,7 @@ function StagePanel({
   panelKey,
   child,
   isDragging,
+  collapsed,
   motion,
   stage,
   onDragStart,
@@ -159,7 +161,9 @@ function StagePanel({
         flexDirection: 'column',
         minWidth: 0,
         minHeight: 0,
-        flex: 1,
+        // Collapsed (terminal minimized) → shrink to the grip + footer bar so it
+        // never fills the slot as a tall empty panel.
+        flex: collapsed ? '0 0 auto' : 1,
         background: '#fff',
         border: '1px solid #e0e0e0',
         borderRadius: 8,
@@ -201,7 +205,7 @@ function StagePanel({
       </div>
 
       {/* ── Live panel content (interactive — never starts a drag) ── */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{child}</div>
+      <div style={{ flex: collapsed ? '0 0 auto' : 1, minHeight: 0, overflow: collapsed ? 'visible' : 'auto' }}>{child}</div>
     </MotionDiv>
   );
 }
@@ -375,7 +379,10 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     const panels = panelsInSlot(slot);
     const isBottom = slot === 'bottom';
     const isTarget = hoverSlot === slot && dragging !== null;
-    const bottomHeight = isBottom && terminalMode === 'minimized' ? 33 : 220;
+    // Minimized terminal: collapse the bottom dock to just the grip + footer bar
+    // (grip 26 + footer ~32). Avoids a tall empty terminal panel.
+    const termMinimized = terminalMode === 'minimized';
+    const bottomHeight = isBottom && termMinimized ? 60 : 220;
     return (
       <MotionDiv
         layout
@@ -415,6 +422,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
             panelKey={p}
             child={nodeFor(p)}
             isDragging={dragging === p}
+            collapsed={p === 'bottomBar' && termMinimized}
             motion={motion}
             stage={stage}
             onDragStart={onDragStart}
