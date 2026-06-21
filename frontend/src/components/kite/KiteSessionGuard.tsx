@@ -27,6 +27,12 @@ export function KiteSessionGuard() {
   const canAutoRecover = !!status?.has_refresh_token;
 
   useEffect(() => {
+    // Wait for the first real status poll. Until then `status` is undefined and
+    // every field reads false — if we recorded that as `prevConnected`, the real
+    // poll would look like a false→false no-op and an already-expired session on
+    // load would never open the modal.
+    if (!status) return;
+
     const was = prevConnected.current;
     prevConnected.current = connected;
 
@@ -60,7 +66,7 @@ export function KiteSessionGuard() {
     graceTimer.current = window.setTimeout(() => {
       if (!prevConnected.current) setOpen(true);
     }, delay);
-  }, [connected, hasAccount, canAutoRecover]);
+  }, [status, connected, hasAccount, canAutoRecover]);
 
   useEffect(() => () => { if (graceTimer.current) window.clearTimeout(graceTimer.current); }, []);
 
