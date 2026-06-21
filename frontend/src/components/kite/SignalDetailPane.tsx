@@ -9,7 +9,7 @@ import { QuoteDetail } from './MarketWatchPane';
 import { AlignmentChips } from './TripleSupertrendPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { SignalImpactCalculator } from './SignalImpactCalculator';
+import { SignalImpactCalculator, stopDistance, computeLegRR, rrScore } from './SignalImpactCalculator';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
@@ -40,10 +40,11 @@ function Stat({ label, value, color }: { label: string; value: string; color?: s
   );
 }
 
-function LegCard({ leg, exchange, underlying, spotPx }: {
+function LegCard({ leg, exchange, underlying, spotPx, isBest }: {
   leg: OptionDetail; exchange: string;
   underlying: string;
   spotPx?: number;
+  isBest?: boolean;
 }) {
   const [showDepth, setShowDepth] = useState(false);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -96,6 +97,12 @@ function LegCard({ leg, exchange, underlying, spotPx }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, paddingRight: 8, flex: 1 }}>
           <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
           <span style={{ fontSize: 13, color: color, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
+          {isBest && (
+            <span title="Best reward-to-risk among these strikes for a 1R move"
+              style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
+              ★ BEST R:R
+            </span>
+          )}
           <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>
         </div>
         
@@ -262,9 +269,22 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
           {data.options.length === 0 ? (
             <div style={{ color: k.dim, fontSize: 12 }}>No option legs resolved (no liquid ATM/ITM contract).</div>
           ) : (
-            data.options.map((leg) => (
-              <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} />
-            ))
+            (() => {
+              // ★ BEST R:R — same logic as the impact calculator, applied to the leg list.
+              const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
+              let bestSym: string | null = null;
+              let bestVal = -Infinity;
+              for (const leg of data.options) {
+                const premium = leg.last_price || 0;
+                if (premium <= 0) continue;
+                const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
+                const v = rrScore(rr, effPct);
+                if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
+              }
+              return data.options.map((leg) => (
+                <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} />
+              ));
+            })()
           )}
           <div style={{ fontSize: 10, color: k.dim, marginTop: 8 }}>
             Greeks are Black-Scholes from live IV (or backed out of last price when the market is closed). BUY/SELL place real MARKET orders on your Kite account.

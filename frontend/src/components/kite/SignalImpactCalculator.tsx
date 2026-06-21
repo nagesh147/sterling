@@ -22,6 +22,35 @@ interface Row {
   effPct: number;              // proj gain as % of cost deployed
 }
 
+// ─── Shared "★ BEST R:R" logic ──────────────────────────────────────────────
+// Reused by the signal rows (TripleSupertrendPane) and the detail page so the
+// badge always means the same thing: among a signal's option legs, the strike
+// with the best reward:risk for a 1R move (ties fall back to capital efficiency).
+
+/** 1R unit = distance from spot to the signal stop; falls back to ~0.5% of spot. */
+export function stopDistance(spot: number, stop: number): number {
+  const d = Math.abs((spot || 0) - (stop || 0));
+  if (d > 0) return Math.round(d);
+  return Math.max(10, Math.round((spot || 0) * 0.005));
+}
+
+/** Reward:risk + capital efficiency for one leg given a 1R move (= stopDist). */
+export function computeLegRR(delta: number, gamma: number, premium: number, stopDist: number): { rr: number | null; effPct: number } {
+  const d = Math.abs(delta) || 0;
+  const g = Math.abs(gamma) || 0;
+  const move = stopDist;
+  const optMove = d * move + 0.5 * g * move * move;          // Δpremium ≈ δ·move + ½γ·move²
+  const risk = Math.min(premium, d * move);                  // capped at premium paid
+  const rr = risk > 0 ? optMove / risk : null;
+  const effPct = premium > 0 ? (optMove / premium) * 100 : 0;
+  return { rr, effPct };
+}
+
+/** Sortable score for picking the best leg (R:R, else capital efficiency). */
+export function rrScore(rr: number | null, effPct: number): number {
+  return rr ?? effPct / 100;
+}
+
 function computeRow(leg: OptionDetail, move: number, stopMove: number): Row {
   const premium = leg.last_price || 0;
   const lot = leg.lot_size || 1;

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
@@ -14,6 +15,7 @@ import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
+import { stopDistance, computeLegRR, rrScore } from './SignalImpactCalculator';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -276,6 +278,29 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
     }
   }
 
+  // ★ BEST R:R — among this signal's option legs, the strike with the best
+  // reward:risk for a 1R move. Same logic as the Trade Impact Calculator. Only
+  // meaningful for underlying-driven (spot) signals; derivatives rows scan the
+  // contract's own premium, so the underlying-move R:R doesn't apply.
+  const bestRRSym = React.useMemo(() => {
+    if (isDeriv) return null;
+    const spot = uLastPx ?? row.spot ?? 0;
+    const sd = stopDistance(spot, row.stop_loss ?? 0);
+    let best: string | null = null;
+    let bestVal = -Infinity;
+    for (const leg of visibleLegs) {
+      const lq = quotes?.[`${row.exchange}:${leg.option_symbol}`];
+      const premium = lq?.last_price ?? (leg as any).premium_spot ?? 0;
+      if (premium <= 0) continue;
+      const g = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, spot, lq, leg.lot_size ?? null);
+      if (!g) continue;
+      const { rr, effPct } = computeLegRR(g.delta, g.gamma, premium, sd);
+      const v = rrScore(rr, effPct);
+      if (v > bestVal) { bestVal = v; best = leg.option_symbol; }
+    }
+    return best;
+  }, [isDeriv, uLastPx, row, visibleLegs, quotes]);
+
   return (
     <div
       className="st-parent-row"
@@ -405,8 +430,12 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>
-                      {leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}
+                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
+                      {leg.option_symbol === bestRRSym && (
+                        <span title="Best reward-to-risk among these strikes for a 1R move"
+                          style={{ fontSize: 8, fontWeight: 700, color: '#fff', background: k.green, padding: '0px 4px', borderRadius: 3 }}>★ R:R</span>
+                      )}
                     </span>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
                       {lastPx != null ? lastPx.toFixed(2) : '—'}
@@ -567,7 +596,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
-                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                     {leg.option_symbol === bestRRSym && (
+                       <span title="Best reward-to-risk among these strikes for a 1R move"
+                         style={{ fontSize: 8.5, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>★ BEST R:R</span>
+                     )}
+                   </span>
                    {s.showExchange && (
                      <span style={{ fontSize: 11, color: k.dim, width: 40, flexShrink: 0 }}>
                        {row.exchange}
@@ -697,29 +732,34 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
       </div>
       )}
 
-      {/* Per-leg "more options" menu (⋮) */}
-      {legMenu && (() => {
-        const pinned = tickerPins.includes(legMenu.symbol);
-        return (
-          <div
-            style={{
-              position: 'fixed', top: legMenu.top, left: legMenu.left,
-              background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)', padding: '6px 0', zIndex: 200, minWidth: 180,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      {/* Per-leg "more options" menu (⋮) — portaled to body so it isn't trapped or
+          clipped by a transformed/overflow-hidden ancestor (e.g. the Mac stage panel). */}
+      {legMenu && createPortal(
+        (() => {
+          const pinned = tickerPins.includes(legMenu.symbol);
+          return (
             <div
-              style={{ padding: '8px 14px', fontSize: 13, color: pinned ? k.blue : k.text, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}
-              onClick={() => { toggleTickerPin(legMenu.symbol); setLegMenu(null); }}
-              title="Show this contract as a tile in the top bar"
+              style={{
+                position: 'fixed', top: legMenu.top, left: Math.max(8, legMenu.left),
+                background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)', padding: '6px 0', zIndex: 100000, minWidth: 180,
+                fontFamily: k.fontFamily,
+              }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <span style={{ color: pinned ? k.blue : k.dim, display: 'flex' }}><Icons.Pin /></span>
-              {pinned ? 'Remove from ticker' : 'Add to ticker'}
+              <div
+                style={{ padding: '8px 14px', fontSize: 13, color: pinned ? k.blue : k.text, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}
+                onClick={() => { toggleTickerPin(legMenu.symbol); setLegMenu(null); }}
+                title="Show this contract as a tile in the top bar"
+              >
+                <span style={{ color: pinned ? k.blue : k.dim, display: 'flex' }}><Icons.Pin /></span>
+                {pinned ? 'Remove from ticker' : 'Add to ticker'}
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })(),
+        document.body,
+      )}
     </div>
   );
 }
