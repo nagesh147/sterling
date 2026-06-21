@@ -1486,7 +1486,6 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
     const upper = name.trim().toUpperCase();
     if (cfg.scan_stocks.includes(upper)) return;
     patch({ scan_stocks: [...cfg.scan_stocks, upper] }, `Added ${upper} to scan`);
-    setCustomStock('');
   };
 
   const removeCustomStock = (name: string) => {
