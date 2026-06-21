@@ -161,19 +161,14 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
   return (
     <div style={headless ? { overflow: 'hidden', background: k.bg } : { border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}>
       <div style={{ padding: '13px 20px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-          {!headless && <span style={{ fontSize: 14, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>}
-          {updatedAt && (
-            <span title="These greeks are a snapshot. The detail auto-refreshes every 15s; reopening always re-fetches."
-              style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green, display: 'inline-block' }} />
-              as of {new Date(updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} · refreshes 15s
-            </span>
-          )}
-        </div>
+        {!headless && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>
+          </div>
+        )}
 
         {/* Move + lots controls — one aligned row */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 11 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: headless ? 0 : 11 }}>
           <span style={{ fontSize: 10, color: k.dim, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             IF {data.underlying} MOVES {dirWord.toUpperCase()}
           </span>
@@ -308,17 +303,28 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
         </table>
       </div>
 
-      {/* Plain-English read of the recommended strike — collapsed behind a toggle */}
+      {/* Footer: plain-English read toggle (left) + freshness stamp (right) */}
       {(() => {
         const rec = rows.find((r) => r.leg.option_symbol === recommended);
-        if (!rec) return null;
+        if (!rec && !updatedAt) return null;
         return (
           <div style={{ borderTop: `1px solid ${k.border}`, background: k.bg }}>
-            <button onClick={() => setShowRead((v) => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '12px 20px', background: 'transparent', border: 'none', cursor: 'pointer', color: k.text, fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit' }}>
-              {showRead ? 'Hide read' : 'Read'}
-            </button>
-            {showRead && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 20px', minHeight: 40 }}>
+              {rec ? (
+                <button onClick={() => setShowRead((v) => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left', padding: '12px 0', background: 'transparent', border: 'none', cursor: 'pointer', color: k.text, fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit' }}>
+                  {showRead ? 'Hide read' : 'Read'}
+                </button>
+              ) : <span />}
+              {updatedAt && (
+                <span title="These greeks are a snapshot. The detail auto-refreshes every 15s; reopening always re-fetches."
+                  style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green, display: 'inline-block' }} />
+                  as of {new Date(updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} · refreshes 15s
+                </span>
+              )}
+            </div>
+            {showRead && rec && (
               <div style={{ padding: '0 20px 16px', fontSize: 11.5, color: k.dim, lineHeight: 1.7 }}>
                 The <strong style={{ color: k.text }}>{rec.leg.moneyness} {rec.leg.strike}</strong> gives the best
                 reward-to-risk here — a {move}-pt move {dirWord} turns ~{inr(rec.costPerLot * lotsMult)} of premium into

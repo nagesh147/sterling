@@ -71,6 +71,7 @@ export interface ActivityResponse {
   next_scan_ms: number;
   signal_count: number;
   scanning_label: string;
+  market_open: boolean;
 }
 
 export interface SetupPoint {

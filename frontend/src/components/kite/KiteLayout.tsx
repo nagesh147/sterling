@@ -445,16 +445,28 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               <span style={{ width: 1, height: 14, background: '#e0e0e0' }} />
             </>
           )}
-          <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : autoScan ? k.orange : '#bbb' }} />
-          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
-            {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}
-          </span>
-          {!scanning && (activity?.last_scan_ms ?? 0) > 0 && (
-            <span style={{ opacity: 0.7 }}>· {fmtAgo(activity!.last_scan_ms)}</span>
-          )}
-          {!scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 && (
-            <span style={{ opacity: 0.7 }}>· Next Due {fmtNext(activity!.next_scan_ms)}</span>
-          )}
+          {(() => {
+            // AUTO + market closed: the scan loop intentionally pauses until the
+            // next session, so last/next scan timestamps are stale. Show "market
+            // closed" instead of a misleading "Next Due now".
+            const marketClosed = autoScan && activity?.market_open === false;
+            return (
+              <>
+                <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : marketClosed ? '#bbb' : autoScan ? k.orange : '#bbb' }} />
+                <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
+                  {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}
+                </span>
+                {!scanning && (activity?.last_scan_ms ?? 0) > 0 && (
+                  <span style={{ opacity: 0.7 }}>· {fmtAgo(activity!.last_scan_ms)}</span>
+                )}
+                {!scanning && marketClosed ? (
+                  <span style={{ opacity: 0.7 }}>· Market closed</span>
+                ) : (!scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 && (
+                  <span style={{ opacity: 0.7 }}>· Next Due {fmtNext(activity!.next_scan_ms)}</span>
+                ))}
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

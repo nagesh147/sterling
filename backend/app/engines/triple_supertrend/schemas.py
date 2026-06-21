@@ -129,6 +129,10 @@ class ActivityResponse(BaseModel):
     next_scan_ms: int
     signal_count: int
     scanning_label: str = ""
+    # True only during NSE/BSE session. When auto_scan is on but the market is
+    # closed the loop intentionally pauses, so next_scan_ms goes stale — the UI
+    # uses this to say "market closed" instead of a misleading "next due now".
+    market_open: bool = True
 
 
 class DepthLevel(BaseModel):

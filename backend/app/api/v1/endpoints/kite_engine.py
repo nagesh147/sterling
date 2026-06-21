@@ -93,6 +93,7 @@ async def activity(limit: int = 2000,
         events=state.activity(uid, limit), scanning=st.scanning, auto_scan=service.is_auto_running(),
         last_scan_ms=st.last_scan_ms, next_scan_ms=st.next_scan_ms, signal_count=st.signal_count,
         scanning_label=us.scanning_label if us.scanning else "",
+        market_open=is_market_open(),
     )
 
 

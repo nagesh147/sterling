@@ -1177,12 +1177,15 @@ function ScanProgressBar({ signals }: { signals?: SignalsResponse }) {
   const next = signals?.next_scan_ms ?? 0;
   const interval = next - gen;
   const frac = interval > 0 ? Math.min(1, Math.max(0, (Date.now() - gen) / interval)) : 0;
+  // Market closed → the loop is paused and next_scan_ms is stale, so the
+  // countdown bar would falsely sit full. Don't show it then.
+  const counting = auto && interval > 0 && signals?.market_open !== false;
 
   return (
     <div style={{ height: 2, background: k.border, position: 'relative', overflow: 'hidden' }}>
       {scanning
           ? <div className="st-scan-bar" />
-          : auto && interval > 0
+          : counting
             ? <div key={gen} style={{ height: '100%', width: `${frac * 100}%`, background: k.orange, transition: 'width 1s linear' }} />
             : null}
     </div>
