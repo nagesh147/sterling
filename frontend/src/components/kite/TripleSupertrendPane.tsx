@@ -1629,7 +1629,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ padding: '12px 16px 8px', borderBottom: `1px solid ${k.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <EngineMark />
-            <span style={{ fontSize: 14, fontWeight: 600, color: k.text }}>Triple SuperTrend</span>
+            <span style={{ fontSize: 14, color: k.text }}>Triple SuperTrend</span>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim,
                            border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px' }}>1H</span>
           </div>
