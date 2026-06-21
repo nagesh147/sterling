@@ -127,7 +127,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
     <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, marginBottom: 16, overflow: 'hidden', background: k.bg }}>
       <div style={{ padding: '18px 20px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>
+          <span style={{ fontSize: 14, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>
           <span style={{ fontSize: 11, color: k.dim, lineHeight: 1.5 }}>
             Live greeks · {data.option_type} · {data.underlying} {data.spot_now ? data.spot_now.toFixed(0) : ''} ·
             {hasStop
@@ -286,7 +286,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         const tv = Math.max(0, rec.premium - intrinsic);
         const intrinsicFrac = rec.premium > 0 ? intrinsic / rec.premium : 0;
         return (
-          <div style={{ padding: '16px 20px', borderTop: `1px solid ${k.border}` }}>
+          <div style={{ padding: '28px 20px 16px', borderTop: `1px solid ${k.border}` }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 12, letterSpacing: 0.4, textTransform: 'uppercase' }}>
               Premium breakdown (approximate) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
             </div>
