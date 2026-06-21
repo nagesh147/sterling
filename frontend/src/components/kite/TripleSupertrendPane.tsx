@@ -600,7 +600,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {leg.option_symbol === bestRRSym && (
                        <span title="Best reward-to-risk among these strikes for a 1R move"
-                         style={{ fontSize: 8.5, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>★ BEST R:R</span>
+                         style={{ fontSize: 8.5, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 5px', borderRadius: 3, flexShrink: 0 }}>★</span>
                      )}
                    </span>
                    {s.showExchange && (
