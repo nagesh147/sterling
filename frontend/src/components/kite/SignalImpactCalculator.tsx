@@ -276,6 +276,9 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         </table>
       </div>
 
+      {/* Gutter separating the calculator table from the breakdown panels */}
+      <div style={{ height: 16, background: k.surface, borderTop: `1px solid ${k.border}`, borderBottom: `1px solid ${k.border}` }} />
+
       {/* Premium breakdown — recommended strike, intrinsic vs time value (graphical) */}
       {(() => {
         const rec = rows.find((r) => r.leg.option_symbol === recommended);
@@ -286,7 +289,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         const tv = Math.max(0, rec.premium - intrinsic);
         const intrinsicFrac = rec.premium > 0 ? intrinsic / rec.premium : 0;
         return (
-          <div style={{ padding: '28px 20px 16px', borderTop: `1px solid ${k.border}` }}>
+          <div style={{ padding: '16px 20px' }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 12, letterSpacing: 0.4, textTransform: 'uppercase' }}>
               Premium breakdown (approximate) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
             </div>
