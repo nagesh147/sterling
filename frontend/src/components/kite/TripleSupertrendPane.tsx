@@ -343,12 +343,12 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
           {isDeriv ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: uColor }}>{row.underlying}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
               </span>
             </div>
           ) : (
             <>
-              <span style={{ fontSize: 13, fontWeight: 600, color: uColor }}>{row.underlying}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
 
               <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
                 <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>

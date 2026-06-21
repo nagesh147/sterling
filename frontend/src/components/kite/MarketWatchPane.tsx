@@ -708,7 +708,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, paddingRight: 8 }}>
-                      <span style={{ color: chgColor, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={w.symbol} /></span>
+                      <span style={{ color: chgColor, fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={w.symbol} /></span>
                       <SignalMarker symbol={w.symbol} color={t.dim} />
                     </div>
 

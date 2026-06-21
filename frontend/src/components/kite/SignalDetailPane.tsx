@@ -103,7 +103,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, paddingRight: 8, flex: 1 }}>
           <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
-          <span style={{ fontSize: 13, color: color, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
+          <span style={{ fontSize: 12, color: color, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
           {isBest && (
             <span title="Best reward-to-risk among these strikes for a 1R move"
               style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
@@ -195,7 +195,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
   const move = (data && data.spot_at_trigger > 0 && data.spot_now > 0) ? data.spot_now - data.spot_at_trigger : null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily, overflow: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily, overflow: 'auto', scrollbarGutter: 'stable' }}>
       <style>{`
         .sd-leg-row {
           position: relative;

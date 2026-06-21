@@ -238,7 +238,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>
                         {r.leg.moneyness}
                       </span>
-                      <span style={{ fontSize: 13, color: dirColor(legQuotes?.[`${data.exchange}:${r.leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={`${data.exchange}:${r.leg.option_symbol}`} /></span>
+                      <span style={{ fontSize: 12, color: dirColor(legQuotes?.[`${data.exchange}:${r.leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={`${data.exchange}:${r.leg.option_symbol}`} /></span>
                       {isRec && (
                         <span title="Best reward-to-risk for this move"
                           style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
@@ -257,33 +257,33 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                     </div>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{inr(totalCost)}</div>
+                    <div style={{ fontWeight: 500, fontSize: 11 }}>{inr(totalCost)}</div>
                     <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>max loss</div>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ fontSize: 13 }}>{r.leg.delta.toFixed(2)}</div>
+                    <div style={{ fontSize: 11, fontWeight: 500 }}>{r.leg.delta.toFixed(2)}</div>
                     <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>{r.probItm}%</div>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ color: k.green, fontWeight: 700, fontSize: 13 }}>+{inr(totalGain)}</div>
+                    <div style={{ color: k.green, fontWeight: 500, fontSize: 11 }}>+{inr(totalGain)}</div>
                     <div style={{ fontSize: 10, color: k.dim, marginTop: 3 }}>{r.effPct.toFixed(0)}% on cost</div>
                   </td>
                   <td style={td('right')}>
-                    <div style={{ color: k.red, fontWeight: 600 }}>−{inr(totalRisk)}</div>
+                    <div style={{ color: k.red, fontWeight: 500, fontSize: 11 }}>−{inr(totalRisk)}</div>
                   </td>
                   <td style={td('right')}>
                     <span style={{
-                      fontWeight: 700,
+                      fontWeight: 500, fontSize: 11,
                       color: r.rr == null ? k.dim : r.rr >= 2 ? k.green : r.rr >= 1 ? k.amber : k.red,
                     }}>
                       {r.rr == null ? '—' : `${r.rr.toFixed(1)}:1`}
                     </span>
                   </td>
                   <td style={td('right')}>
-                    <span style={{ color: k.red }}>{inr(totalTheta)}</span>
+                    <span style={{ color: k.red, fontSize: 11, fontWeight: 500 }}>{inr(totalTheta)}</span>
                   </td>
                   <td style={td('right')}>
-                    <span style={{ color: k.dim }}>{isFinite(r.breakEvenPts) ? `${Math.round(r.breakEvenPts)}p` : '—'}</span>
+                    <span style={{ color: k.dim, fontSize: 11, fontWeight: 500 }}>{isFinite(r.breakEvenPts) ? `${Math.round(r.breakEvenPts)}p` : '—'}</span>
                   </td>
                   <td style={td('right')}>
                     {onBuy && (
@@ -380,38 +380,49 @@ export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
         <span>Premium breakdown</span>
         <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>intrinsic vs time value (approximate)</span>
       </div>
-      <div style={{ padding: '6px 18px 14px' }}>
-        {rows.map((leg) => {
-          const premium = leg.last_price || 0;
-          const intrinsic = data.option_type === 'CE'
-            ? Math.max(0, spot - leg.strike)
-            : Math.max(0, leg.strike - spot);
-          const tv = Math.max(0, premium - intrinsic);
-          const intrinsicFrac = premium > 0 ? intrinsic / premium : 0;
-          const isRec = leg.option_symbol === recSym;
-          const isBestDelta = leg.option_symbol === bestDeltaSym;
-          return (
-            <div key={leg.option_symbol} style={{ padding: '10px 0', borderBottom: `1px solid ${k.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, minWidth: 0 }}>
-                <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
-                <span style={{ fontSize: 13, color: dirColor(legQuotes?.[`${data.exchange}:${leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={`${data.exchange}:${leg.option_symbol}`} /></span>
-                {isRec && <span title="Best reward-to-risk" style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>✝</span>}
-                {isBestDelta && <span title="Highest delta — most responsive to the underlying" style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>▲</span>}
-                <span style={{ fontSize: 13, color: k.dim, flexShrink: 0 }}>· ₹{premium.toFixed(2)} total</span>
-              </div>
-              <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
-                <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
-                  style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
-                <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
-                  style={{ flex: 1, background: k.orange, opacity: 0.85 }} />
-              </div>
-              <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
-                <span style={{ color: k.green, fontWeight: 600 }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</span>
-                <span style={{ color: k.orange, fontWeight: 600 }}>■ Time value ₹{tv.toFixed(0)}</span>
-              </div>
-            </div>
-          );
-        })}
+      <div style={{ padding: '4px 18px 14px' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            {rows.map((leg) => {
+              const premium = leg.last_price || 0;
+              const intrinsic = data.option_type === 'CE'
+                ? Math.max(0, spot - leg.strike)
+                : Math.max(0, leg.strike - spot);
+              const tv = Math.max(0, premium - intrinsic);
+              const intrinsicFrac = premium > 0 ? intrinsic / premium : 0;
+              const isRec = leg.option_symbol === recSym;
+              const isBestDelta = leg.option_symbol === bestDeltaSym;
+              return (
+                <tr key={leg.option_symbol} style={{ borderBottom: `1px solid ${k.border}` }}>
+                  {/* instrument */}
+                  <td style={{ padding: '10px 14px 10px 0', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
+                      <span style={{ fontSize: 12, color: dirColor(legQuotes?.[`${data.exchange}:${leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400 }}><InstrumentLabel symbol={`${data.exchange}:${leg.option_symbol}`} /></span>
+                      {isRec && <span title="Best reward-to-risk" style={{ fontSize: 13, fontWeight: 700, color: k.blue }}>✝</span>}
+                      {isBestDelta && <span title="Highest delta — most responsive to the underlying" style={{ fontSize: 13, fontWeight: 700, color: k.blue }}>▲</span>}
+                    </span>
+                  </td>
+                  {/* premium total */}
+                  <td style={{ padding: '10px 16px 10px 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12, color: k.text, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>₹{premium.toFixed(2)}</td>
+                  {/* intrinsic vs time-value bar — absorbs remaining width */}
+                  <td style={{ padding: '10px 16px', width: '100%', verticalAlign: 'middle' }}>
+                    <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', display: 'flex' }}>
+                      <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
+                        style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
+                      <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
+                        style={{ flex: 1, background: k.orange, opacity: 0.85 }} />
+                    </div>
+                  </td>
+                  {/* intrinsic */}
+                  <td style={{ padding: '10px 16px 10px 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 11, color: k.green, fontWeight: 600, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</td>
+                  {/* time value */}
+                  <td style={{ padding: '10px 0', textAlign: 'right', whiteSpace: 'nowrap', fontSize: 11, color: k.orange, fontWeight: 600, fontVariantNumeric: 'tabular-nums', verticalAlign: 'middle' }}>■ Time value ₹{tv.toFixed(0)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
         <div style={{ fontSize: 10, color: k.dim, marginTop: 10 }}>Time value (orange) is what theta decays daily.</div>
       </div>
     </div>
