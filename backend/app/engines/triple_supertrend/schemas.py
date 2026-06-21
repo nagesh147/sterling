@@ -38,6 +38,12 @@ class EngineSignalRow(BaseModel):
     stop_loss: float
     score: float
     timestamp_ms: int
+    # Underlying spot at the trigger bar. For "spot"-source signals this equals
+    # ``spot``; for "derivatives" signals ``spot`` carries the option premium (and is
+    # zeroed during leg grouping), so the underlying spot is captured separately here
+    # from the underlying's 1H candle at the trigger timestamp. None when the
+    # underlying candle for that bar wasn't available.
+    underlying_spot: Optional[float] = None
     # is_active = the SuperTrend is STILL aligned on the latest closed bar (trade is
     # running), vs. a stale entry whose trend has since broken. is_fresh = entered on
     # the latest bar (the live "ready now" trigger). For grouped derivative rows these

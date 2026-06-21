@@ -151,6 +151,9 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
         parent.is_fresh = parent.is_fresh or r.is_fresh
         if r.timestamp_ms > parent.timestamp_ms:
             parent.timestamp_ms = r.timestamp_ms
+            # keep the underlying-spot aligned with the displayed (latest) trigger bar
+            if (r.underlying_spot or 0) > 0:
+                parent.underlying_spot = r.underlying_spot
     final_rows.extend(grouped_derivs.values())
     for r in final_rows:
         if r.source == "derivatives" and len(r.legs) > 1:
@@ -521,6 +524,9 @@ class KiteEngineScanner:
                         under = []
                 
                 spot = float(under[-1].close) if under else 0.0
+                # Underlying spot at each 1H bar, so a derivative signal can report the
+                # spot at its trigger timestamp (the premium chart alone never carries it).
+                under_close_by_ts = {int(c.timestamp_ms): float(c.close) for c in under}
                 if spot <= 0:
                     try:
                         # Quote by DISPLAY name (mirrors detail._spot_symbol): the LTP
@@ -625,6 +631,14 @@ class KiteEngineScanner:
                         # them as "historical entry only" for the activity log).
                         if not (drow.is_active or drow.is_fresh):
                             continue
+                        # Stamp the underlying spot at this signal's trigger bar (1H bars
+                        # of premium and underlying share timestamps; fall back to the
+                        # last bar at/before the trigger if there's no exact match).
+                        drow.underlying_spot = under_close_by_ts.get(int(drow.timestamp_ms))
+                        if drow.underlying_spot is None and under_close_by_ts:
+                            prior = [ts for ts in under_close_by_ts if ts <= drow.timestamp_ms]
+                            if prior:
+                                drow.underlying_spot = under_close_by_ts[max(prior)]
                         rows.append(drow)
                         is_fresh = (drow.timestamp_ms == latest_ts)
                         if is_fresh:

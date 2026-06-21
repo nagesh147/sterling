@@ -93,6 +93,11 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
     return EngineDetailResponse(
         underlying=row.underlying, token=row.token, exchange=row.exchange,
         direction=row.direction, regime=row.regime, alignment=row.alignment, option_type=row.option_type,
-        triggered_ms=row.timestamp_ms, spot_at_trigger=row.spot, spot_now=spot_now,
+        triggered_ms=row.timestamp_ms,
+        # For "spot" signals row.spot is the underlying at trigger; for "derivatives"
+        # row.spot is the premium (zeroed after grouping), so use the separately
+        # captured underlying_spot.
+        spot_at_trigger=(row.underlying_spot if (row.underlying_spot or 0) > 0 else row.spot),
+        spot_now=spot_now,
         stop_loss=row.stop_loss, options=options,
     )
