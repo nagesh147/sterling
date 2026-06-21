@@ -12,7 +12,8 @@ import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
 import { DirectionalModePanel } from './DirectionalModePanel';
 import { KiteTelegramPanel } from './KiteTelegramPanel';
-import { useKiteSettings } from '../../store/useKiteSettings';
+import { useKiteSettings, type LoaderStyle } from '../../store/useKiteSettings';
+import { KiteLoader, ButtonLoader } from './KiteLoader';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 16, marginBottom: 14 },
@@ -299,7 +300,7 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
               </span>
               {acc.has_refresh_token && (
                 <button style={S.btn} onClick={() => refresh.mutate({ account_id: acc.id })} disabled={refresh.isPending}>
-                  {refresh.isPending ? '…' : '↻ Refresh'}
+                  {refresh.isPending ? <ButtonLoader color="#387ed1" /> : '↻ Refresh'}
                 </button>
               )}
               <button style={S.btn} onClick={() => setShowRelogin((v) => !v)}>
@@ -336,7 +337,7 @@ function AccountCard({ acc }: { acc: KiteAccount }) {
                   disabled={!reqToken.trim() || gen.isPending}
                   onClick={() => gen.mutate({ request_token: reqToken.trim(), account_id: acc.id }, { onSuccess: () => { setReqToken(''); setShowRelogin(false); } })}
                 >
-                  {gen.isPending ? '…' : 'Connect'}
+                  {gen.isPending ? <ButtonLoader /> : 'Connect'}
                 </button>
               </div>
               {gen.isSuccess && <div style={S.ok}>✓ Connected{gen.data?.user_name ? ` — ${gen.data.user_name}` : ''}</div>}
@@ -572,8 +573,56 @@ function KiteSettings() {
         <div style={{ ...S.hint, marginTop: 6 }}>Choose how the Triple SuperTrend settings drawer is laid out.</div>
       </div>
 
+      <div style={{ marginBottom: 18, paddingTop: 16, borderTop: `1px solid #e0e0e0` }}>
+        <LoaderStylePicker />
+      </div>
+
       <div style={{ paddingTop: 16, borderTop: `1px solid #e0e0e0` }}>
         <KiteTelegramPanel />
+      </div>
+    </div>
+  );
+}
+
+/** Loader / animation style selector with a live preview of each option. */
+function LoaderStylePicker() {
+  const style = useKiteSettings((s) => s.loaderStyle);
+  const setStyle = useKiteSettings((s) => s.setLoaderStyle);
+  const opts: Array<{ value: LoaderStyle; label: string; desc: string }> = [
+    { value: 'mac', label: 'Mac', desc: 'Apple-grade spinner, smooth overlay & checkmark' },
+    { value: 'classic', label: 'Classic', desc: 'Simple rotating ring' },
+    { value: 'off', label: 'Minimal', desc: 'Static dots — no animation' },
+  ];
+  return (
+    <div>
+      <label style={{ ...S.label, marginBottom: 8 }}>LOADER & ANIMATION STYLE</label>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {opts.map((o) => {
+          const sel = style === o.value;
+          return (
+            <button
+              key={o.value}
+              onClick={() => setStyle(o.value)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                width: 120, padding: '14px 10px', cursor: 'pointer',
+                background: sel ? 'rgba(240,100,40,0.06)' : '#fff',
+                border: `1.5px solid ${sel ? '#f06428' : '#e0e0e0'}`,
+                borderRadius: 8, fontFamily: 'inherit', transition: 'all .15s',
+              }}
+            >
+              {/* Force a remount per style so the preview reflects the option, not
+                  the currently-saved one, by keying on the option value. */}
+              <div style={{ height: 32, display: 'flex', alignItems: 'center' }}>
+                <KiteLoader size={26} styleOverride={o.value} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: sel ? 700 : 500, color: sel ? '#f06428' : '#444' }}>{o.label}</div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ ...S.hint, marginTop: 8 }}>
+        {opts.find((o) => o.value === style)?.desc} · applies to login overlays, buttons and pending states.
       </div>
     </div>
   );

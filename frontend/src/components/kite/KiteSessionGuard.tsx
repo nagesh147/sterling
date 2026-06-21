@@ -3,6 +3,8 @@ import {
   useKiteStatus, useKiteLoginUrl, useGenerateKiteSession, useRefreshKiteSession,
 } from '../../hooks/useKite';
 import { notifyOrder } from '../../store/useKiteNotifications';
+import { authSuccess, authIdle } from '../../store/useAuthFeedback';
+import { ButtonLoader } from './KiteLoader';
 import { k } from '../../styles/kiteUI';
 
 // Watches the live Kite /status for a connected→disconnected transition (the daily
@@ -45,6 +47,24 @@ export function KiteSessionGuard() {
         notifiedRef.current = false;
         if (graceTimer.current) { window.clearTimeout(graceTimer.current); graceTimer.current = null; }
         setOpen(false);
+        // A genuine disconnected→connected transition (manual paste, the
+        // auto-callback redirect, or a silent refresh) — surface the success
+        // flourish + toast. `was === null` is a fresh page load with an already
+        // valid session, so stay silent there to avoid a toast on every reload.
+        if (was === false) {
+          authSuccess(status?.user_name ? `Connected · ${status.user_name}` : 'Kite connected');
+          notifyOrder({
+            kind: 'complete',
+            title: 'Kite connected',
+            message: status?.user_name
+              ? `Signed in as ${status.user_name}${status.kite_user_id ? ` (${status.kite_user_id})` : ''}.`
+              : 'Your Kite session is now active.',
+          });
+        }
+      } else if (was === true) {
+        // Just dropped out of a connected session — make sure no stale
+        // "connecting" overlay lingers before the expiry modal logic runs.
+        authIdle();
       }
       return;
     }
@@ -107,7 +127,7 @@ export function KiteSessionGuard() {
               fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}
           >
-            {refresh.isPending ? 'Renewing…' : '↻ Try automatic renewal'}
+            {refresh.isPending ? <ButtonLoader color="#387ed1" /> : '↻ Try automatic renewal'}
           </button>
         )}
 
@@ -149,7 +169,7 @@ export function KiteSessionGuard() {
                 opacity: reqToken.trim() && !gen.isPending ? 1 : 0.5,
               }}
             >
-              {gen.isPending ? '…' : 'Connect'}
+              {gen.isPending ? <ButtonLoader /> : 'Connect'}
             </button>
           </div>
           {gen.error && <div style={{ color: '#e53935', fontSize: 11, marginTop: 2 }}>✗ {gen.error.message}</div>}

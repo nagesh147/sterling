@@ -4,6 +4,7 @@ import { api } from '../utils/api';
 import { underlyingSpotKey } from '../utils/computeGreeks';
 import { registerTokens, getTick, useTickVersion } from './useKiteLiveTicks';
 import { notifyOrder } from '../store/useKiteNotifications';
+import { authConnecting, authIdle } from '../store/useAuthFeedback';
 import type {
   CreateAlertBody, HoldingsAuthResult, KiteAccount, KiteAccountList, KiteAlert,
   KiteAlertHistoryRow, KiteInstrumentSearch, KiteOrderUpdate, KiteSessionResult,
@@ -115,18 +116,16 @@ export function useGenerateKiteSession() {
   const qc = useQueryClient();
   return useMutation<KiteSessionResult, Error, { request_token: string; account_id?: string }>({
     mutationFn: (body) => api.post<KiteSessionResult>(`${K}/session`, body),
-    onSuccess: (data) => {
+    // Drive the global auth overlay (mac-style spinner). The success toast +
+    // checkmark are owned by KiteSessionGuard's connection watcher so a single
+    // path covers manual paste, auto-callback redirect, AND silent refresh.
+    onMutate: () => { authConnecting('Connecting to Kite…'); },
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kite-status'] });
       qc.invalidateQueries({ queryKey: ['kite-accounts'] });
-      notifyOrder({
-        kind: 'complete',
-        title: 'Kite connected',
-        message: data?.user_name
-          ? `Signed in as ${data.user_name}${data.kite_user_id ? ` (${data.kite_user_id})` : ''}.`
-          : 'Kite session is now active.',
-      });
     },
     onError: (err) => {
+      authIdle();
       notifyOrder({ kind: 'error', title: 'Kite login failed', message: err.message });
     },
   });
@@ -136,15 +135,12 @@ export function useRefreshKiteSession() {
   const qc = useQueryClient();
   return useMutation<KiteSessionResult, Error, { refresh_token?: string; account_id?: string }>({
     mutationFn: (body) => api.post<KiteSessionResult>(`${K}/session/refresh`, body),
-    onSuccess: (data) => {
+    onMutate: () => { authConnecting('Renewing session…'); },
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kite-status'] });
       qc.invalidateQueries({ queryKey: ['kite-accounts'] });
-      notifyOrder({
-        kind: 'complete',
-        title: 'Kite session renewed',
-        message: data?.user_name ? `Session restored for ${data.user_name}.` : 'Session restored automatically.',
-      });
     },
+    onError: () => { authIdle(); },
   });
 }
 

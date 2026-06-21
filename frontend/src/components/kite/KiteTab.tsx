@@ -14,6 +14,7 @@ import { BacktestPane } from './BacktestPane';
 import { InstrumentPane, InstrumentTab } from './InstrumentPane';
 import { KiteNotifications } from './KiteNotifications';
 import { KiteSessionGuard } from './KiteSessionGuard';
+import { KiteAuthOverlay } from './KiteLoader';
 import { TripleSupertrendPane } from './TripleSupertrendPane';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
@@ -152,6 +153,7 @@ export function KiteTab() {
       />
       <KiteNotifications />
       <KiteSessionGuard />
+      <KiteAuthOverlay />
       {isOpen && options && (
         <OrderWindow options={options} onClose={closeOrderWindow} />
       )}
