@@ -59,6 +59,14 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   const scanning = !!activity?.scanning;
   const autoScan = !!activity?.auto_scan;
 
+  // Live (running) trade count — published by the Triple SuperTrend pane.
+  const [liveCount, setLiveCount] = useState(0);
+  useEffect(() => {
+    const cb = (e: any) => setLiveCount(Number(e.detail) || 0);
+    window.addEventListener('kite-st-live-count', cb);
+    return () => window.removeEventListener('kite-st-live-count', cb);
+  }, []);
+
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('kite_sidebar_width');
     return saved ? parseInt(saved, 10) : 420;
@@ -430,6 +438,16 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
         {/* Scan status — bottom-right */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#777', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           <style>{KL_SCAN_CSS}</style>
+          {liveCount > 0 && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 7px', borderRadius: 999,
+              fontSize: 11, fontWeight: 600, color: k.green,
+              background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.30)',
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
+              {liveCount} live
+            </span>
+          )}
           <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : autoScan ? k.orange : '#bbb' }} />
           <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
             {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}

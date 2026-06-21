@@ -1,0 +1,14 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sterling-screen" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A2D31"/>
+      <stop offset="1" stop-color="#161719"/>
+    </linearGradient>
+  </defs>
+  <!-- Terminal tile -->
+  <rect width="64" height="64" rx="15" fill="url(#sterling-screen)"/>
+  <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="13.75" fill="none" stroke="#3A3D42" stroke-width="1.5"/>
+  <!-- Prompt  >_ -->
+  <polyline points="19 24 29 32 19 40" stroke="#E3E3E3" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="33" y="36" width="14" height="5" rx="2.5" fill="#34D399"/>
+</svg>

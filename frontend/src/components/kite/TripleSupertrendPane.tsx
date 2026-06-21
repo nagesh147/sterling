@@ -1612,6 +1612,16 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
 
+  // Currently-running trade count. Published to the Kite footer (which can't
+  // recompute it — it lacks the rows+quotes reconciliation) via a window event.
+  const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent('kite-st-live-count', { detail: liveCount }));
+  }, [liveCount]);
+  React.useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent('kite-st-live-count', { detail: 0 }));
+  }, []);
+
   // Ended groups stay expanded by default so past rows are visible (light amber bg).
   // The user can collapse them manually.
 
@@ -1666,7 +1676,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     );
   }
 
-  const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
   const autoScan = signals?.auto_scan ?? false;
 
   return (
@@ -1703,17 +1712,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
             )}
           </div>
           <div style={{ flex: 1 }} />
-          {liveCount > 0 && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999,
-              fontSize: 10.5, fontWeight: 700, color: k.green,
-              background: tint(k.green, 10), border: `1px solid ${tint(k.green, 30)}`,
-            }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
-              {liveCount} live
-            </span>
-          )}
-          {/* Actions: rescan / scan report / grid·list — moved next to the live badge */}
+          {/* Actions: rescan / scan report / grid·list */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
               <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
