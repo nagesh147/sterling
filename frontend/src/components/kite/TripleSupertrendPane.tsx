@@ -1685,7 +1685,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         {/* Row 1: identity + live count + settings */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
           <EngineMark />
-          <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, fontWeight: 700, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
+          <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
             Triple SuperTrend
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
