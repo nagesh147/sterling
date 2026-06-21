@@ -279,11 +279,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
   }
 
   // ★ BEST R:R — among this signal's option legs, the strike with the best
-  // reward:risk for a 1R move. Same logic as the Trade Impact Calculator. Only
-  // meaningful for underlying-driven (spot) signals; derivatives rows scan the
-  // contract's own premium, so the underlying-move R:R doesn't apply.
+  // reward:risk for a 1R move. Same logic as the Trade Impact Calculator, so the
+  // badge stays in sync with the detail page (which marks the best strike for
+  // both spot- and derivatives-source signals). The greeks use the underlying
+  // spot, so a 1R underlying move is meaningful regardless of signal source.
   const bestRRSym = React.useMemo(() => {
-    if (isDeriv) return null;
     const spot = uLastPx ?? row.spot ?? 0;
     const sd = stopDistance(spot, row.stop_loss ?? 0);
     let best: string | null = null;
@@ -299,7 +299,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
       if (v > bestVal) { bestVal = v; best = leg.option_symbol; }
     }
     return best;
-  }, [isDeriv, uLastPx, row, visibleLegs, quotes]);
+  }, [uLastPx, row, visibleLegs, quotes]);
 
   return (
     <div
