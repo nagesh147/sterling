@@ -30,7 +30,7 @@ router = APIRouter(prefix="/kite/engine", tags=["kite-engine"])
 
 
 def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
-    return SterlingKiteEngineConfig(trail_target=c.trail_target, early_lock=c.early_lock)
+    return SterlingKiteEngineConfig(trail_target=c.trail_target)
 
 
 async def _client(user: UserContext):

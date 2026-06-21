@@ -1957,18 +1957,10 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
             <SettingRow label="Trail" hint="How tightly the position is trailed before exit.">
               <Segmented
                 options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg.trail_target ?? 'mid') === v}
+                isActive={(v) => (cfg.trail_target ?? 'fast') === v}
                 onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`)}
               />
             </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
-              onClick={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)}>
-              <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => {}} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Lock profits early</span>
-                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Exit on slow-ST flip once comfortably in profit.</span>
-              </div>
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
               onClick={toggleAuto}>
               <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={() => {}} />
@@ -2035,7 +2027,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
                       <div style={{ display: 'flex', flexDirection: 'column' }}>{universeGroup}</div>
                     </Collapsible>
                     <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
-                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
+                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'fast'))?.label ?? 'Tight'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>{executionGroup}</div>
                     </Collapsible>
                   </div>

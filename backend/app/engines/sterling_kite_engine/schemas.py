@@ -222,7 +222,9 @@ class EngineConfigModel(BaseModel):
     # signals, auto-execute). False = engine OFF; the Kite platform runs as normal
     # (manual trading only). Toggled from the Connect tab.
     engine_enabled: bool = True
-    trail_target: Literal["fast", "mid", "slow"] = "mid"
+    # Which ST line trails the stop. "fast" (tightest band) is the most OOS-robust
+    # exit in the 7.5y sweep and bleeds the least theta; "mid"/"slow" stay selectable.
+    trail_target: Literal["fast", "mid", "slow"] = "fast"
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
     # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.
     strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]] = [
@@ -240,6 +242,9 @@ class EngineConfigModel(BaseModel):
     scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]
     scan_stocks: List[str] = []
     scan_all_stocks: bool = False  # default preserves the full spot universe
+    # DEPRECATED / inert: changed zero trades across 7.5y of real data (it keyed off
+    # the slow ST, which always flips after the trail exits). Kept for API/UI back-
+    # compat; the live exit is the trail_target flip. Safe to retire the UI toggle.
     early_lock: bool = False
     auto_execute: bool = False
     # ── Per-trade risk sizing (workstream F) ──────────────────────────────────
@@ -332,7 +337,7 @@ class BacktestRequest(BaseModel):
     # "NIFTY 50"); for real, it is an option tradingsymbol (e.g. "NIFTY24JUN24000CE").
     symbol: str
     data_mode: Literal["synthetic", "real", "both"] = "both"
-    trail_target: Literal["fast", "mid", "slow"] = "mid"
+    trail_target: Literal["fast", "mid", "slow"] = "fast"
     lookback_bars: int = 2000          # 1H bars (synthetic can reach back years)
     starting_capital: float = 100_000.0
     qty: int = 50                      # one lot (lot_size) — value/risk scales with this

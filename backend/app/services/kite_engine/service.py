@@ -44,7 +44,7 @@ def has_scanned() -> bool:
 
 
 def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
-    return SterlingKiteEngineConfig(trail_target=c.trail_target, early_lock=c.early_lock)
+    return SterlingKiteEngineConfig(trail_target=c.trail_target)
 
 
 async def place_manual_order(uid: str, option_symbol: str, side: str,

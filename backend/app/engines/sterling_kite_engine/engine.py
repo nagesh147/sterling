@@ -95,14 +95,10 @@ class SterlingKiteEngine:
             pos.stop = min(pos.stop, line)  # ratchet down only
             flipped = trend == 1
 
-        # early-lock: once in sufficient profit, also honor a slow-ST flip
-        if not flipped and self.cfg.early_lock:
-            risk = abs(pos.entry - pos.initial_stop) or 1e-9
-            profit = (c[i] - pos.entry) if pos.direction == "long" else (pos.entry - c[i])
-            if profit >= self.cfg.early_lock_profit_r * risk:
-                slow = int(r.trend("slow")[i])
-                flipped = (slow == -1) if pos.direction == "long" else (slow == 1)
-
+        # The trail-target flip is the SOLE exit. (A former "early-lock" branch that
+        # also honored a slow-ST flip once in profit was removed: the slow ST is the
+        # widest band, so it always flips *after* the trail_target — it changed zero
+        # trades across 7.5y of real data. See study/kite_st_exit_analysis.md.)
         if flipped:
             self._positions.pop(underlying, None)
             return ManageResult(underlying, pos.stop, exit=True, reason="trail_flip")

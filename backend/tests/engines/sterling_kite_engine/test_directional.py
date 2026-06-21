@@ -77,7 +77,7 @@ class TestDefaultConfig:
     def test_existing_defaults_preserved(self):
         """All pre-existing defaults must survive the schema extension."""
         cfg = EngineConfigModel()
-        assert cfg.trail_target == "mid"
+        assert cfg.trail_target == "fast"
         assert "ATM" in cfg.strike_moneyness
         assert cfg.scan_source == "derivatives"
         assert cfg.early_lock is False

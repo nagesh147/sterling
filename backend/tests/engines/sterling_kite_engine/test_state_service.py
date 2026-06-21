@@ -7,11 +7,11 @@ from app.services.kite_engine import state
 
 def test_config_store_roundtrip():
     state.reset("u1")
-    assert state.get_config("u1").trail_target == "mid"  # default
-    cfg = EngineConfigModel(trail_target="fast", strike_moneyness=["ATM", "ITM1"], auto_execute=True)
+    assert state.get_config("u1").trail_target == "fast"  # default
+    cfg = EngineConfigModel(trail_target="slow", strike_moneyness=["ATM", "ITM1"], auto_execute=True)
     state.set_config("u1", cfg)
     got = state.get_config("u1")
-    assert got.trail_target == "fast" and got.strike_moneyness == ["ATM", "ITM1"] and got.auto_execute
+    assert got.trail_target == "slow" and got.strike_moneyness == ["ATM", "ITM1"] and got.auto_execute
 
 
 def test_activity_log_ring_and_status():

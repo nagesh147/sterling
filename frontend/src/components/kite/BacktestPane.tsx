@@ -121,7 +121,7 @@ function RunCard({ run }: { run: BacktestRun }) {
 export function BacktestPane() {
   const [symbol, setSymbol] = useState('NIFTY 50');
   const [mode, setMode] = useState<BacktestDataMode>('both');
-  const [trail, setTrail] = useState<'fast' | 'mid' | 'slow'>('mid');
+  const [trail, setTrail] = useState<'fast' | 'mid' | 'slow'>('fast');
   const [lookback, setLookback] = useState(2000);
   const [capital, setCapital] = useState(100000);
   const [qty, setQty] = useState(50);
