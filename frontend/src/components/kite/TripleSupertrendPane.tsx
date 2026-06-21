@@ -1691,39 +1691,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               {liveCount} live
             </span>
           )}
-          <span data-st-settings style={{ display: 'inline-flex' }}>
-            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-              <Icons.Settings />
-            </HeaderIconBtn>
-          </span>
-        </div>
-
-        {/* Row 2: scan status + action icons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 14px 8px' }}>
-          {/* Status */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-            <span className={scanning ? 'st-pulse' : undefined} style={{
-              width: 6, height: 6, borderRadius: 3, flexShrink: 0,
-              background: scanning ? k.green : autoScan ? k.orange : k.dim,
-            }} />
-            <span style={{ color: scanning ? k.green : autoScan ? k.text : k.dim, fontWeight: scanning || autoScan ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {scanning
-                ? (signals?.scanning_label || 'scanning…')
-                : autoScan
-                  ? 'auto'
-                  : !(signals?.market_open ?? true)
-                    ? 'closed'
-                    : 'manual'}
-            </span>
-            {!scanning && (signals?.generated_ms ?? 0) > 0 && (
-              <span style={{ opacity: 0.7 }}>· last {timeAgo(signals!.generated_ms!)}</span>
-            )}
-            {!scanning && autoScan && (signals?.next_scan_ms ?? 0) > 0 && (
-              <span style={{ opacity: 0.7 }}>· next {countdown(signals!.next_scan_ms!)}</span>
-            )}
-          </div>
-
-          {/* Actions */}
+          {/* Actions: rescan / scan report / grid·list — moved next to the live badge */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
               <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
@@ -1753,6 +1721,37 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 <ListIcon />
               </button>
             </div>
+          </div>
+          <span data-st-settings style={{ display: 'inline-flex' }}>
+            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+              <Icons.Settings />
+            </HeaderIconBtn>
+          </span>
+        </div>
+
+        {/* Row 2: scan status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 14px 8px' }}>
+          {/* Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
+            <span className={scanning ? 'st-pulse' : undefined} style={{
+              width: 6, height: 6, borderRadius: 3, flexShrink: 0,
+              background: scanning ? k.green : autoScan ? k.orange : k.dim,
+            }} />
+            <span style={{ color: scanning ? k.green : autoScan ? k.text : k.dim, fontWeight: scanning || autoScan ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {scanning
+                ? (signals?.scanning_label || 'scanning…')
+                : autoScan
+                  ? 'auto'
+                  : !(signals?.market_open ?? true)
+                    ? 'closed'
+                    : 'manual'}
+            </span>
+            {!scanning && (signals?.generated_ms ?? 0) > 0 && (
+              <span style={{ opacity: 0.7 }}>· last {timeAgo(signals!.generated_ms!)}</span>
+            )}
+            {!scanning && autoScan && (signals?.next_scan_ms ?? 0) > 0 && (
+              <span style={{ opacity: 0.7 }}>· next {countdown(signals!.next_scan_ms!)}</span>
+            )}
           </div>
         </div>
 
