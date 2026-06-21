@@ -96,6 +96,15 @@ async def activity(limit: int = 2000,
     )
 
 
+@router.get("/server-logs")
+async def server_logs(limit: int = 300,
+                      user: UserContext = Depends(get_current_user)) -> dict:
+    """Recent backend server logs (in-memory ring buffer) for the Kite Terminal.
+    Lets the UI interleave real server logs with engine activity. Read-only."""
+    from app.core.logging import recent_logs
+    return {"logs": recent_logs(limit)}
+
+
 @router.post("/scan", response_model=SignalsResponse)
 async def run_scan(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
     """Manual scan trigger (the background loop also scans automatically)."""

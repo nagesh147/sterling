@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { useEngineActivity } from '../../hooks/useTripleSupertrend';
+import { useEngineActivity, useEngineServerLogs } from '../../hooks/useTripleSupertrend';
 import type { ActivityEvent } from '../../types/kiteEngine';
 
 type Theme = 'dark' | 'light';
@@ -36,6 +36,18 @@ const KIND_META: Record<string, { level: Level; emoji: string; label: string; ba
   order_failed:  { level: 'ERROR',   emoji: '❌', label: 'ORDER FAILED' },
   error:         { level: 'ERROR',   emoji: '💥', label: 'ERROR' },
   info:          { level: 'INFO',    emoji: '',  label: 'INFO' },
+  // Real backend server logs, one kind per severity so the level token + colour
+  // stay accurate while the 🖧 glyph marks them apart from engine activity.
+  srv_debug:     { level: 'DEBUG',   emoji: '🖧', label: 'SERVER' },
+  srv_info:      { level: 'INFO',    emoji: '🖧', label: 'SERVER' },
+  srv_warn:      { level: 'WARN',    emoji: '🖧', label: 'SERVER' },
+  srv_error:     { level: 'ERROR',   emoji: '🖧', label: 'SERVER' },
+};
+
+// Map a Python log level name to the matching server log `kind`.
+const SERVER_KIND: Record<string, string> = {
+  DEBUG: 'srv_debug', INFO: 'srv_info', WARNING: 'srv_warn',
+  ERROR: 'srv_error', CRITICAL: 'srv_error',
 };
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -152,6 +164,10 @@ let lastTerminalMode: 'minimized' | 'normal' | 'partial' | 'full' = 'normal';
 
 export function EngineTerminal() {
   const { data } = useEngineActivity();
+  // Server logs are opt-in (persisted) and only polled while enabled.
+  const [showServerLogs, setShowServerLogs] = useState<boolean>(
+    () => localStorage.getItem('kite_terminal_server_logs') === '1');
+  const { data: serverLogs } = useEngineServerLogs(showServerLogs);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('kite_terminal_theme') as Theme) || 'dark');
   const [mode, setModeState] = useState<'minimized' | 'normal' | 'partial' | 'full'>(lastTerminalMode);
@@ -173,7 +189,17 @@ export function EngineTerminal() {
   }, []);
 
   const t = THEME[theme];
-  const events = (data?.events ?? []).filter((ev) => ev.ts_ms > clearedBefore);
+  // Merge engine activity with real server logs (when enabled), ordered by time.
+  const serverEvents: ActivityEvent[] = showServerLogs
+    ? (serverLogs?.logs ?? []).map((l) => ({
+        ts_ms: l.ts_ms,
+        kind: SERVER_KIND[l.level] ?? 'srv_info',
+        message: `${l.name}: ${l.message}`,
+      }))
+    : [];
+  const events = [...(data?.events ?? []), ...serverEvents]
+    .filter((ev) => ev.ts_ms > clearedBefore)
+    .sort((a, b) => a.ts_ms - b.ts_ms);
   const scanning = !!data?.scanning;
 
   const clearLog = () => {
@@ -189,6 +215,7 @@ export function EngineTerminal() {
   }, [scanning]);
 
   useEffect(() => { localStorage.setItem('kite_terminal_theme', theme); }, [theme]);
+  useEffect(() => { localStorage.setItem('kite_terminal_server_logs', showServerLogs ? '1' : '0'); }, [showServerLogs]);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [events.length]);
@@ -262,13 +289,45 @@ export function EngineTerminal() {
         {!scanning && data?.auto_scan && <span style={{ color: t.dim }}>⏭️ next {fmtCountdown(data?.next_scan_ms ?? 0)}</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           {(data?.signal_count ?? 0) > 0 && <span style={{ color: k.orange, fontWeight: 600 }}>🎯 {data?.signal_count} ready</span>}
+          {/* Server logs toggle — interleave real backend logs into the terminal */}
+          <button
+            onClick={() => setShowServerLogs((v) => !v)}
+            title={showServerLogs ? 'Hide server logs' : 'Show server logs'}
+            aria-pressed={showServerLogs}
+            style={{
+              background: showServerLogs ? `${k.blue}1f` : 'none',
+              border: `1px solid ${showServerLogs ? k.blue : t.border}`,
+              color: showServerLogs ? k.blue : t.headDim,
+              borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+            }}
+          >
+            {/* server / stacked-disks icon */}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="6" rx="1.5" />
+              <rect x="3" y="14" width="18" height="6" rx="1.5" />
+              <line x1="6.5" y1="7" x2="6.5" y2="7" /><line x1="6.5" y1="17" x2="6.5" y2="17" />
+            </svg>
+          </button>
+          {/* Theme toggle — icon only (shows the mode you'll switch to) */}
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            title="Toggle terminal theme"
-            style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '1px 8px', fontSize: 11, cursor: 'pointer' }}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
           >
-            {theme === 'dark' ? '☀ Light' : '🌙 Dark'}
+            {theme === 'dark' ? (
+              // sun
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            ) : (
+              // moon
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+              </svg>
+            )}
           </button>
+          {/* Clear terminal — clear/eraser icon (not delete) */}
           <button
             onClick={clearLog}
             title="Clear terminal"
@@ -276,9 +335,8 @@ export function EngineTerminal() {
             style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 6px', cursor: events.length === 0 ? 'default' : 'pointer', opacity: events.length === 0 ? 0.4 : 1, display: 'flex', alignItems: 'center' }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              <line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
+              <path d="M20 20H7L3 16a1.5 1.5 0 0 1 0-2.1l8-8a1.5 1.5 0 0 1 2.1 0l6 6a1.5 1.5 0 0 1 0 2.1L13.5 20" />
+              <line x1="7" y1="20" x2="20" y2="20" />
             </svg>
           </button>
           {mode === 'minimized' && (

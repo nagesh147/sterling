@@ -102,6 +102,22 @@ export function useEngineActivity() {
   });
 }
 
+// ─── Server logs (real backend logs, interleaved into the terminal) ──────────
+export interface ServerLogLine {
+  ts_ms: number;
+  level: string;
+  name: string;
+  message: string;
+}
+export function useEngineServerLogs(enabled: boolean) {
+  return useQuery<{ logs: ServerLogLine[] }>({
+    queryKey: ['kite-engine-server-logs'],
+    queryFn: () => api.get<{ logs: ServerLogLine[] }>(`${E}/server-logs?limit=400`),
+    refetchInterval: enabled ? 10_000 : false,
+    enabled,
+  });
+}
+
 // ─── Setup chart (click-to-visualize) ─────────────────────────────────────────
 export function useEngineSetup(token: number | null, underlying: string, enabled: boolean) {
   return useQuery<SetupChart>({

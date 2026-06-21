@@ -1,6 +1,38 @@
 import logging
 import sys
+from collections import deque
 from app.core.config import settings
+
+
+# ── In-memory ring buffer of recent server logs ──────────────────────────────
+# Lets the UI (Kite Terminal) interleave real backend logs with engine activity
+# without writing/tailing a file. Bounded so it can never grow unbounded.
+_LOG_RING: "deque[dict]" = deque(maxlen=1000)
+
+
+class RingBufferLogHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            _LOG_RING.append({
+                "ts_ms": int(record.created * 1000),
+                "level": record.levelname,
+                "name": record.name,
+                "message": record.getMessage(),
+            })
+        except Exception:
+            pass
+
+
+def attach_ring_logger() -> None:
+    root = logging.getLogger()
+    if any(isinstance(h, RingBufferLogHandler) for h in root.handlers):
+        return
+    root.addHandler(RingBufferLogHandler())
+
+
+def recent_logs(limit: int = 300) -> list[dict]:
+    items = list(_LOG_RING)
+    return items[-limit:] if limit and limit > 0 else items
 
 
 def setup_logging() -> None:
@@ -10,6 +42,7 @@ def setup_logging() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+    attach_ring_logger()
 
 import asyncio
 log_queue = None
