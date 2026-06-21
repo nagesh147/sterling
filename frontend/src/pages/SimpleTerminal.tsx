@@ -203,7 +203,6 @@ export function SimpleTerminal() {
       {/* ── Header ─────────────────────────────────────────────── */}
       <div style={{
         flexShrink: 0,
-        background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
       }}>
         {/* Row 1: STERLING | KITE | CRYPTO | [kite nav when active] | [actions] */}

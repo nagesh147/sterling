@@ -121,7 +121,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
-      background: 'var(--t-bg3)', border: '1px solid var(--t-border)',
+      border: '1px solid var(--t-border)',
       borderRadius: 8, padding: '12px 14px', width: 250, flexShrink: 0,
     }}>
       {/* Left: name + price + change */}
@@ -193,7 +193,7 @@ export function KiteTicker() {
   if (items.length === 0) {
     return (
       <div style={{
-        height: 56, background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)',
+        height: 56, borderBottom: '1px solid var(--t-border)',
         display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0,
         fontFamily: TILE_FONT,
       }}>
@@ -213,7 +213,7 @@ export function KiteTicker() {
 
   return (
     <div ref={outerRef} style={{
-      background: 'var(--t-bg2)', borderBottom: '1px solid var(--t-border)',
+      borderBottom: '1px solid var(--t-border)',
       padding: '10px 20px', flexShrink: 0, overflow: 'hidden',
       fontFamily: TILE_FONT,
     }}>
