@@ -26,6 +26,7 @@ import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
 import { useKiteStatus } from '../hooks/useKite';
 import type { NavItem } from '../components/kite/KiteLayout';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
+import { SterlingLogo } from '../components/SterlingLogo';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
 
@@ -211,7 +212,7 @@ export function SimpleTerminal() {
           height: 44, padding: '0 20px',
         }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, marginRight: 16, userSelect: 'none' }}>
-            <img src="/logo.svg?v=3" alt="Sterling" width={24} height={24} style={{ display: 'block', borderRadius: 6 }} draggable={false} />
+            <SterlingLogo size={24} />
             <span style={{
               fontSize: 17, fontWeight: 800, letterSpacing: '0.18em',
               color: 'var(--t-bright)', fontFamily: 'inherit',
