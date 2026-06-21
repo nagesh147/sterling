@@ -76,9 +76,10 @@ interface Props {
   data: EngineDetailResponse;
   onBuy?: (leg: OptionDetail) => void;
   updatedAt?: number; // ms epoch of the snapshot these greeks came from
+  headless?: boolean; // when true, omit the outer card border + title (a wrapper supplies them)
 }
 
-export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
+export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Props) {
   // Natural "1R" unit = distance from spot to the signal's stop. Falls back to
   // ~0.5% of spot when no stop is available.
   const spot = data.spot_now || data.spot_at_trigger;
@@ -158,16 +159,10 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
       ];
 
   return (
-    <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}>
+    <div style={headless ? { overflow: 'hidden', background: k.bg } : { border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}>
       <div style={{ padding: '13px 20px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>
-          <span style={{ fontSize: 11, color: k.dim, lineHeight: 1.5 }}>
-            Live greeks · {data.option_type} · {data.underlying} {data.spot_now ? data.spot_now.toFixed(0) : ''} ·
-            {hasStop
-              ? ` stop ${data.stop_loss.toFixed(0)} (${stopDist} pts = 1R)`
-              : ` no stop set — showing a ${stopDist}-pt move`}
-          </span>
+          {!headless && <span style={{ fontSize: 14, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>}
           {updatedAt && (
             <span title="These greeks are a snapshot. The detail auto-refreshes every 15s; reopening always re-fetches."
               style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -289,7 +284,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       fontWeight: 500, fontSize: 11,
                       color: r.rr == null ? k.dim : r.rr >= 2 ? k.green : r.rr >= 1 ? k.amber : k.red,
                     }}>
-                      {r.rr == null ? '—' : `${r.rr.toFixed(1)}:1`}
+                      {r.rr == null ? '—' : Math.abs(r.rr - 1) < 0.05 ? '1' : `${r.rr.toFixed(1)}:1`}
                     </span>
                   </td>
                   <td style={td('left')}>
@@ -347,7 +342,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
 // vs time value (theta eats this daily). The ✝ marks the best-R:R strike, picked
 // with the same shared maths the calculator and the Option-legs list use.
 
-export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
+export function PremiumBreakdown({ data, headless }: { data: EngineDetailResponse; headless?: boolean }) {
   const spot = data.spot_now || data.spot_at_trigger;
 
   // Live quotes for direction-coloured strike labels (same as the Option legs).
@@ -388,11 +383,13 @@ export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
   if (!rows.length) return null;
 
   return (
-    <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.bg, borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <span>Premium breakdown</span>
-        <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>intrinsic vs time value (approximate)</span>
-      </div>
+    <div style={headless ? { overflow: 'hidden' } : { border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      {!headless && (
+        <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.bg, borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+          <span>Premium breakdown</span>
+          <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>intrinsic vs time value (approximate)</span>
+        </div>
+      )}
       <div style={{ padding: '4px 18px 14px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>

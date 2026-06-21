@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
 import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useTripleSupertrend';
 import type { DepthLevel, OptionDetail } from '../../types/kiteEngine';
@@ -34,7 +34,7 @@ function ist(ms: number): string {
 // Compact stat used in the trigger-context strip; even spacing + thin dividers.
 function StripStat({ label, value, color, title }: { label: string; value: string; color?: string; title?: string }) {
   return (
-    <div title={title} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 22px', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+    <div title={title} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 22px', justifyContent: 'center', alignItems: 'flex-start', textAlign: 'left' }}>
       <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>{label}</span>
       <span style={{ fontSize: 14, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
@@ -115,7 +115,6 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
               ▲
             </span>
           )}
-          <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>
         </div>
         
         {!showDepth && (
@@ -170,6 +169,40 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
   );
 }
 
+// A detail section that can be collapsed (click header) and reordered (drag the
+// header onto another section). The header is the drag source; the whole card is
+// the drop target, so the body stays fully interactive.
+function CollapsibleCard({ title, collapsed, onToggle, onDragStart, onDragOver, onDrop, children }: {
+  title: string;
+  collapsed: boolean;
+  onToggle: () => void;
+  onDragStart: () => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      style={{ marginTop: 12, border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}
+    >
+      <div
+        draggable
+        onDragStart={onDragStart}
+        onClick={onToggle}
+        title={collapsed ? 'Expand · drag to reorder' : 'Collapse · drag to reorder'}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', userSelect: 'none', background: k.bg, borderBottom: collapsed ? 'none' : `1px solid ${k.border}` }}
+      >
+        <span style={{ cursor: 'grab', color: k.dim, fontSize: 13, lineHeight: 1, letterSpacing: -1 }}>⠿</span>
+        <span style={{ display: 'inline-block', transform: collapsed ? 'none' : 'rotate(90deg)', transition: 'transform .15s', color: k.dim, fontSize: 11 }}>▸</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase' }}>{title}</span>
+      </div>
+      {!collapsed && children}
+    </div>
+  );
+}
+
 export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onShowSetup, onShowOptionChain }: Props) {
   const { data, isLoading, isError, dataUpdatedAt } = useEngineDetail(token, timestamp_ms, true);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -186,8 +219,32 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
     } catch { /* ignore */ }
   };
 
+  // Collapsible + reorderable detail sections (order + collapsed state persisted).
+  const [sectionOrder, setSectionOrder] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('kite_detail_section_order') || 'null');
+      if (Array.isArray(saved) && saved.length === 3 && ['calculator', 'breakdown', 'legs'].every((x) => saved.includes(x))) return saved;
+    } catch { /* ignore */ }
+    return ['calculator', 'breakdown', 'legs'];
+  });
+  const [sectionCollapsed, setSectionCollapsed] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('kite_detail_section_collapsed') || '{}'); } catch { return {}; }
+  });
+  const dragSection = useRef<string | null>(null);
+  useEffect(() => { localStorage.setItem('kite_detail_section_order', JSON.stringify(sectionOrder)); }, [sectionOrder]);
+  useEffect(() => { localStorage.setItem('kite_detail_section_collapsed', JSON.stringify(sectionCollapsed)); }, [sectionCollapsed]);
+  const toggleSection = (id: string) => setSectionCollapsed((c) => ({ ...c, [id]: !c[id] }));
+  const reorderSection = (from: string, to: string) => setSectionOrder((order) => {
+    if (from === to) return order;
+    const next = order.filter((x) => x !== from);
+    const idx = next.indexOf(to);
+    if (idx < 0) return order;
+    next.splice(idx, 0, from);
+    return next;
+  });
+
   const uExch = data?.exchange === 'BFO' ? 'BSE' : 'NSE';
-  const { data: quotes } = useKiteQuote(data ? [`${uExch}:${underlying}`] : [], false);
+  const { data: quotes } = useKiteQuote(data ? [`${uExch}:${underlying}`] : [], !!data);
   const uQ = data ? quotes?.[`${uExch}:${underlying}`] : undefined;
 
   const bull = data?.regime === 'BULL';
@@ -226,15 +283,23 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
         
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: k.text }}>{underlying}</span>
-          
-          {uQ && (
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, fontSize: 13 }}>
-              <span style={{ fontWeight: 500, color: uQ.net_change && uQ.net_change >= 0 ? k.green : k.red }}>{uQ.last_price?.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) ?? data?.spot_now.toFixed(2)}</span>
-              {uQ.net_change != null && <span style={{ fontSize: 12, color: k.dim, marginLeft: 2 }}>{uQ.net_change.toFixed(2)}</span>}
-              {uQ.pct_change != null && <span style={{ fontSize: 12, color: k.dim }}>{uQ.pct_change.toFixed(2)}%</span>}
-            </div>
-          )}
-          
+
+          {(() => {
+            const last = uQ?.last_price ?? (data?.spot_now || null);
+            if (last == null) return null;
+            const base = uQ?.ohlc?.close;
+            const abs = uQ?.net_change ?? (base ? last - base : null);
+            const pct = uQ?.pct_change ?? (abs != null && base ? (abs / base) * 100 : null);
+            const col = abs == null ? k.text : abs >= 0 ? k.green : k.red;
+            return (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, fontSize: 13 }}>
+                <span style={{ fontWeight: 500, color: col }}>{last.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                {abs != null && <span style={{ fontSize: 12, color: col }}>{abs >= 0 ? '+' : ''}{abs.toFixed(2)}</span>}
+                {pct != null && <span style={{ fontSize: 12, color: col }}>({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)</span>}
+              </div>
+            );
+          })()}
+
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -274,54 +339,69 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             );
           })()}
 
-          {/* Trade impact calculator — pick the best strike with live greeks */}
-          <SignalImpactCalculator
-            data={data}
-            updatedAt={dataUpdatedAt}
-            onBuy={(leg) => openOrderWindow({
-              symbol: leg.option_symbol,
-              exchange: data.exchange,
-              initialSide: 'BUY',
-              lotSize: leg.lot_size || 1,
-              lastPrice: leg.last_price || 0,
-            })}
-          />
-
-          {/* premium breakdown — its own card, separate from the calculator */}
-          <div style={{ marginTop: 12 }}>
-            <PremiumBreakdown data={data} />
-          </div>
-
-          {/* option legs — own section, spaced clear of the calculator above */}
-          <div style={{ marginTop: 12, border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
-              Option legs
-            </div>
-            {data.options.length === 0 ? (
-              <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>No option legs resolved (no liquid ATM/ITM contract).</div>
-            ) : (
-              (() => {
-                // ✝ BEST R:R — same logic as the impact calculator, applied to the leg list.
-                const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
-                let bestSym: string | null = null;
-                let bestVal = -Infinity;
-                let bestDeltaSym: string | null = null;
-                let bestDeltaVal = -Infinity;
-                for (const leg of data.options) {
-                  const premium = leg.last_price || 0;
-                  if (premium <= 0) continue;
-                  const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
-                  const v = rrScore(rr, effPct);
-                  if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
-                  const ad = Math.abs(leg.delta);
-                  if (ad > bestDeltaVal) { bestDeltaVal = ad; bestDeltaSym = leg.option_symbol; }
-                }
-                return data.options.map((leg) => (
-                  <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
-                ));
-              })()
-            )}
-          </div>
+          {/* Collapsible + reorderable detail sections (drag a header to reorder). */}
+          {sectionOrder.map((id) => {
+            const cardProps = {
+              collapsed: !!sectionCollapsed[id],
+              onToggle: () => toggleSection(id),
+              onDragStart: () => { dragSection.current = id; },
+              onDragOver: (e: React.DragEvent) => e.preventDefault(),
+              onDrop: () => { if (dragSection.current) reorderSection(dragSection.current, id); dragSection.current = null; },
+            };
+            if (id === 'calculator') {
+              return (
+                <CollapsibleCard key={id} title="Trade Impact Calculator" {...cardProps}>
+                  <SignalImpactCalculator
+                    headless
+                    data={data}
+                    updatedAt={dataUpdatedAt}
+                    onBuy={(leg) => openOrderWindow({
+                      symbol: leg.option_symbol,
+                      exchange: data.exchange,
+                      initialSide: 'BUY',
+                      lotSize: leg.lot_size || 1,
+                      lastPrice: leg.last_price || 0,
+                    })}
+                  />
+                </CollapsibleCard>
+              );
+            }
+            if (id === 'breakdown') {
+              return (
+                <CollapsibleCard key={id} title="Premium breakdown" {...cardProps}>
+                  <PremiumBreakdown headless data={data} />
+                </CollapsibleCard>
+              );
+            }
+            return (
+              <CollapsibleCard key={id} title="Option legs" {...cardProps}>
+                {data.options.length === 0 ? (
+                  <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>No option legs resolved (no liquid ATM/ITM contract).</div>
+                ) : (
+                  (() => {
+                    // ✝ BEST R:R — same logic as the impact calculator, applied to the leg list.
+                    const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
+                    let bestSym: string | null = null;
+                    let bestVal = -Infinity;
+                    let bestDeltaSym: string | null = null;
+                    let bestDeltaVal = -Infinity;
+                    for (const leg of data.options) {
+                      const premium = leg.last_price || 0;
+                      if (premium <= 0) continue;
+                      const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
+                      const v = rrScore(rr, effPct);
+                      if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
+                      const ad = Math.abs(leg.delta);
+                      if (ad > bestDeltaVal) { bestDeltaVal = ad; bestDeltaSym = leg.option_symbol; }
+                    }
+                    return data.options.map((leg) => (
+                      <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
+                    ));
+                  })()
+                )}
+              </CollapsibleCard>
+            );
+          })}
           <div style={{ fontSize: 10, color: k.dim, marginTop: 18, lineHeight: 1.7 }}>
             Greeks are Black-Scholes from live IV (or backed out of last price when the market is closed). BUY/SELL place real MARKET orders on your Kite account.
           </div>
