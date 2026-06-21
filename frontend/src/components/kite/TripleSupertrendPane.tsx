@@ -1051,9 +1051,9 @@ function SettingRow({ label, hint, children, align = 'center', full = false }: {
   align?: 'center' | 'top'; full?: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${k.border}` }}>
-      <span title={hint} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.dim, width: 62, flexShrink: 0, lineHeight: 1.4, paddingTop: align === 'top' ? 1 : 0 }}>{label}</span>
-      <div style={{ flex: full ? 1 : undefined, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>{children}</div>
+    <div style={{ display: 'flex', alignItems: align === 'top' ? 'flex-start' : 'center', gap: 10, padding: '13px 16px', borderBottom: `1px solid ${k.border}` }}>
+      <span title={hint} style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.dim, width: 62, flexShrink: 0, lineHeight: 1.4, paddingTop: align === 'top' ? 2 : 0 }}>{label}</span>
+      <div style={{ flex: full ? 1 : undefined, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 7 }}>{children}</div>
     </div>
   );
 }
@@ -1866,7 +1866,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
               />
             </SettingRow>
-            <div style={{ padding: '8px 16px', fontSize: 10, color: k.dim, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+            <div style={{ padding: '11px 16px', fontSize: 10, color: k.dim, display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <span style={{ opacity: 0.6 }}>ℹ</span> {scanCost(cfg)}
             </div>
           </>
@@ -1925,7 +1925,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`)}
               />
             </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
               onClick={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)}>
               <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => {}} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1933,7 +1933,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Exit on slow-ST flip once comfortably in profit.</span>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
               onClick={toggleAuto}>
               <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={() => {}} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1950,7 +1950,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Stop mode: ${v}`)}
               />
             </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
               onClick={() => patch({ risk_sizing: !(cfg.risk_sizing ?? true) }, `Risk sizing ${!(cfg.risk_sizing ?? true) ? 'ON' : 'OFF'}`)}>
               <Switch on={cfg.risk_sizing ?? true} color={k.blue} label="Risk-based sizing" onChange={() => {}} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1966,7 +1966,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                 </label>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 16px', background: kiteLive ? tint(k.green, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', background: kiteLive ? tint(k.green, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
               onClick={toggleKiteLive}>
               <Switch on={kiteLive} color={k.green} label="Kite live" onChange={() => {}} />
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -2015,7 +2015,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                       <div style={{ flex: 1 }} />
                     </div>
                     {/* Scrollable content — capped so it never takes >40% of the panel */}
-                    <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+                    <div style={{ maxHeight: 360, overflowY: 'auto', paddingBottom: 4 }}>
                       {settingsTab === 'scan' && scanGroup}
                       {settingsTab === 'universe' && universeGroup}
                       {settingsTab === 'execution' && executionGroup}
