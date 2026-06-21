@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useKiteQuote } from '../../hooks/useKite';
+import { useCandles } from '../../hooks/useCandles';
 import { useTickerPins } from '../../store/useTickerPins';
 import { InstrumentLabel } from './InstrumentLabel';
 import { k } from '../../styles/kiteUI';
@@ -71,15 +72,30 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const up = (abs ?? 0) >= 0;
   const chgColor = abs == null ? 'var(--t-dim)' : up ? UP : DOWN;
 
-  let series = pushHist(sym, close ?? open, last);
-  // The accumulated tick buffer can hold a single point (flat/closed market, or a
-  // brand-new tile), which left the graph blank. Always fall back to a 2-point
-  // baseline drawn from the day's open/prev-close → live price so a line shows.
-  if (series.length < 2) {
-    const base = close ?? open;
-    if (base != null && base > 0 && last != null && last > 0) series = [base, last];
-    else if (last != null && last > 0) series = [last, last];
-  }
+  // Real intraday shape: drive the sparkline from 5-minute candles of the latest
+  // trading day. This shows a proper curve (not a 2-point slanted line) and, at
+  // EOD / when the market is offline, renders the complete day's chart. The live
+  // tick is appended so the curve still tracks the latest price between candle
+  // refreshes. Falls back to the accumulated tick buffer if candles aren't ready.
+  const { data: candles } = useCandles(sym, '5m', 90);
+  const series = useMemo(() => {
+    const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);
+    if (candles && candles.length > 1) {
+      const lastDay = new Date(toMs(candles[candles.length - 1].time)).toDateString();
+      const dayBars = candles.filter((c) => new Date(toMs(c.time)).toDateString() === lastDay);
+      const pts = (dayBars.length > 1 ? dayBars : candles).map((c) => c.close).filter((v) => v > 0);
+      if (last != null && last > 0 && pts.length && pts[pts.length - 1] !== last) pts.push(last);
+      if (pts.length > 1) return pts;
+    }
+    // Fallback: accumulated live ticks, else a flat baseline so something renders.
+    let s = pushHist(sym, close ?? open, last);
+    if (s.length < 2) {
+      const base = close ?? open;
+      if (base != null && base > 0 && last != null && last > 0) s = [base, last];
+      else if (last != null && last > 0) s = [last, last];
+    }
+    return s;
+  }, [candles, last, close, open, sym]);
 
   useEffect(() => {
     const prev = prevRef.current;
