@@ -103,9 +103,15 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
   // Recompute when the stop distance changes (new signal selected).
   React.useEffect(() => { setMove(stopDist); }, [stopDist]);
 
+  // Risk reference distance: the actual stop when one is set (risk-to-SL is then
+  // fixed, as it should be — your stop doesn't move with your target). With NO
+  // stop, risk against the SAME move magnitude (a symmetric adverse move) so the
+  // Risk and R:R columns scale with the move instead of sitting on an arbitrary
+  // constant default.
+  const riskDist = hasStop ? stopDist : move;
   const rows = useMemo(
-    () => data.options.map((leg) => computeRow(leg, move, stopDist)),
-    [data.options, move, stopDist],
+    () => data.options.map((leg) => computeRow(leg, move, riskDist)),
+    [data.options, move, riskDist],
   );
 
   // Recommend the strike with the best reward:risk for this move. Ties/no-stop
@@ -213,15 +219,28 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
 
       {/* Per-strike comparison */}
       <div style={{ overflowX: 'auto', padding: '4px 0' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        {/* tableLayout: fixed + explicit column widths keep the columns from
+            jumping when the move value changes the cell/header text widths. */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '26%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '6%' }} />
+            <col style={{ width: '7%' }} />
+          </colgroup>
           <thead>
             <tr style={{ color: k.dim, fontSize: 10, borderBottom: `1px solid ${k.border}` }}>
               <th style={th('left')}>Strike</th>
               <th style={th('right')} title="Last traded premium and your cost per lot × lots">Cost</th>
               <th style={th('right')} title="Black-Scholes delta ≈ probability of finishing in-the-money">δ / ITM%</th>
               <th style={th('right')} title={`Projected profit if ${data.underlying} moves ${move} pts ${dirWord}`}>If +{move}pts</th>
-              <th style={th('right')} title="Premium lost per lot if the underlying runs to the signal's stop">Risk→SL</th>
-              <th style={th('right')} title="Reward : risk for this move vs the stop">R:R</th>
+              <th style={th('right')} title={hasStop ? "Premium lost per lot if the underlying runs to the signal's stop" : `Premium lost per lot if the underlying moves ${move} pts against you (no stop set)`}>{hasStop ? 'Risk→SL' : 'Risk↓'}</th>
+              <th style={th('right')} title={hasStop ? 'Reward : risk for this move vs the stop' : `Reward : risk for a ${move}-pt move either way`}>R:R</th>
               <th style={th('right')} title="Premium lost to time decay per day if nothing moves">θ/day</th>
               <th style={th('right')} title="Points the underlying must move just to recover the premium">B/E</th>
               <th style={th('right')} />
@@ -237,7 +256,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
               return (
                 <tr key={r.leg.option_symbol}
                   style={{ borderBottom: `1px solid ${k.border}`, background: 'transparent', height: 41 }}>
-                  <td style={td('left')} title={`LTP ${r.premium.toFixed(2)} · ${r.lot}/lot · ${r.leg.dte}d to expiry`}>
+                  <td style={{ ...td('left'), overflow: 'hidden', textOverflow: 'ellipsis' }} title={`LTP ${r.premium.toFixed(2)} · ${r.lot}/lot · ${r.leg.dte}d to expiry`}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                       <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>
                         {r.leg.moneyness}
@@ -310,7 +329,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                 The <strong style={{ color: k.text }}>{rec.leg.moneyness} {rec.leg.strike}</strong> gives the best
                 reward-to-risk here — a {move}-pt move {dirWord} turns ~{inr(rec.costPerLot * lotsMult)} of premium into
                 <strong style={{ color: k.green }}> +{inr(rec.projGainPerLot * lotsMult)}</strong>, against
-                <strong style={{ color: k.red }}> −{inr(rec.riskToStopPerLot * lotsMult)}</strong> if it hits the stop instead.
+                <strong style={{ color: k.red }}> −{inr(rec.riskToStopPerLot * lotsMult)}</strong> {hasStop ? 'if it hits the stop instead' : `if it moves ${move} pts against you instead`}.
                 {rec.probItm < 40 && ' Low delta — it needs the move to come quickly before theta bites.'}
                 {rec.probItm >= 60 && ' Higher delta — pricier, but behaves closer to the underlying with less time decay.'}
                 <br />Figures are first-order greeks (with a gamma boost on big moves); exit IV and spread will shift the real fill.
