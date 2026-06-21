@@ -27,11 +27,20 @@ interface Row {
 // badge always means the same thing: among a signal's option legs, the strike
 // with the best reward:risk for a 1R move (ties fall back to capital efficiency).
 
-/** 1R unit = distance from spot to the signal stop; falls back to ~0.5% of spot. */
+/** A sane default move when there is no usable stop: ~1% of spot, clamped to a
+ *  clean 10–100 pt band (e.g. SENSEX 76,803 → 100, not the full index level). */
+export function defaultMove(spot: number): number {
+  return Math.max(10, Math.min(100, Math.round((spot || 0) * 0.01)));
+}
+
+/** 1R unit = distance from spot to the signal stop. A missing/zero stop (where
+ *  `d` collapses to the whole spot level) or an absurdly far one is meaningless
+ *  as 1R, so we fall back to a clean default move instead. */
 export function stopDistance(spot: number, stop: number): number {
-  const d = Math.abs((spot || 0) - (stop || 0));
-  if (d > 0) return Math.round(d);
-  return Math.max(10, Math.round((spot || 0) * 0.005));
+  const s = spot || 0;
+  const d = Math.abs(s - (stop || 0));
+  if (stop > 0 && d > 0 && d <= s * 0.5) return Math.round(d);
+  return defaultMove(s);
 }
 
 /** Reward:risk + capital efficiency for one leg given a 1R move (= stopDist). */
@@ -93,11 +102,12 @@ interface Props {
 export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
   // Natural "1R" unit = distance from spot to the signal's stop. Falls back to
   // ~0.5% of spot when no stop is available.
-  const stopDist = useMemo(() => {
-    const d = Math.abs((data.spot_now || data.spot_at_trigger) - data.stop_loss);
-    if (d > 0) return Math.round(d);
-    return Math.max(10, Math.round((data.spot_now || data.spot_at_trigger) * 0.005));
-  }, [data]);
+  const spot = data.spot_now || data.spot_at_trigger;
+  const stopDist = useMemo(
+    () => stopDistance(spot, data.stop_loss),
+    [spot, data.stop_loss],
+  );
+  const hasStop = data.stop_loss > 0 && stopDist <= spot * 0.5;
 
   const [move, setMove] = useState<number>(stopDist);
   const [lotsMult, setLotsMult] = useState<number>(1);
@@ -125,12 +135,19 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
   if (!data.options.length) return null;
 
   const dirWord = data.direction === 'long' ? 'up' : 'down';
-  const quickMoves: { label: string; v: number }[] = [
-    { label: '½R', v: Math.round(stopDist / 2) },
-    { label: '1R', v: stopDist },
-    { label: '2R', v: stopDist * 2 },
-    { label: '3R', v: stopDist * 3 },
-  ];
+  const quickMoves: { label: string; v: number }[] = hasStop
+    ? [
+        { label: '½R', v: Math.round(stopDist / 2) },
+        { label: '1R', v: stopDist },
+        { label: '2R', v: stopDist * 2 },
+        { label: '3R', v: stopDist * 3 },
+      ]
+    : [
+        { label: '50', v: 50 },
+        { label: '100', v: 100 },
+        { label: '200', v: 200 },
+        { label: '300', v: 300 },
+      ];
 
   return (
     <div style={{ border: `1px solid ${k.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
@@ -139,7 +156,9 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           <span style={{ fontSize: 13, fontWeight: 700, color: k.text }}>Trade Impact Calculator</span>
           <span style={{ fontSize: 11, color: k.dim }}>
             Live greeks · {data.option_type} · {data.underlying} {data.spot_now ? data.spot_now.toFixed(0) : ''} ·
-            stop {data.stop_loss.toFixed(0)} ({stopDist} pts = 1R)
+            {hasStop
+              ? ` stop ${data.stop_loss.toFixed(0)} (${stopDist} pts = 1R)`
+              : ` no stop set — showing a ${stopDist}-pt move`}
           </span>
           {updatedAt && (
             <span title="These greeks are a snapshot. The detail auto-refreshes every 15s; reopening always re-fetches."
@@ -269,6 +288,65 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Premium breakdown — recommended strike, intrinsic vs time value (graphical) */}
+      {(() => {
+        const rec = rows.find((r) => r.leg.option_symbol === recommended);
+        if (!rec) return null;
+        const intrinsic = data.option_type === 'CE'
+          ? Math.max(0, spot - rec.leg.strike)
+          : Math.max(0, rec.leg.strike - spot);
+        const tv = Math.max(0, rec.premium - intrinsic);
+        const intrinsicFrac = rec.premium > 0 ? intrinsic / rec.premium : 0;
+        return (
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${k.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
+              PREMIUM BREAKDOWN (APPROXIMATE) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
+            </div>
+            <div style={{ height: 14, borderRadius: 7, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
+              <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
+                style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 4 : 0, transition: 'width .3s' }} />
+              <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
+                style={{ flex: 1, background: k.orange, opacity: 0.8 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 16, fontSize: 10, flexWrap: 'wrap' }}>
+              <span style={{ color: k.green }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</span>
+              <span style={{ color: k.orange }}>■ Time value ₹{tv.toFixed(0)} <span style={{ color: k.dim }}>— theta decays this daily</span></span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Same move, every strike compared — graphical bars */}
+      {(() => {
+        const maxGain = Math.max(...rows.map((r) => r.projGainPerLot * lotsMult), 1);
+        return (
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${k.border}`, background: k.surface }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
+              SAME {move}-PT MOVE — EVERY STRIKE COMPARED
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {rows.map((r) => {
+                const gain = r.projGainPerLot * lotsMult;
+                const isRec = r.leg.option_symbol === recommended;
+                const w = (gain / maxGain) * 100;
+                return (
+                  <div key={r.leg.option_symbol}
+                    style={{ display: 'grid', gridTemplateColumns: '96px 1fr 78px', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, fontWeight: isRec ? 700 : 500, color: isRec ? k.green : k.text }}>
+                      {r.leg.moneyness} {r.leg.strike}
+                    </span>
+                    <div style={{ height: 12, background: k.bg, borderRadius: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${w}%`, height: '100%', background: isRec ? k.green : k.blue, opacity: isRec ? 1 : 0.5, transition: 'width .3s' }} />
+                    </div>
+                    <span style={{ fontSize: 10, textAlign: 'right', color: k.green, fontWeight: 600 }}>+{inr(gain)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Plain-English read of the recommended strike */}
       {(() => {
