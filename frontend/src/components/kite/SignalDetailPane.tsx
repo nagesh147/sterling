@@ -289,28 +289,33 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             })}
           />
 
-          {/* option legs */}
-          {data.options.length === 0 ? (
-            <div style={{ color: k.dim, fontSize: 12 }}>No option legs resolved (no liquid ATM/ITM contract).</div>
-          ) : (
-            (() => {
-              // ★ BEST R:R — same logic as the impact calculator, applied to the leg list.
-              const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
-              let bestSym: string | null = null;
-              let bestVal = -Infinity;
-              for (const leg of data.options) {
-                const premium = leg.last_price || 0;
-                if (premium <= 0) continue;
-                const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
-                const v = rrScore(rr, effPct);
-                if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
-              }
-              return data.options.map((leg) => (
-                <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} />
-              ));
-            })()
-          )}
-          <div style={{ fontSize: 10, color: k.dim, marginTop: 8 }}>
+          {/* option legs — own section, spaced clear of the calculator above */}
+          <div style={{ marginTop: 20, border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.4, textTransform: 'uppercase', padding: '10px 16px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+              Option legs
+            </div>
+            {data.options.length === 0 ? (
+              <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>No option legs resolved (no liquid ATM/ITM contract).</div>
+            ) : (
+              (() => {
+                // ★ BEST R:R — same logic as the impact calculator, applied to the leg list.
+                const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
+                let bestSym: string | null = null;
+                let bestVal = -Infinity;
+                for (const leg of data.options) {
+                  const premium = leg.last_price || 0;
+                  if (premium <= 0) continue;
+                  const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
+                  const v = rrScore(rr, effPct);
+                  if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
+                }
+                return data.options.map((leg) => (
+                  <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} />
+                ));
+              })()
+            )}
+          </div>
+          <div style={{ fontSize: 10, color: k.dim, marginTop: 14, lineHeight: 1.6 }}>
             Greeks are Black-Scholes from live IV (or backed out of last price when the market is closed). BUY/SELL place real MARKET orders on your Kite account.
           </div>
         </div>
