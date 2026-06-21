@@ -160,7 +160,15 @@ function ProgressBar({ label, t }: { label?: string; t: typeof THEME.dark }) {
 // component. Without this, a remount would reset mode to 'normal' and the terminal
 // would render full-height inside the minimized slot — looking like it went full
 // screen right after the user clicked minimize.
-let lastTerminalMode: 'minimized' | 'normal' | 'partial' | 'full' = 'normal';
+// It is ALSO mirrored to localStorage (key below) so the minimize/maximize state
+// survives a full page reload, not just remounts. KiteLayout reads the same key.
+export const TERMINAL_MODE_KEY = 'kite_terminal_mode';
+type TerminalMode = 'minimized' | 'normal' | 'partial' | 'full';
+function readTerminalMode(): TerminalMode {
+  const v = localStorage.getItem(TERMINAL_MODE_KEY);
+  return v === 'minimized' || v === 'partial' || v === 'full' || v === 'normal' ? v : 'normal';
+}
+let lastTerminalMode: TerminalMode = readTerminalMode();
 
 export function EngineTerminal() {
   const { data } = useEngineActivity();
@@ -178,12 +186,13 @@ export function EngineTerminal() {
 
   const setMode = (m: 'minimized' | 'normal' | 'partial' | 'full') => {
     lastTerminalMode = m;
+    localStorage.setItem(TERMINAL_MODE_KEY, m);
     setModeState(m);
     window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: m }));
   };
 
   useEffect(() => {
-    const cb = (e: any) => { lastTerminalMode = e.detail; setModeState(e.detail); };
+    const cb = (e: any) => { lastTerminalMode = e.detail; localStorage.setItem(TERMINAL_MODE_KEY, e.detail); setModeState(e.detail); };
     window.addEventListener('kite-terminal-mode', cb);
     return () => window.removeEventListener('kite-terminal-mode', cb);
   }, []);

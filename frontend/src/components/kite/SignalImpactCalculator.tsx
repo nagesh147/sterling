@@ -1,7 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { k } from '../../styles/kiteUI';
+import { k, tint } from '../../styles/kiteUI';
 import type { EngineDetailResponse, OptionDetail } from '../../types/kiteEngine';
-import { stopDistance } from './impactMath';
+import { stopDistance, computeLegRR, rrScore } from './impactMath';
+import { InstrumentLabel } from './InstrumentLabel';
+import { useKiteQuote } from '../../hooks/useKite';
+import { useKiteSettings } from '../../store/useKiteSettings';
+
+// Strike-label colour by live price direction — mirrors the Option-legs rows,
+// the Triple SuperTrend table, and the watchlist (green up / red down; grey when
+// direction colours are off or no live quote yet).
+function dirColor(q: any, chgType: string, showDir: boolean): string {
+  if (!q) return k.dim;
+  const base = chgType === 'close' ? q.ohlc?.close : q.ohlc?.open;
+  if (base) return showDir ? (q.last_price - base >= 0 ? k.green : k.red) : k.dim;
+  if (q.net_change != null) return showDir ? (q.net_change >= 0 ? k.green : k.red) : k.dim;
+  return k.dim;
+}
 
 // ─── Per-strike impact maths ───────────────────────────────────────────────────
 // All figures are first-order (delta) with a gamma correction for larger moves,
@@ -76,6 +90,15 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
 
   const [move, setMove] = useState<number>(stopDist);
   const [lotsMult, setLotsMult] = useState<number>(1);
+  const [showRead, setShowRead] = useState<boolean>(false);
+
+  // Live quotes for direction-coloured strike labels (same as the Option legs).
+  const s = useKiteSettings();
+  const legSyms = useMemo(
+    () => data.options.map((o) => `${data.exchange}:${o.option_symbol}`),
+    [data.options, data.exchange],
+  );
+  const { data: legQuotes } = useKiteQuote(legSyms, legSyms.length > 0);
 
   // Recompute when the stop distance changes (new signal selected).
   React.useEffect(() => { setMove(stopDist); }, [stopDist]);
@@ -117,15 +140,16 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         { label: '3R', v: stopDist * 3 },
       ]
     : [
+        { label: '10', v: 10 },
+        { label: '25', v: 25 },
         { label: '50', v: 50 },
+        { label: '75', v: 75 },
         { label: '100', v: 100 },
-        { label: '200', v: 200 },
-        { label: '300', v: 300 },
       ];
 
   return (
-    <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, marginBottom: 16, overflow: 'hidden', background: k.bg }}>
-      <div style={{ padding: '18px 20px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+    <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}>
+      <div style={{ padding: '13px 20px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 14, color: k.text, letterSpacing: -0.2 }}>Trade Impact Calculator</span>
           <span style={{ fontSize: 11, color: k.dim, lineHeight: 1.5 }}>
@@ -143,8 +167,8 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           )}
         </div>
 
-        {/* Move + lots controls — one aligned row with generous spacing */}
-        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginTop: 16 }}>
+        {/* Move + lots controls — one aligned row */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 11 }}>
           <span style={{ fontSize: 10, color: k.dim, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase' }}>
             IF {data.underlying} MOVES {dirWord.toUpperCase()}
           </span>
@@ -208,23 +232,23 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
               const totalTheta = r.thetaPerLotDay * lotsMult;
               return (
                 <tr key={r.leg.option_symbol}
-                  style={{ borderBottom: `1px solid ${k.border}`, background: isRec ? 'rgba(76,175,80,0.07)' : 'transparent' }}>
+                  style={{ borderBottom: `1px solid ${k.border}`, background: 'transparent' }}>
                   <td style={td('left')}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 700, background: 'rgba(240,100,40,0.12)', color: k.orange }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>
                         {r.leg.moneyness}
                       </span>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{r.leg.strike}</span>
+                      <span style={{ fontSize: 13, color: dirColor(legQuotes?.[`${data.exchange}:${r.leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={`${data.exchange}:${r.leg.option_symbol}`} /></span>
                       {isRec && (
                         <span title="Best reward-to-risk for this move"
-                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '2px 7px', borderRadius: 4, letterSpacing: 0.3 }}>
-                          ✝ BEST R:R
+                          style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
+                          ✝
                         </span>
                       )}
                       {r.leg.option_symbol === bestDeltaSym && (
                         <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
-                          style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '2px 7px', borderRadius: 4, letterSpacing: 0.3 }}>
-                          ▲ BEST Δ
+                          style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
+                          ▲
                         </span>
                       )}
                     </div>
@@ -276,84 +300,120 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
         </table>
       </div>
 
-      {/* Gutter separating the calculator table from the breakdown panels */}
-      <div style={{ height: 16, background: k.surface, borderTop: `1px solid ${k.border}`, borderBottom: `1px solid ${k.border}` }} />
-
-      {/* Premium breakdown — recommended strike, intrinsic vs time value (graphical) */}
-      {(() => {
-        const rec = rows.find((r) => r.leg.option_symbol === recommended);
-        if (!rec) return null;
-        const intrinsic = data.option_type === 'CE'
-          ? Math.max(0, spot - rec.leg.strike)
-          : Math.max(0, rec.leg.strike - spot);
-        const tv = Math.max(0, rec.premium - intrinsic);
-        const intrinsicFrac = rec.premium > 0 ? intrinsic / rec.premium : 0;
-        return (
-          <div style={{ padding: '16px 20px' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 12, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-              Premium breakdown (approximate) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
-            </div>
-            <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', display: 'flex', marginBottom: 10 }}>
-              <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
-                style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
-              <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
-                style={{ flex: 1, background: k.orange, opacity: 0.85 }} />
-            </div>
-            <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
-              <span style={{ color: k.green, fontWeight: 600 }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</span>
-              <span style={{ color: k.orange, fontWeight: 600 }}>■ Time value ₹{tv.toFixed(0)} <span style={{ color: k.dim, fontWeight: 400 }}>— theta decays this daily</span></span>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Same move, every strike compared — graphical bars */}
-      {(() => {
-        const maxGain = Math.max(...rows.map((r) => r.projGainPerLot * lotsMult), 1);
-        return (
-          <div style={{ padding: '16px 20px', borderTop: `1px solid ${k.border}`, background: k.surface }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 14, letterSpacing: 0.4, textTransform: 'uppercase' }}>
-              Same {move}-pt move — every strike compared
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {rows.map((r) => {
-                const gain = r.projGainPerLot * lotsMult;
-                const isRec = r.leg.option_symbol === recommended;
-                const w = (gain / maxGain) * 100;
-                return (
-                  <div key={r.leg.option_symbol}
-                    style={{ display: 'grid', gridTemplateColumns: '110px 1fr 84px', gap: 12, alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, fontWeight: isRec ? 700 : 500, color: isRec ? k.green : k.text }}>
-                      {r.leg.moneyness} {r.leg.strike}
-                    </span>
-                    <div style={{ height: 3, background: k.border, borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ width: `${w}%`, height: '100%', background: isRec ? k.green : k.blue, opacity: isRec ? 1 : 0.55, transition: 'width .3s' }} />
-                    </div>
-                    <span style={{ fontSize: 11, textAlign: 'right', color: k.green, fontWeight: 700 }}>+{inr(gain)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Plain-English read of the recommended strike */}
+      {/* Plain-English read of the recommended strike — collapsed behind a toggle */}
       {(() => {
         const rec = rows.find((r) => r.leg.option_symbol === recommended);
         if (!rec) return null;
         return (
-          <div style={{ padding: '16px 20px', fontSize: 11.5, color: k.dim, lineHeight: 1.7, borderTop: `1px solid ${k.border}`, background: k.surface }}>
-            <strong style={{ color: k.text }}>Read:</strong> the <strong>{rec.leg.moneyness} {rec.leg.strike}</strong> gives the best
-            reward-to-risk here — a {move}-pt move {dirWord} turns ~{inr(rec.costPerLot * lotsMult)} of premium into
-            <strong style={{ color: k.green }}> +{inr(rec.projGainPerLot * lotsMult)}</strong>, against
-            <strong style={{ color: k.red }}> −{inr(rec.riskToStopPerLot * lotsMult)}</strong> if it hits the stop instead.
-            {rec.probItm < 40 && ' Low delta — it needs the move to come quickly before theta bites.'}
-            {rec.probItm >= 60 && ' Higher delta — pricier, but behaves closer to the underlying with less time decay.'}
-            <br />Figures are first-order greeks (with a gamma boost on big moves); exit IV and spread will shift the real fill.
+          <div style={{ borderTop: `1px solid ${k.border}`, background: k.bg }}>
+            <button onClick={() => setShowRead((v) => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '12px 20px', background: 'transparent', border: 'none', cursor: 'pointer', color: k.text, fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit' }}>
+              <span style={{ display: 'inline-block', transform: showRead ? 'rotate(90deg)' : 'none', transition: 'transform .15s', color: k.dim }}>▸</span>
+              Read
+            </button>
+            {showRead && (
+              <div style={{ padding: '0 20px 16px', fontSize: 11.5, color: k.dim, lineHeight: 1.7 }}>
+                The <strong style={{ color: k.text }}>{rec.leg.moneyness} {rec.leg.strike}</strong> gives the best
+                reward-to-risk here — a {move}-pt move {dirWord} turns ~{inr(rec.costPerLot * lotsMult)} of premium into
+                <strong style={{ color: k.green }}> +{inr(rec.projGainPerLot * lotsMult)}</strong>, against
+                <strong style={{ color: k.red }}> −{inr(rec.riskToStopPerLot * lotsMult)}</strong> if it hits the stop instead.
+                {rec.probItm < 40 && ' Low delta — it needs the move to come quickly before theta bites.'}
+                {rec.probItm >= 60 && ' Higher delta — pricier, but behaves closer to the underlying with less time decay.'}
+                <br />Figures are first-order greeks (with a gamma boost on big moves); exit IV and spread will shift the real fill.
+              </div>
+            )}
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ─── Premium breakdown — its own card (sibling to Option legs) ───────────────────
+// One row per strike, splitting each premium into intrinsic (real, non-decaying)
+// vs time value (theta eats this daily). The ✝ marks the best-R:R strike, picked
+// with the same shared maths the calculator and the Option-legs list use.
+
+export function PremiumBreakdown({ data }: { data: EngineDetailResponse }) {
+  const spot = data.spot_now || data.spot_at_trigger;
+
+  // Live quotes for direction-coloured strike labels (same as the Option legs).
+  const s = useKiteSettings();
+  const legSyms = useMemo(
+    () => data.options.map((o) => `${data.exchange}:${o.option_symbol}`),
+    [data.options, data.exchange],
+  );
+  const { data: legQuotes } = useKiteQuote(legSyms, legSyms.length > 0);
+
+  const recSym = useMemo(() => {
+    const sd = stopDistance(spot, data.stop_loss);
+    let best: string | null = null;
+    let bestVal = -Infinity;
+    for (const leg of data.options) {
+      const premium = leg.last_price || 0;
+      if (premium <= 0) continue;
+      const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
+      const v = rrScore(rr, effPct);
+      if (v > bestVal) { bestVal = v; best = leg.option_symbol; }
+    }
+    return best;
+  }, [data.options, spot, data.stop_loss]);
+
+  // Best delta — highest |delta| among priced legs (matches the ▲ in the table/legs).
+  const bestDeltaSym = useMemo(() => {
+    let best: string | null = null;
+    let bestVal = -Infinity;
+    for (const leg of data.options) {
+      if ((leg.last_price || 0) <= 0) continue;
+      const ad = Math.abs(leg.delta);
+      if (ad > bestVal) { bestVal = ad; best = leg.option_symbol; }
+    }
+    return best;
+  }, [data.options]);
+
+  const rows = data.options.filter((leg) => (leg.last_price || 0) > 0);
+  if (!rows.length) return null;
+
+  return (
+    <div style={{ border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.bg, borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span>Premium breakdown</span>
+        <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>intrinsic vs time value (approximate)</span>
+      </div>
+      <div style={{ padding: '6px 18px 14px' }}>
+        {rows.map((leg) => {
+          const premium = leg.last_price || 0;
+          const intrinsic = data.option_type === 'CE'
+            ? Math.max(0, spot - leg.strike)
+            : Math.max(0, leg.strike - spot);
+          const tv = Math.max(0, premium - intrinsic);
+          const intrinsicFrac = premium > 0 ? intrinsic / premium : 0;
+          const isRec = leg.option_symbol === recSym;
+          const isBestDelta = leg.option_symbol === bestDeltaSym;
+          return (
+            <div key={leg.option_symbol} style={{ padding: '10px 0', borderBottom: `1px solid ${k.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, minWidth: 0 }}>
+                <span style={{ fontSize: 10, padding: '2px 6px', background: tint(k.orange, 10), color: k.orange, borderRadius: 2, fontWeight: 700 }}>{leg.moneyness}</span>
+                <span style={{ fontSize: 13, color: dirColor(legQuotes?.[`${data.exchange}:${leg.option_symbol}`], s.chgType, s.showPriceDirection), fontWeight: 400, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={`${data.exchange}:${leg.option_symbol}`} /></span>
+                {isRec && <span title="Best reward-to-risk" style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>✝</span>}
+                {isBestDelta && <span title="Highest delta — most responsive to the underlying" style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>▲</span>}
+                <span style={{ fontSize: 13, color: k.dim, flexShrink: 0 }}>· ₹{premium.toFixed(2)} total</span>
+              </div>
+              <div style={{ height: 3, borderRadius: 2, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+                <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
+                  style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
+                <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
+                  style={{ flex: 1, background: k.orange, opacity: 0.85 }} />
+              </div>
+              <div style={{ display: 'flex', gap: 20, fontSize: 11, flexWrap: 'wrap' }}>
+                <span style={{ color: k.green, fontWeight: 600 }}>■ Intrinsic ₹{intrinsic.toFixed(0)}</span>
+                <span style={{ color: k.orange, fontWeight: 600 }}>■ Time value ₹{tv.toFixed(0)}</span>
+              </div>
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 10, color: k.dim, marginTop: 10 }}>Time value (orange) is what theta decays daily.</div>
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { k as t, tint, Icons } from '../../styles/kiteUI';
 import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist, watchLtpSymbols } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
+import { SignalMarker } from './SignalMarker';
 import { KiteActionButtons } from './KiteActionButtons';
 import { PriceCell } from './PriceCell';
 import { useKiteSettings } from '../../store/useKiteSettings';
@@ -708,6 +709,7 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, paddingRight: 8 }}>
                       <span style={{ color: chgColor, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={w.symbol} /></span>
+                      <SignalMarker symbol={w.symbol} color={t.dim} />
                     </div>
 
                     <KiteActionButtons 

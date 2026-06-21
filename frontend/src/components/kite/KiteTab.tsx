@@ -99,7 +99,8 @@ export function KiteTab() {
 
   const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain') => {
     if (!instrumentView) {
-      setSavedTerminalMode('normal');
+      const cur = localStorage.getItem('kite_terminal_mode');
+      setSavedTerminalMode(cur === 'minimized' || cur === 'partial' || cur === 'full' ? cur : 'normal');
       window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'minimized' }));
     }
     setInstrumentView({ symbol, tab: defaultTab as InstrumentTab });

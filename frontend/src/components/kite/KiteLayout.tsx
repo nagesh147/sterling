@@ -95,7 +95,10 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     return localStorage.getItem('kite_layout_locked') === 'true';
   });
 
-  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>(() => {
+    const v = localStorage.getItem('kite_terminal_mode');
+    return v === 'minimized' || v === 'partial' || v === 'full' ? v : 'normal';
+  });
 
   useEffect(() => {
     const cb = (e: any) => setTerminalMode(e.detail);

@@ -21,6 +21,7 @@ import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
+import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 
 
 interface Props {
@@ -305,6 +306,26 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
     }
     return { bestRRSym: bestRR, bestDeltaSym: bestDelta };
   }, [uLastPx, row, visibleLegs, quotes]);
+
+  // Publish this signal's ✝/▲ markers (keyed by the full EXCHANGE:tradingsymbol)
+  // so the watchlist and ticker can show them on the same contract. Cleared on
+  // unmount so stale signals don't keep marking instruments.
+  const publishMarkers = useSignalMarkers((m) => m.publish);
+  const clearMarkers = useSignalMarkers((m) => m.clear);
+  React.useEffect(() => {
+    const rowKey = String(row.token);
+    const entries: Record<string, Marker> = {};
+    if (bestRRSym) {
+      const key = `${row.exchange}:${bestRRSym}`;
+      entries[key] = { ...entries[key], rr: true };
+    }
+    if (bestDeltaSym) {
+      const key = `${row.exchange}:${bestDeltaSym}`;
+      entries[key] = { ...entries[key], delta: true };
+    }
+    publishMarkers(rowKey, entries);
+    return () => clearMarkers(rowKey);
+  }, [bestRRSym, bestDeltaSym, row.exchange, row.token, publishMarkers, clearMarkers]);
 
   return (
     <div

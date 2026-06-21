@@ -9,7 +9,7 @@ import { QuoteDetail } from './MarketWatchPane';
 import { AlignmentChips } from './TripleSupertrendPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { SignalImpactCalculator } from './SignalImpactCalculator';
+import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';
 import { stopDistance, computeLegRR, rrScore } from './impactMath';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -106,14 +106,14 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
           <span style={{ fontSize: 13, color: color, fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={`${exchange}:${leg.option_symbol}`} /></span>
           {isBest && (
             <span title="Best reward-to-risk among these strikes for a 1R move"
-              style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-              ✝ BEST R:R
+              style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
+              ✝
             </span>
           )}
           {isBestDelta && (
             <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
-              style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-              ▲ BEST Δ
+              style={{ fontSize: 13, fontWeight: 700, color: k.blue, flexShrink: 0 }}>
+              ▲
             </span>
           )}
           <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>
@@ -148,7 +148,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
       </div>
 
       {showDepth && (
-        <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.surface }}>
+        <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.bg }}>
           <div style={{ display: 'flex' }}>
             <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
               <QuoteDetail 
@@ -268,7 +268,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
               ? `${realMove >= 0 ? '+' : ''}${realMove.toFixed(2)}${movePct != null ? `  (${realMove >= 0 ? '+' : ''}${movePct.toFixed(2)}%)` : ''}`
               : 'n/a';
             return (
-              <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 0, padding: '16px 8px', background: k.surface, borderRadius: 10, marginBottom: 16, border: `1px solid ${k.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 0, padding: '16px 8px', background: k.bg, borderRadius: 10, marginBottom: 16, border: `1px solid ${k.border}` }}>
                 <StripStat label="Triggered" value={ist(data.triggered_ms)} />
                 <StripDiv />
                 <StripStat label="Spot @ trigger"
@@ -297,9 +297,14 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             })}
           />
 
+          {/* premium breakdown — its own card, separate from the calculator */}
+          <div style={{ marginTop: 12 }}>
+            <PremiumBreakdown data={data} />
+          </div>
+
           {/* option legs — own section, spaced clear of the calculator above */}
-          <div style={{ marginTop: 20, border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+          <div style={{ marginTop: 12, border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase', padding: '14px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
               Option legs
             </div>
             {data.options.length === 0 ? (
