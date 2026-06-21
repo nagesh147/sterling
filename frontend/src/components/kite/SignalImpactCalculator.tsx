@@ -22,7 +22,7 @@ interface Row {
   effPct: number;              // proj gain as % of cost deployed
 }
 
-// ─── Shared "★ BEST R:R" logic ──────────────────────────────────────────────
+// ─── Shared "✝ BEST R:R" logic ──────────────────────────────────────────────
 // Reused by the signal rows (TripleSupertrendPane) and the detail page so the
 // badge always means the same thing: among a signal's option legs, the strike
 // with the best reward:risk for a 1R move (ties fall back to capital efficiency).
@@ -253,13 +253,13 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       {isRec && (
                         <span title="Best reward-to-risk for this move"
                           style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3 }}>
-                          ★ BEST R:R
+                          ✝ BEST R:R
                         </span>
                       )}
                       {r.leg.option_symbol === bestDeltaSym && (
                         <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
                           style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3 }}>
-                          ✝ BEST Δ
+                          ▲ BEST Δ
                         </span>
                       )}
                     </div>

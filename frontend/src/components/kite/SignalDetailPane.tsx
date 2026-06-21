@@ -106,13 +106,13 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
           {isBest && (
             <span title="Best reward-to-risk among these strikes for a 1R move"
               style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.green, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-              ★ BEST R:R
+              ✝ BEST R:R
             </span>
           )}
           {isBestDelta && (
             <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
               style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-              ✝ BEST Δ
+              ▲ BEST Δ
             </span>
           )}
           <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>
@@ -305,7 +305,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
               <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>No option legs resolved (no liquid ATM/ITM contract).</div>
             ) : (
               (() => {
-                // ★ BEST R:R — same logic as the impact calculator, applied to the leg list.
+                // ✝ BEST R:R — same logic as the impact calculator, applied to the leg list.
                 const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
                 let bestSym: string | null = null;
                 let bestVal = -Infinity;

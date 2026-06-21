@@ -279,7 +279,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
     }
   }
 
-  // ★ BEST R:R — among this signal's option legs, the strike with the best
+  // ✝ BEST R:R — among this signal's option legs, the strike with the best
   // reward:risk for a 1R move. Same logic as the Trade Impact Calculator, so the
   // badge stays in sync with the detail page (which marks the best strike for
   // both spot- and derivatives-source signals). The greeks use the underlying
@@ -431,11 +431,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
                       {leg.option_symbol === bestRRSym && (
                         <span title="Best reward-to-risk among these strikes for a 1R move"
-                          style={{ fontSize: 12, color: k.blue, lineHeight: 1 }}>★</span>
+                          style={{ fontSize: 12, color: k.blue, lineHeight: 1 }}>✝</span>
                       )}
                       {leg.option_symbol === bestDeltaSym && (
                         <span title="Highest delta — most responsive to the underlying"
-                          style={{ fontSize: 11, color: k.blue, lineHeight: 1, opacity: 0.75 }}>✝</span>
+                          style={{ fontSize: 11, color: k.blue, lineHeight: 1, opacity: 0.75 }}>▲</span>
                       )}
                     </span>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
@@ -601,11 +601,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {leg.option_symbol === bestRRSym && (
                        <span title="Best reward-to-risk among these strikes for a 1R move"
-                         style={{ fontSize: 13, color: k.blue, lineHeight: 1, flexShrink: 0 }}>★</span>
+                         style={{ fontSize: 13, color: k.blue, lineHeight: 1, flexShrink: 0 }}>✝</span>
                      )}
                      {leg.option_symbol === bestDeltaSym && (
                        <span title="Highest delta — most responsive to the underlying"
-                         style={{ fontSize: 12, color: k.blue, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>✝</span>
+                         style={{ fontSize: 12, color: k.blue, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
                      )}
                    </span>
                    {s.showExchange && (
