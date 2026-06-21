@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { KiteLayout, NavItem, MoreTab } from './KiteLayout';
 import { KiteDashboard } from './KiteDashboard';
 import { MarketWatchPane } from './MarketWatchPane';
@@ -78,6 +78,14 @@ export function KiteTab() {
   const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
   useKiteAutoSession();
+
+  // Listen for nav clicks dispatched from the Sterling top row.
+  useEffect(() => {
+    const cb = (e: Event) => handleNavClick((e as CustomEvent<NavItem>).detail);
+    window.addEventListener('kite-nav-click', cb);
+    return () => window.removeEventListener('kite-nav-click', cb);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { isOpen, options, closeOrderWindow } = useOrderWindowStore();
 

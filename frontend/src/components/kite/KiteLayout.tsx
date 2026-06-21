@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { k } from '../../styles/kiteUI';
-import { useKiteStatus } from '../../hooks/useKite';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
@@ -18,7 +17,6 @@ interface KiteLayoutProps {
 }
 
 export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, content }: KiteLayoutProps) {
-  const { data: status } = useKiteStatus();
   const { on: macOn } = useMacKite();
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -180,8 +178,6 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     };
   }, [handleMouseMove, handleMouseUp]);
 
-  const navItems: NavItem[] = ['dashboard', 'orders', 'holdings', 'positions', 'more', 'connect'];
-
   const footBtn = (active: boolean, disabled = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: 24, height: 22, padding: 0, cursor: disabled ? 'default' : 'pointer', borderRadius: 4, border: 'none',
@@ -192,101 +188,6 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', fontFamily: k.fontFamily }}>
-      <style>{`
-        .kite-nav-item { transition: color 0.2s; }
-        .kite-nav-item:hover { color: #f06428 !important; }
-        .kite-icon-btn { transition: color 0.2s; }
-        .kite-icon-btn:hover { color: #f06428 !important; }
-        .kite-reset-btn { transition: background 0.2s, color 0.2s; }
-        .kite-reset-btn:hover { color: #444 !important; background: #f9f9f9 !important; }
-      `}</style>
-      
-      {/* ── TOP NAVBAR ── */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 24px',
-        height: 56,
-        background: '#fff',
-        borderBottom: '1px solid #e0e0e0',
-        zIndex: 10
-      }}>
-        {/* Logo area */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ color: '#f06428', fontSize: 24, fontWeight: 900, transform: 'scaleX(-1)' }}>◩</div>
-          </div>
-          <div style={{ fontSize: 14, fontWeight: 500, color: '#444', letterSpacing: 0.5 }}>KITE</div>
-        </div>
-
-        {/* Navigation items */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, height: '100%' }}>
-          {navItems.map((item) => (
-              <div
-                key={item}
-                className="kite-nav-item"
-                onClick={() => onNavClick(item)}
-                style={{
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: activeNav === item ? 500 : 400,
-                  color: activeNav === item ? '#f06428' : '#444',
-                  textTransform: 'capitalize',
-                  textDecoration: 'none'
-                }}
-              >
-                {item === 'more' ? 'More' : item}
-              </div>
-          ))}
-
-          {/* Spacer */}
-          <div style={{ width: 16 }} />
-
-          {/* Right side icons/profile (panel controls live in the Kite footer below) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div className="kite-icon-btn" style={{ color: '#444', cursor: 'pointer', fontSize: 16 }}>🔔</div>
-            {/* Profile avatar with a trading-mode LED. Green pulsing = LIVE (real
-                money), amber = PAPER. Replaces the old loud LIVE/PAPER badge. */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <div style={{ position: 'relative' }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 14, background: 'rgba(240, 100, 40, 0.1)',
-                  color: '#f06428', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 500
-                }}>
-                  {status?.user_name ? status.user_name.substring(0, 2).toUpperCase() : 'SK'}
-                </div>
-                {status?.connected && (() => {
-                  const live = !status.is_paper;
-                  return (
-                    <span
-                      title={live
-                        ? 'LIVE — real-money orders are enabled'
-                        : 'PAPER — orders are simulated; no real money at risk'}
-                      style={{
-                        position: 'absolute', bottom: -1, right: -1,
-                        width: 10, height: 10, borderRadius: '50%',
-                        background: live ? '#4caf50' : '#ff9800',
-                        border: '2px solid #fff',
-                        boxShadow: live ? '0 0 4px #4caf50' : undefined,
-                        animation: live ? 'kitePulse 1.6s ease-in-out infinite' : undefined,
-                      }}
-                    />
-                  );
-                })()}
-              </div>
-              <div style={{ fontSize: 12, color: '#444' }}>
-                {status?.user_name ? status.user_name.split(' ')[0] : 'Guest'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ── MAIN LAYOUT ── (mac-canvas: dims + scales 2% behind the order ticket) */}
       {macOn ? (
         <MacStageLayout sidebar={sidebar} content={content} rightSidebar={rightSidebar} bottomBar={bottomBar} />
@@ -409,8 +310,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
       {/* ── Kite Footer — panel show/hide + reset + lock (Kite-specific) ── */}
       <div style={{ height: 30, flexShrink: 0, background: '#fff', borderTop: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
-        <span style={{ fontSize: 10, color: '#9b9b9b', letterSpacing: 0.4 }}>KITE</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <MacKiteToggle />
           <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
           {sidebar && (

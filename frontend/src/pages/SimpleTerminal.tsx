@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TickerStrip } from '../components/TickerStrip';
 import { StatusBar } from '../components/StatusBar';
 import { PositionsStrip } from '../components/PositionsStrip';
@@ -24,6 +24,8 @@ import { PaperResearchTab } from '../components/paper/PaperResearchTab';
 import { KiteTab } from '../components/kite/KiteTab';
 import { KiteTicker } from '../components/kite/KiteTicker';
 import { useSterlingV2, useSetSterlingV2 } from '../store/useStore';
+import { useKiteStatus } from '../hooks/useKite';
+import type { NavItem } from '../components/kite/KiteLayout';
 import { ThreeColumnLayout, RightSection } from '../components/ThreeColumnLayout';
 import { card, cardBody, cardHead } from '../styles/terminalUI';
 import '../styles/terminal.css';
@@ -174,6 +176,13 @@ export function SimpleTerminal() {
   const setSterlingV2 = useSetSterlingV2();
   const [activeTopTab, setActiveTopTab] = useState<TopTab>('kite');
   const [activeSection, setActiveSection] = useState<TabId>('sterlingEngine');
+  const [kiteNav, setKiteNav] = useState<NavItem>('dashboard');
+  const { data: kiteStatus } = useKiteStatus();
+
+  const handleKiteNav = (nav: NavItem) => {
+    setKiteNav(nav);
+    window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: nav }));
+  };
   const [showCryptoTab, setShowCryptoTab] = useState(() => {
     const stored = localStorage.getItem('sterling_show_crypto_tab');
     return stored === null ? true : stored === 'true';
@@ -198,54 +207,102 @@ export function SimpleTerminal() {
         background: 'var(--t-bg2)',
         borderBottom: '1px solid var(--t-border)',
       }}>
-        {/* Row 1: STERLING | KITE | CRYPTO ──────────────── [actions] */}
+        {/* Row 1: STERLING | KITE | CRYPTO | [kite nav when active] | [actions] */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 16,
+          display: 'flex', alignItems: 'center', gap: 0,
           height: 44, padding: '0 20px',
         }}>
           <span style={{
             fontSize: 17, fontWeight: 800, letterSpacing: '0.18em',
             color: 'var(--t-bright)', fontFamily: 'inherit', userSelect: 'none',
+            marginRight: 16,
           }}>
             STERLING
           </span>
-          <button onClick={() => setActiveTopTab('kite')} style={TOP_TAB(activeTopTab === 'kite')}>
+          <button onClick={() => setActiveTopTab('kite')} style={{ ...TOP_TAB(activeTopTab === 'kite'), marginRight: 4 }}>
             KITE
           </button>
           {showCryptoTab && (
-            <button onClick={() => setActiveTopTab('crypto')} style={{ ...TOP_TAB(activeTopTab === 'crypto'), opacity: 1, color: activeTopTab === 'crypto' ? 'var(--t-bright)' : 'var(--t-dim)' }}>
+            <button onClick={() => setActiveTopTab('crypto')} style={{ ...TOP_TAB(activeTopTab === 'crypto'), opacity: 1, color: activeTopTab === 'crypto' ? 'var(--t-bright)' : 'var(--t-dim)', marginRight: 4 }}>
               CRYPTO
             </button>
           )}
+
+          {/* Kite nav items — shown inline when KITE tab is active */}
+          {activeTopTab === 'kite' && (
+            <>
+              <span style={{ width: 1, height: 18, background: 'var(--t-border)', margin: '0 12px' }} />
+              {(['dashboard', 'orders', 'holdings', 'positions', 'more', 'connect'] as NavItem[]).map((nav) => (
+                <button
+                  key={nav}
+                  onClick={() => handleKiteNav(nav)}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: kiteNav === nav ? 600 : 400,
+                    letterSpacing: '0.06em', textTransform: 'capitalize',
+                    color: kiteNav === nav ? 'var(--t-bright)' : 'var(--t-dim)',
+                    padding: '0 10px', height: '100%',
+                    borderBottom: kiteNav === nav ? '2px solid var(--t-bright)' : '2px solid transparent',
+                    transition: 'color .15s ease',
+                    marginBottom: -1,
+                  }}
+                >
+                  {nav === 'more' ? 'More' : nav}
+                </button>
+              ))}
+            </>
+          )}
+
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {scalpOn && (
-              <button onClick={() => setShowLive(true)} title="Live alerts & controls" style={{
+            {/* Bell — always visible in kite mode; conditional in crypto */}
+            {(activeTopTab === 'kite' || scalpOn) && (
+              <button onClick={() => scalpOn ? setShowLive(true) : undefined} title="Notifications" style={{
                 background: 'none', border: '1px solid var(--t-border)', cursor: 'pointer',
-                width: 34, height: 34, borderRadius: 8,
+                width: 32, height: 32, borderRadius: 8,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'var(--t-dim)', fontSize: 14, transition: 'border-color .12s, color .12s',
+                color: 'var(--t-dim)', fontSize: 13, transition: 'border-color .12s, color .12s',
               }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-bright)44'; (e.currentTarget as HTMLElement).style.color = 'var(--t-bright)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--t-dim)'; }}
               >🔔</button>
             )}
-            <div title="User profile" style={{
-              width: 32, height: 32, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #2563EB 0%, #1E40AF 100%)',
-              border: '2px solid rgba(255,255,255,0.12)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 800, color: '#fff', letterSpacing: '0.02em', cursor: 'pointer',
-            }}>S</div>
-            <button onClick={() => setShowSettings(true)} title="Settings" style={{
+            {/* Kite user avatar + name — shown when kite is active */}
+            {activeTopTab === 'kite' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <div style={{ position: 'relative' }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 14,
+                    background: 'rgba(240,100,40,0.15)',
+                    color: '#f06428', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700,
+                  }}>
+                    {kiteStatus?.user_name ? kiteStatus.user_name.substring(0, 2).toUpperCase() : 'MA'}
+                  </div>
+                  {kiteStatus?.connected && (
+                    <span style={{
+                      position: 'absolute', bottom: -1, right: -1,
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: kiteStatus.is_paper ? '#ff9800' : '#4caf50',
+                      border: '2px solid var(--t-bg2)',
+                    }} />
+                  )}
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--t-dim)' }}>
+                  {kiteStatus?.user_name ? kiteStatus.user_name.split(' ')[0] : 'Madaram'}
+                </span>
+              </div>
+            )}
+            {/* More options (three dots) — replaces old settings gear */}
+            <button onClick={() => setShowSettings(true)} title="More options" style={{
               background: 'none', border: '1px solid var(--t-border)', cursor: 'pointer',
-              width: 34, height: 34, borderRadius: 8,
+              width: 32, height: 32, borderRadius: 8,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--t-dim)', fontSize: 14, transition: 'border-color .12s, color .12s',
+              color: 'var(--t-dim)', fontSize: 16, lineHeight: 1, transition: 'border-color .12s, color .12s',
             }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-bright)44'; (e.currentTarget as HTMLElement).style.color = 'var(--t-bright)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--t-border)'; (e.currentTarget as HTMLElement).style.color = 'var(--t-dim)'; }}
-            >⚙</button>
+            >⋮</button>
           </div>
         </div>
 
