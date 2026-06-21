@@ -32,9 +32,9 @@ function ist(ms: number): string {
 }
 
 // Compact stat used in the trigger-context strip; even spacing + thin dividers.
-function StripStat({ label, value, color }: { label: string; value: string; color?: string }) {
+function StripStat({ label, value, color, title }: { label: string; value: string; color?: string; title?: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 16px', justifyContent: 'center' }}>
+    <div title={title} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '0 16px', justifyContent: 'center' }}>
       <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600 }}>{label}</span>
       <span style={{ fontSize: 13, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
@@ -250,23 +250,26 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
         <div style={{ padding: 16 }}>
           {/* trigger context — compact inline strip with separators */}
           {(() => {
-            // Trigger spot can be absent on older/aged signals; fall back to the
-            // live spot so the field never renders as a lonely blank dash.
-            const trigSpot = data.spot_at_trigger > 0 ? data.spot_at_trigger : (data.spot_now || 0);
-            const movePct = (trigSpot > 0 && move != null) ? (move / trigSpot) * 100 : null;
-            const moveColor = move != null ? (move >= 0 ? k.green : k.red) : k.dim;
+            const trigSpot = data.spot_at_trigger > 0 ? data.spot_at_trigger : null;
+            // Move is only meaningful when we have both prices; if trigger spot
+            // was never captured don't compute a misleading delta.
+            const realMove = (trigSpot != null && data.spot_now > 0) ? data.spot_now - trigSpot : null;
+            const movePct  = (trigSpot != null && realMove != null && trigSpot > 0) ? (realMove / trigSpot) * 100 : null;
+            const moveColor = realMove != null ? (realMove >= 0 ? k.green : k.red) : k.dim;
+            const moveLabel = realMove != null
+              ? `${realMove >= 0 ? '+' : ''}${realMove.toFixed(2)}${movePct != null ? `  (${realMove >= 0 ? '+' : ''}${movePct.toFixed(2)}%)` : ''}`
+              : 'n/a';
             return (
               <div style={{ display: 'flex', alignItems: 'stretch', flexWrap: 'wrap', gap: 0, padding: '10px 16px', background: k.surface, borderRadius: 6, marginBottom: 16 }}>
                 <StripStat label="Triggered" value={ist(data.triggered_ms)} />
                 <StripDiv />
-                <StripStat label="Spot @ trigger" value={trigSpot > 0 ? trigSpot.toFixed(2) : '—'} />
+                <StripStat label="Spot @ trigger"
+                  value={trigSpot != null ? trigSpot.toFixed(2) : 'not captured'}
+                  title={trigSpot == null ? 'Trigger-time spot was not recorded for this signal' : undefined} />
                 <StripDiv />
                 <StripStat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={moveColor} />
                 <StripDiv />
-                <StripStat
-                  label="Move since"
-                  value={move != null ? `${move >= 0 ? '+' : ''}${move.toFixed(2)}${movePct != null ? `  (${move >= 0 ? '+' : ''}${movePct.toFixed(2)}%)` : ''}` : 'flat'}
-                  color={moveColor} />
+                <StripStat label="Move since" value={moveLabel} color={moveColor} />
                 <StripDiv />
                 <StripStat label="Stop loss" value={data.stop_loss > 0 ? data.stop_loss.toFixed(2) : '—'} color={data.stop_loss > 0 ? k.amber : k.dim} />
               </div>
