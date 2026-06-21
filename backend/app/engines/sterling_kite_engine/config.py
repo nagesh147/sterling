@@ -25,10 +25,10 @@ class SterlingKiteEngineConfig:
     # 0/4 for ``slow`` (study/kite_st_exit_analysis.md). A tighter trail also banks
     # the move faster → less theta bleed on long options.
     trail_target: TrailTarget = "fast"
-    # DEPRECATED / inert: the early-lock exit keyed off the *slow* (widest) ST, which
-    # always flips AFTER the trail_target has already exited, so across 7.5y of real
-    # data it changed exactly zero trades (P&L spread 0.0 in all 60 sweep cells). Kept
-    # only so callers that still pass it don't break; it has no effect on the exit.
+    # Removed from the live engine + UI + API (provably inert: 0.0 P&L change across
+    # 7.5y — it keyed off the slow/widest ST, which always flips after the trail has
+    # already exited). Retained here ONLY so the offline study scripts that documented
+    # this can still construct the config; the live exit is the trail_target flip.
     early_lock: bool = False
     early_lock_profit_r: float = 1.0
 

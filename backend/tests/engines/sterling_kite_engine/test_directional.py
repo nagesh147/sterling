@@ -80,7 +80,6 @@ class TestDefaultConfig:
         assert cfg.trail_target == "fast"
         assert "ATM" in cfg.strike_moneyness
         assert cfg.scan_source == "derivatives"
-        assert cfg.early_lock is False
         assert cfg.auto_execute is False
         assert cfg.risk_sizing is True
         assert cfg.risk_pct == 1.0

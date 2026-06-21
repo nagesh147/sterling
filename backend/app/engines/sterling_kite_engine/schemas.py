@@ -242,10 +242,6 @@ class EngineConfigModel(BaseModel):
     scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]
     scan_stocks: List[str] = []
     scan_all_stocks: bool = False  # default preserves the full spot universe
-    # DEPRECATED / inert: changed zero trades across 7.5y of real data (it keyed off
-    # the slow ST, which always flips after the trail exits). Kept for API/UI back-
-    # compat; the live exit is the trail_target flip. Safe to retire the UI toggle.
-    early_lock: bool = False
     auto_execute: bool = False
     # ── Per-trade risk sizing (workstream F) ──────────────────────────────────
     # When on, auto-exec sizes lots so premium-at-risk ((entry − stop) × qty) stays

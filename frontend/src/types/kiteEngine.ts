@@ -149,7 +149,6 @@ export interface EngineConfigModel {
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
-  early_lock: boolean;
   auto_execute: boolean;
   // Per-trade risk sizing (workstream F)
   risk_sizing: boolean;
