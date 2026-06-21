@@ -1,14 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-// Symbols pinned to the top-bar horizontal ticker tiles. This is now DECOUPLED
+// Symbols added to the horizontal Ticker tiles. This is DECOUPLED
 // from the Market Watch list — adding to the watchlist no longer auto-fills the
-// ticker. Users explicitly pin instruments from a Market Watch row's "more"
-// menu or a Signals row, and NIFTY + SENSEX are seeded as sensible defaults.
+// ticker. Users explicitly add/remove instruments via "Add/Remove to Ticker"
+// from a Market Watch or Signals row’s “more” menu. NIFTY + SENSEX are seeded as defaults.
 //
 // Stored as EXCHANGE:TRADINGSYMBOL strings (the same key the quote poll uses).
 // A zustand store (not per-component useState) so the ticker reacts instantly
-// when any pane pins/unpins, and the choice persists across reloads.
+// when any pane adds/removes, and the choice persists across reloads.
 const DEFAULT_PINS = ['NSE:NIFTY 50', 'BSE:SENSEX'];
 
 interface TickerPinsState {

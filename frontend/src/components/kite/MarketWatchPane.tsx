@@ -770,10 +770,10 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
               <div
                 style={{ padding: '8px 16px', fontSize: 13, color: pinned ? t.blue : t.text, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}
                 onClick={() => { toggleTickerPin(menuOpen.symbol); setMenuOpen(null); }}
-                title="Show this instrument as a tile in the top bar"
+                title="Add or remove this instrument as a tile in the Ticker"
               >
                 <span style={{ color: pinned ? t.blue : t.dim }}><Icons.Pin /></span>
-                {pinned ? 'Unpin from top bar' : 'Pin to top bar'}
+                {pinned ? 'Remove from Ticker' : 'Add to Ticker'}
               </div>
             );
           })()}

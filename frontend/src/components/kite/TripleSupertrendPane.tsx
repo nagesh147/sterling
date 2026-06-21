@@ -210,7 +210,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const tickerPins = useTickerPins((p) => p.pins);
   const toggleTickerPin = useTickerPins((p) => p.toggle);
-  // Per-leg "more options" (⋮) menu — lets the user add the contract to the ticker.
+  // Per-leg "more options" (⋮) menu — lets the user add/remove the contract to/from the Ticker.
   const [legMenu, setLegMenu] = React.useState<{ symbol: string; label: string; top: number; left: number } | null>(null);
   React.useEffect(() => {
     if (!legMenu) return;
@@ -376,13 +376,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             );
           })()}
           {(() => {
-            // Pin the underlying (NOT the option contract) to the top-bar tiles.
+            // Add the underlying (NOT the option contract) to the Ticker tiles.
             const tickerSym = `${uExch}:${uSym}`;
             const pinned = tickerPins.includes(tickerSym);
             return (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleTickerPin(tickerSym); }}
-                title={pinned ? 'Unpin underlying from top bar' : 'Pin underlying to top bar'}
+                title={pinned ? 'Remove underlying from Ticker' : 'Add underlying to Ticker'}
                 style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   background: 'transparent', border: 'none', cursor: 'pointer', padding: 2,
@@ -747,10 +747,10 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
               <div
                 style={{ padding: '8px 14px', fontSize: 13, color: pinned ? k.blue : k.text, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}
                 onClick={() => { toggleTickerPin(legMenu.symbol); setLegMenu(null); }}
-                title="Show this contract as a tile in the top bar"
+                title="Add or remove this contract as a tile in the Ticker"
               >
                 <span style={{ color: pinned ? k.blue : k.dim, display: 'flex' }}><Icons.Pin /></span>
-                {pinned ? 'Remove from ticker' : 'Add to ticker'}
+                {pinned ? 'Remove from Ticker' : 'Add to Ticker'}
               </div>
             </div>
           );
@@ -1728,9 +1728,9 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
       {rows.length > 0 && !settingsOpen && (
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
-              <KiteSearchBar 
+              <KiteSearchBar
                 query={query} 
                 setQuery={setQuery} 
                 searchSettingsOpen={searchSettingsOpen} 

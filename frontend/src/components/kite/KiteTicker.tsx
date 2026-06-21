@@ -198,7 +198,7 @@ export function KiteTicker() {
         fontFamily: TILE_FONT,
       }}>
         <span style={{ color: 'var(--t-dim)', fontSize: 11 }}>
-          No pinned tiles — pin instruments from a Market Watch or Signals row’s “Pin to top bar”.
+          No pinned tiles — add instruments from a Market Watch or Signals row’s “Add to Ticker”.
         </span>
       </div>
     );
