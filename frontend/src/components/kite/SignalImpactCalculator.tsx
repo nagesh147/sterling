@@ -310,7 +310,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
             <div style={{ fontSize: 10, fontWeight: 700, color: k.dim, marginBottom: 8 }}>
               PREMIUM BREAKDOWN (APPROXIMATE) — {rec.leg.moneyness} {rec.leg.strike} · ₹{rec.premium.toFixed(2)} total
             </div>
-            <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
+            <div style={{ height: 4, borderRadius: 2, overflow: 'hidden', display: 'flex', marginBottom: 6 }}>
               <div title={`Intrinsic ₹${intrinsic.toFixed(0)} — real value, doesn't decay`}
                 style={{ width: `${intrinsicFrac * 100}%`, background: k.green, minWidth: intrinsicFrac > 0 ? 3 : 0, transition: 'width .3s' }} />
               <div title={`Time value ₹${tv.toFixed(0)} — theta eats this daily`}
@@ -343,7 +343,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                     <span style={{ fontSize: 10, fontWeight: isRec ? 700 : 500, color: isRec ? k.green : k.text }}>
                       {r.leg.moneyness} {r.leg.strike}
                     </span>
-                    <div style={{ height: 4, background: k.border, borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ height: 3, background: k.border, borderRadius: 2, overflow: 'hidden' }}>
                       <div style={{ width: `${w}%`, height: '100%', background: isRec ? k.green : k.blue, opacity: isRec ? 1 : 0.55, transition: 'width .3s' }} />
                     </div>
                     <span style={{ fontSize: 10, textAlign: 'right', color: k.green, fontWeight: 600 }}>+{inr(gain)}</span>
