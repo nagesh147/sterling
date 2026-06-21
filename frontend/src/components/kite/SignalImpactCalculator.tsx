@@ -136,7 +136,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
     <div style={{ border: `1px solid ${k.border}`, borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
       <div style={{ padding: '12px 16px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: k.text }}>🧮 Trade Impact Calculator</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: k.text }}>Trade Impact Calculator</span>
           <span style={{ fontSize: 11, color: k.dim }}>
             Live greeks · {data.option_type} · {data.underlying} {data.spot_now ? data.spot_now.toFixed(0) : ''} ·
             stop {data.stop_loss.toFixed(0)} ({stopDist} pts = 1R)

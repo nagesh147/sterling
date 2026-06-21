@@ -126,7 +126,7 @@ function timeAgo(ms: number): string {
 function countdown(ms: number): string {
   if (!ms) return '—';
   const s = Math.max(0, Math.round((ms - Date.now()) / 1000));
-  if (s <= 0) return 'due';
+  if (s <= 0) return 'now';
   return s >= 60 ? `${Math.floor(s / 60)}m` : `${s}s`;
 }
 
@@ -317,7 +317,6 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
           {isDeriv ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, color: k.orange, border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>DERIV</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: uColor }}>{row.underlying}</span>
               </span>
             </div>
@@ -341,12 +340,9 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {rowRunning
-            ? <span title="SuperTrend still aligned on the latest 1H bar — trade running"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: k.green }}>
-                <span style={{ width: 6, height: 6, borderRadius: 3, background: k.green }} />running</span>
-            : <span title="The entry's SuperTrend has flipped or the live premium has fallen through its stop — shown for history, not a live entry"
-                    style={{ fontSize: 10, color: k.dim }}>trend ended</span>}
+          {!rowRunning && (
+            <span title="The entry's SuperTrend has flipped or the live premium has fallen through its stop — shown for history, not a live entry"
+                  style={{ fontSize: 10, color: k.dim }}>trend ended</span>)}
           {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
           {row.adx != null && (
             <span title={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}
@@ -364,17 +360,18 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
               ATR {row.atr_pct.toFixed(0)}%
             </span>
           )}
-          <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
           {(() => {
             const d = new Date(row.timestamp_ms);
             const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-            const wday = d.toLocaleDateString('en-US', { weekday: 'short' });
-            const date = d.toLocaleDateString('en-US', { day: '2-digit' });
+            const day = d.getDate();
+            const ord = day % 10 === 1 && day !== 11 ? 'st'
+              : day % 10 === 2 && day !== 12 ? 'nd'
+              : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
             const month = d.toLocaleDateString('en-US', { month: 'short' });
             return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, paddingLeft: 4 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, paddingLeft: 4 }}>
+                <span style={{ fontSize: 10, color: k.dim, opacity: 0.85 }}>{day}{ord} {month}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: k.text }}>{time}</span>
-                <span style={{ fontSize: 10, color: k.dim, opacity: 0.85 }}>{wday} {date} {month}</span>
               </span>
             );
           })()}
@@ -1585,7 +1582,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       if (aIdx !== bIdx) return bIdx - aIdx; // indices first
       return a.underlying.localeCompare(b.underlying);
     });
-    if (active.length) buckets.push({ label: 'Active now', rows: sortedActive, active: true });
+    if (active.length) buckets.push({ label: 'Active', rows: sortedActive, active: true });
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -1666,7 +1663,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     );
   }
 
-  const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
   const autoScan = signals?.auto_scan ?? false;
 
   return (
@@ -1676,44 +1672,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         {/* Row 1: identity + live count + settings */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
           <EngineMark />
-          <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, fontWeight: 700, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
+          <span title={UNIVERSE_TIP} style={{ fontFamily: 'inherit', fontSize: 13, fontWeight: 400, color: k.text, whiteSpace: 'nowrap' }}>
             Triple SuperTrend
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
-          {/* Scan status — moved up next to the title */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 11, color: k.dim, fontVariantNumeric: 'tabular-nums' }}>
-            <span className={scanning ? 'st-pulse' : undefined} style={{
-              width: 6, height: 6, borderRadius: 3, flexShrink: 0,
-              background: scanning ? k.green : autoScan ? k.orange : k.dim,
-            }} />
-            <span style={{ color: scanning ? k.green : autoScan ? k.text : k.dim, fontWeight: scanning || autoScan ? 600 : 400, textTransform: 'uppercase', letterSpacing: 0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {scanning
-                ? (signals?.scanning_label || 'scanning…')
-                : autoScan
-                  ? 'AUTO'
-                  : !(signals?.market_open ?? true)
-                    ? 'CLOSED'
-                    : 'MANUAL'}
-            </span>
-            {!scanning && (signals?.generated_ms ?? 0) > 0 && (
-              <span style={{ opacity: 0.7, whiteSpace: 'nowrap' }}>· {timeAgo(signals!.generated_ms!)}</span>
-            )}
-            {!scanning && autoScan && (signals?.next_scan_ms ?? 0) > 0 && (
-              <span style={{ opacity: 0.7, whiteSpace: 'nowrap' }}>· next {countdown(signals!.next_scan_ms!)}</span>
-            )}
-          </div>
           <div style={{ flex: 1 }} />
-          {liveCount > 0 && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999,
-              fontSize: 10.5, fontWeight: 700, color: k.green,
-              background: tint(k.green, 10), border: `1px solid ${tint(k.green, 30)}`,
-            }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: k.green }} />
-              {liveCount} live
-            </span>
-          )}
-          {/* Actions: rescan / scan report / grid·list — moved next to the live badge */}
+          {/* Actions: rescan / scan report / grid·list */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
               <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>

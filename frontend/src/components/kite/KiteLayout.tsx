@@ -3,9 +3,43 @@ import { k } from '../../styles/kiteUI';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
+import { useEngineActivity } from '../../hooks/useTripleSupertrend';
 
 export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
+
+// Footer scan-status helpers — mirror the Triple SuperTrend pane formats.
+function fmtAgo(ms: number): string {
+  if (!ms) return 'never';
+  const s = Math.round((Date.now() - ms) / 1000);
+  if (s < 60) return `${s} Sec ago`;
+  return `${Math.floor(s / 60)} Min ago`;
+}
+function fmtNext(ms: number): string {
+  if (!ms) return '—';
+  const s = Math.max(0, Math.round((ms - Date.now()) / 1000));
+  if (s <= 0) return 'now';
+  return s >= 60 ? `${Math.floor(s / 60)}m` : `${s}s`;
+}
+
+// Footer scanning animation — pulsing dot + a sweeping shimmer across the
+// symbol label so it reads as "actively scanning". Honours reduced-motion.
+const KL_SCAN_CSS = `
+@keyframes kl-scan-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.6); } }
+@keyframes kl-scan-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.kl-scan-dot { animation: kl-scan-pulse 1.1s ease-in-out infinite; }
+.kl-scan-text {
+  background-image: linear-gradient(90deg, #d35400 0%, #d35400 38%, #ffb27a 50%, #d35400 62%, #d35400 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: kl-scan-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kl-scan-dot { animation: none; }
+  .kl-scan-text { animation: none; -webkit-text-fill-color: #d35400; color: #d35400; }
+}
+`;
 
 interface KiteLayoutProps {
   activeNav: NavItem;
@@ -21,6 +55,9 @@ interface KiteLayoutProps {
 
 export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content }: KiteLayoutProps) {
   const { on: macOn } = useMacKite();
+  const { data: activity } = useEngineActivity();
+  const scanning = !!activity?.scanning;
+  const autoScan = !!activity?.auto_scan;
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('kite_sidebar_width');
@@ -388,6 +425,21 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               {isLocked ? <path d="M7 11V7a5 5 0 0 1 10 0v4" /> : <path d="M7 11V7a5 5 0 0 1 9.9-1" />}
             </svg>
           </button>
+        </div>
+
+        {/* Scan status — bottom-right */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#777', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          <style>{KL_SCAN_CSS}</style>
+          <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : autoScan ? k.orange : '#bbb' }} />
+          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
+            {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}
+          </span>
+          {!scanning && (activity?.last_scan_ms ?? 0) > 0 && (
+            <span style={{ opacity: 0.7 }}>· {fmtAgo(activity!.last_scan_ms)}</span>
+          )}
+          {!scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 && (
+            <span style={{ opacity: 0.7 }}>· Next Due {fmtNext(activity!.next_scan_ms)}</span>
+          )}
         </div>
       </div>
     </div>

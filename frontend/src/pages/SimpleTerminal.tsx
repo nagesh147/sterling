@@ -211,12 +211,14 @@ export function SimpleTerminal() {
           display: 'flex', alignItems: 'center', gap: 0,
           height: 44, padding: '0 20px',
         }}>
-          <span style={{
-            fontSize: 17, fontWeight: 800, letterSpacing: '0.18em',
-            color: 'var(--t-bright)', fontFamily: 'inherit', userSelect: 'none',
-            marginRight: 16,
-          }}>
-            STERLING
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9, marginRight: 16, userSelect: 'none' }}>
+            <img src="/logo.svg" alt="Sterling" width={24} height={24} style={{ display: 'block', borderRadius: 6 }} draggable={false} />
+            <span style={{
+              fontSize: 17, fontWeight: 800, letterSpacing: '0.18em',
+              color: 'var(--t-bright)', fontFamily: 'inherit',
+            }}>
+              STERLING
+            </span>
           </span>
           <button onClick={() => setActiveTopTab('kite')} style={{ ...TOP_TAB(activeTopTab === 'kite'), marginRight: 4 }}>
             KITE
