@@ -1768,11 +1768,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
-              <KiteSearchBar 
-                query={query} 
-                setQuery={setQuery} 
-                searchSettingsOpen={searchSettingsOpen} 
-                setSearchSettingsOpen={setSearchSettingsOpen} 
+              <KiteSearchBar
+                query={query}
+                setQuery={setQuery}
+                searchSettingsOpen={searchSettingsOpen}
+                setSearchSettingsOpen={setSearchSettingsOpen}
+                height={35}
               />
             </div>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>

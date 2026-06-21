@@ -245,11 +245,12 @@ export function QuoteDetail({ sym, q, expiry, spotName, spotPx, instrumentName, 
 
 // ─── Search Bar Component ───────────────────────────────────────────────────────
 
-export function KiteSearchBar({ 
-  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen
-}: { 
-  query: string; setQuery: (q: string) => void; watchCount?: number; 
+export function KiteSearchBar({
+  query, setQuery, watchCount, searchSettingsOpen, setSearchSettingsOpen, height = 50
+}: {
+  query: string; setQuery: (q: string) => void; watchCount?: number;
   searchSettingsOpen: boolean; setSearchSettingsOpen: (v: boolean) => void;
+  height?: number;
 }) {
   const s = useKiteSettings();
   return (
@@ -257,7 +258,7 @@ export function KiteSearchBar({
       <style>{`
         .kite-radio, .kite-checkbox { display: none; }
       `}</style>
-      <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', height: 50 }}>
+      <div style={{ padding: '0 16px', background: t.bg, display: 'flex', alignItems: 'center', height }}>
         <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
           <span style={{ position: 'absolute', left: 0, color: t.dim }}><Icons.Search /></span>
           <input
@@ -277,7 +278,7 @@ export function KiteSearchBar({
         </div>
       </div>
       {searchSettingsOpen && (
-        <div style={{ position: 'absolute', top: 50, left: 0, right: 0, zIndex: 100, padding: '24px 16px', background: t.bg, borderBottom: `1px solid ${t.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, color: t.text }}>
+        <div style={{ position: 'absolute', top: height, left: 0, right: 0, zIndex: 100, padding: '24px 16px', background: t.bg, borderBottom: `1px solid ${t.border}`, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 13, color: t.text }}>
           <div style={{ display: 'flex', marginBottom: 24, alignItems: 'center' }}>
             <div style={{ width: 120, color: t.dim, fontWeight: 600, fontSize: 11, letterSpacing: 0.5, display: 'flex', alignItems: 'center' }}>CHANGE TYPE <span style={{ marginLeft: 6, cursor: 'pointer' }}><Icons.Info /></span></div>
             <div style={{ display: 'flex', gap: 24 }}>
