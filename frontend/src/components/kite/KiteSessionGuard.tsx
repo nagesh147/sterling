@@ -30,8 +30,10 @@ export function KiteSessionGuard() {
     const was = prevConnected.current;
     prevConnected.current = connected;
 
-    // Only react to a real transition out of a connected session.
-    if (was !== true || connected || !hasAccount) {
+    // React to a transition out of a connected session OR an already-expired session on initial load.
+    if ((was === true || was === null) && !connected && hasAccount) {
+      // fall through to show modal
+    } else {
       if (connected) {
         // Session is healthy again — reset state + close the modal.
         notifiedRef.current = false;
