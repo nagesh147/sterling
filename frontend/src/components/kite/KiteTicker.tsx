@@ -56,6 +56,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const flashRef = useRef<HTMLSpanElement>(null);
   const prevRef = useRef<number | null>(null);
   const unpin = useTickerPins((s) => s.unpin);
+  const [hover, setHover] = useState(false);
 
   const last: number | undefined = q?.last_price;
   const close: number | undefined = q?.ohlc?.close;
@@ -120,13 +121,16 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const pctStr = pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '';
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      border: '1px solid var(--t-border)',
-      borderRadius: 8, padding: '12px 14px', width: 250, flexShrink: 0,
-      position: 'relative',
-    }}>
-      {/* Tiny close — removes this instrument from the ticker row */}
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        border: '1px solid var(--t-border)',
+        borderRadius: 8, padding: '12px 14px', width: 250, flexShrink: 0,
+        position: 'relative',
+      }}>
+      {/* Tiny close — appears on hover; removes this instrument from the ticker row */}
       <button
         onClick={(e) => { e.stopPropagation(); unpin(sym); }}
         title="Remove from ticker"
@@ -137,10 +141,13 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 11, fontWeight: 600,
           background: 'transparent', border: 'none', borderRadius: 3,
-          color: 'var(--t-dim)', cursor: 'pointer', opacity: 0.6,
+          color: 'var(--t-dim)', cursor: 'pointer',
+          opacity: hover ? 0.7 : 0,
+          pointerEvents: hover ? 'auto' : 'none',
+          transition: 'opacity .12s',
         }}
         onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--t-bright)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = 'var(--t-dim)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--t-dim)'; }}
       >
         ×
       </button>
