@@ -1,11 +1,10 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useKiteWatchlist, useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
+import { k } from '../../styles/kiteUI';
 
-// Match the Equity balance figure in KiteDashboard's MarginCard, which is the
-// reference for these tiles — it renders in Open Sans. Open Sans is preloaded via
-// the Google Fonts <link> in index.html (weights 400/600/700).
-const TILE_FONT = "'Open Sans', sans-serif";
+// Use the single app-wide Kite font (Inter stack) so tiles match the rest of the UI.
+const TILE_FONT = k.fontFamily;
 
 const UP = '#10B981';
 const DOWN = '#EF4444';

@@ -13,6 +13,7 @@ import { AlertsPane } from './AlertsPane';
 import { BacktestPane } from './BacktestPane';
 import { InstrumentPane, InstrumentTab } from './InstrumentPane';
 import { KiteNotifications } from './KiteNotifications';
+import { KiteSessionGuard } from './KiteSessionGuard';
 import { TripleSupertrendPane } from './TripleSupertrendPane';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
@@ -150,6 +151,7 @@ export function KiteTab() {
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
       />
       <KiteNotifications />
+      <KiteSessionGuard />
       {isOpen && options && (
         <OrderWindow options={options} onClose={closeOrderWindow} />
       )}

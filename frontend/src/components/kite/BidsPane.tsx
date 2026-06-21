@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useKiteAuctions, useKiteIPOs, useKiteCorporateActions } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
+import { k } from '../../styles/kiteUI';
 
 const S: Record<string, React.CSSProperties> = {
-  container: { padding: '24px 32px', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' as const, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' },
+  container: { padding: '24px 32px', width: '100%', height: '100%', display: 'flex', flexDirection: 'column' as const, fontFamily: k.fontFamily },
   title: { fontSize: 24, fontWeight: 400, color: '#444', margin: '0 0 24px 0' },
   navContainer: { display: 'flex', gap: 32, borderBottom: `1px solid #f1f1f1`, marginBottom: 24 },
   navItem: { padding: '0 0 12px 0', fontSize: 14, cursor: 'pointer', transition: 'color 0.2s' },

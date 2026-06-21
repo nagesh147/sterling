@@ -115,9 +115,19 @@ export function useGenerateKiteSession() {
   const qc = useQueryClient();
   return useMutation<KiteSessionResult, Error, { request_token: string; account_id?: string }>({
     mutationFn: (body) => api.post<KiteSessionResult>(`${K}/session`, body),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['kite-status'] });
       qc.invalidateQueries({ queryKey: ['kite-accounts'] });
+      notifyOrder({
+        kind: 'complete',
+        title: 'Kite connected',
+        message: data?.user_name
+          ? `Signed in as ${data.user_name}${data.kite_user_id ? ` (${data.kite_user_id})` : ''}.`
+          : 'Kite session is now active.',
+      });
+    },
+    onError: (err) => {
+      notifyOrder({ kind: 'error', title: 'Kite login failed', message: err.message });
     },
   });
 }
@@ -126,9 +136,14 @@ export function useRefreshKiteSession() {
   const qc = useQueryClient();
   return useMutation<KiteSessionResult, Error, { refresh_token?: string; account_id?: string }>({
     mutationFn: (body) => api.post<KiteSessionResult>(`${K}/session/refresh`, body),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['kite-status'] });
       qc.invalidateQueries({ queryKey: ['kite-accounts'] });
+      notifyOrder({
+        kind: 'complete',
+        title: 'Kite session renewed',
+        message: data?.user_name ? `Session restored for ${data.user_name}.` : 'Session restored automatically.',
+      });
     },
   });
 }

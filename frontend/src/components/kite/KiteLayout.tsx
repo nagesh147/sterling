@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { k } from '../../styles/kiteUI';
 import { useKiteStatus } from '../../hooks/useKite';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
@@ -190,7 +191,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#fff', fontFamily: k.fontFamily }}>
       <style>{`
         .kite-nav-item { transition: color 0.2s; }
         .kite-nav-item:hover { color: #f06428 !important; }

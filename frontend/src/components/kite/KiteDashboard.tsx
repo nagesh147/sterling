@@ -3,6 +3,7 @@ import { useKiteStatus, useKiteMargins, useKiteHoldings } from '../../hooks/useK
 import { createChart, ColorType, AreaSeries } from 'lightweight-charts';
 import { useCandles } from '../../hooks/useCandles';
 import { InstrumentLabel } from './InstrumentLabel';
+import { k } from '../../styles/kiteUI';
 
 function formatCurrency(val: number) {
   if (!val) return '0';
@@ -29,8 +30,8 @@ function MarginCard({ title, available, used, opening, loading }: { title: strin
             color: loading ? '#ccc' : '#444', 
             lineHeight: 1.3, 
             letterSpacing: 0,
-            fontFamily: '"Open Sans", sans-serif',
-            marginBottom: 4 
+            fontFamily: k.fontFamily,
+            marginBottom: 4
           }}>
             {loading ? '—' : formatCurrency(available)}
           </div>

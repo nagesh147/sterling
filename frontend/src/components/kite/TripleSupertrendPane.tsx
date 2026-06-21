@@ -829,6 +829,106 @@ function Chip({ label, active, onClick, dim }: { label: string; active: boolean;
   );
 }
 
+// Custom-stock autocomplete. Suggestions are drawn ONLY from the F&O stock
+// registry (the liquid, tradable F&O universe) — never arbitrary symbols — so a
+// user can't add an illiquid or non-F&O name. Matches are ranked by liquidity
+// (most tradable first) then alphabetically, and already-selected names hidden.
+const LIQUIDITY_RANK: Record<string, number> = {
+  'Very High': 0, 'High': 1, 'Good': 2, 'Moderate-Good': 3, 'Moderate': 4,
+};
+const LIQUIDITY_COLOR: Record<string, string> = {
+  'Very High': k.green, 'High': k.green, 'Good': k.blue,
+  'Moderate-Good': k.amber, 'Moderate': k.dim,
+};
+
+function CustomStockSearch({ stockReg, selected, onAdd }: {
+  stockReg?: LiquidityGroup[];
+  selected: string[];
+  onAdd: (name: string) => void;
+}) {
+  const [query, setQuery] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const [activeIdx, setActiveIdx] = React.useState(0);
+
+  // Flatten the registry once into a de-duplicated, liquidity-ranked list.
+  const universe = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: StockEntry[] = [];
+    for (const g of stockReg ?? []) {
+      for (const s of g.stocks) {
+        if (seen.has(s.name)) continue;
+        seen.add(s.name);
+        out.push(s);
+      }
+    }
+    out.sort((a, b) =>
+      (LIQUIDITY_RANK[a.liquidity] ?? 9) - (LIQUIDITY_RANK[b.liquidity] ?? 9)
+      || a.name.localeCompare(b.name));
+    return out;
+  }, [stockReg]);
+
+  const matches = React.useMemo(() => {
+    const q = query.trim().toUpperCase();
+    if (!q) return [];
+    return universe
+      .filter((s) => !selected.includes(s.name)
+        && (s.name.toUpperCase().includes(q) || (s.label || '').toUpperCase().includes(q)))
+      .slice(0, 8);
+  }, [query, universe, selected]);
+
+  React.useEffect(() => { setActiveIdx(0); }, [query]);
+
+  const pick = (s: StockEntry) => {
+    onAdd(s.name);
+    setQuery('');
+    setOpen(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 2, position: 'relative' }}>
+      <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 52, paddingTop: 4 }}>CUSTOM</span>
+      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+        <input
+          style={{ width: '100%', boxSizing: 'border-box', fontSize: 9.5, padding: '3px 6px', background: k.surface, border: `1px solid ${open && matches.length ? k.orange : k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search F&O stock…"
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => Math.min(i + 1, matches.length - 1)); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === 'Enter' && matches[activeIdx]) { e.preventDefault(); pick(matches[activeIdx]); }
+            else if (e.key === 'Escape') { setOpen(false); }
+          }}
+        />
+        {open && query.trim() && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, marginTop: 2, background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, boxShadow: '0 6px 18px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+            {matches.length === 0 ? (
+              <div style={{ padding: '7px 10px', fontSize: 10, color: k.dim }}>No matching F&amp;O stock.</div>
+            ) : matches.map((s, i) => (
+              <div
+                key={s.name}
+                onMouseDown={(e) => { e.preventDefault(); pick(s); }}
+                onMouseEnter={() => setActiveIdx(i)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 10px', cursor: 'pointer', background: i === activeIdx ? k.surfaceHover : 'transparent' }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 600, color: k.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {s.name}
+                  {s.label && s.label !== s.name && <span style={{ fontSize: 9.5, fontWeight: 400, color: k.dim, marginLeft: 5 }}>{s.label}</span>}
+                </span>
+                <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 700, letterSpacing: 0.3, color: LIQUIDITY_COLOR[s.liquidity] ?? k.dim, border: `1px solid ${tint(LIQUIDITY_COLOR[s.liquidity] ?? k.dim, 40)}`, borderRadius: 3, padding: '1px 4px', textTransform: 'uppercase' }}>
+                  {s.liquidity}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Settings-drawer layout primitives ──────────────────────────────────────
 // A consistent setting row: tiny caps label inline-left, control to the right.
 // Each row carries its own padding + bottom border for a clean list-of-settings look.
@@ -1102,7 +1202,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const activeAcct = kiteAccts?.accounts.find((a) => a.is_active);
   const kiteLive = !!activeAcct && !activeAcct.is_paper;
   const [query, setQuery] = React.useState('');
-  const [customStock, setCustomStock] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
   const [sortBy, setSortBy] = React.useState('Custom');
   const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
@@ -1259,7 +1358,27 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     }
   };
 
-  const rows = signals?.rows ?? [];
+  // While a scan is in progress the backend flushes results progressively, so a
+  // raw poll can momentarily return fewer rows than before — making rows blink out
+  // and reappear. To keep the table stable, we remember the last completed-scan row
+  // set and, during scanning, MERGE it with the freshly-arriving rows (fresh wins on
+  // key collision). Rows therefore only get added/updated mid-scan, never vanish.
+  // When the scan finishes, the fresh set becomes the new baseline.
+  const rowKey = (r: EngineSignalRow) => `${r.token}:${r.option_type}:${r.timestamp_ms}`;
+  const lastStableRows = React.useRef<EngineSignalRow[]>([]);
+  const rawRows = signals?.rows ?? [];
+  const isScanning = signals?.scanning ?? false;
+  const rows = React.useMemo(() => {
+    if (!isScanning) {
+      lastStableRows.current = rawRows;
+      return rawRows;
+    }
+    const merged = new Map<string, EngineSignalRow>();
+    for (const r of lastStableRows.current) merged.set(rowKey(r), r);
+    for (const r of rawRows) merged.set(rowKey(r), r); // fresh overrides stale
+    return Array.from(merged.values());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawRows, isScanning]);
   const filteredRows = React.useMemo(() => {
     let result = [...rows];
     if (query.trim()) {
@@ -1687,16 +1806,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                     </div>
                   </div>
                 ))}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 52 }}>CUSTOM</span>
-                  <input
-                    style={{ width: 88, fontSize: 9.5, padding: '2px 6px', background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4, color: k.text, outline: 'none' }}
-                    value={customStock} onChange={e => setCustomStock(e.target.value)}
-                    placeholder="Symbol…"
-                    onKeyDown={e => { if (e.key === 'Enter') addCustomStock(customStock); }}
-                  />
-                  <button onClick={() => addCustomStock(customStock)} style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ add</button>
-                </div>
+                <CustomStockSearch stockReg={stockReg} selected={cfg.scan_stocks} onAdd={addCustomStock} />
                 {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).map(n => (
