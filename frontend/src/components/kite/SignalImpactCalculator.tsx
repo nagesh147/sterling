@@ -236,14 +236,14 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
           <thead>
             <tr style={{ color: k.dim, fontSize: 10, borderBottom: `1px solid ${k.border}` }}>
               <th style={th('left')}>Strike</th>
-              <th style={th('right')} title="Last traded premium and your cost per lot × lots">Cost</th>
-              <th style={th('right')} title="Black-Scholes delta ≈ probability of finishing in-the-money">δ / ITM%</th>
-              <th style={th('right')} title={`Projected profit if ${data.underlying} moves ${move} pts ${dirWord}`}>If +{move}pts</th>
-              <th style={th('right')} title={hasStop ? "Premium lost per lot if the underlying runs to the signal's stop" : `Premium lost per lot if the underlying moves ${move} pts against you (no stop set)`}>{hasStop ? 'Risk→SL' : 'Risk↓'}</th>
-              <th style={th('right')} title={hasStop ? 'Reward : risk for this move vs the stop' : `Reward : risk for a ${move}-pt move either way`}>R:R</th>
-              <th style={th('right')} title="Premium lost to time decay per day if nothing moves">θ/day</th>
-              <th style={th('right')} title="Points the underlying must move just to recover the premium">B/E</th>
-              <th style={th('right')} />
+              <th style={th('left')} title="Last traded premium and your cost per lot × lots">Cost</th>
+              <th style={th('left')} title="Black-Scholes delta ≈ probability of finishing in-the-money">δ / ITM%</th>
+              <th style={th('left')} title={`Projected profit if ${data.underlying} moves ${move} pts ${dirWord}`}>If +{move}pts</th>
+              <th style={th('left')} title={hasStop ? "Premium lost per lot if the underlying runs to the signal's stop" : `Premium lost per lot if the underlying moves ${move} pts against you (no stop set)`}>{hasStop ? 'Risk→SL' : 'Risk↓'}</th>
+              <th style={th('left')} title={hasStop ? 'Reward : risk for this move vs the stop' : `Reward : risk for a ${move}-pt move either way`}>R:R</th>
+              <th style={th('left')} title="Premium lost to time decay per day if nothing moves">θ/day</th>
+              <th style={th('left')} title="Points the underlying must move just to recover the premium">B/E</th>
+              <th style={th('left')} />
             </tr>
           </thead>
           <tbody>
@@ -270,21 +270,21 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       )}
                     </span>
                   </td>
-                  <td style={td('right')} title="Cost deployed per move = max loss">
+                  <td style={td('left')} title="Cost deployed per move = max loss">
                     <span style={{ fontWeight: 500, fontSize: 11 }}>{inr(totalCost)}</span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     <span style={{ fontSize: 11, fontWeight: 500 }}>{r.leg.delta.toFixed(2)}</span>
                     <span style={{ fontSize: 10, color: k.dim, marginLeft: 6 }}>{r.probItm}%</span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     <span style={{ color: k.green, fontWeight: 500, fontSize: 11 }}>+{inr(totalGain)}</span>
                     <span style={{ fontSize: 10, color: k.dim, marginLeft: 6 }}>{r.effPct.toFixed(0)}%</span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     <span style={{ color: k.red, fontWeight: 500, fontSize: 11 }}>−{inr(totalRisk)}</span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     <span style={{
                       fontWeight: 500, fontSize: 11,
                       color: r.rr == null ? k.dim : r.rr >= 2 ? k.green : r.rr >= 1 ? k.amber : k.red,
@@ -292,17 +292,17 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       {r.rr == null ? '—' : `${r.rr.toFixed(1)}:1`}
                     </span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     <span style={{ color: k.red, fontSize: 11, fontWeight: 500 }}>{inr(totalTheta)}</span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     <span style={{ color: k.dim, fontSize: 11, fontWeight: 500 }}>{isFinite(r.breakEvenPts) ? `${Math.round(r.breakEvenPts)}p` : '—'}</span>
                   </td>
-                  <td style={td('right')}>
+                  <td style={td('left')}>
                     {onBuy && (
-                      <button onClick={() => onBuy(r.leg)}
-                        style={{ fontSize: 11, padding: '5px 16px', background: k.blue, color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
-                        BUY
+                      <button onClick={() => onBuy(r.leg)} title="Buy this strike"
+                        style={{ fontSize: 11, padding: '5px 12px', background: k.blue, color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.3 }}>
+                        B
                       </button>
                     )}
                   </td>

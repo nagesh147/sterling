@@ -6,7 +6,6 @@ import { parseTradingsymbol } from '../../utils/fmt';
 import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { QuoteDetail } from './MarketWatchPane';
-import { AlignmentChips } from './TripleSupertrendPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';
@@ -35,7 +34,7 @@ function ist(ms: number): string {
 // Compact stat used in the trigger-context strip; even spacing + thin dividers.
 function StripStat({ label, value, color, title }: { label: string; value: string; color?: string; title?: string }) {
   return (
-    <div title={title} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 22px', justifyContent: 'center' }}>
+    <div title={title} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 22px', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
       <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700 }}>{label}</span>
       <span style={{ fontSize: 14, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
@@ -236,13 +235,6 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             </div>
           )}
           
-          {data && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-              {data.alignment && <AlignmentChips a={data.alignment} />}
-              <span style={{ fontSize: 12, color: k.dim, marginLeft: 4 }}>SL {data.stop_loss.toFixed(1)}</span>
-              <span style={{ color: k.dim, fontSize: 12, fontWeight: 600 }}>· {data.option_type}</span>
-            </div>
-          )}
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>

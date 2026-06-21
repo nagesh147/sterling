@@ -285,7 +285,10 @@ export function EngineTerminal() {
       )}
 
       {/* FOOTER */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '5px 14px', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0 }}>
+      <div
+        onClick={() => setMode(mode === 'minimized' ? 'normal' : 'minimized')}
+        title={mode === 'minimized' ? 'Expand terminal' : 'Minimize terminal'}
+        style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '5px 14px', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0, cursor: 'pointer' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: t.headTxt }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, boxShadow: scanning ? `0 0 5px ${k.green}` : 'none', flexShrink: 0 }} />
           TERMINAL
@@ -299,7 +302,7 @@ export function EngineTerminal() {
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Server logs toggle — interleave real backend logs into the terminal */}
           <button
-            onClick={() => setShowServerLogs((v) => !v)}
+            onClick={(e) => { e.stopPropagation(); setShowServerLogs((v) => !v); }}
             title={showServerLogs ? 'Hide server logs' : 'Show server logs'}
             aria-pressed={showServerLogs}
             style={{
@@ -318,7 +321,7 @@ export function EngineTerminal() {
           </button>
           {/* Theme toggle — icon only (shows the mode you'll switch to) */}
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={(e) => { e.stopPropagation(); setTheme(theme === 'dark' ? 'light' : 'dark'); }}
             title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
             style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
           >
@@ -337,7 +340,7 @@ export function EngineTerminal() {
           </button>
           {/* Clear terminal — clear/eraser icon (not delete) */}
           <button
-            onClick={clearLog}
+            onClick={(e) => { e.stopPropagation(); clearLog(); }}
             title="Clear terminal"
             disabled={events.length === 0}
             style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 6px', cursor: events.length === 0 ? 'default' : 'pointer', opacity: events.length === 0 ? 0.4 : 1, display: 'flex', alignItems: 'center' }}
@@ -347,11 +350,6 @@ export function EngineTerminal() {
               <line x1="7" y1="20" x2="20" y2="20" />
             </svg>
           </button>
-          {mode === 'minimized' && (
-            <button onClick={() => setMode('normal')} style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
-              Expand ↑
-            </button>
-          )}
         </div>
       </div>
     </div>
