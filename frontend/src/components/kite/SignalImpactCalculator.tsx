@@ -316,8 +316,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
           <div style={{ borderTop: `1px solid ${k.border}`, background: k.bg }}>
             <button onClick={() => setShowRead((v) => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left', padding: '12px 20px', background: 'transparent', border: 'none', cursor: 'pointer', color: k.text, fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit' }}>
-              <span style={{ display: 'inline-block', transform: showRead ? 'rotate(90deg)' : 'none', transition: 'transform .15s', color: k.dim }}>▸</span>
-              Read
+              {showRead ? 'Hide read' : 'Read'}
             </button>
             {showRead && (
               <div style={{ padding: '0 20px 16px', fontSize: 11.5, color: k.dim, lineHeight: 1.7 }}>

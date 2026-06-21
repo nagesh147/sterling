@@ -169,33 +169,42 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
   );
 }
 
-// A detail section that can be collapsed (click header) and reordered (drag the
-// header onto another section). The header is the drag source; the whole card is
-// the drop target, so the body stays fully interactive.
-function CollapsibleCard({ title, collapsed, onToggle, onDragStart, onDragOver, onDrop, children }: {
+// A detail section that can be collapsed (click the header) and reordered
+// (press-and-drag the header). Dragging is handled by the parent via pointer
+// events so the lifted card stays pinned to the cursor and the list auto-scrolls;
+// a small movement threshold lets a plain click still toggle collapse.
+function CollapsibleCard({ id, title, collapsed, dragging, dragOffset, onHeaderPointerDown, children }: {
+  id: string;
   title: string;
   collapsed: boolean;
-  onToggle: () => void;
-  onDragStart: () => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: () => void;
+  dragging: boolean;
+  dragOffset: { x: number; y: number };
+  onHeaderPointerDown: (e: React.PointerEvent) => void;
   children: React.ReactNode;
 }) {
   return (
     <div
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      style={{ marginTop: 12, border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}
+      data-sec={id}
+      style={{
+        marginTop: 12,
+        border: `1px solid ${dragging ? k.text : k.border}`,
+        borderRadius: 10,
+        overflow: 'hidden',
+        background: k.bg,
+        position: 'relative',
+        transform: dragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
+        boxShadow: dragging ? '0 14px 34px rgba(0,0,0,0.5)' : undefined,
+        opacity: dragging ? 0.97 : 1,
+        zIndex: dragging ? 50 : undefined,
+        transition: dragging ? 'none' : 'box-shadow .15s',
+        willChange: dragging ? 'transform' : undefined,
+      }}
     >
       <div
-        draggable
-        onDragStart={onDragStart}
-        onClick={onToggle}
+        onPointerDown={onHeaderPointerDown}
         title={collapsed ? 'Expand · drag to reorder' : 'Collapse · drag to reorder'}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', userSelect: 'none', background: k.bg, borderBottom: collapsed ? 'none' : `1px solid ${k.border}` }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: dragging ? 'grabbing' : 'grab', userSelect: 'none', touchAction: 'none', background: k.bg, borderBottom: collapsed ? 'none' : `1px solid ${k.border}` }}
       >
-        <span style={{ cursor: 'grab', color: k.dim, fontSize: 13, lineHeight: 1, letterSpacing: -1 }}>⠿</span>
-        <span style={{ display: 'inline-block', transform: collapsed ? 'none' : 'rotate(90deg)', transition: 'transform .15s', color: k.dim, fontSize: 11 }}>▸</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: k.dim, letterSpacing: 0.5, textTransform: 'uppercase' }}>{title}</span>
       </div>
       {!collapsed && children}
@@ -230,18 +239,94 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
   const [sectionCollapsed, setSectionCollapsed] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem('kite_detail_section_collapsed') || '{}'); } catch { return {}; }
   });
-  const dragSection = useRef<string | null>(null);
   useEffect(() => { localStorage.setItem('kite_detail_section_order', JSON.stringify(sectionOrder)); }, [sectionOrder]);
   useEffect(() => { localStorage.setItem('kite_detail_section_collapsed', JSON.stringify(sectionCollapsed)); }, [sectionCollapsed]);
   const toggleSection = (id: string) => setSectionCollapsed((c) => ({ ...c, [id]: !c[id] }));
-  const reorderSection = (from: string, to: string) => setSectionOrder((order) => {
-    if (from === to) return order;
-    const next = order.filter((x) => x !== from);
-    const idx = next.indexOf(to);
-    if (idx < 0) return order;
-    next.splice(idx, 0, from);
-    return next;
-  });
+
+  // Pointer-driven reorder: the picked-up card lifts and tracks the cursor
+  // (up/down + sideways), the list auto-scrolls when the cursor nears an edge so
+  // off-screen sections come into reach, and a thin guide marks where it will land.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const drag = useRef<
+    { id: string; px0: number; py0: number; px: number; py: number; sTop0: number; moved: boolean; raf: number | null; dropIndex: number | null } | null
+  >(null);
+
+  // Where the dragged card would land, based on the cursor vs each slot midpoint.
+  const computeDropIndex = (clientY: number): number => {
+    const sc = scrollRef.current;
+    if (!sc) return 0;
+    const els = Array.from(sc.querySelectorAll('[data-sec]')) as HTMLElement[];
+    for (let i = 0; i < els.length; i++) {
+      const r = els[i].getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) return i;
+    }
+    return els.length;
+  };
+
+  // Per-frame loop while dragging: auto-scroll near edges, keep the card pinned to
+  // the cursor (compensating for any scroll), and refresh the drop guide.
+  const tick = () => {
+    const d = drag.current;
+    const sc = scrollRef.current;
+    if (!d || !sc) return;
+    const r = sc.getBoundingClientRect();
+    const EDGE = 56, SPEED = 14;
+    if (d.py < r.top + EDGE) sc.scrollTop = Math.max(0, sc.scrollTop - SPEED);
+    else if (d.py > r.bottom - EDGE) sc.scrollTop = Math.min(sc.scrollHeight - sc.clientHeight, sc.scrollTop + SPEED);
+    const di = computeDropIndex(d.py);
+    d.dropIndex = di;
+    setDragOffset({ x: d.px - d.px0, y: (d.py - d.py0) + (sc.scrollTop - d.sTop0) });
+    setDropIndex(di);
+    d.raf = requestAnimationFrame(tick);
+  };
+
+  const endDrag = () => {
+    const d = drag.current;
+    if (!d) return;
+    if (d.raf) cancelAnimationFrame(d.raf);
+    if (!d.moved) {
+      toggleSection(d.id); // never crossed the threshold → treat as a click
+    } else if (d.dropIndex != null) {
+      const di = d.dropIndex;
+      setSectionOrder((order) => {
+        const without = order.filter((x) => x !== d.id);
+        const origIdx = order.indexOf(d.id);
+        let insert = di > origIdx ? di - 1 : di;
+        insert = Math.max(0, Math.min(without.length, insert));
+        without.splice(insert, 0, d.id);
+        return without;
+      });
+    }
+    drag.current = null;
+    setDragId(null);
+    setDragOffset({ x: 0, y: 0 });
+    setDropIndex(null);
+  };
+
+  const startDrag = (id: string) => (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const sc = scrollRef.current;
+    const ac = new AbortController();
+    drag.current = { id, px0: e.clientX, py0: e.clientY, px: e.clientX, py: e.clientY, sTop0: sc ? sc.scrollTop : 0, moved: false, raf: null, dropIndex: null };
+    const onMove = (ev: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      d.px = ev.clientX;
+      d.py = ev.clientY;
+      if (!d.moved && Math.abs(ev.clientX - d.px0) + Math.abs(ev.clientY - d.py0) > 4) {
+        d.moved = true;
+        setDragId(d.id);
+        d.raf = requestAnimationFrame(tick);
+      }
+      if (d.moved) ev.preventDefault();
+    };
+    const onUp = () => { ac.abort(); endDrag(); };
+    window.addEventListener('pointermove', onMove, { signal: ac.signal });
+    window.addEventListener('pointerup', onUp, { signal: ac.signal });
+  };
 
   const uExch = data?.exchange === 'BFO' ? 'BSE' : 'NSE';
   const { data: quotes } = useKiteQuote(data ? [`${uExch}:${underlying}`] : [], !!data);
@@ -251,7 +336,7 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
   const move = (data && data.spot_at_trigger > 0 && data.spot_now > 0) ? data.spot_now - data.spot_at_trigger : null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily, overflow: 'auto', scrollbarGutter: 'stable' }}>
+    <div ref={scrollRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', background: k.bg, fontFamily: k.fontFamily, overflow: 'auto', scrollbarGutter: 'stable' }}>
       <style>{`
         .sd-leg-row {
           position: relative;
@@ -339,17 +424,21 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
             );
           })()}
 
-          {/* Collapsible + reorderable detail sections (drag a header to reorder). */}
-          {sectionOrder.map((id) => {
+          {/* Collapsible + reorderable detail sections (press-drag a header to reorder). */}
+          {sectionOrder.map((id, i) => {
             const cardProps = {
+              id,
               collapsed: !!sectionCollapsed[id],
-              onToggle: () => toggleSection(id),
-              onDragStart: () => { dragSection.current = id; },
-              onDragOver: (e: React.DragEvent) => e.preventDefault(),
-              onDrop: () => { if (dragSection.current) reorderSection(dragSection.current, id); dragSection.current = null; },
+              dragging: dragId === id,
+              dragOffset,
+              onHeaderPointerDown: startDrag(id),
             };
+            const guide = dragId && dropIndex === i
+              ? <div key={`guide-${id}`} style={{ height: 2, background: k.green, borderRadius: 2, marginTop: 12 }} />
+              : null;
+            let card: React.ReactNode;
             if (id === 'calculator') {
-              return (
+              card = (
                 <CollapsibleCard key={id} title="Trade Impact Calculator" {...cardProps}>
                   <SignalImpactCalculator
                     headless
@@ -365,16 +454,15 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                   />
                 </CollapsibleCard>
               );
-            }
-            if (id === 'breakdown') {
-              return (
+            } else if (id === 'breakdown') {
+              card = (
                 <CollapsibleCard key={id} title="Premium breakdown" {...cardProps}>
                   <PremiumBreakdown headless data={data} />
                 </CollapsibleCard>
               );
-            }
-            return (
-              <CollapsibleCard key={id} title="Option legs" {...cardProps}>
+            } else {
+              card = (
+                <CollapsibleCard key={id} title="Option legs" {...cardProps}>
                 {data.options.length === 0 ? (
                   <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>No option legs resolved (no liquid ATM/ITM contract).</div>
                 ) : (
@@ -399,9 +487,14 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                     ));
                   })()
                 )}
-              </CollapsibleCard>
-            );
+                </CollapsibleCard>
+              );
+            }
+            return <React.Fragment key={id}>{guide}{card}</React.Fragment>;
           })}
+          {dragId && dropIndex === sectionOrder.length && (
+            <div style={{ height: 2, background: k.green, borderRadius: 2, marginTop: 12 }} />
+          )}
           <div style={{ fontSize: 10, color: k.dim, marginTop: 18, lineHeight: 1.7 }}>
             Greeks are Black-Scholes from live IV (or backed out of last price when the market is closed). BUY/SELL place real MARKET orders on your Kite account.
           </div>
