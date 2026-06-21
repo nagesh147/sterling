@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
-import { useEngineConfig, useSetEngineConfig } from '../../hooks/useTripleSupertrend';
+import { useEngineConfig, useSetEngineConfig } from '../../hooks/useSterlingKiteEngine';
 import type { EngineConfigModel } from '../../types/kiteEngine';
 import { ModeToggle } from './ModeToggle';
 

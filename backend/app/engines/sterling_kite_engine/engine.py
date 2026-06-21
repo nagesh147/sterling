@@ -1,4 +1,4 @@
-"""``TripleSupertrendEngine`` — StrategyProtocol-conforming options engine.
+"""``SterlingKiteEngine`` — StrategyProtocol-conforming options engine.
 
 Broker/market-agnostic: takes a series of CLOSED candles, returns ``Signal``s.
 Stateful only for the trailing lifecycle (one open position per underlying).
@@ -12,8 +12,8 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from app.domain.models import Candle, Signal
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
 @dataclass
@@ -40,12 +40,12 @@ def _arrays(candles: Sequence[Candle]):
     return o, h, l, c
 
 
-class TripleSupertrendEngine:
+class SterlingKiteEngine:
     """Emits an entry Signal only when the latest closed bar is a fresh full
     alignment transition; ratchets/exits via :meth:`manage`."""
 
-    def __init__(self, cfg: Optional[TripleSupertrendConfig] = None):
-        self.cfg = cfg or TripleSupertrendConfig()
+    def __init__(self, cfg: Optional[SterlingKiteEngineConfig] = None):
+        self.cfg = cfg or SterlingKiteEngineConfig()
         self._positions: Dict[str, _OpenPos] = {}
 
     # ── entry ────────────────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ class TripleSupertrendEngine:
             take_profit=None,
             score=score,
             strength="STRONG" if score >= 80.0 else "SIGNAL",
-            source="triple_supertrend",
+            source="sterling_kite_engine",
             timestamp_ms=int(candles[i].timestamp_ms),
         )]
 

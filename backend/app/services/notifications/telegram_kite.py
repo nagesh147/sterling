@@ -1,5 +1,5 @@
 """
-Telegram control surface for the Kite (Zerodha) triple-SuperTrend engine.
+Telegram control surface for the Kite (Zerodha) Sterling Kite Engine.
 
 Kept SEPARATE from the crypto/scalping bot (telegram_bot.py): its own command
 (`/kite`), its own `k*` callback namespace, and its own alert push — the two

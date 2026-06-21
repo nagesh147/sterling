@@ -14,8 +14,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.core.logging import get_logger
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import EngineConfigModel
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services import live_safety
 from app.services.kite_engine import positions, protective_stop, sizing, state
 from app.services.kite_engine import futures as futures_mod
@@ -43,8 +43,8 @@ def has_scanned() -> bool:
     return _first_scan_done
 
 
-def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
-    return TripleSupertrendConfig(trail_target=c.trail_target, early_lock=c.early_lock)
+def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
+    return SterlingKiteEngineConfig(trail_target=c.trail_target, early_lock=c.early_lock)
 
 
 async def place_manual_order(uid: str, option_symbol: str, side: str,
@@ -474,7 +474,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         state.log(uid, "info", "Scan skipped — cancelled recently (60s cooldown).")
         return 0
     state.set_scanning(uid, True)
-    state.log(uid, "scan_start", f"Initiating 1H triple-SuperTrend scan…")
+    state.log(uid, "scan_start", f"Initiating 1H Sterling Kite Engine scan…")
     try:
         # Fetch the four exchange dumps concurrently (warm cache → instant; cold →
         # parallel downloads instead of ~1s of sequential round-trips).

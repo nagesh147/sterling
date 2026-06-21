@@ -6,7 +6,7 @@ import {
   useKiteTickerSubscribe, useKiteTickerUnsubscribe, useRefreshKiteSession,
   useTestKiteAccount, useUpdateKiteAccount,
 } from '../../hooks/useKite';
-import { useEngineConfig, useSetEngineConfig, useEngineSignals } from '../../hooks/useTripleSupertrend';
+import { useEngineConfig, useSetEngineConfig, useEngineSignals } from '../../hooks/useSterlingKiteEngine';
 import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
@@ -570,7 +570,7 @@ function KiteSettings() {
             );
           })}
         </div>
-        <div style={{ ...S.hint, marginTop: 6 }}>Choose how the Triple SuperTrend settings drawer is laid out.</div>
+        <div style={{ ...S.hint, marginTop: 6 }}>Choose how the Sterling Kite Engine settings drawer is laid out.</div>
       </div>
 
       <div style={{ marginBottom: 18, paddingTop: 16, borderTop: `1px solid #e0e0e0` }}>
@@ -652,7 +652,7 @@ function DirectionalModePanelWrapper() {
   );
 }
 
-// Master ON/OFF for the whole Triple-SuperTrend engine. Sits at the very bottom of
+// Master ON/OFF for the whole Sterling Kite Engine. Sits at the very bottom of
 // the Connect page. OFF = Kite behaves as a normal manual-trading platform.
 function EngineMasterToggle() {
   const { data: cfg } = useEngineConfig();
@@ -661,7 +661,7 @@ function EngineMasterToggle() {
   const on = cfg.engine_enabled;
   return (
     <div style={{ ...S.card, borderColor: on ? '#4caf50' : '#e0e0e0', borderWidth: 2 }}>
-      <div style={S.title}>TRIPLE SUPERTREND ENGINE</div>
+      <div style={S.title}>STERLING KITE ENGINE</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button
           onClick={() => setCfg.mutate({ ...cfg, engine_enabled: !on })}

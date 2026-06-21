@@ -2,9 +2,9 @@ import numpy as np
 
 from app.domain.interfaces import StrategyProtocol
 from app.domain.models import Candle, Signal
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
 def _candles(close_path):
@@ -32,12 +32,12 @@ def _first_long_transition(candles, cfg):
 
 
 def test_conforms_to_protocol():
-    assert isinstance(TripleSupertrendEngine(), StrategyProtocol)
+    assert isinstance(SterlingKiteEngine(), StrategyProtocol)
 
 
 def test_generate_emits_long_options_signal_on_fresh_bull():
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     path = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
     candles = _candles(path)
     idx = _first_long_transition(candles, cfg)
@@ -46,20 +46,20 @@ def test_generate_emits_long_options_signal_on_fresh_bull():
     s = sigs[0]
     assert isinstance(s, Signal)
     assert s.direction == "long" and s.instrument_type == "options"
-    assert s.source == "triple_supertrend"
+    assert s.source == "sterling_kite_engine"
     assert s.stop_loss is not None and s.take_profit is None
 
 
 def test_no_signal_when_latest_bar_not_fresh():
     # a long sustained uptrend: alignment became fresh early, last bar is stale
-    eng = TripleSupertrendEngine()
+    eng = SterlingKiteEngine()
     path = list(np.linspace(100, 400, 120))
     assert eng.generate(_candles(path), underlying="X") == []
 
 
 def test_one_position_per_underlying():
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     path = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
     candles = _candles(path)
     idx = _first_long_transition(candles, cfg)
@@ -68,8 +68,8 @@ def test_one_position_per_underlying():
 
 
 def test_trail_ratchets_only_favorably_and_exits_on_flip():
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     up = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
     candles = _candles(up)
     idx = _first_long_transition(candles, cfg)
@@ -90,13 +90,13 @@ def test_trail_ratchets_only_favorably_and_exits_on_flip():
 
 def test_trail_target_knob_changes_stop():
     up = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
-    fast_cfg = TripleSupertrendConfig(trail_target="fast")
-    slow_cfg = TripleSupertrendConfig(trail_target="slow")
+    fast_cfg = SterlingKiteEngineConfig(trail_target="fast")
+    slow_cfg = SterlingKiteEngineConfig(trail_target="slow")
     candles = _candles(up)
     # full alignment (transition bar) is independent of trail_target
-    idx = _first_long_transition(candles, TripleSupertrendConfig())
-    fast = TripleSupertrendEngine(fast_cfg).generate(candles[: idx + 1], underlying="X")
-    slow = TripleSupertrendEngine(slow_cfg).generate(candles[: idx + 1], underlying="Y")
+    idx = _first_long_transition(candles, SterlingKiteEngineConfig())
+    fast = SterlingKiteEngine(fast_cfg).generate(candles[: idx + 1], underlying="X")
+    slow = SterlingKiteEngine(slow_cfg).generate(candles[: idx + 1], underlying="Y")
     assert fast and slow
     # fast (mult 1) trails tighter than slow (mult 3) → higher stop in an uptrend
     assert fast[0].stop_loss >= slow[0].stop_loss

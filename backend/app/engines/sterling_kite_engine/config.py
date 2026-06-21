@@ -1,4 +1,4 @@
-"""Knobs for the 1H Heikin-Ashi triple-SuperTrend engine."""
+"""Knobs for the 1H Heikin-Ashi Sterling Kite Engine."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,8 +8,8 @@ TrailTarget = Literal["fast", "mid", "slow"]
 
 
 @dataclass(frozen=True)
-class TripleSupertrendConfig:
-    """Configuration for the triple-SuperTrend engine.
+class SterlingKiteEngineConfig:
+    """Configuration for the Sterling Kite Engine.
 
     ``fast``/``mid``/``slow`` are named by flip-responsiveness (driven by the
     multiplier), matching the source spec. Each is a ``(period, multiplier)``

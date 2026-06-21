@@ -8,7 +8,7 @@ import numpy as np
 from datetime import datetime, timezone, timedelta
 
 from app.domain.models import Candle
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.services.kite_engine.scanner import (
     evaluate_derivative_contract, scanner, KiteEngineScanner,
 )
@@ -50,7 +50,7 @@ def to_candles(closes):
 
 
 def main():
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     closes = premium_series()
     candles = to_candles(closes)
     print(f"premium bars={len(candles)}  warmup={cfg.warmup}  last_close={closes[-1]:.1f}")

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 // ─── Signal markers (✝ best R:R, ▲ best delta) shared across panes ──────────────
-// The Triple SuperTrend rows compute, per signal, which option leg is the best
+// The Sterling Kite Engine rows compute, per signal, which option leg is the best
 // reward:risk (✝) and which has the highest delta (▲). Those same markers should
 // follow the instrument anywhere it appears — the market watchlist and the ticker
 // — so a user who pins/adds a marked contract sees the same ✝/▲.

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { useEngineOpenPositions, useCloseEnginePosition } from '../../hooks/useTripleSupertrend';
+import { useEngineOpenPositions, useCloseEnginePosition } from '../../hooks/useSterlingKiteEngine';
 import type { EngineOpenPosition, EngineVehicle } from '../../types/kiteEngine';
 
 // ─── Vehicle badge ────────────────────────────────────────────────────────────

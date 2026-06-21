@@ -4,7 +4,7 @@ import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
   useScanReport, useStockRegistry,
-} from '../../hooks/useTripleSupertrend';
+} from '../../hooks/useSterlingKiteEngine';
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
@@ -12,7 +12,7 @@ import type {
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
-import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
+import { QuoteDetail, KiteSearchBar } from './SterlingWatchList';
 import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
 import { stopDistance, computeLegRR, rrScore } from './impactMath';
@@ -1329,7 +1329,7 @@ function ScanReportView({ data }: { data?: ScanReportResponse }) {
   );
 }
 
-export function TripleSupertrendPane({ onSelectSignal }: Props) {
+export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
@@ -1653,7 +1653,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ padding: '12px 16px 8px', borderBottom: `1px solid ${k.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <EngineMark />
-            <span style={{ fontSize: 14, color: k.text }}>Triple SuperTrend</span>
+            <span style={{ fontSize: 14, color: k.text }}>Sterling Kite Engine</span>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim,
                            border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px' }}>1H</span>
           </div>
@@ -1674,12 +1674,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               Engine is off
             </div>
             <div style={{ fontSize: 12, color: k.dim, lineHeight: 1.6, maxWidth: 260 }}>
-              The Triple SuperTrend strategy is disabled. Kite runs in normal mode
+              The Sterling Kite Engine strategy is disabled. Kite runs in normal mode
               — manual trading, market watch, and existing flows are unaffected.
             </div>
           </div>
           <button
-            onClick={() => patch({ engine_enabled: true }, 'Triple SuperTrend engine enabled')}
+            onClick={() => patch({ engine_enabled: true }, 'Sterling Kite Engine enabled')}
             disabled={setCfg.isPending}
             style={{ padding: '10px 28px', borderRadius: 8, border: 'none', cursor: 'pointer',
                      background: k.green, color: '#fff', fontSize: 13, fontWeight: 700,
@@ -1710,7 +1710,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
           <EngineMark />
           <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
-            Triple SuperTrend
+            Sterling Kite Engine
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
@@ -2114,4 +2114,4 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   );
 }
 
-export default TripleSupertrendPane;
+export default SterlingKiteEnginePane;

@@ -1,4 +1,4 @@
-"""API/UI pydantic models for the Kite triple-SuperTrend engine."""
+"""API/UI pydantic models for the Kite Sterling Kite Engine."""
 from __future__ import annotations
 
 from typing import List, Literal, Optional
@@ -218,7 +218,7 @@ DeepItmMoneyness = Literal["ITM5", "ITM10", "ITM15", "ITM20"]
 
 
 class EngineConfigModel(BaseModel):
-    # Master gate. True (default) = Triple-SuperTrend engine active (scanning,
+    # Master gate. True (default) = Sterling Kite Engine active (scanning,
     # signals, auto-execute). False = engine OFF; the Kite platform runs as normal
     # (manual trading only). Toggled from the Connect tab.
     engine_enabled: bool = True

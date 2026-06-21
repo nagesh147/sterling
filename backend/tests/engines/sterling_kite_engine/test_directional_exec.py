@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from app.engines.triple_supertrend.schemas import (
+from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
 )
 from app.services import live_safety

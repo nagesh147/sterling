@@ -1,4 +1,4 @@
-"""Curated stock registry for the Triple SuperTrend scan.
+"""Curated stock registry for the Sterling Kite Engine scan.
 
 Each entry maps a stock name (equity tradingsymbol) to its liquidity tier and
 metadata. Only these stocks are exposed in the UI's quick-pick chip selector.

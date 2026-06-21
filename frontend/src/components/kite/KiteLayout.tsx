@@ -3,13 +3,13 @@ import { k } from '../../styles/kiteUI';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
-import { useEngineActivity } from '../../hooks/useTripleSupertrend';
+import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 
 export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
-// Footer scan-status helpers — mirror the Triple SuperTrend pane formats.
+// Footer scan-status helpers — mirror the Sterling Kite Engine pane formats.
 function fmtAgo(ms: number): string {
   if (!ms) return 'never';
   const s = Math.round((Date.now() - ms) / 1000);
@@ -294,7 +294,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             {content}
           </div>
 
-          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ── */}
+          {/* ── Bottom Bar (Sterling Kite Terminal) — spans only the center column ── */}
           {bottomBar && isBottomBarOpen && (
             terminalMode === 'full' ? (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -402,7 +402,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
                 }
                 window.dispatchEvent(new CustomEvent('kite-pane-toggle'));
               }} 
-              title={terminalMode === 'minimized' ? 'Restore Kite terminal' : 'Show / hide Kite terminal'} 
+              title={terminalMode === 'minimized' ? 'Restore Sterling Kite terminal' : 'Show / hide Sterling Kite terminal'} 
               style={footBtn(isBottomBarOpen || terminalMode === 'minimized')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

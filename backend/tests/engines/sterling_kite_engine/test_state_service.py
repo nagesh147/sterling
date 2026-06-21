@@ -1,7 +1,7 @@
 import pytest
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import EngineConfigModel
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services.kite_engine import state
 
 
@@ -35,7 +35,7 @@ def test_activity_log_ring_and_status():
 async def test_scan_user_logs_and_marks_status(monkeypatch):
     import numpy as np
     from app.domain.models import Candle
-    from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+    from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
     from app.services.kite_engine import service
 
     def _candles(path):
@@ -43,7 +43,7 @@ async def test_scan_user_logs_and_marks_status(monkeypatch):
         return [Candle(timestamp_ms=i * 3_600_000, open=float(o[i]), high=float(max(o[i], c[i]) + 1),
                        low=float(min(o[i], c[i]) - 1), close=float(c[i]), volume=1.0) for i in range(len(c))]
 
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     full = _candles(list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80)))
     o = np.array([x.open for x in full], float); h = np.array([x.high for x in full], float)
     l = np.array([x.low for x in full], float); c = np.array([x.close for x in full], float)
@@ -139,7 +139,7 @@ async def test_reconcile_user_auto_open_clears_after_broker_flat():
 
 @pytest.mark.asyncio
 async def test_auto_exec_one_position_guard():
-    from app.engines.triple_supertrend.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
     from app.services.kite_engine import service, state
 
     state.reset("g1")
@@ -178,7 +178,7 @@ async def test_auto_exec_one_position_guard():
 @pytest.mark.asyncio
 async def test_update_trails_tightens_futures_stop_and_moves_gtt(monkeypatch):
     """_update_open_position_trails updates in-memory stop and calls move_stop."""
-    from app.engines.triple_supertrend.schemas import (
+    from app.engines.sterling_kite_engine.schemas import (
         AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
     )
     from app.services.kite_engine import positions, service, state
@@ -229,7 +229,7 @@ async def test_update_trails_tightens_futures_stop_and_moves_gtt(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_trails_does_not_widen_stop(monkeypatch):
     """_update_open_position_trails never widens an existing stop."""
-    from app.engines.triple_supertrend.schemas import (
+    from app.engines.sterling_kite_engine.schemas import (
         AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
     )
     from app.services.kite_engine import positions, service, state

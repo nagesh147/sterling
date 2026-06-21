@@ -1,5 +1,5 @@
-// Types for the Kite-exclusive triple-SuperTrend options engine.
-// Mirrors backend app/engines/triple_supertrend/schemas.py.
+// Types for the Kite-exclusive Sterling Kite Engine options engine.
+// Mirrors backend app/engines/sterling_kite_engine/schemas.py.
 
 export type TrailTarget = 'fast' | 'mid' | 'slow';
 export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';

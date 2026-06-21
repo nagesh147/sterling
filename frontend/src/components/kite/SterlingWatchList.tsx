@@ -362,7 +362,7 @@ export function KiteSearchBar({
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
-export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
+export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
   const [query, setQuery] = useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = useState(false);
   // Debounce so we fire ONE /instruments request after typing pauses, not one

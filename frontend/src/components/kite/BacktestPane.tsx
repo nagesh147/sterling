@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useEngineBacktest } from '../../hooks/useTripleSupertrend';
+import { useEngineBacktest } from '../../hooks/useSterlingKiteEngine';
 import type {
   BacktestDataMode, BacktestRequest, BacktestRun, BacktestStats,
 } from '../../types/kiteEngine';
@@ -154,7 +154,7 @@ export function BacktestPane() {
     <div style={S.wrap}>
       <div style={S.h1}>Options Backtest</div>
       <div style={S.sub}>
-        Replays the Triple-SuperTrend signal with real Indian F&amp;O costs (STT, brokerage, GST,
+        Replays the Sterling Kite Engine signal with real Indian F&amp;O costs (STT, brokerage, GST,
         slippage). Pick how option prices are sourced — each mode states its honesty caveat.
       </div>
 

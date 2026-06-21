@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
-import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useTripleSupertrend';
+import { useEngineDetail, useEnginePlaceOrder } from '../../hooks/useSterlingKiteEngine';
 import type { DepthLevel, OptionDetail } from '../../types/kiteEngine';
 import { parseTradingsymbol } from '../../utils/fmt';
 import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
-import { QuoteDetail } from './MarketWatchPane';
+import { QuoteDetail } from './SterlingWatchList';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';

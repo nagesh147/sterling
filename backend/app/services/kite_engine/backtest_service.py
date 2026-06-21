@@ -12,7 +12,7 @@ from typing import List, Optional
 import numpy as np
 
 from app.core.logging import get_logger
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine import backtest as bt
 from app.services.kite_engine.greeks import bs_price
@@ -81,7 +81,7 @@ def _arrays(candles):
 
 async def run_backtest(client, req) -> dict:
     """Execute the requested data mode(s) and return a response dict."""
-    cfg = TripleSupertrendConfig(trail_target=req.trail_target)
+    cfg = SterlingKiteEngineConfig(trail_target=req.trail_target)
     costs = _costs(req)
     runs: List[dict] = []
     notes: List[str] = []

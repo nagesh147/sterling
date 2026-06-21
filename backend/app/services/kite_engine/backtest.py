@@ -1,7 +1,7 @@
-"""Honest options backtest for the Kite Triple-SuperTrend engine (workstream H).
+"""Honest options backtest for the Kite Sterling Kite Engine (workstream H).
 
 Three data modes, all replaying the SAME signal logic the live engine uses
-(Triple-SuperTrend full-alignment entries, trail-target exit):
+(Sterling Kite Engine full-alignment entries, trail-target exit):
 
   * ``synthetic`` — run the ST on the underlying's real multi-year candles. Each
     bar the option premium is priced with Black-Scholes (underlying + a fixed IV
@@ -29,8 +29,8 @@ from typing import List, Optional
 
 import numpy as np
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.greeks import bs_price
 
 
@@ -156,7 +156,7 @@ def replay_premium_series(
     premium_high: List[float],
     premium_low: List[float],
     premium_close: List[float],
-    cfg: TripleSupertrendConfig,
+    cfg: SterlingKiteEngineConfig,
     trail_target: str,
     qty: int,
     costs: OptionCosts,
@@ -239,7 +239,7 @@ def run_synthetic(
     *,
     timestamps_ms: List[int],
     u_open: List[float], u_high: List[float], u_low: List[float], u_close: List[float],
-    cfg: TripleSupertrendConfig,
+    cfg: SterlingKiteEngineConfig,
     trail_target: str,
     iv: float,
     dte_days: float,

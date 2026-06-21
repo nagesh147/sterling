@@ -1,14 +1,14 @@
-# Kite Triple-SuperTrend Options Engine — Implementation Plan
+# Kite Sterling Kite Engine Options Engine — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (inline) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A Kite-exclusive 1H Heikin-Ashi triple-SuperTrend options engine that scans the Indian universe (Nifty50/BankNifty/FinNifty/Sensex stocks + index options), emits ready Signals with ATM/ITM strikes, shows them in the Kite right sidebar with click-to-chart, and optionally auto-executes.
+**Goal:** A Kite-exclusive 1H Heikin-Ashi Sterling Kite Engine options engine that scans the Indian universe (Nifty50/BankNifty/FinNifty/Sensex stocks + index options), emits ready Signals with ATM/ITM strikes, shows them in the Kite right sidebar with click-to-chart, and optionally auto-executes.
 
-**Architecture:** A pure, broker-agnostic engine core (`backend/app/engines/triple_supertrend/`) computes HA + 3 SuperTrends, detects fresh full-alignment transitions, and trails on the mid ST. Kite-only wiring (universe builder, throttled scanner, ATM/ITM strike picker, endpoints, sidebar pane, auto-exec) lives separately and imports **no** other-engine strategy logic.
+**Architecture:** A pure, broker-agnostic engine core (`backend/app/engines/sterling_kite_engine/`) computes HA + 3 SuperTrends, detects fresh full-alignment transitions, and trails on the mid ST. Kite-only wiring (universe builder, throttled scanner, ATM/ITM strike picker, endpoints, sidebar pane, auto-exec) lives separately and imports **no** other-engine strategy logic.
 
 **Tech Stack:** Python/FastAPI, numpy, pydantic; React + lightweight-charts v5; Kite Connect (KiteClient).
 
-**Test convention:** Run with `PYTHONWARNINGS=ignore` from `backend/`. Tests live in `backend/tests/engines/triple_supertrend/`.
+**Test convention:** Run with `PYTHONWARNINGS=ignore` from `backend/`. Tests live in `backend/tests/engines/sterling_kite_engine/`.
 
 **Hard constraint (Kite exclusive):** No imports from `app.engines.derivatives`, `edge`, `directional`, `scalping`, `sterling_*`. Allowed shared primitives only: `compute_heikin_ashi`, `compute_supertrend`, `app.domain.models.Signal`.
 
@@ -17,11 +17,11 @@
 ## File structure
 
 **Engine core (pure, broker-agnostic):**
-- `backend/app/engines/triple_supertrend/__init__.py` — exports
-- `backend/app/engines/triple_supertrend/config.py` — `TripleSupertrendConfig`
-- `backend/app/engines/triple_supertrend/regime.py` — pure HA+3ST+transitions+trail
-- `backend/app/engines/triple_supertrend/engine.py` — `TripleSupertrendEngine` (StrategyProtocol)
-- `backend/app/engines/triple_supertrend/schemas.py` — API/UI pydantic models
+- `backend/app/engines/sterling_kite_engine/__init__.py` — exports
+- `backend/app/engines/sterling_kite_engine/config.py` — `SterlingKiteEngineConfig`
+- `backend/app/engines/sterling_kite_engine/regime.py` — pure HA+3ST+transitions+trail
+- `backend/app/engines/sterling_kite_engine/engine.py` — `SterlingKiteEngine` (StrategyProtocol)
+- `backend/app/engines/sterling_kite_engine/schemas.py` — API/UI pydantic models
 
 **Kite wiring (exclusive):**
 - `backend/app/services/kite_engine/__init__.py`
@@ -32,19 +32,19 @@
 - Modify `backend/main.py` — include the router
 
 **Frontend:**
-- `frontend/src/components/kite/TripleSupertrendPane.tsx` — right sidebar
+- `frontend/src/components/kite/SterlingKiteEnginePane.tsx` — right sidebar
 - `frontend/src/components/kite/SetupChart.tsx` — click-to-chart (HA + 3 ST + markers)
-- `frontend/src/hooks/useTripleSupertrend.ts` — polling + setup fetch
+- `frontend/src/hooks/useSterlingKiteEngine.ts` — polling + setup fetch
 - Modify `frontend/src/components/kite/KiteTab.tsx:54` — mount pane in `rightSidebar`
 - `frontend/src/types/kiteEngine.ts` — shared types
 
 **Tests:**
-- `backend/tests/engines/triple_supertrend/__init__.py`
-- `backend/tests/engines/triple_supertrend/conftest.py` — OHLC fixtures
-- `backend/tests/engines/triple_supertrend/test_regime.py`
-- `backend/tests/engines/triple_supertrend/test_engine.py`
-- `backend/tests/engines/triple_supertrend/test_strikes.py`
-- `backend/tests/engines/triple_supertrend/test_universe.py`
+- `backend/tests/engines/sterling_kite_engine/__init__.py`
+- `backend/tests/engines/sterling_kite_engine/conftest.py` — OHLC fixtures
+- `backend/tests/engines/sterling_kite_engine/test_regime.py`
+- `backend/tests/engines/sterling_kite_engine/test_engine.py`
+- `backend/tests/engines/sterling_kite_engine/test_strikes.py`
+- `backend/tests/engines/sterling_kite_engine/test_universe.py`
 
 ---
 
@@ -53,8 +53,8 @@
 ### Task 1: Config
 
 **Files:**
-- Create: `backend/app/engines/triple_supertrend/__init__.py`
-- Create: `backend/app/engines/triple_supertrend/config.py`
+- Create: `backend/app/engines/sterling_kite_engine/__init__.py`
+- Create: `backend/app/engines/sterling_kite_engine/config.py`
 
 - [ ] **Step 1:** Create `__init__.py` empty (exports added later).
 
@@ -69,8 +69,8 @@ TrailTarget = Literal["fast", "mid", "slow"]
 
 
 @dataclass(frozen=True)
-class TripleSupertrendConfig:
-    """Knobs for the 1H Heikin-Ashi triple-SuperTrend engine.
+class SterlingKiteEngineConfig:
+    """Knobs for the 1H Heikin-Ashi Sterling Kite Engine.
 
     fast/mid/slow are named by flip-responsiveness (driven by the multiplier),
     matching the source spec. Params are (period, multiplier) verbatim.
@@ -90,17 +90,17 @@ class TripleSupertrendConfig:
         return {"fast": self.fast, "mid": self.mid, "slow": self.slow}[target]
 ```
 
-- [ ] **Step 3: Commit.** `git add backend/app/engines/triple_supertrend && git commit -m "feat(kite-engine): triple-supertrend config"`
+- [ ] **Step 3: Commit.** `git add backend/app/engines/sterling_kite_engine && git commit -m "feat(kite-engine): sterling-kite-engine config"`
 
 ---
 
 ### Task 2: Regime core — alignment + transitions (TDD)
 
 **Files:**
-- Create: `backend/tests/engines/triple_supertrend/__init__.py` (empty)
-- Create: `backend/tests/engines/triple_supertrend/conftest.py`
-- Create: `backend/tests/engines/triple_supertrend/test_regime.py`
-- Create: `backend/app/engines/triple_supertrend/regime.py`
+- Create: `backend/tests/engines/sterling_kite_engine/__init__.py` (empty)
+- Create: `backend/tests/engines/sterling_kite_engine/conftest.py`
+- Create: `backend/tests/engines/sterling_kite_engine/test_regime.py`
+- Create: `backend/app/engines/sterling_kite_engine/regime.py`
 
 - [ ] **Step 1: Fixtures** — `conftest.py`:
 
@@ -136,13 +136,13 @@ def down_then_up():
 
 ```python
 import numpy as np
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime
 
 
 def test_regime_shapes_and_warmup(uptrend):
     o, h, l, c = uptrend
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     r = compute_regime(o, h, l, c, cfg)
     n = len(c)
     assert r.bull.shape == (n,) and r.bear.shape == (n,)
@@ -154,12 +154,12 @@ def test_regime_shapes_and_warmup(uptrend):
 
 def test_three_trend_arrays_present(uptrend):
     o, h, l, c = uptrend
-    r = compute_regime(o, h, l, c, TripleSupertrendConfig())
+    r = compute_regime(o, h, l, c, SterlingKiteEngineConfig())
     for tr in (r.t_fast, r.t_mid, r.t_slow):
         assert set(np.unique(tr[20:])).issubset({-1, 1})
 ```
 
-- [ ] **Step 3:** Run `PYTHONWARNINGS=ignore pytest tests/engines/triple_supertrend/test_regime.py -v` → FAIL (no module).
+- [ ] **Step 3:** Run `PYTHONWARNINGS=ignore pytest tests/engines/sterling_kite_engine/test_regime.py -v` → FAIL (no module).
 
 - [ ] **Step 4: Implement** `regime.py`:
 
@@ -171,7 +171,7 @@ from numpy.typing import NDArray
 
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
 from app.engines.indicators.supertrend import compute_supertrend
-from app.engines.triple_supertrend.config import TripleSupertrendConfig, TrailTarget
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig, TrailTarget
 
 
 @dataclass
@@ -193,7 +193,7 @@ class RegimeSeries:
         return {"fast": self.t_fast, "mid": self.t_mid, "slow": self.t_slow}[target]
 
 
-def compute_regime(opens, highs, lows, closes, cfg: TripleSupertrendConfig) -> RegimeSeries:
+def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) -> RegimeSeries:
     o = np.asarray(opens, float); h = np.asarray(highs, float)
     l = np.asarray(lows, float); c = np.asarray(closes, float)
     _, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
@@ -215,12 +215,12 @@ def compute_regime(opens, highs, lows, closes, cfg: TripleSupertrendConfig) -> R
 - [ ] **Step 6: Add transition test** to `test_regime.py`:
 
 ```python
-from app.engines.triple_supertrend.regime import entry_transitions
+from app.engines.sterling_kite_engine.regime import entry_transitions
 
 
 def test_fresh_transition_fires_once(down_then_up):
     o, h, l, c = down_then_up
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     r = compute_regime(o, h, l, c, cfg)
     longs, shorts = entry_transitions(r)
     # exactly the bars where alignment becomes fresh — not every aligned bar
@@ -258,8 +258,8 @@ def entry_transitions(r: RegimeSeries):
 ### Task 3: Engine — generate() + trailing lifecycle (TDD)
 
 **Files:**
-- Create: `backend/app/engines/triple_supertrend/engine.py`
-- Create: `backend/tests/engines/triple_supertrend/test_engine.py`
+- Create: `backend/app/engines/sterling_kite_engine/engine.py`
+- Create: `backend/tests/engines/sterling_kite_engine/test_engine.py`
 
 - [ ] **Step 1: Failing tests** — `test_engine.py`:
 
@@ -267,8 +267,8 @@ def entry_transitions(r: RegimeSeries):
 import numpy as np
 from app.domain.models import Candle, Signal
 from app.domain.interfaces import StrategyProtocol
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
 
 
 def _candles(close_path):
@@ -283,11 +283,11 @@ def _candles(close_path):
 
 
 def test_conforms_to_protocol():
-    assert isinstance(TripleSupertrendEngine(), StrategyProtocol)
+    assert isinstance(SterlingKiteEngine(), StrategyProtocol)
 
 
 def test_generate_emits_long_options_signal_on_fresh_bull():
-    eng = TripleSupertrendEngine()
+    eng = SterlingKiteEngine()
     # latest closed bar is a fresh bull transition
     path = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 450, 50))
     sigs = eng.generate(_candles(path), underlying="RELIANCE")
@@ -295,18 +295,18 @@ def test_generate_emits_long_options_signal_on_fresh_bull():
     s = sigs[0]
     assert isinstance(s, Signal)
     assert s.direction == "long" and s.instrument_type == "options"
-    assert s.source == "triple_supertrend"
+    assert s.source == "sterling_kite_engine"
     assert s.stop_loss is not None and s.take_profit is None
 
 
 def test_no_signal_when_not_fresh():
-    eng = TripleSupertrendEngine()
+    eng = SterlingKiteEngine()
     path = list(np.linspace(100, 400, 120))  # long uptrend; last bar not a fresh flip
     assert eng.generate(_candles(path), underlying="X") == []
 
 
 def test_one_position_per_underlying():
-    eng = TripleSupertrendEngine()
+    eng = SterlingKiteEngine()
     path = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 450, 50))
     eng.generate(_candles(path), underlying="RELIANCE")        # opens
     again = eng.generate(_candles(path), underlying="RELIANCE")  # already open
@@ -324,8 +324,8 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from app.domain.models import Candle, Signal
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
 @dataclass
@@ -352,14 +352,14 @@ def _arrays(candles: Sequence[Candle]):
     return o, h, l, c
 
 
-class TripleSupertrendEngine:
+class SterlingKiteEngine:
     """StrategyProtocol. Broker/market-agnostic: closed candles in, Signals out.
 
     Stateful only for the trailing lifecycle (one open position per underlying).
     """
 
-    def __init__(self, cfg: Optional[TripleSupertrendConfig] = None):
-        self.cfg = cfg or TripleSupertrendConfig()
+    def __init__(self, cfg: Optional[SterlingKiteEngineConfig] = None):
+        self.cfg = cfg or SterlingKiteEngineConfig()
         self._positions: Dict[str, _OpenPos] = {}
 
     def generate(self, candles: Sequence[Candle], underlying: str = "", **_) -> List[Signal]:
@@ -382,7 +382,7 @@ class TripleSupertrendEngine:
             underlying=underlying, direction=direction, instrument_type="options",
             stop_loss=trail, take_profit=None, score=score,
             strength="STRONG" if score >= 80 else "SIGNAL",
-            source="triple_supertrend",
+            source="sterling_kite_engine",
             timestamp_ms=int(candles[i].timestamp_ms),
         )]
 
@@ -428,7 +428,7 @@ class TripleSupertrendEngine:
 
 ```python
 def test_trail_ratchets_only_favorably_and_exits_on_flip():
-    eng = TripleSupertrendEngine()
+    eng = SterlingKiteEngine()
     up = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
     candles = _candles(up)
     eng.generate(candles, underlying="X")
@@ -441,8 +441,8 @@ def test_trail_ratchets_only_favorably_and_exits_on_flip():
 
 
 def test_trail_target_knob_changes_stop():
-    fast = TripleSupertrendEngine(TripleSupertrendConfig(trail_target="fast"))
-    slow = TripleSupertrendEngine(TripleSupertrendConfig(trail_target="slow"))
+    fast = SterlingKiteEngine(SterlingKiteEngineConfig(trail_target="fast"))
+    slow = SterlingKiteEngine(SterlingKiteEngineConfig(trail_target="slow"))
     up = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
     sf = fast.generate(_candles(up), underlying="X")
     ss = slow.generate(_candles(up), underlying="Y")
@@ -455,22 +455,22 @@ def test_trail_target_knob_changes_stop():
 - [ ] **Step 7: Export** in `__init__.py`:
 
 ```python
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine, ManageResult
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions, RegimeSeries
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine, ManageResult
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions, RegimeSeries
 
-__all__ = ["TripleSupertrendConfig", "TripleSupertrendEngine", "ManageResult",
+__all__ = ["SterlingKiteEngineConfig", "SterlingKiteEngine", "ManageResult",
            "compute_regime", "entry_transitions", "RegimeSeries"]
 ```
 
-- [ ] **Step 8: Commit.** `git commit -am "feat(kite-engine): TripleSupertrendEngine generate + trailing lifecycle"`
+- [ ] **Step 8: Commit.** `git commit -am "feat(kite-engine): SterlingKiteEngine generate + trailing lifecycle"`
 
 ---
 
 ### Task 4: API/UI schemas
 
 **Files:**
-- Create: `backend/app/engines/triple_supertrend/schemas.py`
+- Create: `backend/app/engines/sterling_kite_engine/schemas.py`
 
 - [ ] **Step 1:** Write `schemas.py`:
 
@@ -548,7 +548,7 @@ class EngineConfigModel(BaseModel):
 - Create: `backend/app/services/kite_engine/__init__.py` (empty)
 - Create: `backend/app/services/kite_engine/universe.py`
 - Create: `backend/app/services/kite_engine/universe.json`
-- Create: `backend/tests/engines/triple_supertrend/test_universe.py`
+- Create: `backend/tests/engines/sterling_kite_engine/test_universe.py`
 
 - [ ] **Step 1:** Write `universe.json` (editable index/basket config — names + the four indices with their option exchange):
 
@@ -659,7 +659,7 @@ def build_universe(*, nfo_instruments: Sequence[dict], bfo_instruments: Sequence
 
 **Files:**
 - Create: `backend/app/services/kite_engine/strikes.py`
-- Create: `backend/tests/engines/triple_supertrend/test_strikes.py`
+- Create: `backend/tests/engines/sterling_kite_engine/test_strikes.py`
 
 - [ ] **Step 1: Failing test** — `test_strikes.py`:
 
@@ -763,10 +763,10 @@ from typing import Dict, List, Optional
 
 from app.core.logging import get_logger
 from app.domain.models import Candle
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-from app.engines.triple_supertrend.schemas import AlignmentChip, EngineSignalRow
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.universe import UniverseItem
 from app.services.kite_engine.strikes import pick_strike
 
@@ -788,7 +788,7 @@ def _drop_forming(candles: List[Candle], tf_ms: int = 3600_000) -> List[Candle]:
 
 @dataclass
 class _UserScan:
-    engine: TripleSupertrendEngine
+    engine: SterlingKiteEngine
     rows: List[EngineSignalRow] = field(default_factory=list)
     candle_cache: Dict[int, tuple] = field(default_factory=dict)  # token -> (ts, candles)
     generated_ms: int = 0
@@ -799,16 +799,16 @@ class KiteEngineScanner:
     def __init__(self):
         self._users: Dict[str, _UserScan] = {}
 
-    def _user(self, uid: str, cfg: TripleSupertrendConfig) -> _UserScan:
+    def _user(self, uid: str, cfg: SterlingKiteEngineConfig) -> _UserScan:
         if uid not in self._users:
-            self._users[uid] = _UserScan(engine=TripleSupertrendEngine(cfg))
+            self._users[uid] = _UserScan(engine=SterlingKiteEngine(cfg))
         return self._users[uid]
 
     def snapshot(self, uid: str) -> _UserScan:
-        return self._users.get(uid) or _UserScan(engine=TripleSupertrendEngine())
+        return self._users.get(uid) or _UserScan(engine=SterlingKiteEngine())
 
     async def scan(self, *, uid: str, client, universe: List[UniverseItem],
-                   cfg: TripleSupertrendConfig, moneyness: str = "ATM") -> None:
+                   cfg: SterlingKiteEngineConfig, moneyness: str = "ATM") -> None:
         us = self._user(uid, cfg)
         us.scanning = True
         sem = asyncio.Semaphore(_CONCURRENCY)
@@ -917,8 +917,8 @@ from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import UserContext, get_current_user
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import (
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import (
     EngineConfigModel, SignalsResponse, SetupChart)
 from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.kite_engine.scanner import scanner
@@ -932,8 +932,8 @@ def _cfg(uid: str) -> EngineConfigModel:
     return _config.setdefault(uid, EngineConfigModel())
 
 
-def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
-    return TripleSupertrendConfig(trail_target=c.trail_target, early_lock=c.early_lock)
+def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
+    return SterlingKiteEngineConfig(trail_target=c.trail_target, early_lock=c.early_lock)
 
 
 @router.get("/config", response_model=EngineConfigModel)
@@ -1009,31 +1009,31 @@ async def setup(token: int, underlying: str = "", user: UserContext = Depends(ge
 
 **Files:**
 - Create: `frontend/src/types/kiteEngine.ts`
-- Create: `frontend/src/hooks/useTripleSupertrend.ts`
+- Create: `frontend/src/hooks/useSterlingKiteEngine.ts`
 
 **Reference:** mirror query/polling style in `frontend/src/hooks/useKite.ts` (same fetch wrapper / base URL / auth headers).
 
 - [ ] **Step 1:** `kiteEngine.ts` — TS mirrors of `EngineSignalRow`, `SignalsResponse`, `SetupChart`, `EngineConfigModel`.
 
-- [ ] **Step 2:** `useTripleSupertrend.ts` — `useEngineSignals()` (poll `GET /api/v1/kite/engine/signals` every ~15s), `useEngineConfig()` + `setEngineConfig()`, `runScan()` (`POST /scan`), `fetchSetup(token, underlying)` (`GET /setup/{token}`). Follow the exact fetch helper used in `useKite.ts`.
+- [ ] **Step 2:** `useSterlingKiteEngine.ts` — `useEngineSignals()` (poll `GET /api/v1/kite/engine/signals` every ~15s), `useEngineConfig()` + `setEngineConfig()`, `runScan()` (`POST /scan`), `fetchSetup(token, underlying)` (`GET /setup/{token}`). Follow the exact fetch helper used in `useKite.ts`.
 
-- [ ] **Step 3: Commit.** `git commit -am "feat(kite-engine): FE types + useTripleSupertrend hook"`
+- [ ] **Step 3: Commit.** `git commit -am "feat(kite-engine): FE types + useSterlingKiteEngine hook"`
 
 ### Task 10: Sidebar pane
 
 **Files:**
-- Create: `frontend/src/components/kite/TripleSupertrendPane.tsx`
+- Create: `frontend/src/components/kite/SterlingKiteEnginePane.tsx`
 - Modify: `frontend/src/components/kite/KiteTab.tsx:54`
 
 **Reference:** style tokens from `frontend/src/styles/kiteUI.tsx`; orange `#ff5722`.
 
-- [ ] **Step 1:** Build `TripleSupertrendPane.tsx`: header (title, scan button, **auto-execute toggle**, trail-target + moneyness selects bound to `useEngineConfig`), then a list of `EngineSignalRow`s (BULL/BEAR badge, fast/mid/slow alignment chips ▲/▼, CE/PE + strike + expiry, trailing stop). Each row `onClick` → `onSelectSetup(token, underlying)` passed via prop (opens the chart). Empty state: "No ready setups."
+- [ ] **Step 1:** Build `SterlingKiteEnginePane.tsx`: header (title, scan button, **auto-execute toggle**, trail-target + moneyness selects bound to `useEngineConfig`), then a list of `EngineSignalRow`s (BULL/BEAR badge, fast/mid/slow alignment chips ▲/▼, CE/PE + strike + expiry, trailing stop). Each row `onClick` → `onSelectSetup(token, underlying)` passed via prop (opens the chart). Empty state: "No ready setups."
 
-- [ ] **Step 2:** Mount in `KiteTab.tsx`: replace `rightSidebar={<div .../>}` with `rightSidebar={<TripleSupertrendPane onSelectSetup={setSetupView} />}` and add `const [setupView, setSetupView] = useState<{token:number;underlying:string}|null>(null)`.
+- [ ] **Step 2:** Mount in `KiteTab.tsx`: replace `rightSidebar={<div .../>}` with `rightSidebar={<SterlingKiteEnginePane onSelectSetup={setSetupView} />}` and add `const [setupView, setSetupView] = useState<{token:number;underlying:string}|null>(null)`.
 
 - [ ] **Step 3:** `tsc` check: `cd frontend && npx tsc --noEmit` → clean.
 
-- [ ] **Step 4: Commit.** `git commit -am "feat(kite-engine): right-sidebar TripleSupertrend signals pane"`
+- [ ] **Step 4: Commit.** `git commit -am "feat(kite-engine): right-sidebar SterlingKiteEngine signals pane"`
 
 ---
 

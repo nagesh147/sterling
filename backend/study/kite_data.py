@@ -1,4 +1,4 @@
-"""Real Kite index-candle fetcher for the Triple-SuperTrend permutation sweep.
+"""Real Kite index-candle fetcher for the Sterling Kite Engine permutation sweep.
 
 Pulls multi-year 1H candles for the four Kite index underlyings by stitching
 together <=400-day windows (Kite caps a single 60minute historical request at

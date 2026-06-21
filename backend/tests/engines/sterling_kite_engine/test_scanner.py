@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 from app.domain.models import Candle
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.scanner import (
     KiteEngineScanner, attach_strikes, drop_forming, evaluate_derivative_contract,
     evaluate_item, option_order_args,
@@ -56,8 +56,8 @@ def test_drop_forming_removes_open_bar():
 
 
 def test_evaluate_item_emits_row_on_fresh_transition():
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     item = UniverseItem("RELIANCE", "RELIANCE", 111, "NSE", "NFO")
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
     rows = evaluate_item(eng, item, candles, cfg)
@@ -68,8 +68,8 @@ def test_evaluate_item_emits_row_on_fresh_transition():
 
 
 def test_attach_strike_uses_option_name_for_indices():
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     nifty = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
     rows = evaluate_item(eng, nifty, candles, cfg)
@@ -89,8 +89,8 @@ def test_attach_strike_uses_option_name_for_indices():
 
 
 def test_attach_strikes_multi_moneyness_legs():
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     item = UniverseItem("ACME", "ACME", 1, "NSE", "NFO")
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
     rows = evaluate_item(eng, item, candles, cfg)
@@ -115,8 +115,8 @@ def test_attach_strikes_multi_moneyness_legs():
 def test_attach_strikes_otm_legs_and_canonical_order():
     """ITM + ATM + OTM together, resolved in a fixed canonical order (ATM first)
     regardless of the order they were requested in (the UI can scramble it)."""
-    cfg = TripleSupertrendConfig()
-    eng = TripleSupertrendEngine(cfg)
+    cfg = SterlingKiteEngineConfig()
+    eng = SterlingKiteEngine(cfg)
     item = UniverseItem("ACME", "ACME", 1, "NSE", "NFO")
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
     rows = evaluate_item(eng, item, candles, cfg)
@@ -140,7 +140,7 @@ def test_attach_strikes_otm_legs_and_canonical_order():
 def test_option_order_args_auto_exec_picks_nearest_to_spot_leg():
     """Auto-exec must buy the at-the-money (nearest-spot) contract, never a deep
     OTM lottery — even if an OTM leg happens to be first in the list."""
-    from app.engines.triple_supertrend.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
 
     row = EngineSignalRow(
         underlying="NIFTY 50", token=256265, exchange="NFO", regime="BULL",
@@ -165,7 +165,7 @@ async def test_scan_end_to_end_with_fake_client():
             # one item fires (fresh transition), the other is flat noise
             if inst.zerodha_token == 1:
                 return _trim_to_transition(_candles(_fresh_long_path()),
-                                           TripleSupertrendConfig())
+                                           SterlingKiteEngineConfig())
             return _candles(list(np.linspace(100, 101, 30)))
 
     base = 400  # rough ATM for the fired item (rises to ~600 region trimmed earlier)
@@ -182,7 +182,7 @@ async def test_scan_end_to_end_with_fake_client():
     sc = KiteEngineScanner()
     # candles are far in the past, so drop_forming keeps the last bar
     await sc.scan(uid="u1", client=FakeClient(), universe=universe, nfo_rows=nfo,
-                  bfo_rows=[], cfg=TripleSupertrendConfig(), moneyness=["ATM"])
+                  bfo_rows=[], cfg=SterlingKiteEngineConfig(), moneyness=["ATM"])
     snap = sc.snapshot("u1")
     assert not snap.scanning and snap.generated_ms > 0
     # only the firing item appears (DULL is flat); evaluate_item now returns all
@@ -193,7 +193,7 @@ async def test_scan_end_to_end_with_fake_client():
 
 
 def test_evaluate_derivative_contract_emits_buy_on_premium_uptrend():
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     item = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
     pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
                       expiry="2026-06-26", dte=8, lot_size=75, token=44001)
@@ -211,7 +211,7 @@ def test_evaluate_derivative_contract_emits_buy_on_premium_uptrend():
 
 
 def test_evaluate_derivative_contract_pe_is_bearish():
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     item = UniverseItem("BANKNIFTY", "BANKNIFTY", 260105, "INDICES", "NFO", is_index=True)
     pick = OptionPick(option_symbol="BANKNIFTY25JUN54000PE", strike=54000.0, option_type="PE",
                       expiry="2026-06-26", dte=8, lot_size=15, token=55001)
@@ -223,7 +223,7 @@ def test_evaluate_derivative_contract_pe_is_bearish():
 
 
 def test_evaluate_derivative_contract_buy_only_skips_premium_downtrend():
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     item = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
     pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
                       expiry="2026-06-26", dte=8, lot_size=75, token=44001)
@@ -240,7 +240,7 @@ def test_evaluate_derivative_contract_old_entry_dead_after_stop_breach():
     long-dead entry (e.g. bought at 971, premium since collapsed to 200) was shown as
     a live 'running' signal whenever the trail bounced back up.
     """
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     item = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
     pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
                       expiry="2026-06-26", dte=8, lot_size=75, token=44001)
@@ -258,13 +258,13 @@ def test_evaluate_derivative_contract_old_entry_dead_after_stop_breach():
 
 
 def test_engine_config_default_offers_itm_and_otm():
-    from app.engines.triple_supertrend.schemas import EngineConfigModel
+    from app.engines.sterling_kite_engine.schemas import EngineConfigModel
     cfg = EngineConfigModel()
     assert cfg.strike_moneyness == ["ITM1", "ATM", "OTM1"]
 
 
 def test_engine_config_scan_source_and_universe_defaults():
-    from app.engines.triple_supertrend.schemas import EngineConfigModel
+    from app.engines.sterling_kite_engine.schemas import EngineConfigModel
     c = EngineConfigModel()
     assert c.scan_source == "derivatives"   # default engine mode
     assert c.scan_all_stocks is False       # indices/curated only by default
@@ -275,7 +275,7 @@ def test_engine_config_scan_source_and_universe_defaults():
 
 
 def test_engine_config_accepts_otm_only_selection():
-    from app.engines.triple_supertrend.schemas import EngineConfigModel
+    from app.engines.sterling_kite_engine.schemas import EngineConfigModel
     cfg = EngineConfigModel(strike_moneyness=["OTM1", "OTM2"])
     assert cfg.strike_moneyness == ["OTM1", "OTM2"]
     # empty falls back to the default set (validator)
@@ -283,7 +283,7 @@ def test_engine_config_accepts_otm_only_selection():
 
 
 def test_option_order_args_maps_buy_one_lot():
-    from app.engines.triple_supertrend.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
 
     row = EngineSignalRow(
         underlying="NIFTY 50", token=256265, exchange="NFO", regime="BULL",
@@ -314,7 +314,7 @@ async def test_scan_records_index_diagnostics():
     class FakeClient:
         async def get_candles(self, inst, resolution, limit):
             if inst.zerodha_token in (1, 10):  # a stock + an index fire
-                return _trim_to_transition(_candles(_fresh_long_path()), TripleSupertrendConfig())
+                return _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig())
             if inst.zerodha_token == 11:        # an index whose fetch comes back empty
                 return []
             return _candles(list(np.linspace(100, 101, 30)))  # token 2: data, no transition
@@ -327,7 +327,7 @@ async def test_scan_records_index_diagnostics():
     ]
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=universe, nfo_rows=[],
-                  bfo_rows=[], cfg=TripleSupertrendConfig(), moneyness=["ATM"])
+                  bfo_rows=[], cfg=SterlingKiteEngineConfig(), moneyness=["ATM"])
     d = sc.snapshot("u1").diag
     assert d.universe == 4 and d.indices == 2
     assert d.evaluated == 3 and d.no_data == 1      # token 11 returned nothing
@@ -338,7 +338,7 @@ async def test_scan_records_index_diagnostics():
 async def test_scan_derivatives_charts_both_sides_and_emits_buy_rows():
     """Derivatives mode charts BOTH the CE and PE of each selected strike (on the
     contract's own premium series) and emits a BUY row only when the premium fires."""
-    fired = _trim_to_transition(_candles(_fresh_long_path()), TripleSupertrendConfig(), "long")
+    fired = _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig(), "long")
     flat = _candles(list(np.linspace(100, 101, 40)))
 
     class FakeClient:
@@ -359,7 +359,7 @@ async def test_scan_derivatives_charts_both_sides_and_emits_buy_rows():
     deriv = [UniverseItem("NIFTY 50", "NIFTY", 100, "INDICES", "NFO", is_index=True)]
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
-                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv)
+                  cfg=SterlingKiteEngineConfig(), moneyness=["ATM"], deriv_universe=deriv)
     snap = sc.snapshot("u1")
     assert len(snap.rows) == 1
     row = snap.rows[0]
@@ -392,7 +392,7 @@ async def test_scan_derivatives_does_not_skip_short_weeklies():
     deriv = [UniverseItem("NIFTY 50", "NIFTY", 100, "INDICES", "NFO", is_index=True)]
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
-                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv)
+                  cfg=SterlingKiteEngineConfig(), moneyness=["ATM"], deriv_universe=deriv)
     snap = sc.snapshot("u1")
     d = snap.diag
     assert d.deriv_charts == 2      # both young weeklies were charted (not skipped)
@@ -403,7 +403,7 @@ async def test_scan_derivatives_does_not_skip_short_weeklies():
 @pytest.mark.asyncio
 async def test_scan_derivatives_invokes_place_cb_for_auto_exec():
     """Auto-exec is universal: a fired derivative contract goes through place_cb too."""
-    fired = _trim_to_transition(_candles(_fresh_long_path()), TripleSupertrendConfig(), "long")
+    fired = _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig(), "long")
 
     class FakeClient:
         async def get_candles(self, inst, resolution, limit):
@@ -427,7 +427,7 @@ async def test_scan_derivatives_invokes_place_cb_for_auto_exec():
 
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
-                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv, place_cb=cb)
+                  cfg=SterlingKiteEngineConfig(), moneyness=["ATM"], deriv_universe=deriv, place_cb=cb)
     assert calls == [("derivatives", "NIFTY25JUN100CE", 75)]
 
 
@@ -436,7 +436,7 @@ async def test_deriv_index_spot_fallback_quotes_by_display_name():
     """When an index's 1H candle fetch comes back empty, the deriv scan resolves the
     spot from a QUOTE keyed by the DISPLAY name ("NSE:NIFTY 50"), not the option name
     ("NSE:NIFTY") which is not a valid quote symbol. Proves the chain still scans."""
-    fired = _trim_to_transition(_candles(_fresh_long_path()), TripleSupertrendConfig(), "long")
+    fired = _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig(), "long")
     quoted = {}
 
     class FakeClient:
@@ -461,7 +461,7 @@ async def test_deriv_index_spot_fallback_quotes_by_display_name():
     deriv = [UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)]
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
-                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv)
+                  cfg=SterlingKiteEngineConfig(), moneyness=["ATM"], deriv_universe=deriv)
     assert quoted['syms'] == ["NSE:NIFTY 50"]          # display name, not "NSE:NIFTY"
     snap = sc.snapshot("u1")
     assert snap.diag.deriv_no_spot == 0                # spot WAS resolved via the quote
@@ -483,7 +483,7 @@ async def test_deriv_unresolved_spot_is_visible_not_silent():
     logs = []
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=[], bfo_rows=[],
-                  cfg=TripleSupertrendConfig(), moneyness=["ATM"], deriv_universe=deriv,
+                  cfg=SterlingKiteEngineConfig(), moneyness=["ATM"], deriv_universe=deriv,
                   log_cb=lambda m: logs.append(m))
     d = sc.snapshot("u1").diag
     assert d.deriv_no_spot == 1 and d.deriv_resolved == 0
@@ -496,7 +496,7 @@ def test_derivative_signal_marks_active_when_trend_intact_vs_stale():
     is_active=False (stale entry, kept only for history). This is the fix for "I see a
     big move on the chart but the engine shows nothing today" — the entry was days ago
     and the trend has since ended."""
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     item = UniverseItem("SENSEX", "SENSEX", 265, "INDICES", "BFO", is_index=True)
     pick = OptionPick(option_symbol="SENSEX2561876000CE", strike=76000.0, option_type="CE",
                       expiry="2026-06-18", dte=3, lot_size=20, token=999001)
@@ -518,7 +518,7 @@ def test_derivative_signal_marks_active_when_trend_intact_vs_stale():
 async def test_deriv_grouping_dedupes_legs_for_repeated_transitions():
     """A contract that fires more than once over its premium history yields ONE leg
     (the most recent), not a duplicate strike chip per transition."""
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     # premium that transitions up TWICE (up, down, up again) → 2 long transitions
     twice = (list(np.linspace(300, 150, 50)) + list(np.linspace(150, 600, 40))
              + list(np.linspace(600, 200, 40)) + list(np.linspace(200, 700, 40)))
@@ -552,7 +552,7 @@ async def test_scan_drops_stopped_out_historical_entries_but_keeps_diag():
     """A contract whose only entry fired days ago and has since been stopped out is
     NOT surfaced as a signal row (it's neither fresh nor running) — but the scan still
     records it in the per-contract diagnostics as 'historical entry only' for the log."""
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     # fired (proven long path) then collapsed hard → trend broke before the last bar:
     # an entry exists in history but is_active=False and not fresh.
     dead = _candles(_fresh_long_path() + list(np.linspace(600, 150, 40)))
@@ -587,7 +587,7 @@ async def test_scan_invokes_place_cb_for_ready_rows():
     class FakeClient:
         async def get_candles(self, inst, resolution, limit):
             if inst.zerodha_token == 1:
-                return _trim_to_transition(_candles(_fresh_long_path()), TripleSupertrendConfig())
+                return _trim_to_transition(_candles(_fresh_long_path()), SterlingKiteEngineConfig())
             return _candles(list(np.linspace(100, 101, 30)))
 
     nfo = [
@@ -608,13 +608,13 @@ async def test_scan_invokes_place_cb_for_ready_rows():
 
     sc = KiteEngineScanner()
     await sc.scan(uid="u1", client=FakeClient(), universe=universe, nfo_rows=nfo,
-                  bfo_rows=[], cfg=TripleSupertrendConfig(), moneyness=["ATM"], place_cb=cb)
+                  bfo_rows=[], cfg=SterlingKiteEngineConfig(), moneyness=["ATM"], place_cb=cb)
     assert calls == [("ACME", "ACME25JUN300CE", 50)]
 
 
 # ── UserScan.row_for_token (O(1) index used by the detail endpoint) ───────────
 def _row(token, ts, legs=()):
-    from app.engines.triple_supertrend.schemas import EngineSignalRow, AlignmentChip, OptionLeg
+    from app.engines.sterling_kite_engine.schemas import EngineSignalRow, AlignmentChip, OptionLeg
     return EngineSignalRow(
         underlying="NIFTY", token=token, exchange="NFO", regime="BULL",
         alignment=AlignmentChip(fast=1, mid=1, slow=1), direction="long",
@@ -627,9 +627,9 @@ def _row(token, ts, legs=()):
 
 def test_row_for_token_matches_own_and_leg_tokens():
     from app.services.kite_engine.scanner import UserScan
-    from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-    from app.engines.triple_supertrend.config import TripleSupertrendConfig
-    us = UserScan(engine=TripleSupertrendEngine(TripleSupertrendConfig()))
+    from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+    from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+    us = UserScan(engine=SterlingKiteEngine(SterlingKiteEngineConfig()))
     us.rows = [_row(111, 1000, legs=[("NIFTYCE", 25000, 5001), ("NIFTYCE2", 25100, 5002)]),
                _row(222, 1000, legs=[("BANKCE", 50000, 6001)])]
     us.generated_ms = 1000
@@ -641,9 +641,9 @@ def test_row_for_token_matches_own_and_leg_tokens():
 
 def test_row_for_token_reindexes_after_new_scan():
     from app.services.kite_engine.scanner import UserScan
-    from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-    from app.engines.triple_supertrend.config import TripleSupertrendConfig
-    us = UserScan(engine=TripleSupertrendEngine(TripleSupertrendConfig()))
+    from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+    from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+    us = UserScan(engine=SterlingKiteEngine(SterlingKiteEngineConfig()))
     us.rows = [_row(111, 1000)]
     us.generated_ms = 1000
     assert us.row_for_token(111).token == 111
@@ -656,9 +656,9 @@ def test_row_for_token_reindexes_after_new_scan():
 
 def test_row_for_token_respects_timestamp():
     from app.services.kite_engine.scanner import UserScan
-    from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-    from app.engines.triple_supertrend.config import TripleSupertrendConfig
-    us = UserScan(engine=TripleSupertrendEngine(TripleSupertrendConfig()))
+    from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+    from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+    us = UserScan(engine=SterlingKiteEngine(SterlingKiteEngineConfig()))
     us.rows = [_row(111, 1000)]
     us.generated_ms = 1000
     assert us.row_for_token(111, timestamp_ms=1000).token == 111

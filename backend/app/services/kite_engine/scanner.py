@@ -1,4 +1,4 @@
-"""Throttled background scanner for the Kite triple-SuperTrend engine.
+"""Throttled background scanner for the Kite Sterling Kite Engine.
 
 Per active Kite user: fetch 1H candles for each universe item (cached, rate
 throttled), drop the forming bar, run the broker-agnostic engine, and collect the
@@ -24,10 +24,10 @@ from app.domain.models import Candle
 from app.engines.indicators.adx import adx as _adx
 from app.engines.indicators.atr import atr_percentile as _atr_pct, compute_atr as _compute_atr
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
-from app.engines.triple_supertrend.schemas import (
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
 from app.schemas.instruments import InstrumentMeta
@@ -62,8 +62,8 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
 
 
 def evaluate_item(
-    engine: TripleSupertrendEngine, item: UniverseItem,
-    candles: Sequence[Candle], cfg: TripleSupertrendConfig,
+    engine: SterlingKiteEngine, item: UniverseItem,
+    candles: Sequence[Candle], cfg: SterlingKiteEngineConfig,
 ) -> List[EngineSignalRow]:
     """Run the engine on closed candles; return all historical fresh transitions."""
     if len(candles) <= cfg.warmup + 1:
@@ -163,9 +163,9 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
 
 def evaluate_derivative_contract(
     item: UniverseItem, moneyness: str, pick: OptionPick,
-    candles: Sequence[Candle], cfg: TripleSupertrendConfig,
+    candles: Sequence[Candle], cfg: SterlingKiteEngineConfig,
 ) -> List[EngineSignalRow]:
-    """Run the triple-SuperTrend on an option CONTRACT's own premium series.
+    """Run the Sterling Kite Engine on an option CONTRACT's own premium series.
 
     Options-buying only: emit a BUY signal on a fresh *uptrend* transition of the
     premium (a fresh downtrend is a holder's exit, not an entry, so it's ignored).
@@ -308,7 +308,7 @@ class ScanDiag:
 
 @dataclass
 class UserScan:
-    engine: TripleSupertrendEngine
+    engine: SterlingKiteEngine
     rows: List[EngineSignalRow] = field(default_factory=list)
     candle_cache: Dict[int, tuple] = field(default_factory=dict)  # token -> (mono_ts, candles)
     generated_ms: int = 0
@@ -363,10 +363,10 @@ class KiteEngineScanner:
     def __init__(self) -> None:
         self._users: Dict[str, UserScan] = {}
 
-    def _user(self, uid: str, cfg: TripleSupertrendConfig) -> UserScan:
+    def _user(self, uid: str, cfg: SterlingKiteEngineConfig) -> UserScan:
         us = self._users.get(uid)
         if us is None:
-            us = UserScan(engine=TripleSupertrendEngine(cfg))
+            us = UserScan(engine=SterlingKiteEngine(cfg))
             self._users[uid] = us
         return us
 
@@ -374,7 +374,7 @@ class KiteEngineScanner:
         us = self._users.get(uid)
         if us is not None:
             return us
-        us = UserScan(engine=TripleSupertrendEngine())
+        us = UserScan(engine=SterlingKiteEngine())
         cached = state.load_signal_cache(uid)
         if cached:
             rows_data, gen_ms = cached
@@ -417,7 +417,7 @@ class KiteEngineScanner:
     async def scan(
         self, *, uid: str, client, universe: List[UniverseItem],
         nfo_rows: Sequence[dict], bfo_rows: Sequence[dict],
-        cfg: TripleSupertrendConfig, moneyness: Sequence[str] = ("ATM",),
+        cfg: SterlingKiteEngineConfig, moneyness: Sequence[str] = ("ATM",),
         expiry_types: Sequence[ExpiryType] = (),
         expiry_types_indices: Optional[Sequence[ExpiryType]] = None,
         expiry_types_stocks: Optional[Sequence[ExpiryType]] = None,
@@ -671,7 +671,7 @@ scanner = KiteEngineScanner()
 
 # ── setup chart (click-to-visualize) ────────────────────────────────────────
 async def build_setup_chart(
-    client, token: int, underlying: str, cfg: TripleSupertrendConfig,
+    client, token: int, underlying: str, cfg: SterlingKiteEngineConfig,
 ) -> SetupChart:
     item = UniverseItem(name=underlying or str(token), tradingsymbol=underlying or str(token),
                         token=token, exchange="", option_exchange="NFO")

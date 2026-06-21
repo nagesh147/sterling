@@ -1,4 +1,4 @@
-"""Pure triple-SuperTrend regime core — no I/O, no broker types.
+"""Pure Sterling Kite Engine regime core — no I/O, no broker types.
 
 Heikin-Ashi conversion -> three SuperTrends -> per-bar bull/bear/flat regime,
 fresh full-alignment entry transitions, and the trail line/trend selected by the
@@ -14,7 +14,7 @@ from numpy.typing import NDArray
 
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
 from app.engines.indicators.supertrend import compute_supertrend
-from app.engines.triple_supertrend.config import TrailTarget, TripleSupertrendConfig
+from app.engines.sterling_kite_engine.config import TrailTarget, SterlingKiteEngineConfig
 
 
 @dataclass
@@ -36,7 +36,7 @@ class RegimeSeries:
         return {"fast": self.t_fast, "mid": self.t_mid, "slow": self.t_slow}[target]
 
 
-def compute_regime(opens, highs, lows, closes, cfg: TripleSupertrendConfig) -> RegimeSeries:
+def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) -> RegimeSeries:
     o = np.asarray(opens, dtype=float)
     h = np.asarray(highs, dtype=float)
     l = np.asarray(lows, dtype=float)

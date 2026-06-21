@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { KiteLayout, NavItem, MoreTab } from './KiteLayout';
 import { KiteDashboard } from './KiteDashboard';
-import { MarketWatchPane } from './MarketWatchPane';
+import { SterlingWatchList } from './SterlingWatchList';
 import { MarketDataPane } from './MarketDataPane';
 import { ConnectPane } from './ConnectPane';
 import { MutualFundsPane } from './MutualFundsPane';
@@ -15,7 +15,7 @@ import { InstrumentPane, InstrumentTab } from './InstrumentPane';
 import { KiteNotifications } from './KiteNotifications';
 import { KiteSessionGuard } from './KiteSessionGuard';
 import { KiteAuthOverlay } from './KiteLoader';
-import { TripleSupertrendPane } from './TripleSupertrendPane';
+import { SterlingKiteEnginePane } from './SterlingKiteEnginePane';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
 import { EngineTerminal } from './EngineTerminal';
@@ -156,8 +156,8 @@ export function KiteTab() {
       <KiteLayout
         activeNav={nav}
         onNavClick={handleNavClick}
-        sidebar={<MarketWatchPane onOpenInstrument={handleOpenInstrument} />}
-        rightSidebar={<TripleSupertrendPane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} />}
+        sidebar={<SterlingWatchList onOpenInstrument={handleOpenInstrument} />}
+        rightSidebar={<SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} />}
         bottomBar={<EngineTerminal />}
         centerTopBar={<KiteTicker />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}

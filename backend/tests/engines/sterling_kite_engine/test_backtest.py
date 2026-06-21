@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.services.kite_engine import backtest as bt
 
 
@@ -37,7 +37,7 @@ class TestReplayPremiumSeries:
         # after warmup, so a dip is needed to arm the entry.)
         path = list(np.linspace(120, 60, 50)) + list(np.linspace(60, 300, 90))
         ts, o, h, l, c = _ohlc(path)
-        cfg = TripleSupertrendConfig(trail_target="mid")
+        cfg = SterlingKiteEngineConfig(trail_target="mid")
         run = bt.replay_premium_series(
             timestamps_ms=ts, premium_open=o, premium_high=h, premium_low=l,
             premium_close=c, cfg=cfg, trail_target="mid", qty=50,
@@ -48,7 +48,7 @@ class TestReplayPremiumSeries:
 
     def test_too_few_bars_no_trades(self):
         ts, o, h, l, c = _ohlc([100, 101, 102])
-        cfg = TripleSupertrendConfig()
+        cfg = SterlingKiteEngineConfig()
         run = bt.replay_premium_series(
             timestamps_ms=ts, premium_open=o, premium_high=h, premium_low=l,
             premium_close=c, cfg=cfg, trail_target="mid", qty=50,
@@ -62,7 +62,7 @@ class TestSynthetic:
         # synthetic premium is BS-priced. Just assert it executes and accounts costs.
         path = list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
         ts, o, h, l, c = _ohlc(path)
-        cfg = TripleSupertrendConfig(trail_target="mid")
+        cfg = SterlingKiteEngineConfig(trail_target="mid")
         run = bt.run_synthetic(
             timestamps_ms=ts, u_open=o, u_high=h, u_low=l, u_close=c, cfg=cfg,
             trail_target="mid", iv=0.18, dte_days=7, bars_per_day=6,

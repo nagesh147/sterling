@@ -111,7 +111,7 @@ export function computeGreeksFromSymbol(
 }
 
 /**
- * Compute greeks from TripleSupertrend OptionLeg data with spot + quote.
+ * Compute greeks from SterlingKiteEngine OptionLeg data with spot + quote.
  */
 export function computeGreeksFromLeg(
   strike: number,

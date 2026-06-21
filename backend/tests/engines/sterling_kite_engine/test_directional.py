@@ -5,7 +5,7 @@ options-only engine. This test validates:
 
 1. EngineConfigModel defaults haven't shifted — directional_mode is False,
    vehicle is 'otm_options', all new fields are inert.
-2. The TripleSupertrendEngine + regime core produce the same signals with or
+2. The SterlingKiteEngine + regime core produce the same signals with or
    without the new schema fields.
 3. should_exit still behaves as a downside-only stop when no direction is given.
 4. size_future_position returns sane results but is never invoked on the default path.
@@ -16,10 +16,10 @@ import numpy as np
 import pytest
 
 from app.domain.models import Candle
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
-from app.engines.triple_supertrend.schemas import EngineConfigModel
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services.kite_engine.positions import OpenPosition, should_exit
 from app.services.kite_engine.sizing import SizingResult, size_future_position
 
@@ -91,7 +91,7 @@ class TestDefaultConfig:
 # ── 2. signal parity ────────────────────────────────────────────────────────
 
 class TestSignalParity:
-    """TripleSupertrendEngine is purely signal-level; adding schema fields
+    """SterlingKiteEngine is purely signal-level; adding schema fields
     should not alter regime/entry logic at all."""
 
     @pytest.fixture
@@ -99,7 +99,7 @@ class TestSignalParity:
         return _make_candles(_random_walk(seed=42, n=200))
 
     def test_regime_deterministic(self, candles):
-        cfg = TripleSupertrendConfig()
+        cfg = SterlingKiteEngineConfig()
         opens = np.array([c.open for c in candles])
         highs = np.array([c.high for c in candles])
         lows = np.array([c.low for c in candles])
@@ -111,9 +111,9 @@ class TestSignalParity:
         np.testing.assert_array_equal(r1.bear, r2.bear)
 
     def test_engine_signals_unchanged(self, candles):
-        eng = TripleSupertrendEngine()
+        eng = SterlingKiteEngine()
         sig1 = eng.generate(candles, underlying="TEST")
-        eng2 = TripleSupertrendEngine()
+        eng2 = SterlingKiteEngine()
         sig2 = eng2.generate(candles, underlying="TEST")
         assert len(sig1) == len(sig2)
         for s1, s2 in zip(sig1, sig2):

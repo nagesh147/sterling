@@ -16,7 +16,7 @@ import warnings
 
 import numpy as np
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from study import kite_data
 from study.kite_st_sweep import replay, OOS_FRAC, QTY, STARTING_CAPITAL
 
@@ -44,7 +44,7 @@ def run_deep_itm_sweep(data: dict) -> list:
         oos_lo = int(n * (1 - OOS_FRAC))
         full = {k: arrs[k] for k in ("o", "h", "l", "c", "ts")}
         oos_seg = {k: arrs[k][oos_lo:n] for k in ("o", "h", "l", "c", "ts")}
-        cfg = TripleSupertrendConfig(trail_target=TRAIL_TARGET)
+        cfg = SterlingKiteEngineConfig(trail_target=TRAIL_TARGET)
         for depth_label, steps in DEPTHS:
             mny_pct = steps * step / median_spot * 100.0
             for iv in IV_VALUES:

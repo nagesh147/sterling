@@ -69,7 +69,7 @@ export function useResetEngineConfig() {
       notifyOrder({
         kind: 'info',
         title: 'Settings reset',
-        message: 'Triple SuperTrend configuration restored to defaults.',
+        message: 'Sterling Kite Engine configuration restored to defaults.',
       });
     },
   });

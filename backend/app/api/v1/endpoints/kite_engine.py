@@ -1,4 +1,4 @@
-"""Kite triple-SuperTrend engine endpoints — `/api/v1/kite/engine/*`.
+"""Kite Sterling Kite Engine endpoints — `/api/v1/kite/engine/*`.
 
 Scoped to the calling Kite user. Advisory by default; auto-execute is opt-in via
 config and runs through the same Kite order path + live-safety gate as manual
@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import (
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import (
     ActivityResponse, BacktestRequest, BacktestResponse, ContractScanEntry,
     EngineConfigModel, EngineDetailResponse, EngineOrderRequest, EngineOrderResponse,
     OpenPositionRecord, OpenPositionsResponse,
@@ -29,8 +29,8 @@ log = get_logger(__name__)
 router = APIRouter(prefix="/kite/engine", tags=["kite-engine"])
 
 
-def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
-    return TripleSupertrendConfig(trail_target=c.trail_target, early_lock=c.early_lock)
+def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
+    return SterlingKiteEngineConfig(trail_target=c.trail_target, early_lock=c.early_lock)
 
 
 async def _client(user: UserContext):
@@ -100,7 +100,7 @@ async def activity(limit: int = 2000,
 @router.get("/server-logs")
 async def server_logs(limit: int = 300,
                       user: UserContext = Depends(get_current_user)) -> dict:
-    """Recent backend server logs (in-memory ring buffer) for the Kite Terminal.
+    """Recent backend server logs (in-memory ring buffer) for the Sterling Kite Terminal.
     Lets the UI interleave real server logs with engine activity. Read-only."""
     from app.core.logging import recent_logs
     return {"logs": recent_logs(limit)}
