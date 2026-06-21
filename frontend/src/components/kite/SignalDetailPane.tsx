@@ -112,7 +112,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
           {isBestDelta && (
             <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
               style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
-              ◆ BEST Δ
+              ✚ BEST Δ
             </span>
           )}
           <span style={{ fontSize: 9, color: k.dim, flexShrink: 0 }}>{exchange}</span>

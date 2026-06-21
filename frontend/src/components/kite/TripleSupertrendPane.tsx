@@ -435,7 +435,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                       )}
                       {leg.option_symbol === bestDeltaSym && (
                         <span title="Highest delta — most responsive to the underlying"
-                          style={{ fontSize: 11, color: k.blue, lineHeight: 1, opacity: 0.75 }}>◆</span>
+                          style={{ fontSize: 11, color: k.blue, lineHeight: 1, opacity: 0.75 }}>✚</span>
                       )}
                     </span>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
@@ -605,7 +605,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                      )}
                      {leg.option_symbol === bestDeltaSym && (
                        <span title="Highest delta — most responsive to the underlying"
-                         style={{ fontSize: 12, color: k.blue, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>◆</span>
+                         style={{ fontSize: 12, color: k.blue, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>✚</span>
                      )}
                    </span>
                    {s.showExchange && (
