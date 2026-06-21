@@ -341,12 +341,6 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {rowRunning
-            ? <span title="SuperTrend still aligned on the latest 1H bar — trade running"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: k.green }}>
-                <span style={{ width: 6, height: 6, borderRadius: 3, background: k.green }} />running</span>
-            : <span title="The entry's SuperTrend has flipped or the live premium has fallen through its stop — shown for history, not a live entry"
-                    style={{ fontSize: 10, color: k.dim }}>trend ended</span>}
           {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
           {row.adx != null && (
             <span title={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}
@@ -364,7 +358,6 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
               ATR {row.atr_pct.toFixed(0)}%
             </span>
           )}
-          <span style={{ color: k.dim, fontSize: 11, fontWeight: 600 }}>· {row.option_type}</span>
           {(() => {
             const d = new Date(row.timestamp_ms);
             const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -372,8 +365,8 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             const date = d.toLocaleDateString('en-US', { day: '2-digit' });
             const month = d.toLocaleDateString('en-US', { month: 'short' });
             return (
-              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3, paddingLeft: 4 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: k.text }}>{time}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, paddingLeft: 4, whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: k.text, letterSpacing: 0.2 }}>{time}</span>
                 <span style={{ fontSize: 10, color: k.dim, opacity: 0.85 }}>{wday} {date} {month}</span>
               </span>
             );

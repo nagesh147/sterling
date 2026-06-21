@@ -55,6 +55,7 @@ function Sparkline({ points, color, width = 80, height = 40 }: {
 function KiteCard({ sym, q }: { sym: string; q: any }) {
   const flashRef = useRef<HTMLSpanElement>(null);
   const prevRef = useRef<number | null>(null);
+  const unpin = useTickerPins((s) => s.unpin);
 
   const last: number | undefined = q?.last_price;
   const close: number | undefined = q?.ohlc?.close;
@@ -123,7 +124,27 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
       display: 'flex', alignItems: 'center', gap: 12,
       border: '1px solid var(--t-border)',
       borderRadius: 8, padding: '12px 14px', width: 250, flexShrink: 0,
+      position: 'relative',
     }}>
+      {/* Tiny close — removes this instrument from the ticker row */}
+      <button
+        onClick={(e) => { e.stopPropagation(); unpin(sym); }}
+        title="Remove from ticker"
+        aria-label={`Remove ${rawTs} from ticker`}
+        style={{
+          position: 'absolute', top: 3, right: 3,
+          width: 14, height: 14, padding: 0, lineHeight: '12px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 600,
+          background: 'transparent', border: 'none', borderRadius: 3,
+          color: 'var(--t-dim)', cursor: 'pointer', opacity: 0.6,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--t-bright)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = 'var(--t-dim)'; }}
+      >
+        ×
+      </button>
+
       {/* Left: name + price + change */}
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
         <span style={{
