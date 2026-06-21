@@ -290,7 +290,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
     let bestRR: string | null = null;
     let bestRRVal = -Infinity;
     let bestDelta: string | null = null;
-    let bestDeltaDist = Infinity;
+    let bestDeltaVal = -Infinity;
     for (const leg of visibleLegs) {
       const lq = quotes?.[`${row.exchange}:${leg.option_symbol}`];
       const premium = lq?.last_price ?? (leg as any).premium_spot ?? 0;
@@ -300,8 +300,8 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
       const { rr, effPct } = computeLegRR(g.delta, g.gamma, premium, sd);
       const v = rrScore(rr, effPct);
       if (v > bestRRVal) { bestRRVal = v; bestRR = leg.option_symbol; }
-      const dd = Math.abs(Math.abs(g.delta) - 0.5);
-      if (dd < bestDeltaDist) { bestDeltaDist = dd; bestDelta = leg.option_symbol; }
+      const ad = Math.abs(g.delta);
+      if (ad > bestDeltaVal) { bestDeltaVal = ad; bestDelta = leg.option_symbol; }
     }
     return { bestRRSym: bestRR, bestDeltaSym: bestDelta };
   }, [uLastPx, row, visibleLegs, quotes]);
@@ -434,7 +434,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                           style={{ fontSize: 12, color: k.blue, lineHeight: 1 }}>★</span>
                       )}
                       {leg.option_symbol === bestDeltaSym && (
-                        <span title="Delta closest to 0.50 — optimal sensitivity"
+                        <span title="Highest delta — most responsive to the underlying"
                           style={{ fontSize: 11, color: k.blue, lineHeight: 1, opacity: 0.75 }}>◆</span>
                       )}
                     </span>
@@ -604,7 +604,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                          style={{ fontSize: 13, color: k.blue, lineHeight: 1, flexShrink: 0 }}>★</span>
                      )}
                      {leg.option_symbol === bestDeltaSym && (
-                       <span title="Delta closest to 0.50 — optimal sensitivity"
+                       <span title="Highest delta — most responsive to the underlying"
                          style={{ fontSize: 12, color: k.blue, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>◆</span>
                      )}
                    </span>

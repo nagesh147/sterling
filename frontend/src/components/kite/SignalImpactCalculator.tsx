@@ -132,12 +132,12 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
     return scored[0]?.leg.option_symbol ?? null;
   }, [rows]);
 
-  // Best delta: leg whose |delta| is closest to 0.50 (optimal sensitivity —
-  // moves enough to profit without being overpriced like deep ITM).
+  // Best delta: leg with the highest |delta| (most responsive to the underlying —
+  // the deepest ITM strike here moves nearest 1:1 with spot).
   const bestDeltaSym = useMemo(() => {
     if (!rows.length) return null;
     return rows.reduce((best, r) =>
-      Math.abs(Math.abs(r.leg.delta) - 0.5) < Math.abs(Math.abs(best.leg.delta) - 0.5) ? r : best
+      Math.abs(r.leg.delta) > Math.abs(best.leg.delta) ? r : best
     ).leg.option_symbol;
   }, [rows]);
 
@@ -257,7 +257,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                         </span>
                       )}
                       {r.leg.option_symbol === bestDeltaSym && (
-                        <span title="Delta closest to 0.50 — optimal sensitivity: moves meaningfully without overpaying for deep ITM"
+                        <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
                           style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3 }}>
                           ◆ BEST Δ
                         </span>

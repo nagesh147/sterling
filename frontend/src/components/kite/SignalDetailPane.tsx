@@ -110,7 +110,7 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
             </span>
           )}
           {isBestDelta && (
-            <span title="Delta closest to 0.50 — optimal sensitivity: moves meaningfully without overpaying for deep ITM"
+            <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
               style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3, flexShrink: 0 }}>
               ◆ BEST Δ
             </span>
@@ -310,15 +310,15 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                 let bestSym: string | null = null;
                 let bestVal = -Infinity;
                 let bestDeltaSym: string | null = null;
-                let bestDeltaDist = Infinity;
+                let bestDeltaVal = -Infinity;
                 for (const leg of data.options) {
                   const premium = leg.last_price || 0;
                   if (premium <= 0) continue;
                   const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
                   const v = rrScore(rr, effPct);
                   if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
-                  const dd = Math.abs(Math.abs(leg.delta) - 0.5);
-                  if (dd < bestDeltaDist) { bestDeltaDist = dd; bestDeltaSym = leg.option_symbol; }
+                  const ad = Math.abs(leg.delta);
+                  if (ad > bestDeltaVal) { bestDeltaVal = ad; bestDeltaSym = leg.option_symbol; }
                 }
                 return data.options.map((leg) => (
                   <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
