@@ -238,13 +238,11 @@ export function SimpleTerminal() {
                     onClick={() => handleKiteNav(nav)}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      fontFamily: 'inherit', fontSize: 12, fontWeight: kiteNav === nav ? 600 : 400,
-                      letterSpacing: '0.06em', textTransform: 'capitalize',
-                      color: kiteNav === nav ? 'var(--t-bright)' : 'var(--t-dim)',
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: kiteNav === nav ? 500 : 400,
+                      textTransform: 'capitalize',
+                      color: kiteNav === nav ? '#f06428' : '#444',
                       padding: '0 9px', height: '100%',
-                      borderBottom: kiteNav === nav ? '2px solid var(--t-bright)' : '2px solid transparent',
                       transition: 'color .15s ease',
-                      marginBottom: -1,
                     }}
                   >
                     {nav === 'more' ? 'More' : nav}
