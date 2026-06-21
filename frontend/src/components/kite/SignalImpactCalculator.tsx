@@ -259,7 +259,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt }: Props) {
                       {r.leg.option_symbol === bestDeltaSym && (
                         <span title="Highest delta — most responsive to the underlying (moves nearest 1:1 with spot)"
                           style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: k.blue, padding: '1px 6px', borderRadius: 3 }}>
-                          ✚ BEST Δ
+                          ✝ BEST Δ
                         </span>
                       )}
                     </div>
