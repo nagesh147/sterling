@@ -288,7 +288,6 @@ export function EngineTerminal() {
         {!scanning && <span style={{ color: t.dim }}>🕐 last {data?.last_scan_ms ? hhmmss(data.last_scan_ms) : '—'}</span>}
         {!scanning && data?.auto_scan && <span style={{ color: t.dim }}>⏭️ next {fmtCountdown(data?.next_scan_ms ?? 0)}</span>}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {(data?.signal_count ?? 0) > 0 && <span style={{ color: k.orange, fontWeight: 600 }}>🎯 {data?.signal_count} ready</span>}
           {/* Server logs toggle — interleave real backend logs into the terminal */}
           <button
             onClick={() => setShowServerLogs((v) => !v)}

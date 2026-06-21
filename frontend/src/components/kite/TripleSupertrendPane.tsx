@@ -318,7 +318,6 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
           {isDeriv ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, color: k.orange, border: `1px solid ${tint(k.orange, 40)}`, background: tint(k.orange, 10), borderRadius: 4, padding: '1px 4px', flexShrink: 0 }}>DERIV</span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: uColor }}>{row.underlying}</span>
               </span>
             </div>
