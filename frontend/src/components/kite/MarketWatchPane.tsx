@@ -6,6 +6,7 @@ import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { PriceCell } from './PriceCell';
 import { useKiteSettings } from '../../store/useKiteSettings';
+import { useTickerPins } from '../../store/useTickerPins';
 import { computeGreeksFromSymbol } from '../../utils/computeGreeks';
 import { useDebounced } from '../../hooks/useDebounced';
 
@@ -373,6 +374,8 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
   const [menuOpen, setMenuOpen] = useState<{ symbol: string; top: number; left: number } | null>(null);
 
   const { openOrderWindow } = useOrderWindowStore();
+  const tickerPinned = useTickerPins((p) => p.pins);
+  const toggleTickerPin = useTickerPins((p) => p.toggle);
 
   React.useEffect(() => {
     const closeMenu = () => setMenuOpen(null);
@@ -761,7 +764,19 @@ export function MarketWatchPane({ onOpenInstrument }: { onOpenInstrument?: (symb
           <div style={{ padding: '8px 16px', fontSize: 13, color: t.text, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }} onClick={() => { onOpenInstrument?.(menuOpen.symbol, 'chart'); setMenuOpen(null); }}><span style={{ color: t.dim }}><Icons.Chart /></span> Chart</div>
           <div style={{ padding: '8px 16px', fontSize: 13, color: t.text, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }} onClick={() => { onOpenInstrument?.(menuOpen.symbol, 'option-chain'); setMenuOpen(null); }}><span style={{ color: t.dim }}><Icons.OptionChain /></span> Option chain</div>
           <div style={{ padding: '8px 16px', fontSize: 13, color: t.text, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }} onClick={() => { toggleExpand(menuOpen.symbol); setMenuOpen(null); }}><span style={{ color: t.dim }}><Icons.Depth /></span> Market depth</div>
-          <div style={{ padding: '8px 16px', fontSize: 13, color: t.text, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }} onClick={() => setMenuOpen(null)}><span style={{ color: t.dim }}><Icons.Pin /></span> Pin</div>
+          {(() => {
+            const pinned = tickerPinned.includes(menuOpen.symbol);
+            return (
+              <div
+                style={{ padding: '8px 16px', fontSize: 13, color: pinned ? t.blue : t.text, cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'center' }}
+                onClick={() => { toggleTickerPin(menuOpen.symbol); setMenuOpen(null); }}
+                title="Show this instrument as a tile in the top bar"
+              >
+                <span style={{ color: pinned ? t.blue : t.dim }}><Icons.Pin /></span>
+                {pinned ? 'Unpin from top bar' : 'Pin to top bar'}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

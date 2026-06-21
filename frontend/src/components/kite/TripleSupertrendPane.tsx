@@ -17,6 +17,7 @@ import { computeGreeksFromLeg } from '../../utils/computeGreeks';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { useTickerPins } from '../../store/useTickerPins';
 
 
 interface Props {
@@ -205,6 +206,8 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
+  const tickerPins = useTickerPins((p) => p.pins);
+  const toggleTickerPin = useTickerPins((p) => p.toggle);
   const bull = row.regime === 'BULL';
   const accent = bull ? k.green : k.red;
   // Derivatives rows: the SuperTrend ran on this contract's OWN premium chart, so
@@ -342,8 +345,26 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
               </span>
             );
           })()}
+          {(() => {
+            // Pin the underlying (NOT the option contract) to the top-bar tiles.
+            const tickerSym = `${uExch}:${uSym}`;
+            const pinned = tickerPins.includes(tickerSym);
+            return (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleTickerPin(tickerSym); }}
+                title={pinned ? 'Unpin underlying from top bar' : 'Pin underlying to top bar'}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'transparent', border: 'none', cursor: 'pointer', padding: 2,
+                  marginLeft: 2, color: pinned ? k.blue : k.dim, lineHeight: 0,
+                }}
+              >
+                <Icons.Pin />
+              </button>
+            );
+          })()}
         </span>
-        
+
       </div>
 
       {/* option legs */}

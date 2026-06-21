@@ -1,5 +1,6 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useKiteWatchlist, useKiteQuote } from '../../hooks/useKite';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useKiteQuote } from '../../hooks/useKite';
+import { useTickerPins } from '../../store/useTickerPins';
 import { InstrumentLabel } from './InstrumentLabel';
 import { k } from '../../styles/kiteUI';
 
@@ -30,10 +31,10 @@ function pushHist(sym: string, seed: number | undefined, px: number | undefined)
   return arr;
 }
 
-function Sparkline({ points, color, width = 187, height = 34 }: {
+function Sparkline({ points, color, width = 80, height = 40 }: {
   points: number[]; color: string; width?: number; height?: number;
 }) {
-  if (!points || points.length < 2) return <div style={{ height, marginTop: 8 }} />;
+  if (!points || points.length < 2) return <div style={{ width, height }} />;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
@@ -44,7 +45,7 @@ function Sparkline({ points, color, width = 187, height = 34 }: {
     .map((p, i) => `${(i * stepX).toFixed(1)},${(pad + h - ((p - min) / range) * h).toFixed(1)}`)
     .join(' ');
   return (
-    <svg width={width} height={height} style={{ display: 'block', marginTop: 8, overflow: 'visible' }}>
+    <svg width={width} height={height} style={{ display: 'block', overflow: 'visible', flexShrink: 0 }}>
       <polyline points={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
@@ -70,7 +71,15 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const up = (abs ?? 0) >= 0;
   const chgColor = abs == null ? 'var(--t-dim)' : up ? UP : DOWN;
 
-  const series = pushHist(sym, close ?? open, last);
+  let series = pushHist(sym, close ?? open, last);
+  // The accumulated tick buffer can hold a single point (flat/closed market, or a
+  // brand-new tile), which left the graph blank. Always fall back to a 2-point
+  // baseline drawn from the day's open/prev-close → live price so a line shows.
+  if (series.length < 2) {
+    const base = close ?? open;
+    if (base != null && base > 0 && last != null && last > 0) series = [base, last];
+    else if (last != null && last > 0) series = [last, last];
+  }
 
   useEffect(() => {
     const prev = prevRef.current;
@@ -95,46 +104,52 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column',
+      display: 'flex', alignItems: 'center', gap: 12,
       background: 'var(--t-bg3)', border: '1px solid var(--t-border)',
-      borderRadius: 8, padding: '12px 14px', width: 215, flexShrink: 0,
+      borderRadius: 8, padding: '12px 14px', width: 250, flexShrink: 0,
     }}>
-      <span style={{
-        fontSize: 12, fontWeight: 700, color: 'var(--t-bright)',
-        letterSpacing: '0.04em', textTransform: 'uppercase',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        <InstrumentLabel symbol={rawTs} />
-      </span>
+      {/* Left: name + price + change */}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+        <span style={{
+          fontSize: 12, fontWeight: 700, color: 'var(--t-bright)',
+          letterSpacing: '0.04em', textTransform: 'uppercase',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          <InstrumentLabel symbol={rawTs} />
+        </span>
 
-      <span ref={flashRef} style={{
-        fontSize: 24, fontWeight: 300, color: 'var(--t-bright)',
-        fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
-        marginTop: 8, lineHeight: 1.1,
-      }}>
-        {priceStr}
-      </span>
+        <span ref={flashRef} style={{
+          fontSize: 24, fontWeight: 300, color: 'var(--t-bright)',
+          fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
+          marginTop: 8, lineHeight: 1.1,
+        }}>
+          {priceStr}
+        </span>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 6, minHeight: 16 }}>
-        {abs != null && (
-          <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{absStr}</span>
-        )}
-        {pct != null && (
-          <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{pctStr}</span>
-        )}
-        {abs == null && <span style={{ fontSize: 11, color: 'var(--t-dim)' }}>{hasPrice ? exch : 'no data'}</span>}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginTop: 6, minHeight: 16 }}>
+          {abs != null && (
+            <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{absStr}</span>
+          )}
+          {pct != null && (
+            <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{pctStr}</span>
+          )}
+          {abs == null && <span style={{ fontSize: 11, color: 'var(--t-dim)' }}>{hasPrice ? exch : 'no data'}</span>}
+        </div>
       </div>
 
-      <Sparkline points={series} color={SPARK} />
+      {/* Right: sparkline, vertically centred, tinted by direction */}
+      <Sparkline points={series} color={abs == null ? SPARK : up ? UP : DOWN} width={76} height={46} />
     </div>
   );
 }
 
 export function KiteTicker() {
-  const { items } = useKiteWatchlist();
-  // Quote (not LTP) so each tile shows day-change + a sparkline. The symbol set
-  // matches MarketWatchPane's quote poll, so React Query collapses them into one.
-  const symbols = items.map((w) => w.symbol);
+  // Top-bar tiles are driven by an explicit pin list (NIFTY + SENSEX by default),
+  // NOT the Market Watch list. Users pin/unpin from a watch row or signal row.
+  const pins = useTickerPins((s) => s.pins);
+  const items = useMemo(() => pins.map((symbol) => ({ symbol })), [pins]);
+  // Quote (not LTP) so each tile shows day-change + a sparkline.
+  const symbols = pins;
   const { data: quotes } = useKiteQuote(symbols, items.length > 0);
   const outerRef = useRef<HTMLDivElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
@@ -167,7 +182,7 @@ export function KiteTicker() {
         fontFamily: TILE_FONT,
       }}>
         <span style={{ color: 'var(--t-dim)', fontSize: 11 }}>
-          Kite watchlist empty — search &amp; add instruments from Market Watch tab
+          No pinned tiles — pin instruments from a Market Watch or Signals row’s “Pin to top bar”.
         </span>
       </div>
     );
