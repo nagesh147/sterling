@@ -15,7 +15,7 @@ import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
-import { stopDistance, computeLegRR, rrScore } from './SignalImpactCalculator';
+import { stopDistance, computeLegRR, rrScore } from './impactMath';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';

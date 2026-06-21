@@ -9,7 +9,8 @@ import { QuoteDetail } from './MarketWatchPane';
 import { AlignmentChips } from './TripleSupertrendPane';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { SignalImpactCalculator, stopDistance, computeLegRR, rrScore } from './SignalImpactCalculator';
+import { SignalImpactCalculator } from './SignalImpactCalculator';
+import { stopDistance, computeLegRR, rrScore } from './impactMath';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
