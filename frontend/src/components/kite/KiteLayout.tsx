@@ -335,7 +335,10 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
           position: 'relative',
           borderLeft: (sidebar && isSidebarOpen) ? '1px solid #e0e0e0' : 'none'
         }}>
-          <div style={{ flex: 1, background: '#fff', overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* scrollbarGutter: stable reserves the scrollbar track so the content
+              doesn't shift horizontally when resizing the terminal toggles the
+              vertical scrollbar on/off. */}
+          <div style={{ flex: 1, background: '#fff', overflow: 'auto', scrollbarGutter: 'stable', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {content}
           </div>
 
