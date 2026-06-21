@@ -208,6 +208,14 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const tickerPins = useTickerPins((p) => p.pins);
   const toggleTickerPin = useTickerPins((p) => p.toggle);
+  // Per-leg "more options" (⋮) menu — lets the user add the contract to the ticker.
+  const [legMenu, setLegMenu] = React.useState<{ symbol: string; label: string; top: number; left: number } | null>(null);
+  React.useEffect(() => {
+    if (!legMenu) return;
+    const close = () => setLegMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [legMenu]);
   const bull = row.regime === 'BULL';
   const accent = bull ? k.green : k.red;
   // Derivatives rows: the SuperTrend ran on this contract's OWN premium chart, so
@@ -377,8 +385,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             const slPx = (leg as any).premium_sl;
             const legEnded = legIsExited(leg);
             const isExp = expanded.has(leg.option_symbol);
+            const gSpot = uLastPx ?? row.spot ?? 0;
+            const gGreeks = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, gSpot, q, leg.lot_size ?? null);
+            const gDelta = gGreeks ? Math.abs(gGreeks.delta).toFixed(2) : null;
+            const gEntry = (leg as any).premium_spot;
+            const gDiff = (!legEnded && lastPx != null && gEntry != null) ? lastPx - gEntry : null;
             return (
-              <div key={leg.option_symbol} style={{ minWidth: 105 }}>
+              <div key={leg.option_symbol} style={{ minWidth: 132 }}>
                 <div 
                   onClick={(e) => toggleExpand(e, leg.option_symbol)}
                   style={{
@@ -392,8 +405,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>{leg.moneyness}</span>
-                    <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>{lastPx != null ? lastPx.toFixed(2) : '—'}</span>
+                    <span style={{ fontSize: 10, color: k.orange, fontWeight: 700 }}>
+                      {leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}
+                    </span>
+                    <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
+                      {lastPx != null ? lastPx.toFixed(2) : '—'}
+                      {gDiff != null && <span style={{ fontSize: 9.5, marginLeft: 3, fontWeight: 600, color: gDiff >= 0 ? k.green : k.red }}>({gDiff >= 0 ? '+' : ''}{gDiff.toFixed(1)})</span>}
+                    </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -527,6 +545,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
           // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the
           // live premium fell through the (entry-snapshot) stop between scans.
           const liveExited = lastPx != null && slPx != null && slPx > 0 && lastPx <= slPx;
+          // Live delta for the Leg column (shown in brackets next to ITM/ATM/OTM).
+          const legSpot = uLastPx ?? row.spot ?? 0;
+          const legGreeks = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, legSpot, q, leg.lot_size ?? null);
+          const deltaTxt = legGreeks ? Math.abs(legGreeks.delta).toFixed(2) : null;
+          // How far the live LTP has moved from the fired entry (points). Only meaningful
+          // while the leg is live; for ended legs the entry is frozen history.
+          const entryDiff = (!ended && lastPx != null && entryPx != null) ? lastPx - entryPx : null;
           // A dead leg has no live trade plan — showing its old entry/stop next to a live
           // LTP is misleading (e.g. entry 3420 vs LTP 459), so blank them inline and keep
           // the fire-time values in the tooltip for anyone reviewing the history.
@@ -549,15 +574,22 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                      </span>
                    )}
                    {s.showLeg && (
-                     <span style={{ fontSize: 11, color: k.dim, width: 45, flexShrink: 0 }}>
+                     <span style={{ fontSize: 11, color: k.dim, width: 78, flexShrink: 0 }}>
                        {leg.moneyness}
+                       {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
                      </span>
                    )}
                    {isDeriv && (
                      // Keep the fired Entry visible even after exit — but dimmed + struck
-                     // through so it reads as history, not a live order to act on.
-                     <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 70, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                     // through so it reads as history, not a live order to act on. The bracket
+                     // shows how many points the live LTP has moved from that entry.
+                     <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 110, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                        {entryPx != null ? entryPx.toFixed(2) : '—'}
+                       {entryDiff != null && (
+                         <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
+                           ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
+                         </span>
+                       )}
                      </span>
                    )}
                    {isDeriv && (
@@ -610,7 +642,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
 
                     <KiteActionButtons
                       className="st-actions-more-persistent"
-                      onMore={(e) => { e.stopPropagation(); }}
+                      onMore={(e) => {
+                        e.stopPropagation();
+                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setLegMenu({ symbol: sym, label: leg.option_symbol, top: r.bottom + 4, left: r.left - 150 });
+                      }}
                     />
                   </div>
                 )}
@@ -660,6 +696,30 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
         )}
       </div>
       )}
+
+      {/* Per-leg "more options" menu (⋮) */}
+      {legMenu && (() => {
+        const pinned = tickerPins.includes(legMenu.symbol);
+        return (
+          <div
+            style={{
+              position: 'fixed', top: legMenu.top, left: legMenu.left,
+              background: k.surface, border: `1px solid ${k.border}`, borderRadius: 4,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)', padding: '6px 0', zIndex: 200, minWidth: 180,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{ padding: '8px 14px', fontSize: 13, color: pinned ? k.blue : k.text, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}
+              onClick={() => { toggleTickerPin(legMenu.symbol); setLegMenu(null); }}
+              title="Show this contract as a tile in the top bar"
+            >
+              <span style={{ color: pinned ? k.blue : k.dim, display: 'flex' }}><Icons.Pin /></span>
+              {pinned ? 'Remove from ticker' : 'Add to ticker'}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1225,7 +1285,8 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
   const [sortBy, setSortBy] = React.useState('Custom');
-  const [settingsOpen, setSettingsOpen] = React.useState<boolean>(() => localStorage.getItem('kite_st_settings_open') === 'true');
+  // Always start collapsed on a fresh load/refresh (not restored from storage).
+  const [settingsOpen, setSettingsOpen] = React.useState<boolean>(false);
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(() => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'grid');
   const legSort = s.legSort;
   const setLegSort = s.setLegSort;
@@ -1248,7 +1309,19 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   const toggleCard = (key: 'scan' | 'universe' | 'execution') =>
     setCardOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  React.useEffect(() => { localStorage.setItem('kite_st_settings_open', String(settingsOpen)); }, [settingsOpen]);
+  // Close the settings drawer when clicking outside the drawer or its toggle.
+  // The toggle button and the drawer are marked with [data-st-settings]; a click
+  // outside any such element collapses the drawer (the toggle still toggles).
+  React.useEffect(() => {
+    if (!settingsOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = e.target as Element | null;
+      if (el && el.closest('[data-st-settings]')) return;
+      setSettingsOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [settingsOpen]);
   React.useEffect(() => { localStorage.setItem('kite_st_view_layout', viewLayout); }, [viewLayout]);
   React.useEffect(() => { localStorage.setItem('kite_settings_tab', settingsTab); }, [settingsTab]);
   React.useEffect(() => { localStorage.setItem('kite_settings_cards', JSON.stringify(cardOpen)); }, [cardOpen]);
@@ -1578,9 +1651,11 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               {liveCount} live
             </span>
           )}
-          <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
-            <Icons.Settings />
-          </HeaderIconBtn>
+          <span data-st-settings style={{ display: 'inline-flex' }}>
+            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+              <Icons.Settings />
+            </HeaderIconBtn>
+          </span>
         </div>
 
         {/* Row 2: scan status + action icons */}
@@ -1675,8 +1750,8 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
                  <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
                  {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
-                 {s.showLeg && <SortHeaderDiv label="Leg" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 45, flexShrink: 0 }} />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
+                 {s.showLeg && <SortHeaderDiv label="Leg (Δ)" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 78, flexShrink: 0 }} />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry (Δpts)" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 110, flexShrink: 0 }} align="right" />}
                  {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Stop" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
@@ -1907,7 +1982,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         );
 
         return (
-          <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
+          <div data-st-settings className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
             <div style={{ overflow: 'hidden' }}>
               <div style={{ background: k.bg, borderBottom: `1px solid ${k.border}` }}>
                 {layout === 'cards' ? (
