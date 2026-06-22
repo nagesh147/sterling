@@ -144,13 +144,19 @@ def mark_rejected(uid: str, symbol: str, reason: str = "") -> Optional[OpenPosit
 
 
 def update_stop(uid: str, symbol: str, stop_premium: float, gtt_id: Optional[int] = None) -> Optional[OpenPosition]:
-    """Raise (trail-up) or set the stop for a held position. Stops only ratchet
-    UP for a long option — a lower new trail (looser stop) is ignored so the
-    monitor never relaxes protection mid-trade."""
+    """Tighten (trail) or set the stop for a held position. The stop only ratchets
+    in the protective direction so the monitor never relaxes protection mid-trade:
+    UP for a long (option or long future), DOWN for a short future. A looser new
+    trail is ignored."""
     p = _load(uid).get(symbol)
     if p is None:
         return None
-    if stop_premium > p.stop_premium:
+    if p.direction == "short":
+        # short future: the protective stop sits ABOVE price → ratchets DOWN.
+        if stop_premium > 0 and (p.stop_premium <= 0 or stop_premium < p.stop_premium):
+            p.stop_premium = float(stop_premium)
+    elif stop_premium > p.stop_premium:
+        # long (option or long future): the stop sits BELOW price → ratchets UP.
         p.stop_premium = float(stop_premium)
     if gtt_id is not None:
         p.gtt_id = int(gtt_id)

@@ -31,8 +31,8 @@ interface Props {
 
 // Plain-language labels (users were confused by fast/mid/slow + "early lock").
 const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
-  { value: 'fast', label: 'Tight', hint: 'Exit quickly — trails the fast SuperTrend (21,1). Locks gains sooner, more whipsaw.' },
-  { value: 'mid', label: 'Balanced', hint: 'Default — trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
+  { value: 'fast', label: 'Tight', hint: 'Default — exit quickly; trails the fast SuperTrend (21,1). Locks gains sooner, more whipsaw.' },
+  { value: 'mid', label: 'Balanced', hint: 'Trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
   { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
 ];
 

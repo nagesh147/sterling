@@ -47,7 +47,7 @@ async def main():
     P("scan_indices    :", saved.scan_indices)
     P("scan_all_stocks :", saved.scan_all_stocks)
     moneyness = saved.strike_moneyness
-    cfg = SterlingKiteEngineConfig(trail_target=saved.trail_target, early_lock=saved.early_lock)
+    cfg = SterlingKiteEngineConfig(trail_target=saved.trail_target)
     P("warmup bars     :", cfg.warmup)
 
     try:
