@@ -72,8 +72,17 @@ class RegimeSeries:
     def best_trail_line_value(self, direction: str, i: int) -> float:
         """Return the trail value from the tightest still-green ST line at bar ``i``.
 
-        As lines flip red, the trail auto-tightens to the next still-green line.
-        If no lines are green, returns 0.0 (all red — exit should have fired).
+        While all three are green the stop rides the tightest band (``fast``). As the
+        tighter lines flip red, the trail steps OUT to the next still-green, WIDER
+        line (``fast``→``mid``→``slow``) — i.e. it LOOSENS, to give the trade room to
+        run to a multi-line (``two_red``/``three_red``) exit. If no line is green,
+        returns 0.0 (all red — an exit should already have fired).
+
+        CAVEAT: the live stop is ratcheted monotonically (``positions.update_stop``
+        take-max for a long), which REJECTS this loosening — so in production the
+        premium stop stays pinned near the peak ``fast`` level and the red-count exit
+        is largely pre-empted (effective exit ≈ ``one_red``). Reconcile the ratchet
+        with this stepping-out before relying on ``two_red``+.
         """
         green = self.green_lines(direction, i)
         if not green:

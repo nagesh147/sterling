@@ -71,3 +71,26 @@ Run (needs a logged-in Kite account in the DB; caches to `study/kite_cache/`):
 It answers the open questions: is a trail tighter/looser than `fast` better once
 premium whipsaw + costs are paid, and do a time-stop or breakeven help on options?
 Numbers are intentionally **not** included here — they require a live data pull.
+
+## 6. Exit-counter (`exit_mode`) addendum — shipped later, NOT yet measured
+
+A later change added a configurable **`exit_mode`** (`one_red` / `two_red` /
+`three_red` / `three_red_signal`): exit once that many of the three STs are red
+against the position (`engines/common/exit_counter.py`; live in `scanner.is_active`
++ `monitor.on_tick`). The default was set to **`two_red`**. Two problems, both open:
+
+1. **`two_red` is asserted, not measured.** Unlike the `mid→fast` decision above
+   (7.5y IS/OOS), no sweep backs `two_red` — `docs/kite_exit_counter_prod_rollout.md`
+   argues it qualitatively ("balanced") with zero numbers, and `kite_st_exit_sweep.py`
+   never tested the red-count modes. **`kite_st_exit_mode_sweep.py`** (new) fills the
+   gap: entry fixed, sweep the four modes on the delta1 + costed-options lenses,
+   IS/OOS. Run it before trusting any default but `one_red`.
+
+2. **`two_red`+ is shadowed in the live path → effective exit ≈ `one_red`.** The stop
+   is the tightest still-green line (`regime.best_trail_line_value`), meant to step
+   OUT (loosen) to `mid`/`slow` as tighter lines flip so the trade can reach a 2-/3-red
+   exit. But `positions.update_stop` ratchets the premium stop UP-only and REJECTS
+   that loosening, pinning it near the peak `fast` level — so the price-trail breach
+   fires around the first (`fast`) flip and pre-empts the counter. Net: the `exit_mode`
+   knob barely moves live behaviour. Reconcile the ratchet with the stepping-out stop
+   before the counter means anything.
