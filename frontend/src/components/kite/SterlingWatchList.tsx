@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { k as t, tint, Icons } from '../../styles/kiteUI';
-import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist, watchLtpSymbols } from '../../hooks/useKite';
+import { useKiteInstrumentSearch, useKiteInstrumentLots, useKiteInstrumentExpiries, useKiteLtp, useKiteQuote, useKiteWatchlist, useSyncKiteWatchlist, watchLtpSymbols } from '../../hooks/useKite';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel, parseInstrument } from './InstrumentLabel';
 import { SignalMarker } from './SignalMarker';
@@ -369,7 +369,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
   // per keystroke (each is a heavy full-dump filter server-side).
   const debouncedQuery = useDebounced(query, 300);
   const search = useKiteInstrumentSearch(debouncedQuery);
-  const { items: watch, add, remove, reorder, mergeLots } = useKiteWatchlist();
+  const { items: watch, add, remove, reorder, mergeLots, mergeExpiries } = useKiteWatchlist();
   const sync = useSyncKiteWatchlist();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [hovered, setHovered] = useState<string | null>(null);
@@ -397,6 +397,11 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
   const ltpSyms = useMemo(() => watchLtpSymbols(watch), [watch]);
   const { data: ltp } = useKiteLtp(ltpSyms, watch.length > 0);
   const { data: quotes } = useKiteQuote(symbols, symbols.length > 0);
+  // Expanded rows show the market-depth ladder — stream it live (full mode) instead
+  // of the 30s quote-mode heartbeat that left depth frozen. Only the expanded
+  // instrument(s) get the heavier full-mode subscription.
+  const expandedSyms = useMemo(() => Array.from(expanded), [expanded]);
+  const { data: depthQuotes } = useKiteQuote(expandedSyms, expandedSyms.length > 0, 5_000, 'full');
 
   // Backfill real lot sizes onto watch items that lack one (legacy/synced items),
   // so every Buy/Sell opens the ticket with the correct quantity directly.
@@ -406,6 +411,18 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
     if (lotMap && Object.keys(lotMap).length) mergeLots(lotMap);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lotMap]);
+
+  // Backfill expiry onto F&O items saved before we tracked it, so the expanded row's
+  // Expiry field shows a real date instead of "N/A". Equities (no expiry) are skipped.
+  const missingExpiry = useMemo(
+    () => watch.filter((w) => w.expiry == null && /^(NFO|BFO|MCX|CDS|BCD):/.test(w.symbol)).map((w) => w.symbol),
+    [watch],
+  );
+  const { data: expiryMap } = useKiteInstrumentExpiries(missingExpiry);
+  React.useEffect(() => {
+    if (expiryMap && Object.keys(expiryMap).length) mergeExpiries(expiryMap);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expiryMap]);
 
   const s = useKiteSettings();
   
@@ -422,7 +439,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
     const meta = instrMeta(i);
     const sym = `${i.exchange || 'NSE'}:${i.tradingsymbol}`;
     const label = i.name || `${i.exchange} · ${meta.kind}`;
-    add({ symbol: sym, token: i.instrument_token, name: i.tradingsymbol, sub: label, lot_size: i.lot_size });
+    add({ symbol: sym, token: i.instrument_token, name: i.tradingsymbol, sub: label, lot_size: i.lot_size, expiry: i.expiry });
     setQuery('');
   };
 
@@ -739,7 +756,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                       />
                     </div>
                   </div>
-                  {isExp && <QuoteDetail sym={w.symbol} q={quotes?.[w.symbol]} greeks={computeGreeksFromSymbol(w.symbol, quotes?.[w.symbol], ltp) ?? undefined} onBuy={() => handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size)} onSell={() => handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size)} />}
+                  {isExp && <QuoteDetail sym={w.symbol} q={depthQuotes?.[w.symbol] ?? quotes?.[w.symbol]} expiry={w.expiry} greeks={computeGreeksFromSymbol(w.symbol, depthQuotes?.[w.symbol] ?? quotes?.[w.symbol], ltp) ?? undefined} onBuy={() => handleOpenOrder(w.symbol, 'BUY', lastPx ?? null, w.lot_size)} onSell={() => handleOpenOrder(w.symbol, 'SELL', lastPx ?? null, w.lot_size)} />}
                 </div>
               );
             })}

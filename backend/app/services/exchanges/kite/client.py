@@ -258,6 +258,10 @@ class KiteClient(TradingExchangeAdapter):
         """EXCHANGE:TRADINGSYMBOL → lot_size for a batch (found instruments only)."""
         return await self._instruments.lot_sizes(symbols)
 
+    async def instrument_expiries(self, symbols: list) -> dict:
+        """EXCHANGE:TRADINGSYMBOL → expiry (YYYY-MM-DD) for a batch (dated F&O only)."""
+        return await self._instruments.expiries(symbols)
+
     async def search_mf_instruments(self, query: str = "", limit: int = 50) -> List[dict]:
         """Search the mutual-fund scheme master by tradingsymbol/name/AMC."""
         return await self._mf_instruments.search(query, "", limit)

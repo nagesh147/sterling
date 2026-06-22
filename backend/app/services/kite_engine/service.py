@@ -531,7 +531,10 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
                         if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
-        count = len(snap.rows)
+        # The board now retains recently-ended setups too, but the "ready" count, badge
+        # and return value should reflect only live (running/just-fired) signals.
+        live = sum(1 for r in snap.rows if r.is_active or r.is_fresh)
+        ended = len(snap.rows) - live
         d = snap.diag
         mode = "auto-exec ON" if place_cb else "advisory"
         parts = []
@@ -559,11 +562,12 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # Trail-update pass: push tightened stops to open positions.
         if cfg_model.auto_execute:
             await _update_open_position_trails(client, uid)
+        board = f"{live} live signal(s)" + (f" + {ended} ended" if ended else "")
         state.log(uid, "scan_done",
-                  f"Scan complete — {count} ready signal(s) / {len(selected)} instruments "
+                  f"Scan complete — {board} / {len(selected)} instruments "
                   f"[{source}] ({mode}) · {' · '.join(parts)}")
-        state.mark_scan_done(uid, signal_count=count, next_in_s=interval_s)
-        return count
+        state.mark_scan_done(uid, signal_count=live, next_in_s=interval_s)
+        return live
     except Exception as exc:  # noqa: BLE001
         state.set_scanning(uid, False)
         state.log(uid, "error", f"Scan failed: {exc}")

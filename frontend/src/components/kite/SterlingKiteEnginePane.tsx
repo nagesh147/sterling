@@ -78,19 +78,6 @@ const EXPIRY_OPTS: { value: ScanExpiry; label: string; hint: string }[] = [
   { value: 'monthly', label: 'Monthly', hint: 'Monthly contracts expiring on the last Thursday of the month.' },
 ];
 
-// Expert visual: 3 SuperTrend lines alignment (F/M/S). Green = with position, Red = against.
-// Used on signals and can be reused for open positions to show live degradation toward exit.
-function AlignmentViz({ a, size = 10 }: { a?: AlignmentChip; size?: number }) {
-  if (!a) return null;
-  const col = (v: number) => v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : '#64748b';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 6, verticalAlign: 'middle' }} title={`ST lines fast/mid/slow: ${a.fast} / ${a.mid} / ${a.slow}`}>
-      {([a.fast, a.mid, a.slow] as const).map((v, i) => (
-        <span key={i} style={{ width: size, height: size + 4, background: col(v), borderRadius: 2, display: 'inline-block' }} />
-      ))}
-    </span>
-  );
-}
 const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
   { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
@@ -369,13 +356,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
-                <AlignmentViz a={row.alignment} size={8} />
               </span>
             </div>
           ) : (
             <>
               <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
-              <AlignmentViz a={row.alignment} size={8} />
 
               <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
                 <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>
@@ -452,13 +437,16 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             const sym = `${row.exchange}:${leg.option_symbol}`;
             const q = quotes?.[sym];
             const lastPx = q?.last_price || (leg as any).premium_spot;
-            const slPx = (leg as any).premium_sl;
+            // Non-positive premium ⇒ no real entry/stop (illiquid bar) — show "—", not 0.0.
+            const rawGSlPx = (leg as any).premium_sl;
+            const slPx = rawGSlPx != null && rawGSlPx > 0 ? rawGSlPx : null;
             const legEnded = legIsExited(leg);
             const isExp = expanded.has(leg.option_symbol);
             const gSpot = uLastPx ?? row.spot ?? 0;
             const gGreeks = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, gSpot, q, leg.lot_size ?? null);
             const gDelta = gGreeks ? Math.abs(gGreeks.delta).toFixed(2) : null;
-            const gEntry = (leg as any).premium_spot;
+            const rawGEntry = (leg as any).premium_spot;
+            const gEntry = rawGEntry != null && rawGEntry > 0 ? rawGEntry : null;
             const gDiff = (!legEnded && lastPx != null && gEntry != null) ? lastPx - gEntry : null;
             return (
               <div key={leg.option_symbol} style={{ minWidth: 132 }}>
@@ -616,8 +604,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
           // the signal fired, so dim them — they're history, not a live order to act on.
           // Use the LEG's own liveness (the row flag is OR'd across all strikes in the
           // group, so a dead strike can sit under a "running" parent).
-          const entryPx = (leg as any).premium_spot;
-          const slPx = (leg as any).premium_sl;
+          // A 0 / illiquid premium bar at the entry can leave these at 0 — that's not a
+          // real entry/stop, so treat non-positive as "no value" (renders as "—") instead
+          // of a misleading 0.00 sitting next to a live LTP (the classic "entry 0 (+61.75)").
+          const rawEntryPx = (leg as any).premium_spot;
+          const entryPx = rawEntryPx != null && rawEntryPx > 0 ? rawEntryPx : null;
+          const rawSlPx = (leg as any).premium_sl;
+          const slPx = rawSlPx != null && rawSlPx > 0 ? rawSlPx : null;
           const ended = legIsExited(leg);
           const legActive = !ended;
           // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the
@@ -2118,7 +2111,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : signals?.market_open ? 'No ready setups right now. The engine re-scans automatically.' : `No cached signals from today's session. Markets open Mon–Fri 9:15 AM – 3:30 PM IST.`}
+            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : signals?.market_open ? 'No active or recent setups on the board yet. The engine re-scans every ~5 min.' : `No recent signals on the board. Recent setups stay listed; the engine resumes when markets open (Mon–Fri 9:15 AM – 3:30 PM IST).`}
           </div>
         ) : (
           groupedRows.map(group => {

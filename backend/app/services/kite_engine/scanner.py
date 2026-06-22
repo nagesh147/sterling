@@ -45,6 +45,13 @@ _CONCURRENCY = 2             # stay UNDER Kite historical ~3 req/s (3 concurrent
 _TF_MS = 3_600_000           # 1H bar in ms
 _LOOKBACK_BARS = 320
 
+# Signals linger on the board for a couple of weeks after they fire — even once
+# their SuperTrend de-aligns (the UI renders these struck-through as "ended") — so a
+# setup entered before a weekend is still visible the following Monday instead of
+# vanishing the instant the trend breaks. The UI buckets ended entries up to 15 days
+# old ("Today / Yesterday / Last week / Last 15 days"), so the retention matches.
+_SIGNAL_RETENTION_MS = 15 * 24 * 60 * 60 * 1000
+
 _IST = timezone(timedelta(hours=5, minutes=30))
 
 # place_cb(row, item) -> Awaitable: optional auto-exec hook injected by the endpoint.
@@ -60,6 +67,31 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
     if candles[-1].timestamp_ms + _TF_MS > now_ms:
         return candles[:-1]
     return candles
+
+
+def _retain_signals(eval_rows: List[EngineSignalRow], now_ms: int) -> List[EngineSignalRow]:
+    """Filter one instrument's transitions to the rows worth showing.
+
+    Keeps every still-running or just-fired entry, PLUS the single most-recent
+    now-ended entry while it is still within the retention window. This replaces the
+    old ``is_active or is_fresh`` drop so a recent setup doesn't disappear the moment
+    its trend ends — it stays on the board (rendered struck-through as "ended") until
+    it ages out or a newer transition on the same instrument supersedes it. Older
+    de-aligned wiggles are dropped, keeping the board bounded and the cache stable
+    across re-scans (each scan replays the same history deterministically).
+
+    Auto-exec is unaffected: callers still fire only on the fresh (latest-bar) row.
+    """
+    if not eval_rows:
+        return []
+    latest_ts = max(int(r.timestamp_ms) for r in eval_rows)
+    out: List[EngineSignalRow] = []
+    for r in eval_rows:
+        if r.is_active or r.is_fresh:
+            out.append(r)
+        elif int(r.timestamp_ms) == latest_ts and (now_ms - int(r.timestamp_ms)) <= _SIGNAL_RETENTION_MS:
+            out.append(r)
+    return out
 
 
 def evaluate_item(
@@ -462,6 +494,7 @@ class KiteEngineScanner:
         try:
             sem = asyncio.Semaphore(_CONCURRENCY)
             today = datetime.now(_IST).date()
+            now_ms = int(time.time() * 1000)  # retention cutoff for ended signals
             rows: List[EngineSignalRow] = []
             diag = ScanDiag(universe=len(universe),
                             indices=sum(1 for i in universe if i.is_index))
@@ -504,13 +537,10 @@ class KiteEngineScanner:
                 _expiry = expiry_types_indices if (expiry_types_indices is not None and item.is_index) else expiry_types_stocks if (expiry_types_stocks is not None and not item.is_index) else expiry_types
                 
                 latest_ts = candles[-1].timestamp_ms
-                for row in eval_rows:
-                    # Only surface LIVE signals: a fresh entry (this bar) or a still-running
-                    # trade. Stopped-out historical entries are dropped at the source —
-                    # they're neither actionable nor open, and carrying them just clutters
-                    # the console with dead rows whose frozen entry sits far from the LTP.
-                    if not (row.is_active or row.is_fresh):
-                        continue
+                # Surface running/just-fired setups PLUS the most-recent recently-ended
+                # one, so signals don't vanish the instant a trend breaks (they show as
+                # "ended" until they age out — see _retain_signals).
+                for row in _retain_signals(eval_rows, now_ms):
                     attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                                    moneynesses=moneyness, today=today,
                                    expiry_types=_expiry)
@@ -653,12 +683,9 @@ class KiteEngineScanner:
                         fired_at_ms=fired_at, reason=reason))
                     
                     latest_ts = oc[-1].timestamp_ms
-                    for drow in drows:
-                        # Live-only: keep a fresh entry or a still-running trade; drop
-                        # stopped-out historical entries (the diag trace above still records
-                        # them as "historical entry only" for the activity log).
-                        if not (drow.is_active or drow.is_fresh):
-                            continue
+                    # Keep running/just-fired entries plus the most-recent recently-ended
+                    # one (the diag trace above still records every historical entry).
+                    for drow in _retain_signals(drows, now_ms):
                         # Stamp the underlying spot at this signal's trigger bar (1H bars
                         # of premium and underlying share timestamps; fall back to the
                         # last bar at/before the trigger if there's no exact match).

@@ -8,8 +8,8 @@ from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.scanner import (
-    KiteEngineScanner, attach_strikes, drop_forming, evaluate_derivative_contract,
-    evaluate_item, option_order_args,
+    _SIGNAL_RETENTION_MS, KiteEngineScanner, _retain_signals, attach_strikes,
+    drop_forming, evaluate_derivative_contract, evaluate_item, option_order_args,
 )
 from app.services.kite_engine.strikes import OptionPick
 from app.services.kite_engine.universe import UniverseItem
@@ -53,6 +53,43 @@ def test_drop_forming_removes_open_bar():
     assert len(drop_forming(candles, now_ms=2 * 3_600_000 + 1_800_000)) == 2
     # well past close → keep it
     assert len(drop_forming(candles, now_ms=10 * 3_600_000)) == 3
+
+
+def _sig_row(ts_ms: int, *, active: bool, fresh: bool):
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow
+    return EngineSignalRow(
+        underlying="NIFTY", token=1, exchange="NFO",
+        regime="BULL", alignment=AlignmentChip(fast=1, mid=1, slow=1),
+        direction="long", option_type="CE", spot=100.0, stop_loss=90.0,
+        score=85.0, timestamp_ms=ts_ms, is_active=active, is_fresh=fresh,
+    )
+
+
+def test_retain_signals_keeps_active_and_fresh():
+    now = 1_000 * 3_600_000
+    rows = [_sig_row(now, active=True, fresh=True), _sig_row(now - 3_600_000, active=True, fresh=False)]
+    assert _retain_signals(rows, now) == rows
+
+
+def test_retain_signals_keeps_most_recent_ended_within_window():
+    now = 1_000 * 3_600_000
+    recent_ended = _sig_row(now - 24 * 3_600_000, active=False, fresh=False)        # ~1 day ago
+    older_ended = _sig_row(now - 48 * 3_600_000, active=False, fresh=False)         # ~2 days ago (superseded)
+    kept = _retain_signals([older_ended, recent_ended], now)
+    # Only the single most-recent ended transition survives; the older one is dropped.
+    assert kept == [recent_ended]
+
+
+def test_retain_signals_drops_ended_past_retention_window():
+    now = 1_000 * 3_600_000
+    stale = _sig_row(now - _SIGNAL_RETENTION_MS - 3_600_000, active=False, fresh=False)
+    assert _retain_signals([stale], now) == []
+
+
+def test_retain_signals_active_kept_regardless_of_age():
+    now = 1_000 * 3_600_000
+    old_active = _sig_row(now - _SIGNAL_RETENTION_MS - 10 * 3_600_000, active=True, fresh=False)
+    assert _retain_signals([old_active], now) == [old_active]
 
 
 def test_evaluate_item_emits_row_on_fresh_transition():

@@ -344,6 +344,19 @@ async def instrument_lots(symbols: str = "", user: UserContext = Depends(get_cur
     return await _run(user, lambda c: c.instrument_lot_sizes(syms))
 
 
+@router.get("/instruments/expiries")
+async def instrument_expiries(symbols: str = "", user: UserContext = Depends(get_current_user)):
+    """Bulk expiry lookup: ?symbols=BFO:SENSEX...,NFO:NIFTY... → {symbol: 'YYYY-MM-DD'}.
+
+    Used by the market watch to backfill the expiry shown on an expanded option
+    row (legacy watch items were saved without it).
+    """
+    syms = [s for s in (symbols or "").split(",") if s]
+    if not syms:
+        return {}
+    return await _run(user, lambda c: c.instrument_expiries(syms))
+
+
 @router.get("/quote")
 async def quote(i: List[str] = Query(...), user: UserContext = Depends(get_current_user)):
     return await _run(user, lambda c: c.get_quote(i))
