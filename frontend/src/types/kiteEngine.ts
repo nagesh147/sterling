@@ -180,6 +180,7 @@ export interface BacktestRequest {
   symbol: string;
   data_mode: BacktestDataMode;
   trail_target: TrailTarget;
+  exit_mode: ExitMode;
   lookback_bars: number;
   starting_capital: number;
   qty: number;

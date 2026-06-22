@@ -82,3 +82,25 @@ class TestSynthetic:
             underlying_close=flat, strike=100, iv=0.2, dte_days_start=10,
             bars_per_day=6, option_type="CE")
         assert prem[0] > prem[-1]  # later bar = less time value
+
+
+class TestExitMode:
+    def test_looser_mode_trades_no_more_than_tighter(self):
+        # Oscillating premium: a tighter exit (one_red) re-enters on every pullback;
+        # a looser exit (three_red) holds through minor dips → fewer, longer trades.
+        seg = list(np.linspace(80, 170, 26)) + list(np.linspace(170, 95, 22))
+        path = seg * 4
+        ts, o, h, l, c = _ohlc(path)
+        cfg = SterlingKiteEngineConfig()
+
+        def trades_for(mode):
+            run = bt.replay_premium_series(
+                timestamps_ms=ts, premium_open=o, premium_high=h, premium_low=l,
+                premium_close=c, cfg=cfg, trail_target="fast", exit_mode=mode, qty=50,
+                costs=bt.OptionCosts(), starting_capital=100_000)
+            return run.stats.trades
+
+        one, three = trades_for("one_red"), trades_for("three_red")
+        assert one >= 1 and three >= 1
+        # tighter exit ⇒ at least as many trades as the looser one (monotonic)
+        assert one >= three

@@ -357,6 +357,10 @@ class BacktestRequest(BaseModel):
     symbol: str
     data_mode: Literal["synthetic", "real", "both"] = "both"
     trail_target: Literal["fast", "mid", "slow"] = "fast"
+    # Exit counter (how many red ST lines trigger the exit), mirrors the live engine.
+    # The backtest exit IS this red-count rule; trail_target is retained for the live
+    # stop level but does not change the backtest exit.
+    exit_mode: ExitMode = "two_red"
     lookback_bars: int = 2000          # 1H bars (synthetic can reach back years)
     starting_capital: float = 100_000.0
     qty: int = 50                      # one lot (lot_size) — value/risk scales with this

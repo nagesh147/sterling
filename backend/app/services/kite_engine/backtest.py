@@ -1,7 +1,7 @@
 """Honest options backtest for the Kite Sterling Kite Engine (workstream H).
 
 Three data modes, all replaying the SAME signal logic the live engine uses
-(Sterling Kite Engine full-alignment entries, trail-target exit):
+(Sterling Kite Engine full-alignment entries, red-count ``exit_mode`` exit):
 
   * ``synthetic`` — run the ST on the underlying's real multi-year candles. Each
     bar the option premium is priced with Black-Scholes (underlying + a fixed IV
@@ -29,6 +29,9 @@ from typing import List, Optional
 
 import numpy as np
 
+from app.engines.common.exit_counter import (
+    exit_needs_counter_signal, get_exit_threshold,
+)
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.greeks import bs_price
@@ -149,6 +152,28 @@ def _stats_from_trades(trades: List[BacktestTrade], starting_capital: float) -> 
     return stats, [round(e, 2) for e in equity]
 
 
+def _redcount_exit_bar(r, entry_i: int, want: int, longs, shorts, exit_mode: str, n: int) -> tuple:
+    """First exit bar after ``entry_i`` under the red-count rule — identical to the
+    live ``scanner.is_active`` loop: ``regime.red_line_count`` (over all three STs)
+    >= the ``exit_mode`` threshold, plus a fresh counter-arrow for ``three_red_signal``.
+    ``trail_target`` governs only the stop LEVEL live, not this exit decision, so it
+    plays no part here. Returns (exit_i, reason)."""
+    threshold = get_exit_threshold(exit_mode)
+    needs_signal = exit_needs_counter_signal(exit_mode)
+    against = -want  # long(+1) → red = -1; short(-1) → red = +1
+    for j in range(entry_i + 1, n):
+        reds = ((int(r.t_fast[j]) == against)
+                + (int(r.t_mid[j]) == against)
+                + (int(r.t_slow[j]) == against))
+        if reds >= threshold:
+            if not needs_signal:
+                return j, f"{exit_mode}_exit"
+            counter = bool(shorts[j]) if want == 1 else bool(longs[j])
+            if counter:
+                return j, f"{exit_mode}_exit"
+    return n - 1, "series end"
+
+
 def replay_premium_series(
     *,
     timestamps_ms: List[int],
@@ -158,6 +183,7 @@ def replay_premium_series(
     premium_close: List[float],
     cfg: SterlingKiteEngineConfig,
     trail_target: str,
+    exit_mode: str = "two_red",
     qty: int,
     costs: OptionCosts,
     starting_capital: float,
@@ -165,7 +191,7 @@ def replay_premium_series(
 ) -> BacktestRun:
     """Replay the ST on a PREMIUM series (the 'real' mode, and the inner loop the
     'synthetic' mode reuses on its modeled premium series). BUY on a fresh up-
-    transition of the premium's own SuperTrend; exit when the trail flips down.
+    transition of the premium's own SuperTrend; exit on the red-count ``exit_mode``.
     """
     o = np.asarray(premium_open, float)
     h = np.asarray(premium_high, float)
@@ -179,8 +205,7 @@ def replay_premium_series(
         return run
 
     r = compute_regime(o, h, l, c, cfg)
-    longs, _ = entry_transitions(r)          # premium up-transition = BUY
-    trend = r.trend(trail_target)            # exit when this flips against us
+    longs, shorts = entry_transitions(r)     # premium up-transition = BUY
 
     i = 0
     while i < n:
@@ -190,14 +215,8 @@ def replay_premium_series(
         # enter at this bar's close (premium)
         entry_i = i
         entry_px = float(c[entry_i])
-        # walk forward to the first bar the trail flips down (or series end)
-        exit_i = n - 1
-        reason = "series end"
-        for j in range(entry_i + 1, n):
-            if trend[j] == -1:
-                exit_i = j
-                reason = "trail flip"
-                break
+        # exit = red-count over the premium's 3 STs (the live exit_mode rule)
+        exit_i, reason = _redcount_exit_bar(r, entry_i, 1, longs, shorts, exit_mode, n)
         exit_px = float(c[exit_i])
         gross = (exit_px - entry_px) * qty
         ch = costs.round_trip(entry_px, exit_px, qty)
@@ -241,6 +260,7 @@ def run_synthetic(
     u_open: List[float], u_high: List[float], u_low: List[float], u_close: List[float],
     cfg: SterlingKiteEngineConfig,
     trail_target: str,
+    exit_mode: str = "two_red",
     iv: float,
     dte_days: float,
     bars_per_day: float,
@@ -265,7 +285,6 @@ def run_synthetic(
 
     r = compute_regime(o, h, l, c, cfg)
     longs, shorts = entry_transitions(r)
-    trend = r.trend(trail_target)
 
     i = 0
     while i < n:
@@ -279,15 +298,9 @@ def run_synthetic(
         # ATM strike shifted by the moneyness offset (signed by direction).
         sign = 1.0 if is_long else -1.0
         strike = round(spot0 * (1.0 + sign * moneyness_offset_pct / 100.0), 0)
-        # exit bar = first flip of the chosen trail against the position
+        # exit bar = red-count over the 3 STs (the live exit_mode rule)
         want = 1 if is_long else -1
-        exit_i = n - 1
-        reason = "series end"
-        for j in range(i + 1, n):
-            if trend[j] != want:
-                exit_i = j
-                reason = "trail flip"
-                break
+        exit_i, reason = _redcount_exit_bar(r, i, want, longs, shorts, exit_mode, n)
         # model premium at entry and exit
         held = exit_i - i
         entry_dte = dte_days
