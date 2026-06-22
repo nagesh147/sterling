@@ -35,6 +35,55 @@ class RegimeSeries:
     def trend(self, target: TrailTarget) -> NDArray[np.int64]:
         return {"fast": self.t_fast, "mid": self.t_mid, "slow": self.t_slow}[target]
 
+    def red_line_count(self, direction: str, i: int) -> int:
+        """Count how many ST lines are red (against the position) at bar ``i``.
+
+        For a long position, red = trend == -1.
+        For a short position, red = trend == +1.
+        """
+        against = -1 if direction == "long" else 1
+        count = 0
+        if int(self.t_fast[i]) == against:
+            count += 1
+        if int(self.t_mid[i]) == against:
+            count += 1
+        if int(self.t_slow[i]) == against:
+            count += 1
+        return count
+
+    def green_lines(self, direction: str, i: int) -> list:
+        """Return the names of ST lines that are still green (aligned with position) at bar ``i``.
+
+        For a long: green = trend == +1. Returns in priority order: slow (widest), mid, fast (tightest).
+        The widest still-green line provides the best trailing stop.
+        """
+        want = 1 if direction == "long" else -1
+        lines = []
+        # Order: slow (widest/loosest), mid, fast (tightest) — so we can trail
+        # the widest available green line for maximum protection without premature exit.
+        if int(self.t_slow[i]) == want:
+            lines.append("slow")
+        if int(self.t_mid[i]) == want:
+            lines.append("mid")
+        if int(self.t_fast[i]) == want:
+            lines.append("fast")
+        return lines
+
+    def best_trail_line_value(self, direction: str, i: int) -> float:
+        """Return the trail value from the tightest still-green ST line at bar ``i``.
+
+        As lines flip red, the trail auto-tightens to the next still-green line.
+        If no lines are green, returns 0.0 (all red — exit should have fired).
+        """
+        green = self.green_lines(direction, i)
+        if not green:
+            return 0.0
+        # Use the TIGHTEST (innermost) green line as the trail. For a long,
+        # tighter = higher stop. "fast" is tightest, then "mid", then "slow".
+        # green_lines returns slow→mid→fast, so the last element is the tightest.
+        tightest = green[-1]
+        return float(self.line(tightest)[i])
+
 
 def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) -> RegimeSeries:
     o = np.asarray(opens, dtype=float)

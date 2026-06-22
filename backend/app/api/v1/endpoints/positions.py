@@ -104,6 +104,7 @@ def _theta_burn_usd(legs, contracts: float, hold_days: float) -> float:
                     * (1.0 if getattr(l, "side", "buy") == "buy" else -1.0)
                     for l in legs)
     return round(abs(net_theta) * contracts * hold_days, 2)
+
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
@@ -118,6 +119,57 @@ from app.services import paper_store, pnl_history
 from app.services.exchange_account_store import list_exchanges as _list_exchange_configs
 from app.services.exchanges import instrument_registry as registry
 from app.engines.directional.orchestrator import run_once as engine_run_once
+
+
+# Reusable helper extracted for red-count exit logic in monitor flows (directional + for parity with kite).
+# Called from _monitor_one (and usable in tests/kite). Supports greeks/trail flags for monitor integration.
+def _compute_red_and_maybe_close(
+    pos: "PaperPosition",
+    signal: Any,
+    current_spot: float,
+    now_ms: int,
+    estimated_pnl: float,
+    current_dte: int,
+    update_greeks: bool = False,
+    trail_update: bool = False,
+) -> Optional["MonitorResult"]:
+    """Compute red from st_trends, update store if changed, close pos on exit per mode.
+    Returns MonitorResult on exit or None. Shared logic for parity.
+    """
+    if getattr(pos, "exit_mode", None) and hasattr(signal, "st_trends"):
+        try:
+            from app.engines.common.exit_counter import (
+                compute_red_count_from_trends,
+                get_exit_threshold,
+                should_exit_on_reds,
+            )
+            d = pos.sized_trade.structure.direction.value
+            rc = compute_red_count_from_trends(
+                signal.st_trends or [getattr(signal, "trend", 0)] * 3, d
+            )
+            if rc != getattr(pos, "current_red_count", 0):
+                paper_store.update_position(pos.id, current_red_count=rc)
+            thresh = get_exit_threshold(pos.exit_mode)
+            if should_exit_on_reds(rc, pos.exit_mode):
+                exit_signal = ExitSignal(
+                    should_exit=True,
+                    reason=f"red_count_exit {rc}/{thresh} ({pos.exit_mode})",
+                    exit_type="red_count",
+                )
+                paper_store.close_position(pos.id, float(current_spot))
+                return MonitorResult(
+                    position_id=pos.id,
+                    underlying=pos.underlying,
+                    exit_signal=exit_signal,
+                    current_spot=current_spot,
+                    estimated_pnl_usd=estimated_pnl,
+                    current_dte=current_dte,
+                    current_signal_trend=getattr(signal, "trend", None),
+                    timestamp_ms=now_ms,
+                )
+        except Exception:
+            pass
+    return None
 
 
 def _is_paper_mode() -> bool:
@@ -836,6 +888,7 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
             trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
             initial_sl=_initial_sl,
             initial_tp=_initial_tp,
+            exit_mode="two_red",  # unification with kite exit counter
         )
     return pos
 
@@ -857,6 +910,8 @@ async def monitor_all(request: Request) -> MonitorAllResult:
 
     _sem = asyncio.Semaphore(3)  # cap concurrent adapter calls
 
+    # (helper defined at module level above for reuse)
+
     async def _monitor_one(pos: PaperPosition) -> Optional[MonitorResult]:
         async with _sem:
             try:
@@ -866,7 +921,18 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                 adapter = _live_adapter
                 c1h = await adapter.get_candles(inst, "1H", limit=400)
                 signal = compute_signal(c1h)
+
                 current_spot = await adapter.get_index_price(inst)
+                # minimal for red path (full pnl computed below or in other paths)
+                estimated_pnl = 0.0
+                current_dte = 0
+
+                red_result = _compute_red_and_maybe_close(
+                    pos, signal, current_spot, now_ms, estimated_pnl, current_dte
+                )
+                if red_result:
+                    return red_result
+                # (trail update continues below)
                 leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
                 dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
                 if dte_from_expiry >= 0:

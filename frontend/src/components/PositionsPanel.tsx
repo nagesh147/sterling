@@ -251,7 +251,7 @@ function RetryOrderButton({ posId, onDone }: { posId: string; onDone?: () => voi
   );
 }
 
-function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number | null }) {
+export function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number | null }) {
   const [closePrice, setClosePrice] = useState('');
   const [showClose, setShowClose] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -341,6 +341,30 @@ function PositionCard({ pos, livePnl }: { pos: PaperPosition; livePnl?: number |
         <div style={styles.cell}><span style={styles.key}>ENTRY SPOT</span><span style={styles.val}>${fmt(pos.entry_spot_price)}</span></div>
         <div style={styles.cell}><span style={styles.key}>MAX RISK</span><span style={styles.val}>${fmt(pos.sized_trade.max_risk_usd)}</span></div>
         <div style={styles.cell}><span style={styles.key}>SCORE</span><span style={styles.val}>{fmtN(s.score, 1)}</span></div>
+        {pos.exit_mode && (
+          <div style={styles.cell}>
+            <span style={styles.key}>EXIT MODE</span>
+            <span style={{...styles.val, fontSize: 10, background: '#333', padding: '1px 4px', borderRadius: 2}}>
+              {pos.exit_mode} {pos.current_red_count != null && pos.exit_threshold != null ? `(${pos.current_red_count}/${pos.exit_threshold} red)` : ''}
+            </span>
+            {pos.current_red_count != null && pos.exit_threshold != null && pos.exit_threshold > 0 && (
+              <div style={{width: 60, height: 8, background: '#222', borderRadius: 4, overflow: 'hidden', marginTop: 2}}>
+                <div style={{
+                  width: `${Math.min(100, (pos.current_red_count / pos.exit_threshold) * 100)}%`,
+                  height: '100%',
+                  background: pos.current_red_count >= pos.exit_threshold ? '#f44' : pos.current_red_count > pos.exit_threshold * 0.6 ? '#fa0' : '#4a4',
+                  transition: 'width 0.2s'
+                }} />
+              </div>
+            )}
+          </div>
+        )}
+        {pos.last_st_alignment && (
+          <div style={styles.cell}>
+            <span style={styles.key}>ST ALIGN</span>
+            <span style={styles.val}>{pos.last_st_alignment.join('/')}</span>
+          </div>
+        )}
         {pos.realized_pnl_usd != null && (
           <div style={styles.cell}>
             <span style={styles.key}>REALIZED P&L</span>

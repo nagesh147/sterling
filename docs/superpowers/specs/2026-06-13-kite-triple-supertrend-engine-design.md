@@ -120,8 +120,8 @@ Uses `KiteClient.get_option_chain(instrument)` (returns strike / moneyness / dte
   chosen strike/expiry, trailing stop). Polled by the sidebar.
 - `GET /api/v1/kite/engine/setup/{token}` — `SetupChart`: 1H closed candles + the three ST
   line series + entry marker + ratcheted trailing-stop line (for click-to-visualize).
-- `GET/POST /api/v1/kite/engine/config` — knobs (`trail_target`, `strike_moneyness`,
-  `early_lock`, **`auto_execute`** toggle). `auto_execute` defaults **OFF**.
+- `GET/POST /api/v1/kite/engine/config` — knobs (`trail_target`, `exit_mode` (one_red/two_red/three_red/three_red_signal), `strike_moneyness`,
+  `early_lock`, **`auto_execute`** toggle). Default exit_mode="two_red" (balanced). `auto_execute` defaults **OFF**.
 
 ### 5e. Auto-execute (toggle, default OFF) — Kite order path, not other engines
 When ON: a new "ready" signal with no open position for that underlying → pick ATM/ITM
@@ -163,6 +163,11 @@ and other-engine selectors are **not** used.
 - Scan timeframe **1H**; cache-refreshed background scan.
 - Sidebar shows **only "ready"** signals (fresh full-alignment transition).
 - `trail_target = "mid"`, `early_lock = False`.
+- `exit_mode = "two_red"` (balanced counter: exit on 2 red ST lines; 1/3/3+signal options; unifies 3-green entry with red counter exit + adaptive green-line trailing SL).
+
+## Directional / kite engine unification note
+The core 3-ST-line + arrow (entry) / red-count counter (exit) + best-green trailing is implemented in sterling_kite_engine (pure regime + engine + monitor integration). This provides a clean "directional scalper" for options (CE on bull 3-green, exit on chosen reds).
+The older `engines/directional/` (ADX/RSI + setups) remains for other assets/modes. Shared future: extract regime.py or common AlignmentChip logic. Red-count health is now exposed on positions and used in monitor for dynamic exits.
 
 ## 9. Honest caveats / risks
 

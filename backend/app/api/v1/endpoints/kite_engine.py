@@ -30,7 +30,11 @@ router = APIRouter(prefix="/kite/engine", tags=["kite-engine"])
 
 
 def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
-    return SterlingKiteEngineConfig(trail_target=c.trail_target)
+    return SterlingKiteEngineConfig(
+        trail_target=c.trail_target,
+        exit_mode=c.exit_mode,
+        hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
+    )
 
 
 async def _client(user: UserContext):
@@ -211,17 +215,22 @@ async def scan_report(user: UserContext = Depends(get_current_user)) -> ScanRepo
 async def open_positions(user: UserContext = Depends(get_current_user)) -> OpenPositionsResponse:
     """Return the engine's currently tracked open positions including vehicle/direction labels."""
     uid = user.user_id
-    records = [
-        OpenPositionRecord(
+    records = []
+    for p in kite_positions.open_positions(uid):
+        em = getattr(p, 'exit_mode', 'one_red')
+        from app.engines.common.exit_counter import get_exit_threshold
+        thresh = get_exit_threshold(em)
+        records.append(OpenPositionRecord(
             symbol=p.symbol, exchange=p.exchange, token=p.token,
             qty=p.qty, lot_size=p.lot_size,
             entry_premium=p.entry_premium, fill_price=p.fill_price,
             stop_premium=p.stop_premium, status=p.status,
             direction=p.direction, vehicle=p.vehicle, underlying=p.underlying,
             opened_ms=p.opened_ms, exit_reason=p.exit_reason, order_id=p.order_id,
-        )
-        for p in kite_positions.open_positions(uid)
-    ]
+            exit_mode=em,
+            current_red_count=getattr(p, 'current_red_count', 0),
+            exit_threshold=thresh,
+        ))
     return OpenPositionsResponse(positions=records)
 
 
@@ -244,17 +253,22 @@ async def close_position(symbol: str, user: UserContext = Depends(get_current_us
         except Exception:  # noqa: BLE001
             pass
     kite_positions.close(uid, symbol, reason="manual_close")
-    records = [
-        OpenPositionRecord(
+    records = []
+    for p in kite_positions.open_positions(uid):
+        em = getattr(p, 'exit_mode', 'one_red')
+        from app.engines.common.exit_counter import get_exit_threshold
+        thresh = get_exit_threshold(em)
+        records.append(OpenPositionRecord(
             symbol=p.symbol, exchange=p.exchange, token=p.token,
             qty=p.qty, lot_size=p.lot_size,
             entry_premium=p.entry_premium, fill_price=p.fill_price,
             stop_premium=p.stop_premium, status=p.status,
             direction=p.direction, vehicle=p.vehicle, underlying=p.underlying,
             opened_ms=p.opened_ms, exit_reason=p.exit_reason, order_id=p.order_id,
-        )
-        for p in kite_positions.open_positions(uid)
-    ]
+            exit_mode=em,
+            current_red_count=getattr(p, 'current_red_count', 0),
+            exit_threshold=thresh,
+        ))
     return OpenPositionsResponse(positions=records)
 
 

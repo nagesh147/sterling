@@ -8,6 +8,7 @@ import {
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
+  ExitMode,
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -33,6 +34,16 @@ const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
   { value: 'fast', label: 'Tight', hint: 'Exit quickly — trails the fast SuperTrend (21,1). Locks gains sooner, more whipsaw.' },
   { value: 'mid', label: 'Balanced', hint: 'Default — trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
   { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
+];
+
+// Expert exit counter modes — mirrors backend ExitMode exactly.
+// Entry is ALWAYS "full 3 green lines + fresh green transition (arrow)".
+// Exit is the COUNTER chosen by user.
+const EXIT_MODE_OPTS: { value: ExitMode; label: string; hint: string; short: string }[] = [
+  { value: 'one_red', label: '1 Red', short: 'Tightest', hint: 'Auto-exit the moment ANY one of the 3 ST lines turns red against your position. Fastest lock, highest sensitivity.' },
+  { value: 'two_red', label: '2 Red', short: 'Moderate', hint: 'Exit when any TWO SuperTrend lines have flipped red. Good balance of room vs protection.' },
+  { value: 'three_red', label: '3 Red', short: 'Patient', hint: 'Hold until ALL THREE lines are red (full reversal). Gives the trend maximum room to breathe.' },
+  { value: 'three_red_signal', label: '3R + Signal', short: 'Safest', hint: 'Only exit on 3 red lines AND a fresh opposite arrow (counter-entry confirmation). Maximum conviction filter for exits.' },
 ];
 const STOP_MODE_OPTS: { value: 'broker' | 'monitor' | 'both'; label: string; hint: string }[] = [
   { value: 'both', label: 'Both', hint: 'Broker GTT stop + server-side tick monitor. Defense in depth — recommended for real money.' },
@@ -66,6 +77,20 @@ const EXPIRY_OPTS: { value: ScanExpiry; label: string; hint: string }[] = [
   { value: 'weekly', label: 'Weekly', hint: 'Weekly contracts expiring every Thursday (including current week).' },
   { value: 'monthly', label: 'Monthly', hint: 'Monthly contracts expiring on the last Thursday of the month.' },
 ];
+
+// Expert visual: 3 SuperTrend lines alignment (F/M/S). Green = with position, Red = against.
+// Used on signals and can be reused for open positions to show live degradation toward exit.
+function AlignmentViz({ a, size = 10 }: { a?: AlignmentChip; size?: number }) {
+  if (!a) return null;
+  const col = (v: number) => v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : '#64748b';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 6, verticalAlign: 'middle' }} title={`ST lines fast/mid/slow: ${a.fast} / ${a.mid} / ${a.slow}`}>
+      {([a.fast, a.mid, a.slow] as const).map((v, i) => (
+        <span key={i} style={{ width: size, height: size + 4, background: col(v), borderRadius: 2, display: 'inline-block' }} />
+      ))}
+    </span>
+  );
+}
 const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
   { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
@@ -344,11 +369,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
+                <AlignmentViz a={row.alignment} size={8} />
               </span>
             </div>
           ) : (
             <>
               <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
+              <AlignmentViz a={row.alignment} size={8} />
 
               <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
                 <span style={{ fontWeight: 500 }}>{uLastPx != null ? uLastPx.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : row.spot.toFixed(2)}</span>
@@ -1712,6 +1739,11 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
             Sterling Kite Engine
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
+          {cfg && (
+            <span title="Current auto-exit rule (counter to the 3-green entry)" style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tint(k.blue, 8), color: k.blue }}>
+              {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.short ?? '1R'} EXIT
+            </span>
+          )}
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
           {/* Actions: rescan / scan report / grid·list */}
@@ -1954,12 +1986,38 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
 
         const executionGroup = (
           <>
+            <div style={{ padding: '6px 16px 8px', fontSize: 10, color: k.dim, background: tint(k.amber, 3), borderBottom: `1px solid ${k.border}` }}>
+              Entry: <b>all 3 green lines + fresh green arrow</b>. Exit counter (your choice): 1/2/3 red lines (or + red arrow). Trail ratchets tighter as lines flip red.
+            </div>
             <SettingRow label="Trail" hint="How tightly the position is trailed before exit.">
               <Segmented
                 options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.trail_target ?? 'fast') === v}
                 onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`)}
               />
+            </SettingRow>
+            <SettingRow label="Hybrid Weight" hint="Weight for ST vs ATR in hybrid trail (0-1). Only for hybrid mode.">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={cfg.hybrid_st_weight ?? 0.5}
+                onChange={e => patch({ hybrid_st_weight: parseFloat(e.target.value) }, `Hybrid weight → ${e.target.value}`)}
+                aria-label="Hybrid Weight"
+                data-testid="hybrid-weight-input"
+                style={{ width: 80, padding: 4, background: k.surface, color: k.text, border: `1px solid ${k.border}` }}
+              />
+            </SettingRow>
+            <SettingRow label="Exit Counter" hint="Entry = all 3 green lines + fresh green arrow. Choose how many red (counter) lines + optional red arrow trigger auto-exit + ratcheting trail.">
+              <Segmented
+                options={EXIT_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: `${o.short}: ${o.hint}` }))}
+                isActive={(v) => (cfg.exit_mode ?? 'one_red') === v}
+                onSelect={(v) => patch({ exit_mode: v as 'one_red'|'two_red'|'three_red'|'three_red_signal' }, `Exit mode → ${EXIT_MODE_OPTS.find(x=>x.value===v)?.short || v}`)}
+              />
+              <div style={{ fontSize: 10, color: k.dim, marginTop: 4, lineHeight: 1.3 }}>
+                {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.hint}
+              </div>
             </SettingRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
               onClick={toggleAuto}>
@@ -2027,7 +2085,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
                       <div style={{ display: 'flex', flexDirection: 'column' }}>{universeGroup}</div>
                     </Collapsible>
                     <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
-                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'fast'))?.label ?? 'Tight'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
+                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'fast'))?.label ?? 'Tight'} trail · ${ (EXIT_MODE_OPTS.find(o=>o.value===(cfg.exit_mode??'one_red'))?.short || '1R') } exit${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>{executionGroup}</div>
                     </Collapsible>
                   </div>

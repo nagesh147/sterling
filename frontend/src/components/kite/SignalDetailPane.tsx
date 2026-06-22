@@ -420,6 +420,12 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                 <StripStat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={moveColor} />
                 <StripDiv />
                 <StripStat label="Move since" value={moveLabel} color={moveColor} />
+                {data?.alignment && (
+                  <>
+                    <StripDiv />
+                    <StripStat label="ST align F/M/S" value={`${data.alignment.fast}/${data.alignment.mid}/${data.alignment.slow}`} title="Current SuperTrend alignment at trigger (+1 green / -1 red)" />
+                  </>
+                )}
               </div>
             );
           })()}

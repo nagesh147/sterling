@@ -174,6 +174,11 @@ export interface PaperPosition {
   current_tp?: number | null;
   trail_mode?: string | null;
   mode?: string | null;
+  // Exit counter unification (from PaperPosition backend)
+  exit_mode?: string | null;
+  current_red_count?: number;
+  exit_threshold?: number;
+  last_st_alignment?: number[] | null;
 }
 
 export interface PositionListResponse {

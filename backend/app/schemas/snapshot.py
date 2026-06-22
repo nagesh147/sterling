@@ -19,6 +19,7 @@ class DirectionalSnapshot(BaseModel):
     red_arrow: bool
     st_trends: List[int]
     st_values: List[float]
+    red_count: int = 0  # from common.exit_counter for directional/kite unification
     score_long: float
     score_short: float
     close_1h: float

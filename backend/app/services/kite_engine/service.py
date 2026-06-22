@@ -44,7 +44,11 @@ def has_scanned() -> bool:
 
 
 def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
-    return SterlingKiteEngineConfig(trail_target=c.trail_target)
+    return SterlingKiteEngineConfig(
+        trail_target=c.trail_target,
+        exit_mode=c.exit_mode,
+        hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
+    )
 
 
 async def place_manual_order(uid: str, option_symbol: str, side: str,
@@ -348,7 +352,8 @@ def _make_place_cb(client, uid: str):
             entry_premium=entry_px, stop_premium=stop_px,
             order_id=oid, status=positions.PENDING,
             stop_mode=cfg.stop_mode, guard_key=guard_key,
-            direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying))
+            direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying,
+            exit_mode=cfg.exit_mode))
 
         # ── auto-subscribe the position's token to the ticker (tick monitor) ──
         if trade_token and cfg.stop_mode in ("monitor", "both"):
@@ -438,28 +443,47 @@ async def _update_open_position_trails(client, uid: str) -> None:
         if p.status != positions.OPEN:
             continue
         new_sl = _new_trail_for_open(p, rows)
-        if new_sl is None:
-            continue
-        old_sl = p.stop_premium
-        positions.update_stop(uid, p.symbol, new_sl)
-        state.log(uid, "info",
-                  f"Trail updated {p.symbol} ({p.vehicle}): "
-                  f"₹{old_sl:.2f} → ₹{new_sl:.2f}")
-        if p.gtt_id and cfg.stop_mode in ("broker", "both"):
-            try:
-                ltp_key = f"{p.exchange}:{p.symbol}"
-                ltp_data = await client.get_ltp([ltp_key])
-                ltp = float((ltp_data or {}).get(ltp_key, {}).get("last_price") or new_sl)
-            except Exception:  # noqa: BLE001
-                ltp = new_sl
-            moved = await protective_stop.move_stop(
-                client, trigger_id=p.gtt_id,
-                tradingsymbol=p.symbol, exchange=p.exchange,
-                qty=p.qty, trigger_premium=new_sl, last_price=ltp,
-                direction=p.direction)
-            if moved:
-                state.log(uid, "info",
-                          f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")
+        if new_sl is not None:
+            old_sl = p.stop_premium
+            positions.update_stop(uid, p.symbol, new_sl)
+            state.log(uid, "info",
+                      f"Trail updated {p.symbol} ({p.vehicle}): "
+                      f"₹{old_sl:.2f} → ₹{new_sl:.2f}")
+            if p.gtt_id and cfg.stop_mode in ("broker", "both"):
+                try:
+                    ltp_key = f"{p.exchange}:{p.symbol}"
+                    ltp_data = await client.get_ltp([ltp_key])
+                    ltp = float((ltp_data or {}).get(ltp_key, {}).get("last_price") or new_sl)
+                except Exception:  # noqa: BLE001
+                    ltp = new_sl
+                moved = await protective_stop.move_stop(
+                    client, trigger_id=p.gtt_id,
+                    tradingsymbol=p.symbol, exchange=p.exchange,
+                    qty=p.qty, trigger_premium=new_sl, last_price=ltp,
+                    direction=p.direction)
+                if moved:
+                    state.log(uid, "info",
+                              f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")
+
+        # Wire red-count awareness (scan driven): compute current reds from latest alignment using this position's entry-time exit_mode.
+        # The monitor will see the updated current_red_count and can exit on red threshold (in addition to price trail).
+        current_reds = 0
+        for row in rows:
+            if row.underlying != p.underlying:
+                continue
+            al = getattr(row, 'alignment', None)
+            if al:
+                trends = [al.fast, al.mid, al.slow]
+                want_red = -1 if getattr(p, 'direction', 'long') == "long" else 1
+                current_reds = sum(1 for t in trends if t == want_red)
+            break
+        positions.update_health(uid, p.symbol, current_reds, getattr(p, 'exit_mode', None))
+        if current_reds > 0:
+            mode = getattr(p, 'exit_mode', 'one_red')
+            from app.engines.common.exit_counter import get_exit_threshold
+            thresh = get_exit_threshold(mode)
+            if current_reds >= thresh:
+                state.log(uid, "info", f"Red count hit {current_reds}/{thresh} for open {p.symbol} under {mode} — monitor will consider for exit")
 
 
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) -> int:

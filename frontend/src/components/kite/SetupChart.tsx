@@ -93,6 +93,16 @@ export function SetupChart({ token, underlying, onClose }: Props) {
     addLine(data.st_fast, k.blue, 'ST fast (21,1)');
     addLine(data.st_mid, k.orange, 'ST mid (14,2)');
     addLine(data.st_slow, k.dim, 'ST slow (7,3)');
+    // Exit threshold viz: dashed version of mid line as example "2-red exit boundary" (tightens with best-green trail)
+    if (data.st_mid && data.st_mid.length) {
+      const dashS = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, lineStyle: 2 as any, title: 'exit thresh (ex: 2-red)', priceLineVisible: false, lastValueVisible: false });
+      dashS.setData(dedupeSorted(data.st_mid).map((p) => ({ time: p.time as any, value: p.value })));
+    }
+    // Exit threshold viz: dashed version of mid line as example "2-red exit boundary" (tightens with best-green trail)
+    if (data.st_mid && data.st_mid.length) {
+      const dashS = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, lineStyle: 2 as any, title: 'exit thresh (ex: 2-red)', priceLineVisible: false, lastValueVisible: false });
+      dashS.setData(dedupeSorted(data.st_mid).map((p) => ({ time: p.time as any, value: p.value })));
+    }
 
     if (data.entry_index != null && data.candles[data.entry_index]) {
       createSeriesMarkers(candleSeries, [{
@@ -116,7 +126,7 @@ export function SetupChart({ token, underlying, onClose }: Props) {
       <div style={{ padding: '10px 16px', borderBottom: `1px solid ${k.border}`, display: 'flex', alignItems: 'center', gap: 16 }}>
         <button onClick={onClose} style={{ fontSize: 12, color: k.dim, background: 'none', border: `1px solid ${k.border}`, borderRadius: 4, padding: '4px 10px', cursor: 'pointer' }}>← Back</button>
         <span style={{ fontSize: 14, fontWeight: 600, color: k.text }}>{underlying}</span>
-        <span style={{ fontSize: 11, color: k.dim }}>Heikin-Ashi 1H · Sterling Kite Engine · trail: {data?.trail_target ?? 'fast'}</span>
+        <span style={{ fontSize: 11, color: k.dim }}>Heikin-Ashi 1H · Sterling Kite Engine · trail: {data?.trail_target ?? 'fast'} · exit: {data?.exit_mode ?? 'two_red'} (red counter; 3-green+arrow entry)</span>
         <span style={{ marginLeft: 'auto', fontSize: 10, color: k.dim, display: 'flex', gap: 12 }}>
           <span style={{ color: k.blue }}>— fast</span>
           <span style={{ color: k.orange }}>— mid</span>

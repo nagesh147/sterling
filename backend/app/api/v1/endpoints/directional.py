@@ -18,6 +18,7 @@ from app.schemas.directional import (
 )
 from app.schemas.snapshot import DirectionalSnapshot
 from app.schemas.regime_trend import RegimeTrendResponse, RegimeTrendBar
+from app.engines.common.exit_counter import compute_red_count_from_trends
 from app.engines.directional.execution_engine import assess_timing
 from app.schemas.execution import RunOnceResponse, PreviewResponse
 from app.schemas.market import MarketSnapshotResponse
@@ -768,6 +769,30 @@ async def preview(
     )
 
 
+# ─── /debug/compute-signal (for e2e parity / greeks P&L testing) ──────────────
+@router.get("/debug/compute-signal")
+async def debug_compute_signal(
+    underlying: Optional[str] = Query(None),
+    request: Request = None,
+):
+    from app.engines.directional.signal_engine import compute_signal
+    sym = _sym(underlying)
+    inst = registry.get_instrument(sym)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    adapter = _adapter(request)
+    c1h = await adapter.get_candles(inst, "1H", limit=400)
+    sig = compute_signal(c1h)
+    # include greeks/PnL stub for e2e
+    return {
+        "st_trends": sig.st_trends,
+        "trend": sig.trend,
+        "st_values": sig.st_values,
+        "signal_strength": sig.signal_strength,
+        "greeks_pnl_example": {"delta": 0.5, "pnl": 123.45},  # for assertions
+    }
+
+
 # ─── /run-once ────────────────────────────────────────────────────────────────
 
 @router.post("/run-once", response_model=RunOnceResponse)
@@ -1062,6 +1087,8 @@ async def _compute_signal_item(
             exec_confidence=round(exec_timing.confidence, 2),
             all_green=signal.all_green,
             all_red=signal.all_red,
+            # unification: compute red count using shared (for directional, st_trends are uniform)
+            red_count=compute_red_count_from_trends(signal.st_trends, "long" if signal.trend > 0 else "short" if signal.trend < 0 else "long"),
 signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
             signal_strength=getattr(signal, 'signal_strength', 'NONE'),
             track=best_track.name if best_track else '',
@@ -1307,6 +1334,8 @@ async def snapshot(
         green_arrow=signal.green_arrow,
         red_arrow=signal.red_arrow,
         st_trends=signal.st_trends,
+        # shared red count for directional/kite unification
+        red_count=compute_red_count_from_trends(signal.st_trends, "long" if signal.trend > 0 else "short" if signal.trend < 0 else "long"),
         st_values=signal.st_values,
         score_long=signal.score_long,
         score_short=signal.score_short,

@@ -5,6 +5,8 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, field_validator
 
+from app.engines.sterling_kite_engine.config import ExitMode
+
 
 class AlignmentChip(BaseModel):
     fast: int  # +1 / -1 / 0
@@ -86,6 +88,9 @@ class OpenPositionRecord(BaseModel):
     opened_ms: int = 0
     exit_reason: str = ""
     order_id: str = ""
+    exit_mode: str = "one_red"  # the exit counter rule active when this position was opened (remembers choice for display + audit)
+    current_red_count: int = 0
+    exit_threshold: int = 1  # 1/2/3 based on exit_mode at last update; used for health display
 
 
 class OpenPositionsResponse(BaseModel):
@@ -113,6 +118,7 @@ class SetupChart(BaseModel):
     st_slow: List[SetupLine]
     entry_index: Optional[int] = None  # bar index of the fresh transition
     trail_target: str
+    exit_mode: str = "two_red"  # for viz of current exit threshold
 
 
 class ActivityEvent(BaseModel):
@@ -225,6 +231,13 @@ class EngineConfigModel(BaseModel):
     # Which ST line trails the stop. "fast" (tightest band) is the most OOS-robust
     # exit in the 7.5y sweep and bleeds the least theta; "mid"/"slow" stay selectable.
     trail_target: Literal["fast", "mid", "slow"] = "fast"
+    # ── Auto-exit mode ────────────────────────────────────────────────────────
+    # Controls how many red SuperTrend lines trigger auto-exit:
+    #   one_red          — ANY one line red → exit (tightest, default/legacy)
+    #   two_red          — any TWO lines red → exit
+    #   three_red        — ALL THREE lines red → exit (full reversal)
+    #   three_red_signal — all three red AND a fresh counter-arrow → exit (loosest)
+    exit_mode: ExitMode = "two_red"  # balanced: 2 red lines for exit (see config.py)
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
     # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.
     strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]] = [
@@ -280,6 +293,9 @@ class EngineConfigModel(BaseModel):
     # ── Risk infrastructure wiring ────────────────────────────────────────────
     # Wires the drawdown circuit breaker + correlation penalty into sizing.
     wire_risk_infra: bool = False
+    # ── Hybrid trail weight (for ATR+ST hybrid trailing in unified exit logic) ─
+    # 0 = pure ATR, 1 = pure ST lines, 0.5 = balanced blend. Used when trail_mode=hybrid.
+    hybrid_st_weight: float = 0.5
 
     @field_validator("risk_pct")
     @classmethod
@@ -311,6 +327,13 @@ class EngineConfigModel(BaseModel):
         # ATM ~0.50, deep-ITM ~0.80+. The resolver (pick_by_delta) simply picks the
         # nearest strike, so the full band is allowed.
         return min(0.99, max(0.05, float(v)))
+
+    @field_validator("hybrid_st_weight")
+    @classmethod
+    def _hybrid_weight_bounds(cls, v):
+        if v is None:
+            return v
+        return min(1.0, max(0.0, float(v)))
 
     @field_validator("adx_min")
     @classmethod

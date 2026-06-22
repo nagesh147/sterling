@@ -12,6 +12,10 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from app.domain.models import Candle, Signal
+from app.engines.common.exit_counter import (
+    get_exit_threshold, should_exit_on_reds, get_exit_reason, exit_needs_counter_signal
+)
+from app.engines.common.trailing import ratchet_trail
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
@@ -30,6 +34,8 @@ class ManageResult:
     stop: float
     exit: bool
     reason: Optional[str] = None
+    red_count: int = 0       # how many ST lines are currently red against the position
+    green_lines: int = 3     # how many ST lines are still aligned with the position
 
 
 def _arrays(candles: Sequence[Candle]):
@@ -85,24 +91,35 @@ class SterlingKiteEngine:
         o, h, l, c = _arrays(candles)
         r = compute_regime(o, h, l, c, self.cfg)
         i = len(c) - 1
-        line = float(r.line(self.cfg.trail_target)[i])
-        trend = int(r.trend(self.cfg.trail_target)[i])
 
-        if pos.direction == "long":
-            pos.stop = max(pos.stop, line)  # ratchet up only
-            flipped = trend == -1
-        else:
-            pos.stop = min(pos.stop, line)  # ratchet down only
-            flipped = trend == 1
+        # ── Count how many ST lines are red (against the position) ──────────
+        red_count = r.red_line_count(pos.direction, i)
+        green_count = 3 - red_count
 
-        # The trail-target flip is the SOLE exit. (A former "early-lock" branch that
-        # also honored a slow-ST flip once in profit was removed: the slow ST is the
-        # widest band, so it always flips *after* the trail_target — it changed zero
-        # trades across 7.5y of real data. See study/kite_st_exit_analysis.md.)
-        if flipped:
+        # ── Adaptive trailing stop ──────────────────────────────────────────
+        # Use the tightest still-green line as the trail. As lines flip red one by
+        # one, the trail auto-tightens to the next innermost green line. This gives
+        # progressively tighter protection as the trade deteriorates.
+        trail_value = r.best_trail_line_value(pos.direction, i)
+        if trail_value > 0:
+            pos.stop = ratchet_trail(pos.stop, trail_value, pos.direction)
+
+        # ── Exit decision (based on configured exit_mode) ───────────────────
+        # Use shared counter logic for unification.
+        has_arrow = False
+        if exit_needs_counter_signal(self.cfg.exit_mode):
+            longs, shorts = entry_transitions(r)
+            has_arrow = bool(shorts[i]) if pos.direction == "long" else bool(longs[i])
+        should_exit = should_exit_on_reds(red_count, self.cfg.exit_mode, has_arrow)
+
+        if should_exit:
             self._positions.pop(underlying, None)
-            return ManageResult(underlying, pos.stop, exit=True, reason="trail_flip")
-        return ManageResult(underlying, pos.stop, exit=False)
+            reason = get_exit_reason(red_count, self.cfg.exit_mode)
+            return ManageResult(underlying, pos.stop, exit=True, reason=reason,
+                                red_count=red_count, green_lines=green_count)
+
+        return ManageResult(underlying, pos.stop, exit=False,
+                            red_count=red_count, green_lines=green_count)
 
     def has_position(self, underlying: str) -> bool:
         return underlying in self._positions

@@ -107,7 +107,7 @@ def replay(candles: Sequence[Candle], cfg: SterlingKiteEngineConfig):
         else:
             pos["stop"] = min(pos["stop"], float(l_trail[i]))
             flip = t_trail[i] == 1
-        reason = "trail_flip"
+        reason = "red_line_exit"
         if not flip and cfg.early_lock:
             risk = abs(pos["entry"] - pos["init"]) or 1e-9
             profit = (c[i] - pos["entry"]) if pos["dir"] == "long" else (pos["entry"] - c[i])
