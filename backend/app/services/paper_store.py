@@ -331,9 +331,9 @@ def close_position(
         settlement_recorded=settlement_recorded,
         notes=notes or pos.notes,
         run_once_state=TradeState.EXITED,
-        exit_mode=getattr(pos, 'exit_mode', exit_mode),
-        current_red_count=getattr(pos, 'current_red_count', current_red_count),
-        exit_threshold=getattr(pos, 'exit_threshold', exit_threshold),
+        exit_mode=getattr(pos, 'exit_mode', 'one_red'),
+        current_red_count=getattr(pos, 'current_red_count', 0),
+        exit_threshold=getattr(pos, 'exit_threshold', 1),
     )
     # Live event emission — no-op unless settings.enable_event_bus configured a
     # bus at startup. Fail-safe: never let event wiring affect a close.
