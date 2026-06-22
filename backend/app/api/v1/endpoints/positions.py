@@ -8,7 +8,7 @@ import io
 import math
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 from app.schemas.execution import CandidateContract
