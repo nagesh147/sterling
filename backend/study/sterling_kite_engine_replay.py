@@ -1,4 +1,4 @@
-"""Replay the Kite triple-SuperTrend engine on REAL 1H index/stock data (Yahoo).
+"""Replay the Kite Sterling Kite Engine on REAL 1H index/stock data (Yahoo).
 
 No Kite login needed — pulls real 1H bars from Yahoo Finance (same source as
 ``equity_pipeline``) for the index underlyings + a few liquid F&O stocks, then
@@ -13,7 +13,7 @@ CAVEATS (honest):
   * Yahoo 1H sessions differ slightly from Kite's; this validates the engine's
     setup detection + trailing logic on real Indian-market structure, not fills.
 
-Run:  cd backend && PYTHONWARNINGS=ignore python3 -m study.kite_triple_supertrend_replay
+Run:  cd backend && PYTHONWARNINGS=ignore python3 -m study.kite_sterling_kite_engine_replay
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ from typing import List, Optional, Sequence
 import numpy as np
 
 from app.domain.models import Candle
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from study.equity_pipeline import fetch_chart, yahoo_to_frame
 
 _IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -79,7 +79,7 @@ def _ist(ms: int) -> str:
     return dt.datetime.fromtimestamp(ms / 1000, _IST).strftime("%Y-%m-%d %H:%M")
 
 
-def replay(candles: Sequence[Candle], cfg: TripleSupertrendConfig):
+def replay(candles: Sequence[Candle], cfg: SterlingKiteEngineConfig):
     """Faithful live-loop replay using the engine's causal regime arrays."""
     o = np.array([c.open for c in candles], float)
     h = np.array([c.high for c in candles], float)
@@ -107,7 +107,7 @@ def replay(candles: Sequence[Candle], cfg: TripleSupertrendConfig):
         else:
             pos["stop"] = min(pos["stop"], float(l_trail[i]))
             flip = t_trail[i] == 1
-        reason = "trail_flip"
+        reason = "red_line_exit"
         if not flip and cfg.early_lock:
             risk = abs(pos["entry"] - pos["init"]) or 1e-9
             profit = (c[i] - pos["entry"]) if pos["dir"] == "long" else (pos["entry"] - c[i])
@@ -121,7 +121,7 @@ def replay(candles: Sequence[Candle], cfg: TripleSupertrendConfig):
     return trades, r, (longs, shorts), pos
 
 
-def _report(name: str, candles: List[Candle], cfg: TripleSupertrendConfig, week_cutoff_ms: int):
+def _report(name: str, candles: List[Candle], cfg: SterlingKiteEngineConfig, week_cutoff_ms: int):
     trades, r, (longs, shorts), pos = replay(candles, cfg)
     n = len(candles)
     last = n - 1
@@ -157,8 +157,8 @@ def _report(name: str, candles: List[Candle], cfg: TripleSupertrendConfig, week_
 
 
 def main():
-    cfg = TripleSupertrendConfig()
-    print(f"Kite Triple-SuperTrend — REAL 1H replay  (trail={cfg.trail_target}, warmup={cfg.warmup})")
+    cfg = SterlingKiteEngineConfig()
+    print(f"Kite Sterling Kite Engine — REAL 1H replay  (trail={cfg.trail_target}, warmup={cfg.warmup})")
     all_trades: List[Trade] = []
     now_ms = int(dt.datetime.now(tz=dt.timezone.utc).timestamp() * 1000)
     week_cutoff = now_ms - 7 * 86_400_000

@@ -82,6 +82,11 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 - When displaying scan status, show what specifically is being scanned (e.g., "Scanning BTC options…", "Scanning ETH futures…") instead of a generic "scanning…" indicator — the label should identify the active scan target. Confidence: 0.70
 - Cache and reuse historical scan data when markets are closed — avoid re-scanning unchanged data outside market hours. Only actively poll/refresh during live market hours when data can actually change. Confidence: 0.60
 
+# kite-terminal
+- Terminal status bar items (AUTO mode indicator, time-ago, Next Due countdown) belong in the bottom-right footer, not in the terminal header or inline with other controls. Confidence: 0.70
+- Premium Breakdown should be a separate card/component from Trade Impact Calculator — do not mix them into the same panel. Each gets its own distinct section. Confidence: 0.70
+- Terminal minimize/maximize state must persist across sessions (localStorage or similar), not reset on page reload. Confidence: 0.65
+
 # ui-symbols
 - Core symbols (BTC, ETH, SOL) in Global Strategy Config > SYMBOLS must stay always present but be individually toggleable (enable/disable) — never deletable and never permanently locked. Use a checkbox or similar on/off control, not a remove (×) button. Confidence: 0.75
 

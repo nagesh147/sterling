@@ -1,4 +1,4 @@
-# Kite Triple-SuperTrend Options Engine — Design
+# Kite Sterling Kite Engine Options Engine — Design
 
 **Date:** 2026-06-13
 **Branch:** `KiteEngine`
@@ -7,7 +7,7 @@
 ## 1. Goal
 
 A self-contained, **Kite-exclusive** options-buying engine that, on a 1H Heikin-Ashi
-**triple-SuperTrend** trend filter, scans the Indian-market universe (Nifty 50 / Bank
+**Sterling Kite Engine** trend filter, scans the Indian-market universe (Nifty 50 / Bank
 Nifty / FinNifty / Sensex constituent stocks + the NIFTY / BANKNIFTY / FINNIFTY /
 SENSEX index options), emits a **Signal** whenever an underlying enters full
 trend-alignment, picks an **ATM/ITM** option strike (never OTM), surfaces "ready"
@@ -31,7 +31,7 @@ the existing Kite order path under the live-safety gate.
    `StrategyProtocol` (`generate(*args, **kwargs) -> list[Signal]`).
 4. **Closed candles only.** The data layer drops the forming 1H bar before the engine sees it.
 
-## 3. Triple-SuperTrend logic (the spec)
+## 3. Sterling Kite Engine logic (the spec)
 
 Operate on the underlying's 1H candles. Convert raw OHLC → Heikin-Ashi, then compute
 three SuperTrends on the HA high/low/close (params verbatim; "fast/mid/slow" named by
@@ -55,7 +55,7 @@ three trends valid (non-seed). Practically `i >= warmup + 1`.
 - bear transition → `Signal(direction="short", instrument_type="options", …)` → PE
 - One open position per underlying. `Signal.stop_loss = ST_trail.line[i]` at entry
   (trail target, default `ST_mid`). `take_profit=None` (trailing is the only exit).
-  `source="triple_supertrend"`, `score`/`strength` from alignment conviction.
+  `source="sterling_kite_engine"`, `score`/`strength` from alignment conviction.
 
 **Trailing stop / exit (only exit, no fixed target):**
 - Trail line = the trail-target SuperTrend line (default `ST_mid` (14,2)).
@@ -68,25 +68,25 @@ three trends valid (non-seed). Practically `i >= warmup + 1`.
 - **Optional early-lock:** when unrealized profit ≥ `early_lock_profit_r` × initial risk
   (`|entry − initial_stop|`), also allow exit on `ST_slow` flip. Default `early_lock=False`.
 
-## 4. Backend module layout — `backend/app/engines/triple_supertrend/`
+## 4. Backend module layout — `backend/app/engines/sterling_kite_engine/`
 
 (Mirrors the `sterling_engine/` package shape; **no** cross-engine imports.)
 
-- `config.py` — `TripleSupertrendConfig` (frozen dataclass): the three `(period,mult)`
+- `config.py` — `SterlingKiteEngineConfig` (frozen dataclass): the three `(period,mult)`
   pairs, `trail_target`, `early_lock`, `early_lock_profit_r`, `warmup`. Sensible defaults.
 - `regime.py` — **pure** core, fully testable, no I/O:
   - `compute_regime(candles, cfg) -> RegimeSeries` (HA + 3 ST + per-bar bull/bear/flat +
     the three trend arrays + the three lines)
   - `entry_transitions(regime) -> mask` (fresh full-alignment transitions)
   - `trail_line(regime, cfg) / trail_trend(regime, cfg)` (selected by `trail_target`)
-- `engine.py` — `TripleSupertrendEngine` (conforms to `StrategyProtocol`):
+- `engine.py` — `SterlingKiteEngine` (conforms to `StrategyProtocol`):
   - `generate(candles, underlying) -> list[Signal]` — emits an entry Signal **only when the
     latest closed bar is a fresh transition** and there is no open position for `underlying`.
   - stateful per-underlying lifecycle (`_positions: dict[str, _OpenPos]`):
     `manage(underlying, candles) -> ManageResult` ratchets the stop and reports an exit when
     the trail trend flips (+ early-lock `ST_slow` flip). No order calls.
 - `schemas.py` — pydantic `EngineSignalRow`, `EngineState`, `SetupChart` (for the API/UI).
-- Tests: `backend/tests/engines/triple_supertrend/` — regime alignment, warm-up skip,
+- Tests: `backend/tests/engines/sterling_kite_engine/` — regime alignment, warm-up skip,
   fresh-transition-only entry, trail ratchet monotonicity, trail-flip exit, `trail_target`
   knob, early-lock, one-position-per-underlying, `StrategyProtocol` conformance, Signal
   field correctness (options / long↔CE / short↔PE / stop_loss==trail line).
@@ -95,7 +95,7 @@ three trends valid (non-seed). Practically `i >= warmup + 1`.
 
 All under the Kite namespace; **exclusive** — built fresh, no other-engine imports.
 
-### 5a. Universe — `backend/app/engines/triple_supertrend/kite_universe.py` (or a Kite service module)
+### 5a. Universe — `backend/app/engines/sterling_kite_engine/kite_universe.py` (or a Kite service module)
 Build the scan set from the Kite instruments dump (`InstrumentCache.load`):
 underlyings with listed options (NFO + BFO equity options) ∪ the four indices
 (NIFTY 50, NIFTY BANK, NIFTY FIN SERVICE/FINNIFTY, SENSEX). Backed by an editable
@@ -104,7 +104,7 @@ underlyings with listed options (NFO + BFO equity options) ∪ the four indices
 
 ### 5b. Throttled scanner (background, per active Kite user)
 - 1H-candle cache, refreshed every few minutes; semaphore-throttled (~3 rps Kite limit).
-- Runs `TripleSupertrendEngine` over the universe; collects "ready" signals
+- Runs `SterlingKiteEngine` over the universe; collects "ready" signals
   (fresh transition on latest **closed** bar) → writes to a store the sidebar polls.
 - *Caveat: first full scan is slow; cache makes re-scans cheap; needs paid historical sub.*
 
@@ -120,8 +120,8 @@ Uses `KiteClient.get_option_chain(instrument)` (returns strike / moneyness / dte
   chosen strike/expiry, trailing stop). Polled by the sidebar.
 - `GET /api/v1/kite/engine/setup/{token}` — `SetupChart`: 1H closed candles + the three ST
   line series + entry marker + ratcheted trailing-stop line (for click-to-visualize).
-- `GET/POST /api/v1/kite/engine/config` — knobs (`trail_target`, `strike_moneyness`,
-  `early_lock`, **`auto_execute`** toggle). `auto_execute` defaults **OFF**.
+- `GET/POST /api/v1/kite/engine/config` — knobs (`trail_target`, `exit_mode` (one_red/two_red/three_red/three_red_signal), `strike_moneyness`,
+  `early_lock`, **`auto_execute`** toggle). Default exit_mode="two_red" (balanced). `auto_execute` defaults **OFF**.
 
 ### 5e. Auto-execute (toggle, default OFF) — Kite order path, not other engines
 When ON: a new "ready" signal with no open position for that underlying → pick ATM/ITM
@@ -133,7 +133,7 @@ and other-engine selectors are **not** used.
 
 ## 6. Frontend — Kite right sidebar
 
-- `frontend/src/components/kite/TripleSupertrendPane.tsx` placed in the `KiteLayout`
+- `frontend/src/components/kite/SterlingKiteEnginePane.tsx` placed in the `KiteLayout`
   `rightSidebar` slot (replacing the empty `<div>` in `KiteTab.tsx:54`); styled with the
   existing `kiteUI` tokens (Kite orange `#ff5722`).
   - Header: engine status + **auto-execute toggle** + knobs (trail target, moneyness).
@@ -141,7 +141,7 @@ and other-engine selectors are **not** used.
     CE/PE + chosen strike & expiry, trailing stop. Click a row →
   - **Click-to-chart**: open the 1H chart (reuse the `InstrumentPane` lightweight-charts v5
     setup) drawing **HA candles + the 3 SuperTrend lines + entry marker + trailing-stop line**.
-- `useTripleSupertrend` hook (in `useKite.ts` or a new file) polls `engine/signals` and
+- `useSterlingKiteEngine` hook (in `useKite.ts` or a new file) polls `engine/signals` and
   fetches `engine/setup/{token}` on click.
 
 ## 7. Build order (phased, each independently testable)
@@ -151,7 +151,7 @@ and other-engine selectors are **not** used.
 3. **Throttled scanner** + candle cache + signals store.
 4. **ATM/ITM strike picker** (Kite-only).
 5. **Endpoints** (`signals`, `setup/{token}`, `config`).
-6. **Right-sidebar pane** + `useTripleSupertrend` hook (advisory display).
+6. **Right-sidebar pane** + `useSterlingKiteEngine` hook (advisory display).
 7. **Click-to-chart** setup visualization.
 8. **Auto-execute** wiring (toggle, default OFF) through the Kite order path + `live_safety`.
 
@@ -163,6 +163,11 @@ and other-engine selectors are **not** used.
 - Scan timeframe **1H**; cache-refreshed background scan.
 - Sidebar shows **only "ready"** signals (fresh full-alignment transition).
 - `trail_target = "mid"`, `early_lock = False`.
+- `exit_mode = "two_red"` (balanced counter: exit on 2 red ST lines; 1/3/3+signal options; unifies 3-green entry with red counter exit + adaptive green-line trailing SL).
+
+## Directional / kite engine unification note
+The core 3-ST-line + arrow (entry) / red-count counter (exit) + best-green trailing is implemented in sterling_kite_engine (pure regime + engine + monitor integration). This provides a clean "directional scalper" for options (CE on bull 3-green, exit on chosen reds).
+The older `engines/directional/` (ADX/RSI + setups) remains for other assets/modes. Shared future: extract regime.py or common AlignmentChip logic. Red-count health is now exposed on positions and used in monitor for dynamic exits.
 
 ## 9. Honest caveats / risks
 

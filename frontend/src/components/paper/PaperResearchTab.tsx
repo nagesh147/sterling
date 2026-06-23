@@ -20,13 +20,13 @@ function NotLiveBanner() {
   );
 }
 
-function PositionsTable({ positions }: { positions: PaperPosition[] }) {
+export function PositionsTable({ positions }: { positions: PaperPosition[] }) {
   if (!positions?.length) return <div style={dim}>No open positions.</div>;
   return (
     <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
       <thead>
         <tr style={dim}>
-          {['SYMBOL', 'SLEEVE', 'DIR', 'ENTRY', 'SL', 'TP', 'UNREAL'].map(h => (
+          {['SYMBOL', 'SLEEVE', 'DIR', 'ENTRY', 'SL', 'TP', 'EXIT', 'REDS', 'UNREAL'].map(h => (
             <th key={h} style={{ textAlign: 'left', padding: '4px 8px' }}>{h}</th>
           ))}
         </tr>
@@ -42,6 +42,17 @@ function PositionsTable({ positions }: { positions: PaperPosition[] }) {
             <td style={{ padding: '4px 8px' }}>{usd(p.entry_price)}</td>
             <td style={{ padding: '4px 8px' }}>{usd(p.sl)}</td>
             <td style={{ padding: '4px 8px' }}>{usd(p.tp)}</td>
+            <td style={{ padding: '4px 8px' }}>{p.exit_mode || '—'}</td>
+            <td style={{ padding: '4px 8px' }}>
+              {p.current_red_count != null && p.exit_threshold != null ? (
+                <>
+                  {p.current_red_count}/{p.exit_threshold}
+                  <div style={{width: 40, height: 3, background: '#222', marginTop: 1}}>
+                    <div style={{width: `${Math.min(100, (p.current_red_count / p.exit_threshold) * 100)}%`, height: '100%', background: p.current_red_count >= p.exit_threshold ? '#f44' : '#4a4'}} />
+                  </div>
+                </>
+              ) : '—'}
+            </td>
             <td style={{ padding: '4px 8px',
                          color: (p.unrealized_pnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
               {pct(p.unrealized_pnl)}</td>

@@ -65,9 +65,17 @@ export function getTick(token: number): KiteTick | undefined {
 }
 
 // ── subscription reconciler (ref-counted union) ───────────────────────────────
-const _desired = new Map<number, number>();         // token → refcount
-const _subscribed = new Set<number>();              // tokens sent to the server
+const _desired = new Map<number, number>();         // token → refcount (any mode)
+const _desiredFull = new Map<number, number>();     // token → refcount of FULL-mode (depth) interest
+const _subscribed = new Map<number, 'quote' | 'full'>(); // token → mode currently on the server
 let _reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+
+// A token streams in "full" mode (5-level depth) if ANY consumer asked for depth,
+// else the lighter "quote" mode. Depth views (expanded watch row, market-data card)
+// register full; everything else stays quote.
+function _wantMode(tok: number): 'quote' | 'full' {
+  return (_desiredFull.get(tok) ?? 0) > 0 ? 'full' : 'quote';
+}
 
 function _scheduleReconcile() {
   if (_reconcileTimer) return;
@@ -81,25 +89,39 @@ async function _reconcile() {
   const want = new Set<number>();
   for (const [tok, n] of _desired) if (n > 0) want.add(tok);
 
-  const toAdd = [...want].filter((t) => !_subscribed.has(t));
-  const toRemove = [..._subscribed].filter((t) => !want.has(t));
-  if (toAdd.length === 0 && toRemove.length === 0) return;
+  // (Re)subscribe brand-new tokens, or ones whose desired mode changed — e.g. a depth
+  // view opened (upgrade quote→full) or closed (downgrade full→quote).
+  const toSub: number[] = [];
+  for (const t of want) {
+    if (_subscribed.get(t) !== _wantMode(t)) toSub.push(t);
+  }
+  const toRemove = [..._subscribed.keys()].filter((t) => !want.has(t));
+  if (toSub.length === 0 && toRemove.length === 0) return;
 
   // Optimistically record intent so concurrent reconciles don't double-fire.
-  toAdd.forEach((t) => _subscribed.add(t));
+  const prev = new Map(_subscribed);
+  toSub.forEach((t) => _subscribed.set(t, _wantMode(t)));
   toRemove.forEach((t) => _subscribed.delete(t));
 
+  // Group by mode so each subscribe call carries a single, correct mode.
+  const byMode: Record<'quote' | 'full', number[]> = { quote: [], full: [] };
+  for (const t of toSub) byMode[_wantMode(t)].push(t);
+
   try {
-    if (toAdd.length) {
-      // subscribe auto-starts the ticker server-side via ensure()
-      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: toAdd, mode: 'quote' });
+    // subscribe auto-starts the ticker server-side via ensure()
+    if (byMode.full.length) {
+      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.full, mode: 'full' });
+    }
+    if (byMode.quote.length) {
+      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.quote, mode: 'quote' });
     }
     if (toRemove.length) {
       await api.post(`${K}/ticker/unsubscribe`, { instrument_tokens: toRemove });
     }
   } catch {
     // Roll back so the next reconcile retries (e.g. account not connected yet).
-    toAdd.forEach((t) => _subscribed.delete(t));
+    _subscribed.clear();
+    for (const [t, m] of prev) _subscribed.set(t, m);
   }
 }
 
@@ -108,9 +130,12 @@ async function _reconcile() {
  * releases them. Tokens are ref-counted across all callers so the server sees
  * exactly the displayed union, and rapid mount/unmount churn is debounced.
  */
-export function registerTokens(tokens: number[]): () => void {
+export function registerTokens(tokens: number[], mode: 'quote' | 'full' = 'quote'): () => void {
   if (tokens.length === 0) return () => {};
-  for (const t of tokens) _desired.set(t, (_desired.get(t) ?? 0) + 1);
+  for (const t of tokens) {
+    _desired.set(t, (_desired.get(t) ?? 0) + 1);
+    if (mode === 'full') _desiredFull.set(t, (_desiredFull.get(t) ?? 0) + 1);
+  }
   _refConnect();
   _scheduleReconcile();
   return () => {
@@ -118,6 +143,11 @@ export function registerTokens(tokens: number[]): () => void {
       const n = (_desired.get(t) ?? 0) - 1;
       if (n <= 0) _desired.delete(t);
       else _desired.set(t, n);
+      if (mode === 'full') {
+        const f = (_desiredFull.get(t) ?? 0) - 1;
+        if (f <= 0) _desiredFull.delete(t);
+        else _desiredFull.set(t, f);
+      }
     }
     _refDisconnect();
     _scheduleReconcile();

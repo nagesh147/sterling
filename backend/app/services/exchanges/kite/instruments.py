@@ -184,6 +184,32 @@ class InstrumentCache:
                 out[sym] = ls if ls > 0 else 1
         return out
 
+    async def expiries(self, symbols: List[str]) -> Dict[str, str]:
+        """Bulk ``EXCHANGE:TRADINGSYMBOL`` → ``expiry`` (``YYYY-MM-DD``) lookup.
+
+        Only F&O instruments that are actually found AND carry an expiry are
+        returned (equities have none). Mirrors :meth:`lot_sizes` so the market
+        watch can backfill the expiry it shows on an expanded option row.
+        """
+        by_ex: Dict[str, List[Tuple[str, str]]] = {}
+        for sym in symbols:
+            ex, sep, ts = sym.partition(":")
+            if not sep:
+                ex, ts = "", ex
+            by_ex.setdefault(ex.upper(), []).append((sym, ts.upper()))
+        out: Dict[str, str] = {}
+        for ex, pairs in by_ex.items():
+            rows = await self.load(ex)
+            idx = {str(r.get("tradingsymbol", "")).upper(): r for r in rows}
+            for sym, ts in pairs:
+                r = idx.get(ts)
+                if r is None:
+                    continue
+                exp = str(r.get("expiry") or "")[:10]
+                if exp:
+                    out[sym] = exp
+        return out
+
     def clear(self) -> None:
         self._cache.clear()
         self._cache_ts.clear()

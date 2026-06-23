@@ -35,6 +35,7 @@ const FIELDS: Array<{ key: keyof RiskParams; label: string; step: number; min?: 
   { key: 'time_stop_dte', label: 'TIME STOP DTE', step: 1 },
   { key: 'financial_stop_pct', label: 'FINANCIAL STOP %', step: 0.05 },
   { key: 'win_rate', label: 'ESTIMATED WIN RATE (Kelly sizing)', step: 0.01, min: 0.30, max: 0.80 },
+  { key: 'hybrid_st_weight', label: 'HYBRID ST WEIGHT (ATR+ST trail blend 0-1)', step: 0.1, min: 0, max: 1 },
 ];
 
 export function RiskConfigPanel() {
@@ -86,6 +87,7 @@ export function RiskConfigPanel() {
               max={max}
               value={form[key] ?? (key === 'win_rate' ? 0.52 : 0)}
               onChange={e => handleChange(key, e.target.value)}
+              data-testid={key === 'hybrid_st_weight' ? 'risk-hybrid-weight' : undefined}
             />
           </div>
         ))}

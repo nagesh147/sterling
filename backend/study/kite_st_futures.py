@@ -1,6 +1,6 @@
 """Phase-0b: Delta-1 (futures-equivalent) baseline — the honest floor.
 
-Replays the triple-SuperTrend signal entries/exits on the UNDERLYING directly
+Replays the Sterling Kite Engine signal entries/exits on the UNDERLYING directly
 (no option wrapper). This establishes the "best-case" directional edge of the
 signal itself, free of theta/IV/slippage from the options wrapper.
 
@@ -22,8 +22,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from study import kite_data
 
 TRAIL_TARGET = "mid"
@@ -124,7 +124,7 @@ def _stats(trades, capital):
 
 def run_futures_baseline(data: dict) -> list:
     rows = []
-    cfg = TripleSupertrendConfig(trail_target=TRAIL_TARGET)
+    cfg = SterlingKiteEngineConfig(trail_target=TRAIL_TARGET)
     for name, arrs in data.items():
         n = len(arrs["c"])
         oos_lo = int(n * (1 - OOS_FRAC))

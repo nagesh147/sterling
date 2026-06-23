@@ -1,4 +1,4 @@
-"""``TripleSupertrendEngine`` — StrategyProtocol-conforming options engine.
+"""``SterlingKiteEngine`` — StrategyProtocol-conforming options engine.
 
 Broker/market-agnostic: takes a series of CLOSED candles, returns ``Signal``s.
 Stateful only for the trailing lifecycle (one open position per underlying).
@@ -12,8 +12,12 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from app.domain.models import Candle, Signal
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.common.exit_counter import (
+    get_exit_threshold, should_exit_on_reds, get_exit_reason, exit_needs_counter_signal
+)
+from app.engines.common.trailing import ratchet_trail
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
 @dataclass
@@ -30,6 +34,8 @@ class ManageResult:
     stop: float
     exit: bool
     reason: Optional[str] = None
+    red_count: int = 0       # how many ST lines are currently red against the position
+    green_lines: int = 3     # how many ST lines are still aligned with the position
 
 
 def _arrays(candles: Sequence[Candle]):
@@ -40,12 +46,12 @@ def _arrays(candles: Sequence[Candle]):
     return o, h, l, c
 
 
-class TripleSupertrendEngine:
+class SterlingKiteEngine:
     """Emits an entry Signal only when the latest closed bar is a fresh full
     alignment transition; ratchets/exits via :meth:`manage`."""
 
-    def __init__(self, cfg: Optional[TripleSupertrendConfig] = None):
-        self.cfg = cfg or TripleSupertrendConfig()
+    def __init__(self, cfg: Optional[SterlingKiteEngineConfig] = None):
+        self.cfg = cfg or SterlingKiteEngineConfig()
         self._positions: Dict[str, _OpenPos] = {}
 
     # ── entry ────────────────────────────────────────────────────────────────
@@ -73,7 +79,7 @@ class TripleSupertrendEngine:
             take_profit=None,
             score=score,
             strength="STRONG" if score >= 80.0 else "SIGNAL",
-            source="triple_supertrend",
+            source="sterling_kite_engine",
             timestamp_ms=int(candles[i].timestamp_ms),
         )]
 
@@ -85,28 +91,35 @@ class TripleSupertrendEngine:
         o, h, l, c = _arrays(candles)
         r = compute_regime(o, h, l, c, self.cfg)
         i = len(c) - 1
-        line = float(r.line(self.cfg.trail_target)[i])
-        trend = int(r.trend(self.cfg.trail_target)[i])
 
-        if pos.direction == "long":
-            pos.stop = max(pos.stop, line)  # ratchet up only
-            flipped = trend == -1
-        else:
-            pos.stop = min(pos.stop, line)  # ratchet down only
-            flipped = trend == 1
+        # ── Count how many ST lines are red (against the position) ──────────
+        red_count = r.red_line_count(pos.direction, i)
+        green_count = 3 - red_count
 
-        # early-lock: once in sufficient profit, also honor a slow-ST flip
-        if not flipped and self.cfg.early_lock:
-            risk = abs(pos.entry - pos.initial_stop) or 1e-9
-            profit = (c[i] - pos.entry) if pos.direction == "long" else (pos.entry - c[i])
-            if profit >= self.cfg.early_lock_profit_r * risk:
-                slow = int(r.trend("slow")[i])
-                flipped = (slow == -1) if pos.direction == "long" else (slow == 1)
+        # ── Adaptive trailing stop ──────────────────────────────────────────
+        # Use the tightest still-green line as the trail. As lines flip red one by
+        # one, the trail auto-tightens to the next innermost green line. This gives
+        # progressively tighter protection as the trade deteriorates.
+        trail_value = r.best_trail_line_value(pos.direction, i)
+        if trail_value > 0:
+            pos.stop = ratchet_trail(pos.stop, trail_value, pos.direction)
 
-        if flipped:
+        # ── Exit decision (based on configured exit_mode) ───────────────────
+        # Use shared counter logic for unification.
+        has_arrow = False
+        if exit_needs_counter_signal(self.cfg.exit_mode):
+            longs, shorts = entry_transitions(r)
+            has_arrow = bool(shorts[i]) if pos.direction == "long" else bool(longs[i])
+        should_exit = should_exit_on_reds(red_count, self.cfg.exit_mode, has_arrow)
+
+        if should_exit:
             self._positions.pop(underlying, None)
-            return ManageResult(underlying, pos.stop, exit=True, reason="trail_flip")
-        return ManageResult(underlying, pos.stop, exit=False)
+            reason = get_exit_reason(red_count, self.cfg.exit_mode)
+            return ManageResult(underlying, pos.stop, exit=True, reason=reason,
+                                red_count=red_count, green_lines=green_count)
+
+        return ManageResult(underlying, pos.stop, exit=False,
+                            red_count=red_count, green_lines=green_count)
 
     def has_position(self, underlying: str) -> bool:
         return underlying in self._positions

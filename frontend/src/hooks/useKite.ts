@@ -521,6 +521,18 @@ export function useKiteInstrumentLots(symbols: string[]) {
   });
 }
 
+// Bulk EXCHANGE:TRADINGSYMBOL → expiry (YYYY-MM-DD), dated F&O only. Backfills the
+// expiry shown on an expanded watch row for legacy items saved without it.
+export function useKiteInstrumentExpiries(symbols: string[]) {
+  const key = [...symbols].sort().join(',');
+  return useQuery<Record<string, string>>({
+    queryKey: ['kite-instrument-expiries', key],
+    queryFn: () => api.get<Record<string, string>>(`${K}/instruments/expiries?symbols=${encodeURIComponent(key)}`),
+    enabled: symbols.length > 0,
+    staleTime: 3_600_000,
+  });
+}
+
 // Live prices now arrive over the tick WebSocket (useKiteLiveTicks); REST runs
 // only as a slow cold-start/fallback heartbeat + symbol→token resolver.
 const LIVE_HEARTBEAT_MS = 30_000;
@@ -536,6 +548,7 @@ const _symTokenCache = new Map<string, number>();
 function useKiteLive(
   symbols: string[],
   rest: Record<string, any> | undefined,
+  mode: 'quote' | 'full' = 'quote',
 ): Record<string, any> {
   const ver = useTickVersion();
   const symKey = symbols.join(',');
@@ -559,8 +572,8 @@ function useKiteLive(
 
   useEffect(() => {
     if (!tokensKey) return;
-    return registerTokens(tokensKey.split(',').map(Number));
-  }, [tokensKey]);
+    return registerTokens(tokensKey.split(',').map(Number), mode);
+  }, [tokensKey, mode]);
 
   return useMemo(() => {
     const out: Record<string, any> = {};
@@ -585,7 +598,10 @@ function useKiteLive(
 
 // `heartbeatMs` lets transient depth consumers (OrderWindow) refresh the REST
 // depth ladder faster, since quote-mode ticks omit market depth.
-export function useKiteQuote(symbols: string[], enabled = true, heartbeatMs = LIVE_HEARTBEAT_MS) {
+// `mode: 'full'` streams the live 5-level market-depth ladder over the WS (quote-mode
+// ticks omit depth, so a quote-mode consumer only refreshes depth on the slow REST
+// heartbeat). Use 'full' for depth views (expanded watch row, market-data card).
+export function useKiteQuote(symbols: string[], enabled = true, heartbeatMs = LIVE_HEARTBEAT_MS, mode: 'quote' | 'full' = 'quote') {
   const syms = canonSyms(symbols);
   const q = useQuery<Record<string, any>>({
     queryKey: ['kite-quote', syms.join(',')],
@@ -593,7 +609,7 @@ export function useKiteQuote(symbols: string[], enabled = true, heartbeatMs = LI
     enabled: enabled && syms.length > 0,
     refetchInterval: heartbeatMs,
   });
-  const data = useKiteLive(syms, q.data);
+  const data = useKiteLive(syms, q.data, mode);
   return { ...q, data };
 }
 
@@ -658,6 +674,16 @@ export function useKiteWatchlist() {
       });
       return changed ? next : p;
     });
+  // Backfill F&O expiry onto legacy items saved without it (persists to storage).
+  const mergeExpiries = (map: Record<string, string>) =>
+    setItems((p) => {
+      let changed = false;
+      const next = p.map((x) => {
+        if (x.expiry == null && map[x.symbol] != null) { changed = true; return { ...x, expiry: map[x.symbol] }; }
+        return x;
+      });
+      return changed ? next : p;
+    });
   const reorder = (startIndex: number, endIndex: number) => {
     setItems((p) => {
       const result = Array.from(p);
@@ -667,7 +693,7 @@ export function useKiteWatchlist() {
     });
   };
   const clear = () => setItems([]);
-  return { items, add, remove, reorder, clear, mergeLots };
+  return { items, add, remove, reorder, clear, mergeLots, mergeExpiries };
 }
 
 export function useKiteLtp(symbols: string[], enabled = true) {

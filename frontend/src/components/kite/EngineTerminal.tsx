@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { useEngineActivity, useEngineServerLogs } from '../../hooks/useTripleSupertrend';
+import { useEngineActivity, useEngineServerLogs } from '../../hooks/useSterlingKiteEngine';
 import type { ActivityEvent } from '../../types/kiteEngine';
 
 type Theme = 'dark' | 'light';
@@ -249,7 +249,7 @@ export function EngineTerminal() {
       {mode !== 'minimized' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim, flexShrink: 0 }}>
           <span style={{ fontWeight: 600, color: t.headTxt, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span>🖥️</span> KITE TERMINAL
+            <span>🖥️</span> STERLING KITE TERMINAL
           </span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>

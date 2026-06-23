@@ -4,7 +4,7 @@ Tests whether filtering entries by a minimum ADX (trend strength) or minimum
 ATR percentile (volatility floor) improves the delta-1 baseline. These are the
 candidate entry gates for directional mode.
 
-The hypothesis: the triple-SuperTrend generates many false signals in choppy
+The hypothesis: the Sterling Kite Engine generates many false signals in choppy
 (low-ADX) or compressed (low-ATR) regimes. An ADX floor ≥ 20 and/or ATR
 percentile ≥ 50 should improve OOS profit factor and win rate.
 
@@ -22,8 +22,8 @@ import numpy as np
 
 from app.engines.indicators.adx import adx as calc_adx_array
 from app.engines.indicators.atr import atr_percentile, compute_atr
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from study import kite_data
 
 TRAIL_TARGET = "mid"
@@ -129,7 +129,7 @@ def _stats(trades, capital):
 
 def run_filter_sweep(data: dict) -> list:
     rows = []
-    cfg = TripleSupertrendConfig(trail_target=TRAIL_TARGET)
+    cfg = SterlingKiteEngineConfig(trail_target=TRAIL_TARGET)
     for name, arrs in data.items():
         n = len(arrs["c"])
         oos_lo = int(n * (1 - OOS_FRAC))

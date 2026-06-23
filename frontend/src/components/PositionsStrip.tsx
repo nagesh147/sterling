@@ -533,6 +533,20 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
                   ) : null}
                 </div>
 
+                {pos.exit_mode && pos.current_red_count != null && pos.exit_threshold != null && pos.exit_threshold > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 50 }}>
+                    <span style={{ fontSize: 8, fontWeight: 600, color: 'var(--text-dim)' }}>EXIT {pos.exit_mode}</span>
+                    <div style={{width: 50, height: 5, background: 'var(--border)', borderRadius: 2, overflow: 'hidden'}}>
+                      <div style={{
+                        width: `${Math.min(100, ((pos.current_red_count || 0) / (pos.exit_threshold || 1)) * 100)}%`,
+                        height: '100%',
+                        background: (pos.current_red_count || 0) >= (pos.exit_threshold || 1) ? 'var(--danger)' : (pos.current_red_count || 0) > (pos.exit_threshold || 1)*0.6 ? 'var(--warning)' : 'var(--accent)'
+                      }} />
+                    </div>
+                    <span style={{fontSize: 8}}>{pos.current_red_count}/{pos.exit_threshold}</span>
+                  </div>
+                )}
+
                 {/* Column 5: P&L */}
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-dim)', marginBottom: 3 }}>
@@ -657,6 +671,24 @@ export function PositionsStrip({ asPage = false }: { asPage?: boolean } = {}) {
                   )}
                   {pos.order_status && (
                     <DetailField label="ORDER STATUS" value={pos.order_status.toUpperCase()} />
+                  )}
+
+                  {pos.exit_mode && (
+                    <div>
+                      <DetailField label="EXIT MODE" value={pos.exit_mode} />
+                      {pos.current_red_count != null && pos.exit_threshold != null && pos.exit_threshold > 0 && (
+                        <div style={{marginTop: 4}}>
+                          <div style={{fontSize: 8, color: 'var(--text-dim)'}}>REDS: {pos.current_red_count}/{pos.exit_threshold}</div>
+                          <div style={{width: 80, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden'}}>
+                            <div style={{
+                              width: `${Math.min(100, (pos.current_red_count / pos.exit_threshold) * 100)}%`,
+                              height: '100%',
+                              background: pos.current_red_count >= pos.exit_threshold ? 'var(--danger)' : pos.current_red_count > pos.exit_threshold * 0.6 ? 'var(--warning)' : 'var(--accent)'
+                            }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                   <DetailField label="MODE" value={pos.is_paper ? 'PAPER' : 'LIVE'} />
 

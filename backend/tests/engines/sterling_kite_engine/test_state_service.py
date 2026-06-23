@@ -1,17 +1,17 @@
 import pytest
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import EngineConfigModel
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services.kite_engine import state
 
 
 def test_config_store_roundtrip():
     state.reset("u1")
-    assert state.get_config("u1").trail_target == "mid"  # default
-    cfg = EngineConfigModel(trail_target="fast", strike_moneyness=["ATM", "ITM1"], auto_execute=True)
+    assert state.get_config("u1").trail_target == "fast"  # default
+    cfg = EngineConfigModel(trail_target="slow", strike_moneyness=["ATM", "ITM1"], auto_execute=True)
     state.set_config("u1", cfg)
     got = state.get_config("u1")
-    assert got.trail_target == "fast" and got.strike_moneyness == ["ATM", "ITM1"] and got.auto_execute
+    assert got.trail_target == "slow" and got.strike_moneyness == ["ATM", "ITM1"] and got.auto_execute
 
 
 def test_activity_log_ring_and_status():
@@ -35,7 +35,7 @@ def test_activity_log_ring_and_status():
 async def test_scan_user_logs_and_marks_status(monkeypatch):
     import numpy as np
     from app.domain.models import Candle
-    from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+    from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
     from app.services.kite_engine import service
 
     def _candles(path):
@@ -43,7 +43,7 @@ async def test_scan_user_logs_and_marks_status(monkeypatch):
         return [Candle(timestamp_ms=i * 3_600_000, open=float(o[i]), high=float(max(o[i], c[i]) + 1),
                        low=float(min(o[i], c[i]) - 1), close=float(c[i]), volume=1.0) for i in range(len(c))]
 
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     full = _candles(list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80)))
     o = np.array([x.open for x in full], float); h = np.array([x.high for x in full], float)
     l = np.array([x.low for x in full], float); c = np.array([x.close for x in full], float)
@@ -139,7 +139,7 @@ async def test_reconcile_user_auto_open_clears_after_broker_flat():
 
 @pytest.mark.asyncio
 async def test_auto_exec_one_position_guard():
-    from app.engines.triple_supertrend.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
     from app.services.kite_engine import service, state
 
     state.reset("g1")
@@ -178,7 +178,7 @@ async def test_auto_exec_one_position_guard():
 @pytest.mark.asyncio
 async def test_update_trails_tightens_futures_stop_and_moves_gtt(monkeypatch):
     """_update_open_position_trails updates in-memory stop and calls move_stop."""
-    from app.engines.triple_supertrend.schemas import (
+    from app.engines.sterling_kite_engine.schemas import (
         AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
     )
     from app.services.kite_engine import positions, service, state
@@ -229,7 +229,7 @@ async def test_update_trails_tightens_futures_stop_and_moves_gtt(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_trails_does_not_widen_stop(monkeypatch):
     """_update_open_position_trails never widens an existing stop."""
-    from app.engines.triple_supertrend.schemas import (
+    from app.engines.sterling_kite_engine.schemas import (
         AlignmentChip, EngineConfigModel, EngineSignalRow, OptionLeg,
     )
     from app.services.kite_engine import positions, service, state
@@ -267,3 +267,50 @@ async def test_update_trails_does_not_widen_stop(monkeypatch):
 
     p = positions.open_positions(uid)[0]
     assert p.stop_premium == 24900.0, "stop must not be widened"
+
+
+@pytest.mark.asyncio
+async def test_update_trails_tightens_short_future_downward(monkeypatch):
+    """A short future's protective stop sits ABOVE price, so it trails DOWN."""
+    from app.engines.sterling_kite_engine.schemas import (
+        AlignmentChip, EngineConfigModel, EngineSignalRow,
+    )
+    from app.services.kite_engine import positions, service, state
+    from app.services.kite_engine.scanner import scanner
+
+    uid = "trail-short"
+    state.reset(uid)
+    positions._positions.pop(uid, None)
+    state.set_config(uid, EngineConfigModel(auto_execute=True, stop_mode="both"))
+
+    # short future, protective stop above price at 25200
+    positions.register(positions.OpenPosition(
+        uid=uid, symbol="NIFTY26JUNFUT", exchange="NFO", token=5001,
+        qty=75, lot_size=75, stop_premium=25200.0, direction="short",
+        vehicle="futures", underlying="NIFTY 50",
+        status=positions.OPEN, gtt_id=44))
+
+    # fresh scan: ST level fell to 25050 → tighter for a short (lower stop)
+    row = EngineSignalRow(
+        underlying="NIFTY 50", token=256265, exchange="NFO",
+        regime="BEAR", alignment=AlignmentChip(fast=-1, mid=-1, slow=-1),
+        direction="short", option_type="PE", legs=[],
+        spot=24900.0, stop_loss=25050.0, score=90.0,
+        timestamp_ms=1_700_000_000_000)
+    us = scanner.snapshot(uid)
+    us.rows = [row]
+
+    gtt_moved = []
+
+    class _FakeClient:
+        async def get_ltp(self, syms):
+            return {s: {"last_price": 24900.0} for s in syms}
+        async def modify_gtt(self, tid, **kw):
+            gtt_moved.append((tid, kw.get("trigger_values")))
+            return {"trigger_id": tid}
+
+    await service._update_open_position_trails(_FakeClient(), uid)
+
+    p = positions.open_positions(uid)[0]
+    assert p.stop_premium == 25050.0, "short stop should tighten downward"
+    assert gtt_moved and gtt_moved[0] == (44, [25050.0])

@@ -52,6 +52,7 @@ async def reset_risk_config() -> RiskParams:
         capital=settings.default_capital,
         max_position_pct=settings.max_position_pct,
         max_contracts=settings.max_contracts,
+        hybrid_st_weight=0.5,
     )
     return _risk
 

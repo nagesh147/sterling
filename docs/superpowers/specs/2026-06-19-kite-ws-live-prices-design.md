@@ -6,9 +6,9 @@
 
 ## Problem
 
-The kite terminal runs several always-mounted panes that each poll REST for live
-prices: `KiteTicker` (`useKiteLtp`, 5s), `MarketWatchPane` (`useKiteLtp` 5s +
-`useKiteQuote` 15s), `TripleSupertrendPane` (`useKiteQuote` 15s), plus transient
+The Sterling Kite terminal runs several always-mounted panes that each poll REST for live
+prices: `KiteTicker` (`useKiteLtp`, 5s), `SterlingWatchList` (`useKiteLtp` 5s +
+`useKiteQuote` 15s), `SterlingKiteEnginePane` (`useKiteQuote` 15s), plus transient
 consumers (`MarketDataPane`, `SignalDetailPane`, `OrderWindow`). These loops are
 independent of the scan and never stop, producing a continuous stream of
 `/api/v1/kite/ltp` and `/quote` calls (the network "storm").
@@ -89,7 +89,7 @@ Backs both `useKiteLtp` and `useKiteQuote`. Returns
 ## Data flow
 
 ```
-KiteTicker / MarketWatchPane / TripleSupertrendPane
+KiteTicker / SterlingWatchList / SterlingKiteEnginePane
         │  useKiteLtp / useKiteQuote  (unchanged call sites)
         ▼
    useKiteLive(symbols)
@@ -131,10 +131,10 @@ KiteTicker / MarketWatchPane / TripleSupertrendPane
 - Unit: `useKiteLive` overlay (tick overrides REST per symbol; missing tick falls
   back to REST; token resolved from `WatchItem.token` and from REST response).
 - `npx tsc --noEmit` clean.
-- Manual (DevTools): with the kite terminal open during market hours, confirm
+- Manual (DevTools): with the Sterling Kite terminal open during market hours, confirm
   `/ltp` and `/quote` calls drop to the 30s heartbeat (no 5s loop), one
   `/ticker/subscribe` fires for the displayed token union, and prices still tick
-  live in the ticker + market watch + triple-supertrend panes.
+  live in the ticker + market watch + sterling-kite-engine panes.
 
 ## Files
 
@@ -143,5 +143,5 @@ KiteTicker / MarketWatchPane / TripleSupertrendPane
 - **Edit:** `frontend/src/hooks/useKite.ts` — add `useKiteLive`; reimplement
   `useKiteLtp`/`useKiteQuote` on top of it; slow REST heartbeat to 30s.
 - **Edit (minimal):** `OrderWindow.tsx` — pass a faster `heartbeatMs` for depth.
-- Pane components (`KiteTicker`, `MarketWatchPane`, `TripleSupertrendPane`,
+- Pane components (`KiteTicker`, `SterlingWatchList`, `SterlingKiteEnginePane`,
   `MarketDataPane`, `SignalDetailPane`) — unchanged.

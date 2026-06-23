@@ -11,7 +11,7 @@ import json
 
 from app.engines.analytics.correlation import CorrelationTracker
 from app.engines.risk.circuit_breaker import CircuitBreakerConfig, DrawdownCircuitBreaker
-from app.engines.triple_supertrend.schemas import ActivityEvent, EngineConfigModel
+from app.engines.sterling_kite_engine.schemas import ActivityEvent, EngineConfigModel
 from app.services import db
 
 _ACTIVITY_MAX = 2000

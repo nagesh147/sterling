@@ -51,6 +51,7 @@ class SnapshotEntry:
     exec_confidence: float = 0.0
     all_green: bool = False
     all_red: bool = False
+    red_count: int = 0
     signal_score: float = 0.0
     signal_strength: str = "NONE"
     strategy: str = "legacy"
@@ -64,7 +65,7 @@ _cache: Dict[str, SnapshotEntry] = {}
 _PRESERVE_FIELDS = (
     'direction', 'regime', 'score_long', 'score_short', 'exec_mode',
     'stop_price', 'target_price', 'atr', 'adx', 'atr_percentile', 'rsi',
-    'squeezed', 'exec_confidence', 'all_green', 'all_red',
+    'squeezed', 'exec_confidence', 'all_green', 'all_red', 'red_count',
     'signal_score', 'signal_strength', 'strategy', 'track',
 )
 
@@ -91,6 +92,7 @@ def put(
     exec_confidence = _UNSET,
     all_green = _UNSET,
     all_red = _UNSET,
+    red_count = _UNSET,
     signal_score = _UNSET,
     signal_strength = _UNSET,
     strategy = _UNSET,
@@ -121,6 +123,7 @@ def put(
         exec_confidence=exec_confidence if exec_confidence is not _UNSET else (existing.exec_confidence if existing else 0.0),
         all_green=all_green if all_green is not _UNSET else (existing.all_green if existing else False),
         all_red=all_red if all_red is not _UNSET else (existing.all_red if existing else False),
+        red_count=red_count if red_count is not _UNSET else (existing.red_count if existing else 0),
         signal_score=signal_score if signal_score is not _UNSET else (existing.signal_score if existing else 0.0),
         signal_strength=signal_strength if signal_strength is not _UNSET else (existing.signal_strength if existing else "NONE"),
         strategy=strategy if strategy is not _UNSET else (existing.strategy if existing else "legacy"),

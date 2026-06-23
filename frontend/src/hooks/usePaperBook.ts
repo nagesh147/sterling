@@ -13,6 +13,10 @@ export interface PaperPosition {
   unrealized_pnl?: number;
   stop_dist_pct?: number;
   weight?: number;
+  // Unified exit counter + red health (for EXIT/REDS columns and progress bars)
+  exit_mode?: string | null;
+  current_red_count?: number;
+  exit_threshold?: number;
 }
 
 export interface PaperState {

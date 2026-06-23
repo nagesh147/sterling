@@ -66,7 +66,9 @@ function pill(col: string): React.CSSProperties {
 const INTERVALS = ['minute', '3minute', '5minute', '15minute', '30minute', '60minute', 'day', 'week'];
 
 function QuoteCard({ symbols }: { symbols: string[] }) {
-  const { data, isLoading, error } = useKiteQuote(symbols, symbols.length > 0);
+  // Full-quote card shows the depth ladder — stream it live (full mode) so it
+  // updates in real time instead of only on the slow quote-mode REST heartbeat.
+  const { data, isLoading, error } = useKiteQuote(symbols, symbols.length > 0, 5_000, 'full');
   if (symbols.length === 0) return null;
   if (isLoading) return <div style={S.hint}>Loading quotes…</div>;
   if (error) return <div style={{ color: '#e53935', fontSize: 11 }}>✗ {(error as Error).message}</div>;
@@ -275,7 +277,7 @@ export function MarketDataPane() {
                     <span style={{ ...S.hint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name} · {i.exchange} · token {i.instrument_token}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                    {!inWatch && <span style={{ ...S.hint, fontSize: 10, cursor: 'pointer' }} onClick={() => add({ symbol: sym, token: i.instrument_token, name: i.name || i.tradingsymbol, sub: `${i.exchange}` })}>+watch</span>}
+                    {!inWatch && <span style={{ ...S.hint, fontSize: 10, cursor: 'pointer' }} onClick={() => add({ symbol: sym, token: i.instrument_token, name: i.name || i.tradingsymbol, sub: `${i.exchange}`, expiry: i.expiry })}>+watch</span>}
                     <span onClick={() => toggleSymbol(sym)} style={{ color: sel ? '#387ed1' : '#9b9b9b', fontSize: 18, lineHeight: 1 }}>{sel ? '◉' : '○'}</span>
                   </div>
                 </div>

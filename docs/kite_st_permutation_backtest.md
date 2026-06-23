@@ -1,4 +1,4 @@
-# Kite Triple-SuperTrend — Full Permutation Backtest (real data)
+# Kite Sterling Kite Engine — Full Permutation Backtest (real data)
 
 **Date:** 2026-06-20 · **Branch:** KiteEngine · **Scope:** Kite (Indian index options) only — **no crypto.**
 

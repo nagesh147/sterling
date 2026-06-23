@@ -14,8 +14,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.core.logging import get_logger
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import EngineConfigModel
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services import live_safety
 from app.services.kite_engine import positions, protective_stop, sizing, state
 from app.services.kite_engine import futures as futures_mod
@@ -43,8 +43,12 @@ def has_scanned() -> bool:
     return _first_scan_done
 
 
-def _ts_cfg(c: EngineConfigModel) -> TripleSupertrendConfig:
-    return TripleSupertrendConfig(trail_target=c.trail_target, early_lock=c.early_lock)
+def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
+    return SterlingKiteEngineConfig(
+        trail_target=c.trail_target,
+        exit_mode=c.exit_mode,
+        hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
+    )
 
 
 async def place_manual_order(uid: str, option_symbol: str, side: str,
@@ -348,7 +352,8 @@ def _make_place_cb(client, uid: str):
             entry_premium=entry_px, stop_premium=stop_px,
             order_id=oid, status=positions.PENDING,
             stop_mode=cfg.stop_mode, guard_key=guard_key,
-            direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying))
+            direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying,
+            exit_mode=cfg.exit_mode))
 
         # ── auto-subscribe the position's token to the ticker (tick monitor) ──
         if trade_token and cfg.stop_mode in ("monitor", "both"):
@@ -438,28 +443,47 @@ async def _update_open_position_trails(client, uid: str) -> None:
         if p.status != positions.OPEN:
             continue
         new_sl = _new_trail_for_open(p, rows)
-        if new_sl is None:
-            continue
-        old_sl = p.stop_premium
-        positions.update_stop(uid, p.symbol, new_sl)
-        state.log(uid, "info",
-                  f"Trail updated {p.symbol} ({p.vehicle}): "
-                  f"₹{old_sl:.2f} → ₹{new_sl:.2f}")
-        if p.gtt_id and cfg.stop_mode in ("broker", "both"):
-            try:
-                ltp_key = f"{p.exchange}:{p.symbol}"
-                ltp_data = await client.get_ltp([ltp_key])
-                ltp = float((ltp_data or {}).get(ltp_key, {}).get("last_price") or new_sl)
-            except Exception:  # noqa: BLE001
-                ltp = new_sl
-            moved = await protective_stop.move_stop(
-                client, trigger_id=p.gtt_id,
-                tradingsymbol=p.symbol, exchange=p.exchange,
-                qty=p.qty, trigger_premium=new_sl, last_price=ltp,
-                direction=p.direction)
-            if moved:
-                state.log(uid, "info",
-                          f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")
+        if new_sl is not None:
+            old_sl = p.stop_premium
+            positions.update_stop(uid, p.symbol, new_sl)
+            state.log(uid, "info",
+                      f"Trail updated {p.symbol} ({p.vehicle}): "
+                      f"₹{old_sl:.2f} → ₹{new_sl:.2f}")
+            if p.gtt_id and cfg.stop_mode in ("broker", "both"):
+                try:
+                    ltp_key = f"{p.exchange}:{p.symbol}"
+                    ltp_data = await client.get_ltp([ltp_key])
+                    ltp = float((ltp_data or {}).get(ltp_key, {}).get("last_price") or new_sl)
+                except Exception:  # noqa: BLE001
+                    ltp = new_sl
+                moved = await protective_stop.move_stop(
+                    client, trigger_id=p.gtt_id,
+                    tradingsymbol=p.symbol, exchange=p.exchange,
+                    qty=p.qty, trigger_premium=new_sl, last_price=ltp,
+                    direction=p.direction)
+                if moved:
+                    state.log(uid, "info",
+                              f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")
+
+        # Wire red-count awareness (scan driven): compute current reds from latest alignment using this position's entry-time exit_mode.
+        # The monitor will see the updated current_red_count and can exit on red threshold (in addition to price trail).
+        current_reds = 0
+        for row in rows:
+            if row.underlying != p.underlying:
+                continue
+            al = getattr(row, 'alignment', None)
+            if al:
+                trends = [al.fast, al.mid, al.slow]
+                want_red = -1 if getattr(p, 'direction', 'long') == "long" else 1
+                current_reds = sum(1 for t in trends if t == want_red)
+            break
+        positions.update_health(uid, p.symbol, current_reds, getattr(p, 'exit_mode', None))
+        if current_reds > 0:
+            mode = getattr(p, 'exit_mode', 'one_red')
+            from app.engines.common.exit_counter import get_exit_threshold
+            thresh = get_exit_threshold(mode)
+            if current_reds >= thresh:
+                state.log(uid, "info", f"Red count hit {current_reds}/{thresh} for open {p.symbol} under {mode} — monitor will consider for exit")
 
 
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) -> int:
@@ -474,7 +498,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         state.log(uid, "info", "Scan skipped — cancelled recently (60s cooldown).")
         return 0
     state.set_scanning(uid, True)
-    state.log(uid, "scan_start", f"Initiating 1H triple-SuperTrend scan…")
+    state.log(uid, "scan_start", f"Initiating 1H Sterling Kite Engine scan…")
     try:
         # Fetch the four exchange dumps concurrently (warm cache → instant; cold →
         # parallel downloads instead of ~1s of sequential round-trips).
@@ -507,7 +531,10 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
                         if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
-        count = len(snap.rows)
+        # The board now retains recently-ended setups too, but the "ready" count, badge
+        # and return value should reflect only live (running/just-fired) signals.
+        live = sum(1 for r in snap.rows if r.is_active or r.is_fresh)
+        ended = len(snap.rows) - live
         d = snap.diag
         mode = "auto-exec ON" if place_cb else "advisory"
         parts = []
@@ -535,11 +562,12 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # Trail-update pass: push tightened stops to open positions.
         if cfg_model.auto_execute:
             await _update_open_position_trails(client, uid)
+        board = f"{live} live signal(s)" + (f" + {ended} ended" if ended else "")
         state.log(uid, "scan_done",
-                  f"Scan complete — {count} ready signal(s) / {len(selected)} instruments "
+                  f"Scan complete — {board} / {len(selected)} instruments "
                   f"[{source}] ({mode}) · {' · '.join(parts)}")
-        state.mark_scan_done(uid, signal_count=count, next_in_s=interval_s)
-        return count
+        state.mark_scan_done(uid, signal_count=live, next_in_s=interval_s)
+        return live
     except Exception as exc:  # noqa: BLE001
         state.set_scanning(uid, False)
         state.log(uid, "error", f"Scan failed: {exc}")

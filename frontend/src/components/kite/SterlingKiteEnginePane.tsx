@@ -4,15 +4,16 @@ import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
   useScanReport, useStockRegistry,
-} from '../../hooks/useTripleSupertrend';
+} from '../../hooks/useSterlingKiteEngine';
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
+  ExitMode,
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { Icons } from '../../styles/kiteUI';
-import { QuoteDetail, KiteSearchBar } from './MarketWatchPane';
+import { QuoteDetail, KiteSearchBar } from './SterlingWatchList';
 import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
 import { stopDistance, computeLegRR, rrScore } from './impactMath';
@@ -30,9 +31,19 @@ interface Props {
 
 // Plain-language labels (users were confused by fast/mid/slow + "early lock").
 const TRAIL_OPTS: { value: TrailTarget; label: string; hint: string }[] = [
-  { value: 'fast', label: 'Tight', hint: 'Exit quickly — trails the fast SuperTrend (21,1). Locks gains sooner, more whipsaw.' },
-  { value: 'mid', label: 'Balanced', hint: 'Default — trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
+  { value: 'fast', label: 'Tight', hint: 'Default — exit quickly; trails the fast SuperTrend (21,1). Locks gains sooner, more whipsaw.' },
+  { value: 'mid', label: 'Balanced', hint: 'Trails the mid SuperTrend (14,2). Balanced hold vs. protection.' },
   { value: 'slow', label: 'Loose', hint: 'Hold longer — trails the slow SuperTrend (7,3). Rides trends further, gives back more.' },
+];
+
+// Expert exit counter modes — mirrors backend ExitMode exactly.
+// Entry is ALWAYS "full 3 green lines + fresh green transition (arrow)".
+// Exit is the COUNTER chosen by user.
+const EXIT_MODE_OPTS: { value: ExitMode; label: string; hint: string; short: string }[] = [
+  { value: 'one_red', label: '1 Red', short: 'Tightest', hint: 'Auto-exit the moment ANY one of the 3 ST lines turns red against your position. Fastest lock, highest sensitivity.' },
+  { value: 'two_red', label: '2 Red', short: 'Moderate', hint: 'Exit when any TWO SuperTrend lines have flipped red. Good balance of room vs protection.' },
+  { value: 'three_red', label: '3 Red', short: 'Patient', hint: 'Hold until ALL THREE lines are red (full reversal). Gives the trend maximum room to breathe.' },
+  { value: 'three_red_signal', label: '3R + Signal', short: 'Safest', hint: 'Only exit on 3 red lines AND a fresh opposite arrow (counter-entry confirmation). Maximum conviction filter for exits.' },
 ];
 const STOP_MODE_OPTS: { value: 'broker' | 'monitor' | 'both'; label: string; hint: string }[] = [
   { value: 'both', label: 'Both', hint: 'Broker GTT stop + server-side tick monitor. Defense in depth — recommended for real money.' },
@@ -66,6 +77,7 @@ const EXPIRY_OPTS: { value: ScanExpiry; label: string; hint: string }[] = [
   { value: 'weekly', label: 'Weekly', hint: 'Weekly contracts expiring every Thursday (including current week).' },
   { value: 'monthly', label: 'Monthly', hint: 'Monthly contracts expiring on the last Thursday of the month.' },
 ];
+
 const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
   { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
@@ -425,13 +437,16 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             const sym = `${row.exchange}:${leg.option_symbol}`;
             const q = quotes?.[sym];
             const lastPx = q?.last_price || (leg as any).premium_spot;
-            const slPx = (leg as any).premium_sl;
+            // Non-positive premium ⇒ no real entry/stop (illiquid bar) — show "—", not 0.0.
+            const rawGSlPx = (leg as any).premium_sl;
+            const slPx = rawGSlPx != null && rawGSlPx > 0 ? rawGSlPx : null;
             const legEnded = legIsExited(leg);
             const isExp = expanded.has(leg.option_symbol);
             const gSpot = uLastPx ?? row.spot ?? 0;
             const gGreeks = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, gSpot, q, leg.lot_size ?? null);
             const gDelta = gGreeks ? Math.abs(gGreeks.delta).toFixed(2) : null;
-            const gEntry = (leg as any).premium_spot;
+            const rawGEntry = (leg as any).premium_spot;
+            const gEntry = rawGEntry != null && rawGEntry > 0 ? rawGEntry : null;
             const gDiff = (!legEnded && lastPx != null && gEntry != null) ? lastPx - gEntry : null;
             return (
               <div key={leg.option_symbol} style={{ minWidth: 132 }}>
@@ -589,8 +604,13 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
           // the signal fired, so dim them — they're history, not a live order to act on.
           // Use the LEG's own liveness (the row flag is OR'd across all strikes in the
           // group, so a dead strike can sit under a "running" parent).
-          const entryPx = (leg as any).premium_spot;
-          const slPx = (leg as any).premium_sl;
+          // A 0 / illiquid premium bar at the entry can leave these at 0 — that's not a
+          // real entry/stop, so treat non-positive as "no value" (renders as "—") instead
+          // of a misleading 0.00 sitting next to a live LTP (the classic "entry 0 (+61.75)").
+          const rawEntryPx = (leg as any).premium_spot;
+          const entryPx = rawEntryPx != null && rawEntryPx > 0 ? rawEntryPx : null;
+          const rawSlPx = (leg as any).premium_sl;
+          const slPx = rawSlPx != null && rawSlPx > 0 ? rawSlPx : null;
           const ended = legIsExited(leg);
           const legActive = !ended;
           // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the
@@ -1329,7 +1349,7 @@ function ScanReportView({ data }: { data?: ScanReportResponse }) {
   );
 }
 
-export function TripleSupertrendPane({ onSelectSignal }: Props) {
+export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
@@ -1486,7 +1506,6 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
     const upper = name.trim().toUpperCase();
     if (cfg.scan_stocks.includes(upper)) return;
     patch({ scan_stocks: [...cfg.scan_stocks, upper] }, `Added ${upper} to scan`);
-    setCustomStock('');
   };
 
   const removeCustomStock = (name: string) => {
@@ -1653,7 +1672,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ padding: '12px 16px 8px', borderBottom: `1px solid ${k.border}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <EngineMark />
-            <span style={{ fontSize: 14, color: k.text }}>Triple SuperTrend</span>
+            <span style={{ fontSize: 14, color: k.text }}>Sterling Kite Engine</span>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: k.dim,
                            border: `1px solid ${k.border}`, borderRadius: 4, padding: '1px 5px' }}>1H</span>
           </div>
@@ -1674,12 +1693,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
               Engine is off
             </div>
             <div style={{ fontSize: 12, color: k.dim, lineHeight: 1.6, maxWidth: 260 }}>
-              The Triple SuperTrend strategy is disabled. Kite runs in normal mode
+              The Sterling Kite Engine strategy is disabled. Kite runs in normal mode
               — manual trading, market watch, and existing flows are unaffected.
             </div>
           </div>
           <button
-            onClick={() => patch({ engine_enabled: true }, 'Triple SuperTrend engine enabled')}
+            onClick={() => patch({ engine_enabled: true }, 'Sterling Kite Engine enabled')}
             disabled={setCfg.isPending}
             style={{ padding: '10px 28px', borderRadius: 8, border: 'none', cursor: 'pointer',
                      background: k.green, color: '#fff', fontSize: 13, fontWeight: 700,
@@ -1710,9 +1729,14 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px 6px' }}>
           <EngineMark />
           <span title={UNIVERSE_TIP} style={{ fontSize: 13.5, color: k.text, whiteSpace: 'nowrap', letterSpacing: -0.2 }}>
-            Triple SuperTrend
+            Sterling Kite Engine
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
+          {cfg && (
+            <span title="Current auto-exit rule (counter to the 3-green entry)" style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tint(k.blue, 8), color: k.blue }}>
+              {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.short ?? '1R'} EXIT
+            </span>
+          )}
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
           {/* Actions: rescan / scan report / grid·list */}
@@ -1768,11 +1792,12 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
         <div style={{ position: 'sticky', top: 0, zIndex: 10, background: k.bg }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 16px', borderBottom: `1px solid ${k.border}` }}>
             <div style={{ flex: 1 }}>
-              <KiteSearchBar 
-                query={query} 
-                setQuery={setQuery} 
-                searchSettingsOpen={searchSettingsOpen} 
-                setSearchSettingsOpen={setSearchSettingsOpen} 
+              <KiteSearchBar
+                query={query}
+                setQuery={setQuery}
+                searchSettingsOpen={searchSettingsOpen}
+                setSearchSettingsOpen={setSearchSettingsOpen}
+                height={35}
               />
             </div>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1954,21 +1979,39 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
 
         const executionGroup = (
           <>
+            <div style={{ padding: '6px 16px 8px', fontSize: 10, color: k.dim, background: tint(k.amber, 3), borderBottom: `1px solid ${k.border}` }}>
+              Entry: <b>all 3 green lines + fresh green arrow</b>. Exit counter (your choice): 1/2/3 red lines (or + red arrow). Trail ratchets tighter as lines flip red.
+            </div>
             <SettingRow label="Trail" hint="How tightly the position is trailed before exit.">
               <Segmented
                 options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg.trail_target ?? 'mid') === v}
+                isActive={(v) => (cfg.trail_target ?? 'fast') === v}
                 onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`)}
               />
             </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
-              onClick={() => patch({ early_lock: !(cfg.early_lock ?? false) }, `Early lock ${!(cfg.early_lock ?? false) ? 'ON' : 'OFF'}`)}>
-              <Switch on={cfg.early_lock ?? false} color={k.blue} label="Lock profits early" onChange={() => {}} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Lock profits early</span>
-                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Exit on slow-ST flip once comfortably in profit.</span>
+            <SettingRow label="Hybrid Weight" hint="Weight for ST vs ATR in hybrid trail (0-1). Only for hybrid mode.">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                max="1"
+                value={cfg.hybrid_st_weight ?? 0.5}
+                onChange={e => patch({ hybrid_st_weight: parseFloat(e.target.value) }, `Hybrid weight → ${e.target.value}`)}
+                aria-label="Hybrid Weight"
+                data-testid="hybrid-weight-input"
+                style={{ width: 80, padding: 4, background: k.surface, color: k.text, border: `1px solid ${k.border}` }}
+              />
+            </SettingRow>
+            <SettingRow label="Exit Counter" hint="Entry = all 3 green lines + fresh green arrow. Choose how many red (counter) lines + optional red arrow trigger auto-exit + ratcheting trail.">
+              <Segmented
+                options={EXIT_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: `${o.short}: ${o.hint}` }))}
+                isActive={(v) => (cfg.exit_mode ?? 'one_red') === v}
+                onSelect={(v) => patch({ exit_mode: v as 'one_red'|'two_red'|'three_red'|'three_red_signal' }, `Exit mode → ${EXIT_MODE_OPTS.find(x=>x.value===v)?.short || v}`)}
+              />
+              <div style={{ fontSize: 10, color: k.dim, marginTop: 4, lineHeight: 1.3 }}>
+                {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.hint}
               </div>
-            </div>
+            </SettingRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
               onClick={toggleAuto}>
               <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={() => {}} />
@@ -2035,7 +2078,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
                       <div style={{ display: 'flex', flexDirection: 'column' }}>{universeGroup}</div>
                     </Collapsible>
                     <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
-                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'mid'))?.label ?? 'Balanced'}${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
+                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'fast'))?.label ?? 'Tight'} trail · ${ (EXIT_MODE_OPTS.find(o=>o.value===(cfg.exit_mode??'one_red'))?.short || '1R') } exit${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>{executionGroup}</div>
                     </Collapsible>
                   </div>
@@ -2068,7 +2111,7 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : signals?.market_open ? 'No ready setups right now. The engine re-scans automatically.' : `No cached signals from today's session. Markets open Mon–Fri 9:15 AM – 3:30 PM IST.`}
+            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : signals?.market_open ? 'No active or recent setups on the board yet. The engine re-scans every ~5 min.' : `No recent signals on the board. Recent setups stay listed; the engine resumes when markets open (Mon–Fri 9:15 AM – 3:30 PM IST).`}
           </div>
         ) : (
           groupedRows.map(group => {
@@ -2113,4 +2156,4 @@ export function TripleSupertrendPane({ onSelectSignal }: Props) {
   );
 }
 
-export default TripleSupertrendPane;
+export default SterlingKiteEnginePane;

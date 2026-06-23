@@ -7,7 +7,7 @@ import { useKiteQuote } from '../../hooks/useKite';
 import { useKiteSettings } from '../../store/useKiteSettings';
 
 // Strike-label colour by live price direction — mirrors the Option-legs rows,
-// the Triple SuperTrend table, and the watchlist (green up / red down; grey when
+// the Sterling Kite Engine table, and the watchlist (green up / red down; grey when
 // direction colours are off or no live quote yet).
 function dirColor(q: any, chgType: string, showDir: boolean): string {
   if (!q) return k.dim;

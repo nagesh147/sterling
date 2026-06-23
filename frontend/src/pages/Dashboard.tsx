@@ -388,6 +388,10 @@ export function Dashboard() {
 function TradingModeCard() {
   const { data: modeData } = useTradingMode();
   const cfg = modeData?.config;
+  const [kiteCfg, setKiteCfg] = React.useState<any>(null);
+  React.useEffect(() => {
+    fetch('/api/v1/kite/engine/config').then(r => r.json()).then(setKiteCfg).catch(() => {});
+  }, []);
   return (
     <div>
       <div style={{ marginBottom: 12 }}><TradingModeSelector /></div>
@@ -398,6 +402,8 @@ function TradingModeCard() {
             ['DTE range', `${cfg.dte_min}–${cfg.dte_max}d`], ['Position %', `${(cfg.position_pct * 100).toFixed(1)}%`],
             ['Max positions', String(cfg.max_concurrent)], ['Stop mult', `${cfg.stop_atr_mult}×ATR`],
             ['Trail mode', cfg.trail_mode], ['Poll', `${cfg.poll_interval_s}s`],
+            ['Hybrid ST weight', (cfg.hybrid_st_weight ?? kiteCfg?.hybrid_st_weight ?? 0.5).toFixed(1)],
+            ['Exit mode (unified)', kiteCfg?.exit_mode || 'two_red'],
           ].map(([k, v]) => (
             <div key={k as string}>
               <div style={{ color: 'var(--text-faint)', fontSize: 10 }}>{k}</div>

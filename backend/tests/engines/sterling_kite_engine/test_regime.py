@@ -1,12 +1,12 @@
 import numpy as np
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 
 
 def test_regime_shapes_and_warmup(uptrend):
     o, h, l, c = uptrend
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     r = compute_regime(o, h, l, c, cfg)
     n = len(c)
     assert r.bull.shape == (n,) and r.bear.shape == (n,)
@@ -18,7 +18,7 @@ def test_regime_shapes_and_warmup(uptrend):
 
 def test_three_trend_arrays_present(uptrend):
     o, h, l, c = uptrend
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     r = compute_regime(o, h, l, c, cfg)
     for tr in (r.t_fast, r.t_mid, r.t_slow):
         # past the largest warmup, every trend is committed (+1 / -1)
@@ -27,7 +27,7 @@ def test_three_trend_arrays_present(uptrend):
 
 def test_fresh_transition_fires_once(down_then_up):
     o, h, l, c = down_then_up
-    cfg = TripleSupertrendConfig()
+    cfg = SterlingKiteEngineConfig()
     r = compute_regime(o, h, l, c, cfg)
     longs, shorts = entry_transitions(r)
     # exactly the bars where alignment becomes fresh — not every aligned bar

@@ -20,6 +20,7 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional
 
 from app.core.trading_mode import TrailMode, TradingModeConfig
+from app.engines.common.trailing import HybridTrailEngine, HybridTrailConfig
 from app.schemas.market import Candle
 
 
@@ -48,10 +49,12 @@ def realistic_stop_fill(
 
 @dataclass
 class TrailState:
-    mode: TrailMode
+    # Required fields first (no defaults)
     current_stop: float
     highest_seen: float
     lowest_seen: float
+    # Then fields with defaults (including mode)
+    mode: TrailMode = TrailMode.HYBRID
     partial_25_done: bool = False
     partial_50_done: bool = False
     breakeven_set: bool = False
@@ -67,6 +70,10 @@ class TrailState:
     # distance-based breakeven.
     initial_risk: float = 0.0
     timeframe: str = "intraday"
+    # Hybrid ATR+ST params for full hybrid mode
+    hybrid_atr_mult: float = 2.0
+    hybrid_st_weight: float = 0.5
+    hybrid_use_st: bool = True
 
     def to_json(self) -> str:
         d = asdict(self)
@@ -89,6 +96,9 @@ class TrailState:
         d.setdefault("tp1_triggered", False)
         d.setdefault("initial_risk", 0.0)
         d.setdefault("timeframe", "intraday")
+        d.setdefault("hybrid_atr_mult", 2.0)
+        d.setdefault("hybrid_st_weight", 0.5)
+        d.setdefault("hybrid_use_st", True)
         return cls(**d)
 
 
@@ -157,6 +167,19 @@ class TrailingStopEngine:
         else:
             # Default or ATR/Hybrid
             trail_dist = mult * atr if atr > 0 else price * 0.01
+
+            # Full hybrid in TrailState: use if hybrid mode or st provided
+            use_hybrid = (getattr(state, 'hybrid_use_st', True) and st_value and st_value > 0) or state.mode == 'hybrid'
+            if use_hybrid:
+                hcfg = HybridTrailConfig(
+                    atr_mult=getattr(state, 'hybrid_atr_mult', mult),
+                    st_weight=getattr(state, 'hybrid_st_weight', 0.5),
+                    use_st_lines=True
+                )
+                hybrid_eng = HybridTrailEngine(hcfg)
+                st_lines = {"st": [st_value]} if st_value else {}
+                dstr = "long" if is_long else "short"
+                trail_dist = hybrid_eng.compute_hybrid_trail(trail_dist, st_lines, dstr, price)
             
             # Hybrid base-trail enhancement if explicitly set or we assume options need it
             if is_options and getattr(state.mode, "value", "") == "hybrid":

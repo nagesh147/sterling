@@ -4,7 +4,7 @@
 
 ## Goal
 Three things, all Kite-specific and Kite-faithful (light theme, orange `#f06428`):
-1. Redesign the Triple SuperTrend settings drawer for readability. Ship **both** a
+1. Redesign the Sterling Kite Engine settings drawer for readability. Ship **both** a
    tabbed layout and a collapsible-cards layout; the user picks which via a control
    in the **Connect** tab. Persisted preference.
 2. Give the Kite app its **own Telegram** (separate bot(s)/chat from the crypto
@@ -15,7 +15,7 @@ Three things, all Kite-specific and Kite-faithful (light theme, orange `#f06428`
 
 ## Part 1 — SuperTrend settings drawer (both layouts)
 
-File: `frontend/src/components/kite/TripleSupertrendPane.tsx` (settings drawer at
+File: `frontend/src/components/kite/SterlingKiteEnginePane.tsx` (settings drawer at
 lines ~1272–1439). Keep ALL existing state/handlers and the save path
 (`useSetEngineConfig` → `POST /api/v1/kite/engine/config`). Only reorganize the JSX.
 
@@ -106,7 +106,7 @@ Files: new `frontend/src/components/kite/KiteTelegramPanel.tsx`, new hook
 `frontend/src/components/kite/KiteTelegramPanel.tsx`, `frontend/src/hooks/useKiteTelegram.ts`,
 `frontend/src/types/kiteTelegram.ts`.
 **Edited:** `frontend/src/store/useKiteSettings.ts` (done — layout pref);
-`frontend/src/components/kite/TripleSupertrendPane.tsx`;
+`frontend/src/components/kite/SterlingKiteEnginePane.tsx`;
 `frontend/src/components/kite/ConnectPane.tsx`;
 `backend/app/services/notifications/telegram_kite.py`; v1 api router registration.
 

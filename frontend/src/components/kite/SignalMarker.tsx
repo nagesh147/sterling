@@ -2,7 +2,7 @@ import { useSignalMarkers } from '../../store/useSignalMarkers';
 
 /**
  * Renders the ✝ (best reward:risk) and ▲ (best delta) markers for a symbol when it
- * matches a current Triple SuperTrend signal leg. Grey, by design, to match the
+ * matches a current Sterling Kite Engine signal leg. Grey, by design, to match the
  * markers shown in the signal rows. Returns null when the symbol carries no marker.
  *
  * `color` lets each host pass its own grey (the light-theme watchlist uses k.dim;

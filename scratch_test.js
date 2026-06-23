@@ -10,7 +10,7 @@ const { chromium } = require('playwright');
     console.log("Waiting for app to load...");
     await page.waitForLoadState('networkidle');
 
-    // Look for the Sterling app or Triple Supertrend Pane
+    // Look for the Sterling app or Sterling Kite Engine Pane
     // If not visible, we might need to navigate to it or it might be on the default view.
     // Let's print the page text or elements
     

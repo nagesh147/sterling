@@ -68,6 +68,15 @@ class PaperPosition(BaseModel):
     # a cash-settlement event (vs. a pre-expiry market close).
     settlement_recorded: bool = False
 
+    # ── Exit counter unification (kite + directional) ──
+    # exit_mode chosen at entry: "one_red" | "two_red" | "three_red" | "three_red_signal"
+    # Allows directional positions to carry the same counter logic as kite.
+    exit_mode: Optional[str] = "two_red"
+    current_red_count: int = 0
+    exit_threshold: int = 2
+    # last known st alignment for red count ( [fast, mid, slow] or from st_trends )
+    last_st_alignment: Optional[List[int]] = None
+
 
 class EnterPositionRequest(BaseModel):
     underlying: str

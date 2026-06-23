@@ -757,7 +757,7 @@ function OptionChainView({ symbol }: { symbol: string }) {
             { label: 'Create GTT / GTC', icon: <Icons.Timer /> },
             { label: 'Create alert / ATO', icon: <Icons.Bell /> },
             { label: 'Market depth', icon: <Icons.Depth /> },
-            { label: 'Add to marketwatch', icon: <Icons.More /> },
+            { label: 'Add to watchlist', icon: <Icons.More /> },
             { label: 'Add to basket', icon: <Icons.Basket /> },
           ].map((item, idx) => (
             <div

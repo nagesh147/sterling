@@ -70,7 +70,7 @@ return <motion.div .../>;            // Mac path
 - **My enhancement — per-digit odometer:** only the digits that actually changed roll;
   unchanged leading digits stay put. Cheaper and reads as true Mac odometer polish.
 - `PriceCell` is a thin shared component: `macKite ? <MacPriceTicker/> : <span>` so we
-  don't touch every LTP call site. Wired first into `MarketWatchPane` LTP + change cells.
+  don't touch every LTP call site. Wired first into `SterlingWatchList` LTP + change cells.
 - Watchlist rows: hover tint via `--mac-hover` (`background-color 0.1s linear`).
 
 ### 2. Order ticket — Mac App Store card morph (`OrderWindow.tsx`, `KiteTab.tsx`)
@@ -131,7 +131,7 @@ These are gated by the same flag and reduced-motion guard; each is small and hig
 `components/kite/mac/{MacMotionProvider,MacPriceTicker,MacStageLayout,MacChartSwitch,MacKiteToggle,MacButton}.tsx`,
 `components/kite/PriceCell.tsx`.
 **Edited (additively, off-path preserved):** `store/useKiteSettings.ts`,
-`components/kite/{KiteTab,KiteLayout,OrderWindow,MarketWatchPane,KiteNotifications,SetupChart}.tsx`.
+`components/kite/{KiteTab,KiteLayout,OrderWindow,SterlingWatchList,KiteNotifications,SetupChart}.tsx`.
 **Dependency:** `framer-motion@12` (installed; React 19 peer OK).
 
 ## Settings entry point

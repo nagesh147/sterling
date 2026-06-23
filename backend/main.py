@@ -1557,7 +1557,7 @@ async def lifespan(app: FastAPI):
     deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
     log.info("Derivatives scanner started (every 30s)")
 
-    # Kite triple-SuperTrend engine — background auto-scan of connected Kite
+    # Kite Sterling Kite Engine — background auto-scan of connected Kite
     # accounts (advisory by default; gated auto-exec when the user enables it).
     # First reconcile each account's auto-open guard against the broker's real
     # positions: the guard is DB-persisted across restarts, but a position may
@@ -1572,7 +1572,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         log.warning("Kite auto-open startup reconcile failed: %s", exc)
     kite_engine_task = asyncio.create_task(_kite_auto_scan())
-    log.info("Kite triple-SuperTrend auto-scan loop started (every 5 min)")
+    log.info("Kite Sterling Kite Engine auto-scan loop started (every 5 min)")
 
     # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
     # Only starts when scalp_mode (crypto kill switch) is enabled.
@@ -1785,7 +1785,7 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite import router as kite_router
     app.include_router(kite_router, prefix="/api/v1")
 
-    # Kite-exclusive triple-SuperTrend options engine (scanner + advisory/auto-exec)
+    # Kite-exclusive Sterling Kite Engine options engine (scanner + advisory/auto-exec)
     from app.api.v1.endpoints.kite_engine import router as kite_engine_router
     app.include_router(kite_engine_router, prefix="/api/v1")
 

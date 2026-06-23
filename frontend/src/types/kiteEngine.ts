@@ -1,5 +1,5 @@
-// Types for the Kite-exclusive triple-SuperTrend options engine.
-// Mirrors backend app/engines/triple_supertrend/schemas.py.
+// Types for the Kite-exclusive Sterling Kite Engine options engine.
+// Mirrors backend app/engines/sterling_kite_engine/schemas.py.
 
 export type TrailTarget = 'fast' | 'mid' | 'slow';
 export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
@@ -7,6 +7,7 @@ export type ScanSource = 'spot' | 'derivatives' | 'both';
 export type ScanExpiry = 'weekly' | 'monthly';
 export type Vehicle = 'otm_options' | 'deep_itm_options' | 'futures';
 export type DeepItmMoneyness = 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20';
+export type ExitMode = 'one_red' | 'two_red' | 'three_red' | 'three_red_signal';
 
 export interface AlignmentChip {
   fast: number; // +1 / -1 / 0
@@ -95,6 +96,7 @@ export interface SetupChart {
   st_slow: SetupLine[];
   entry_index: number | null;
   trail_target: string;
+  exit_mode?: string;
 }
 
 export interface DepthLevel {
@@ -141,6 +143,7 @@ export interface EngineDetailResponse {
 export interface EngineConfigModel {
   engine_enabled: boolean;
   trail_target: TrailTarget;
+  exit_mode: ExitMode;
   strike_moneyness: Moneyness[];
   scan_source: ScanSource;
   scan_expiries: ScanExpiry[];
@@ -149,7 +152,6 @@ export interface EngineConfigModel {
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
-  early_lock: boolean;
   auto_execute: boolean;
   // Per-trade risk sizing (workstream F)
   risk_sizing: boolean;
@@ -167,6 +169,8 @@ export interface EngineConfigModel {
   adx_min: number | null;
   atr_pct_min: number | null;
   wire_risk_infra: boolean;
+  // Hybrid ATR+ST trail weight (0-1)
+  hybrid_st_weight?: number;
 }
 
 // ─── Options backtest (workstream H) ─────────────────────────────────────────
@@ -176,6 +180,7 @@ export interface BacktestRequest {
   symbol: string;
   data_mode: BacktestDataMode;
   trail_target: TrailTarget;
+  exit_mode: ExitMode;
   lookback_bars: number;
   starting_capital: number;
   qty: number;
@@ -322,6 +327,9 @@ export interface EngineOpenPosition {
   opened_ms: number;
   exit_reason: string;
   order_id: string;
+  exit_mode?: string;  // the chosen exit counter at entry (one_red etc) — persisted per position
+  current_red_count?: number;
+  exit_threshold?: number;
 }
 
 export interface OpenPositionsResponse {

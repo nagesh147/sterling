@@ -96,9 +96,9 @@ export function OrderWindow({ options, onClose }: Props) {
   const { data: funds, refetch: refetchFunds } = useKiteMargins(true);
 
   const fullSym = `${instr.exchange}:${instr.symbol}`;
-  // Depth ladder needs to feel live; quote-mode ticks omit depth, so poll REST
-  // faster than the 30s live heartbeat while the (transient) depth panel is open.
-  const { data: depthQuotes } = useKiteQuote([fullSym], depthOpen, 5_000);
+  // Depth ladder needs to feel live; subscribe full mode so the 5-level depth streams
+  // over the WS (quote-mode ticks omit depth). The 5s REST poll is a cold-start/fallback.
+  const { data: depthQuotes } = useKiteQuote([fullSym], depthOpen, 5_000, 'full');
   const depthQ = (depthQuotes as any)?.[fullSym];
   const nudge = useMemo(() => getOrderNudge(instr.symbol, instr.exchange), [instr.symbol, instr.exchange]);
 

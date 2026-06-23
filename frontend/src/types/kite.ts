@@ -66,6 +66,7 @@ export interface WatchItem {
   name: string;
   sub?: string;     // short descriptor (e.g. "NFO · CE 25000")
   lot_size?: number; // contract lot for F&O (1 for equity); used to size orders
+  expiry?: string;   // F&O expiry (YYYY-MM-DD); shown on the expanded depth row
 }
 
 export interface KitePosition {

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-// Bridges the "N live" running-signal count from the Triple SuperTrend pane
+// Bridges the "N live" running-signal count from the Sterling Kite Engine pane
 // (which derives it from live LTP reconciliation) to the Kite footer status,
 // which lives in a different component tree. The pane publishes; the footer reads.
 interface LiveSignalCountState {
