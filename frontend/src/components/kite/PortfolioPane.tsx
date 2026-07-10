@@ -8,6 +8,7 @@ import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { EnginePositionsPane } from './EnginePositionsPane';
+import { toCsv, downloadCsv } from '../../utils/csvExport';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -133,6 +134,8 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const showPositions = view === 'positions' || !view;
 
   const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
+  const [posQuery, setPosQuery] = useState('');
+  const [holdQuery, setHoldQuery] = useState('');
 
   // Sorting state
   const [posSort, setPosSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
@@ -141,7 +144,30 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const handlePosSort = (k: string) => setPosSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
   const handleHoldSort = (k: string) => setHoldSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
 
-  let sortedPositions = [...positions];
+  const downloadPositions = () => downloadCsv('positions.csv', toCsv(sortedPositions, [
+    { header: 'Instrument', value: (p: any) => p.tradingsymbol },
+    { header: 'Exchange', value: (p: any) => p.exchange },
+    { header: 'Product', value: (p: any) => p.product },
+    { header: 'Qty', value: (p: any) => num(p.quantity) },
+    { header: 'Avg Price', value: (p: any) => num(p.average_price).toFixed(2) },
+    { header: 'LTP', value: (p: any) => num(p.last_price).toFixed(2) },
+    { header: 'P&L', value: (p: any) => num(p.pnl).toFixed(2) },
+  ]));
+
+  const downloadHoldings = () => downloadCsv('holdings.csv', toCsv(sortedHoldings, [
+    { header: 'Instrument', value: (h: any) => h.tradingsymbol },
+    { header: 'Exchange', value: (h: any) => h.exchange },
+    { header: 'Qty', value: (h: any) => num(h.quantity) },
+    { header: 'Avg Cost', value: (h: any) => num(h.average_price).toFixed(2) },
+    { header: 'LTP', value: (h: any) => num(h.last_price).toFixed(2) },
+    { header: 'Cur. Value', value: (h: any) => (num(h.quantity) * num(h.last_price)).toFixed(2) },
+    { header: 'P&L', value: (h: any) => num(h.pnl).toFixed(2) },
+  ]));
+
+  const filteredPositions = posQuery.trim()
+    ? positions.filter((p: any) => `${p.tradingsymbol} ${p.exchange}`.toLowerCase().includes(posQuery.trim().toLowerCase()))
+    : positions;
+  let sortedPositions = [...filteredPositions];
   if (posSort.key && posSort.dir) {
     sortedPositions.sort((a: any, b: any) => {
       let va = a[posSort.key];
@@ -158,7 +184,10 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     });
   }
 
-  let sortedHoldings = [...(holdings || [])];
+  const filteredHoldings = holdQuery.trim()
+    ? (holdings || []).filter((h: any) => `${h.tradingsymbol} ${h.exchange}`.toLowerCase().includes(holdQuery.trim().toLowerCase()))
+    : (holdings || []);
+  let sortedHoldings = [...filteredHoldings];
   if (holdSort.key && holdSort.dir) {
     sortedHoldings.sort((a: any, b: any) => {
       let va = a[holdSort.key];
@@ -241,7 +270,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </span>
-                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 160, outline: 'none' }} />
+                <input type="text" placeholder="Search" value={posQuery} onChange={(e) => setPosQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 160, outline: 'none' }} />
               </div>
               <a href="#" style={{ color: '#ff5722', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Analyze
@@ -252,9 +281,9 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               <a href="#" style={{ color: '#9b9b9b', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Settings
               </a>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span onClick={downloadPositions} role="button" style={{ color: '#387ed1', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
-              </a>
+              </span>
             </div>
           </div>
           {positions.length === 0 && <div style={S.hint}>No open positions.</div>}
@@ -368,14 +397,14 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </span>
-                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
+                <input type="text" placeholder="Search" value={holdQuery} onChange={(e) => setHoldQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
               </div>
               <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg> Analytics
               </a>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span onClick={downloadHoldings} role="button" style={{ color: '#387ed1', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
-              </a>
+              </span>
               <AuthoriseHoldingsButton />
             </div>
           </div>
