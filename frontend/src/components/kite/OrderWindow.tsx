@@ -6,6 +6,7 @@ import {
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
 import { useMacKite } from '../../hooks/useMacKite';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
@@ -250,6 +251,15 @@ export function OrderWindow({ options, onClose }: Props) {
   const placing = placeOrder.isPending;
   const buyDisabled = placing || !!nudge?.blocked || (amoConfirmNeeded && !amoConfirmed);
 
+  const addToBasket = useKiteBasketStore((s) => s.add);
+  const addCurrentToBasket = () => {
+    addToBasket({
+      symbol: instr.symbol, exchange: instr.exchange, side, qty,
+      product, orderType, price, trigger,
+    });
+    onClose();
+  };
+
   // ── reusable fields ──────────────────────────────────────────────────────────
   const qtyField = (
     <Field label={lotsMode ? 'Lots' : 'Qty.'}>
@@ -432,6 +442,7 @@ export function OrderWindow({ options, onClose }: Props) {
               <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderTop: `1px solid ${k.border}`, background: k.surface }}>
                 {reqAvail}
                 <div style={{ marginLeft: 'auto', paddingLeft: 28, display: 'flex', gap: 10 }}>
+                  <button onClick={addCurrentToBasket} title="Add to basket instead of placing now" style={{ ...cancelBtnWide, width: 'auto', padding: '9px 16px', fontSize: 12.5 }}>+ Basket</button>
                   <button onClick={submit} disabled={buyDisabled} style={{ ...primaryBtn, width: 'auto', padding: '9px 28px', fontSize: 13.5, background: accent, opacity: buyDisabled ? 0.55 : 1, cursor: buyDisabled ? 'not-allowed' : 'pointer' }}>{placing ? '…' : side === 'BUY' ? 'Buy' : 'Sell'}</button>
                   <button onClick={onClose} style={{ ...cancelBtnWide, width: 'auto', padding: '9px 22px' }}>Cancel</button>
                 </div>

@@ -23,6 +23,8 @@ import { KiteTicker } from './KiteTicker';
 import { useKiteAutoSession } from '../../hooks/useKite';
 import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { BasketPane } from './BasketPane';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { MacMotionProvider } from './mac/MacMotionProvider';
 import { MacSectionFade } from './mac/MacSectionFade';
 import { k } from '../../styles/kiteUI';
@@ -78,6 +80,8 @@ export function KiteTab() {
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
   const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
+  const [basketOpen, setBasketOpen] = useState(false);
+  const basketCount = useKiteBasketStore((s) => s.entries.length);
   useKiteAutoSession();
 
   // Listen for nav clicks dispatched from the Sterling top row.
@@ -161,6 +165,8 @@ export function KiteTab() {
         bottomBar={<EngineTerminal />}
         centerTopBar={<KiteTicker />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
+        onBasketClick={() => setBasketOpen(true)}
+        basketCount={basketCount}
       />
       <KiteNotifications />
       <KiteSessionGuard />
@@ -168,6 +174,7 @@ export function KiteTab() {
       {isOpen && options && (
         <OrderWindow options={options} onClose={closeOrderWindow} />
       )}
+      {basketOpen && <BasketPane onClose={() => setBasketOpen(false)} />}
     </MacMotionProvider>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { k } from '../../styles/kiteUI';
+import { k, Icons } from '../../styles/kiteUI';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
@@ -52,9 +52,13 @@ interface KiteLayoutProps {
       the center column so the left/right sidebars start at the top bar's bottom. */
   centerTopBar?: React.ReactNode;
   content: React.ReactNode;
+  /** Persistent basket trigger — footer icon button + count badge (owned by the
+      caller, since basket-open state and the basket store live one level up). */
+  onBasketClick?: () => void;
+  basketCount?: number;
 }
 
-export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content }: KiteLayoutProps) {
+export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content, onBasketClick, basketCount = 0 }: KiteLayoutProps) {
   const { on: macOn } = useMacKite();
   const { data: activity } = useEngineActivity();
   const scanning = !!activity?.scanning;
@@ -430,6 +434,19 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               {isLocked ? <path d="M7 11V7a5 5 0 0 1 10 0v4" /> : <path d="M7 11V7a5 5 0 0 1 9.9-1" />}
             </svg>
           </button>
+          {onBasketClick && (
+            <>
+              <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
+              <button onClick={onBasketClick} title="Basket" style={{ ...footBtn(basketCount > 0), position: 'relative' }}>
+                <Icons.Basket />
+                {basketCount > 0 && (
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#ff5722', color: '#fff', borderRadius: '50%', minWidth: 15, height: 15, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px' }}>
+                    {basketCount}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Scan status — bottom-right */}

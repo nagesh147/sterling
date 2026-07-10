@@ -11,6 +11,7 @@ import { EnginePositionsPane } from './EnginePositionsPane';
 import { toCsv, downloadCsv } from '../../utils/csvExport';
 import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
 import { KiteSettingsPopover } from './KiteSettingsPopover';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -119,6 +120,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   });
 
   const { openOrderWindow } = useOrderWindowStore();
+  const addToBasket = useKiteBasketStore((s) => s.add);
 
   const handleOpenOrder = (symbol: string, initialSide: 'BUY' | 'SELL', initialQty: number, product: string, lastPx: number | null = null) => {
     const [exchange, tradingsymbol] = symbol.split(':');
@@ -336,11 +338,12 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg), position: 'relative' }}>
                           <span className="portfolio-content">{chg.toFixed(2)}%</span>
                           <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
-                            <KiteActionButtons 
+                            <KiteActionButtons
                               onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
                               buyLabel="Add"
                               onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
                               sellLabel="Exit"
+                              onBasket={(e) => { e.stopPropagation(); addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
                             />
                           </div>
                         </td>
@@ -447,11 +450,12 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChgPct), position: 'relative' }}>
                           <span className="portfolio-content">{dayChg !== 0 ? `${dayChg > 0 ? '+' : ''}${dayChgPct.toFixed(2)}%` : '0.00%'}</span>
                           <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
-                            <KiteActionButtons 
+                            <KiteActionButtons
                               onBuy={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'BUY', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
                               buyLabel="Add"
                               onSell={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
                               sellLabel="Exit"
+                              onBasket={(e) => { e.stopPropagation(); addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: num(h.quantity), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
                             />
                           </div>
                         </td>
