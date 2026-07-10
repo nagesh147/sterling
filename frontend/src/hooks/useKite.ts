@@ -442,6 +442,12 @@ export function useKiteOrderMargins() {
   });
 }
 
+export function useKiteMarginsBasket() {
+  return useMutation<any, Error, Record<string, unknown>[]>({
+    mutationFn: (orders) => api.post(`${K}/margins/basket`, orders),
+  });
+}
+
 export function useKiteBasketMargins() {
   return useMutation<any, Error, { orders: any[]; consider_positions?: boolean }>({
     mutationFn: (body) => api.post(`${K}/margins/basket${body.consider_positions ? '?consider_positions=true' : ''}`, body.orders),
