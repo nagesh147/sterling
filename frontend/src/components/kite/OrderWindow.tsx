@@ -6,6 +6,7 @@ import {
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
 import { useMacKite } from '../../hooks/useMacKite';
+import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -14,7 +15,7 @@ import {
   Side, OrderType, Product, Validity,
   productsForExchange, defaultProduct, marginSegment, isDerivative,
   effectiveLot, lotsFromQty, snapToLot, stepQty, lotsToQty,
-  needsPrice, needsTrigger, validateTicket,
+  needsPrice, needsTrigger, validateTicket, resolveVariety,
   buildOrderBody, buildMarginOrder, parseMargin, buildProtectionGtt,
 } from './orderTicket';
 
@@ -94,6 +95,10 @@ export function OrderWindow({ options, onClose }: Props) {
   const placeGtt = usePlaceKiteGtt();
   const marginCalc = useKiteOrderMargins();
   const { data: funds, refetch: refetchFunds } = useKiteMargins(true);
+  const { data: activity } = useEngineActivity();
+  const variety = resolveVariety(activity?.market_open);
+  const amoConfirmNeeded = variety === 'amo';
+  const [amoConfirmed, setAmoConfirmed] = useState(false);
 
   const fullSym = `${instr.exchange}:${instr.symbol}`;
   // Depth ladder needs to feel live; subscribe full mode so the 5-level depth streams
@@ -120,9 +125,9 @@ export function OrderWindow({ options, onClose }: Props) {
 
   const args = useMemo(() => ({
     tradingsymbol: instr.symbol, exchange: instr.exchange, side, quantity: qty, product, orderType,
-    price, trigger, validity, validityTtl: ttlMins, variety: 'regular' as const,
+    price, trigger, validity, validityTtl: ttlMins, variety,
     disclosedQty: tab === 'regular' ? disclosedQty : 0, tag,
-  }), [instr.symbol, instr.exchange, side, qty, product, orderType, price, trigger, validity, ttlMins, disclosedQty, tab, tag]);
+  }), [instr.symbol, instr.exchange, side, qty, product, orderType, price, trigger, validity, ttlMins, disclosedQty, tab, tag, variety]);
 
   const available = useMemo(() => {
     const seg = (funds as any)?.[marginSegment(instr.exchange)];
@@ -195,6 +200,7 @@ export function OrderWindow({ options, onClose }: Props) {
     setTrigger(0); setValidity('DAY'); setDisclosedQty(0);
     setSlOn(false); setSlPct(0); setTgtOn(false); setTgtPct(0);
     setError(null); setNudgeOpen(true);
+    setAmoConfirmed(false);
     // Note: we intentionally do NOT close the search here — picking a result
     // updates the ticket but keeps the list open. Only an outside click closes it.
   };
@@ -242,7 +248,7 @@ export function OrderWindow({ options, onClose }: Props) {
   const required = margin ? margin.total : null;
   const insufficient = required != null && Number.isFinite(available) && required > available;
   const placing = placeOrder.isPending;
-  const buyDisabled = placing || !!nudge?.blocked;
+  const buyDisabled = placing || !!nudge?.blocked || (amoConfirmNeeded && !amoConfirmed);
 
   // ── reusable fields ──────────────────────────────────────────────────────────
   const qtyField = (
@@ -405,6 +411,15 @@ export function OrderWindow({ options, onClose }: Props) {
             )}
 
             {error && <div style={{ padding: '8px 16px', background: tint(k.red, 10), color: k.red, fontSize: 12 }}>{error}</div>}
+
+            {amoConfirmNeeded && (
+              <div style={{ padding: '8px 16px', background: tint(k.amber, 12), color: '#8a6100', fontSize: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={amoConfirmed} onChange={(e) => setAmoConfirmed(e.target.checked)} style={{ accentColor: k.amber, width: 14, height: 14, flexShrink: 0 }} />
+                  Market is closed — this will be placed as an After Market Order (AMO) for the next session.
+                </label>
+              </div>
+            )}
 
             {/* Footer */}
             {tab === 'quick' ? (
