@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { usePlaceKiteOrder, useKiteMarginsBasket } from '../../hooks/useKite';
 import { useKiteBasketStore, type BasketEntry } from '../../store/useKiteBasketStore';
-import { buildOrderBody, buildMarginOrder, parseMargin, needsPrice, needsTrigger } from './orderTicket';
+import { buildOrderBody, buildMarginOrder, parseMargin, needsPrice, needsTrigger, resolveVariety } from './orderTicket';
 import { InstrumentLabel } from './InstrumentLabel';
+import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 
 const inr = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -18,6 +19,8 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
   const { entries, remove, update, setStatus, clear } = useKiteBasketStore();
   const placeOrder = usePlaceKiteOrder();
   const marginCalc = useKiteMarginsBasket();
+  const { data: activity } = useEngineActivity();
+  const variety = resolveVariety(activity?.market_open);
   const [margin, setMargin] = useState<{ total: number; charges: number } | null>(null);
   const [placingAll, setPlacingAll] = useState(false);
 
@@ -58,6 +61,7 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
         const res = await placeOrder.mutateAsync(buildOrderBody({
           tradingsymbol: current.symbol, exchange: current.exchange, side: current.side, quantity: current.qty,
           product: current.product, orderType: current.orderType, price: current.price, trigger: current.trigger,
+          variety,
         }));
         setStatus(id, 'placed', undefined, res?.order_id);
       } catch (err: any) {
@@ -77,6 +81,12 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500, color: '#444' }}>Basket <span style={{ color: '#9b9b9b', fontWeight: 400 }}>({entries.length})</span></h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9b9b9b', cursor: 'pointer' }}>✕</button>
         </div>
+
+        {variety === 'amo' && (
+          <div style={{ padding: '8px 20px', background: 'rgba(240,180,40,0.12)', color: '#8a6100', fontSize: 12 }}>
+            Market is closed — all orders placed from this basket will queue as After Market Orders (AMO).
+          </div>
+        )}
 
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {entries.length === 0 && <div style={{ padding: 24, color: '#9b9b9b', fontSize: 13 }}>Basket is empty. Add orders from the order ticket or a watchlist row.</div>}

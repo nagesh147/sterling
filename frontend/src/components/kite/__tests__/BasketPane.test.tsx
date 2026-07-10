@@ -9,6 +9,9 @@ vi.mock('../../../hooks/useKite', () => ({
   usePlaceKiteOrder: () => ({ mutateAsync: mockMutateAsync }),
   useKiteMarginsBasket: () => ({ mutate: vi.fn(), data: null, isPending: false }),
 }));
+vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
+  useEngineActivity: () => ({ data: { market_open: true } }),
+}));
 
 beforeEach(() => {
   useKiteBasketStore.setState({ entries: [] });

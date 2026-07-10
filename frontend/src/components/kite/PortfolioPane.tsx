@@ -343,7 +343,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                               buyLabel="Add"
                               onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
                               sellLabel="Exit"
-                              onBasket={(e) => { e.stopPropagation(); addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
+                              onBasket={(e) => { e.stopPropagation(); if (Math.abs(qty) === 0) return; addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
                             />
                           </div>
                         </td>
@@ -455,7 +455,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                               buyLabel="Add"
                               onSell={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
                               sellLabel="Exit"
-                              onBasket={(e) => { e.stopPropagation(); addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: num(h.quantity), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
+                              onBasket={(e) => { e.stopPropagation(); if (num(h.quantity) === 0) return; addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: num(h.quantity), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
                             />
                           </div>
                         </td>
