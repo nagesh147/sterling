@@ -45,6 +45,16 @@ describe('useKiteBasketStore', () => {
     expect(useKiteBasketStore.getState().entries[0].error).toBe('Insufficient margin');
   });
 
+  it('clears a stale error when transitioning away from failed', () => {
+    useKiteBasketStore.getState().add(entry());
+    const id = useKiteBasketStore.getState().entries[0].id;
+    useKiteBasketStore.getState().setStatus(id, 'failed', 'Insufficient margin');
+    expect(useKiteBasketStore.getState().entries[0].error).toBe('Insufficient margin');
+    useKiteBasketStore.getState().setStatus(id, 'placing');
+    expect(useKiteBasketStore.getState().entries[0].status).toBe('placing');
+    expect(useKiteBasketStore.getState().entries[0].error).toBeUndefined();
+  });
+
   it('clears all entries', () => {
     useKiteBasketStore.getState().add(entry());
     useKiteBasketStore.getState().add(entry({ symbol: 'TCS' }));

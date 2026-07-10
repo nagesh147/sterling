@@ -25,6 +25,9 @@ interface BasketState {
   add: (entry: NewBasketEntry) => void;
   remove: (id: string) => void;
   update: (id: string, patch: Partial<NewBasketEntry>) => void;
+  /** Omitted error/orderId are cleared (set to undefined), not left as-is —
+   *  e.g. retrying a failed entry via setStatus(id, 'placing') drops its
+   *  stale error message rather than carrying it into the new attempt. */
   setStatus: (id: string, status: BasketEntryStatus, error?: string, orderId?: string) => void;
   clear: () => void;
 }
