@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { usePlaceKiteOrder, useKiteMarginsBasket } from '../../hooks/useKite';
 import { useKiteBasketStore, type BasketEntry } from '../../store/useKiteBasketStore';
@@ -21,16 +21,23 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
   const [margin, setMargin] = useState<{ total: number; charges: number } | null>(null);
   const [placingAll, setPlacingAll] = useState(false);
 
-  useEffect(() => {
+  const reqId = useRef(0);
+  const runMargin = () => {
     if (entries.length === 0) { setMargin(null); return; }
+    if (entries.some((e) => (needsPrice(e.orderType) && !(e.price > 0)) || (needsTrigger(e.orderType) && !(e.trigger > 0)))) return;
     const orders = entries.map((e) => buildMarginOrder({
       tradingsymbol: e.symbol, exchange: e.exchange, side: e.side, quantity: e.qty,
       product: e.product, orderType: e.orderType, price: e.price, trigger: e.trigger,
     }));
+    const id = ++reqId.current;
     marginCalc.mutate(orders, {
-      onSuccess: (resp) => setMargin(parseMargin(Array.isArray(resp) ? resp[resp.length - 1] : resp)),
-      onError: () => setMargin(null),
+      onSuccess: (resp) => { if (id === reqId.current) setMargin(parseMargin(Array.isArray(resp) ? resp[resp.length - 1] : resp)); },
+      onError: () => { if (id === reqId.current) setMargin(null); },
     });
+  };
+  useEffect(() => {
+    const t = setTimeout(runMargin, 350);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries.map((e) => `${e.symbol}|${e.qty}|${e.price}|${e.orderType}`).join(',')]);
 
@@ -38,18 +45,23 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
     setPlacingAll(true);
     // Sequential, not Promise.all: a live order that already filled can't be
     // un-placed, so each must resolve before the next fires — mirrors how
-    // real Kite Web places a basket one order at a time.
-    for (const entry of entries) {
-      if (entry.status === 'placed') continue;
-      setStatus(entry.id, 'placing');
+    // real Kite Web places a basket one order at a time. Re-read entries from
+    // the store's live getState() on every iteration (not the render-time
+    // `entries` snapshot) so a row removed mid-run is skipped instead of
+    // still getting placed.
+    const ids = useKiteBasketStore.getState().entries.map((e) => e.id);
+    for (const id of ids) {
+      const current = useKiteBasketStore.getState().entries.find((e) => e.id === id);
+      if (!current || current.status === 'placed') continue;
+      setStatus(id, 'placing');
       try {
         const res = await placeOrder.mutateAsync(buildOrderBody({
-          tradingsymbol: entry.symbol, exchange: entry.exchange, side: entry.side, quantity: entry.qty,
-          product: entry.product, orderType: entry.orderType, price: entry.price, trigger: entry.trigger,
+          tradingsymbol: current.symbol, exchange: current.exchange, side: current.side, quantity: current.qty,
+          product: current.product, orderType: current.orderType, price: current.price, trigger: current.trigger,
         }));
-        setStatus(entry.id, 'placed', undefined, res?.order_id);
+        setStatus(id, 'placed', undefined, res?.order_id);
       } catch (err: any) {
-        setStatus(entry.id, 'failed', err?.message || 'Order failed');
+        setStatus(id, 'failed', err?.message || 'Order failed');
       }
     }
     setPlacingAll(false);
@@ -72,11 +84,11 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
             <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 20px', borderBottom: '1px solid #f9f9f9' }}>
               <span style={{ width: 44, fontSize: 11, fontWeight: 700, color: e.side === 'BUY' ? k.blue : k.orange }}>{e.side}</span>
               <span style={{ flex: 1, fontSize: 13, color: '#444' }}><InstrumentLabel symbol={`${e.exchange}:${e.symbol}`} /></span>
-              <input type="number" min={1} value={e.qty} disabled={e.status === 'placed'}
+              <input type="number" min={1} value={e.qty} disabled={e.status === 'placed' || placingAll}
                 onChange={(ev) => update(e.id, { qty: Number(ev.target.value) })}
                 style={{ width: 60, padding: '4px 6px', border: '1px solid #e0e0e0', borderRadius: 3, fontSize: 12, textAlign: 'right' }} />
               {needsPrice(e.orderType) && (
-                <input type="number" step={0.05} value={e.price} disabled={e.status === 'placed'}
+                <input type="number" step={0.05} value={e.price} disabled={e.status === 'placed' || placingAll}
                   onChange={(ev) => update(e.id, { price: Number(ev.target.value) })}
                   style={{ width: 70, padding: '4px 6px', border: '1px solid #e0e0e0', borderRadius: 3, fontSize: 12, textAlign: 'right' }} />
               )}
