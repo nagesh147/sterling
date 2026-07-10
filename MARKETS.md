@@ -13,7 +13,7 @@ markets it serves:
 |---|---|---|
 | `crypto` | perps & options | delta_india, binance, deribit, okx |
 | `equities` | Indian equities | zerodha |
-| `commodities` | commodity futures (incl. natural gas) | zerodha |
+| `commodities` | commodity futures (incl. natural gas) | zerodha — **manual trading only**; declared in `constants.py` but not yet wired into the auto-scan universe (backlog item, see `docs/superpowers/specs/2026-07-10-kite-parity-polish-design.md`) |
 | `forex` | FX pairs | — (planned) |
 | `metals` | gold / silver | — (planned) |
 | `energy` | natural gas / crude | — (planned) |
