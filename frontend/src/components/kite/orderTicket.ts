@@ -99,6 +99,25 @@ export function roundTick(price: number, tick = 0.05): number {
   return Math.round(price / tick) * tick;
 }
 
+// ─── AMO (After Market Order) ────────────────────────────────────────────────
+
+/** Whether the ticket must be sent as an AMO because the market is currently closed. */
+export function needsAmo(marketOpen: boolean | undefined): boolean {
+  return marketOpen === false;
+}
+
+/**
+ * Resolve the variety to submit. `marketOpen` comes from the engine-activity
+ * poll (`is_market_open()` on the backend) — an approximation used only for
+ * the pre-submit advisory. The backend's own hint-based AMO conversion
+ * (`client.py`, catching `switch_to_amo`) remains the actual authority and is
+ * unaffected by this — this just makes the same outcome visible *before* the
+ * order is sent instead of only via a post-submit toast.
+ */
+export function resolveVariety(marketOpen: boolean | undefined): Variety {
+  return needsAmo(marketOpen) ? 'amo' : 'regular';
+}
+
 // ─── Order-type field rules ─────────────────────────────────────────────────
 
 /** LIMIT and SL (stop-loss limit) carry a price. */
