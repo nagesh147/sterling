@@ -13,16 +13,16 @@ interface Props {
 }
 
 /**
- * Lightweight analytics view: real-vs-real breakdown of numbers already
- * computed elsewhere in PortfolioPane (no new backend call for holdings;
- * positions view surfaces per-order charges via the existing
- * POST /api/v1/kite/charges/orders route).
+ * Lightweight analytics view: a breakdown of numbers already computed
+ * elsewhere in PortfolioPane / present in the raw Kite position and holding
+ * payloads (realised/unrealised split, investment vs. current value) — no
+ * new backend calls.
  */
 export function KitePortfolioAnalyticsModal({ view, positions, holdings, onClose }: Props) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.15)', zIndex: 1100 }} />
-      <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', width: 640, maxWidth: '92vw', maxHeight: '80vh', overflowY: 'auto', background: '#fff', borderRadius: 6, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily }}>
+      <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', width: 640, maxWidth: '92vw', maxHeight: '80vh', overflowY: 'auto', background: k.bg, borderRadius: 4, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f1f1' }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500, color: '#444' }}>
             {view === 'positions' ? 'Positions analytics' : 'Holdings analytics'}
@@ -38,8 +38,14 @@ export function KitePortfolioAnalyticsModal({ view, positions, holdings, onClose
 }
 
 function PositionsAnalytics({ positions }: { positions: any[] }) {
-  const realized = positions.filter((p) => num(p.quantity) === 0).reduce((a, p) => a + num(p.pnl), 0);
-  const unrealized = positions.filter((p) => num(p.quantity) !== 0).reduce((a, p) => a + num(p.pnl), 0);
+  // Kite's raw position rows carry separate `realised`/`unrealised` fields (British
+  // spelling) per row — a partially-closed position (e.g. bought 100, sold 40, still
+  // holding 60) reports nonzero `quantity` but its `pnl` bundles both the booked profit
+  // from the 40 sold AND the open P&L on the 60 held. Deriving realized/unrealized from
+  // `quantity === 0` misattributes that booked portion to "unrealized". Sum the actual
+  // fields instead; fall back to `pnl` for realized only if a row is ever missing it.
+  const realized = positions.reduce((a, p) => a + num(p.realised ?? p.pnl), 0);
+  const unrealized = positions.reduce((a, p) => a + num(p.unrealised ?? 0), 0);
   const total = realized + unrealized;
   const maxAbs = Math.max(...positions.map((p) => Math.abs(num(p.pnl))), 1);
   return (
