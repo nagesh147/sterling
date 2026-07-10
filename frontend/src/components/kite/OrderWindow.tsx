@@ -253,6 +253,9 @@ export function OrderWindow({ options, onClose }: Props) {
 
   const addToBasket = useKiteBasketStore((s) => s.add);
   const addCurrentToBasket = () => {
+    setError(null);
+    const err = validateTicket({ side, exchange: instr.exchange, quantity: qty, lotSize: instr.lotSize, orderType, price, trigger, ltp: instr.lastPrice });
+    if (err) { setError(err); return; }
     addToBasket({
       symbol: instr.symbol, exchange: instr.exchange, side, qty,
       product, orderType, price, trigger,
