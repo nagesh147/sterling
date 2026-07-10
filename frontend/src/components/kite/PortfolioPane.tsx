@@ -9,6 +9,7 @@ import { KiteActionButtons } from './KiteActionButtons';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { EnginePositionsPane } from './EnginePositionsPane';
 import { toCsv, downloadCsv } from '../../utils/csvExport';
+import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -136,6 +137,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
   const [posQuery, setPosQuery] = useState('');
   const [holdQuery, setHoldQuery] = useState('');
+  const [analyticsView, setAnalyticsView] = useState<'positions' | 'holdings' | null>(null);
 
   // Sorting state
   const [posSort, setPosSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
@@ -275,7 +277,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               <a href="#" style={{ color: '#ff5722', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Analyze
               </a>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setAnalyticsView('positions'); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10h-10z"></path></svg> Analytics
               </a>
               <a href="#" style={{ color: '#9b9b9b', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -399,7 +401,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                 </span>
                 <input type="text" placeholder="Search" value={holdQuery} onChange={(e) => setHoldQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
               </div>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setAnalyticsView('holdings'); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg> Analytics
               </a>
               <a href="#" onClick={(e) => { e.preventDefault(); downloadHoldings(); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -483,6 +485,15 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
           )}
           <AuctionsSection />
         </div>
+      )}
+
+      {analyticsView && (
+        <KitePortfolioAnalyticsModal
+          view={analyticsView}
+          positions={sortedPositions}
+          holdings={sortedHoldings}
+          onClose={() => setAnalyticsView(null)}
+        />
       )}
     </div>
   );
