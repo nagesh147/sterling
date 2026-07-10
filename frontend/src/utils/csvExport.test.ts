@@ -27,8 +27,8 @@ describe('downloadCsv', () => {
   it('creates an object URL, clicks a temporary anchor, and revokes the URL', () => {
     const createUrl = vi.fn(() => 'blob:mock-url');
     const revoke = vi.fn();
-    (global as any).URL.createObjectURL = createUrl;
-    (global as any).URL.revokeObjectURL = revoke;
+    (globalThis as any).URL.createObjectURL = createUrl;
+    (globalThis as any).URL.revokeObjectURL = revoke;
     const click = vi.fn();
     const origCreateElement = document.createElement.bind(document);
     vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
