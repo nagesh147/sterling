@@ -57,15 +57,14 @@ def _audit(db_path: Path) -> list[dict]:
 def _delete(db_path: Path, ids: list[str]) -> int:
     if not ids:
         return 0
-    # Placeholders are only "?" markers (not user data); ids are bound as params.
-    placeholders = ",".join("?" for _ in ids)
+    # Per-id deletes keep the statement fully parameterized (no dynamic SQL).
+    deleted = 0
     with sqlite3.connect(str(db_path)) as conn:
-        cur = conn.execute(
-            f"DELETE FROM positions WHERE id IN ({placeholders})",
-            ids,
-        )
+        for row_id in ids:
+            cur = conn.execute("DELETE FROM positions WHERE id = ?", (row_id,))
+            deleted += cur.rowcount or 0
         conn.commit()
-        return cur.rowcount or 0
+    return deleted
 
 
 def main(argv: list[str]) -> int:
