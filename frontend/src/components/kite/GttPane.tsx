@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useKiteGtts } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { CreateGttModal } from './CreateGttModal';
+import { GttOptionsModal } from './GttOptionsModal';
 
 const S: Record<string, React.CSSProperties> = {
   emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 100 },
@@ -27,6 +28,7 @@ function gttStatusStyle(status: string): React.CSSProperties {
 export function GttPane() {
   const { data: gtts } = useKiteGtts(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [optionsGtt, setOptionsGtt] = useState<any | null>(null);
 
   return (
     <>
@@ -64,7 +66,7 @@ export function GttPane() {
                   <td style={S.td}>{g.type}</td>
                   <td style={S.td}><span style={gttStatusStyle(g.status)}>{g.status}</span></td>
                   <td style={{ ...S.td, textAlign: 'right' }}>
-                    <span style={{ cursor: 'pointer', color: '#387ed1', marginRight: 12 }}>Options</span>
+                    <span style={{ cursor: 'pointer', color: '#387ed1', marginRight: 12 }} onClick={() => setOptionsGtt(g)}>Options</span>
                   </td>
                 </tr>
               ))}
@@ -73,6 +75,7 @@ export function GttPane() {
         </div>
       )}
       {createOpen && <CreateGttModal onClose={() => setCreateOpen(false)} />}
+      {optionsGtt && <GttOptionsModal gtt={optionsGtt} onClose={() => setOptionsGtt(null)} />}
     </>
   );
 }
