@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useConvertKitePosition, useKiteHoldings, useKitePositions,
   useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp, usePlaceKiteOrder
@@ -134,6 +135,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     });
   };
 
+  const qc = useQueryClient();
   const placeOrder = usePlaceKiteOrder();
   const [exitingSelected, setExitingSelected] = useState(false);
 
@@ -142,17 +144,33 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   // (mirrors placeAll() in BasketPane.tsx). Per-leg failures are swallowed
   // here since usePlaceKiteOrder's own onError already surfaces a toast —
   // one failed leg must not stop the remaining selected positions.
+  //
+  // useKitePositions polls every 5s (hooks/useKite.ts), and this loop can
+  // easily span more than one poll tick across several legs — a GTT, the
+  // auto-exec engine, or another device can close/shrink a leg mid-loop.
+  // So unlike the initial `targets` snapshot (used only for the confirm
+  // count/preview), each leg re-reads the LIVE broker snapshot straight out
+  // of the query cache immediately before firing: a leg that's since gone
+  // flat is skipped outright, and a leg that's shrunk fires sized to its
+  // current live quantity — never the possibly-stale click-time size, which
+  // could otherwise cross through zero into a brand-new, unintended position.
   const exitSelected = async () => {
     const targets = positions.filter((p: any) => selectedPos.has(`${p.exchange}:${p.tradingsymbol}`) && num(p.quantity) !== 0);
     if (targets.length === 0) return;
-    if (!window.confirm(`Exit ${targets.length} selected position${targets.length !== 1 ? 's' : ''} at market price?`)) return;
+    const preview = targets.length <= 3
+      ? targets.map((p: any) => p.tradingsymbol).join(', ')
+      : `${targets.slice(0, 3).map((p: any) => p.tradingsymbol).join(', ')} +${targets.length - 3} more`;
+    if (!window.confirm(`Exit ${targets.length} selected position${targets.length !== 1 ? 's' : ''} (${preview}) at market price?`)) return;
     setExitingSelected(true);
     for (const p of targets) {
-      const qty = num(p.quantity);
+      const liveNet = qc.getQueryData<{ net: any[] }>(['kite-positions'])?.net ?? [];
+      const live = liveNet.find((x: any) => x.exchange === p.exchange && x.tradingsymbol === p.tradingsymbol && x.product === p.product);
+      const liveQty = live ? num(live.quantity) : 0;
+      if (liveQty === 0) continue;  // closed elsewhere since selection — nothing left to exit
       try {
         await placeOrder.mutateAsync({
           tradingsymbol: p.tradingsymbol, exchange: p.exchange,
-          transaction_type: qty >= 0 ? 'SELL' : 'BUY', quantity: Math.abs(qty),
+          transaction_type: liveQty >= 0 ? 'SELL' : 'BUY', quantity: Math.abs(liveQty),
           order_type: 'MARKET', product: p.product, variety: 'regular', validity: 'DAY',
         });
       } catch {
@@ -252,9 +270,16 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     setSelectedPos(next);
   };
 
+  // Only positions with a live (non-zero) quantity are exit-able — a qty=0 row
+  // (kept visible only to show its day's realized P&L) has nothing left to
+  // close, so it's excluded from "select all" the same way its own checkbox
+  // is disabled below. Keeps the "Exit Selected (N)" button count always
+  // equal to the number of orders the confirm dialog/loop will actually fire.
+  const selectablePosIds = positions.filter((p: any) => num(p.quantity) !== 0).map((p: any) => `${p.exchange}:${p.tradingsymbol}`);
+
   const toggleAllPos = () => {
-    if (selectedPos.size === positions.length && positions.length > 0) setSelectedPos(new Set());
-    else setSelectedPos(new Set(positions.map((p: any) => `${p.exchange}:${p.tradingsymbol}`)));
+    if (selectedPos.size === selectablePosIds.length && selectablePosIds.length > 0) setSelectedPos(new Set());
+    else setSelectedPos(new Set(selectablePosIds));
   };
 
   const totalPosPnl = positions.reduce((acc: number, p: any) => acc + num(p.pnl), 0);
@@ -329,7 +354,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead><tr>
                   <th style={{ ...S.th, width: 40, textAlign: 'center' }}>
-                    <input type="checkbox" checked={selectedPos.size === positions.length && positions.length > 0} onChange={toggleAllPos} style={{ cursor: 'pointer' }} />
+                    <input type="checkbox" checked={selectedPos.size === selectablePosIds.length && selectablePosIds.length > 0} onChange={toggleAllPos} style={{ cursor: 'pointer' }} />
                   </th>
                   <SortHeader label="Product" sortKey="product" currentSort={posSort} onSort={handlePosSort} style={S.th} />
                   <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={posSort} onSort={handlePosSort} style={S.th} />
@@ -348,7 +373,14 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                     return (
                       <tr key={`${id}-${idx}`} className="portfolio-row" style={{ background: isSelected ? 'rgba(56, 126, 209, 0.05)' : 'transparent', transition: 'background 0.2s' }}>
                         <td style={{ ...S.td, textAlign: 'center' }}>
-                          <input type="checkbox" checked={isSelected} onChange={() => togglePos(id)} style={{ cursor: 'pointer' }} />
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={qty === 0}
+                            title={qty === 0 ? "Already flat — nothing left to exit" : undefined}
+                            onChange={() => togglePos(id)}
+                            style={{ cursor: qty === 0 ? 'not-allowed' : 'pointer' }}
+                          />
                         </td>
                         <td style={S.td}>
                           {p.product === 'NRML' ? (
