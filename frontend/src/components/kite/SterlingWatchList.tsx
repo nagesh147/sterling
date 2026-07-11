@@ -361,6 +361,8 @@ export function KiteSearchBar({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { defaultProduct } from './orderTicket';
 
 export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (symbol: string, defaultTab: 'chart' | 'option-chain') => void }) {
   const [query, setQuery] = useState('');
@@ -376,6 +378,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
   const [menuOpen, setMenuOpen] = useState<{ symbol: string; top: number; left: number } | null>(null);
 
   const { openOrderWindow } = useOrderWindowStore();
+  const addToBasket = useKiteBasketStore((s) => s.add);
   const tickerPinned = useTickerPins((p) => p.pins);
   const toggleTickerPin = useTickerPins((p) => p.toggle);
 
@@ -585,6 +588,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                         onChart={(e) => { e.stopPropagation(); onOpenInstrument?.(sym, 'chart'); }}
                         onDepth={(e) => { e.stopPropagation(); addAndExpand(i); }}
                         onAdd={added ? undefined : (e) => { e.stopPropagation(); addInstr(i); }}
+                        onBasket={(e) => { e.stopPropagation(); const [exch, tsym] = sym.split(':'); addToBasket({ symbol: tsym || sym, exchange: exch || 'NSE', side: 'BUY', qty: i.lot_size && i.lot_size > 0 ? i.lot_size : 1, product: defaultProduct(exch || 'NSE'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
                       />
                     </div>
                   );
@@ -737,6 +741,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                       onChart={(e) => { e.stopPropagation(); onOpenInstrument?.(w.symbol, 'chart'); }}
                       onDelete={(e) => { e.stopPropagation(); remove(w.symbol); }}
                       onMore={(e) => { e.stopPropagation(); handleMenuClick(e, w.symbol); }}
+                      onBasket={(e) => { e.stopPropagation(); const [exch, tsym] = w.symbol.split(':'); addToBasket({ symbol: tsym || w.symbol, exchange: exch || 'NSE', side: 'BUY', qty: w.lot_size && w.lot_size > 0 ? w.lot_size : 1, product: defaultProduct(exch || 'NSE'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
                     />
                     
                     <div className="mw-prices" style={{ opacity: isExp ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: isExp ? 'none' : 'auto' }}>

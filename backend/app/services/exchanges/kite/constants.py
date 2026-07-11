@@ -23,6 +23,14 @@ EXCHANGE_NFO = "NFO"
 EXCHANGE_BFO = "BFO"
 EXCHANGE_CDS = "CDS"
 EXCHANGE_BCD = "BCD"
+# Declared for completeness (Kite Connect lists MCX as a valid exchange) but NOT
+# wired into app/services/kite_engine/universe.py — the auto-scan universe is
+# built around equity+options pairs (NFO/BFO derivatives + index underlyings),
+# and MCX is commodity FUTURES only, which needs a different strategy shape.
+# Manual order placement to MCX already works via the generic order route.
+# Full auto-engine MCX support is an explicit backlog item, planned for a
+# dedicated pass before production rollover — see
+# docs/superpowers/specs/2026-07-10-kite-parity-polish-design.md.
 EXCHANGE_MCX = "MCX"
 EXCHANGES = (EXCHANGE_NSE, EXCHANGE_BSE, EXCHANGE_NFO, EXCHANGE_BFO,
              EXCHANGE_CDS, EXCHANGE_BCD, EXCHANGE_MCX)

@@ -26,14 +26,23 @@ Structurally, a strategy satisfies `StrategyProtocol`
 
 ## Where strategies live
 
-`app/engines/` — current engines include `sterling_engine` (price-action /
-MA-crossover scalper + backtest), `directional`, `edge` (backtest-validated 4h
-combos), `sterling_v2`, `hybrid_vcp`, `analytics`, `indicators`, `risk`. Each is
-self-contained.
+`app/engines/` — current packages: `sterling_engine` (price-action /
+MA-crossover crypto scalper + backtest), `sterling_kite_engine` (Zerodha/Indian
+equities & derivatives engine), `directional` (multi-track regime/signal/setup/
+sizing/execution pipeline, aka "Grok"), `derivatives` (Greeks-aware strike/
+expiry/leverage selection) and its smaller sibling `derivatives_native`, `edge`
+(backtest-validated 4h signal generator), `sterling_v2`, `hybrid_vcp`,
+`analytics` (walk-forward, sensitivity, correlation, CPCV, Monte Carlo — pure
+functions, no I/O), `risk` (drawdown circuit breaker, greeks budget, slippage,
+microstructure veto — stateful singletons via DI), `indicators`, `ml`,
+`backtest`, `arbitration`, `common`. Each is self-contained. `scalping/` and
+`triple_supertrend/` are legacy dirs, now empty — their logic was consolidated
+into `sterling_engine`/`directional`; do not add new code there.
 
 Styles already represented: trend-following (MA crossover), mean-reversion,
-volatility/breakout, and derivatives selection. The architecture supports
-statistical-arbitrage and others as new engines.
+volatility/breakout, and derivatives selection, across both crypto (Delta
+Exchange India) and Indian equities/derivatives (Zerodha Kite). The
+architecture supports statistical-arbitrage and others as new engines.
 
 ## Adding a strategy
 

@@ -41,3 +41,19 @@ clean:
 	find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find backend -name "*.pyc" -delete 2>/dev/null || true
 	rm -f backend/sterling_paper.db
+
+.PHONY: setup-claude
+setup-claude:
+	@./scripts/setup-claude.sh
+
+.PHONY: setup-claude
+setup-claude:
+	@./scripts/setup-claude.sh
+
+.PHONY: setup-claude
+setup-claude:
+	@./scripts/setup-claude.sh
+
+.PHONY: setup-claude
+setup-claude:
+	@./scripts/setup-claude.sh

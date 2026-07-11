@@ -82,6 +82,11 @@ export interface KitePosition {
   position_type: string;
 }
 
+// `MTF` is accepted by the backend/Kite Connect API but is not offered
+// anywhere in the order ticket UI (`orderTicket.ts`'s `Product` type
+// deliberately excludes it) — wiring it in needs verified broker-side MTF
+// eligibility we don't have. Explicit backlog item, see
+// docs/superpowers/specs/2026-07-11-kite-order-management-parity-design.md.
 export interface PlaceOrderBody {
   tradingsymbol: string;
   exchange: string;

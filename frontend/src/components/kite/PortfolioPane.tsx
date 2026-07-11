@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useConvertKitePosition, useKiteHoldings, useKitePositions,
-  useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp
+  useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp, usePlaceKiteOrder
 } from '../../hooks/useKite';
 
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { EnginePositionsPane } from './EnginePositionsPane';
+import { toCsv, downloadCsv } from '../../utils/csvExport';
+import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
+import { KiteSettingsPopover } from './KiteSettingsPopover';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { notifyOrder } from '../../store/useKiteNotifications';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -22,24 +28,40 @@ const S: Record<string, React.CSSProperties> = {
 const num = (v: any) => Number(v ?? 0);
 const pnlColor = (v: number) => (v > 0 ? '#4caf50' : v < 0 ? '#df514c' : '#9b9b9b');
 
-function ConvertControl({ p }: { p: any }) {
+// Exported so it can be unit-tested directly (also reachable from a
+// PortfolioPane-level render test): wired into the Positions row via the
+// "Convert" toggle in the hover-actions area, which swaps the Chg% cell for
+// this control when `expandedConvertId` matches the row (see below).
+export function ConvertControl({ p }: { p: any }) {
   const convert = useConvertKitePosition();
   const products = ['MIS', 'CNC', 'NRML'].filter((x) => x !== p.product);
   const [target, setTarget] = useState(products[0]);
+  const fullQty = Math.abs(num(p.quantity));
+  const [qty, setQty] = useState(fullQty);
   if (!num(p.quantity)) return null;
+  const invalidQty = !(qty > 0) || qty > fullQty;
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+      <input
+        type="number" min={1} max={fullQty} value={qty}
+        onChange={(e) => setQty(Number(e.target.value))}
+        style={{ ...S.inSm, width: 56, textAlign: 'right' }}
+        title={`Max: ${fullQty}`}
+      />
       <select style={S.inSm} value={target} onChange={(e) => setTarget(e.target.value)}>
         {products.map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
       <span
-        style={{ cursor: 'pointer', color: convert.isError ? '#df514c' : '#387ed1', fontSize: 11 }}
-        title={convert.isError ? (convert.error as Error).message : `Convert ${p.product} → ${target}`}
-        onClick={() => convert.mutate({
-          tradingsymbol: p.tradingsymbol, exchange: p.exchange,
-          transaction_type: num(p.quantity) >= 0 ? 'BUY' : 'SELL', position_type: 'day',
-          quantity: Math.abs(num(p.quantity)), old_product: p.product, new_product: target,
-        })}
+        style={{ cursor: invalidQty ? 'not-allowed' : 'pointer', color: invalidQty ? '#bdbdbd' : convert.isError ? '#df514c' : '#387ed1', fontSize: 11 }}
+        title={invalidQty ? `Enter a quantity between 1 and ${fullQty}` : convert.isError ? (convert.error as Error).message : `Convert ${qty} of ${fullQty} ${p.product} → ${target}`}
+        onClick={() => {
+          if (invalidQty) return;
+          convert.mutate({
+            tradingsymbol: p.tradingsymbol, exchange: p.exchange,
+            transaction_type: num(p.quantity) >= 0 ? 'BUY' : 'SELL', position_type: 'day',
+            quantity: qty, old_product: p.product, new_product: target,
+          });
+        }}
       >
         {convert.isPending ? '…' : convert.isSuccess ? '✓' : 'convert'}
       </span>
@@ -66,6 +88,10 @@ function AuthoriseHoldingsButton() {
 function AuctionsSection() {
   const { data: auctions } = useKiteAuctions(true);
   if (!auctions || auctions.length === 0) return null;
+  // Read-only by design this pass: real Kite lets you place an auction bid
+  // from this tab, but there's no backend endpoint for it yet (no POST route
+  // exists for auction participation) — explicit backlog item, see
+  // docs/superpowers/specs/2026-07-11-kite-order-management-parity-design.md.
   return (
     <div style={{ marginTop: 48 }}>
       <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', marginBottom: 24 }}>
@@ -116,6 +142,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   });
 
   const { openOrderWindow } = useOrderWindowStore();
+  const addToBasket = useKiteBasketStore((s) => s.add);
 
   const handleOpenOrder = (symbol: string, initialSide: 'BUY' | 'SELL', initialQty: number, product: string, lastPx: number | null = null) => {
     const [exchange, tradingsymbol] = symbol.split(':');
@@ -129,10 +156,77 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     });
   };
 
+  const qc = useQueryClient();
+  const placeOrder = usePlaceKiteOrder();
+  const [exitingSelected, setExitingSelected] = useState(false);
+
+  // Sequential, not Promise.all: a live market order that already filled
+  // can't be un-placed, so each leg must resolve before the next fires
+  // (mirrors placeAll() in BasketPane.tsx). Per-leg failures are swallowed
+  // here since usePlaceKiteOrder's own onError already surfaces a toast —
+  // one failed leg must not stop the remaining selected positions.
+  //
+  // useKitePositions polls every 5s (hooks/useKite.ts), and this loop can
+  // easily span more than one poll tick across several legs — a GTT, the
+  // auto-exec engine, or another device can close/shrink a leg mid-loop.
+  // So unlike the initial `targets` snapshot (used only for the confirm
+  // count/preview), each leg re-reads the LIVE broker snapshot straight out
+  // of the query cache immediately before firing: a leg that's since gone
+  // flat is skipped outright, and a leg that's shrunk fires sized to its
+  // current live quantity — never the possibly-stale click-time size, which
+  // could otherwise cross through zero into a brand-new, unintended position.
+  const exitSelected = async () => {
+    const targets = positions.filter((p: any) => selectedPos.has(`${p.exchange}:${p.tradingsymbol}`) && num(p.quantity) !== 0);
+    if (targets.length === 0) return;
+    const preview = targets.length <= 3
+      ? targets.map((p: any) => p.tradingsymbol).join(', ')
+      : `${targets.slice(0, 3).map((p: any) => p.tradingsymbol).join(', ')} +${targets.length - 3} more`;
+    if (!window.confirm(`Exit ${targets.length} selected position${targets.length !== 1 ? 's' : ''} (${preview}) at market price?`)) return;
+    setExitingSelected(true);
+    let skipped = 0;
+    for (const p of targets) {
+      const liveNet = qc.getQueryData<{ net: any[] }>(['kite-positions'])?.net ?? [];
+      const live = liveNet.find((x: any) => x.exchange === p.exchange && x.tradingsymbol === p.tradingsymbol && x.product === p.product);
+      const liveQty = live ? num(live.quantity) : 0;
+      if (liveQty === 0) { skipped++; continue; }  // gone flat OR converted to a different product since selection — either way, nothing left to exit under this (exchange, tradingsymbol, product) key
+      try {
+        await placeOrder.mutateAsync({
+          tradingsymbol: p.tradingsymbol, exchange: p.exchange,
+          transaction_type: liveQty >= 0 ? 'SELL' : 'BUY', quantity: Math.abs(liveQty),
+          order_type: 'MARKET', product: p.product, variety: 'regular', validity: 'DAY',
+        });
+      } catch {
+        // swallowed — see comment above
+      }
+    }
+    setExitingSelected(false);
+    setSelectedPos(new Set());
+    // Per-leg failures already get their own toast from usePlaceKiteOrder's
+    // onError, but a skip (leg vanished from the live snapshot — closed OR
+    // converted to a different product) never calls placeOrder at all, so it
+    // would otherwise be totally silent: the button just reverts and the
+    // selection clears with no indication anything was left unexited.
+    if (skipped > 0) {
+      notifyOrder({
+        kind: 'info',
+        title: 'Some positions were skipped',
+        message: `Exited ${targets.length - skipped} of ${targets.length} selected position${targets.length !== 1 ? 's' : ''} — ${skipped} ${skipped === 1 ? 'was' : 'were'} already closed or changed.`,
+      });
+    }
+  };
+
   const showHoldings = view === 'holdings' || !view;
   const showPositions = view === 'positions' || !view;
 
   const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
+  // Which position row (by `${exchange}:${tradingsymbol}` id) has its Chg%
+  // cell swapped for the inline ConvertControl. Only one row at a time —
+  // mirrors the single-`expandedId` idiom used for Alerts/Orders history rows.
+  const [expandedConvertId, setExpandedConvertId] = useState<string | null>(null);
+  const [posQuery, setPosQuery] = useState('');
+  const [holdQuery, setHoldQuery] = useState('');
+  const [analyticsView, setAnalyticsView] = useState<'positions' | 'holdings' | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Sorting state
   const [posSort, setPosSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
@@ -141,7 +235,30 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const handlePosSort = (k: string) => setPosSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
   const handleHoldSort = (k: string) => setHoldSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
 
-  let sortedPositions = [...positions];
+  const downloadPositions = () => downloadCsv('positions.csv', toCsv(sortedPositions, [
+    { header: 'Instrument', value: (p: any) => p.tradingsymbol },
+    { header: 'Exchange', value: (p: any) => p.exchange },
+    { header: 'Product', value: (p: any) => p.product },
+    { header: 'Qty', value: (p: any) => num(p.quantity) },
+    { header: 'Avg Price', value: (p: any) => num(p.average_price).toFixed(2) },
+    { header: 'LTP', value: (p: any) => num(p.last_price).toFixed(2) },
+    { header: 'P&L', value: (p: any) => num(p.pnl).toFixed(2) },
+  ]));
+
+  const downloadHoldings = () => downloadCsv('holdings.csv', toCsv(sortedHoldings, [
+    { header: 'Instrument', value: (h: any) => h.tradingsymbol },
+    { header: 'Exchange', value: (h: any) => h.exchange },
+    { header: 'Qty', value: (h: any) => num(h.quantity) },
+    { header: 'Avg Cost', value: (h: any) => num(h.average_price).toFixed(2) },
+    { header: 'LTP', value: (h: any) => num(h.last_price).toFixed(2) },
+    { header: 'Cur. Value', value: (h: any) => (num(h.quantity) * num(h.last_price)).toFixed(2) },
+    { header: 'P&L', value: (h: any) => num(h.pnl).toFixed(2) },
+  ]));
+
+  const filteredPositions = posQuery.trim()
+    ? positions.filter((p: any) => `${p.tradingsymbol} ${p.exchange}`.toLowerCase().includes(posQuery.trim().toLowerCase()))
+    : positions;
+  let sortedPositions = [...filteredPositions];
   if (posSort.key && posSort.dir) {
     sortedPositions.sort((a: any, b: any) => {
       let va = a[posSort.key];
@@ -158,7 +275,10 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     });
   }
 
-  let sortedHoldings = [...(holdings || [])];
+  const filteredHoldings = holdQuery.trim()
+    ? (holdings || []).filter((h: any) => `${h.tradingsymbol} ${h.exchange}`.toLowerCase().includes(holdQuery.trim().toLowerCase()))
+    : (holdings || []);
+  let sortedHoldings = [...filteredHoldings];
   if (holdSort.key && holdSort.dir) {
     sortedHoldings.sort((a: any, b: any) => {
       let va = a[holdSort.key];
@@ -188,9 +308,16 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     setSelectedPos(next);
   };
 
+  // Only positions with a live (non-zero) quantity are exit-able — a qty=0 row
+  // (kept visible only to show its day's realized P&L) has nothing left to
+  // close, so it's excluded from "select all" the same way its own checkbox
+  // is disabled below. Keeps the "Exit Selected (N)" button count always
+  // equal to the number of orders the confirm dialog/loop will actually fire.
+  const selectablePosIds = positions.filter((p: any) => num(p.quantity) !== 0).map((p: any) => `${p.exchange}:${p.tradingsymbol}`);
+
   const toggleAllPos = () => {
-    if (selectedPos.size === positions.length && positions.length > 0) setSelectedPos(new Set());
-    else setSelectedPos(new Set(positions.map((p: any) => `${p.exchange}:${p.tradingsymbol}`)));
+    if (selectedPos.size === selectablePosIds.length && selectablePosIds.length > 0) setSelectedPos(new Set());
+    else setSelectedPos(new Set(selectablePosIds));
   };
 
   const totalPosPnl = positions.reduce((acc: number, p: any) => acc + num(p.pnl), 0);
@@ -237,22 +364,24 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               Positions <span style={{ color: '#9b9b9b', fontSize: 18 }}>({positions.length})</span>
             </h2>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              {selectedPos.size > 0 && (
+                <button onClick={exitSelected} disabled={exitingSelected} style={{ background: '#df514c', color: '#fff', border: 'none', borderRadius: 3, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: exitingSelected ? 'not-allowed' : 'pointer', opacity: exitingSelected ? 0.6 : 1 }}>
+                  {exitingSelected ? 'Exiting…' : `Exit Selected (${selectedPos.size})`}
+                </button>
+              )}
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </span>
-                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 160, outline: 'none' }} />
+                <input type="text" placeholder="Search" value={posQuery} onChange={(e) => setPosQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 160, outline: 'none' }} />
               </div>
-              <a href="#" style={{ color: '#ff5722', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Analyze
-              </a>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setAnalyticsView('positions'); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10h-10z"></path></svg> Analytics
               </a>
-              <a href="#" style={{ color: '#9b9b9b', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setSettingsOpen(true); }} style={{ color: '#9b9b9b', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Settings
               </a>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); downloadPositions(); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
               </a>
             </div>
@@ -263,7 +392,7 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                 <thead><tr>
                   <th style={{ ...S.th, width: 40, textAlign: 'center' }}>
-                    <input type="checkbox" checked={selectedPos.size === positions.length && positions.length > 0} onChange={toggleAllPos} style={{ cursor: 'pointer' }} />
+                    <input type="checkbox" checked={selectedPos.size === selectablePosIds.length && selectablePosIds.length > 0} onChange={toggleAllPos} style={{ cursor: 'pointer' }} />
                   </th>
                   <SortHeader label="Product" sortKey="product" currentSort={posSort} onSort={handlePosSort} style={S.th} />
                   <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={posSort} onSort={handlePosSort} style={S.th} />
@@ -282,7 +411,14 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                     return (
                       <tr key={`${id}-${idx}`} className="portfolio-row" style={{ background: isSelected ? 'rgba(56, 126, 209, 0.05)' : 'transparent', transition: 'background 0.2s' }}>
                         <td style={{ ...S.td, textAlign: 'center' }}>
-                          <input type="checkbox" checked={isSelected} onChange={() => togglePos(id)} style={{ cursor: 'pointer' }} />
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={qty === 0}
+                            title={qty === 0 ? "Already flat — nothing left to exit" : undefined}
+                            onChange={() => togglePos(id)}
+                            style={{ cursor: qty === 0 ? 'not-allowed' : 'pointer' }}
+                          />
                         </td>
                         <td style={S.td}>
                           {p.product === 'NRML' ? (
@@ -304,15 +440,40 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                           {num(p.pnl) > 0 ? '+' : ''}{num(p.pnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg), position: 'relative' }}>
-                          <span className="portfolio-content">{chg.toFixed(2)}%</span>
-                          <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
-                            <KiteActionButtons 
-                              onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
-                              buyLabel="Add"
-                              onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
-                              sellLabel="Exit"
-                            />
-                          </div>
+                          {expandedConvertId === id ? (
+                            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                              <ConvertControl p={p} />
+                              <span
+                                style={{ cursor: 'pointer', color: '#9b9b9b', fontSize: 14, lineHeight: 1 }}
+                                title="Close"
+                                onClick={() => setExpandedConvertId(null)}
+                              >
+                                ×
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="portfolio-content">{chg.toFixed(2)}%</span>
+                              <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8, alignItems: 'center' }}>
+                                <KiteActionButtons
+                                  onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
+                                  buyLabel="Add"
+                                  onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
+                                  sellLabel="Exit"
+                                  onBasket={(e) => { e.stopPropagation(); if (Math.abs(qty) === 0) return; addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
+                                />
+                                {qty !== 0 && (
+                                  <span
+                                    style={{ cursor: 'pointer', color: '#9b9b9b', fontSize: 11, marginLeft: 8, whiteSpace: 'nowrap' }}
+                                    title={`Convert this ${p.product} position to another product type`}
+                                    onClick={(e) => { e.stopPropagation(); setExpandedConvertId(id); }}
+                                  >
+                                    Convert
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </td>
                       </tr>
                     );
@@ -368,12 +529,12 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </span>
-                <input type="text" placeholder="Search" style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
+                <input type="text" placeholder="Search" value={holdQuery} onChange={(e) => setHoldQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
               </div>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setAnalyticsView('holdings'); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg> Analytics
               </a>
-              <a href="#" style={{ color: '#387ed1', textDecoration: 'none', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); downloadHoldings(); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
               </a>
               <AuthoriseHoldingsButton />
@@ -405,6 +566,11 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                         <td style={{...S.td, whiteSpace: 'nowrap'}}>
                           <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={h.tradingsymbol} /></span>
                           <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{h.exchange}</span>
+                          {num(h.t1_quantity) > 0 && (
+                            <span style={{ marginLeft: 6, fontSize: 9, color: '#ff9800', background: 'rgba(255, 152, 0, 0.1)', padding: '1px 4px', borderRadius: 2, fontWeight: 600 }} title={`${num(h.t1_quantity)} of ${num(h.quantity)} shares not yet settled — not sellable today`}>
+                              T1: {num(h.t1_quantity)}
+                            </span>
+                          )}
                         </td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.quantity)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.average_price).toFixed(2)}</td>
@@ -417,11 +583,12 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChgPct), position: 'relative' }}>
                           <span className="portfolio-content">{dayChg !== 0 ? `${dayChg > 0 ? '+' : ''}${dayChgPct.toFixed(2)}%` : '0.00%'}</span>
                           <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
-                            <KiteActionButtons 
+                            <KiteActionButtons
                               onBuy={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'BUY', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
                               buyLabel="Add"
-                              onSell={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
+                              onSell={(e) => { e.stopPropagation(); const sellable = num(h.quantity) - num(h.t1_quantity); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', Math.max(sellable, 0), h.product || 'CNC', num(h.last_price)); }}
                               sellLabel="Exit"
+                              onBasket={(e) => { e.stopPropagation(); if (num(h.quantity) === 0) return; addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: Math.max(num(h.quantity) - num(h.t1_quantity), 0), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
                             />
                           </div>
                         </td>
@@ -455,6 +622,17 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
           <AuctionsSection />
         </div>
       )}
+
+      {analyticsView && (
+        <KitePortfolioAnalyticsModal
+          view={analyticsView}
+          positions={sortedPositions}
+          holdings={sortedHoldings}
+          onClose={() => setAnalyticsView(null)}
+        />
+      )}
+
+      {settingsOpen && <KiteSettingsPopover onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

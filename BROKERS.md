@@ -66,3 +66,13 @@ backward compatibility.
 Every adapter takes `is_paper`. Order *dispatch* mode (paper/shadow/live) is
 decided by the `OrderRouter`, not the adapter — see [EXECUTION.md](EXECUTION.md).
 Delta India is the reference implementation; study `adapters/delta_india.py`.
+
+## Broker-specific business logic vs. the raw client
+
+Some brokers need more than an adapter: Zerodha's raw Kite Connect client
+(auth, instruments, ticker, multi-tenant account store) lives in
+`app/services/exchanges/kite/`, while the *trading* logic that sits on top of
+it (scanning, sizing, strike/futures selection, protective stops) lives
+separately in `app/services/kite_engine/`. Keep that split — the adapter layer
+stays a thin, contract-conforming translator; engine-style logic belongs next
+to the other engines' patterns, not inside the adapter.

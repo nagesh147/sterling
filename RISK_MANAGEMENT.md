@@ -18,9 +18,12 @@ Embedded in the `OrderRouter` via injected guards and `app/services/live_safety.
 | Greeks budget (live only) | portfolio delta/gamma/vega budget breached |
 
 Plus the portfolio drawdown **circuit breaker**
-(`app/services/execution/circuit_breaker.py`, `DrawdownCircuitBreaker`) and the
-execution-level circuit breaker — see `CLAUDE.md` for the `app.state` wiring
-invariants. All guards are **fail-closed**: a guard that errors rejects the order.
+(`app/engines/risk/circuit_breaker.py`, `DrawdownCircuitBreaker` —
+`app.state.dd_circuit_breaker`) and the separate execution-level circuit
+breaker (`app/services/execution/circuit_breaker.py`, `CircuitBreaker` —
+`app.state.circuit_breaker`) — see `CLAUDE.md` for the `app.state` wiring
+invariants; the two are distinct singletons, not aliases of each other. All
+guards are **fail-closed**: a guard that errors rejects the order.
 
 ## 2. The RiskEngine (separable, shadow-first)
 

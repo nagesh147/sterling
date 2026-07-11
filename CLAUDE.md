@@ -1,69 +1,63 @@
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+cat > /home/nageshmadaram/Sterling/CLAUDE.md << 'EOF'
+# Sterling - Project Instructions
 
-**IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+## 1. Graph Tools First (Highest Priority)
+ALWAYS use **code-review-graph** MCP tools before Grep/Glob/Read.
 
-### When to use graph tools FIRST
+- Exploring → `semantic_search_nodes` or `query_graph`
+- Impact → `get_impact_radius` or `get_affected_flows`
+- Review → `detect_changes` + `get_review_context`
+- Architecture overview → `get_architecture_overview` + `list_communities`
+- Relationships → `query_graph` (callers_of / callees_of / tests_for / imports_of)
 
-- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
-- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
-- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
-- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
-- **Architecture questions**: `get_architecture_overview` + `list_communities`
+Only fall back to `rg` / `fd` / `sg` when the graph cannot answer.
 
-Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+## 2. Architecture Quality → Use TrueCourse
+For deeper architecture analysis use **TrueCourse**:
 
-### Key Tools
+- Circular dependencies
+- Layer violations
+- God modules / dead modules
+- Cross-service flows (frontend ↔ backend)
+- Architecture health / coupling
+- Spec / intent drift
 
-| Tool | Use when |
-|------|----------|
-| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
-| `get_review_context` | Need source snippets for review — token-efficient |
-| `get_impact_radius` | Understanding blast radius of a change |
-| `get_affected_flows` | Finding which execution paths are impacted |
-| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
-| `get_architecture_overview` | Understanding high-level codebase structure |
-| `refactor_tool` | Planning renames, finding dead code |
+Commands:
+- `truecourse analyze` — full analysis
+- `truecourse list` — show violations
+- `truecourse dashboard` — interactive UI
 
-### Workflow
+**Rule:** Use code-review-graph for daily coding & impact.  
+Use TrueCourse for architecture quality, circular deps, and structural health.
 
-1. The graph auto-updates on file changes (via hooks).
-2. Use `detect_changes` for code review.
-3. Use `get_affected_flows` to understand impact.
-4. Use `query_graph` pattern="tests_for" to check coverage.
+## 3. Critical Invariants (Never Violate)
+- `CorrelationTracker.update()` with 1H closes on **every** `evaluate()`
+- `DrawdownCircuitBreaker.update()` (alias `CircuitBreaker`) called **FIRST** in `evaluate()`
+- `CalibrationService.record_trade()` on **every** paper_store position close
+- Walk-forward: **no lookahead**
+- Sensitivity sweep: startup + weekly, cached 7 days
+- Singletons: `dd_circuit_breaker`, `circuit_breaker`, `correlation_tracker`, `calibration_service`
+- Always inject `CalibrationService` via Depends
+- Do **not** Grep v3 modules — use graph
 
-## New modules (v3)
+## 4. Preferred Tools
+- Search: `rg` | Find: `fd` | AST: `sg` (ast-grep)
+- JSON: `jq` | YAML: `yq` | GitHub: `gh`
+- Typecheck: `tsc --noEmit`
 
-`analytics/`: walk-forward, sensitivity, correlation, performance — no exchange calls
-`risk/`: slippage, greeks_budget, circuit_breaker — stateful singletons on SterlingEngine
-`services/calibration.py`: persisted adaptive state — always access via dependency injection
+## 5. Skill Usage Strategy (Token Efficient)
+Use skills **selectively** (1–3 max per task). Prefer good skills over long free-form reasoning.
 
-### Key invariants
-- CorrelationTracker is fed 1H close prices on EVERY evaluate() call
-- CircuitBreaker (DrawdownCircuitBreaker).update() is called BEFORE any trade logic in evaluate()
-- CalibrationService.record_trade() is called on EVERY position close in paper_store
-- Walk-forward results are cached in DB; re-run only when >7 days stale or user forces
-- Parameter sensitivity sweep runs on first startup and weekly via background task
-- `app.state.dd_circuit_breaker` — DrawdownCircuitBreaker (v3, portfolio drawdown)
-- `app.state.circuit_breaker` — existing execution-level CircuitBreaker (DO NOT confuse them)
-- `app.state.correlation_tracker` — CorrelationTracker singleton
-- `app.state.calibration_service` — CalibrationService singleton
+### Preferred Skills
+- Debugging → `investigate-bug` + `systematic-debugging`
+- Features → `implement-feature` + `writing-plans` + `executing-plans`
+- Review → `requesting-code-review` + `architecture-review`
+- Verification → `verification-before-completion` + `test-driven-development`
+- Architecture → `architecture-review` + `pathfinder` + `smart-explore`
+- Exploration → `smart-explore` + `learn-codebase`
 
-## v3 modules (do not Grep these — use graph)
-
-`engines/analytics/`: walk-forward, sensitivity, correlation, performance — pure functions, no I/O
-`engines/risk/`: slippage, greeks_budget, circuit_breaker — stateful singletons via DI
-`services/calibration.py`: adaptive state — always inject via Depends, never import directly
-
-### Wire invariants
-- CorrelationTracker.update() called on EVERY evaluate() with 1H close
-- CircuitBreaker.update() called FIRST in evaluate() before any strategy logic
-- CalibrationService.record_trade() called on EVERY paper_store position close
-- Sensitivity sweep runs as startup background task; cached 7 days
-- Walk-forward: NEVER use test window data to select threshold (lookahead veto)
-- `CircuitBreaker` is an alias for `DrawdownCircuitBreaker` — both names valid
+## Style
+- Be precise and concise
+- Prefer small verifiable steps
+- Always re-check critical invariants when touching evaluate(), risk, or paper_store
+EOF
