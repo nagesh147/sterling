@@ -3,6 +3,7 @@ import { useKiteOrders } from '../../hooks/useKite';
 import { GttPane } from './GttPane';
 import { AlertsPane } from './AlertsPane';
 import { InstrumentLabel } from './InstrumentLabel';
+import { ModifyOrderModal } from './ModifyOrderModal';
 
 const S: Record<string, React.CSSProperties> = {
   emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 100 },
@@ -31,6 +32,7 @@ const MODIFIABLE_STATUSES = new Set(['OPEN', 'TRIGGER PENDING']);
 
 function OrdersSubPane() {
   const { data: orders } = useKiteOrders(true);
+  const [modifyOrder, setModifyOrder] = useState<any | null>(null);
 
   if (!orders || orders.length === 0) {
     return (
@@ -66,7 +68,7 @@ function OrdersSubPane() {
         <thead><tr>
           <th style={S.th}>Time</th><th style={S.th}>Type</th><th style={S.th}>Instrument</th>
           <th style={S.th}>Product</th><th style={S.th}>Qty.</th><th style={S.th}>Avg. price</th>
-          <th style={S.th}>Status</th>
+          <th style={S.th}>Status</th><th style={S.th} />
         </tr></thead>
         <tbody>
           {orders.map((o: any) => (
@@ -88,10 +90,16 @@ function OrdersSubPane() {
                   <span style={{ marginLeft: 6, padding: '1px 5px', background: '#f1f1f1', color: '#9b9b9b', borderRadius: 2, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{o.variety}</span>
                 )}
               </td>
+              <td style={{ ...S.td, textAlign: 'right' }}>
+                {MODIFIABLE_STATUSES.has(o.status) && (
+                  <span onClick={() => setModifyOrder(o)} style={{ cursor: 'pointer', color: '#387ed1', fontSize: 12 }}>Modify</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      {modifyOrder && <ModifyOrderModal order={modifyOrder} onClose={() => setModifyOrder(null)} />}
     </div>
   );
 }
