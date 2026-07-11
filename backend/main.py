@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
+from app.core.async_tasks import spawn_background
 from app.core.observability import (
     configure_json_logging, new_correlation_id, set_correlation_id, reset_correlation_id,
 )
@@ -1037,7 +1038,7 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                                     })
                                 except Exception:
                                     pass
-                            asyncio.create_task(_broadcast_log())
+                            spawn_background(_broadcast_log(), name="arbitrator-log")
 
             # Persist tracker state so server restarts don't re-fire existing signals
             _save_signal_tracker_state()
