@@ -342,3 +342,8 @@ used to end with):
 ```bash
 cd frontend && npm run build   # TypeScript + Vite, clean build
 ```
+### Dynamic skills
+
+Skills are available globally but loaded **on demand** (1–3 per task).
+Routing is defined in `CLAUDE.md`. Architecture analysis uses TrueCourse;
+daily code exploration uses code-review-graph.
