@@ -14,6 +14,7 @@ import type { PlaceOrderBody, PlaceGttBody } from '../../types/kite';
 
 export type Side = 'BUY' | 'SELL';
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
+// MTF intentionally excluded — see the backlog note on PlaceOrderBody.product in types/kite.ts.
 export type Product = 'MIS' | 'CNC' | 'NRML';
 export type Validity = 'DAY' | 'IOC' | 'TTL';
 export type Variety = 'regular' | 'amo';

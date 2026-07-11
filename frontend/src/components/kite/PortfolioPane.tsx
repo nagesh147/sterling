@@ -87,6 +87,10 @@ function AuthoriseHoldingsButton() {
 function AuctionsSection() {
   const { data: auctions } = useKiteAuctions(true);
   if (!auctions || auctions.length === 0) return null;
+  // Read-only by design this pass: real Kite lets you place an auction bid
+  // from this tab, but there's no backend endpoint for it yet (no POST route
+  // exists for auction participation) — explicit backlog item, see
+  // docs/superpowers/specs/2026-07-11-kite-order-management-parity-design.md.
   return (
     <div style={{ marginTop: 48 }}>
       <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', marginBottom: 24 }}>
