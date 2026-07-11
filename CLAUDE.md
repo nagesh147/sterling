@@ -115,3 +115,25 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Capability ownership
+
+| Need | Use |
+|------|-----|
+| Daily coding, callers, impact, PR risk, MCP token savings | **code-review-graph** |
+| Architecture: cycles, layers, god modules, violation dashboard | **TrueCourse** |
+| Knowledge graph over code + docs (+ `/graphify`, broader context) | **Graphify** |
+| Plan / debug / implement / verify process | **Skills** (1–3 max) |
+
+Do not use all three graphs for the same question. Pick one owner from the table.
+Graphify skill is global (`~/.claude/skills/graphify`); per-repo data lives in `graphify-out/`.
