@@ -66,3 +66,5 @@ antigravity-claude-proxy/
 
 # Superpowers brainstorm session files
 .superpowers/
+# Added by code-review-graph
+.code-review-graph/
