@@ -52,7 +52,7 @@ async def account_info():
     }
 
 
-@router.get("/summary", response_model=AccountSummaryResponse)
+@router.get("/summary")
 async def account_summary() -> AccountSummaryResponse:
     now_ms = int(time.time() * 1000)
     cfg = store.get_active()

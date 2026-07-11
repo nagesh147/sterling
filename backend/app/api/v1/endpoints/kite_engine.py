@@ -44,23 +44,23 @@ async def _client(user: UserContext):
     return await kite_accounts.acquire_client(acct)   # warm, cached (no per-call close)
 
 
-@router.get("/config", response_model=EngineConfigModel)
+@router.get("/config")
 async def get_config(user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     return state.get_config(user.user_id)
 
 
-@router.post("/config", response_model=EngineConfigModel)
+@router.post("/config")
 async def set_config(body: EngineConfigModel,
                      user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     return state.set_config(user.user_id, body)
 
 
-@router.post("/config/reset", response_model=EngineConfigModel)
+@router.post("/config/reset")
 async def reset_config(user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     return state.set_config(user.user_id, EngineConfigModel())
 
 
-@router.post("/backtest", response_model=BacktestResponse)
+@router.post("/backtest")
 async def backtest(body: BacktestRequest,
                    user: UserContext = Depends(get_current_user)) -> BacktestResponse:
     """Honest options backtest (workstream H). data_mode synthetic | real | both:
@@ -77,7 +77,7 @@ async def backtest(body: BacktestRequest,
     return BacktestResponse(**result)
 
 
-@router.get("/signals", response_model=SignalsResponse)
+@router.get("/signals")
 async def signals(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
     uid = user.user_id
     us = scanner.snapshot(uid)
@@ -87,7 +87,7 @@ async def signals(user: UserContext = Depends(get_current_user)) -> SignalsRespo
                            market_open=is_market_open())
 
 
-@router.get("/activity", response_model=ActivityResponse)
+@router.get("/activity")
 async def activity(limit: int = 2000,
                    user: UserContext = Depends(get_current_user)) -> ActivityResponse:
     uid = user.user_id
@@ -110,7 +110,7 @@ async def server_logs(limit: int = 300,
     return {"logs": recent_logs(limit)}
 
 
-@router.post("/scan", response_model=SignalsResponse)
+@router.post("/scan")
 async def run_scan(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
     """Manual scan trigger (the background loop also scans automatically)."""
     uid = user.user_id
@@ -123,7 +123,7 @@ async def run_scan(user: UserContext = Depends(get_current_user)) -> SignalsResp
                            market_open=is_market_open())
 
 
-@router.post("/scan/cancel", response_model=SignalsResponse)
+@router.post("/scan/cancel")
 async def cancel_scan(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
     """Force-stop a running scan. Returns the current snapshot after cancellation."""
     uid = user.user_id
@@ -139,14 +139,14 @@ async def cancel_scan(user: UserContext = Depends(get_current_user)) -> SignalsR
                            market_open=is_market_open())
 
 
-@router.get("/setup/{token}", response_model=SetupChart)
+@router.get("/setup/{token}")
 async def setup(token: int, underlying: str = "",
                 user: UserContext = Depends(get_current_user)) -> SetupChart:
     client = await _client(user)
     return await build_setup_chart(client, token, underlying, _ts_cfg(state.get_config(user.user_id)))
 
 
-@router.post("/order", response_model=EngineOrderResponse)
+@router.post("/order")
 async def place_order(body: EngineOrderRequest,
                      user: UserContext = Depends(get_current_user)) -> EngineOrderResponse:
     """Place a manual BUY/SELL from the detail panel — same live-safety gate as the
@@ -162,7 +162,7 @@ async def place_order(body: EngineOrderRequest,
         message=res.get("message", ""))
 
 
-@router.get("/detail/{token}", response_model=EngineDetailResponse)
+@router.get("/detail/{token}")
 async def detail(token: int, timestamp_ms: int = 0, user: UserContext = Depends(get_current_user)) -> EngineDetailResponse:
     """Trigger context + live underlying price + per-leg quote/depth/greeks for a
     ready signal (BUY/SELL are placed via the standard /kite/orders endpoint)."""
@@ -173,7 +173,7 @@ async def detail(token: int, timestamp_ms: int = 0, user: UserContext = Depends(
     return d
 
 
-@router.get("/scan-report", response_model=ScanReportResponse)
+@router.get("/scan-report")
 async def scan_report(user: UserContext = Depends(get_current_user)) -> ScanReportResponse:
     """Per-contract scan trace — every option contract evaluated, with bars, premium,
     and reason. Shows exactly which contracts fired and why others didn't."""
@@ -211,7 +211,7 @@ async def scan_report(user: UserContext = Depends(get_current_user)) -> ScanRepo
     return ScanReportResponse(summary=summary, entries=entries)
 
 
-@router.get("/open-positions", response_model=OpenPositionsResponse)
+@router.get("/open-positions")
 async def open_positions(user: UserContext = Depends(get_current_user)) -> OpenPositionsResponse:
     """Return the engine's currently tracked open positions including vehicle/direction labels."""
     uid = user.user_id
@@ -234,7 +234,7 @@ async def open_positions(user: UserContext = Depends(get_current_user)) -> OpenP
     return OpenPositionsResponse(positions=records)
 
 
-@router.delete("/open-positions/{symbol}", response_model=OpenPositionsResponse)
+@router.delete("/open-positions/{symbol}")
 async def close_position(symbol: str, user: UserContext = Depends(get_current_user)) -> OpenPositionsResponse:
     """Manually close (mark-closed) a tracked position without placing a broker order.
     Cancels any live broker GTT stop before closing, so it can't fire after removal.

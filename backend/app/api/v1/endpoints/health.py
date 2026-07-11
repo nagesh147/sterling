@@ -38,7 +38,7 @@ class HealthResponse(BaseModel):
     timestamp_ms: int
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 async def health(request: Request) -> HealthResponse:
     now_ms = int(time.time() * 1000)
     from app.services import adapter_manager as _adm

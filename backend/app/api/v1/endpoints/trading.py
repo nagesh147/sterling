@@ -103,12 +103,12 @@ class VCPModeResponse(BaseModel):
     active_profiles: list[str]
 
 
-@router.get("/algo-mode", response_model=AlgoModeResponse)
+@router.get("/algo-mode")
 async def get_algo_mode(request: Request) -> AlgoModeResponse:
     return AlgoModeResponse(enabled=getattr(request.app.state, "algo_mode", False))
 
 
-@router.post("/algo-mode", response_model=AlgoModeResponse)
+@router.post("/algo-mode")
 async def set_algo_mode(body: AlgoModeRequest, request: Request) -> AlgoModeResponse:
     from app.services.db import set_config
     request.app.state.algo_mode = body.enabled
@@ -124,12 +124,12 @@ class ScalpModeResponse(BaseModel):
     enabled: bool
 
 
-@router.get("/scalp-mode", response_model=ScalpModeResponse)
+@router.get("/scalp-mode")
 async def get_scalp_mode(request: Request) -> ScalpModeResponse:
     return ScalpModeResponse(enabled=getattr(request.app.state, "scalp_mode", False))
 
 
-@router.post("/scalp-mode", response_model=ScalpModeResponse)
+@router.post("/scalp-mode")
 async def set_scalp_mode(body: ScalpModeRequest, request: Request) -> ScalpModeResponse:
     from app.services.db import set_config
     request.app.state.scalp_mode = body.enabled
@@ -145,7 +145,7 @@ class ScoringStrategyResponse(BaseModel):
     strategy: str
 
 
-@router.get("/scoring-strategy", response_model=ScoringStrategyResponse)
+@router.get("/scoring-strategy")
 async def get_scoring_strategy(request: Request) -> ScoringStrategyResponse:
     """
     Get the current ensemble scoring strategy used by the directional engine.
@@ -158,7 +158,7 @@ async def get_scoring_strategy(request: Request) -> ScoringStrategyResponse:
     return ScoringStrategyResponse(strategy=get_active_strategy())
 
 
-@router.post("/scoring-strategy", response_model=ScoringStrategyResponse)
+@router.post("/scoring-strategy")
 async def set_scoring_strategy(
     body: ScoringStrategyRequest, request: Request,
 ) -> ScoringStrategyResponse:
@@ -176,7 +176,7 @@ async def set_scoring_strategy(
     return ScoringStrategyResponse(strategy=body.strategy)
 
 
-@router.get("/algo-router-mode", response_model=AlgoRouterModeResponse)
+@router.get("/algo-router-mode")
 async def get_algo_router_mode(request: Request) -> AlgoRouterModeResponse:
     """
     Phase F: paper / shadow / live dispatch mode for the auto-trader.
@@ -190,7 +190,7 @@ async def get_algo_router_mode(request: Request) -> AlgoRouterModeResponse:
     )
 
 
-@router.post("/algo-router-mode", response_model=AlgoRouterModeResponse)
+@router.post("/algo-router-mode")
 async def set_algo_router_mode(
     body: AlgoRouterModeRequest, request: Request,
 ) -> AlgoRouterModeResponse:
@@ -205,7 +205,7 @@ async def set_algo_router_mode(
     return AlgoRouterModeResponse(mode=body.mode)
 
 
-@router.get("/vcp-mode", response_model=VCPModeResponse)
+@router.get("/vcp-mode")
 async def get_vcp_mode(request: Request) -> VCPModeResponse:
     """
     Get current VCP live-feed state.
@@ -220,7 +220,7 @@ async def get_vcp_mode(request: Request) -> VCPModeResponse:
     )
 
 
-@router.post("/vcp-mode", response_model=VCPModeResponse)
+@router.post("/vcp-mode")
 async def set_vcp_mode(body: VCPModeRequest, request: Request) -> VCPModeResponse:
     """
     Start or stop the VCP live-feed independently of algo_mode.
@@ -271,7 +271,7 @@ async def set_vcp_mode(body: VCPModeRequest, request: Request) -> VCPModeRespons
     )
 
 
-@router.post("/place-order", response_model=LiveOrderResponse)
+@router.post("/place-order")
 async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrderResponse:
     """
     Place a live order on Delta Exchange India (or paper if not configured).

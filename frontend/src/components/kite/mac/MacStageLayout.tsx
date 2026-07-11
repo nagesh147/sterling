@@ -342,7 +342,8 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
 
   const onDragStart = useCallback((key: PanelKey) => {
     document.querySelectorAll<HTMLElement>('[data-stage-slot]').forEach((el) => {
-      const s = el.getAttribute('data-stage-slot') as SlotKey | null;
+      const raw = el.getAttribute('data-stage-slot');
+      const s = raw && (VALID_SLOTS as readonly string[]).includes(raw) ? (raw as SlotKey) : null;
       if (s) slotRects.current[s] = el.getBoundingClientRect();
     });
     document.querySelectorAll<HTMLElement>('[data-stage-preset]').forEach((el) => {
@@ -454,7 +455,8 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     );
   };
 
-  const topEmpty = (['left', 'center', 'right'] as SlotKey[]).every((s) => panelsInSlot(s).length === 0);
+  const TOP_SLOTS: SlotKey[] = ['left', 'center', 'right'];
+  const topEmpty = TOP_SLOTS.every((s) => panelsInSlot(s).length === 0);
   const bottomPanels = panelsInSlot('bottom');
 
   return (

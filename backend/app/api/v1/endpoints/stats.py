@@ -30,7 +30,7 @@ class SessionStats(BaseModel):
     timestamp_ms: int
 
 
-@router.get("/session", response_model=SessionStats)
+@router.get("/session")
 async def session_stats() -> SessionStats:
     now_ms = int(time.time() * 1000)
 

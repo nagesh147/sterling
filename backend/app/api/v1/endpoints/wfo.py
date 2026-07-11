@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import asyncio
 from fastapi import APIRouter
@@ -44,7 +45,7 @@ def _launch_optimizer() -> None:
     )
     with open(LOG_PATH, "a", encoding="utf-8") as logf:
         subprocess.Popen(
-            ["python3", cron_script],
+            [sys.executable, cron_script],
             stdout=logf,
             stderr=subprocess.STDOUT,
             start_new_session=True,

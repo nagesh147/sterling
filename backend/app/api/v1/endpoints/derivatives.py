@@ -431,7 +431,7 @@ class _ScanResponse(BaseModel):
     auto_exec_accepted: int = 0
 
 
-@router.get("/scan", response_model=_ScanResponse)
+@router.get("/scan")
 async def scan(request: Request) -> _ScanResponse:
     """Read the cached scanner snapshot maintained by the background
     derivatives scanner. Fast — no live work. The FE polls this every
@@ -532,7 +532,7 @@ class _ExecuteResponse(BaseModel):
     timestamp_ms: int
 
 
-@router.post("/execute", response_model=_ExecuteResponse)
+@router.post("/execute")
 async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
     """Execute the frozen decision. The freeze_token MUST match a still-
     valid entry in the store, or we reject with `code=stale_candidate`."""
@@ -685,13 +685,13 @@ class _ConfigPatchGlobalRequest(BaseModel):
     auto_execute_options: Optional[bool] = None
 
 
-@router.get("/config", response_model=_ConfigResponse)
+@router.get("/config")
 async def get_config(request: Request) -> _ConfigResponse:
     from app.engines.derivatives.profiles import DEFAULT_PROFILES
     return _ConfigResponse(profiles=_profile_overrides(request.app), defaults=DEFAULT_PROFILES)
 
 
-@router.post("/config", response_model=_ConfigResponse)
+@router.post("/config")
 async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigResponse:
     from app.services.db import set_config
     import json
@@ -711,7 +711,7 @@ async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigRe
     return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
 
 
-@router.delete("/config", response_model=_ConfigResponse)
+@router.delete("/config")
 async def reset_all_config(request: Request) -> _ConfigResponse:
     from app.services.db import set_config
     import json
@@ -726,7 +726,7 @@ async def reset_all_config(request: Request) -> _ConfigResponse:
     return _ConfigResponse(profiles={}, defaults=DEFAULT_PROFILES)
 
 
-@router.post("/config/global", response_model=_ConfigResponse)
+@router.post("/config/global")
 async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request) -> _ConfigResponse:
     from app.services.db import set_config
     import json
@@ -750,12 +750,12 @@ async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request)
     return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
 
 
-@router.get("/config/engine", response_model=DerivativesEngineConfig)
+@router.get("/config/engine")
 async def get_engine_config_ep(request: Request) -> DerivativesEngineConfig:
     return get_engine_config(request.app)
 
 
-@router.post("/config/engine", response_model=DerivativesEngineConfig)
+@router.post("/config/engine")
 async def set_engine_config_ep(
     body: DerivativesEngineConfig, request: Request
 ) -> DerivativesEngineConfig:
@@ -1114,12 +1114,12 @@ def _edge_gate_response(app) -> _EdgeGateResponse:
     )
 
 
-@router.get("/edge-gate", response_model=_EdgeGateResponse)
+@router.get("/edge-gate")
 async def get_edge_gate(request: Request) -> _EdgeGateResponse:
     return _edge_gate_response(request.app)
 
 
-@router.post("/edge-gate", response_model=_EdgeGateResponse)
+@router.post("/edge-gate")
 async def set_edge_gate(body: _EdgeGateModel, request: Request) -> _EdgeGateResponse:
     """Update the edge admission thresholds and rebuild the allow-list. Changes
     are in-memory (lost on restart), matching the per-strategy profile pattern."""

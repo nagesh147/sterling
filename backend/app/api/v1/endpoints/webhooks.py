@@ -17,13 +17,13 @@ from app.services import webhook_store
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
-@router.get("", response_model=WebhookListResponse)
+@router.get("")
 async def list_webhooks() -> WebhookListResponse:
     whs = webhook_store.list_webhooks()
     return WebhookListResponse(webhooks=whs, count=len(whs))
 
 
-@router.post("", response_model=WebhookConfig)
+@router.post("")
 async def add_webhook(body: WebhookCreate) -> WebhookConfig:
     return webhook_store.add_webhook(body)
 
@@ -34,7 +34,7 @@ async def delete_webhook(wh_id: str) -> None:
         raise HTTPException(status_code=404, detail=f"Webhook {wh_id} not found")
 
 
-@router.post("/{wh_id}/test", response_model=WebhookTestResponse)
+@router.post("/{wh_id}/test")
 async def test_webhook(wh_id: str) -> WebhookTestResponse:
     wh = webhook_store.get_webhook(wh_id.upper())
     if not wh:
@@ -51,7 +51,7 @@ async def test_webhook(wh_id: str) -> WebhookTestResponse:
         return WebhookTestResponse(id=wh_id, delivered=False, error=str(exc))
 
 
-@router.post("/{wh_id}/toggle", response_model=WebhookConfig)
+@router.post("/{wh_id}/toggle")
 async def toggle_webhook(wh_id: str) -> WebhookConfig:
     wh = webhook_store.get_webhook(wh_id.upper())
     if not wh:

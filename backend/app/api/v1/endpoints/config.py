@@ -33,19 +33,19 @@ def get_scoring_weights() -> ScoringWeights:
 
 # ─── Risk config ──────────────────────────────────────────────────────────────
 
-@router.get("/risk", response_model=RiskParams)
+@router.get("/risk")
 async def get_risk_config() -> RiskParams:
     return _risk
 
 
-@router.put("/risk", response_model=RiskParams)
+@router.put("/risk")
 async def update_risk_config(params: RiskParams) -> RiskParams:
     global _risk
     _risk = params
     return _risk
 
 
-@router.post("/risk/reset", response_model=RiskParams)
+@router.post("/risk/reset")
 async def reset_risk_config() -> RiskParams:
     global _risk
     _risk = RiskParams(
@@ -73,7 +73,7 @@ class DataSourceResponse(BaseModel):
     timestamp_ms: int
 
 
-@router.get("/data-source", response_model=DataSourceResponse)
+@router.get("/data-source")
 async def get_data_source() -> DataSourceResponse:
     name = _adm.get_data_source()
     ad = _adm.get_adapter()
@@ -92,7 +92,7 @@ async def get_data_source() -> DataSourceResponse:
     )
 
 
-@router.post("/data-source", response_model=DataSourceResponse)
+@router.post("/data-source")
 async def set_data_source(body: DataSourceRequest, request: Request) -> DataSourceResponse:
     exchange = body.exchange.lower()
     if exchange not in _adm.SUPPORTED_DATA_SOURCES:
@@ -145,7 +145,7 @@ class SystemInfo(BaseModel):
     timestamp_ms: int
 
 
-@router.get("/info", response_model=SystemInfo)
+@router.get("/info")
 async def system_info() -> SystemInfo:
     import os
     instruments = registry.list_instruments()
@@ -170,19 +170,19 @@ async def system_info() -> SystemInfo:
 
 # ─── Scoring weights ──────────────────────────────────────────────────────────
 
-@router.get("/scoring-weights", response_model=ScoringWeights)
+@router.get("/scoring-weights")
 async def get_scoring_weights_endpoint() -> ScoringWeights:
     return _scoring_weights
 
 
-@router.put("/scoring-weights", response_model=ScoringWeights)
+@router.put("/scoring-weights")
 async def update_scoring_weights(body: ScoringWeights) -> ScoringWeights:
     global _scoring_weights
     _scoring_weights = body
     return _scoring_weights
 
 
-@router.post("/scoring-weights/reset", response_model=ScoringWeights)
+@router.post("/scoring-weights/reset")
 async def reset_scoring_weights() -> ScoringWeights:
     global _scoring_weights
     _scoring_weights = ScoringWeights()
@@ -205,7 +205,7 @@ class TelegramConfigResponse(BaseModel):
     reachable: bool = False
 
 
-@router.get("/telegram", response_model=TelegramConfigResponse)
+@router.get("/telegram")
 async def get_telegram_config() -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
     from app.services import db as _db
@@ -225,7 +225,7 @@ async def get_telegram_config() -> TelegramConfigResponse:
     )
 
 
-@router.put("/telegram", response_model=TelegramConfigResponse)
+@router.put("/telegram")
 async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
     from app.services import db as _db
@@ -264,7 +264,7 @@ async def set_telegram_config(body: TelegramConfigRequest) -> TelegramConfigResp
     )
 
 
-@router.post("/telegram/test", response_model=TelegramConfigResponse)
+@router.post("/telegram/test")
 async def test_telegram() -> TelegramConfigResponse:
     import app.services.notifications.telegram as _tg
     from app.services import db as _db
@@ -313,13 +313,13 @@ class EvalHistoryCapResponse(BaseModel):
     cap: int
 
 
-@router.get("/eval-history-cap", response_model=EvalHistoryCapResponse)
+@router.get("/eval-history-cap")
 async def get_eval_history_cap() -> EvalHistoryCapResponse:
     from app.services import eval_history
     return EvalHistoryCapResponse(cap=eval_history.get_cap())
 
 
-@router.put("/eval-history-cap", response_model=EvalHistoryCapResponse)
+@router.put("/eval-history-cap")
 async def set_eval_history_cap(cap: int = 50) -> EvalHistoryCapResponse:
     from app.services import eval_history
     eval_history.set_cap(cap)

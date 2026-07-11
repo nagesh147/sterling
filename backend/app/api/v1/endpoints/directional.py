@@ -530,7 +530,7 @@ def _sym(underlying: Optional[str]) -> str:
 
 # ─── /status ──────────────────────────────────────────────────────────────────
 
-@router.get("/status", response_model=DirectionalStatusResponse)
+@router.get("/status")
 async def directional_status(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -666,7 +666,7 @@ def _adapter_can_serve(inst, source: str) -> bool:
     return inst.exchange != "zerodha"
 
 
-@router.get("/watchlist", response_model=WatchlistResponse)
+@router.get("/watchlist")
 async def watchlist(request: Request) -> WatchlistResponse:
     current_source = _adm.get_data_source()
     instruments = registry.list_instruments()
@@ -699,7 +699,7 @@ async def watchlist(request: Request) -> WatchlistResponse:
 
 # ─── /debug/market-snapshot ───────────────────────────────────────────────────
 
-@router.get("/debug/market-snapshot", response_model=MarketSnapshotResponse)
+@router.get("/debug/market-snapshot")
 async def market_snapshot(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -746,7 +746,7 @@ async def market_snapshot(
 
 # ─── /preview ─────────────────────────────────────────────────────────────────
 
-@router.get("/preview", response_model=PreviewResponse)
+@router.get("/preview")
 async def preview(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -795,7 +795,7 @@ async def debug_compute_signal(
 
 # ─── /run-once ────────────────────────────────────────────────────────────────
 
-@router.post("/run-once", response_model=RunOnceResponse)
+@router.post("/run-once")
 async def run_once_endpoint(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -1271,7 +1271,7 @@ async def all_signals(request: Request) -> dict:
 
 # ─── /snapshot ────────────────────────────────────────────────────────────────
 
-@router.get("/snapshot", response_model=DirectionalSnapshot)
+@router.get("/snapshot")
 async def snapshot(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -1366,7 +1366,7 @@ async def snapshot(
 
 # ─── /history/{underlying} ────────────────────────────────────────────────────
 
-@router.get("/history/{underlying}", response_model=EvalHistoryResponse)
+@router.get("/history/{underlying}")
 async def eval_history(underlying: str) -> EvalHistoryResponse:
     sym = underlying.upper()
     if not registry.is_supported(sym):
@@ -1994,7 +1994,7 @@ class ArrowResponse(BaseModel):
     count: int
 
 
-@router.get("/arrows/{underlying}", response_model=ArrowResponse)
+@router.get("/arrows/{underlying}")
 async def get_arrows(underlying: str) -> ArrowResponse:
     sym = underlying.upper()
     if not registry.is_supported(sym):
@@ -2007,7 +2007,7 @@ async def get_arrows(underlying: str) -> ArrowResponse:
     )
 
 
-@router.get("/arrows", response_model=ArrowResponse)
+@router.get("/arrows")
 async def get_all_arrows() -> ArrowResponse:
     events = arrow_store.get_all()
     return ArrowResponse(
@@ -2019,7 +2019,7 @@ async def get_all_arrows() -> ArrowResponse:
 
 # ─── /regime-trend/{underlying} ───────────────────────────────────────────────
 
-@router.get("/regime-trend/{underlying}", response_model=RegimeTrendResponse)
+@router.get("/regime-trend/{underlying}")
 async def regime_trend(
     underlying: str,
     n_bars: int = Query(default=30, ge=5, le=100),

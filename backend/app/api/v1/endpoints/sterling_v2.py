@@ -22,7 +22,7 @@ class V2Config(BaseModel):
 _config = V2Config()
 
 
-@router.get("/config", response_model=V2Config)
+@router.get("/config")
 def get_config() -> V2Config:
     return _config
 

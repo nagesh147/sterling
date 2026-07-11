@@ -193,7 +193,7 @@ _enter_lock = asyncio.Lock()
 
 # ─── Collection endpoints (no path param) ────────────────────────────────────
 
-@router.get("", response_model=PositionListResponse)
+@router.get("")
 async def list_positions(
     underlying: str = Query(default=""),
     status: str = Query(default=""),
@@ -216,7 +216,7 @@ async def list_positions(
     )
 
 
-@router.get("/summary", response_model=PortfolioSummary)
+@router.get("/summary")
 async def portfolio_summary() -> PortfolioSummary:
     now_ms = int(time.time() * 1000)
     positions = paper_store.list_positions()
@@ -249,7 +249,7 @@ async def portfolio_summary() -> PortfolioSummary:
     )
 
 
-@router.get("/analytics", response_model=TradeAnalytics)
+@router.get("/analytics")
 async def trade_analytics() -> TradeAnalytics:
     """Win rate, avg P&L, profit factor across all closed positions."""
     now_ms = int(time.time() * 1000)
@@ -646,7 +646,7 @@ class DirectEntryRequest(BaseModel):
     notes: str = ""
 
 
-@router.post("/enter-direct", response_model=PaperPosition)
+@router.post("/enter-direct")
 async def enter_direct_position(body: DirectEntryRequest, request: Request) -> PaperPosition:
     """
     Create a paper futures position directly from signal state.
@@ -725,7 +725,7 @@ async def enter_direct_position(body: DirectEntryRequest, request: Request) -> P
     )
 
 
-@router.post("/enter", response_model=PaperPosition)
+@router.post("/enter")
 async def enter_position(body: EnterPositionRequest, request: Request) -> PaperPosition:
     sym = body.underlying.upper()
     inst = registry.get_instrument(sym)
@@ -893,7 +893,7 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
     return pos
 
 
-@router.post("/monitor-all", response_model=MonitorAllResult)
+@router.post("/monitor-all")
 async def monitor_all(request: Request) -> MonitorAllResult:
     now_ms = int(time.time() * 1000)
     # Include partially_closed positions — still need monitoring
@@ -1082,7 +1082,7 @@ async def get_pnl_history(pos_id: str):
     }
 
 
-@router.patch("/{pos_id}/notes", response_model=PaperPosition)
+@router.patch("/{pos_id}/notes")
 async def update_position_notes(pos_id: str, notes: str = "") -> PaperPosition:
     """Update trade journal notes for a paper position."""
     pos = paper_store.update_position(pos_id.upper(), notes=notes)
@@ -1091,7 +1091,7 @@ async def update_position_notes(pos_id: str, notes: str = "") -> PaperPosition:
     return pos
 
 
-@router.get("/{pos_id}", response_model=PaperPosition)
+@router.get("/{pos_id}")
 async def get_position(pos_id: str) -> PaperPosition:
     pos = paper_store.get_position(pos_id.upper())
     if not pos:
@@ -1099,7 +1099,7 @@ async def get_position(pos_id: str) -> PaperPosition:
     return pos
 
 
-@router.post("/{pos_id}/close", response_model=PaperPosition)
+@router.post("/{pos_id}/close")
 async def close_position(pos_id: str, body: ClosePositionRequest, request: Request) -> PaperPosition:
     pos = paper_store.get_position(pos_id.upper())
     updated = paper_store.close_position(pos_id.upper(), body.exit_spot_price, body.notes)
@@ -1130,7 +1130,7 @@ async def close_position(pos_id: str, body: ClosePositionRequest, request: Reque
     return updated
 
 
-@router.post("/{pos_id}/monitor", response_model=MonitorResult)
+@router.post("/{pos_id}/monitor")
 async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     pos = paper_store.get_position(pos_id.upper())
     if not pos:

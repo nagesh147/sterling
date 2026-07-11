@@ -152,19 +152,19 @@ def _effective_config(request: Request) -> ScalpingConfig:
     })
 
 
-@router.get("/config", response_model=ScalpingConfigResponse)
+@router.get("/config")
 async def get_config(request: Request) -> ScalpingConfigResponse:
     return ScalpingConfigResponse(config=_effective_config(request))
 
 
-@router.get("/config/default", response_model=ScalpingConfigResponse)
+@router.get("/config/default")
 async def get_default_config() -> ScalpingConfigResponse:
     """Factory defaults (powers the 'Reset to defaults' button) — 4h/30m, PA+SMC+MA
     on, 1% risk, etc. Does not change live config; the UI sets the draft from this."""
     return ScalpingConfigResponse(config=default_config())
 
 
-@router.post("/config", response_model=ScalpingConfigResponse)
+@router.post("/config")
 async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigResponse:
     from app.services.db import set_config as _sc
     request.app.state.sterling_engine_config = body
@@ -180,7 +180,7 @@ async def presets() -> dict:
     return {k: v.model_dump() for k, v in TIMEFRAME_PRESETS.items()}
 
 
-@router.get("/universe", response_model=ScalpingUniverseResponse)
+@router.get("/universe")
 async def universe(request: Request) -> ScalpingUniverseResponse:
     """Symbols with enough 4H + 15min stored history."""
     cfg = _get_config(request)
@@ -318,7 +318,7 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     return result
 
 
-@router.get("/signals", response_model=ScalpingScanResponse)
+@router.get("/signals")
 async def signals(request: Request, armed_only: bool = False) -> ScalpingScanResponse:
     """Scan the stored-crypto universe, return signals from all enabled strategies."""
     import time as _t
@@ -345,7 +345,7 @@ async def signals(request: Request, armed_only: bool = False) -> ScalpingScanRes
 # ─── backtest ──────────────────────────────────────────────────────────────
 
 
-@router.post("/backtest", response_model=ScalpingBacktestResult)
+@router.post("/backtest")
 async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingBacktestResult:
     """Honest bar-by-bar replay of the scalping strategies on stored data.
 
@@ -419,7 +419,7 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
 # ─── execute ───────────────────────────────────────────────────────────────
 
 
-@router.post("/execute", response_model=ScalpingExecuteResponse)
+@router.post("/execute")
 async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExecuteResponse:
     """Route a scalping signal through the Paper/Live order path."""
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order

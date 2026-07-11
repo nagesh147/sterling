@@ -175,7 +175,7 @@ async def run_mtf_backtest_endpoint(
     }
 
 
-@router.post("/vcp", response_model=HybridVCPBacktestResult)
+@router.post("/vcp")
 async def run_vcp_backtest_endpoint(
     body: HybridVCPBacktestRequest,
     request: Request,
