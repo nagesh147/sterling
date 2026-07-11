@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { k } from '../../styles/kiteUI';
 import { usePlaceKiteGtt } from '../../hooks/useKite';
 
@@ -14,16 +14,6 @@ export function CreateGttModal({ onClose }: { onClose: () => void }) {
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
-  // Close the modal once the mutation actually succeeds, and surface any
-  // server-side failure alongside the local validation errors below.
-  useEffect(() => {
-    if (place.isSuccess) onClose();
-  }, [place.isSuccess, onClose]);
-
-  useEffect(() => {
-    if (place.isError) setError(place.error?.message || 'Create GTT failed');
-  }, [place.isError, place.error]);
-
   const submit = () => {
     setError(null);
     if (!(triggerPrice > 0)) { setError('Enter a valid trigger value'); return; }
@@ -31,11 +21,14 @@ export function CreateGttModal({ onClose }: { onClose: () => void }) {
     if (!(lastPrice > 0)) { setError('Enter the current last price'); return; }
     if (!(orderPrice > 0)) { setError('Enter a valid order price'); return; }
     if (!(quantity > 0)) { setError('Enter a quantity greater than 0'); return; }
-    place.mutate({
-      trigger_type: 'single', tradingsymbol: symbol.trim().toUpperCase(), exchange,
-      last_price: lastPrice, trigger_values: [triggerPrice],
-      orders: [{ tradingsymbol: symbol.trim().toUpperCase(), exchange, transaction_type: side, quantity, order_type: 'LIMIT', product, price: orderPrice }],
-    });
+    place.mutate(
+      {
+        trigger_type: 'single', tradingsymbol: symbol.trim().toUpperCase(), exchange,
+        last_price: lastPrice, trigger_values: [triggerPrice],
+        orders: [{ tradingsymbol: symbol.trim().toUpperCase(), exchange, transaction_type: side, quantity, order_type: 'LIMIT', product, price: orderPrice }],
+      },
+      { onSuccess: onClose, onError: (err: any) => setError(err?.message || 'Create GTT failed') },
+    );
   };
 
   const field = (label: string, value: number | string, onChange: (v: string) => void, type: 'text' | 'number' = 'number') => (

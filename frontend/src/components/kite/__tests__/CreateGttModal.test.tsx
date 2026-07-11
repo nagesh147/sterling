@@ -22,10 +22,13 @@ describe('CreateGttModal', () => {
     fireEvent.change(screen.getByLabelText('Order price'), { target: { value: '1400' } });
     fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '10' } });
     fireEvent.click(screen.getByText('Create GTT'));
-    expect(mockMutate).toHaveBeenCalledWith(expect.objectContaining({
-      trigger_type: 'single', tradingsymbol: 'INFY', exchange: 'NSE',
-      last_price: 1500, trigger_values: [1400],
-    }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger_type: 'single', tradingsymbol: 'INFY', exchange: 'NSE',
+        last_price: 1500, trigger_values: [1400],
+      }),
+      expect.anything(),
+    );
   });
 
   it('shows a validation error when the trigger price is missing', () => {
