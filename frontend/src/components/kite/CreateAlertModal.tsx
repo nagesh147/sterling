@@ -49,7 +49,7 @@ export function CreateAlertModal({ onClose }: { onClose: () => void }) {
             <div style={{ flex: 1 }}>{field('Exchange', exchange, setExchange)}</div>
           </div>
           <label style={{ fontSize: 12, color: '#9b9b9b' }}>Condition
-            <select value={operator} onChange={(e) => setOperator(e.target.value as any)}
+            <select value={operator} onChange={(e) => setOperator(e.target.value as (typeof OPERATORS)[number])}
               style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14 }}>
               {OPERATORS.map((op) => <option key={op} value={op}>Last price {op}</option>)}
             </select>

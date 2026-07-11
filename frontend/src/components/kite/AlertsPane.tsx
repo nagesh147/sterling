@@ -35,6 +35,7 @@ export function AlertsPane() {
   const { data: allAlerts } = useKiteAlerts(true);
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const alerts = query.trim()
     ? allAlerts?.filter((a) => a.name?.toLowerCase().includes(query.trim().toLowerCase()))
     : allAlerts;
@@ -96,7 +97,13 @@ export function AlertsPane() {
                 <td style={S.td}>
                   <Pill type={isAto ? 'ato' : 'simple'}>{isAto ? 'ATO' : 'SIMPLE'}</Pill>
                 </td>
-                <td style={{ ...S.td, color: '#387ed1' }}><TriggeredCount uuid={a.uuid} /></td>
+                <td style={{ ...S.td, color: '#387ed1' }}>
+                  {expandedId === a.uuid ? (
+                    <TriggeredCount uuid={a.uuid} />
+                  ) : (
+                    <span onClick={() => setExpandedId(a.uuid)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Show</span>
+                  )}
+                </td>
                 <td style={S.td}>{a.created_at ? new Date(a.created_at as string).toISOString().split('T')[0] : '—'}</td>
               </tr>
             );

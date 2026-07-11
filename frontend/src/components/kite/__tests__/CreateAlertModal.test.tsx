@@ -52,4 +52,25 @@ describe('CreateAlertModal', () => {
     expect(mockMutate).not.toHaveBeenCalled();
     expect(screen.getByText('Enter a threshold value')).toBeInTheDocument();
   });
+
+  it('uppercases the entered symbol before submitting', () => {
+    render(<CreateAlertModal onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'INFY above 1600' } });
+    fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'infy' } });
+    fireEvent.change(screen.getByLabelText('Exchange'), { target: { value: 'NSE' } });
+    fireEvent.change(screen.getByLabelText('Threshold'), { target: { value: '1600' } });
+    fireEvent.click(screen.getByText('Create alert'));
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ lhs_tradingsymbol: 'INFY' }),
+      expect.anything(),
+    );
+  });
+
+  it('closes on cancel without submitting', () => {
+    const onClose = vi.fn();
+    render(<CreateAlertModal onClose={onClose} />);
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(onClose).toHaveBeenCalled();
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
 });
