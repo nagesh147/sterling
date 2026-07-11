@@ -27,24 +27,40 @@ const S: Record<string, React.CSSProperties> = {
 const num = (v: any) => Number(v ?? 0);
 const pnlColor = (v: number) => (v > 0 ? '#4caf50' : v < 0 ? '#df514c' : '#9b9b9b');
 
-function ConvertControl({ p }: { p: any }) {
+// Exported so it can be unit-tested directly: this control is currently not
+// wired into PortfolioPane's rendered rows (see git history — the render
+// call was dropped in a prior redesign while the component itself was left
+// in place), so a PortfolioPane-level render test cannot reach it.
+export function ConvertControl({ p }: { p: any }) {
   const convert = useConvertKitePosition();
   const products = ['MIS', 'CNC', 'NRML'].filter((x) => x !== p.product);
   const [target, setTarget] = useState(products[0]);
+  const fullQty = Math.abs(num(p.quantity));
+  const [qty, setQty] = useState(fullQty);
   if (!num(p.quantity)) return null;
+  const invalidQty = !(qty > 0) || qty > fullQty;
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+      <input
+        type="number" min={1} max={fullQty} value={qty}
+        onChange={(e) => setQty(Number(e.target.value))}
+        style={{ ...S.inSm, width: 56, textAlign: 'right' }}
+        title={`Max: ${fullQty}`}
+      />
       <select style={S.inSm} value={target} onChange={(e) => setTarget(e.target.value)}>
         {products.map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
       <span
-        style={{ cursor: 'pointer', color: convert.isError ? '#df514c' : '#387ed1', fontSize: 11 }}
-        title={convert.isError ? (convert.error as Error).message : `Convert ${p.product} → ${target}`}
-        onClick={() => convert.mutate({
-          tradingsymbol: p.tradingsymbol, exchange: p.exchange,
-          transaction_type: num(p.quantity) >= 0 ? 'BUY' : 'SELL', position_type: 'day',
-          quantity: Math.abs(num(p.quantity)), old_product: p.product, new_product: target,
-        })}
+        style={{ cursor: invalidQty ? 'not-allowed' : 'pointer', color: invalidQty ? '#bdbdbd' : convert.isError ? '#df514c' : '#387ed1', fontSize: 11 }}
+        title={invalidQty ? `Enter a quantity between 1 and ${fullQty}` : convert.isError ? (convert.error as Error).message : `Convert ${qty} of ${fullQty} ${p.product} → ${target}`}
+        onClick={() => {
+          if (invalidQty) return;
+          convert.mutate({
+            tradingsymbol: p.tradingsymbol, exchange: p.exchange,
+            transaction_type: num(p.quantity) >= 0 ? 'BUY' : 'SELL', position_type: 'day',
+            quantity: qty, old_product: p.product, new_product: target,
+          });
+        }}
       >
         {convert.isPending ? '…' : convert.isSuccess ? '✓' : 'convert'}
       </span>
