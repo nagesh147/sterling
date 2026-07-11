@@ -381,3 +381,9 @@ During `./scripts/setup-claude.sh`:
 
 - Graphify hooks **default YES** (self-updating graph on commit/checkout)
 - Full bundle (CRG + Graphify + TrueCourse pre-commit) **default NO** with time estimates shown (~20–90s+ per commit)
+
+### Obsidian vault (optional, default Yes)
+
+During setup:
+- Creates `docs/obsidian/` for human notes, architecture decisions, daily notes, Graphify exports.
+- Backlinks and visual graph complement CRG (code impact), TrueCourse (violations), Graphify (code+docs).

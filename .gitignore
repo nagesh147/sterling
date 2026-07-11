@@ -71,3 +71,7 @@ antigravity-claude-proxy/
 .truecourse/*
 !.truecourse/config.json
 !.truecourse/.gitignore
+
+# Obsidian local workspace (optional — remove if you want to share settings)
+.obsidian/
+
