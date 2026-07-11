@@ -282,6 +282,101 @@ for entry in ".code-review-graph/" ".truecourse/"; do
 done
 ok ".gitignore ready"
 
+
+
+
+# ---------- G. Graphify (global knowledge graph — optional) ----------
+echo -e "\n${BLD}G. Graphify (knowledge graph: code + docs)...${RST}"
+echo "  Global CLI + Claude skill (all projects). Per-repo data in graphify-out/"
+echo "  Capability: broader knowledge graph. Daily impact/MCP stays code-review-graph."
+echo "  Architecture violations stay TrueCourse."
+echo
+
+if ! command -v graphify &>/dev/null; then
+  echo "  graphify CLI not found."
+  echo "  Install globally? (package name: graphifyy — double y)"
+  echo "  ┌────────────────────────────────────────────────────────────┐"
+  echo "  │ Y — uv tool / pipx / pip install graphifyy  [default]     │"
+  echo "  │ N — skip Graphify for this setup                          │"
+  echo "  └────────────────────────────────────────────────────────────┘"
+  read -r -p "  Install Graphify globally? [Y/n] " ginst
+  ginst=${ginst:-Y}
+  if [[ "$ginst" =~ ^[Yy]$ ]]; then
+    if command -v uv &>/dev/null; then
+      uv tool install graphifyy && ok "graphifyy via uv" || warn "uv install failed"
+    elif command -v pipx &>/dev/null; then
+      pipx install graphifyy && ok "graphifyy via pipx" || warn "pipx install failed"
+    else
+      pip install --user graphifyy && ok "graphifyy via pip --user" || warn "pip install failed"
+    fi
+  else
+    warn "Skipped Graphify install"
+  fi
+else
+  ok "graphify already installed ($(graphify --version 2>/dev/null | head -1))"
+fi
+
+if command -v graphify &>/dev/null; then
+  echo
+  echo "  Register Graphify skill for Claude (all projects)?"
+  echo "  Y — graphify install / graphify claude install  [default]"
+  echo "  N — skip skill registration"
+  read -r -p "  Register global Graphify skill? [Y/n] " gskill
+  gskill=${gskill:-Y}
+  if [[ "$gskill" =~ ^[Yy]$ ]]; then
+    graphify install 2>/dev/null || true
+    graphify claude install 2>/dev/null || true
+    ok "Graphify skill registration attempted (see ~/.claude/skills/graphify)"
+  else
+    warn "Skipped Graphify skill registration"
+  fi
+
+  echo
+  echo "  Build knowledge graph for THIS repo now?"
+  echo "  ┌────────────────────────────────────────────────────────────┐"
+  echo "  │ 1 — Extract/update graph (local CPU; can take a while)     │"
+  echo "  │ 2 — Skip (run later: graphify extract . OR /graphify in Claude) │"
+  echo "  └────────────────────────────────────────────────────────────┘"
+  read -r -p "  Graph build [1/2] (default: 2): " gbuild
+  gbuild=${gbuild:-2}
+  if [[ "$gbuild" == "1" ]]; then
+    echo "  → graphify extract (this may take several minutes on large repos)..."
+    if graphify extract . --update 2>/dev/null || graphify extract .; then
+      ok "Graphify extract done → graphify-out/"
+    else
+      warn "Extract failed — later: graphify extract . or /graphify in Claude"
+    fi
+  else
+    ok "Skipped graph extract for now"
+    echo "  Later:  cd project && graphify extract ."
+    echo "  Or in Claude: /graphify ."
+  fi
+
+  echo
+  echo "  Install Graphify git hooks for THIS repo?"
+  echo "  Y — update graph on commit/branch switch (extra commit time)"
+  echo "  N — no Graphify hooks  [default]  (code-review-graph hooks remain primary)"
+  read -r -p "  Graphify git hooks? [y/N] " ghook
+  ghook=${ghook:-N}
+  if [[ "$ghook" =~ ^[Yy]$ ]]; then
+    graphify hook install 2>/dev/null && ok "Graphify hooks installed" || warn "graphify hook install failed"
+  else
+    ok "Skipped Graphify hooks (recommended if CRG hooks already active)"
+  fi
+else
+  warn "graphify not on PATH — skip skill/extract/hooks"
+fi
+
+# Always ensure gitignore entries when script runs
+touch .gitignore
+for entry in "graphify-out/" ".graphify/"; do
+  if ! grep -qF "$entry" .gitignore 2>/dev/null; then
+    echo -e "\n# Graphify\n$entry" >> .gitignore
+  fi
+done
+ok "gitignore includes Graphify output dirs"
+
+
 # ----- Done -----
 echo -e "\n${GRN}${BLD}"
 echo "=============================================="
@@ -290,7 +385,9 @@ echo "=============================================="
 echo -e "${RST}"
 echo "Stack:"
 echo "  • code-review-graph  → daily coding, impact, token savings"
-echo "  • TrueCourse         → architecture (cycles, layers, god modules)"
+echo "  • TrueCourse
+  • Graphify            → optional knowledge graph (global skill)
+  • Graphify            → optional knowledge graph (global skill)         → architecture (cycles, layers, god modules)"
 echo "  • Skills             → dynamic 1–3 per task (see CLAUDE.md)"
 echo "  • CLI                → rg fd sg jq yq gh"
 echo

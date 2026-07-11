@@ -360,3 +360,13 @@ When you run `./scripts/setup-claude.sh`, TrueCourse will ask:
 2. **Pre-commit hook [y/N]** (default **N**)
    - **Y** — TrueCourse on every commit: stricter, slower commits; usually **no** large LLM token cost (diff/deterministic). Tokens rise only if LLM rules are enabled on the hook.  
    - **N** — fast commits; run `truecourse` manually when needed (recommended for most users).
+
+### Graphify (optional, global)
+
+During `./scripts/setup-claude.sh` you may also be asked about **Graphify**:
+
+- **Install globally** — CLI `graphify` (PyPI: `graphifyy`) + Claude skill for all projects  
+- **Extract graph** — builds `graphify-out/` for this repo (can take a while)  
+- **Git hooks** — optional; default **N** if you already use code-review-graph hooks  
+
+**Capability split:** code-review-graph = daily impact/MCP · TrueCourse = architecture violations · Graphify = knowledge graph (code + docs).
