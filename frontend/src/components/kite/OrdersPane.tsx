@@ -14,6 +14,21 @@ const S: Record<string, React.CSSProperties> = {
   td: { padding: '12px 16px', fontSize: 13, color: '#444', borderBottom: '1px solid #f1f1f1' },
 };
 
+const STATUS_COLOR: Record<string, { fg: string; bg: string }> = {
+  COMPLETE: { fg: '#4caf50', bg: 'rgba(76, 175, 80, 0.1)' },
+  OPEN: { fg: '#ff9800', bg: 'rgba(255, 152, 0, 0.1)' },
+  'TRIGGER PENDING': { fg: '#ff9800', bg: 'rgba(255, 152, 0, 0.1)' },
+  CANCELLED: { fg: '#df514c', bg: 'rgba(223, 81, 76, 0.1)' },
+  REJECTED: { fg: '#df514c', bg: 'rgba(223, 81, 76, 0.1)' },
+};
+
+function statusStyle(status: string): React.CSSProperties {
+  const c = STATUS_COLOR[status] ?? { fg: '#9b9b9b', bg: 'rgba(155, 155, 155, 0.1)' };
+  return { padding: '2px 6px', background: c.bg, color: c.fg, borderRadius: 3, fontSize: 11 };
+}
+
+const MODIFIABLE_STATUSES = new Set(['OPEN', 'TRIGGER PENDING']);
+
 function OrdersSubPane() {
   const { data: orders } = useKiteOrders(true);
 
@@ -68,7 +83,10 @@ function OrdersSubPane() {
               <td style={S.td}>{o.filled_quantity ?? 0}/{o.quantity}</td>
               <td style={S.td}>{Number(o.average_price ?? 0).toFixed(2)}</td>
               <td style={S.td}>
-                <span style={{ padding: '2px 6px', background: 'rgba(155, 155, 155, 0.1)', color: '#9b9b9b', borderRadius: 3, fontSize: 11 }}>{o.status}</span>
+                <span style={statusStyle(o.status)}>{o.status}</span>
+                {o.variety && o.variety !== 'regular' && (
+                  <span style={{ marginLeft: 6, padding: '1px 5px', background: '#f1f1f1', color: '#9b9b9b', borderRadius: 2, fontSize: 9, fontWeight: 600, textTransform: 'uppercase' }}>{o.variety}</span>
+                )}
               </td>
             </tr>
           ))}
