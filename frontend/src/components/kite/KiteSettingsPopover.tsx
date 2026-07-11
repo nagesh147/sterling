@@ -21,7 +21,7 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1100 }} />
-      <div style={{ position: 'fixed', top: 60, right: 40, width: 300, maxWidth: '92vw', background: '#fff', borderRadius: 6, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily, padding: '16px 18px' }}>
+      <div style={{ position: 'fixed', top: 60, right: 40, width: 300, maxWidth: '92vw', background: k.bg, borderRadius: 4, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily, padding: '16px 18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500, color: '#444' }}>Display settings</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 16, color: '#9b9b9b', cursor: 'pointer' }}>✕</button>

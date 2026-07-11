@@ -75,8 +75,8 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.15)', zIndex: 1100 }} />
-      <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', width: 620, maxWidth: '92vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 6, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily }}>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.06)', zIndex: 1100 }} />
+      <div style={{ position: 'fixed', top: 60, left: '50%', transform: 'translateX(-50%)', width: 620, maxWidth: '92vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', background: k.bg, borderRadius: 4, boxShadow: '0 10px 44px rgba(0,0,0,0.28)', zIndex: 1101, fontFamily: k.fontFamily }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #f1f1f1' }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 500, color: '#444' }}>Basket <span style={{ color: '#9b9b9b', fontWeight: 400 }}>({entries.length})</span></h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, color: '#9b9b9b', cursor: 'pointer' }}>✕</button>
