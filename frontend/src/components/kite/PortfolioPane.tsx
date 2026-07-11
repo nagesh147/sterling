@@ -201,6 +201,10 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const showPositions = view === 'positions' || !view;
 
   const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
+  // Which position row (by `${exchange}:${tradingsymbol}` id) has its Chg%
+  // cell swapped for the inline ConvertControl. Only one row at a time —
+  // mirrors the single-`expandedId` idiom used for Alerts/Orders history rows.
+  const [expandedConvertId, setExpandedConvertId] = useState<string | null>(null);
   const [posQuery, setPosQuery] = useState('');
   const [holdQuery, setHoldQuery] = useState('');
   const [analyticsView, setAnalyticsView] = useState<'positions' | 'holdings' | null>(null);
@@ -418,16 +422,40 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                           {num(p.pnl) > 0 ? '+' : ''}{num(p.pnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg), position: 'relative' }}>
-                          <span className="portfolio-content">{chg.toFixed(2)}%</span>
-                          <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
-                            <KiteActionButtons
-                              onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
-                              buyLabel="Add"
-                              onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
-                              sellLabel="Exit"
-                              onBasket={(e) => { e.stopPropagation(); if (Math.abs(qty) === 0) return; addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
-                            />
-                          </div>
+                          {expandedConvertId === id ? (
+                            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                              <ConvertControl p={p} />
+                              <span
+                                style={{ cursor: 'pointer', color: '#9b9b9b', fontSize: 14, lineHeight: 1 }}
+                                title="Close"
+                                onClick={() => setExpandedConvertId(null)}
+                              >
+                                ×
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <span className="portfolio-content">{chg.toFixed(2)}%</span>
+                              <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8, alignItems: 'center' }}>
+                                <KiteActionButtons
+                                  onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
+                                  buyLabel="Add"
+                                  onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
+                                  sellLabel="Exit"
+                                  onBasket={(e) => { e.stopPropagation(); if (Math.abs(qty) === 0) return; addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
+                                />
+                                {qty !== 0 && (
+                                  <span
+                                    style={{ cursor: 'pointer', color: '#9b9b9b', fontSize: 11, marginLeft: 8, whiteSpace: 'nowrap' }}
+                                    title={`Convert this ${p.product} position to another product type`}
+                                    onClick={(e) => { e.stopPropagation(); setExpandedConvertId(id); }}
+                                  >
+                                    Convert
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          )}
                         </td>
                       </tr>
                     );
