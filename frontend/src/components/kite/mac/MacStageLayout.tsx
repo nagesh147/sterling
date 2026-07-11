@@ -122,9 +122,9 @@ interface StagePanelProps {
   onDragEnd: (key: PanelKey, info: { point: { x: number; y: number } }) => void;
 }
 
-/* A single draggable Kite panel. Drag is initiated ONLY from the grip strip via
- * dragControls, so clicks inside the live trading content never start a drag. */
-function StagePanel({
+/* Shared panel chrome. `controls` is either a real Framer DragControls instance
+ * (handle-only drag) or null (whole-surface drag fallback before the hook loads). */
+function StagePanelInner({
   panelKey,
   child,
   isDragging,
@@ -134,12 +134,9 @@ function StagePanel({
   onDragStart,
   onDrag,
   onDragEnd,
-}: StagePanelProps) {
+  controls,
+}: StagePanelProps & { controls: { start: (e: any) => void } | null }) {
   const MotionDiv = motion.div;
-  // useDragControls is resolved lazily (see module note). If for any reason it
-  // isn't ready yet, fall back to whole-surface drag — still functional, and
-  // the grip still works.
-  const controls = useDragControlsRef ? useDragControlsRef() : null;
 
   return (
     <MotionDiv
@@ -208,6 +205,25 @@ function StagePanel({
       <div style={{ flex: collapsed ? '0 0 auto' : 1, minHeight: 0, overflow: collapsed ? 'visible' : 'auto' }}>{child}</div>
     </MotionDiv>
   );
+}
+
+/* Mounted only after `useDragControlsRef` is set — always calls the hook
+ * unconditionally (Rules of Hooks). Switching between this and StagePanelFallback
+ * is a component swap (unmount/remount), not a conditional hook call. */
+function StagePanelWithControls(props: StagePanelProps) {
+  // useDragControlsRef is guaranteed non-null by the parent branch.
+  const controls = useDragControlsRef!();
+  return <StagePanelInner {...props} controls={controls} />;
+}
+
+/* Fallback before framer-motion drag controls resolve: whole-surface drag. */
+function StagePanelFallback(props: StagePanelProps) {
+  return <StagePanelInner {...props} controls={null} />;
+}
+
+function StagePanel(props: StagePanelProps) {
+  const Panel = useDragControlsRef ? StagePanelWithControls : StagePanelFallback;
+  return <Panel {...props} />;
 }
 
 export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: MacStageLayoutProps) {
