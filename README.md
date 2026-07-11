@@ -347,3 +347,16 @@ cd frontend && npm run build   # TypeScript + Vite, clean build
 Skills are available globally but loaded **on demand** (1–3 per task).
 Routing is defined in `CLAUDE.md`. Architecture analysis uses TrueCourse;
 daily code exploration uses code-review-graph.
+
+### TrueCourse options (during setup)
+
+When you run `./scripts/setup-claude.sh`, TrueCourse will ask:
+
+1. **Analysis mode**
+   - **1 Deterministic** (default) — fast, no LLM token cost for rules  
+   - **2 Full LLM** — deeper; can use a large number of tokens; needs Claude quota  
+   - **3 Skip** — no analysis now  
+
+2. **Pre-commit hook [y/N]** (default **N**)
+   - **Y** — TrueCourse on every commit: stricter, slower commits; usually **no** large LLM token cost (diff/deterministic). Tokens rise only if LLM rules are enabled on the hook.  
+   - **N** — fast commits; run `truecourse` manually when needed (recommended for most users).

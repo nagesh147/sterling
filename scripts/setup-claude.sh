@@ -134,16 +134,33 @@ if command -v truecourse &>/dev/null; then
   esac
 
   echo
-  echo "  Pre-commit hook (optional):"
-  echo "  Y = architecture check on every commit (can slow large repos)"
-  echo "  N = faster commits; run truecourse manually  [default]"
+  echo "  Pre-commit hook? [y/N] (default N)"
+  echo "  ┌──────────────────────────────────────────────────────────────────────┐"
+  echo "  │ Y — Run TrueCourse on every commit                                 │"
+  echo "  │     • Stricter (architecture issues caught earlier)               │"
+  echo "  │     • Slower commits on large repos (diff analysis time)          │"
+  echo "  │     • Usually NO large LLM token cost (hook uses --diff)          │"
+  echo "  │     • Many tokens only if LLM rules are enabled on the hook       │"
+  echo "  │                                                                    │"
+  echo "  │ N — No hook [RECOMMENDED for most people / large repos]            │"
+  echo "  │     • Fast commits                                                 │"
+  echo "  │     • Zero hook cost; run truecourse manually when needed          │"
+  echo "  └──────────────────────────────────────────────────────────────────────┘"
   read -r -p "  Install TrueCourse pre-commit hook? [y/N] " hook
   hook=${hook:-N}
   if [[ "$hook" =~ ^[Yy]$ ]]; then
-    truecourse hooks install 2>/dev/null && ok "Pre-commit hook installed" || warn "hook install failed"
+    if truecourse hooks install 2>/dev/null; then
+      ok "Pre-commit hook installed"
+      echo "  Note: hook typically runs diff/deterministic analysis (time cost)."
+      echo "        LLM tokens are NOT used on each commit unless you enable --llm."
+      echo "        For a deep pass later: truecourse analyze --llm --stash --no-skills"
+    else
+      warn "hook install failed"
+    fi
   else
-    ok "Skipped pre-commit hook"
+    ok "Skipped pre-commit hook (faster commits)"
   fi
+
 else
   warn "truecourse not available — architecture step skipped"
 fi
