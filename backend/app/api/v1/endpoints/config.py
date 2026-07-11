@@ -106,7 +106,7 @@ async def set_data_source(body: DataSourceRequest, request: Request) -> DataSour
         request.app.state.adapter = new_adapter
         reachable = await new_adapter.ping()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to connect to {exchange}: {exc}")
+        raise HTTPException(status_code=502, detail=f"Failed to connect to {exchange}: {exc}") from exc
 
     return DataSourceResponse(
         exchange=exchange,

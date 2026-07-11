@@ -44,7 +44,7 @@ def should_exit_on_reds(
 def get_exit_reason(red_count: int, mode: ExitMode, base: str = "red_line") -> str:
     """Human + machine readable reason."""
     if mode == "three_red_signal":
-        return f"three_red_signal_exit"
+        return "three_red_signal_exit"
     return f"{mode}_exit"  # one_red_exit, two_red_exit, three_red_exit
 
 

@@ -463,7 +463,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             raise HTTPException(
                 status_code=502,
                 detail=json.dumps(error_detail),
-            )
+            ) from exc
 
     elif router_mode == "live":
         # ── LIVE REQUESTED BUT NO USABLE CREDENTIALS ──────────────────────
@@ -759,7 +759,7 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
     active = exchange_account_store.get_active()
     if not active or not active.api_key or active.api_key.startswith("DUMMY"):
         paper_store.update_position(position_id, order_status="failed",
-                                     notes=f"[ALGO-FAILED] No live credentials")
+                                     notes="[ALGO-FAILED] No live credentials")
         raise HTTPException(status_code=400, detail="Live credentials required for retry")
 
     s = pos.sized_trade.structure
@@ -804,7 +804,7 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
         paper_store.update_position(position_id, order_status="failed",
                                      notes=f"[ALGO-FAILED] Retry error: {exc}")
         log.error("Retry failed for %s: %s", position_id, exc)
-        raise HTTPException(status_code=502, detail=f"Retry failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Retry failed: {exc}") from exc
 
 
 @router.post("/update-order-status/{position_id}")
@@ -838,7 +838,7 @@ async def update_order_status(position_id: str, order_id: str, request: Request)
         return {"position_id": position_id, "order_id": order_id, "order_status": order_status,
                 "fill_price": fill_price, "raw_status": status}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Status check failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Status check failed: {exc}") from exc
 
 
 @router.get("/test-credentials")
@@ -946,7 +946,7 @@ async def get_order_status(order_id: str, request: Request) -> dict:
                 return {"order_id": order_id, "status": o.status, "filled": o.filled_size, "size": o.size}
         return {"order_id": order_id, "status": "filled_or_cancelled"}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.delete("/cancel-order/{order_id}")
@@ -964,7 +964,7 @@ async def cancel_order(order_id: str, product_id: int, request: Request) -> dict
         result = await adapter.cancel_order(order_id, product_id)
         return {"cancelled": True, "order_id": order_id, "result": result}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.delete("/cancel-all")
@@ -988,7 +988,7 @@ async def cancel_all_orders(product_symbol: str, request: Request) -> dict:
         result       = await adapter.cancel_all_orders(product_id)
         return {"cancelled_all": True, "product": delta_symbol, "result": result}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 # ─── Live execution safety endpoints ────────────────────────────────────────

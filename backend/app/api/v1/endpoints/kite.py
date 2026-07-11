@@ -57,11 +57,11 @@ async def _run(user: UserContext, fn):
     except HTTPException:
         raise
     except KiteTokenError as exc:
-        raise HTTPException(401, str(exc))
+        raise HTTPException(401, str(exc)) from exc
     except KiteError as exc:
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     # NB: no close() — the client is cached/shared (see kite_accounts.acquire_client)
 
 
@@ -147,9 +147,9 @@ async def create_session(body: GenerateSessionRequest,
     try:
         data = await client.generate_session(body.request_token)
     except KiteError as exc:
-        raise HTTPException(401, str(exc))
+        raise HTTPException(401, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     finally:
         await client.close()
     kite_accounts.save_session(
@@ -183,9 +183,9 @@ async def refresh_session(body: RefreshSessionRequest,
     try:
         data = await client.renew_access_token(refresh_token)
     except KiteError as exc:
-        raise HTTPException(401, str(exc))
+        raise HTTPException(401, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     finally:
         await client.close()
     kite_accounts.save_session(

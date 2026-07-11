@@ -103,7 +103,7 @@ async def activate_data_source(exchange_id: str, request: Request) -> dict:
         request.app.state.adapter = new_adapter
         reachable = await new_adapter.ping()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to switch data source: {exc}")
+        raise HTTPException(status_code=502, detail=f"Failed to switch data source: {exc}") from exc
     return {
         "exchange_id": exchange_id,
         "exchange_name": cfg.name,

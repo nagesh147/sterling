@@ -42,7 +42,7 @@ async def option_chain(
         spot = await adapter.get_index_price(inst)
         raw_chain = await adapter.get_option_chain(inst)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Option chain fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Option chain fetch failed: {exc}") from exc
 
     # Phase 1: BSM-fill any Greeks the adapter didn't ship (Delta India often
     # only returns delta + IV). Every contract in the response carries the

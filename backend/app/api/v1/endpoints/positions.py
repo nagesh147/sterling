@@ -1151,7 +1151,7 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
         signal = compute_signal(c1h)
         current_spot = await adapter.get_index_price(inst)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}")
+        raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}") from exc
 
     leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
     dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1

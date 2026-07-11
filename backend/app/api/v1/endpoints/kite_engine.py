@@ -73,7 +73,7 @@ async def backtest(body: BacktestRequest,
     try:
         result = await backtest_service.run_backtest(client, body)
     except KiteError as exc:
-        raise HTTPException(502, f"Kite data fetch failed: {exc}")
+        raise HTTPException(502, f"Kite data fetch failed: {exc}") from exc
     return BacktestResponse(**result)
 
 

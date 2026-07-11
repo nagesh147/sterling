@@ -92,7 +92,7 @@ async def get_balances():
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -112,7 +112,7 @@ async def get_positions(underlying: str = Query(default="")):
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -130,7 +130,7 @@ async def get_open_orders(underlying: str = Query(default="")):
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -148,7 +148,7 @@ async def get_fills(limit: int = Query(default=50, ge=1, le=200)):
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -171,7 +171,7 @@ async def get_fills_summary(limit: int = Query(default=200, ge=1, le=500)):
     try:
         fills = await adapter.get_fills(limit=limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -249,7 +249,7 @@ async def get_trading_preferences():
             "timestamp_ms":      int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -260,7 +260,7 @@ async def export_fills_csv(limit: int = Query(default=200, ge=1, le=500)):
     try:
         fills = await adapter.get_fills(limit=limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -297,7 +297,7 @@ async def export_positions_csv():
     try:
         positions = await adapter.get_positions()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 

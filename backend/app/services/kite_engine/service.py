@@ -498,7 +498,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         state.log(uid, "info", "Scan skipped — cancelled recently (60s cooldown).")
         return 0
     state.set_scanning(uid, True)
-    state.log(uid, "scan_start", f"Initiating 1H Sterling Kite Engine scan…")
+    state.log(uid, "scan_start", "Initiating 1H Sterling Kite Engine scan…")
     try:
         # Fetch the four exchange dumps concurrently (warm cache → instant; cold →
         # parallel downloads instead of ~1s of sequential round-trips).
