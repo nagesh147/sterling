@@ -285,97 +285,71 @@ ok ".gitignore ready"
 
 
 
-# ---------- G. Graphify (global knowledge graph — optional) ----------
-echo -e "\n${BLD}G. Graphify (knowledge graph: code + docs)...${RST}"
-echo "  Global CLI + Claude skill (all projects). Per-repo data in graphify-out/"
-echo "  Capability: broader knowledge graph. Daily impact/MCP stays code-review-graph."
-echo "  Architecture violations stay TrueCourse."
+
+# ---------- H. Git hooks: self-updating graphs (interactive) ----------
+echo -e "
+${BLD}H. Self-updating graphs (git hooks)...${RST}"
+echo
+echo "  Estimates for a repo the size of Sterling (~600–2000 files):"
+echo "  ┌─────────────────────────────────────────────────────────────────────────┐"
+echo "  │ Hook set              │ When              │ Extra time / commit (approx) │"
+echo "  │───────────────────────┼───────────────────┼─────────────────────────────│"
+echo "  │ Graphify only         │ post-commit/      │ ~5–30s  (graph refresh)     │"
+echo "  │                       │ post-checkout     │                             │"
+echo "  │ CRG update            │ commit / Claude   │ ~2–15s  (incremental)       │"
+echo "  │                       │ session hooks     │                             │"
+echo "  │ TrueCourse --diff     │ pre-commit        │ ~10–60s+ (diff analyze)     │"
+echo "  │ ALL THREE             │ every commit      │ ~20–90s+ (can feel slow)    │"
+echo "  └─────────────────────────────────────────────────────────────────────────┘"
+echo "  Notes:"
+echo "  • Times vary with dirty files, CPU, and whether LLM is involved (TC LLM = minutes)."
+echo "  • TrueCourse pre-commit is usually deterministic --diff (no big LLM bill)."
+echo "  • Graphify keeps graphify-out fresh; CRG keeps .code-review-graph fresh."
 echo
 
-if ! command -v graphify &>/dev/null; then
-  echo "  graphify CLI not found."
-  echo "  Install globally? (package name: graphifyy — double y)"
-  echo "  ┌────────────────────────────────────────────────────────────┐"
-  echo "  │ Y — uv tool / pipx / pip install graphifyy  [default]     │"
-  echo "  │ N — skip Graphify for this setup                          │"
-  echo "  └────────────────────────────────────────────────────────────┘"
-  read -r -p "  Install Graphify globally? [Y/n] " ginst
-  ginst=${ginst:-Y}
-  if [[ "$ginst" =~ ^[Yy]$ ]]; then
-    if command -v uv &>/dev/null; then
-      uv tool install graphifyy && ok "graphifyy via uv" || warn "uv install failed"
-    elif command -v pipx &>/dev/null; then
-      pipx install graphifyy && ok "graphifyy via pipx" || warn "pipx install failed"
-    else
-      pip install --user graphifyy && ok "graphifyy via pip --user" || warn "pip install failed"
-    fi
-  else
-    warn "Skipped Graphify install"
-  fi
-else
-  ok "graphify already installed ($(graphify --version 2>/dev/null | head -1))"
-fi
-
+# --- Graphify: stay-fresh default YES ---
 if command -v graphify &>/dev/null; then
-  echo
-  echo "  Register Graphify skill for Claude (all projects)?"
-  echo "  Y — graphify install / graphify claude install  [default]"
-  echo "  N — skip skill registration"
-  read -r -p "  Register global Graphify skill? [Y/n] " gskill
-  gskill=${gskill:-Y}
-  if [[ "$gskill" =~ ^[Yy]$ ]]; then
-    graphify install 2>/dev/null || true
-    graphify claude install 2>/dev/null || true
-    ok "Graphify skill registration attempted (see ~/.claude/skills/graphify)"
+  echo "  Graphify self-update (recommended): refresh knowledge graph on commit/branch switch."
+  read -r -p "  Enable Graphify hooks so graph stays fresh? [Y/n] " gh
+  gh=${gh:-Y}
+  if [[ "$gh" =~ ^[Yy]$ ]]; then
+    graphify hook install 2>/dev/null && echo "  ✔ Graphify hooks ON (self-updating graph)" || echo "  ⚠ graphify hook install failed"
   else
-    warn "Skipped Graphify skill registration"
-  fi
-
-  echo
-  echo "  Build knowledge graph for THIS repo now?"
-  echo "  ┌────────────────────────────────────────────────────────────┐"
-  echo "  │ 1 — Extract/update graph (local CPU; can take a while)     │"
-  echo "  │ 2 — Skip (run later: graphify extract . OR /graphify in Claude) │"
-  echo "  └────────────────────────────────────────────────────────────┘"
-  read -r -p "  Graph build [1/2] (default: 2): " gbuild
-  gbuild=${gbuild:-2}
-  if [[ "$gbuild" == "1" ]]; then
-    echo "  → graphify extract (this may take several minutes on large repos)..."
-    if graphify extract . --update 2>/dev/null || graphify extract .; then
-      ok "Graphify extract done → graphify-out/"
-    else
-      warn "Extract failed — later: graphify extract . or /graphify in Claude"
-    fi
-  else
-    ok "Skipped graph extract for now"
-    echo "  Later:  cd project && graphify extract ."
-    echo "  Or in Claude: /graphify ."
-  fi
-
-  echo
-  echo "  Install Graphify git hooks for THIS repo?"
-  echo "  Y — update graph on commit/branch switch (extra commit time)"
-  echo "  N — no Graphify hooks  [default]  (code-review-graph hooks remain primary)"
-  read -r -p "  Graphify git hooks? [y/N] " ghook
-  ghook=${ghook:-N}
-  if [[ "$ghook" =~ ^[Yy]$ ]]; then
-    graphify hook install 2>/dev/null && ok "Graphify hooks installed" || warn "graphify hook install failed"
-  else
-    ok "Skipped Graphify hooks (recommended if CRG hooks already active)"
+    echo "  ⚠ Graphify hooks OFF — run later: graphify extract . --update && graphify hook install"
   fi
 else
-  warn "graphify not on PATH — skip skill/extract/hooks"
+  echo "  ⚠ graphify not installed — skip Graphify hooks"
 fi
 
-# Always ensure gitignore entries when script runs
-touch .gitignore
-for entry in "graphify-out/" ".graphify/"; do
-  if ! grep -qF "$entry" .gitignore 2>/dev/null; then
-    echo -e "\n# Graphify\n$entry" >> .gitignore
-  fi
-done
-ok "gitignore includes Graphify output dirs"
+echo
+echo "  Enable ALL heavy hooks at once? (CRG git refresh + Graphify + TrueCourse pre-commit)"
+echo "  Y — maximum freshness; commits can take ~20–90s+ on large repos"
+echo "  N — keep lighter defaults (Graphify choice above; no forced TrueCourse pre-commit) [default]"
+read -r -p "  Enable CRG + Graphify + TrueCourse hooks together? [y/N] " allh
+allh=${allh:-N}
 
+if [[ "$allh" =~ ^[Yy]$ ]]; then
+  echo "  → Installing full hook bundle..."
+  if command -v graphify &>/dev/null; then
+    graphify hook install 2>/dev/null && echo "  ✔ Graphify hooks" || echo "  ⚠ Graphify hooks failed"
+  fi
+  if command -v code-review-graph &>/dev/null; then
+    code-review-graph install --platform claude-code 2>/dev/null || true
+    code-review-graph build 2>/dev/null || echo "  ⚠ CRG build issues"
+    echo "  ✔ CRG install/build attempted"
+  fi
+  if command -v truecourse &>/dev/null; then
+    truecourse hooks install 2>/dev/null && echo "  ✔ TrueCourse pre-commit ON (~10–60s+/commit)" || echo "  ⚠ TrueCourse hooks failed"
+  fi
+  echo
+  echo "  Full bundle ON. Expect slower commits; disable later if painful:"
+  echo "    graphify hook uninstall"
+  echo "    truecourse hooks uninstall"
+else
+  echo "  Skipped full triple-hook bundle (safer/faster commits)"
+  echo "  Graphify stay-fresh = your answer above only."
+  echo "  TrueCourse pre-commit remains off unless you enable it separately."
+fi
 
 # ----- Done -----
 echo -e "\n${GRN}${BLD}"

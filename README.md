@@ -374,3 +374,10 @@ During `./scripts/setup-claude.sh` you may also be asked about **Graphify**:
 ### AI context discipline
 
 See `CLAUDE.md` and `docs/ai/CONTEXT.md` for tool ownership, plan-first workflow, MCP limits, and token-saving habits. Prefer graph tools over wide search; small branches; new session when context drifts.
+
+### Graphify (global, stay-fresh by default)
+
+During `./scripts/setup-claude.sh`:
+
+- Graphify hooks **default YES** (self-updating graph on commit/checkout)
+- Full bundle (CRG + Graphify + TrueCourse pre-commit) **default NO** with time estimates shown (~20–90s+ per commit)
