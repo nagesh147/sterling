@@ -7,7 +7,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.engines.sterling_engine.config import default_config
-from app.engines.sterling_engine.optimizer import W_EXEC, W_MACRO, _exit_fixed
+from app.engines.sterling_engine.optimizer import W_EXEC, W_MACRO
 from app.engines.sterling_engine.scanner import scan_symbol
 from app.schemas.market import Candle
 

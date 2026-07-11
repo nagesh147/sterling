@@ -19,7 +19,6 @@ from pathlib import Path
 # Add backend to path if run directly
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.services import db
 from app.services.paper_store import list_positions, update_position, bootstrap
 from app.engines.common.exit_counter import get_exit_threshold
 
