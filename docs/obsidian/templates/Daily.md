@@ -11,9 +11,9 @@ tags: [daily, sterling]
 - [ ] 
 
 ## Plan (if non-trivial)
-- **Goal**: 
-- **Scope / branch**: 
-- **Tools**: CRG · TrueCourse · Graphify · Skills (1–3)
+- Goal: 
+- Scope / branch: 
+- Tools: CRG · TrueCourse · Graphify · Skills (1–3)
 
 ## Work log
 ### Done
@@ -36,11 +36,11 @@ tags: [daily, sterling]
 ## Follow-ups
 - [ ] 
 
-## TrueCourse / Graphify
-- Criticals: [[architecture/truecourse-criticals-{{date:YYYY-MM-DD}}]]
-- Graphify: [[graphs/GRAPH_REPORT-{{date:YYYY-MM-DD}}]]
-
 ## Quick references
 - [[../../CLAUDE.md]]
 - [[../../docs/ai/CONTEXT.md]]
 - [[../../docs/ai/WORKFLOWS.md]]
+
+## Graphify snapshot
+- [[graphs/GRAPH_REPORT-2026-07-12]]
+- Interactive graph: graphify-out/graph.html (browser)
