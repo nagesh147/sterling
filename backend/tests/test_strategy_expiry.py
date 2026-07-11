@@ -51,7 +51,7 @@ class TestStrategyExpiry:
                 for offset in range(7):                     # all days of week
                     day = monday + datetime.timedelta(days=offset)
                     expiry_str, dte = _strategy_expiry(
-                        mode.dte_min, mode.dte_preferred, mode.dte_max, _today=day
+                        mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
                     )
                     exp_date = datetime.datetime.strptime(expiry_str, '%d%m%y').date()
                     assert exp_date.weekday() == 4, (
@@ -69,7 +69,7 @@ class TestStrategyExpiry:
                 for offset in range(7):
                     day = monday + datetime.timedelta(days=offset)
                     _, dte = _strategy_expiry(
-                        mode.dte_min, mode.dte_preferred, mode.dte_max, _today=day
+                        mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
                     )
                     assert dte >= 0, f"{mode_name} on {day}: negative DTE {dte}"
                     # Check if a Friday existed in range
@@ -97,7 +97,7 @@ class TestStrategyExpiry:
             for offset in range(5):                         # Mon–Fri
                 day = monday + datetime.timedelta(days=offset)
                 _, selected_dte = _strategy_expiry(
-                    mode.dte_min, mode.dte_preferred, mode.dte_max, _today=day
+                    mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
                 )
                 # Collect all valid candidates
                 candidates = []
@@ -127,7 +127,7 @@ class TestStrategyExpiry:
             for offset in range(7):
                 day = monday + datetime.timedelta(days=offset)
                 _, dte = _strategy_expiry(
-                    mode.dte_min, mode.dte_preferred, mode.dte_max, _today=day
+                    mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
                 )
                 # 0 DTE on expiry day is allowed for intraday/scalping
                 # because force_close_time exits before market close
@@ -152,7 +152,7 @@ class TestStrategyExpiry:
         for offset in range(7):
             day = monday + datetime.timedelta(days=offset)
             _, dte = _strategy_expiry(
-                mode.dte_min, mode.dte_preferred, mode.dte_max, _today=day
+                mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
             )
             assert dte >= mode.dte_min, (
                 f"swing on {day}: DTE {dte} < dte_min {mode.dte_min}"
@@ -165,7 +165,7 @@ class TestStrategyExpiry:
         for offset in range(7):
             day = monday + datetime.timedelta(days=offset)
             _, dte = _strategy_expiry(
-                mode.dte_min, mode.dte_preferred, mode.dte_max, _today=day
+                mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
             )
             assert dte >= 21, f"positional on {day}: DTE {dte} < 21"
 

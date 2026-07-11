@@ -22,7 +22,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.services import db
 from app.services.paper_store import list_positions, update_position, bootstrap
 from app.engines.common.exit_counter import get_exit_threshold
-from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 
 
 def migrate_paper_positions(dry_run=True, default_mode="two_red"):
@@ -48,7 +47,6 @@ def update_kite_defaults(dry_run=True, default_mode="two_red"):
     """Bulk update for kite engine configs (per uid in db). Queries real DB for keys like kite_engine_config_*"""
     import sqlite3
     import os
-    from app.services import db as _db
     from app.services.kite_engine.state import get_config, set_config
     from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 
@@ -100,7 +98,7 @@ def migrate_kite_positions(dry_run=True, default_mode="two_red"):
     import sqlite3
     import os
     import json
-    from app.services.kite_engine.positions import _load, _persist, OpenPosition
+    from app.services.kite_engine.positions import _load, _persist
     from app.engines.common.exit_counter import get_exit_threshold
 
     _DB_PATH = os.environ.get("STERLING_DB_PATH", "sterling_paper.db")
@@ -145,7 +143,7 @@ def generate_dry_run_report(migrate_count: int, kite_updates: int, default_mode:
     print(f"Default mode: {default_mode}")
     print(f"Paper positions to migrate: {migrate_count}")
     print(f"Kite configs to update: {kite_updates}")
-    print(f"Kite positions health migrate: included if --migrate-kite-positions")
+    print("Kite positions health migrate: included if --migrate-kite-positions")
     print("Changes would include: exit_mode, current_red_count, exit_threshold on positions + kite health.")
     print("No DB writes performed.")
     print("=== END REPORT ===\n")

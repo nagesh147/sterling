@@ -2,7 +2,6 @@ import sys
 import os
 import sqlite3
 import pandas as pd
-from collections import defaultdict
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

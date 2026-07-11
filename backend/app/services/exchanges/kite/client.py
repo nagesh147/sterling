@@ -125,10 +125,13 @@ class KiteClient(TradingExchangeAdapter):
         """Unwrap Kite's ``{status,data}`` envelope; raise a typed KiteError on failure."""
         try:
             body = resp.json()
-        except Exception:
+        except Exception as exc:
             if not resp.is_success:
                 raise_for_kite(f"HTTP {resp.status_code}: {resp.text[:200]}", "", resp.status_code)
-            raise KiteError(f"Non-JSON response from {resp.request.url}", status_code=resp.status_code)
+            raise KiteError(
+                f"Non-JSON response from {resp.request.url}",
+                status_code=resp.status_code,
+            ) from exc
         if isinstance(body, dict) and body.get("status") == "error":
             raise_for_kite(body.get("message", ""), body.get("error_type", ""), resp.status_code,
                            data=body.get("data") if isinstance(body.get("data"), dict) else None)

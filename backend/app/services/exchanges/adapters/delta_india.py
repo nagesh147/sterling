@@ -22,7 +22,6 @@ from typing import List, Optional, Union
 
 import httpx
 
-from app.services.exchanges.authenticated_base import AuthenticatedExchangeAdapter
 from app.services.exchanges.trading_base import TradingExchangeAdapter
 from app.schemas.market import Candle, OptionSummary
 from app.schemas.instruments import InstrumentMeta
@@ -689,7 +688,6 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         is a deep reduce-only limit that, under normal conditions, will
         never fill — it exists only to carry the bracket stop to the OMS.
         """
-        from datetime import datetime as _dt
         # 1. Cancel every open order for this product (bracket stops, TPs, etc.)
         try:
             await self.cancel_all_orders(product_id)

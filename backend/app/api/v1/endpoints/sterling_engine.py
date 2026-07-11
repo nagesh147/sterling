@@ -15,7 +15,7 @@ import json
 import logging
 import time
 from dataclasses import asdict
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -285,9 +285,6 @@ _scan_lock = asyncio.Lock()
 def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     """Evaluate the full universe across all enabled strategies."""
     from app.engines.sterling_engine.scanner import scan_universe
-    import numpy as np
-    from app.engines.sterling_engine.levels import detect_levels
-
     syms = [s.upper() for s in cfg.symbols] if cfg.symbols else _store_symbols(
         min_bars_hours=max(cfg.warmup_bars_4h, cfg.warmup_bars_15m // 4 + 20)
     )

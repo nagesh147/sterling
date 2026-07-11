@@ -14,7 +14,6 @@ from app.services import paper_store
 from app.services import exchange_account_store
 from app.services import adapter_manager
 from app.services import webhook_store as _webhook_store_svc
-from app.services import alert_store as _alert_store_bootstrap
 from app.services import pnl_history as _pnl_history_svc
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.instruments import router as instruments_router
@@ -142,7 +141,6 @@ async def _background_position_monitor(app: FastAPI) -> None:
     import asyncio
     from app.services import paper_store as _ps
     from app.services.exchanges import instrument_registry as _reg
-    from app.schemas.positions import PositionStatus
     from app.core.trading_mode import MODES, DEFAULT_MODE
 
     DEFAULT_INTERVAL = 60   # fallback when no mode is set
@@ -173,7 +171,6 @@ async def _background_position_monitor(app: FastAPI) -> None:
             from app.engines.directional.monitor_engine import check_exits
             from app.engines.directional.trailing_stop  import TrailState, TrailingStopEngine, realistic_stop_fill
             from app.engines.risk import options_monitor as _opt_mon
-            from app.schemas.risk import ExitSignal
             from app.api.v1.endpoints.config import get_runtime_risk
             from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
             from app.services import pnl_history as _pnl_history
@@ -717,7 +714,6 @@ async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
     from app.schemas.execution import (
         TradeStructure, CandidateContract, Direction as ExecDir,
     )
-    from app.schemas.risk import RiskParams
     from app.api.v1.endpoints.config import get_runtime_risk
     from app.api.v1.endpoints.trading import (
         LiveOrderRequest, _create_paper_tracking,
@@ -1335,7 +1331,7 @@ async def lifespan(app: FastAPI):
     from app.services.exchanges.kite import accounts as _kite_accounts
     _kite_accounts.bootstrap()
     _webhook_store_svc.bootstrap()
-    _alert_store_bootstrap.bootstrap()
+    _alert_store_svc.bootstrap()
     _pnl_history_svc.bootstrap()
     from app.services import eval_history as _eval_history_svc
     _eval_history_svc.bootstrap()

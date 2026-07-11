@@ -99,7 +99,8 @@ function saveMap(map: Record<PanelKey, SlotKey>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch {
-    /* ignore quota / private-mode errors */
+    // localStorage may throw in private mode / quota exceeded — layout is non-critical
+    void 0;
   }
 }
 

@@ -31,7 +31,7 @@ from app.engines.derivatives.freeze_token import get_store as get_freeze_store
 from app.engines.derivatives.preview import preview_one
 from app.engines.derivatives.profiles import DEFAULT_PROFILES, get_profile
 from app.engines.derivatives.schemas import (
-    DecisionStatus, DerivativesDecision, DualDerivativesDecision,
+    DecisionStatus, DerivativesDecision,
     MarketContext, SignalContext, StrategyDerivativesProfile,
 )
 from app.engines.derivatives.selector import decide_both as _decide_both
@@ -646,7 +646,7 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
         resp = await place_live_order(order, request)
     except Exception as e:
         store.restore(body.freeze_token, decision)
-        raise e
+        raise
 
     return _ExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
@@ -943,7 +943,7 @@ async def funding(underlying: str, request: Request) -> dict:
         pid = await adapter.get_product_id(inst.delta_perp_symbol or f"{underlying.upper()}USD")
         return await adapter.get_funding_rate(pid)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"funding fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"funding fetch failed: {exc}") from exc
 
 
 @router.get("/book/{symbol}")
@@ -955,7 +955,7 @@ async def book(symbol: str, request: Request, depth: int = Query(default=10, ge=
         pid = await adapter.get_product_id(symbol)
         return await adapter.get_l2_book(pid, depth=depth)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"book fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"book fetch failed: {exc}") from exc
 
 
 # ─── edge feed (validated 4h winners) ─────────────────────────────────
