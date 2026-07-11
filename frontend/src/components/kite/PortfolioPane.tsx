@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   useConvertKitePosition, useKiteHoldings, useKitePositions,
-  useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp
+  useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp, usePlaceKiteOrder
 } from '../../hooks/useKite';
 
 import { InstrumentLabel } from './InstrumentLabel';
@@ -132,6 +132,35 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
       lastPrice: lastPx || 0,
       product: product as 'MIS' | 'CNC' | 'NRML',   // square off / add to the position in its own product
     });
+  };
+
+  const placeOrder = usePlaceKiteOrder();
+  const [exitingSelected, setExitingSelected] = useState(false);
+
+  // Sequential, not Promise.all: a live market order that already filled
+  // can't be un-placed, so each leg must resolve before the next fires
+  // (mirrors placeAll() in BasketPane.tsx). Per-leg failures are swallowed
+  // here since usePlaceKiteOrder's own onError already surfaces a toast —
+  // one failed leg must not stop the remaining selected positions.
+  const exitSelected = async () => {
+    const targets = positions.filter((p: any) => selectedPos.has(`${p.exchange}:${p.tradingsymbol}`) && num(p.quantity) !== 0);
+    if (targets.length === 0) return;
+    if (!window.confirm(`Exit ${targets.length} selected position${targets.length !== 1 ? 's' : ''} at market price?`)) return;
+    setExitingSelected(true);
+    for (const p of targets) {
+      const qty = num(p.quantity);
+      try {
+        await placeOrder.mutateAsync({
+          tradingsymbol: p.tradingsymbol, exchange: p.exchange,
+          transaction_type: qty >= 0 ? 'SELL' : 'BUY', quantity: Math.abs(qty),
+          order_type: 'MARKET', product: p.product, variety: 'regular', validity: 'DAY',
+        });
+      } catch {
+        // swallowed — see comment above
+      }
+    }
+    setExitingSelected(false);
+    setSelectedPos(new Set());
   };
 
   const showHoldings = view === 'holdings' || !view;
@@ -272,6 +301,11 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
               Positions <span style={{ color: '#9b9b9b', fontSize: 18 }}>({positions.length})</span>
             </h2>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              {selectedPos.size > 0 && (
+                <button onClick={exitSelected} disabled={exitingSelected} style={{ background: '#df514c', color: '#fff', border: 'none', borderRadius: 3, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: exitingSelected ? 'not-allowed' : 'pointer', opacity: exitingSelected ? 0.6 : 1 }}>
+                  {exitingSelected ? 'Exiting…' : `Exit Selected (${selectedPos.size})`}
+                </button>
+              )}
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
