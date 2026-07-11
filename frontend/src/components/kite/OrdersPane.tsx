@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useKiteOrders, useCancelKiteOrder } from '../../hooks/useKite';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { GttPane } from './GttPane';
 import { AlertsPane } from './AlertsPane';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -132,19 +133,28 @@ function OrdersSubPane() {
   );
 }
 
-function BasketsPane() {
+function BasketsPane({ onOpenBasket }: { onOpenBasket: () => void }) {
+  const count = useKiteBasketStore((s) => s.entries.length);
+  if (count === 0) {
+    return (
+      <div style={S.emptyContainer}>
+        <div style={{ marginBottom: 24 }}>
+          <svg width="84" height="84" viewBox="0 0 24 24" fill="none">
+            <path d="M4 8l2 12h12l2-12H4z" fill="#f8f8f8" stroke="#dfe1e4" strokeWidth="1" strokeLinejoin="round" />
+            <path d="M8 8V6a4 4 0 018 0v2" stroke="#dfe1e4" strokeWidth="1" strokeLinecap="round" />
+            <path d="M6 11h12M7 14h10M8 17h8" stroke="#dfe1e4" strokeWidth="1" strokeLinecap="round" strokeDasharray="1 2" />
+            <text x="12" y="15" fill="#dfe1e4" fontSize="5" fontWeight="bold" textAnchor="middle" style={{ letterSpacing: 1 }}>000</text>
+          </svg>
+        </div>
+        <div style={S.emptyTitle}>Basket is empty.</div>
+        <button style={S.primaryBtn} onClick={onOpenBasket}>Open basket</button>
+      </div>
+    );
+  }
   return (
     <div style={S.emptyContainer}>
-      <div style={{ marginBottom: 24 }}>
-        <svg width="84" height="84" viewBox="0 0 24 24" fill="none">
-          <path d="M4 8l2 12h12l2-12H4z" fill="#f8f8f8" stroke="#dfe1e4" strokeWidth="1" strokeLinejoin="round" />
-          <path d="M8 8V6a4 4 0 018 0v2" stroke="#dfe1e4" strokeWidth="1" strokeLinecap="round" />
-          <path d="M6 11h12M7 14h10M8 17h8" stroke="#dfe1e4" strokeWidth="1" strokeLinecap="round" strokeDasharray="1 2" />
-          <text x="12" y="15" fill="#dfe1e4" fontSize="5" fontWeight="bold" textAnchor="middle" style={{ letterSpacing: 1 }}>000</text>
-        </svg>
-      </div>
-      <div style={S.emptyTitle}>You haven't created any baskets.</div>
-      <button style={S.primaryBtn}>New basket</button>
+      <div style={{ ...S.emptyTitle, marginBottom: 0 }}>{count} order{count !== 1 ? 's' : ''} staged in your basket.</div>
+      <button style={{ ...S.primaryBtn, marginTop: 20 }} onClick={onOpenBasket}>Open basket</button>
     </div>
   );
 }
@@ -166,7 +176,7 @@ function SipPane() {
   );
 }
 
-export function OrdersPane() {
+export function OrdersPane({ onOpenBasket }: { onOpenBasket?: () => void }) {
   const [tab, setTab] = useState('orders');
   const tabs = ['orders', 'gtt', 'baskets', 'sip', 'alerts'];
 
@@ -201,7 +211,7 @@ export function OrdersPane() {
       <div style={{ flex: 1, overflow: 'auto', padding: '24px 32px' }}>
         {tab === 'orders' && <OrdersSubPane />}
         {tab === 'gtt' && <GttPane />}
-        {tab === 'baskets' && <BasketsPane />}
+        {tab === 'baskets' && <BasketsPane onOpenBasket={onOpenBasket ?? (() => {})} />}
         {tab === 'sip' && <SipPane />}
         {tab === 'alerts' && <AlertsPane />}
       </div>

@@ -143,7 +143,7 @@ export function KiteTab() {
     );
   } else {
     if (nav === 'dashboard') content = <KiteDashboard />;
-    else if (nav === 'orders') content = <OrdersPane />;
+    else if (nav === 'orders') content = <OrdersPane onOpenBasket={() => setBasketOpen(true)} />;
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
     else if (nav === 'positions') content = <PortfolioPane view="positions" />;
     else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
