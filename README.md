@@ -1,9 +1,18 @@
-# Sterling v4 — Hybrid VCP-Momentum Scalper
+# Sterling — Multi-Market Algo Trading Platform
 
-Live crypto futures + options trading platform. Auto-trades based on VCP (Volume Concentration Profile) patterns + multi-timeframe momentum confluence. Supports paper simulation, shadow audit, and live execution via Delta Exchange India.
+A modular, broker-agnostic trading platform spanning two markets:
 
-A modular, broker-agnostic trading platform: brokers, markets, strategies, and
-risk rules are plug-and-play, with a hard zero-regression discipline.
+- **Crypto** (Delta Exchange India primary; Binance/Deribit/OKX adapters) —
+  futures + options, VCP (Volume Concentration Profile) patterns + multi-
+  timeframe momentum confluence, backtest-validated "edge" signals.
+- **Indian equities & derivatives** (Zerodha Kite Connect, multi-tenant —
+  each user's own encrypted credentials) — an auto-scan/auto-execute engine
+  plus a full manual trading terminal (order window, positions, GTT, funds).
+
+Brokers, markets, strategies, and risk rules are plug-and-play (see
+[ARCHITECTURE.md](ARCHITECTURE.md)); every order — auto or manual, crypto or
+Kite — funnels through one `OrderRouter` with paper/shadow/live modes and a
+fail-closed safety pipeline, under a hard zero-regression discipline.
 
 ## Documentation
 
@@ -36,60 +45,72 @@ Signal Generation → Track Selection → Orchestrator → OrderRouter → Excha
 (VCP / trend_following)  (highest score wins)  (paper/shadow/live)
 ```
 
+> **Note:** the trees below cover the crypto/directional core this README was
+> originally written around. The platform has since grown a second major
+> pillar — **Zerodha Kite Connect** (Indian equities/derivatives, fully
+> multi-tenant) — plus several more engines. See the module map in
+> [ARCHITECTURE.md](ARCHITECTURE.md) and the current engine list in
+> [STRATEGIES.md](STRATEGIES.md) for the complete picture; this section calls
+> out the highlights.
+
 ### Backend (FastAPI + Python 3.12)
 
 ```
 backend/
-├── main.py                         App factory, lifespan, VCP feeds, auto-trading
+├── main.py                         App factory, lifespan (app.state singletons), 31 routers
 ├── app/
-│   ├── api/v1/endpoints/
-│   │   ├── directional.py           Signals, snapshot, preview, run-once, SSE stream
-│   │   ├── trading.py               algo-mode, algo-router-mode, place-order, test-credentials
-│   │   ├── positions.py            CRUD, enter, monitor, close, summary, P&L
-│   │   ├── exchanges.py             Exchange accounts, credentials, data source switch
-│   │   └── account.py               Balances, positions, orders, fills
-│   ├── engines/
-│   │   ├── directional/
-│   │   │   ├── orchestrator.py      Runs track registry, picks winning track
-│   │   │   ├── signal_engine.py     Multi-TF indicator pipeline → SignalResult
-│   │   │   ├── signal_features.py   assemble_signal_score + regime-aware weights
-│   │   │   ├── regime_engine.py     4H macro filter (EMA, ATR percentile, ADX)
-│   │   │   ├── setup_engine.py      State machine transitions
-│   │   │   ├── structure_selector   IVR routing + leverage by score + signal_strength
-│   │   │   └── tracks/
-│   │   │       ├── vcp_track.py     Volume concentration profile patterns
-│   │   │       ├── trend_following  Classic momentum (ST + RSI + squeeze + vol)
-│   │   │       └── mean_reversion   Fade-extremes specialist
-│   │   └── hybrid_vcp/
-│   │       ├── executor.py           VCP live feed executor → order submission
-│   │       └── feeder.py            VCP feed state machine
-│   └── services/
-│       ├── execution/
-│       │   └── order_router.py      paper/shadow/live dispatch
-│       ├── snapshot_cache.py         45s TTL cache
-│       └── db.py                     SQLite (positions, alerts, exchanges)
+│   ├── domain/                      Signal/TradeEvent contracts, Protocols (no I/O)
+│   ├── bus/                         EventBus — in-process async pub/sub
+│   ├── agents/                      BrokerAgent/StrategyAgent/ExecutionAgent/RiskAgent/PNLAgent/Orchestrator
+│   ├── api/v1/endpoints/            33 route files — see Key Endpoints below
+│   ├── engines/                     15 packages — see STRATEGIES.md for the full list:
+│   │   ├── sterling_engine/          Crypto scalper: MA-crossover, mean-reversion, breakout, price-action, SMC
+│   │   ├── sterling_kite_engine/     Zerodha/Indian equities + derivatives engine
+│   │   ├── directional/              Multi-track regime/signal/setup/sizing/execution pipeline ("Grok")
+│   │   │   └── tracks/                vcp_track.py, trend_following, mean_reversion
+│   │   ├── derivatives/ (+ derivatives_native/)  Greeks-aware strike/expiry/leverage selector
+│   │   ├── edge/                      Backtest-validated 4h signal generator
+│   │   ├── sterling_v2/               Track-system redesign (validated ma_crossover×3 @4h stack)
+│   │   ├── hybrid_vcp/                VCP live-feed executor
+│   │   ├── analytics/                 Walk-forward, sensitivity, correlation, CPCV, Monte Carlo (pure fns)
+│   │   ├── risk/                      Drawdown circuit breaker, greeks budget, slippage, microstructure veto
+│   │   └── indicators/, ml/, backtest/, arbitration/, common/
+│   ├── services/
+│   │   ├── execution/order_router.py  paper/shadow/live dispatch, fail-closed safety pipeline
+│   │   ├── exchanges/                 adapters/ (delta_india, binance, deribit, okx, zerodha shim)
+│   │   │   └── kite/                   Kite Connect v3 client — auth, instruments, ticker, multi-tenant accounts
+│   │   ├── kite_engine/                Kite trading logic on top of kite/: scanner, sizing, strikes, protective stops
+│   │   ├── calibration.py, snapshot_cache.py (45s TTL), db.py (SQLite)
+│   ├── persistence/                   SQLAlchemy ORM mirror (dual-write, Migration Phase 5)
+│   └── schemas/                       Pydantic boundary models
 └── config/
-    └── tracks.yaml                   Per-(instrument, profile) → [track_list]
+    ├── registry.json                  Broker/market registry (source of truth for adapters)
+    └── tracks.yaml                    Per-(instrument, profile) → [track_list]
 ```
 
 ### Frontend (React 19 + TypeScript + Vite)
 
 ```
 frontend/src/
+├── pages/
+│   ├── SimpleTerminal.tsx            The production shell — KITE / CRYPTO top-tab switch
+│   │                                   CRYPTO_TABS: sterlingEngine / grok / sterling_v2 / positions / backtest / paper
+│   └── Terminal.tsx, Dashboard.tsx   Pro / legacy tabbed layouts
 ├── components/
-│   ├── SignalsTable.tsx              Signal feed with strategy filter (LATEST/LEGACY)
-│   ├── LiveControlPanel.tsx          Kill switch, algo-mode, algo-router-mode selector
-│   ├── PaperLiveToggle.tsx           3-way PAPER / SHADOW / LIVE toggle
-│   ├── V4AnalyticsDashboard.tsx       Live P&L + realized PnL + mode badge
-│   ├── ArrowAlert.tsx                SSE overlay alert cards
-│   └── ...
-├── hooks/
-│   ├── useSignalFeed.ts              Append-only signal feed, SSE-driven
-│   ├── useSignals.ts                 Polling REST /signals endpoint
-│   ├── useExchanges.ts               Exchange CRUD + test connection
-│   └── useLivePnl.ts                 Live unrealized + realized P&L
-└── pages/
-    └── Dashboard.tsx                 8 tabs: Analysis / Signals / Positions / etc.
+│   ├── kite/                         Zerodha panes: ConnectPane, OrderWindow, PositionsPane, OrdersPane,
+│   │   └── mac/                        GttPane, FundsPane, SterlingKiteEnginePane — mac/ = gated Mac-style
+│   │                                    motion layer (useMacKite, lazy framer-motion, off by default)
+│   ├── sterling_engine/, sterling_v2/  Per-engine tab components
+│   ├── derivatives/                  Shared CommonFuturesCandidatesTable / CommonOptionsCandidatesTable /
+│   │                                   CommonSourceBadge — parameterized per engine (Sterling vs Grok)
+│   ├── BacktestPanel.tsx, MassiveBacktestDashboard.tsx, WalkForwardPanel.tsx, SensitivityPanel.tsx
+│   └── PositionsPanel.tsx, PositionHeatmap.tsx, PaperLiveToggle.tsx, TradingTicket.tsx
+├── hooks/                            ~55 domain hooks — useSignalFeed (SSE, append-only), useKiteLiveTicks
+│                                       (WS singleton), useBacktest, useCorrelation, useDrawdownBreaker, useMacKite
+├── store/                            Zustand: useStore (theme/appMode/underlying), useOrderWindowStore,
+│                                       useKiteSettings, useKiteNotifications
+└── styles/                           terminal.css (Bloomberg-dark tokens), kiteUI.tsx (Kite-parity light
+                                        tokens), macMotion.ts (motion-layer springs)
 ```
 
 ---
@@ -125,6 +146,20 @@ Auto-order fires only when `signal_strength == "STRONG"` (≥75% confluence scor
     → OrderRouter.submit()             Only if algo_mode=true + STRONG
 ```
 
+> **⚠️ Diagram shows the conceptual shape, not the current call graph.**
+> `app/engines/directional/orchestrator.py`'s `run_once()`/`preview()` are
+> neutral **stubs** left from the 2026-05-24 strategy reset (they return
+> `IDLE`/`NEUTRAL` with `reason: "strategy removed in reset"`). The live
+> `/api/v1/directional/signals` endpoint does NOT call them — it computes
+> signals via `_compute_signal_item()` in `app/api/v1/endpoints/directional.py`,
+> which uses the since-reimplemented `regime_engine.py` (real ADX + SMA-slope)
+> and `signal_engine.py` (real regime-following score), but several downstream
+> pieces implied by this diagram — `track_scoring.py`, `track_selector.py`,
+> `sizing_engine.py`, `execution_engine.py`, `structure_selector.py`,
+> `policy_engine.py` — are still strategy-reset stubs returning neutral/no-op
+> results. Treat this section as a design sketch pending a dedicated pass to
+> re-diagram the actual `_compute_signal_item` call path.
+
 > **Deep Dive**: See the [Scalping Strategy Logic](backend/docs/SCALPING_LOGIC.md) for detailed logic, conditions, and code snippets behind the Price Action, SMC, and MA Crossover scalping engines.
 
 ## Track System (`config/tracks.yaml`)
@@ -141,50 +176,72 @@ VCP runs first, sets direction; trend_following scores the move. Orchestrator pi
 
 ---
 
-## Signal Table — Strategy Filter
+## Signal status (frontend)
 
-The signal table (frontend) shows a pill-row of strategy filters:
+There is no `SignalsTable.tsx` / ALL-LATEST-LEGACY pill row anymore — it was
+replaced by a status taxonomy in `hooks/useSignals.ts`:
 
-| Button | Color | Shows |
-|--------|-------|-------|
-| ALL | gray | All signals |
-| LATEST | amber | A track (VCP/trend_following/mean_reversion) produced a directional signal |
-| LEGACY | purple | No track won — old Sterling `compute_signal` fallback used |
+- **Sterling** engine signals carry `entry_ok` directly.
+- **Directional/"Grok"** signals have no `entry_ok` — status is derived from
+  `state` (`TradeState`) via `getSignalStatus()`: `ENTRY_ARMED_*` → **ready**
+  (armed, actionable now), `*_SETUP_ACTIVE` → **pending** (forming, not yet
+  armed), `IDLE`/`NONE` → **watching**.
 
-- **LATEST**: `strategy="latest"` — track system won. `track` field shows which track (VCP / trend_following / mean_reversion).
-- **LEGACY**: `strategy="legacy"` — no track had a directional signal; old Sterling `compute_signal` path used as fallback.
-
-Counts update every 5s. Filter is independent of mode/status filters.
+`GrokTab`'s signal counts and `GrokSignalPane`'s rows both filter through the
+shared `visibleGrokSignals()`/`getSignalStatus()` helpers so they can't drift
+out of sync with each other. NIFTY/BANKNIFTY are currently excluded from the
+Grok tab. The `track`/`strategy` fields described above (which track won,
+track-system vs. legacy path) are still exposed by `/signals` and still
+rendered — just via `GrokSignalPane.tsx`/`SignalPane.tsx`/`sterling_v2/V2SignalsPane.tsx`
+rather than a single shared table component.
 
 ---
 
 ## Key Endpoints
 
-### Trading
+There are 33 route files under `app/api/v1/endpoints/`, all mounted under
+`/api/v1` except `health`. Full detail lives in each router's source; the
+groups below are the ones you'll touch most.
+
+### Crypto trading & signals (original core)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/v1/trading/algo-router-mode` | Current mode (paper/shadow/live) |
-| POST | `/api/v1/trading/algo-router-mode` | Switch mode |
-| GET | `/api/v1/trading/algo-mode` | algo_mode on/off |
-| POST | `/api/v1/trading/algo-mode` | Toggle algo_mode |
+| GET/POST | `/api/v1/trading/algo-router-mode` | Router dispatch mode (paper/shadow/live) |
+| GET/POST | `/api/v1/trading/algo-mode` | Master auto-trading on/off |
+| GET/POST | `/api/v1/trading/vcp-mode` | VCP feed status / enable-disable |
 | POST | `/api/v1/trading/place-order` | Manual order |
 | POST | `/api/v1/trading/test-credentials` | Verify exchange keys |
-
-### Signals
-
-| Method | Path | Description |
-|--------|------|-------------|
 | GET | `/api/v1/directional/signals` | Live signal table (all instruments, fresh cache) |
 | GET | `/api/v1/directional/snapshot?underlying=BTC` | Full state: spot + regime + signal + exec |
 | GET | `/api/v1/directional/stream/{underlying}` | SSE live stream |
 
-### VCP Feeds
+### Zerodha Kite (Indian equities/derivatives, multi-tenant)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/trading/vcp-mode` | VCP feed status, active profiles |
-| POST | `/api/v1/trading/vcp-mode` | Enable/disable VCP feeds |
+| Router file | Prefix | Description |
+|---|---|---|
+| `kite.py` | `/kite` | Account CRUD, session/auth, orders, positions, GTT, funds, instruments (largest router, ~68 routes) |
+| `kite_engine.py` | `/kite/engine` | Auto-scan/auto-execute engine control (PAPER/LIVE, MANUAL/AUTO toggles) |
+| `kite_telegram.py` | `/kite/telegram` | Telegram alert integration |
+
+### Derivatives, engines & analytics
+
+| Router file | Prefix | Description |
+|---|---|---|
+| `derivatives.py` | `/derivatives` | Greeks-aware candidate selection, ~21 routes |
+| `sterling_engine.py` | `/sterling-engine` | Crypto scalper control/status |
+| `sterling_v2.py` | — | Track-system engine |
+| `backtest.py`, `vectorized_backtest.py` | `/backtest` | Bar-by-bar and vectorized-sweep backtests |
+| `wfo.py` | — | Walk-forward optimization |
+| `analytics.py`, `analytics_baseline.py` | `/analytics` | Correlation, sensitivity, performance reports |
+| `risk_dashboard.py` | — | Circuit breaker / greeks budget status |
+
+### Shared infrastructure
+
+`positions.py`, `paper.py`, `account.py`, `exchanges.py`, `alerts.py`,
+`webhooks.py`, `options.py`, `stats.py`, `session.py`, `candles.py`,
+`ohlcv.py`, `instruments.py`, `config.py`, `stream.py` (SSE, mounted at
+`/api/v1/stream`).
 
 ---
 
@@ -211,59 +268,29 @@ Signal gate: `signal_strength == "STRONG"` required before any order places.
 
 ---
 
-## Overfitting Diagnosis (2026-05-25)
+## Historical research notes (superseded)
 
-The ensemble backtest showing PF < 1.0 across all modes was confirmed as **exit logic overfitting, not signal failure**. [Full diagnosis →](backend/docs/OVERFITTING_DIAGNOSIS_20260525.md)
+The two write-ups below (Overfitting Diagnosis 2026-05-25, Institutional WFO
+2026-05-31) were written about the **Triple-SuperTrend engine and its
+`ScalpingTab.tsx`/`ScalpingConfigPanel` UI**. Both were removed in the
+2026-06-03 Sterling-only consolidation (`app/engines/triple_supertrend/` and
+`app/engines/scalping/` are now empty dirs; there is no `ScalpingTab.tsx` in
+the frontend). The underlying research (exit-stack overfitting, WFO/CPCV
+timeframe filtering) still informed the surviving `sterling_engine`/`edge`
+config choices (e.g. 4h as the timeframe where durable edge lives — see
+[STRATEGIES.md](STRATEGIES.md)), but the specific config knobs and UI
+described here (`min_confirm`, `ScalpingConfigPanel`, the Scalping Terminal
+header) no longer exist. Full historical detail: `backend/docs/OVERFITTING_DIAGNOSIS_20260525.md`
+and [`docs/reports/SCALPING_PERFORMANCE_REPORT.md`](docs/reports/SCALPING_PERFORMANCE_REPORT.md).
 
-**Root cause:** The exit stack (fixed TP, partials, breakeven triggers) systematically cuts winners short:
-- Raw Triple ST signal on 4H with ST3 trailing only: **PF = 1.064–1.282** (valid edge)
-- Same signal with fixed TP + BE + partials: **PF = 0.900** (edge destroyed)
-- Breakeven alone costs −12% PF (0.900 → 0.796)
-
-**Confirmed fixes (priority order):**
-
-| Fix | Change | Expected Impact |
-|-----|--------|-----------------|
-| 1. Remove fixed TP | `partials = ()`, trail-only exits | PF 0.900 → 1.064+ |
-| 2. Disable breakeven | `be_trigger_r = 999` or remove logic | PF 0.796 → 0.900 |
-| 3. Wider stops | `sl_mult = 2.5` (from 1.5) | Higher win rate (38% vs 34%) |
-| 4. Relax consensus | `min_confirm = 2` (from 3/3) | More signals, PF 1.064 → 1.124 |
-| 5. 1H has no edge | 1H raw PF = 0.788–0.916 — disable | Avoid losing regime |
-
-**Recommended production config:**
-```python
-min_confirm = 2      # 2/3 consensus (more signals, better PF)
-sl_mult = 2.5        # Wider stops
-be_trigger_r = 999   # DISABLED
-partials = ()        # NO partials (let winners run)
-trail_source = "ST3" # Keep ST3 trailing only
-```
-
----
-
-## Institutional WFO & Dynamic Transparency (2026-05-31)
-
-To combat the 3.3 million noise trades generated by unrestricted Retail Mode on low timeframes, the engine's default profiles have been re-architected based on a strict vector robustness scan using Combinatorial Purged Cross-Validation (CPCV) and Monte Carlo testing against real data.
-
-**Proven WFO Gatekeeper Rules (Top Edge-Verified Architectures):**
-1. **BTC 4H MA Crossover (Intraday Profile):** The absolute highest mathematically proven edge. Nearly doubled $500 starting capital (+95.3% Net Return) with a 10.52 OOS Sharpe.
-2. **ETH 2H/4H SMC (Aggressive/Scalping Profiles):** SMC relies on asymmetric risk, surviving and profiting heavily even with ~30-40% win rates.
-3. **BTC 1H Price Action:** Survives noise filters via strict geometric patterns.
-
-The 1m, 5m, 15m, and 30m timeframes were empirically proven to possess negative edge due to fee/slippage decay and were structurally excluded from the default WFO profiles.
-
-**Scalping UI Dynamic Transparency:**
-The Scalping Terminal header has been completely overhauled to surface these WFO constraints natively:
-- **Click-to-Reveal:** Clicking any row in the signal table dynamically updates the global header to explain exactly what logic triggered that specific signal (e.g., *Price Action: Breakout from 5 strict patterns*).
-- **Gatekeeper Awareness:** The UI explicitly warns users if they are running unrestricted "Retail Mode" versus the mathematically enforced "WFO Active" mode.
-
-## Known Issues Fixed
-
-- **Scalping UI Malformed JSX**: Fixed an `oxc` parse error in `ScalpingTab.tsx` caused by a broken fragment during the dynamic header refactor.
-- **Scalping Profile Persistence**: Fixed the "↺ DEFAULTS" button in the `ScalpingConfigPanel` so it aggressively forces the UI state to align with the new WFO arrays (e.g., jumping immediately to `swing_4h`).
-- **PaperLiveToggle shadow switching**: SHADOW button in LIVE mode was opening a confirmation modal that did the wrong thing. Fixed — LIVE→SHADOW now directly sets `is_paper: true`.
-- **Mode persistence**: `algo_router_mode` now stored in SQLite via `set_config`, survives restarts.
-- **Signal strategy exposure**: Backend now exposes `track` + `strategy` fields in `/signals` — shows which strategy won (VCP/trend_following/mean_reversion) and whether track system or legacy path was used.
+**Still accurate today** (from the "Known Issues Fixed" list this section
+used to end with):
+- `PaperLiveToggle` renders via `createPortal` to `document.body` to escape
+  the `.term-root` z-index trap (see `reference_modal_stacking_term_root`
+  pattern) — LIVE→SHADOW correctly sets `is_paper: true` directly.
+- `algo_router_mode` persists across restarts via `db.set_config`.
+- `/api/v1/directional/signals` exposes `track` + `strategy` fields showing
+  which track won and whether the track system or legacy path was used.
 
 ---
 

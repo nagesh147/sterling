@@ -1,10 +1,25 @@
 # Sterling v4 — Canonical Strategy Spec
 
-**Single source of truth.** Resolves contradictions C1–C4 from prior README revisions. Every
-number here is enforced in code by `engines/directional/scoring.py`,
+> **⚠️ NOT CURRENTLY IMPLEMENTED — historical design doc, not ground truth.**
+> This spec describes the pre-"strategy reset" `directional` scoring/policy
+> pipeline. As of the 2026-05-24 strategy-reset branch, `engines/directional/
+> structure_selector.py` and `policy_engine.py` are explicit **stubs**
+> ("STRATEGY STUB — removed in the strategy reset... Implement the new
+> structure-selection logic here") that return neutral/no-op results, and
+> `engines/directional/scoring.py` / `passes_score_threshold` **do not exist**
+> in the current codebase at all. The real pre-reset implementation is
+> preserved only in git history on the `strategy-v2` branch. **Verify against
+> current code (`app/engines/directional/`) before trusting any number below**
+> — for current strategy ground truth see [STRATEGIES.md](STRATEGIES.md) and
+> [ARCHITECTURE.md](ARCHITECTURE.md). Kept here as a design reference in case
+> this scoring/leverage/IVR-band logic is reimplemented.
+
+**Single source of truth** *(for the pre-reset `strategy-v2` implementation only)*.
+Resolves contradictions C1–C4 from prior README revisions. Every
+number here was enforced in code by `engines/directional/scoring.py`,
 `engines/directional/sizing_engine.py`, `engines/directional/structure_selector.py`,
 `engines/risk/cooldown.py`, `engines/risk/regime_adaptive_sizer.py`, and
-`services/execution/order_router.py`. Conflicts between this doc and code are bugs to file.
+`services/execution/order_router.py` — see the warning above for current status.
 
 ---
 
