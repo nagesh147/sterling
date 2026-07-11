@@ -432,3 +432,35 @@ else
   echo "  Graphify stay-fresh = your answer above only."
   echo "  TrueCourse pre-commit remains off unless you enable it separately."
 fi
+# ---------- I. Obsidian vault (human notes / backlinks — optional) ----------
+echo -e "\n${BLD}I. Obsidian vault (human knowledge base)...${RST}"
+echo "  Light optional vault for notes, architecture decisions, daily notes, Graphify export."
+echo "  Complements: CRG (code impact), TrueCourse (violations), Graphify (code+docs graph)."
+echo
+echo "  Create Obsidian project vault? (default Y)"
+echo "  Y — create docs/obsidian/ + README (recommended)"
+echo "  N — skip (use global Obsidian vault only)"
+read -r -p "  Create Obsidian vault? [Y/n] " obs
+obs=${obs:-Y}
+if [[ "$obs" =~ ^[Yy]$ ]]; then
+  mkdir -p docs/obsidian
+  cat > docs/obsidian/README.md << 'OBS'
+# Sterling Obsidian Vault
+
+## Purpose
+- Human notes, architecture decisions, daily notes
+- Graphify export target
+- Backlinks and visual graph for project knowledge
+
+## Folders
+- `daily/` — daily notes
+- `architecture/` — decisions, diagrams
+- `graphs/` — exported from Graphify
+OBS
+  echo "  ✔ Obsidian vault created → docs/obsidian/"
+else
+  echo "  Skipped Obsidian project vault"
+fi
+
+# Ensure gitignore for Obsidian workspace files
+grep -q ".obsidian" .gitignore 2>/dev/null || echo -e "\n# Obsidian\n.obsidian/\n" >> .gitignore
