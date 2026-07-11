@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
 import {
   usePlaceKiteOrder, useKiteOrderMargins, useKiteMargins,
-  useKiteInstrumentSearch, useKiteQuote, usePlaceKiteGtt,
+  useKiteInstrumentSearch, useKiteQuote,
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
 import { useMacKite } from '../../hooks/useMacKite';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { useKitePendingProtectionStore } from '../../store/useKitePendingProtectionStore';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
@@ -93,7 +94,7 @@ export function OrderWindow({ options, onClose }: Props) {
   const [nudgeOpen, setNudgeOpen] = useState(true);
 
   const placeOrder = usePlaceKiteOrder();
-  const placeGtt = usePlaceKiteGtt();
+  const addPendingProtection = useKitePendingProtectionStore((s) => s.add);
   const marginCalc = useKiteOrderMargins();
   const { data: funds, refetch: refetchFunds } = useKiteMargins(true);
   const { data: activity } = useEngineActivity();
@@ -231,14 +232,16 @@ export function OrderWindow({ options, onClose }: Props) {
     if (err) { setError(err); return; }
     placeOrder.mutate(buildOrderBody(args), {
       onSuccess: (res: any) => {
-        // Carry positions can attach a protective GTT created on fill.
+        // Carry positions can attach a protective GTT — queued until the
+        // order actually fills (see PendingGttProtectionWatcher), not fired
+        // on mere submission-acceptance.
         if (product !== 'MIS' && (slOn || tgtOn)) {
           const base = needsPrice(orderType) ? price : instr.lastPrice;
           const gtt = buildProtectionGtt({
             tradingsymbol: instr.symbol, exchange: instr.exchange, entrySide: side, quantity: qty,
             product, basePrice: base, slPct: slOn ? slPct : undefined, tgtPct: tgtOn ? tgtPct : undefined,
           });
-          if (gtt) placeGtt.mutate(gtt);
+          if (gtt && res?.order_id) addPendingProtection({ orderId: res.order_id, gtt });
         }
         onPlaced?.(res?.order_id || ''); onClose();
       },

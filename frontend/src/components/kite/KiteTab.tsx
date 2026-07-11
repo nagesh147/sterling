@@ -13,6 +13,7 @@ import { AlertsPane } from './AlertsPane';
 import { BacktestPane } from './BacktestPane';
 import { InstrumentPane, InstrumentTab } from './InstrumentPane';
 import { KiteNotifications } from './KiteNotifications';
+import { PendingGttProtectionWatcher } from './PendingGttProtectionWatcher';
 import { KiteSessionGuard } from './KiteSessionGuard';
 import { KiteAuthOverlay } from './KiteLoader';
 import { SterlingKiteEnginePane } from './SterlingKiteEnginePane';
@@ -169,6 +170,7 @@ export function KiteTab() {
         basketCount={basketCount}
       />
       <KiteNotifications />
+      <PendingGttProtectionWatcher />
       <KiteSessionGuard />
       <KiteAuthOverlay />
       {isOpen && options && (
