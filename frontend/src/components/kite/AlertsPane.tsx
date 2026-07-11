@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useKiteAlerts, useKiteAlertHistory } from '../../hooks/useKite';
 import type { KiteAlert } from '../../types/kite';
 import { CreateAlertModal } from './CreateAlertModal';
+import { EditAlertModal } from './EditAlertModal';
 
 const S: Record<string, React.CSSProperties> = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px', borderBottom: '1px solid #f1f1f1' },
@@ -36,6 +37,7 @@ export function AlertsPane() {
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingAlert, setEditingAlert] = useState<KiteAlert | null>(null);
   const alerts = query.trim()
     ? allAlerts?.filter((a) => a.name?.toLowerCase().includes(query.trim().toLowerCase()))
     : allAlerts;
@@ -85,8 +87,8 @@ export function AlertsPane() {
             const isAto = (a as any).alert_type === 'ato';
             
             return (
-              <tr key={a.uuid} style={{ transition: 'background 0.2s', cursor: 'default' }}>
-                <td style={{ ...S.td, width: 40 }}><input type="checkbox" style={{ cursor: 'pointer' }} /></td>
+              <tr key={a.uuid} onClick={() => setEditingAlert(a)} style={{ transition: 'background 0.2s', cursor: 'pointer' }}>
+                <td style={{ ...S.td, width: 40 }}><input type="checkbox" onClick={(e) => e.stopPropagation()} style={{ cursor: 'pointer' }} /></td>
                 <td style={S.td}>
                   <div style={{ color: '#444', fontWeight: 400, marginBottom: 4 }}>{a.name}</div>
                   <div style={{ color: '#9b9b9b', fontSize: 11 }}>Last price of {cond}</div>
@@ -101,7 +103,7 @@ export function AlertsPane() {
                   {expandedId === a.uuid ? (
                     <TriggeredCount uuid={a.uuid} />
                   ) : (
-                    <span onClick={() => setExpandedId(a.uuid)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Show</span>
+                    <span onClick={(e) => { e.stopPropagation(); setExpandedId(a.uuid); }} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Show</span>
                   )}
                 </td>
                 <td style={S.td}>{a.created_at ? new Date(a.created_at as string).toISOString().split('T')[0] : '—'}</td>
@@ -111,6 +113,7 @@ export function AlertsPane() {
         </tbody>
       </table>
       {createOpen && <CreateAlertModal onClose={() => setCreateOpen(false)} />}
+      {editingAlert && <EditAlertModal alert={editingAlert} onClose={() => setEditingAlert(null)} />}
     </div>
   );
 }
