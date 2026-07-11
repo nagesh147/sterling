@@ -7,7 +7,7 @@ import { useKiteBasketStore } from '../../../store/useKiteBasketStore';
 const mockMutateAsync = vi.fn();
 vi.mock('../../../hooks/useKite', () => ({
   usePlaceKiteOrder: () => ({ mutateAsync: mockMutateAsync }),
-  useKiteMarginsBasket: () => ({ mutate: vi.fn(), data: null, isPending: false }),
+  useKiteBasketMargins: () => ({ mutate: vi.fn(), data: null, isPending: false }),
 }));
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useEngineActivity: () => ({ data: { market_open: true } }),

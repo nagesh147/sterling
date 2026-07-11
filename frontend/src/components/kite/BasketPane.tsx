@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { usePlaceKiteOrder, useKiteMarginsBasket } from '../../hooks/useKite';
+import { usePlaceKiteOrder, useKiteBasketMargins } from '../../hooks/useKite';
 import { useKiteBasketStore, type BasketEntry } from '../../store/useKiteBasketStore';
 import { buildOrderBody, buildMarginOrder, parseMargin, needsPrice, needsTrigger, resolveVariety } from './orderTicket';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -18,7 +18,7 @@ const statusLabel: Record<BasketEntry['status'], string> = {
 export function BasketPane({ onClose }: { onClose: () => void }) {
   const { entries, remove, update, setStatus, clear } = useKiteBasketStore();
   const placeOrder = usePlaceKiteOrder();
-  const marginCalc = useKiteMarginsBasket();
+  const marginCalc = useKiteBasketMargins();
   const { data: activity } = useEngineActivity();
   const variety = resolveVariety(activity?.market_open);
   const [margin, setMargin] = useState<{ total: number; charges: number } | null>(null);
@@ -33,7 +33,7 @@ export function BasketPane({ onClose }: { onClose: () => void }) {
       product: e.product, orderType: e.orderType, price: e.price, trigger: e.trigger,
     }));
     const id = ++reqId.current;
-    marginCalc.mutate(orders, {
+    marginCalc.mutate({ orders }, {
       onSuccess: (resp) => { if (id === reqId.current) setMargin(parseMargin(Array.isArray(resp) ? resp[resp.length - 1] : resp)); },
       onError: () => { if (id === reqId.current) setMargin(null); },
     });
