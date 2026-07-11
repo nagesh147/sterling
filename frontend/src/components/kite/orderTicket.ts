@@ -274,3 +274,24 @@ export function parseMargin(resp: any): { total: number; charges: number } | nul
   if (!Number.isFinite(total)) return null;
   return { total, charges };
 }
+
+/**
+ * Format the itemized fields of a /charges/orders `charges` object into
+ * newline-separated "key: value" lines for a tooltip. Kite's response mixes
+ * plain numeric fields (brokerage, stamp_duty, ...) with a nested `gst`
+ * object ({igst, cgst, sgst, total}) and non-numeric leaves — a bare
+ * `Number(v).toFixed(2)` over every entry would render "NaN" for those and
+ * silently drop `gst` (an object, not a number). Skip the grand `total` key
+ * and only emit finite-numeric leaves, unwrapping one level into `.total`
+ * for nested fields like `gst`.
+ */
+export function chargeLines(charges: Record<string, any> | null | undefined): string | undefined {
+  if (!charges) return undefined;
+  const lines: string[] = [];
+  for (const [key, v] of Object.entries(charges)) {
+    if (key === 'total') continue;
+    if (typeof v === 'number' && Number.isFinite(v)) lines.push(`${key}: ${v.toFixed(2)}`);
+    else if (v && typeof v === 'object' && Number.isFinite(v.total)) lines.push(`${key}: ${Number(v.total).toFixed(2)}`);
+  }
+  return lines.length ? lines.join('\n') : undefined;
+}
