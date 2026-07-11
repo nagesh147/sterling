@@ -4,6 +4,7 @@ import { GttPane } from './GttPane';
 import { AlertsPane } from './AlertsPane';
 import { InstrumentLabel } from './InstrumentLabel';
 import { ModifyOrderModal } from './ModifyOrderModal';
+import { OrderHistoryRow } from './OrderHistoryRow';
 
 const S: Record<string, React.CSSProperties> = {
   emptyContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 100 },
@@ -34,6 +35,7 @@ function OrdersSubPane() {
   const { data: orders } = useKiteOrders(true);
   const cancelOrder = useCancelKiteOrder();
   const [modifyOrder, setModifyOrder] = useState<any | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!modifyOrder || !orders) return;
@@ -81,7 +83,8 @@ function OrdersSubPane() {
         </tr></thead>
         <tbody>
           {orders.map((o: any) => (
-            <tr key={o.order_id}>
+            <React.Fragment key={o.order_id}>
+            <tr onClick={() => setExpandedId(expandedId === o.order_id ? null : o.order_id)} style={{ cursor: 'pointer' }}>
               <td style={S.td}>{o.order_timestamp}</td>
               <td style={{ ...S.td, color: o.transaction_type === 'BUY' ? '#4caf50' : '#e53935' }}>
                 <span style={{ padding: '2px 6px', background: o.transaction_type === 'BUY' ? 'rgba(76, 175, 80, 0.1)' : 'rgba(229, 57, 53, 0.1)', borderRadius: 3, fontSize: 11 }}>{o.transaction_type}</span>
@@ -102,9 +105,10 @@ function OrdersSubPane() {
               <td style={{ ...S.td, textAlign: 'right' }}>
                 {MODIFIABLE_STATUSES.has(o.status) && (
                   <>
-                    <span onClick={() => setModifyOrder(o)} style={{ cursor: 'pointer', color: '#387ed1', fontSize: 12, marginRight: 12 }}>Modify</span>
+                    <span onClick={(e) => { e.stopPropagation(); setModifyOrder(o); }} style={{ cursor: 'pointer', color: '#387ed1', fontSize: 12, marginRight: 12 }}>Modify</span>
                     <span
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         if (cancelOrder.isPending) return;
                         if (window.confirm(`Cancel this ${o.transaction_type} ${o.quantity} ${o.tradingsymbol} order?`)) {
                           cancelOrder.mutate({ id: o.order_id, variety: o.variety });
@@ -118,6 +122,8 @@ function OrdersSubPane() {
                 )}
               </td>
             </tr>
+            {expandedId === o.order_id && <OrderHistoryRow orderId={o.order_id} colSpan={8} />}
+            </React.Fragment>
           ))}
         </tbody>
       </table>
