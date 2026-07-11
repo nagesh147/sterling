@@ -292,7 +292,6 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     disabled = {s.upper() for s in (cfg.disabled_symbols or [])}
     syms = [s for s in syms if s not in disabled]
 
-    all_signals: List[ScalpingSignal] = []
     tradeable_set: set = set()
 
     resolutions = set()

@@ -18,10 +18,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from app.schemas.account import (
-    AccountPosition, AccountOrder, AccountFill,
-    PortfolioSnapshot, AccountSummaryResponse,
-)
+from app.schemas.account import AccountSummaryResponse
 from app.services import exchange_account_store as store
 from app.services.exchanges.adapter_factory import create_account_adapter
 
