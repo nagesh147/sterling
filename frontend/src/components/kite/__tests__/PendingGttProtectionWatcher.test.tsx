@@ -38,7 +38,7 @@ describe('PendingGttProtectionWatcher', () => {
     mockOrders = [{ order_id: 'o1', status: 'COMPLETE' }];
     render(<PendingGttProtectionWatcher />);
     await waitFor(() => expect(mockGttMutate).toHaveBeenCalledTimes(1));
-    expect(mockGttMutate).toHaveBeenCalledWith(gtt());
+    expect(mockGttMutate).toHaveBeenCalledWith(gtt(), expect.objectContaining({ onError: expect.any(Function) }));
     await waitFor(() => expect(useKitePendingProtectionStore.getState().pending).toHaveLength(0));
   });
 
