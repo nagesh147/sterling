@@ -35,6 +35,6 @@ describe('CreateGttModal', () => {
     render(<CreateGttModal onClose={vi.fn()} />);
     fireEvent.click(screen.getByText('Create GTT'));
     expect(mockMutate).not.toHaveBeenCalled();
-    expect(screen.getByText(/trigger price/i)).toBeInTheDocument();
+    expect(screen.getByText('Enter a valid trigger value')).toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@ import { k } from '../../styles/kiteUI';
 import { usePlaceKiteGtt } from '../../hooks/useKite';
 
 export function CreateGttModal({ onClose }: { onClose: () => void }) {
-  const place = usePlaceKiteGtt() as any;
+  const place = usePlaceKiteGtt();
   const [symbol, setSymbol] = useState('');
   const [exchange, setExchange] = useState('NSE');
   const [side, setSide] = useState<'BUY' | 'SELL'>('SELL');
