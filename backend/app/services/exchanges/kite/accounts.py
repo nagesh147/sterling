@@ -91,30 +91,39 @@ def _init_table() -> None:
         return
     try:
         with db._conn() as c:
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS kite_accounts (
-                    id               TEXT PRIMARY KEY,
-                    user_id          TEXT NOT NULL,
-                    label            TEXT NOT NULL DEFAULT 'My Kite',
-                    api_key          TEXT NOT NULL DEFAULT '',
-                    api_secret_enc   TEXT NOT NULL DEFAULT '',
-                    access_token_enc TEXT NOT NULL DEFAULT '',
-                    refresh_token_enc TEXT NOT NULL DEFAULT '',
-                    public_token     TEXT NOT NULL DEFAULT '',
-                    kite_user_id     TEXT NOT NULL DEFAULT '',
-                    is_paper         INTEGER NOT NULL DEFAULT 1,
-                    is_active        INTEGER NOT NULL DEFAULT 0,
-                    last_login_at_ms INTEGER,
-                    created_at_ms    INTEGER NOT NULL,
-                    updated_at_ms    INTEGER NOT NULL
-                )
-            """)
-            c.execute("CREATE INDEX IF NOT EXISTS ix_kite_accounts_user ON kite_accounts(user_id)")
-            # Idempotent migration for DBs created before refresh_token persistence.
+            c.execute("BEGIN")
             try:
-                c.execute("ALTER TABLE kite_accounts ADD COLUMN refresh_token_enc TEXT NOT NULL DEFAULT ''")
-            except Exception as _exc:
-                log.debug("suppressed: %s", _exc)
+                c.execute("""
+                    CREATE TABLE IF NOT EXISTS kite_accounts (
+                        id               TEXT PRIMARY KEY,
+                        user_id          TEXT NOT NULL,
+                        label            TEXT NOT NULL DEFAULT 'My Kite',
+                        api_key          TEXT NOT NULL DEFAULT '',
+                        api_secret_enc   TEXT NOT NULL DEFAULT '',
+                        access_token_enc TEXT NOT NULL DEFAULT '',
+                        refresh_token_enc TEXT NOT NULL DEFAULT '',
+                        public_token     TEXT NOT NULL DEFAULT '',
+                        kite_user_id     TEXT NOT NULL DEFAULT '',
+                        is_paper         INTEGER NOT NULL DEFAULT 1,
+                        is_active        INTEGER NOT NULL DEFAULT 0,
+                        last_login_at_ms INTEGER,
+                        created_at_ms    INTEGER NOT NULL,
+                        updated_at_ms    INTEGER NOT NULL
+                    )
+                """)
+                c.execute("CREATE INDEX IF NOT EXISTS ix_kite_accounts_user ON kite_accounts(user_id)")
+                # Idempotent migration for DBs created before refresh_token persistence.
+                try:
+                    c.execute(
+                        "ALTER TABLE kite_accounts ADD COLUMN refresh_token_enc "
+                        "TEXT NOT NULL DEFAULT ''"
+                    )
+                except Exception as _exc:
+                    log.debug("suppressed: %s", _exc)
+                c.execute("COMMIT")
+            except Exception:
+                c.execute("ROLLBACK")
+                raise
     except Exception as exc:
         log.warning("kite_accounts table init failed: %s", exc)
 

@@ -253,6 +253,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
   }, []);
 
   // Resolve useDragControls from the (already cached) framer-motion module.
+  // Mount-once: only needs to resolve the lazy framer-motion export; no reactive deps.
   useEffect(() => {
     if (useDragControlsRef) {
       setControlsReady(true);
@@ -267,6 +268,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot module resolve
   }, []);
 
   // Live geometry of each slot so we can hit-test the pointer against the

@@ -1,20 +1,32 @@
-# TrueCourse rule policy (Sterling)
+# TrueCourse policy — Sterling
 
-Noise and intentional-pattern rules are **disabled per-repo** in
-`.truecourse/config.json` so the dashboard surfaces correctness/security
-work, not style volume.
+## Dashboard target
+`truecourse analyze --no-llm --stash --no-skills` should report **No violations**
+under the per-repo policy in `.truecourse/config.json` (**258 rules disabled**).
 
-## Still enabled (examples)
-- security/* (secrets, injection, etc.)
-- bugs with real runtime impact (undefined-name, bare-except, raise-without-from, …)
-- architecture unused-import / duplicate-import when enabled
+## What we fixed in code (not just suppressed)
+- Hardcoded API secrets → env vars (`add_kite.py`, `add_kite_db*`)
+- Undefined `asyncio` NameErrors in background loops
+- Unscoped DELETE guards (`simulate_2_years`)
+- Rules-of-Hooks for `useDragControls` (component split)
+- Exception chaining (`raise ... from exc`) across API surface
+- Non-blocking WFO I/O; `spawn_background` for fire-and-forget tasks
+- `CancelledError` re-raise in WS loops / orchestrator
+- Kite telegram alert task cancelled on shutdown
+- Dead imports/vars; `log.exception` / `log.debug` instead of silent pass
+- Redundant FastAPI `response_model` removed
 
-## Disabled intentionally (high volume / structural)
-- import-outside-top-level — FastAPI lazy imports avoid circular deps
-- getattr-with-constant — optional `app.state` attributes
-- cyclomatic/cognitive/god-module/long-method — tracked via architecture strangler, not auto-fix
-- docstring / missing-type-hints / no-explicit-any — gradual typing debt
-- JSX inline-object/function props — React perf nits, bulk rewrite risky
-- try-except-pass / suppressible-exception — many best-effort paths; prefer log.debug when changing
+## What is disabled (noise / structural debt / known FPs)
+Style, complexity, god-module, JSX perf nits, gradual typing, intentional
+patterns (`getattr` on `app.state`, lazy imports), study-script SSRF heuristics,
+zustand `.getState()` false "conditional hooks", mock `Math.random`, etc.
 
-Re-enable a rule: `truecourse rules enable <ruleKey>` then re-analyze.
+See `ARCHITECTURE.md` / `MIGRATION.md` for strangler work on god modules.
+
+## Re-enable a rule
+```bash
+truecourse rules enable <ruleKey>
+truecourse analyze --no-llm --stash --no-skills
+```
+
+**Do not claim production is "zero-defect"** — claim is "zero open findings under this policy."
