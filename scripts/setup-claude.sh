@@ -1,232 +1,196 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ============================================
-# Sterling - Full Claude Code Setup
-# One command to set up everything for new clones
-# ============================================
-
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-RED='\033[0;31m'
-GRN='\033[0;32m'
-YLW='\033[0;33m'
-CYN='\033[0;36m'
-BLD='\033[1m'
-RST='\033[0m'
-
-echo -e "${CYN}${BLD}"
-echo "========================================"
-echo "  Sterling - Full Claude Code Setup"
-echo "========================================"
-echo -e "${RST}"
-
-# ---------- Helper ----------
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
+CYN='\033[0;36m'; BLD='\033[1m'; RST='\033[0m'
 ok()   { echo -e "  ${GRN}✔${RST}  $1"; }
 warn() { echo -e "  ${YLW}⚠${RST}  $1"; }
-fail() { echo -e "  ${RED}✘${RST}  $1"; }
 
-# ---------- 1. Init Git Submodules ----------
-echo -e "\n${BLD}1. Initializing git submodules...${RST}"
-if [ -f .gitmodules ]; then
-  git submodule update --init --recursive || warn "Some submodules failed (continuing)"
-  ok "Submodules initialized"
-else
-  warn "No .gitmodules found"
-fi
+echo -e "${CYN}${BLD}"
+echo "=============================================="
+echo "  Sterling - Full Claude Setup"
+echo "  code-review-graph + TrueCourse + Skills"
+echo "=============================================="
+echo -e "${RST}"
 
-# ---------- 2. Install Preferred CLI Tools ----------
-echo -e "\n${BLD}2. Installing preferred CLI tools...${RST}"
+# ---------- 1. Submodules ----------
+echo -e "\n${BLD}1. Git submodules...${RST}"
+[ -f .gitmodules ] && git submodule update --init --recursive || warn "no/failed submodules"
+ok "Submodules ready"
 
+# ---------- 2. CLI Tools ----------
+echo -e "\n${BLD}2. Preferred CLI tools...${RST}"
 install_if_missing() {
-  local cmd="$1"
-  local pkg="$2"
-  if command -v "$cmd" &>/dev/null; then
-    ok "$cmd already installed"
+  local cmd="$1" pkg="$2"
+  if command -v "$cmd" &>/dev/null; then ok "$cmd"
   else
-    echo -n "  Installing $pkg ... "
     if command -v apt-get &>/dev/null; then
-      sudo apt-get install -y -qq "$pkg" >/dev/null 2>&1 && echo -e "${GRN}done${RST}" || echo -e "${YLW}failed (install manually)${RST}"
+      sudo apt-get install -y -qq "$pkg" >/dev/null 2>&1 && ok "$pkg" || warn "$pkg failed"
     elif command -v brew &>/dev/null; then
-      brew install "$pkg" >/dev/null 2>&1 && echo -e "${GRN}done${RST}" || echo -e "${YLW}failed${RST}"
-    else
-      echo -e "${YLW}skipped (no package manager)${RST}"
-    fi
+      brew install "$pkg" >/dev/null 2>&1 && ok "$pkg" || warn "$pkg failed"
+    else warn "Install $pkg manually"; fi
   fi
 }
-
-# Core tools from CLAUDE.md
-install_if_missing "rg" "ripgrep"
-install_if_missing "fd" "fd-find"
-install_if_missing "jq" "jq"
-install_if_missing "gh" "gh"
-
-# yq (special)
-if ! command -v yq &>/dev/null; then
-  echo -n "  Installing yq ... "
-  if command -v snap &>/dev/null; then
-    sudo snap install yq >/dev/null 2>&1 && echo -e "${GRN}done${RST}" || echo -e "${YLW}failed${RST}"
-  else
-    echo -e "${YLW}install manually: https://github.com/mikefarah/yq${RST}"
-  fi
-else
-  ok "yq already installed"
-fi
-
-# ast-grep (sg)
+install_if_missing rg ripgrep
+install_if_missing fd fd-find
+install_if_missing jq jq
+install_if_missing gh gh
+command -v yq &>/dev/null && ok "yq" || { command -v snap &>/dev/null && sudo snap install yq >/dev/null 2>&1 && ok "yq" || warn "yq missing"; }
 if ! command -v sg &>/dev/null && ! command -v ast-grep &>/dev/null; then
-  echo -n "  Installing ast-grep ... "
-  if command -v cargo &>/dev/null; then
-    cargo install ast-grep --locked >/dev/null 2>&1 && echo -e "${GRN}done${RST}" || echo -e "${YLW}failed${RST}"
-  elif command -v npm &>/dev/null; then
-    npm install -g @ast-grep/cli >/dev/null 2>&1 && echo -e "${GRN}done${RST}" || echo -e "${YLW}failed${RST}"
-  else
-    echo -e "${YLW}install manually: https://ast-grep.github.io${RST}"
-  fi
-else
-  ok "ast-grep already installed"
-fi
+  command -v npm &>/dev/null && npm install -g @ast-grep/cli >/dev/null 2>&1 && ok "ast-grep" || warn "ast-grep missing"
+else ok "ast-grep"; fi
 
-# ---------- 3. Install code-review-graph ----------
-echo -e "\n${BLD}3. Installing code-review-graph...${RST}"
+# ---------- 3. code-review-graph (Primary) ----------
+echo -e "\n${BLD}3. code-review-graph (Primary)...${RST}"
 if ! command -v code-review-graph &>/dev/null; then
-  if command -v pipx &>/dev/null; then
-    pipx install code-review-graph
+  command -v pipx &>/dev/null && pipx install code-review-graph || pip install --user code-review-graph
+  ok "Installed"
+else ok "Already installed"; fi
+code-review-graph install --platform claude-code || warn "configure warnings"
+code-review-graph build || warn "build issues"
+ok "Graph built + hooks ready"
+
+# ---------- 4. TrueCourse (Architecture) ----------
+echo -e "\n${BLD}4. TrueCourse (Architecture)...${RST}"
+if ! command -v truecourse &>/dev/null; then
+  if command -v npm &>/dev/null; then
+    npm install -g truecourse >/dev/null 2>&1 && ok "truecourse installed" || warn "truecourse install failed"
   else
-    pip install --user code-review-graph
+    warn "npm not found — install Node.js then: npm i -g truecourse"
   fi
-  ok "code-review-graph installed"
 else
-  ok "code-review-graph already installed"
+  ok "truecourse already installed"
 fi
 
-# Configure + Build
-echo "  Configuring for Claude Code..."
-code-review-graph install --platform claude-code || warn "configure had warnings"
+if command -v truecourse &>/dev/null; then
+  echo "  Running first architecture analysis..."
+  truecourse analyze || warn "truecourse analyze had issues (can re-run later)"
+  truecourse hooks install 2>/dev/null || warn "truecourse hooks optional"
+  ok "TrueCourse ready"
+fi
 
-echo "  Building knowledge graph (this can take a few minutes)..."
-code-review-graph build || warn "graph build had issues (you can re-run later)"
-ok "Graph ready"
-
-# ---------- 4. Install / Update Skills ----------
-echo -e "\n${BLD}4. Installing skills...${RST}"
+# ---------- 5. Skills ----------
+echo -e "\n${BLD}5. Skills...${RST}"
 if [ -f "./install-skills.sh" ]; then
-  bash ./install-skills.sh install || warn "install-skills.sh had issues"
-  ok "Skills installed via install-skills.sh"
+  bash ./install-skills.sh update 2>/dev/null || bash ./install-skills.sh install || warn "skills issues"
+  ok "Skills updated"
 else
-  warn "install-skills.sh not found — skipping skill repo install"
+  warn "install-skills.sh missing"
 fi
 
-# Also link any skills that live as submodules inside the project
 GLOBAL_SKILLS="${HOME}/.claude/skills"
 mkdir -p "$GLOBAL_SKILLS"
-
-SKILL_SOURCES=(
-  "$PROJECT_ROOT/superpowers/skills"
-  "$PROJECT_ROOT/frontend-design/skills"
-  "$PROJECT_ROOT/ui-ux-pro-max-skill/.claude/skills"
-  "$PROJECT_ROOT/claude-mem/plugin/skills"
-  "$PROJECT_ROOT/claude-mem/openclaw/skills"
-  "$PROJECT_ROOT/skills/skills"
-  "$PROJECT_ROOT/.claude/skills"
-)
-
 linked=0
-for src in "${SKILL_SOURCES[@]}"; do
-  if [ -d "$src" ]; then
-    for skill in "$src"/*; do
-      [ -d "$skill" ] || continue
-      name=$(basename "$skill")
-      if [[ "$name" == "skills" || "$name" == "tests" || "$name" == "skill-creator" || "$name" == ".system" ]]; then
-        continue
-      fi
-      target="$GLOBAL_SKILLS/$name"
-      if [ ! -e "$target" ] && [ ! -L "$target" ]; then
-        ln -sfn "$skill" "$target"
-        ((linked++)) || true
-      fi
-    done
-  fi
+for src in \
+  "$PROJECT_ROOT/superpowers/skills" \
+  "$PROJECT_ROOT/frontend-design/skills" \
+  "$PROJECT_ROOT/ui-ux-pro-max-skill/.claude/skills" \
+  "$PROJECT_ROOT/claude-mem/plugin/skills" \
+  "$PROJECT_ROOT/claude-mem/openclaw/skills" \
+  "$PROJECT_ROOT/skills/skills" \
+  "$PROJECT_ROOT/.claude/skills"
+do
+  [ -d "$src" ] || continue
+  for skill in "$src"/*; do
+    [ -d "$skill" ] || continue
+    name=$(basename "$skill")
+    [[ "$name" =~ ^(skills|tests|skill-creator|\.system)$ ]] && continue
+    target="$GLOBAL_SKILLS/$name"
+    if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+      ln -sfn "$skill" "$target"
+      ((linked++)) || true
+    fi
+  done
 done
-ok "Linked $linked additional skills into $GLOBAL_SKILLS"
+ok "Linked $linked project skills"
 
-# ---------- 5. Ensure optimized CLAUDE.md ----------
-echo -e "\n${BLD}5. Checking CLAUDE.md...${RST}"
-if [ -f "CLAUDE.md" ]; then
-  ok "CLAUDE.md is present"
-else
-  fail "CLAUDE.md is missing! Please commit the optimized version."
-fi
+# ---------- 6. CLAUDE.md ----------
+echo -e "\n${BLD}6. CLAUDE.md...${RST}"
+[ -f CLAUDE.md ] && ok "Present" || warn "CLAUDE.md missing!"
 
-# ---------- 6. Global MCP Registration ----------
-echo -e "\n${BLD}6. Registering global MCP...${RST}"
+# ---------- 7. Global MCP ----------
+echo -e "\n${BLD}7. Global MCP...${RST}"
 python3 - << 'PY'
 import json
 from pathlib import Path
-
-config_paths = [
-    Path.home() / ".claude.json",
-    Path.home() / ".claude" / "settings.json",
-]
-
-config = {}
-config_path = Path.home() / ".claude.json"
-
-for p in config_paths:
+paths = [Path.home()/".claude.json", Path.home()/".claude"/"settings.json"]
+config, config_path = {}, Path.home()/".claude.json"
+for p in paths:
     if p.exists():
         try:
-            config = json.loads(p.read_text())
-            config_path = p
-            break
-        except Exception:
-            pass
-
-if "mcpServers" not in config:
-    config["mcpServers"] = {}
-
+            config = json.loads(p.read_text()); config_path = p; break
+        except: pass
+if "mcpServers" not in config: config["mcpServers"] = {}
 if "code-review-graph" not in config["mcpServers"]:
     config["mcpServers"]["code-review-graph"] = {
-        "command": "code-review-graph",
-        "args": ["serve"],
-        "type": "stdio"
+        "command": "code-review-graph", "args": ["serve"], "type": "stdio"
     }
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2))
-    print("  ✔  Added code-review-graph to global MCP config")
+    print("  ✔  code-review-graph added to global MCP")
 else:
-    print("  ✔  Global MCP already has code-review-graph")
+    print("  ✔  Global MCP already configured")
 PY
 
-# ---------- 7. Ensure .gitignore has the right entries ----------
-echo -e "\n${BLD}7. Checking .gitignore...${RST}"
-if ! grep -q ".code-review-graph" .gitignore 2>/dev/null; then
-  echo -e "\n# code-review-graph\n.code-review-graph/" >> .gitignore
-  ok "Added .code-review-graph/ to .gitignore"
-else
-  ok ".gitignore already correct"
-fi
+# ---------- 8. Skill auto-update hook ----------
+echo -e "\n${BLD}8. Auto-update hooks...${RST}"
+python3 - << 'PY'
+import json
+from pathlib import Path
+path = Path.home() / ".claude" / "settings.json"
+config = {}
+if path.exists():
+    try: config = json.loads(path.read_text())
+    except: pass
+if "hooks" not in config: config["hooks"] = {}
+if "SessionStart" not in config["hooks"]: config["hooks"]["SessionStart"] = []
+exists = any("install-skills.sh" in str(h) for h in config["hooks"]["SessionStart"])
+if not exists:
+    config["hooks"]["SessionStart"].append({
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "bash -c '[ -f \"$HOME/Sterling/install-skills.sh\" ] && bash \"$HOME/Sterling/install-skills.sh\" update >/dev/null 2>&1 || true'"}]
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2))
+    print("  ✔  Skill auto-update hook added")
+else:
+    print("  ✔  Skill auto-update already present")
+PY
+
+# ---------- 9. .gitignore ----------
+echo -e "\n${BLD}9. .gitignore...${RST}"
+for entry in ".code-review-graph/" ".truecourse/"; do
+  if ! grep -qF "$entry" .gitignore 2>/dev/null; then
+    echo -e "\n# AI tooling\n$entry" >> .gitignore
+    ok "Added $entry"
+  fi
+done
+ok ".gitignore ready"
 
 # ---------- Done ----------
 echo -e "\n${GRN}${BLD}"
-echo "========================================"
+echo "=============================================="
 echo "  ✅  Full setup complete!"
-echo "========================================"
+echo "=============================================="
 echo -e "${RST}"
-echo "What was set up:"
-echo "  • Git submodules initialized"
-echo "  • Preferred CLI tools (rg, fd, jq, yq, gh, ast-grep)"
-echo "  • code-review-graph installed + graph built"
-echo "  • Skills installed & linked globally"
-echo "  • CLAUDE.md ready"
-echo "  • Global MCP registered"
+echo "Installed & configured:"
+echo "  • code-review-graph   → Primary (daily coding + token savings)"
+echo "  • TrueCourse          → Architecture (circular deps, layers, god modules)"
+echo "  • Skills              → 100+ skills + auto-update"
+echo "  • CLI tools           → rg, fd, sg, jq, yq, gh"
+echo "  • CLAUDE.md           → Optimized rules"
 echo
-echo -e "${BLD}Next steps:${RST}"
-echo "  1. Fully restart Claude Desktop App"
-echo "  2. Open the Sterling project"
+echo "Next steps:"
+echo "  1. Restart Claude Desktop App completely"
+echo "  2. Open Sterling"
 echo "  3. Start a NEW session"
 echo
-echo "To verify later, run:"
-echo "  bash claude-verify.sh   # if you have it"
-echo "  or paste the master verification prompt into Claude"
+echo "Useful commands:"
+echo "  truecourse analyze          # Architecture health"
+echo "  truecourse dashboard        # Interactive UI"
+echo "  truecourse list             # Violations"
+echo "  code-review-graph update    # Refresh graph"
 echo
