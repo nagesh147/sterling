@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
 import {
   usePlaceKiteOrder, useKiteOrderMargins, useKiteMargins,
-  useKiteInstrumentSearch, useKiteQuote,
+  useKiteInstrumentSearch, useKiteQuote, useKiteOrderCharges,
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
 import { useMacKite } from '../../hooks/useMacKite';
@@ -33,6 +33,20 @@ const inr = (n: number) => '₹' + (Number.isFinite(n) ? n : 0).toLocaleString('
 const num = (v: any) => Number(v ?? 0);
 const fmtPx = (v: any) => (v != null && !isNaN(Number(v)) ? Number(v).toFixed(2) : '0.00');
 const fmtExpiry = (e?: string) => { if (!e) return ''; const d = new Date(e); return isNaN(d.getTime()) ? e : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase(); };
+// Itemized-charges tooltip text. Kite's /charges/orders response mixes plain numeric
+// fields (brokerage, stamp_duty, ...) with a string `transaction_tax_type` and a NESTED
+// `gst` object ({ igst, cgst, sgst, total }) — so this can't just Number()+toFixed every
+// value; skip non-numeric leaves and unwrap `gst` down to its own `.total`.
+const chargeLines = (charges: Record<string, any> | null): string | undefined => {
+  if (!charges) return undefined;
+  const lines: string[] = [];
+  for (const [key, v] of Object.entries(charges)) {
+    if (key === 'total' || key.endsWith('_type')) continue;
+    if (typeof v === 'number') lines.push(`${key}: ${v.toFixed(2)}`);
+    else if (v && typeof v === 'object' && typeof v.total === 'number') lines.push(`${key}: ${v.total.toFixed(2)}`);
+  }
+  return lines.length ? lines.join('\n') : undefined;
+};
 const HATCH = 'repeating-linear-gradient(-45deg,#f4f4f4,#f4f4f4 5px,#fafafa 5px,#fafafa 10px)';
 
 // ── icons ────────────────────────────────────────────────────────────────────
@@ -96,6 +110,8 @@ export function OrderWindow({ options, onClose }: Props) {
   const placeOrder = usePlaceKiteOrder();
   const addPendingProtection = useKitePendingProtectionStore((s) => s.add);
   const marginCalc = useKiteOrderMargins();
+  const chargesCalc = useKiteOrderCharges();
+  const [charges, setCharges] = useState<Record<string, any> | null>(null);
   const { data: funds, refetch: refetchFunds } = useKiteMargins(true);
   const { data: activity } = useEngineActivity();
   const variety = resolveVariety(activity?.market_open);
@@ -146,6 +162,10 @@ export function OrderWindow({ options, onClose }: Props) {
     marginCalc.mutate([buildMarginOrder(args)], {
       onSuccess: (resp) => { if (id === reqId.current) setMargin(parseMargin(resp)); },
       onError: () => { if (id === reqId.current) setMargin(null); },
+    });
+    chargesCalc.mutate([buildMarginOrder(args)], {
+      onSuccess: (resp) => { if (id === reqId.current) setCharges(Array.isArray(resp) ? resp[0]?.charges ?? null : resp?.charges ?? null); },
+      onError: () => { if (id === reqId.current) setCharges(null); },
     });
   };
   useEffect(() => {
@@ -295,7 +315,9 @@ export function OrderWindow({ options, onClose }: Props) {
 
   const reqAvail = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: k.dim }}>
-      <span>Req. <b style={{ color: insufficient ? k.red : accent, fontWeight: 600 }}>{required != null ? inr(required) : (marginCalc.isPending ? '…' : '—')}</b>{margin && margin.charges > 0 ? <span> + {margin.charges.toFixed(2)}</span> : null}</span>
+      <span>Req. <b style={{ color: insufficient ? k.red : accent, fontWeight: 600 }}>{required != null ? inr(required) : (marginCalc.isPending ? '…' : '—')}</b>{margin && margin.charges > 0 ? (
+        <span title={chargeLines(charges)} style={{ cursor: charges ? 'help' : 'default' }}> + {margin.charges.toFixed(2)}</span>
+      ) : null}</span>
       <span>Avail. <b style={{ color: accent, fontWeight: 600 }}>{Number.isFinite(available) ? inr(available) : '—'}</b></span>
       <button onClick={doRefresh} title="Refresh funds & margin" style={{ background: 'none', border: 'none', color: accent, cursor: 'pointer', display: 'flex', padding: 2 }}>
         <span className={refreshing ? 'ow-spin' : ''} style={{ display: 'flex' }}><Refresh /></span>
