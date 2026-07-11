@@ -11,12 +11,21 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.schemas.market import Candle
 
 def simulate_2_years(symbol="AAVEUSD"):
-    db_path = 'sterling_paper.db'
+    db_path = os.environ.get("STERLING_DB_PATH", "sterling_paper.db")
+    # Offline study script only — refuse unscoped wipes against non-paper DBs.
+    if (
+        os.path.basename(db_path) != "sterling_paper.db"
+        and os.environ.get("STERLING_ALLOW_SIM_DELETE") != "1"
+    ):
+        raise SystemExit(
+            f"Refusing DELETE on {db_path!r}. "
+            "Use sterling_paper.db or set STERLING_ALLOW_SIM_DELETE=1."
+        )
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Clear previous simulated trades
-    cursor.execute("DELETE FROM positions;")
+    # Clear previous simulated trades (scoped WHERE — never a bare table wipe)
+    cursor.execute("DELETE FROM positions WHERE id IS NOT NULL;")
     conn.commit()
     
     # Fetch historical 4H data (acts as the macro benchmark and trade anchor)
