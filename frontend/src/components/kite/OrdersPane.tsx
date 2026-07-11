@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useKiteOrders } from '../../hooks/useKite';
 import { GttPane } from './GttPane';
 import { AlertsPane } from './AlertsPane';
@@ -33,6 +33,14 @@ const MODIFIABLE_STATUSES = new Set(['OPEN', 'TRIGGER PENDING']);
 function OrdersSubPane() {
   const { data: orders } = useKiteOrders(true);
   const [modifyOrder, setModifyOrder] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!modifyOrder || !orders) return;
+    const current = orders.find((o: any) => o.order_id === modifyOrder.order_id);
+    if (!current || !MODIFIABLE_STATUSES.has(current.status)) {
+      setModifyOrder(null);
+    }
+  }, [orders, modifyOrder]);
 
   if (!orders || orders.length === 0) {
     return (

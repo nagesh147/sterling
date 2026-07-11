@@ -27,10 +27,15 @@ export function ModifyOrderModal({ order, onClose }: { order: OrderRow; onClose:
   const submit = () => {
     setError(null);
     if (!(quantity > 0)) { setError('Enter a quantity greater than 0'); return; }
+    if (quantity > order.quantity) { setError(`Quantity can only be reduced, not increased above ${order.quantity}`); return; }
     if (needsPrice && !(price > 0)) { setError('Enter a valid price'); return; }
     if (needsTrigger && !(triggerPrice > 0)) { setError('Enter a valid trigger price'); return; }
     modify.mutate(
-      { id: order.order_id, variety: order.variety, quantity, price, trigger_price: triggerPrice, validity: order.validity },
+      {
+        id: order.order_id, variety: order.variety, quantity, validity: order.validity,
+        ...(needsPrice ? { price } : {}),
+        ...(needsTrigger ? { trigger_price: triggerPrice } : {}),
+      },
       { onSuccess: onClose, onError: (err: any) => setError(err?.message || 'Modify failed') },
     );
   };
@@ -47,8 +52,9 @@ export function ModifyOrderModal({ order, onClose }: { order: OrderRow; onClose:
         </div>
         <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
           <label style={{ fontSize: 12, color: '#9b9b9b' }}>Quantity
-            <input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}
+            <input type="number" min={1} max={order.quantity} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))}
               style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px', border: `1px solid ${k.border}`, borderRadius: 3, fontSize: 14 }} />
+            <span style={{ display: 'block', marginTop: 3, fontSize: 10.5, color: '#bbb' }}>Can only be reduced, not increased above {order.quantity}</span>
           </label>
           {needsPrice && (
             <label style={{ fontSize: 12, color: '#9b9b9b' }}>Price
