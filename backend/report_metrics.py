@@ -175,7 +175,7 @@ def generate_report():
             
         report_lines.append("\n")
 
-    with open("performance_report.md", "w") as f:
+    with open("performance_report.md", "w", encoding="utf-8") as f:
         f.write("\n".join(report_lines))
     print("Report written to performance_report.md")
 

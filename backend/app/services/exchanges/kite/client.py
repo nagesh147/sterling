@@ -751,7 +751,7 @@ class KiteClient(TradingExchangeAdapter):
                                 instrument.underlying, attempt + 1, exc, sleep_time)
                     await asyncio.sleep(sleep_time)
                 else:
-                    log.error("Kite candle fetch failed for %s after %d attempts: %s", 
+                    log.exception("Kite candle fetch failed for %s after %d attempts: %s",
                               instrument.underlying, max_retries, exc)
                     return []
         candles: List[Candle] = []

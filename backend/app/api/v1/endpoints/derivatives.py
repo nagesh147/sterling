@@ -166,7 +166,7 @@ async def _option_chain_or_none(*, underlying: str, app, spot: float):
         log.info(f"Chain for {underlying}: {'None' if chain is None else len(chain)} items")
         return enrich_chain(chain, spot=spot)
     except Exception as e:
-        log.error(f"Failed to fetch option chain for {underlying}: {e}")
+        log.exception(f"Failed to fetch option chain for {underlying}: {e}")
         return None
 
 
@@ -836,7 +836,7 @@ async def study_report(request: Request) -> dict:
             p = os.path.join(d, name)
             if os.path.exists(p):
                 try:
-                    with open(p) as fh:
+                    with open(p, encoding="utf-8") as fh:
                         return {"text": fh.read(), "generated_at": int(os.path.getmtime(p))}
                 except Exception:
                     pass
@@ -1226,7 +1226,7 @@ def _collect_armed_signals(
                 )))
         except Exception as e:
             import traceback
-            log.error(f"Error collecting scalping signals for derivatives: {e}\n{traceback.format_exc()}")
+            log.exception(f"Error collecting scalping signals for derivatives: {e}\n{traceback.format_exc()}")
 
     # Edge-validated feed (4h winners from BACKTEST_EDGE_REPORT)
     try:
@@ -1236,7 +1236,7 @@ def _collect_armed_signals(
         ))
     except Exception as e:
         import traceback
-        log.error(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
+        log.exception(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
 
     # Directional / Grok feed
     if strategy_filter is None or strategy_filter.startswith("directional"):
@@ -1281,6 +1281,6 @@ def _collect_armed_signals(
                     )))
         except Exception as e:
             import traceback
-            log.error(f"Error collecting directional signals for derivatives: {e}\n{traceback.format_exc()}")
+            log.exception(f"Error collecting directional signals for derivatives: {e}\n{traceback.format_exc()}")
 
     return out

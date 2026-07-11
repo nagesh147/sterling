@@ -183,7 +183,6 @@ async def presets() -> dict:
 @router.get("/universe")
 async def universe(request: Request) -> ScalpingUniverseResponse:
     """Symbols with enough 4H + 15min stored history."""
-    cfg = _get_config(request)
     # Since profiles are independent, we'll use a conservative default min_bars
     min_bars = 200
     syms = _store_symbols(min_bars_hours=min_bars)
@@ -293,7 +292,6 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     disabled = {s.upper() for s in (cfg.disabled_symbols or [])}
     syms = [s for s in syms if s not in disabled]
 
-    now_ms = int(time.time() * 1000)
     all_signals: List[ScalpingSignal] = []
     tradeable_set: set = set()
 

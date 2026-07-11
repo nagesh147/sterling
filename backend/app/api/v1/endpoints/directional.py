@@ -1183,8 +1183,6 @@ async def all_signals(request: Request) -> dict:
     for inst in instruments:
         sym = inst.underlying
         snap = _snap_cache.get(sym)       # None when older than 45 s
-        history = hist_store.get_history(sym)
-        latest = history[-1] if history else None
 
         if snap is not None:
             # Fresh cache — serve enriched data written by _compute_signal_item.

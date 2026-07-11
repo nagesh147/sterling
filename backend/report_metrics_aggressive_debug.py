@@ -27,7 +27,6 @@ def get_candles_paper(symbol, resolution, limit=10000):
     return [Candle(timestamp_ms=int(r[0])*1000, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5]) for r in rows]
 
 def debug_report():
-    symbols = ["BTCUSD"]
     config = default_config()
     prof = config.profiles.get("aggressive")
     prof.enable_price_action = True

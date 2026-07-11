@@ -1,7 +1,7 @@
 import time
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.backtest import (
-    BacktestRequest, BacktestResult,
+    BacktestRequest,
     MTFBacktestRequest, MTFBacktestResult,
     HybridVCPBacktestRequest, HybridVCPBacktestResult, HybridVCPProfileResult,
 )

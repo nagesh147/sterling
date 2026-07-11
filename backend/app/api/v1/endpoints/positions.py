@@ -183,7 +183,6 @@ def _is_paper_mode() -> bool:
         return True
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.monitor_engine import check_exits
-from app.schemas.directional import TradeState
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -653,7 +652,7 @@ async def enter_direct_position(body: DirectEntryRequest, request: Request) -> P
     Does not require options structures — creates a synthetic futures trade.
     """
     from app.schemas.execution import (
-        TradeStructure, SizedTrade, CandidateContract, Direction as ExecDir,
+        TradeStructure, CandidateContract, Direction as ExecDir,
     )
     from app.engines.directional.sizing_engine import size_trade
     from app.api.v1.endpoints.config import get_runtime_risk

@@ -125,6 +125,7 @@ def migrate_kite_positions(dry_run=True, default_mode="two_red"):
                     if not dry_run:
                         # update via the module
                         p.exit_mode = default_mode
+                        p.exit_threshold = thresh
                         p.current_red_count = getattr(p, 'current_red_count', 0)
                         p.hybrid_st_weight = 0.5  # auto-set on migrate
                         # persist will be called

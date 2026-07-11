@@ -4,7 +4,6 @@ Option chain browser — returns full chain with per-contract health assessment.
 GET /options/chain?underlying=BTC&type=all&min_dte=5&max_dte=45
 """
 import time
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services.exchanges import instrument_registry as registry

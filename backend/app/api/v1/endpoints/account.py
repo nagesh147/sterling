@@ -15,12 +15,11 @@ import csv
 import io
 import time
 from datetime import datetime, timezone
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.schemas.account import (
-    AssetBalance, AccountPosition, AccountOrder, AccountFill,
+    AccountPosition, AccountOrder, AccountFill,
     PortfolioSnapshot, AccountSummaryResponse,
 )
 from app.services import exchange_account_store as store
@@ -166,7 +165,7 @@ async def get_fills_summary(limit: int = Query(default=200, ge=1, le=500)):
     Returns total commissions paid, GST, liquidation fees, VIP/DETO discounts,
     fill-type breakdown, and average effective rate.
     """
-    from app.services.fees import decode_fill_fee, summarise_fills
+    from app.services.fees import summarise_fills
     cfg, adapter = _get_active_adapter()
     try:
         fills = await adapter.get_fills(limit=limit)

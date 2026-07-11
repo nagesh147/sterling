@@ -5,7 +5,7 @@ Data source switching — hot-swap market data adapter.
 import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from app.schemas.risk import RiskParams, ScoringWeights
 from app.core.config import settings
 from app.services.exchanges import instrument_registry as registry
@@ -294,7 +294,6 @@ async def get_circuit_breaker(request: Request) -> dict:
     cb = getattr(request.app.state, "circuit_breaker", None)
     if cb is None:
         return {"state": "ok", "halted": False, "size_multiplier": 1.0}
-    from app.services.execution.circuit_breaker import CircuitState
     state = "halted" if cb.halted else "ok"
     return {"state": state, "halted": cb.halted, "size_multiplier": cb.size_multiplier}
 

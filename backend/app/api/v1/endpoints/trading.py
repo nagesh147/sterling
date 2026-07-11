@@ -328,8 +328,6 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
         side = "buy" if body.direction == "long" else "sell"
     now_ms = int(time.time() * 1000)
 
-    # Check if Delta Exchange India is active with credentials
-    algo_mode = getattr(request.app.state, "algo_mode", False)
     # Router mode is the authoritative paper/shadow/live switch. Real orders are
     # placed ONLY in "live" mode — "shadow" runs with keys present but simulates
     # the fill as a paper position (so it never touches real funds), and "paper"
@@ -435,7 +433,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             )
 
         except Exception as exc:
-            log.error("Live order failed: %s", exc)
+            log.exception("Live order failed: %s", exc)
             failed_pos_id = _create_failed_algo_tracking(body, sym, str(exc))
             # Enqueue for operator-driven retry. The retry endpoint at the
             # bottom of this file picks items off this queue.
@@ -765,7 +763,6 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
     s = pos.sized_trade.structure
     direction = "long" if s.direction.value == "long" else "short"
     side = "buy" if direction == "long" else "sell"
-    instrument_type = s.structure_type
     now_ms = int(time.time() * 1000)
 
     try:
@@ -803,7 +800,7 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
     except Exception as exc:
         paper_store.update_position(position_id, order_status="failed",
                                      notes=f"[ALGO-FAILED] Retry error: {exc}")
-        log.error("Retry failed for %s: %s", position_id, exc)
+        log.exception("Retry failed for %s: %s", position_id, exc)
         raise HTTPException(status_code=502, detail=f"Retry failed: {exc}") from exc
 
 
@@ -920,7 +917,7 @@ async def test_credentials(request: Request) -> dict:
             f"Alternatively, remove all IPs from the whitelist to allow access from any IP."
         )
         label = "India" if india_err else "Global"
-        return {"ok": False, "reason": f"IP not whitelisted for this API key", "hint": hint, "server_ip": server_ip}
+        return {"ok": False, "reason": "IP not whitelisted for this API key", "hint": hint, "server_ip": server_ip}
     elif "invalid_api_key" in primary_err or "Invalid API key" in primary_err:
         hint = ("Key not recognised on either endpoint. Ensure it was generated at "
                 "delta.exchange/app/account/manageapikeys (not testnet) and has Read + Trading permissions.")

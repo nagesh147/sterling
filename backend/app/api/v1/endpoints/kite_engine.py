@@ -17,7 +17,6 @@ from app.engines.sterling_kite_engine.schemas import (
     OpenPositionRecord, OpenPositionsResponse,
     ScanReportResponse, ScanReportSummary, SetupChart, SignalsResponse,
 )
-from app.services import live_safety
 from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite.errors import KiteError
 from app.services.kite_engine import positions as kite_positions, service, state
@@ -276,7 +275,7 @@ async def close_position(symbol: str, user: UserContext = Depends(get_current_us
 async def stock_registry() -> list[dict]:
     """Return the curated stock registry with liquidity / volatility metadata,
     plus a separate optional-stocks group for the '+' picker."""
-    from app.services.kite_engine.stock_registry import OPTIONAL_STOCKS, STOCK_REGISTRY, STOCKS_BY_LIQUIDITY
+    from app.services.kite_engine.stock_registry import OPTIONAL_STOCKS, STOCKS_BY_LIQUIDITY
     groups = [
         {"liquidity": liq, "stocks": [e.to_dict() for e in entries]}
         for liq in ["Very High", "High", "Good"]

@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger

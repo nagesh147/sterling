@@ -12,7 +12,7 @@ Allows consistent:
 
 Used by engine.manage, monitor.on_tick, scanner is_active, future directional.
 """
-from typing import Literal, Tuple
+from typing import Literal
 
 ExitMode = Literal["one_red", "two_red", "three_red", "three_red_signal"]
 

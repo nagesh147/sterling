@@ -29,6 +29,7 @@ from app.schemas.account import (
     AssetBalance, AccountPosition, AccountOrder, AccountFill, PortfolioSnapshot
 )
 from app.core.logging import get_logger
+from types import MappingProxyType
 
 log = get_logger(__name__)
 
@@ -270,8 +271,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         data = resp.json()
         return self._validate_response(data, path)
 
-    # Human-readable messages for known Delta API error codes
-    _FRIENDLY: dict[str, str] = {
+    # Human-readable messages for known Delta API error codes (immutable)
+    _FRIENDLY = MappingProxyType({
         "insufficient_margin":    "Insufficient margin",
         "invalid_api_key":        "Invalid API key — check your credentials",
         "order_size_too_small":   "Order size too small for this contract",
@@ -282,7 +283,7 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         "risk_limit_exceeded":    "Position exceeds account risk limit",
         "ip_not_whitelisted":     "IP not whitelisted for this API key",
         "IpNotWhitelisted":       "IP not whitelisted for this API key",
-    }
+    })
 
     @staticmethod
     async def _get_public_ip() -> str:
@@ -883,7 +884,7 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                     continue
             return sorted(candles, key=lambda c: c.timestamp_ms)
         except Exception as exc:
-            log.error("Delta candles fetch failed for %s %s: %s", instrument.delta_perp_symbol, resolution, exc)
+            log.exception("Delta candles fetch failed for %s %s: %s", instrument.delta_perp_symbol, resolution, exc)
             raise
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:

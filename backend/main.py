@@ -916,7 +916,7 @@ async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
     try:
         resp = await router.submit(req)
     except Exception as exc:
-        log.error("ALGO router crashed for %s: %s", sym, exc)
+        log.exception("ALGO router crashed for %s: %s", sym, exc)
         # Build a body for failed-tracking — same shape as before refactor.
         body = LiveOrderRequest(
             underlying=sym, direction=direction, instrument_type="futures",
@@ -1020,7 +1020,6 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                             sym = s.get('sym', 'UNKNOWN')
                             strat = s.get('strategy', 'legacy')
                             msg = f"[PASS] {sym} {strat} (DSR: {dsr:.2f}, WFA: {wfa:.2f})"
-                            color = "var(--t-green)" if strength == 'STRONG' else "var(--t-amber)"
                             async def _broadcast_log(m=msg, strngth=strength):
                                 try:
                                     level = "INFO"
@@ -1163,7 +1162,6 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
 
     feeds: dict[str, VCPLiveFeed] = {}
     routers: dict[str, OrderRouter] = {}
-    active_feeds: list[asyncio.Task] = []
 
     def _make_router(profile_key: str, mode_str: str) -> OrderRouter:
         active = exchange_account_store.get_active() or type("A", (), {"api_key": "", "api_secret": "", "extra": {}})()
@@ -1631,7 +1629,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
 
-    for _t in (tg_bot_task, tg_alert_task):
+    for _t in (tg_bot_task, tg_alert_task, tg_kite_alert_task):
         _t.cancel()
         try:
             await _t
