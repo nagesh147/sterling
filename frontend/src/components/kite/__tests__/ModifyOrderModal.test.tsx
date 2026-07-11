@@ -26,10 +26,11 @@ describe('ModifyOrderModal', () => {
 
   it('submits the edited quantity and price with the order id and variety', () => {
     render(<ModifyOrderModal order={order} onClose={vi.fn()} />);
-    fireEvent.change(screen.getByDisplayValue('10'), { target: { value: '20' } });
+    // Quantity can only be reduced (never increased) on a Kite modify, so edit downward.
+    fireEvent.change(screen.getByDisplayValue('10'), { target: { value: '5' } });
     fireEvent.click(screen.getByText('Modify'));
     expect(mockMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'o1', variety: 'regular', quantity: 20, price: 1500 }),
+      expect.objectContaining({ id: 'o1', variety: 'regular', quantity: 5, price: 1500 }),
       expect.anything(),
     );
   });
