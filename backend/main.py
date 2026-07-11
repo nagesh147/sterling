@@ -1296,6 +1296,7 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
 async def _background_scalping_alerts(app: FastAPI, interval: int = 45) -> None:
     """Periodically scan scalping signals and push Telegram alerts for new ready
     setups. Skips entirely when scalp_mode is off."""
+    import asyncio
     from app.services.notifications import telegram_bot as _bot
     await asyncio.sleep(10)  # let startup settle before the first scan
     while True:
