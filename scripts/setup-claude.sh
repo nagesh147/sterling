@@ -61,19 +61,93 @@ code-review-graph build || warn "build issues"
 ok "Graph built"
 
 # ----- 4. TrueCourse (architecture) -----
-echo -e "\n${BLD}4. TrueCourse (architecture)...${RST}"
+# ---------- 4. TrueCourse (Architecture) — interactive for new users ----------
+echo -e "
+${BLD}4. TrueCourse (architecture)...${RST}"
+
 if ! command -v truecourse &>/dev/null; then
   if command -v npm &>/dev/null; then
-    npm install -g truecourse >/dev/null 2>&1 && ok "truecourse installed" || warn "truecourse install failed"
-  else warn "Need Node/npm: npm i -g truecourse"; fi
-else ok "truecourse already installed"; fi
-if command -v truecourse &>/dev/null; then
-  truecourse analyze || warn "analyze had issues (re-run later)"
-  truecourse hooks install 2>/dev/null || true
-  ok "TrueCourse ready"
+    echo
+    echo "  truecourse is not installed."
+    echo "  Install globally via npm? (free package; needs Node.js)"
+    read -r -p "  Install truecourse now? [Y/n] " ans
+    ans=${ans:-Y}
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+      npm install -g truecourse && ok "truecourse installed" || warn "truecourse install failed"
+    else
+      warn "Skipped truecourse install"
+    fi
+  else
+    warn "npm missing — skip truecourse (install Node.js to enable)"
+  fi
+else
+  ok "truecourse already installed"
 fi
 
-# ----- 5. Skills (install + update) -----
+if command -v truecourse &>/dev/null; then
+  echo
+  echo "  TrueCourse finds architecture issues (circular deps, layer violations,"
+  echo "  god/dead modules, coupling, etc.). Choose how to run it NOW:"
+  echo
+  echo "  1) Deterministic only  [RECOMMENDED for first setup]"
+  echo "     - Fast (seconds to a few minutes)"
+  echo "     - No LLM / Claude API token cost for rules"
+  echo "     - Does not need Claude session quota for LLM rules"
+  echo "     - Best default when cloning a repo"
+  echo
+  echo "  2) Full analysis with LLM rules"
+  echo "     - Deeper semantic checks"
+  echo "     - Can use a LARGE number of tokens (on big repos: millions)"
+  echo "     - Requires working claude CLI and available quota"
+  echo "     - Slow; use when you want a deep architecture pass"
+  echo
+  echo "  3) Skip analysis for now"
+  echo "     - Zero time / zero tokens"
+  echo "     - You can run truecourse later manually"
+  echo
+  read -r -p "  Analysis mode [1/2/3] (default: 1): " mode
+  mode=${mode:-1}
+
+  case "$mode" in
+    2)
+      echo "  → Full LLM analysis (high token use)..."
+      if truecourse analyze --llm --stash --no-skills; then
+        ok "TrueCourse full analysis done"
+      else
+        warn "Full analysis failed (quota/CLI). Later: truecourse analyze --llm --stash --no-skills"
+      fi
+      ;;
+    3)
+      warn "Skipped TrueCourse analyze"
+      echo "  Later:"
+      echo "    truecourse analyze --no-llm --stash --no-skills"
+      echo "    truecourse analyze --llm --stash --no-skills"
+      ;;
+    *)
+      echo "  → Deterministic analysis (no LLM tokens)..."
+      if truecourse analyze --no-llm --stash --no-skills; then
+        ok "TrueCourse deterministic analysis done"
+      else
+        warn "Deterministic analyze failed. Later: truecourse analyze --no-llm --stash --no-skills"
+      fi
+      ;;
+  esac
+
+  echo
+  echo "  Pre-commit hook (optional):"
+  echo "  Y = architecture check on every commit (can slow large repos)"
+  echo "  N = faster commits; run truecourse manually  [default]"
+  read -r -p "  Install TrueCourse pre-commit hook? [y/N] " hook
+  hook=${hook:-N}
+  if [[ "$hook" =~ ^[Yy]$ ]]; then
+    truecourse hooks install 2>/dev/null && ok "Pre-commit hook installed" || warn "hook install failed"
+  else
+    ok "Skipped pre-commit hook"
+  fi
+else
+  warn "truecourse not available — architecture step skipped"
+fi
+
 echo -e "\n${BLD}5. Skills (global, used dynamically)...${RST}"
 if [ -f "./install-skills.sh" ]; then
   bash ./install-skills.sh update 2>/dev/null || bash ./install-skills.sh install || warn "skills script issues"
