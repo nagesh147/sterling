@@ -13,8 +13,8 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.backtest import _stats_from_trades, BacktestTrade
 from study import kite_data
 
@@ -26,7 +26,7 @@ def underlying_signal_pnl(arrs, trail_target: str, lo=0, hi=None, cost_bps=3.0):
     exit on trail flip. Isolates whether the SIGNAL itself has directional edge.
     cost_bps = round-trip friction (futures are cheap). Returns stats."""
     o, h, l, c, ts = (arrs[k][lo:hi] for k in ("o", "h", "l", "c", "ts"))
-    cfg = TripleSupertrendConfig(trail_target=trail_target)
+    cfg = SterlingKiteEngineConfig(trail_target=trail_target)
     n = len(c)
     trades = []
     if n <= cfg.warmup + 2:

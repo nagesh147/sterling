@@ -1,7 +1,7 @@
 import time
 from fastapi import APIRouter, HTTPException, Request
 from app.schemas.backtest import (
-    BacktestRequest, BacktestResult,
+    BacktestRequest,
     MTFBacktestRequest, MTFBacktestResult,
     HybridVCPBacktestRequest, HybridVCPBacktestResult, HybridVCPProfileResult,
 )
@@ -43,7 +43,7 @@ async def run_backtest_endpoint(
         candles_4h = await adapter.get_candles(inst, "4H", limit=limit_4h)
         candles_1h = await adapter.get_candles(inst, "1H", limit=limit_1h)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     result = run_backtest(
         underlying=sym,
@@ -140,7 +140,7 @@ async def run_mtf_backtest_endpoint(
             if needs_1d else []
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     # Issue 11 — apply per-underlying funding default when caller omits the field.
     from app.services.funding import resolve_funding_8h_pct
@@ -175,7 +175,7 @@ async def run_mtf_backtest_endpoint(
     }
 
 
-@router.post("/vcp", response_model=HybridVCPBacktestResult)
+@router.post("/vcp")
 async def run_vcp_backtest_endpoint(
     body: HybridVCPBacktestRequest,
     request: Request,
@@ -231,7 +231,7 @@ async def run_vcp_backtest_endpoint(
         if needs_2h:
             candles_by_tf["2h"] = await adapter.get_candles(inst, "2h", limit=limit_regime)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     from app.services.funding import resolve_funding_8h_pct
     from app.engines.hybrid_vcp.backtest import run_all_profiles

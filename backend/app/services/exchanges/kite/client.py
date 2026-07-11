@@ -54,8 +54,8 @@ def _parse_kite_ts(ts_str) -> int:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=_IST)
         return int(dt.timestamp() * 1000)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
     try:
         dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S").replace(tzinfo=_IST)
         return int(dt.timestamp() * 1000)
@@ -125,10 +125,13 @@ class KiteClient(TradingExchangeAdapter):
         """Unwrap Kite's ``{status,data}`` envelope; raise a typed KiteError on failure."""
         try:
             body = resp.json()
-        except Exception:
+        except Exception as exc:
             if not resp.is_success:
                 raise_for_kite(f"HTTP {resp.status_code}: {resp.text[:200]}", "", resp.status_code)
-            raise KiteError(f"Non-JSON response from {resp.request.url}", status_code=resp.status_code)
+            raise KiteError(
+                f"Non-JSON response from {resp.request.url}",
+                status_code=resp.status_code,
+            ) from exc
         if isinstance(body, dict) and body.get("status") == "error":
             raise_for_kite(body.get("message", ""), body.get("error_type", ""), resp.status_code,
                            data=body.get("data") if isinstance(body.get("data"), dict) else None)
@@ -257,6 +260,10 @@ class KiteClient(TradingExchangeAdapter):
     async def instrument_lot_sizes(self, symbols: list) -> dict:
         """EXCHANGE:TRADINGSYMBOL → lot_size for a batch (found instruments only)."""
         return await self._instruments.lot_sizes(symbols)
+
+    async def instrument_expiries(self, symbols: list) -> dict:
+        """EXCHANGE:TRADINGSYMBOL → expiry (YYYY-MM-DD) for a batch (dated F&O only)."""
+        return await self._instruments.expiries(symbols)
 
     async def search_mf_instruments(self, query: str = "", limit: int = 50) -> List[dict]:
         """Search the mutual-fund scheme master by tradingsymbol/name/AMC."""
@@ -723,8 +730,11 @@ class KiteClient(TradingExchangeAdapter):
         from_str = (now - timedelta(days=days_needed)).strftime("%Y-%m-%d %H:%M:%S")
         to_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        log.info("Fetching Kite candles: token=%s, resolution=%s, interval=%s, from=%s, to=%s",
-                 token, resolution, interval, from_str, to_str)
+        # Log underlying + interval only — never instrument tokens (confidential).
+        log.info(
+            "Fetching Kite candles: underlying=%s, resolution=%s, interval=%s, from=%s, to=%s",
+            instrument.underlying, resolution, interval, from_str, to_str,
+        )
         max_retries = 5
         for attempt in range(max_retries):
             try:
@@ -741,7 +751,7 @@ class KiteClient(TradingExchangeAdapter):
                                 instrument.underlying, attempt + 1, exc, sleep_time)
                     await asyncio.sleep(sleep_time)
                 else:
-                    log.error("Kite candle fetch failed for %s after %d attempts: %s", 
+                    log.exception("Kite candle fetch failed for %s after %d attempts: %s",
                               instrument.underlying, max_retries, exc)
                     return []
         candles: List[Candle] = []

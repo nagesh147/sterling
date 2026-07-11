@@ -90,6 +90,6 @@ async def close_current() -> None:
     if _adapter is not None:
         try:
             await _adapter.close()
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
         _adapter = None

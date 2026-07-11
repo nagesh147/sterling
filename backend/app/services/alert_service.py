@@ -4,12 +4,12 @@ Centralised alert evaluation and delivery.
 Both the SSE stream and the background poller call check_and_fire() with a
 pre-computed snapshot so no duplicate exchange requests are made.
 """
-import asyncio
 import time
 from typing import List, Optional
 
 from app.services import alert_store, webhook_store
 from app.core.logging import get_logger
+from app.core.async_tasks import spawn_background
 
 log = get_logger(__name__)
 
@@ -35,7 +35,7 @@ async def check_and_fire(
 
     - Rearms any alert whose cooldown has elapsed.
     - Fires (marks TRIGGERED) all alerts whose condition is met.
-    - Delivers webhooks via asyncio.create_task (non-blocking, fail-safe).
+    - Delivers webhooks via spawn_background (non-blocking, fail-safe).
     - Returns a list of fired-alert dicts for embedding in SSE payloads.
 
     Idempotent: if an alert is already TRIGGERED it won't fire again until
@@ -80,7 +80,10 @@ async def check_and_fire(
                 "message": result.message,
             }
             # Non-blocking: a webhook failure must never crash the caller
-            asyncio.create_task(_deliver_safe(subject, result.message, data))
+            spawn_background(
+                _deliver_safe(subject, result.message, data),
+                name="alert-service-webhook",
+            )
             log.info("Alert fired: %s (%s) %s", alert.id, sym, result.message)
 
     except Exception as exc:

@@ -33,8 +33,8 @@ def bootstrap() -> None:
         try:
             pos = PaperPosition.model_validate(raw)
             _positions[pos.id] = pos
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     _loaded = True
 
 
@@ -59,6 +59,10 @@ def add_position(
     entry_dte: int | None = None,
     entry_greeks_snapshot: GreeksSnapshot | None = None,
     expected_theta_burn_usd: float | None = None,
+    # exit counter for unification with kite engine
+    exit_mode: str = "two_red",
+    current_red_count: int = 0,
+    exit_threshold: int = 2,
 ) -> PaperPosition:
     # Issue 17 — refuse to record a position with a corrupt entry price.
     # Pre-TTACE seed data has rows where entry_spot_price == 0; tightening at
@@ -71,7 +75,7 @@ def add_position(
     from app.core.trading_mode import MODES, DEFAULT_MODE, TrailMode
     from app.engines.directional.trailing_stop import TrailState
 
-    mode_name = trail_mode_name or DEFAULT_MODE
+    mode_name = trail_mode_name or "swing"  # hybrid enabled in swing/positional
     mode      = MODES.get(mode_name, MODES[DEFAULT_MODE])
 
     # Use ATR-based SL when provided; direction-aware fallback (long: below entry, short: above)
@@ -92,6 +96,10 @@ def add_position(
         partial_50_pct=mode.partial_50_pct,
         # Distance to the initial stop — drives R-multiple trail tightening / locks.
         initial_risk=abs(entry_spot_price - sl_price),
+        # Hybrid support
+        hybrid_atr_mult=mode.trail_atr_mult,
+        hybrid_st_weight=0.5,
+        hybrid_use_st=True,
     )
 
     pos = PaperPosition(
@@ -124,6 +132,9 @@ def add_position(
         entry_dte=entry_dte if entry_dte is not None else _default_entry_dte(sized_trade),
         entry_greeks_snapshot=entry_greeks_snapshot,
         expected_theta_burn_usd=expected_theta_burn_usd,
+        exit_mode=exit_mode,
+        current_red_count=current_red_count,
+        exit_threshold=exit_threshold,
     )
     _positions[pos.id] = pos
     db.upsert(pos.model_dump())
@@ -304,8 +315,8 @@ def close_position(
                 if r["audit_id"].startswith(short):
                     _audit.record_exit(r["audit_id"], exit_pnl=float(estimated_pnl))
                     break
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     closed = update_position(
         pos_id,
@@ -320,14 +331,17 @@ def close_position(
         settlement_recorded=settlement_recorded,
         notes=notes or pos.notes,
         run_once_state=TradeState.EXITED,
+        exit_mode=getattr(pos, 'exit_mode', 'one_red'),
+        current_red_count=getattr(pos, 'current_red_count', 0),
+        exit_threshold=getattr(pos, 'exit_threshold', 1),
     )
     # Live event emission — no-op unless settings.enable_event_bus configured a
     # bus at startup. Fail-safe: never let event wiring affect a close.
     try:
         from app.services import event_emit
         event_emit.emit_position_closed(pos.underlying, float(estimated_pnl))
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
     return closed
 
 

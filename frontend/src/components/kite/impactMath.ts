@@ -1,5 +1,5 @@
 // ─── Shared "✝ BEST R:R" maths ──────────────────────────────────────────────
-// Pure functions reused by the signal rows (TripleSupertrendPane), the Trade
+// Pure functions reused by the signal rows (SterlingKiteEnginePane), the Trade
 // Impact Calculator, and the detail page so the badges always mean the same
 // thing. Kept in their OWN module (no React component exports) so the component
 // files stay Fast-Refresh-eligible — mixing utilities with components in one

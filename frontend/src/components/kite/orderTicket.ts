@@ -14,6 +14,7 @@ import type { PlaceOrderBody, PlaceGttBody } from '../../types/kite';
 
 export type Side = 'BUY' | 'SELL';
 export type OrderType = 'MARKET' | 'LIMIT' | 'SL' | 'SL-M';
+// MTF intentionally excluded — see the backlog note on PlaceOrderBody.product in types/kite.ts.
 export type Product = 'MIS' | 'CNC' | 'NRML';
 export type Validity = 'DAY' | 'IOC' | 'TTL';
 export type Variety = 'regular' | 'amo';
@@ -97,6 +98,25 @@ export function lotsToQty(lots: number, lotSize?: number | null): number {
 export function roundTick(price: number, tick = 0.05): number {
   if (!(price > 0)) return 0;
   return Math.round(price / tick) * tick;
+}
+
+// ─── AMO (After Market Order) ────────────────────────────────────────────────
+
+/** Whether the ticket must be sent as an AMO because the market is currently closed. */
+export function needsAmo(marketOpen: boolean | undefined): boolean {
+  return marketOpen === false;
+}
+
+/**
+ * Resolve the variety to submit. `marketOpen` comes from the engine-activity
+ * poll (`is_market_open()` on the backend) — an approximation used only for
+ * the pre-submit advisory. The backend's own hint-based AMO conversion
+ * (`client.py`, catching `switch_to_amo`) remains the actual authority and is
+ * unaffected by this — this just makes the same outcome visible *before* the
+ * order is sent instead of only via a post-submit toast.
+ */
+export function resolveVariety(marketOpen: boolean | undefined): Variety {
+  return needsAmo(marketOpen) ? 'amo' : 'regular';
 }
 
 // ─── Order-type field rules ─────────────────────────────────────────────────
@@ -254,4 +274,25 @@ export function parseMargin(resp: any): { total: number; charges: number } | nul
   const charges = Number(row?.charges?.total ?? 0);
   if (!Number.isFinite(total)) return null;
   return { total, charges };
+}
+
+/**
+ * Format the itemized fields of a /charges/orders `charges` object into
+ * newline-separated "key: value" lines for a tooltip. Kite's response mixes
+ * plain numeric fields (brokerage, stamp_duty, ...) with a nested `gst`
+ * object ({igst, cgst, sgst, total}) and non-numeric leaves — a bare
+ * `Number(v).toFixed(2)` over every entry would render "NaN" for those and
+ * silently drop `gst` (an object, not a number). Skip the grand `total` key
+ * and only emit finite-numeric leaves, unwrapping one level into `.total`
+ * for nested fields like `gst`.
+ */
+export function chargeLines(charges: Record<string, any> | null | undefined): string | undefined {
+  if (!charges) return undefined;
+  const lines: string[] = [];
+  for (const [key, v] of Object.entries(charges)) {
+    if (key === 'total') continue;
+    if (typeof v === 'number' && Number.isFinite(v)) lines.push(`${key}: ${v.toFixed(2)}`);
+    else if (v && typeof v === 'object' && Number.isFinite(v.total)) lines.push(`${key}: ${Number(v.total).toFixed(2)}`);
+  }
+  return lines.length ? lines.join('\n') : undefined;
 }

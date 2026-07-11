@@ -22,7 +22,6 @@ from typing import List, Optional, Union
 
 import httpx
 
-from app.services.exchanges.authenticated_base import AuthenticatedExchangeAdapter
 from app.services.exchanges.trading_base import TradingExchangeAdapter
 from app.schemas.market import Candle, OptionSummary
 from app.schemas.instruments import InstrumentMeta
@@ -30,6 +29,7 @@ from app.schemas.account import (
     AssetBalance, AccountPosition, AccountOrder, AccountFill, PortfolioSnapshot
 )
 from app.core.logging import get_logger
+from types import MappingProxyType
 
 log = get_logger(__name__)
 
@@ -222,7 +222,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                             continue  # ignore individual parse errors
 
             except asyncio.CancelledError:
-                break
+                self._ws_active = False
+                raise
             except Exception as exc:
                 if not self._ws_active:
                     break
@@ -270,8 +271,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         data = resp.json()
         return self._validate_response(data, path)
 
-    # Human-readable messages for known Delta API error codes
-    _FRIENDLY: dict[str, str] = {
+    # Human-readable messages for known Delta API error codes (immutable)
+    _FRIENDLY = MappingProxyType({
         "insufficient_margin":    "Insufficient margin",
         "invalid_api_key":        "Invalid API key — check your credentials",
         "order_size_too_small":   "Order size too small for this contract",
@@ -282,7 +283,7 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         "risk_limit_exceeded":    "Position exceeds account risk limit",
         "ip_not_whitelisted":     "IP not whitelisted for this API key",
         "IpNotWhitelisted":       "IP not whitelisted for this API key",
-    }
+    })
 
     @staticmethod
     async def _get_public_ip() -> str:
@@ -295,8 +296,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                     ip = r.text.strip()
                     if ip:
                         return ip
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
         return "unknown (check ifconfig.me)"
 
     def _raise_api_error(self, resp, path: str) -> None:
@@ -326,8 +327,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                     raise RuntimeError(f"{friendly}{ctx_str}")
         except RuntimeError:
             raise
-        except (ValueError, KeyError, TypeError):
-            pass
+        except (ValueError, KeyError, TypeError) as _exc:
+            log.debug("suppressed: %s", _exc)
         resp.raise_for_status()
 
     async def _auth_get(self, path, params=None):
@@ -383,8 +384,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                 if cv is not None:
                     try:
                         self._contract_value_cache[sym] = float(cv)
-                    except (TypeError, ValueError):
-                        pass
+                    except (TypeError, ValueError) as _exc:
+                        log.debug("suppressed: %s", _exc)
                 if sym == symbol:
                     return int(p["id"])
             return None
@@ -435,8 +436,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                 if sym and cv is not None:
                     try:
                         self._contract_value_cache[sym] = float(cv)
-                    except (TypeError, ValueError):
-                        pass
+                    except (TypeError, ValueError) as _exc:
+                        log.debug("suppressed: %s", _exc)
         except Exception as exc:
             log.debug("get_contract_value scan failed for %s: %s", symbol, exc)
         return self._contract_value_cache.get(symbol, 1.0)
@@ -688,12 +689,11 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         is a deep reduce-only limit that, under normal conditions, will
         never fill — it exists only to carry the bracket stop to the OMS.
         """
-        from datetime import datetime as _dt
         # 1. Cancel every open order for this product (bracket stops, TPs, etc.)
         try:
             await self.cancel_all_orders(product_id)
-        except Exception:
-            pass  # best-effort — existing stops will be overwritten by new bracket
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
 
         # 2. Place a reduce-only limit carrier ~10% away so it cannot fill
         #    under normal conditions.  The attached bracket_stop_loss becomes
@@ -884,7 +884,7 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                     continue
             return sorted(candles, key=lambda c: c.timestamp_ms)
         except Exception as exc:
-            log.error("Delta candles fetch failed for %s %s: %s", instrument.delta_perp_symbol, resolution, exc)
+            log.exception("Delta candles fetch failed for %s %s: %s", instrument.delta_perp_symbol, resolution, exc)
             raise
 
     async def get_option_chain(self, instrument: InstrumentMeta) -> List[OptionSummary]:

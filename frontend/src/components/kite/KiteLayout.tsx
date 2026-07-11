@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { k } from '../../styles/kiteUI';
+import { k, Icons } from '../../styles/kiteUI';
 import { MacKiteToggle } from './mac/MacKiteToggle';
 import { useMacKite } from '../../hooks/useMacKite';
 import { MacStageLayout } from './mac/MacStageLayout';
-import { useEngineActivity } from '../../hooks/useTripleSupertrend';
+import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 
 export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
-// Footer scan-status helpers — mirror the Triple SuperTrend pane formats.
+// Footer scan-status helpers — mirror the Sterling Kite Engine pane formats.
 function fmtAgo(ms: number): string {
   if (!ms) return 'never';
   const s = Math.round((Date.now() - ms) / 1000);
@@ -52,9 +52,13 @@ interface KiteLayoutProps {
       the center column so the left/right sidebars start at the top bar's bottom. */
   centerTopBar?: React.ReactNode;
   content: React.ReactNode;
+  /** Persistent basket trigger — footer icon button + count badge (owned by the
+      caller, since basket-open state and the basket store live one level up). */
+  onBasketClick?: () => void;
+  basketCount?: number;
 }
 
-export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content }: KiteLayoutProps) {
+export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content, onBasketClick, basketCount = 0 }: KiteLayoutProps) {
   const { on: macOn } = useMacKite();
   const { data: activity } = useEngineActivity();
   const scanning = !!activity?.scanning;
@@ -95,7 +99,10 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
     return localStorage.getItem('kite_layout_locked') === 'true';
   });
 
-  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>(() => {
+    const v = localStorage.getItem('kite_terminal_mode');
+    return v === 'minimized' || v === 'partial' || v === 'full' ? v : 'normal';
+  });
 
   useEffect(() => {
     const cb = (e: any) => setTerminalMode(e.detail);
@@ -291,7 +298,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
             {content}
           </div>
 
-          {/* ── Bottom Bar (Kite Terminal) — spans only the center column ── */}
+          {/* ── Bottom Bar (Sterling Kite Terminal) — spans only the center column ── */}
           {bottomBar && isBottomBarOpen && (
             terminalMode === 'full' ? (
               <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -399,7 +406,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
                 }
                 window.dispatchEvent(new CustomEvent('kite-pane-toggle'));
               }} 
-              title={terminalMode === 'minimized' ? 'Restore Kite terminal' : 'Show / hide Kite terminal'} 
+              title={terminalMode === 'minimized' ? 'Restore Sterling Kite terminal' : 'Show / hide Sterling Kite terminal'} 
               style={footBtn(isBottomBarOpen || terminalMode === 'minimized')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -427,6 +434,19 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               {isLocked ? <path d="M7 11V7a5 5 0 0 1 10 0v4" /> : <path d="M7 11V7a5 5 0 0 1 9.9-1" />}
             </svg>
           </button>
+          {onBasketClick && (
+            <>
+              <span style={{ width: 1, height: 16, background: '#e0e0e0', margin: '0 2px' }} />
+              <button onClick={onBasketClick} title="Basket" style={{ ...footBtn(basketCount > 0), position: 'relative' }}>
+                <Icons.Basket />
+                {basketCount > 0 && (
+                  <span style={{ position: 'absolute', top: -4, right: -4, background: '#ff5722', color: '#fff', borderRadius: '50%', minWidth: 15, height: 15, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px' }}>
+                    {basketCount}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Scan status — bottom-right */}
@@ -442,16 +462,28 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
               <span style={{ width: 1, height: 14, background: '#e0e0e0' }} />
             </>
           )}
-          <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : autoScan ? k.orange : '#bbb' }} />
-          <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
-            {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}
-          </span>
-          {!scanning && (activity?.last_scan_ms ?? 0) > 0 && (
-            <span style={{ opacity: 0.7 }}>· {fmtAgo(activity!.last_scan_ms)}</span>
-          )}
-          {!scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 && (
-            <span style={{ opacity: 0.7 }}>· Next Due {fmtNext(activity!.next_scan_ms)}</span>
-          )}
+          {(() => {
+            // AUTO + market closed: the scan loop intentionally pauses until the
+            // next session, so last/next scan timestamps are stale. Show "market
+            // closed" instead of a misleading "Next Due now".
+            const marketClosed = autoScan && activity?.market_open === false;
+            return (
+              <>
+                <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: 3, flexShrink: 0, background: scanning ? k.orange : marketClosed ? '#bbb' : autoScan ? k.orange : '#bbb' }} />
+                <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 600 : 400, textTransform: 'capitalize' }}>
+                  {scanning ? (activity?.scanning_label || 'scanning…') : autoScan ? 'AUTO' : 'MANUAL'}
+                </span>
+                {!scanning && (activity?.last_scan_ms ?? 0) > 0 && (
+                  <span style={{ opacity: 0.7 }}>· {fmtAgo(activity!.last_scan_ms)}</span>
+                )}
+                {!scanning && marketClosed ? (
+                  <span style={{ opacity: 0.7 }}>· Market closed</span>
+                ) : (!scanning && autoScan && (activity?.next_scan_ms ?? 0) > 0 && (
+                  <span style={{ opacity: 0.7 }}>· Next Due {fmtNext(activity!.next_scan_ms)}</span>
+                ))}
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

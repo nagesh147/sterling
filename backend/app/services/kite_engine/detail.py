@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.core.logging import get_logger
-from app.engines.triple_supertrend.schemas import (
+from app.engines.sterling_kite_engine.schemas import (
     DepthLevel, EngineDetailResponse, OptionDetail,
 )
 from app.services.kite_engine.greeks import black_scholes_greeks, implied_vol

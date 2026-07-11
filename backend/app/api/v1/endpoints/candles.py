@@ -107,7 +107,7 @@ async def get_candles(
     try:
         candles = await adapter.get_candles(inst, tf, limit=limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     result = [
         {

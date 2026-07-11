@@ -2,7 +2,6 @@ import sys
 import os
 import sqlite3
 import pandas as pd
-from collections import defaultdict
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,13 +13,23 @@ from app.schemas.market import Candle
 
 def get_candles_paper(symbol, resolution, limit=10000):
     conn = sqlite3.connect('backend/sterling_paper.db')
-    cursor = conn.cursor()
-    if resolution == '1m':
-        cursor.execute(f"SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m WHERE symbol='{symbol}' ORDER BY timestamp DESC LIMIT {limit};")
-    else:
-        cursor.execute(f"SELECT time, open, high, low, close, volume FROM ohlcv WHERE symbol='{symbol}' AND resolution='{resolution}' ORDER BY time DESC LIMIT {limit};")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        if resolution == '1m':
+            cursor.execute(
+                "SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m "
+                "WHERE symbol=? ORDER BY timestamp DESC LIMIT ?",
+                (symbol, limit),
+            )
+        else:
+            cursor.execute(
+                "SELECT time, open, high, low, close, volume FROM ohlcv "
+                "WHERE symbol=? AND resolution=? ORDER BY time DESC LIMIT ?",
+                (symbol, resolution, limit),
+            )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
     rows.reverse()
     if resolution == '1m':
         # the user script already stores ms? wait, Delta's 1m timestamp is mostly ms or s? 
@@ -61,7 +70,7 @@ def replay_strategy(sym, cM, cE, c1h, cfg: ScalpingProfile, tsM, step, maxh, str
     import bisect
     cfg.use_optimized = True # Enforce ultra mode
     out = []
-    cooldown, cj = -1, -1
+    cooldown, _cj = -1, -1
     n = len(cE)
     i = W_EXEC
     while i < n - 1:
@@ -152,8 +161,8 @@ def generate_report():
             report_lines.append(f"| {strat_label} | 0.00 | 0.00R | 0.00 | 0.00R | 0.00 | 0.0% |")
             continue
             
-        pf_b, exp_b, n_b = _pf_exp(trades_before)
-        pf_a, exp_a, n_a = _pf_exp(trades_after)
+        pf_b, exp_b, _n_b = _pf_exp(trades_before)
+        pf_a, exp_a, _n_a = _pf_exp(trades_after)
         
         if len(trades_after) > 0:
             wins_a = sum(1 for t in trades_after if t > 0)

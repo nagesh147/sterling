@@ -99,7 +99,8 @@ function saveMap(map: Record<PanelKey, SlotKey>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch {
-    /* ignore quota / private-mode errors */
+    // localStorage may throw in private mode / quota exceeded — layout is non-critical
+    void 0;
   }
 }
 
@@ -122,9 +123,9 @@ interface StagePanelProps {
   onDragEnd: (key: PanelKey, info: { point: { x: number; y: number } }) => void;
 }
 
-/* A single draggable Kite panel. Drag is initiated ONLY from the grip strip via
- * dragControls, so clicks inside the live trading content never start a drag. */
-function StagePanel({
+/* Shared panel chrome. `controls` is either a real Framer DragControls instance
+ * (handle-only drag) or null (whole-surface drag fallback before the hook loads). */
+function StagePanelInner({
   panelKey,
   child,
   isDragging,
@@ -134,12 +135,9 @@ function StagePanel({
   onDragStart,
   onDrag,
   onDragEnd,
-}: StagePanelProps) {
+  controls,
+}: StagePanelProps & { controls: { start: (e: any) => void } | null }) {
   const MotionDiv = motion.div;
-  // useDragControls is resolved lazily (see module note). If for any reason it
-  // isn't ready yet, fall back to whole-surface drag — still functional, and
-  // the grip still works.
-  const controls = useDragControlsRef ? useDragControlsRef() : null;
 
   return (
     <MotionDiv
@@ -210,6 +208,25 @@ function StagePanel({
   );
 }
 
+/* Mounted only after `useDragControlsRef` is set — always calls the hook
+ * unconditionally (Rules of Hooks). Switching between this and StagePanelFallback
+ * is a component swap (unmount/remount), not a conditional hook call. */
+function StagePanelWithControls(props: StagePanelProps) {
+  // useDragControlsRef is guaranteed non-null by the parent branch.
+  const controls = useDragControlsRef!();
+  return <StagePanelInner {...props} controls={controls} />;
+}
+
+/* Fallback before framer-motion drag controls resolve: whole-surface drag. */
+function StagePanelFallback(props: StagePanelProps) {
+  return <StagePanelInner {...props} controls={null} />;
+}
+
+function StagePanel(props: StagePanelProps) {
+  const Panel = useDragControlsRef ? StagePanelWithControls : StagePanelFallback;
+  return <Panel {...props} />;
+}
+
 export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: MacStageLayoutProps) {
   const { motion, LayoutGroup, sp } = useMacKite();
 
@@ -221,7 +238,10 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
   const [controlsReady, setControlsReady] = useState(() => !!useDragControlsRef);
 
   // Listen to terminal minimize so we can collapse the bottom slot height and give space to chart/content.
-  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>('normal');
+  const [terminalMode, setTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full'>(() => {
+    const v = localStorage.getItem('kite_terminal_mode');
+    return v === 'minimized' || v === 'partial' || v === 'full' ? v : 'normal';
+  });
   useEffect(() => {
     const cb = (e: any) => {
       setTerminalMode(e.detail);
@@ -233,6 +253,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
   }, []);
 
   // Resolve useDragControls from the (already cached) framer-motion module.
+  // Mount-once: only needs to resolve the lazy framer-motion export; no reactive deps.
   useEffect(() => {
     if (useDragControlsRef) {
       setControlsReady(true);
@@ -247,6 +268,7 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional one-shot module resolve
   }, []);
 
   // Live geometry of each slot so we can hit-test the pointer against the
@@ -322,7 +344,8 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
 
   const onDragStart = useCallback((key: PanelKey) => {
     document.querySelectorAll<HTMLElement>('[data-stage-slot]').forEach((el) => {
-      const s = el.getAttribute('data-stage-slot') as SlotKey | null;
+      const raw = el.getAttribute('data-stage-slot');
+      const s = raw && (VALID_SLOTS as readonly string[]).includes(raw) ? (raw as SlotKey) : null;
       if (s) slotRects.current[s] = el.getBoundingClientRect();
     });
     document.querySelectorAll<HTMLElement>('[data-stage-preset]').forEach((el) => {
@@ -434,7 +457,8 @@ export function MacStageLayout({ sidebar, content, rightSidebar, bottomBar }: Ma
     );
   };
 
-  const topEmpty = (['left', 'center', 'right'] as SlotKey[]).every((s) => panelsInSlot(s).length === 0);
+  const TOP_SLOTS: SlotKey[] = ['left', 'center', 'right'];
+  const topEmpty = TOP_SLOTS.every((s) => panelsInSlot(s).length === 0);
   const bottomPanels = panelsInSlot('bottom');
 
   return (

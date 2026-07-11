@@ -546,7 +546,7 @@ Expected: prints `removed _background_statarb_trader`.
 Delete this block (currently ~1794–1796, plus its trailing blank line):
 
 ```python
-    # Triple SuperTrend strategy (self-contained module)
+    # Sterling Kite Engine strategy (self-contained module)
     from app.api.v1.endpoints.strategy import router as strategy_router
     app.include_router(strategy_router, prefix="/api/v1")
 ```

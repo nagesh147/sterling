@@ -37,7 +37,7 @@ def _to_response(cfg: ExchangeConfig) -> ExchangeConfigResponse:
     )
 
 
-@router.get("", response_model=ExchangeListResponse)
+@router.get("")
 async def list_exchanges() -> ExchangeListResponse:
     configs = store.list_exchanges()
     active = store.get_active()
@@ -48,7 +48,7 @@ async def list_exchanges() -> ExchangeListResponse:
     )
 
 
-@router.post("", response_model=ExchangeConfigResponse)
+@router.post("")
 async def add_exchange(body: ExchangeConfigCreate) -> ExchangeConfigResponse:
     if body.name not in SUPPORTED_EXCHANGES:
         raise HTTPException(
@@ -64,7 +64,7 @@ async def supported_exchanges():
     return {"exchanges": [{"name": k, "display_name": v} for k, v in SUPPORTED_EXCHANGES.items()]}
 
 
-@router.get("/{exchange_id}", response_model=ExchangeConfigResponse)
+@router.get("/{exchange_id}")
 async def get_exchange(exchange_id: str) -> ExchangeConfigResponse:
     cfg = store.get_exchange(exchange_id)
     if not cfg:
@@ -72,7 +72,7 @@ async def get_exchange(exchange_id: str) -> ExchangeConfigResponse:
     return _to_response(cfg)
 
 
-@router.put("/{exchange_id}", response_model=ExchangeConfigResponse)
+@router.put("/{exchange_id}")
 async def update_exchange(exchange_id: str, body: ExchangeUpdateRequest) -> ExchangeConfigResponse:
     # Only pass fields explicitly set by the caller (exclude unset None defaults)
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -103,7 +103,7 @@ async def activate_data_source(exchange_id: str, request: Request) -> dict:
         request.app.state.adapter = new_adapter
         reachable = await new_adapter.ping()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to switch data source: {exc}")
+        raise HTTPException(status_code=502, detail=f"Failed to switch data source: {exc}") from exc
     return {
         "exchange_id": exchange_id,
         "exchange_name": cfg.name,
@@ -119,7 +119,7 @@ async def delete_exchange(exchange_id: str) -> None:
         raise HTTPException(status_code=404, detail=f"Exchange {exchange_id} not found")
 
 
-@router.post("/{exchange_id}/activate", response_model=ExchangeConfigResponse)
+@router.post("/{exchange_id}/activate")
 async def activate_exchange(exchange_id: str) -> ExchangeConfigResponse:
     cfg = store.set_active(exchange_id)
     if not cfg:

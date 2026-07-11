@@ -36,13 +36,13 @@ fresh sweep.
 ### Frontend
 6. **Zero-dep virtualization via `content-visibility`.** Add a `.kv-rows` utility
    (`content-visibility: auto; contain-intrinsic-size: <row-h>`) applied to the
-   long lists: TripleSupertrendPane signal rows, InstrumentPane option chain,
+   long lists: SterlingKiteEnginePane signal rows, InstrumentPane option chain,
    instrument search results. Skips layout/paint for off-screen rows — near-virtual
    perf, no library. (No `react-window` dep added.)
 7. **Per-row Greeks + sort memoization.** Memoize `computeGreeksFromSymbol` per row
    (`useMemo` keyed on symbol + that symbol's quote/ltp), and ensure `sortedWatch` /
    `groupedRows` only resort when the sort-relevant values change, not on every tick
-   object-identity churn. (MarketWatchPane, TripleSupertrendPane)
+   object-identity churn. (SterlingWatchList, SterlingKiteEnginePane)
 8. **Stabilize tick-derived references.** `useKiteLive` returns a fresh object each
    tick; downstream sorts/filters key off it. Where a consumer only needs prices for
    display (not reorder), avoid putting the whole map in a memo dep — derive a

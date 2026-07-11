@@ -8,7 +8,7 @@ import io
 import math
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 from app.schemas.execution import CandidateContract
@@ -104,6 +104,7 @@ def _theta_burn_usd(legs, contracts: float, hold_days: float) -> float:
                     * (1.0 if getattr(l, "side", "buy") == "buy" else -1.0)
                     for l in legs)
     return round(abs(net_theta) * contracts * hold_days, 2)
+
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 
@@ -120,6 +121,57 @@ from app.services.exchanges import instrument_registry as registry
 from app.engines.directional.orchestrator import run_once as engine_run_once
 
 
+# Reusable helper extracted for red-count exit logic in monitor flows (directional + for parity with kite).
+# Called from _monitor_one (and usable in tests/kite). Supports greeks/trail flags for monitor integration.
+def _compute_red_and_maybe_close(
+    pos: "PaperPosition",
+    signal: Any,
+    current_spot: float,
+    now_ms: int,
+    estimated_pnl: float,
+    current_dte: int,
+    update_greeks: bool = False,
+    trail_update: bool = False,
+) -> Optional["MonitorResult"]:
+    """Compute red from st_trends, update store if changed, close pos on exit per mode.
+    Returns MonitorResult on exit or None. Shared logic for parity.
+    """
+    if getattr(pos, "exit_mode", None) and hasattr(signal, "st_trends"):
+        try:
+            from app.engines.common.exit_counter import (
+                compute_red_count_from_trends,
+                get_exit_threshold,
+                should_exit_on_reds,
+            )
+            d = pos.sized_trade.structure.direction.value
+            rc = compute_red_count_from_trends(
+                signal.st_trends or [getattr(signal, "trend", 0)] * 3, d
+            )
+            if rc != getattr(pos, "current_red_count", 0):
+                paper_store.update_position(pos.id, current_red_count=rc)
+            thresh = get_exit_threshold(pos.exit_mode)
+            if should_exit_on_reds(rc, pos.exit_mode):
+                exit_signal = ExitSignal(
+                    should_exit=True,
+                    reason=f"red_count_exit {rc}/{thresh} ({pos.exit_mode})",
+                    exit_type="red_count",
+                )
+                paper_store.close_position(pos.id, float(current_spot))
+                return MonitorResult(
+                    position_id=pos.id,
+                    underlying=pos.underlying,
+                    exit_signal=exit_signal,
+                    current_spot=current_spot,
+                    estimated_pnl_usd=estimated_pnl,
+                    current_dte=current_dte,
+                    current_signal_trend=getattr(signal, "trend", None),
+                    timestamp_ms=now_ms,
+                )
+        except Exception:
+            pass
+    return None
+
+
 def _is_paper_mode() -> bool:
     """True when no active exchange is in live mode. Defaults to True (paper) on error or no configs."""
     try:
@@ -131,7 +183,6 @@ def _is_paper_mode() -> bool:
         return True
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.monitor_engine import check_exits
-from app.schemas.directional import TradeState
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -141,7 +192,7 @@ _enter_lock = asyncio.Lock()
 
 # ─── Collection endpoints (no path param) ────────────────────────────────────
 
-@router.get("", response_model=PositionListResponse)
+@router.get("")
 async def list_positions(
     underlying: str = Query(default=""),
     status: str = Query(default=""),
@@ -164,7 +215,7 @@ async def list_positions(
     )
 
 
-@router.get("/summary", response_model=PortfolioSummary)
+@router.get("/summary")
 async def portfolio_summary() -> PortfolioSummary:
     now_ms = int(time.time() * 1000)
     positions = paper_store.list_positions()
@@ -197,7 +248,7 @@ async def portfolio_summary() -> PortfolioSummary:
     )
 
 
-@router.get("/analytics", response_model=TradeAnalytics)
+@router.get("/analytics")
 async def trade_analytics() -> TradeAnalytics:
     """Win rate, avg P&L, profit factor across all closed positions."""
     now_ms = int(time.time() * 1000)
@@ -594,14 +645,14 @@ class DirectEntryRequest(BaseModel):
     notes: str = ""
 
 
-@router.post("/enter-direct", response_model=PaperPosition)
+@router.post("/enter-direct")
 async def enter_direct_position(body: DirectEntryRequest, request: Request) -> PaperPosition:
     """
     Create a paper futures position directly from signal state.
     Does not require options structures — creates a synthetic futures trade.
     """
     from app.schemas.execution import (
-        TradeStructure, SizedTrade, CandidateContract, Direction as ExecDir,
+        TradeStructure, CandidateContract, Direction as ExecDir,
     )
     from app.engines.directional.sizing_engine import size_trade
     from app.api.v1.endpoints.config import get_runtime_risk
@@ -673,7 +724,7 @@ async def enter_direct_position(body: DirectEntryRequest, request: Request) -> P
     )
 
 
-@router.post("/enter", response_model=PaperPosition)
+@router.post("/enter")
 async def enter_position(body: EnterPositionRequest, request: Request) -> PaperPosition:
     sym = body.underlying.upper()
     inst = registry.get_instrument(sym)
@@ -836,11 +887,12 @@ async def enter_position(body: EnterPositionRequest, request: Request) -> PaperP
             trail_atr_mult=mode.trail_atr_mult if mode else 2.0,
             initial_sl=_initial_sl,
             initial_tp=_initial_tp,
+            exit_mode="two_red",  # unification with kite exit counter
         )
     return pos
 
 
-@router.post("/monitor-all", response_model=MonitorAllResult)
+@router.post("/monitor-all")
 async def monitor_all(request: Request) -> MonitorAllResult:
     now_ms = int(time.time() * 1000)
     # Include partially_closed positions — still need monitoring
@@ -857,6 +909,8 @@ async def monitor_all(request: Request) -> MonitorAllResult:
 
     _sem = asyncio.Semaphore(3)  # cap concurrent adapter calls
 
+    # (helper defined at module level above for reuse)
+
     async def _monitor_one(pos: PaperPosition) -> Optional[MonitorResult]:
         async with _sem:
             try:
@@ -866,7 +920,18 @@ async def monitor_all(request: Request) -> MonitorAllResult:
                 adapter = _live_adapter
                 c1h = await adapter.get_candles(inst, "1H", limit=400)
                 signal = compute_signal(c1h)
+
                 current_spot = await adapter.get_index_price(inst)
+                # minimal for red path (full pnl computed below or in other paths)
+                estimated_pnl = 0.0
+                current_dte = 0
+
+                red_result = _compute_red_and_maybe_close(
+                    pos, signal, current_spot, now_ms, estimated_pnl, current_dte
+                )
+                if red_result:
+                    return red_result
+                # (trail update continues below)
                 leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
                 dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1
                 if dte_from_expiry >= 0:
@@ -1016,7 +1081,7 @@ async def get_pnl_history(pos_id: str):
     }
 
 
-@router.patch("/{pos_id}/notes", response_model=PaperPosition)
+@router.patch("/{pos_id}/notes")
 async def update_position_notes(pos_id: str, notes: str = "") -> PaperPosition:
     """Update trade journal notes for a paper position."""
     pos = paper_store.update_position(pos_id.upper(), notes=notes)
@@ -1025,7 +1090,7 @@ async def update_position_notes(pos_id: str, notes: str = "") -> PaperPosition:
     return pos
 
 
-@router.get("/{pos_id}", response_model=PaperPosition)
+@router.get("/{pos_id}")
 async def get_position(pos_id: str) -> PaperPosition:
     pos = paper_store.get_position(pos_id.upper())
     if not pos:
@@ -1033,7 +1098,7 @@ async def get_position(pos_id: str) -> PaperPosition:
     return pos
 
 
-@router.post("/{pos_id}/close", response_model=PaperPosition)
+@router.post("/{pos_id}/close")
 async def close_position(pos_id: str, body: ClosePositionRequest, request: Request) -> PaperPosition:
     pos = paper_store.get_position(pos_id.upper())
     updated = paper_store.close_position(pos_id.upper(), body.exit_spot_price, body.notes)
@@ -1064,7 +1129,7 @@ async def close_position(pos_id: str, body: ClosePositionRequest, request: Reque
     return updated
 
 
-@router.post("/{pos_id}/monitor", response_model=MonitorResult)
+@router.post("/{pos_id}/monitor")
 async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
     pos = paper_store.get_position(pos_id.upper())
     if not pos:
@@ -1085,7 +1150,7 @@ async def monitor_position(pos_id: str, request: Request) -> MonitorResult:
         signal = compute_signal(c1h)
         current_spot = await adapter.get_index_price(inst)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}")
+        raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}") from exc
 
     leg = pos.sized_trade.structure.legs[0] if pos.sized_trade.structure.legs else None
     dte_from_expiry = _dte_from_expiry(leg.expiry_date) if leg else -1

@@ -3,13 +3,12 @@ Walk-forward, sensitivity, and performance analytics endpoints.
 """
 import json
 import time
-from dataclasses import asdict
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional
 
 from app.engines.analytics.walk_forward import (
-    WalkForwardConfig, run as wf_run, run_real as wf_run_real, WalkForwardResult,
+    WalkForwardConfig, run_real as wf_run_real, WalkForwardResult,
 )
 from app.engines.analytics.sensitivity import run_all_sweeps_real, SWEEP_PARAMS
 from app.engines.analytics.performance import full_report
@@ -97,7 +96,7 @@ async def run_walk_forward(
         candles_4h = await adapter.get_candles(inst, "4H", limit=body.train_bars + body.test_bars + 50)
         candles_1h = await adapter.get_candles(inst, "1H", limit=_1h_limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     config = WalkForwardConfig(
         train_bars=body.train_bars,
@@ -110,7 +109,7 @@ async def run_walk_forward(
     try:
         result = wf_run_real(candles_1h, candles_4h, config)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Walk-forward failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Walk-forward failed: {exc}") from exc
 
     result_dict = _wf_result_to_dict(result)
     config_json = json.dumps({'train_bars': body.train_bars, 'test_bars': body.test_bars, 'step_bars': body.step_bars})
@@ -160,7 +159,7 @@ async def run_sensitivity(
         candles_4h = await adapter.get_candles(inst, "4H", limit=300)
         candles_1h = await adapter.get_candles(inst, "1H", limit=400)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     try:
         if body.params:
@@ -189,7 +188,7 @@ async def run_sensitivity(
                 for r in results_raw
             ]
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Sensitivity sweep failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Sensitivity sweep failed: {exc}") from exc
 
     background_tasks.add_task(
         _db.save_sensitivity, sym, json.dumps(results)

@@ -2,7 +2,6 @@ import sys
 import os
 import sqlite3
 import pandas as pd
-from collections import defaultdict
 import numpy as np
 import time
 
@@ -15,19 +14,27 @@ from app.schemas.market import Candle
 
 def get_candles_paper(symbol, resolution, limit=20000):
     conn = sqlite3.connect('backend/sterling_paper.db')
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT time, open, high, low, close, volume FROM ohlcv WHERE symbol='{symbol}' AND resolution='{resolution}' ORDER BY time DESC LIMIT {limit};")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT time, open, high, low, close, volume FROM ohlcv "
+            "WHERE symbol=? AND resolution=? ORDER BY time DESC LIMIT ?",
+            (symbol, resolution, limit),
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
     rows.reverse()
     return [Candle(timestamp_ms=int(r[0])*1000, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5]) for r in rows]
 
 def get_available_symbols():
     conn = sqlite3.connect('backend/sterling_paper.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT symbol FROM ohlcv WHERE resolution='15m' GROUP BY symbol HAVING count(*) > 1000;")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT symbol FROM ohlcv WHERE resolution='15m' GROUP BY symbol HAVING count(*) > 1000;")
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
     return [r[0] for r in rows]
 
 def _exit_with_trailing_sl(cE, i, is_long, entry, sl, tp, maxh):
@@ -52,7 +59,7 @@ def _exit_with_trailing_sl(cE, i, is_long, entry, sl, tp, maxh):
 def replay_strategy(sym, cM, cE, cfg: ScalpingProfile, tsM, step, maxh, strategy_name, use_trailing_sl=True):
     import bisect
     out = []
-    cooldown, cj = -1, -1
+    cooldown, _cj = -1, -1
     n = len(cE)
     i = W_EXEC
     while i < n - 1:
@@ -152,8 +159,8 @@ def generate_report():
                 report_lines.append(f"| {strat_label} | 0.00 | 0.00R | 0.00 | 0.00R | 0.00 | 0.0% |")
                 continue
                 
-            pf_b, exp_b, n_b = _pf_exp(trades_before)
-            pf_a, exp_a, n_a = _pf_exp(trades_after)
+            pf_b, exp_b, _n_b = _pf_exp(trades_before)
+            pf_a, exp_a, _n_a = _pf_exp(trades_after)
             
             if len(trades_after) > 0:
                 wins_a = sum(1 for t in trades_after if t > 0)
@@ -168,7 +175,7 @@ def generate_report():
             
         report_lines.append("\n")
 
-    with open("performance_report.md", "w") as f:
+    with open("performance_report.md", "w", encoding="utf-8") as f:
         f.write("\n".join(report_lines))
     print("Report written to performance_report.md")
 

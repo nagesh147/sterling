@@ -6,7 +6,7 @@
 
 ## Motivation
 
-Expert review of the Kite Triple-SuperTrend auto-exec path surfaced several
+Expert review of the Kite Sterling Kite Engine auto-exec path surfaced several
 real-money risks. This spec hardens the live order path and adds an honest
 options backtest. Eight workstreams, implemented in five safety-ordered stages.
 

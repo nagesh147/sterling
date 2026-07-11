@@ -180,8 +180,8 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     ]:
         try:
             conn.execute(stmt)
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     # v3 tables
     conn.execute("""
         CREATE TABLE IF NOT EXISTS wf_results (
@@ -233,8 +233,8 @@ def _create_tables(conn: sqlite3.Connection) -> None:
     ]:
         try:
             conn.execute(stmt)
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     conn.commit()
 
 
@@ -247,8 +247,8 @@ def _configure(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=15000")
         conn.execute("PRAGMA synchronous=NORMAL")
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
 
 def init() -> bool:

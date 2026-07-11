@@ -1,4 +1,4 @@
-"""Throttled background scanner for the Kite triple-SuperTrend engine.
+"""Throttled background scanner for the Kite Sterling Kite Engine.
 
 Per active Kite user: fetch 1H candles for each universe item (cached, rate
 throttled), drop the forming bar, run the broker-agnostic engine, and collect the
@@ -24,10 +24,11 @@ from app.domain.models import Candle
 from app.engines.indicators.adx import adx as _adx
 from app.engines.indicators.atr import atr_percentile as _atr_pct, compute_atr as _compute_atr
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.engine import TripleSupertrendEngine
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
-from app.engines.triple_supertrend.schemas import (
+from app.engines.common.exit_counter import get_exit_threshold, exit_needs_counter_signal
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
 from app.schemas.instruments import InstrumentMeta
@@ -43,6 +44,13 @@ _CANDLE_TTL_S = 180          # re-use cached 1H candles for ~3 min
 _CONCURRENCY = 2             # stay UNDER Kite historical ~3 req/s (3 concurrent → 429s)
 _TF_MS = 3_600_000           # 1H bar in ms
 _LOOKBACK_BARS = 320
+
+# Signals linger on the board for a couple of weeks after they fire — even once
+# their SuperTrend de-aligns (the UI renders these struck-through as "ended") — so a
+# setup entered before a weekend is still visible the following Monday instead of
+# vanishing the instant the trend breaks. The UI buckets ended entries up to 15 days
+# old ("Today / Yesterday / Last week / Last 15 days"), so the retention matches.
+_SIGNAL_RETENTION_MS = 15 * 24 * 60 * 60 * 1000
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -61,9 +69,34 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
     return candles
 
 
+def _retain_signals(eval_rows: List[EngineSignalRow], now_ms: int) -> List[EngineSignalRow]:
+    """Filter one instrument's transitions to the rows worth showing.
+
+    Keeps every still-running or just-fired entry, PLUS the single most-recent
+    now-ended entry while it is still within the retention window. This replaces the
+    old ``is_active or is_fresh`` drop so a recent setup doesn't disappear the moment
+    its trend ends — it stays on the board (rendered struck-through as "ended") until
+    it ages out or a newer transition on the same instrument supersedes it. Older
+    de-aligned wiggles are dropped, keeping the board bounded and the cache stable
+    across re-scans (each scan replays the same history deterministically).
+
+    Auto-exec is unaffected: callers still fire only on the fresh (latest-bar) row.
+    """
+    if not eval_rows:
+        return []
+    latest_ts = max(int(r.timestamp_ms) for r in eval_rows)
+    out: List[EngineSignalRow] = []
+    for r in eval_rows:
+        if r.is_active or r.is_fresh:
+            out.append(r)
+        elif int(r.timestamp_ms) == latest_ts and (now_ms - int(r.timestamp_ms)) <= _SIGNAL_RETENTION_MS:
+            out.append(r)
+    return out
+
+
 def evaluate_item(
-    engine: TripleSupertrendEngine, item: UniverseItem,
-    candles: Sequence[Candle], cfg: TripleSupertrendConfig,
+    engine: SterlingKiteEngine, item: UniverseItem,
+    candles: Sequence[Candle], cfg: SterlingKiteEngineConfig,
 ) -> List[EngineSignalRow]:
     """Run the engine on closed candles; return all historical fresh transitions."""
     if len(candles) <= cfg.warmup + 1:
@@ -78,12 +111,6 @@ def evaluate_item(
     rows = []
     indices = np.where(longs | shorts)[0]
     latest_ts = int(candles[-1].timestamp_ms)
-    # A trade is "running" until its TRAIL line (the configured target, mid by default)
-    # flips — not when full 3-line alignment breaks (the fast ST whipsaws long before
-    # the position would actually exit). Crucially this must hold for EVERY bar since
-    # the entry: once the trail flips against the entry it has exited, and a later
-    # re-flip is a *new* entry, not a resurrection of the old one.
-    trail = r.trend(cfg.trail_target)
     # Trend-quality readings for the optional directional-mode entry filters
     # (computed once over the raw OHLC; never gate anything on their own).
     adx_arr = _adx(h, l, c, 14)
@@ -91,16 +118,40 @@ def evaluate_item(
     for i in indices:
         direction = "long" if longs[i] else "short"
         ts = int(candles[i].timestamp_ms)
-        want = 1 if direction == "long" else -1
+        # A trade is "running" until enough ST lines turn red (per exit_mode).
+        # For one_red: ANY one line flipping against the entry exits.
+        # For two_red/three_red: two/three lines must be red simultaneously.
+        # For three_red_signal: all three red AND a fresh counter-arrow.
+        # Check every bar from entry to latest — once the exit condition fires,
+        # the trade is dead even if conditions reverse later (that's a new entry).
+        active = True
+        for j in range(i, len(c)):
+            reds = r.red_line_count(direction, j)
+            if reds >= get_exit_threshold(cfg.exit_mode):
+                if exit_needs_counter_signal(cfg.exit_mode):
+                    # Also need a fresh counter-entry arrow at this bar
+                    if direction == "long" and shorts[j]:
+                        active = False
+                        break
+                    elif direction == "short" and longs[j]:
+                        active = False
+                        break
+                    # Not enough — reds hit threshold but no counter-arrow yet
+                else:
+                    active = False
+                    break
+        # Adaptive stop: use the tightest still-green line at the latest bar.
+        last_idx = len(c) - 1
+        trail_val = r.best_trail_line_value(direction, last_idx)
+        stop_loss = trail_val if trail_val > 0 else float(r.line(cfg.trail_target)[i])
         rows.append(EngineSignalRow(
             underlying=item.name, token=item.token, exchange=item.option_exchange,
             regime="BULL" if direction == "long" else "BEAR",
             alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
             direction=direction, option_type="CE" if direction == "long" else "PE",
-            spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
+            spot=float(c[i]), stop_loss=stop_loss,
             score=85.0, timestamp_ms=ts,
-            # running only if the trail held the entry's direction on every bar since
-            is_active=bool(np.all(trail[i:] == want)),
+            is_active=active,
             is_fresh=(ts == latest_ts),
             adx=float(adx_arr[i]) if i < len(adx_arr) else None,
             atr_pct=float(_atr_pct(atr_arr[: i + 1])) if i >= 14 else None,
@@ -163,9 +214,9 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
 
 def evaluate_derivative_contract(
     item: UniverseItem, moneyness: str, pick: OptionPick,
-    candles: Sequence[Candle], cfg: TripleSupertrendConfig,
+    candles: Sequence[Candle], cfg: SterlingKiteEngineConfig,
 ) -> List[EngineSignalRow]:
-    """Run the triple-SuperTrend on an option CONTRACT's own premium series.
+    """Run the Sterling Kite Engine on an option CONTRACT's own premium series.
 
     Options-buying only: emit a BUY signal on a fresh *uptrend* transition of the
     premium (a fresh downtrend is a holder's exit, not an entry, so it's ignored).
@@ -184,22 +235,31 @@ def evaluate_derivative_contract(
     l = np.array([c.low for c in candles], float)
     c = np.array([c.close for c in candles], float)
     r = compute_regime(o, h, l, c, cfg)
-    longs, _shorts = entry_transitions(r)
+    longs, shorts = entry_transitions(r)
 
     rows = []
     is_ce = pick.option_type == "CE"
     indices = np.where(longs)[0]
     latest_ts = int(candles[-1].timestamp_ms)
-    # "running" until the TRAIL line (configured target) flips down — not when full
-    # alignment breaks (the fast ST whipsaws long before the position would exit). This
-    # must hold for EVERY bar since the entry: once the premium trail flips down the
-    # position has exited (its stop was hit), so a later up-flip is a *new* entry, not
-    # the old one coming back to life. Checking only the latest bar resurrected dead
-    # entries (e.g. bought at 971, premium collapsed to 200, then bounced).
-    trail = r.trend(cfg.trail_target)
     for i in indices:
         ts = int(candles[i].timestamp_ms)
-        active = bool(np.all(trail[i:] == 1))
+        # "running" until enough ST lines turn red (per exit_mode). For derivatives
+        # all entries are long (BUY), so red = trend == -1.
+        active = True
+        for j in range(i, len(c)):
+            reds = r.red_line_count("long", j)
+            if reds >= get_exit_threshold(cfg.exit_mode):
+                if exit_needs_counter_signal(cfg.exit_mode):
+                    if shorts[j]:
+                        active = False
+                        break
+                else:
+                    active = False
+                    break
+        # Adaptive stop: tightest still-green line at latest bar.
+        last_idx = len(c) - 1
+        trail_val = r.best_trail_line_value("long", last_idx)
+        stop_loss = trail_val if trail_val > 0 else float(r.line(cfg.trail_target)[i])
         rows.append(EngineSignalRow(
             underlying=item.name, token=pick.token, exchange=item.option_exchange,
             regime="BULL" if is_ce else "BEAR",
@@ -209,7 +269,7 @@ def evaluate_derivative_contract(
                             option_symbol=pick.option_symbol, strike=pick.strike,
                             expiry=pick.expiry, lot_size=pick.lot_size or None,
                             is_active=active)],
-            spot=float(c[i]), stop_loss=float(r.line(cfg.trail_target)[i]),
+            spot=float(c[i]), stop_loss=stop_loss,
             score=85.0, timestamp_ms=ts, source="derivatives",
             is_active=active, is_fresh=(ts == latest_ts),
         ))
@@ -308,7 +368,7 @@ class ScanDiag:
 
 @dataclass
 class UserScan:
-    engine: TripleSupertrendEngine
+    engine: SterlingKiteEngine
     rows: List[EngineSignalRow] = field(default_factory=list)
     candle_cache: Dict[int, tuple] = field(default_factory=dict)  # token -> (mono_ts, candles)
     generated_ms: int = 0
@@ -363,10 +423,10 @@ class KiteEngineScanner:
     def __init__(self) -> None:
         self._users: Dict[str, UserScan] = {}
 
-    def _user(self, uid: str, cfg: TripleSupertrendConfig) -> UserScan:
+    def _user(self, uid: str, cfg: SterlingKiteEngineConfig) -> UserScan:
         us = self._users.get(uid)
         if us is None:
-            us = UserScan(engine=TripleSupertrendEngine(cfg))
+            us = UserScan(engine=SterlingKiteEngine(cfg))
             self._users[uid] = us
         return us
 
@@ -374,15 +434,15 @@ class KiteEngineScanner:
         us = self._users.get(uid)
         if us is not None:
             return us
-        us = UserScan(engine=TripleSupertrendEngine())
+        us = UserScan(engine=SterlingKiteEngine())
         cached = state.load_signal_cache(uid)
         if cached:
             rows_data, gen_ms = cached
             try:
                 us.rows = [EngineSignalRow(**r) for r in rows_data]
                 us.generated_ms = gen_ms
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
         self._users[uid] = us
         return us
 
@@ -417,7 +477,7 @@ class KiteEngineScanner:
     async def scan(
         self, *, uid: str, client, universe: List[UniverseItem],
         nfo_rows: Sequence[dict], bfo_rows: Sequence[dict],
-        cfg: TripleSupertrendConfig, moneyness: Sequence[str] = ("ATM",),
+        cfg: SterlingKiteEngineConfig, moneyness: Sequence[str] = ("ATM",),
         expiry_types: Sequence[ExpiryType] = (),
         expiry_types_indices: Optional[Sequence[ExpiryType]] = None,
         expiry_types_stocks: Optional[Sequence[ExpiryType]] = None,
@@ -434,6 +494,7 @@ class KiteEngineScanner:
         try:
             sem = asyncio.Semaphore(_CONCURRENCY)
             today = datetime.now(_IST).date()
+            now_ms = int(time.time() * 1000)  # retention cutoff for ended signals
             rows: List[EngineSignalRow] = []
             diag = ScanDiag(universe=len(universe),
                             indices=sum(1 for i in universe if i.is_index))
@@ -476,13 +537,10 @@ class KiteEngineScanner:
                 _expiry = expiry_types_indices if (expiry_types_indices is not None and item.is_index) else expiry_types_stocks if (expiry_types_stocks is not None and not item.is_index) else expiry_types
                 
                 latest_ts = candles[-1].timestamp_ms
-                for row in eval_rows:
-                    # Only surface LIVE signals: a fresh entry (this bar) or a still-running
-                    # trade. Stopped-out historical entries are dropped at the source —
-                    # they're neither actionable nor open, and carrying them just clutters
-                    # the console with dead rows whose frozen entry sits far from the LTP.
-                    if not (row.is_active or row.is_fresh):
-                        continue
+                # Surface running/just-fired setups PLUS the most-recent recently-ended
+                # one, so signals don't vanish the instant a trend breaks (they show as
+                # "ended" until they age out — see _retain_signals).
+                for row in _retain_signals(eval_rows, now_ms):
                     attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                                    moneynesses=moneyness, today=today,
                                    expiry_types=_expiry)
@@ -625,12 +683,9 @@ class KiteEngineScanner:
                         fired_at_ms=fired_at, reason=reason))
                     
                     latest_ts = oc[-1].timestamp_ms
-                    for drow in drows:
-                        # Live-only: keep a fresh entry or a still-running trade; drop
-                        # stopped-out historical entries (the diag trace above still records
-                        # them as "historical entry only" for the activity log).
-                        if not (drow.is_active or drow.is_fresh):
-                            continue
+                    # Keep running/just-fired entries plus the most-recent recently-ended
+                    # one (the diag trace above still records every historical entry).
+                    for drow in _retain_signals(drows, now_ms):
                         # Stamp the underlying spot at this signal's trigger bar (1H bars
                         # of premium and underlying share timestamps; fall back to the
                         # last bar at/before the trigger if there's no exact match).
@@ -671,7 +726,7 @@ scanner = KiteEngineScanner()
 
 # ── setup chart (click-to-visualize) ────────────────────────────────────────
 async def build_setup_chart(
-    client, token: int, underlying: str, cfg: TripleSupertrendConfig,
+    client, token: int, underlying: str, cfg: SterlingKiteEngineConfig,
 ) -> SetupChart:
     item = UniverseItem(name=underlying or str(token), tradingsymbol=underlying or str(token),
                         token=token, exchange="", option_exchange="NFO")
@@ -702,4 +757,5 @@ async def build_setup_chart(
         underlying=underlying or str(token), candles=points,
         st_fast=_line(r.l_fast), st_mid=_line(r.l_mid), st_slow=_line(r.l_slow),
         entry_index=entry_index, trail_target=cfg.trail_target,
+        exit_mode=cfg.exit_mode,
     )

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import setup_logging, get_logger
+from app.core.async_tasks import spawn_background
 from app.core.observability import (
     configure_json_logging, new_correlation_id, set_correlation_id, reset_correlation_id,
 )
@@ -13,7 +14,6 @@ from app.services import paper_store
 from app.services import exchange_account_store
 from app.services import adapter_manager
 from app.services import webhook_store as _webhook_store_svc
-from app.services import alert_store as _alert_store_bootstrap
 from app.services import pnl_history as _pnl_history_svc
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.instruments import router as instruments_router
@@ -141,7 +141,6 @@ async def _background_position_monitor(app: FastAPI) -> None:
     import asyncio
     from app.services import paper_store as _ps
     from app.services.exchanges import instrument_registry as _reg
-    from app.schemas.positions import PositionStatus
     from app.core.trading_mode import MODES, DEFAULT_MODE
 
     DEFAULT_INTERVAL = 60   # fallback when no mode is set
@@ -172,7 +171,6 @@ async def _background_position_monitor(app: FastAPI) -> None:
             from app.engines.directional.monitor_engine import check_exits
             from app.engines.directional.trailing_stop  import TrailState, TrailingStopEngine, realistic_stop_fill
             from app.engines.risk import options_monitor as _opt_mon
-            from app.schemas.risk import ExitSignal
             from app.api.v1.endpoints.config import get_runtime_risk
             from app.api.v1.endpoints.positions import _estimate_pnl, _dte_from_expiry
             from app.services import pnl_history as _pnl_history
@@ -601,8 +599,8 @@ async def _background_retry_worker(app: FastAPI, base_interval: int = 60) -> Non
                     product_id = await adapter.get_product_id(delta_symbol)
                     try:
                         await adapter.set_leverage(product_id, leverage)
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        log.debug("suppressed: %s", _exc)
                     order = await adapter.place_order(
                         symbol=delta_symbol, side=side, size=size,
                         order_type="market_order",
@@ -716,7 +714,6 @@ async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
     from app.schemas.execution import (
         TradeStructure, CandidateContract, Direction as ExecDir,
     )
-    from app.schemas.risk import RiskParams
     from app.api.v1.endpoints.config import get_runtime_risk
     from app.api.v1.endpoints.trading import (
         LiveOrderRequest, _create_paper_tracking,
@@ -919,7 +916,7 @@ async def _auto_place_algo_order(app: FastAPI, sym: str, snap, mode) -> None:
     try:
         resp = await router.submit(req)
     except Exception as exc:
-        log.error("ALGO router crashed for %s: %s", sym, exc)
+        log.exception("ALGO router crashed for %s: %s", sym, exc)
         # Build a body for failed-tracking — same shape as before refactor.
         body = LiveOrderRequest(
             underlying=sym, direction=direction, instrument_type="futures",
@@ -1023,7 +1020,6 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                             sym = s.get('sym', 'UNKNOWN')
                             strat = s.get('strategy', 'legacy')
                             msg = f"[PASS] {sym} {strat} (DSR: {dsr:.2f}, WFA: {wfa:.2f})"
-                            color = "var(--t-green)" if strength == 'STRONG' else "var(--t-amber)"
                             async def _broadcast_log(m=msg, strngth=strength):
                                 try:
                                     level = "INFO"
@@ -1035,9 +1031,9 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                                         "level": level,
                                         "message": m
                                     })
-                                except Exception:
-                                    pass
-                            asyncio.create_task(_broadcast_log())
+                                except Exception as _exc:
+                                    log.debug("suppressed: %s", _exc)
+                            spawn_background(_broadcast_log(), name="arbitrator-log")
 
             # Persist tracker state so server restarts don't re-fire existing signals
             _save_signal_tracker_state()
@@ -1077,6 +1073,7 @@ async def _background_derivatives_scanner(app: FastAPI, interval: int = 30) -> N
 
 async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
     """Keeps OHLCV store fresh — runs immediately then every hour."""
+    import asyncio
     from app.services.delta_candle_fetcher import run_full_fetch
     while True:
         try:
@@ -1092,6 +1089,7 @@ async def _background_1m_updater(interval_min: int = 5) -> None:
     every `interval_min`. 1m is excluded from the hourly all-symbol fetch (too
     heavy across every product), so without this dedicated loop the 1m store
     silently freezes. Tight cadence keeps it ~real-time."""
+    import asyncio
     from app.services.delta_candle_fetcher import fetch_core_1m
     while True:
         try:
@@ -1164,7 +1162,6 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
 
     feeds: dict[str, VCPLiveFeed] = {}
     routers: dict[str, OrderRouter] = {}
-    active_feeds: list[asyncio.Task] = []
 
     def _make_router(profile_key: str, mode_str: str) -> OrderRouter:
         active = exchange_account_store.get_active() or type("A", (), {"api_key": "", "api_secret": "", "extra": {}})()
@@ -1294,6 +1291,7 @@ async def _background_vcp_live_feed(app: FastAPI) -> None:
 async def _background_scalping_alerts(app: FastAPI, interval: int = 45) -> None:
     """Periodically scan scalping signals and push Telegram alerts for new ready
     setups. Skips entirely when scalp_mode is off."""
+    import asyncio
     from app.services.notifications import telegram_bot as _bot
     await asyncio.sleep(10)  # let startup settle before the first scan
     while True:
@@ -1331,7 +1329,7 @@ async def lifespan(app: FastAPI):
     from app.services.exchanges.kite import accounts as _kite_accounts
     _kite_accounts.bootstrap()
     _webhook_store_svc.bootstrap()
-    _alert_store_bootstrap.bootstrap()
+    _alert_store_svc.bootstrap()
     _pnl_history_svc.bootstrap()
     from app.services import eval_history as _eval_history_svc
     _eval_history_svc.bootstrap()
@@ -1557,7 +1555,7 @@ async def lifespan(app: FastAPI):
     deriv_scan_task = asyncio.create_task(_background_derivatives_scanner(app, interval=30))
     log.info("Derivatives scanner started (every 30s)")
 
-    # Kite triple-SuperTrend engine — background auto-scan of connected Kite
+    # Kite Sterling Kite Engine — background auto-scan of connected Kite
     # accounts (advisory by default; gated auto-exec when the user enables it).
     # First reconcile each account's auto-open guard against the broker's real
     # positions: the guard is DB-persisted across restarts, but a position may
@@ -1572,7 +1570,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001
         log.warning("Kite auto-open startup reconcile failed: %s", exc)
     kite_engine_task = asyncio.create_task(_kite_auto_scan())
-    log.info("Kite triple-SuperTrend auto-scan loop started (every 5 min)")
+    log.info("Kite Sterling Kite Engine auto-scan loop started (every 5 min)")
 
     # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
     # Only starts when scalp_mode (crypto kill switch) is enabled.
@@ -1628,10 +1626,10 @@ async def lifespan(app: FastAPI):
             await _orch.stop()
         from app.services import event_emit as _ee
         _ee.reset()
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
-    for _t in (tg_bot_task, tg_alert_task):
+    for _t in (tg_bot_task, tg_alert_task, tg_kite_alert_task):
         _t.cancel()
         try:
             await _t
@@ -1748,6 +1746,10 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health_router)
+    # More-specific stream prefix before generic /api/v1 routers (registration order).
+    from app.api.v1.endpoints import stream
+    app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
+
     app.include_router(instruments_router, prefix="/api/v1")
     app.include_router(paper_router, prefix="/api/v1")
     app.include_router(directional_router, prefix="/api/v1")
@@ -1785,7 +1787,7 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite import router as kite_router
     app.include_router(kite_router, prefix="/api/v1")
 
-    # Kite-exclusive triple-SuperTrend options engine (scanner + advisory/auto-exec)
+    # Kite-exclusive Sterling Kite Engine options engine (scanner + advisory/auto-exec)
     from app.api.v1.endpoints.kite_engine import router as kite_engine_router
     app.include_router(kite_engine_router, prefix="/api/v1")
 
@@ -1793,15 +1795,13 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite_telegram import router as kite_telegram_router
     app.include_router(kite_telegram_router, prefix="/api/v1")
 
-    # V4 WebSocket Manager Router
-    from app.api.v1.endpoints import stream
-    app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
-
     return app
 
 
 app = create_app()
 
 if __name__ == "__main__":
+    import os
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

@@ -131,8 +131,8 @@ def mark_executed(audit_id: str) -> None:
         con.execute("UPDATE derivatives_audit SET executed=1 WHERE audit_id=?", (audit_id,))
         con.commit()
         con.close()
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
 
 def record_exit(audit_id: str, exit_pnl: float, exit_ts_ms: Optional[int] = None) -> None:
@@ -155,8 +155,8 @@ def record_exit(audit_id: str, exit_pnl: float, exit_ts_ms: Optional[int] = None
         )
         con.commit()
         con.close()
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
 
 def list_recent(

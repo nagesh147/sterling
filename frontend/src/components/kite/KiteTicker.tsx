@@ -3,6 +3,7 @@ import { useKiteQuote } from '../../hooks/useKite';
 import { useCandles } from '../../hooks/useCandles';
 import { useTickerPins } from '../../store/useTickerPins';
 import { InstrumentLabel } from './InstrumentLabel';
+import { SignalMarker } from './SignalMarker';
 import { k } from '../../styles/kiteUI';
 
 // Use the single app-wide Kite font (Inter stack) so tiles match the rest of the UI.
@@ -154,13 +155,16 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
 
       {/* Left: name + price + change */}
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-        <span style={{
-          fontSize: 12, fontWeight: 700, color: 'var(--t-bright)',
-          letterSpacing: '0.04em', textTransform: 'uppercase',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          <InstrumentLabel symbol={rawTs} />
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <span style={{
+            fontSize: 12, fontWeight: 700, color: 'var(--t-bright)',
+            letterSpacing: '0.04em', textTransform: 'uppercase',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            <InstrumentLabel symbol={rawTs} />
+          </span>
+          <SignalMarker symbol={sym} color="var(--t-dim)" />
+        </div>
 
         <span ref={flashRef} style={{
           fontSize: 24, fontWeight: 300, color: 'var(--t-bright)',

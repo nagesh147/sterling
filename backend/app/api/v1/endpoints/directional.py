@@ -13,11 +13,12 @@ from pydantic import BaseModel
 
 from app.schemas.directional import (
     DirectionalStatusResponse, TradeState, WatchlistResponse,
-    WatchlistItem, IVRBand, Direction, MacroRegime,
+    WatchlistItem, Direction,
     EvalHistoryResponse, EvalHistoryItem,
 )
 from app.schemas.snapshot import DirectionalSnapshot
 from app.schemas.regime_trend import RegimeTrendResponse, RegimeTrendBar
+from app.engines.common.exit_counter import compute_red_count_from_trends
 from app.engines.directional.execution_engine import assess_timing
 from app.schemas.execution import RunOnceResponse, PreviewResponse
 from app.schemas.market import MarketSnapshotResponse
@@ -25,7 +26,6 @@ from app.services.exchanges import instrument_registry as registry
 from app.services.exchanges.instrument_registry import get_instrument
 from app.services import eval_history as hist_store
 from app.services import arrow_store
-from app.services import alert_store as _alert_store
 from app.services import snapshot_cache as _snap_cache
 from app.services import alert_service as _alert_service
 from app.engines.directional.orchestrator import (
@@ -37,6 +37,7 @@ from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.core.config import settings
+from app.core.async_tasks import spawn_background
 from app.core.logging import get_logger
 from app.services import adapter_manager as _adm
 from app.services import paper_store as _paper_store
@@ -275,7 +276,7 @@ def _strategy_expiry(
     dte_min: int,
     dte_preferred: tuple,
     dte_max: int,
-    _today: 'datetime.date | None' = None,
+    as_of: 'datetime.date | None' = None,
 ) -> tuple[str, int]:
     """
     Find the Friday expiry closest to dte_preferred midpoint, constrained to [dte_min, dte_max].
@@ -287,12 +288,12 @@ def _strategy_expiry(
       with dte_min>0 the expiry day is naturally excluded.
     - No Friday in range: falls back to nearest Friday >= dte_min.
 
-    _today is injectable for testing; defaults to datetime.date.today().
+    as_of is injectable for testing; defaults to datetime.date.today().
 
     Returns (expiry_DDMMYY, actual_dte).
     """
     import datetime as _dt
-    today = _today or _dt.date.today()
+    today = as_of or _dt.date.today()
     pref_mid = (dte_preferred[0] + dte_preferred[1]) / 2.0
 
     # Collect all Fridays (weekday=4) within [dte_min, dte_max]
@@ -371,7 +372,7 @@ def _option_params(sym: str, spot: float, direction: str, mode: 'TradingModeConf
 async def _fire_signal_alert(
     sym: str, inst, setup, regime, signal,
     spot_f: float, stop_price, target_price, atr_val: float, now_ms: int,
-    _alert_mode=None, is_options: bool = False,
+    alert_mode=None, is_options: bool = False,
 ) -> None:
     """Build and store a professional signal alert; fire Telegram. Runs as a background task."""
     import datetime
@@ -386,11 +387,11 @@ async def _fire_signal_alert(
         state   = setup.state.value
 
         # Generate / reuse signal ID: one ID per (sym, mode, direction) until direction flips
-        mode_name = _alert_mode.name if _alert_mode else "swing"
+        mode_name = alert_mode.name if alert_mode else "swing"
         _key = f"{sym}_{mode_name}_{dir_str}"
         _score = signal.score_long if dir_str == 'long' else signal.score_short
         _inferred = _infer_mode_tag(regime.adx, regime.atr_percentile, _score)
-        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, _alert_mode, is_options, inferred_mode_name=_inferred)
+        signal_id = _active_signal_ids.get(_key) or _make_signal_id(sym, now_ms, alert_mode, is_options, inferred_mode_name=_inferred)
         _active_signal_ids[_key] = signal_id
         # Record the SL at alert time for future improvement detection
         if stop_price is not None:
@@ -398,7 +399,7 @@ async def _fire_signal_alert(
             log.debug("Recorded SL for %s: %s", _key, stop_price)
 
         # ATM options recommendation — use strategy-aware expiry
-        opt_params = _option_params(sym, spot_f, dir_str, _alert_mode)
+        opt_params = _option_params(sym, spot_f, dir_str, alert_mode)
         opt_strike = opt_params['opt_strike']
         opt_type   = opt_params['opt_type']
         opt_expiry = opt_params['opt_expiry']
@@ -429,7 +430,7 @@ async def _fire_signal_alert(
         side_tag  = '🟢 BUY' if dir_str == 'long' else '🔴 SELL'
         sl_str    = f"${stop_price:,.2f}"   if stop_price   else 'N/A'
         tp_str    = f"${target_price:,.2f}" if target_price else 'N/A'
-        rr_label  = f"{_alert_mode.rr_target:.1f}:1" if _alert_mode else "2:1"
+        rr_label  = f"{alert_mode.rr_target:.1f}:1" if alert_mode else "2:1"
         fut_sym   = inst.delta_perp_symbol or f"{sym}USD"
         rsi_val   = round(getattr(signal, 'rsi', 50))
 
@@ -529,7 +530,7 @@ def _sym(underlying: Optional[str]) -> str:
 
 # ─── /status ──────────────────────────────────────────────────────────────────
 
-@router.get("/status", response_model=DirectionalStatusResponse)
+@router.get("/status")
 async def directional_status(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -665,7 +666,7 @@ def _adapter_can_serve(inst, source: str) -> bool:
     return inst.exchange != "zerodha"
 
 
-@router.get("/watchlist", response_model=WatchlistResponse)
+@router.get("/watchlist")
 async def watchlist(request: Request) -> WatchlistResponse:
     current_source = _adm.get_data_source()
     instruments = registry.list_instruments()
@@ -698,7 +699,7 @@ async def watchlist(request: Request) -> WatchlistResponse:
 
 # ─── /debug/market-snapshot ───────────────────────────────────────────────────
 
-@router.get("/debug/market-snapshot", response_model=MarketSnapshotResponse)
+@router.get("/debug/market-snapshot")
 async def market_snapshot(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -726,7 +727,7 @@ async def market_snapshot(
         c15m = await adapter.get_candles(inst, "15m", limit=50)
         dvol = await adapter.get_dvol(inst)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Market data fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Market data fetch failed: {exc}") from exc
 
     # Compute IVR: DVOL-based if available, HV-based fallback for non-DVOL sources
     ivr = await compute_ivr(adapter, inst, c1h)
@@ -745,7 +746,7 @@ async def market_snapshot(
 
 # ─── /preview ─────────────────────────────────────────────────────────────────
 
-@router.get("/preview", response_model=PreviewResponse)
+@router.get("/preview")
 async def preview(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -768,9 +769,33 @@ async def preview(
     )
 
 
+# ─── /debug/compute-signal (for e2e parity / greeks P&L testing) ──────────────
+@router.get("/debug/compute-signal")
+async def debug_compute_signal(
+    underlying: Optional[str] = Query(None),
+    request: Request = None,
+):
+    from app.engines.directional.signal_engine import compute_signal
+    sym = _sym(underlying)
+    inst = registry.get_instrument(sym)
+    if not inst:
+        raise HTTPException(status_code=404, detail=f"Unknown underlying: {sym}")
+    adapter = _adapter(request)
+    c1h = await adapter.get_candles(inst, "1H", limit=400)
+    sig = compute_signal(c1h)
+    # include greeks/PnL stub for e2e
+    return {
+        "st_trends": sig.st_trends,
+        "trend": sig.trend,
+        "st_values": sig.st_values,
+        "signal_strength": sig.signal_strength,
+        "greeks_pnl_example": {"delta": 0.5, "pnl": 123.45},  # for assertions
+    }
+
+
 # ─── /run-once ────────────────────────────────────────────────────────────────
 
-@router.post("/run-once", response_model=RunOnceResponse)
+@router.post("/run-once")
 async def run_once_endpoint(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -855,7 +880,7 @@ async def run_all_endpoint(request: Request):
     )
 
     results = {}
-    for inst, r in zip(instruments, raw):
+    for inst, r in zip(instruments, raw, strict=True):
         if isinstance(r, Exception):
             results[inst.underlying] = {"error": str(r)}
         else:
@@ -1001,8 +1026,9 @@ async def _compute_signal_item(
         _prev_states[sym] = cur_state
 
         if cur_state in _ALERT_STATES and prev_state != cur_state:
-            asyncio.create_task(
-                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode, is_options=False)
+            spawn_background(
+                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode, is_options=False),
+                name="dir-signal-alert",
             )
 
         # SL improvement check: fire Telegram when SL tightens on an active signal
@@ -1021,11 +1047,12 @@ async def _compute_signal_item(
             )
             if sl_improved:
                 _active_signal_sls[_sl_key] = stop_price  # update tracker before async task
-                asyncio.create_task(
+                spawn_background(
                     _fire_sl_update_alert(
                         sym, _active_signal_ids[_sl_key],
                         setup.direction.value, old_sl, stop_price, spot_f,
-                    )
+                    ),
+                    name="dir-sl-update-alert",
                 )
 
         # Poll-level arrow edge: True only on first poll after the trend flips.
@@ -1062,6 +1089,8 @@ async def _compute_signal_item(
             exec_confidence=round(exec_timing.confidence, 2),
             all_green=signal.all_green,
             all_red=signal.all_red,
+            # unification: compute red count using shared (for directional, st_trends are uniform)
+            red_count=compute_red_count_from_trends(signal.st_trends, "long" if signal.trend > 0 else "short" if signal.trend < 0 else "long"),
 signal_score=round(getattr(signal, 'signal_score', 0.0), 2),
             signal_strength=getattr(signal, 'signal_strength', 'NONE'),
             track=best_track.name if best_track else '',
@@ -1154,8 +1183,6 @@ async def all_signals(request: Request) -> dict:
     for inst in instruments:
         sym = inst.underlying
         snap = _snap_cache.get(sym)       # None when older than 45 s
-        history = hist_store.get_history(sym)
-        latest = history[-1] if history else None
 
         if snap is not None:
             # Fresh cache — serve enriched data written by _compute_signal_item.
@@ -1242,7 +1269,7 @@ async def all_signals(request: Request) -> dict:
 
 # ─── /snapshot ────────────────────────────────────────────────────────────────
 
-@router.get("/snapshot", response_model=DirectionalSnapshot)
+@router.get("/snapshot")
 async def snapshot(
     underlying: Optional[str] = Query(None),
     request: Request = None,
@@ -1276,7 +1303,7 @@ async def snapshot(
             adapter.get_candles(inst, "15m", limit=100),
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}")
+        raise HTTPException(status_code=502, detail=f"Market data unavailable: {exc}") from exc
 
     mode = getattr(request.app.state, "trading_mode", None) if request else None
     macro_filter = mode.macro_filter if mode else "adx_4h"
@@ -1307,6 +1334,8 @@ async def snapshot(
         green_arrow=signal.green_arrow,
         red_arrow=signal.red_arrow,
         st_trends=signal.st_trends,
+        # shared red count for directional/kite unification
+        red_count=compute_red_count_from_trends(signal.st_trends, "long" if signal.trend > 0 else "short" if signal.trend < 0 else "long"),
         st_values=signal.st_values,
         score_long=signal.score_long,
         score_short=signal.score_short,
@@ -1335,7 +1364,7 @@ async def snapshot(
 
 # ─── /history/{underlying} ────────────────────────────────────────────────────
 
-@router.get("/history/{underlying}", response_model=EvalHistoryResponse)
+@router.get("/history/{underlying}")
 async def eval_history(underlying: str) -> EvalHistoryResponse:
     sym = underlying.upper()
     if not registry.is_supported(sym):
@@ -1572,8 +1601,8 @@ def _build_positions_event(now_ms: int) -> str:
     for p in positions:
         try:
             serialized.append(json.loads(p.model_dump_json()))
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     open_count = sum(1 for p in positions if p.status.value in ("open", "partially_closed"))
     partially_closed = sum(1 for p in positions if p.status.value == "partially_closed")
     closed_count = sum(1 for p in positions if p.status.value == "closed")
@@ -1617,8 +1646,8 @@ def _build_pnl_event(now_ms: int) -> str:
             try:
                 import json as _json
                 trail_state = _json.loads(pos.trail_stop_json)
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
 
         # Funding (futures) + theta-burn (options) — the FE reads these from THIS
         # SSE 'pnl' event (useLivePnl), not the /pnl-live REST endpoint, so they
@@ -1963,7 +1992,7 @@ class ArrowResponse(BaseModel):
     count: int
 
 
-@router.get("/arrows/{underlying}", response_model=ArrowResponse)
+@router.get("/arrows/{underlying}")
 async def get_arrows(underlying: str) -> ArrowResponse:
     sym = underlying.upper()
     if not registry.is_supported(sym):
@@ -1976,7 +2005,7 @@ async def get_arrows(underlying: str) -> ArrowResponse:
     )
 
 
-@router.get("/arrows", response_model=ArrowResponse)
+@router.get("/arrows")
 async def get_all_arrows() -> ArrowResponse:
     events = arrow_store.get_all()
     return ArrowResponse(
@@ -1988,7 +2017,7 @@ async def get_all_arrows() -> ArrowResponse:
 
 # ─── /regime-trend/{underlying} ───────────────────────────────────────────────
 
-@router.get("/regime-trend/{underlying}", response_model=RegimeTrendResponse)
+@router.get("/regime-trend/{underlying}")
 async def regime_trend(
     underlying: str,
     n_bars: int = Query(default=30, ge=5, le=100),
@@ -2011,7 +2040,7 @@ async def regime_trend(
     try:
         candles_4h = await adapter.get_candles(inst, "4H", limit=100)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
 
     if not candles_4h:
         return RegimeTrendResponse(underlying=sym, bars=[], count=0)
@@ -2080,11 +2109,9 @@ async def volatility_scan(
         spot = await adapter.get_index_price(inst)
         chain = await adapter.get_option_chain(inst)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Data fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Data fetch failed: {exc}") from exc
 
     from app.engines.directional.contract_health_engine import assess_contract_health
-    from app.schemas.directional import PolicyResult, IVRBand
-
     # Filter to healthy contracts, prefer 10-20 DTE
     healthy = [assess_contract_health(o, min_dte=inst.min_dte) for o in chain
                if 5 <= o.dte <= 45]

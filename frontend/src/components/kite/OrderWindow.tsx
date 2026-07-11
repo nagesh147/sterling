@@ -2,10 +2,13 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { k, tint, Icons } from '../../styles/kiteUI';
 import {
   usePlaceKiteOrder, useKiteOrderMargins, useKiteMargins,
-  useKiteInstrumentSearch, useKiteQuote, usePlaceKiteGtt,
+  useKiteInstrumentSearch, useKiteQuote, useKiteOrderCharges,
 } from '../../hooks/useKite';
 import { useDebounced } from '../../hooks/useDebounced';
 import { useMacKite } from '../../hooks/useMacKite';
+import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { useKitePendingProtectionStore } from '../../store/useKitePendingProtectionStore';
+import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
 import type { OrderWindowOptions } from '../../store/useOrderWindowStore';
 import type { KiteInstrument } from '../../types/kite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -14,8 +17,8 @@ import {
   Side, OrderType, Product, Validity,
   productsForExchange, defaultProduct, marginSegment, isDerivative,
   effectiveLot, lotsFromQty, snapToLot, stepQty, lotsToQty,
-  needsPrice, needsTrigger, validateTicket,
-  buildOrderBody, buildMarginOrder, parseMargin, buildProtectionGtt,
+  needsPrice, needsTrigger, validateTicket, resolveVariety,
+  buildOrderBody, buildMarginOrder, parseMargin, buildProtectionGtt, chargeLines,
 } from './orderTicket';
 
 interface Props {
@@ -91,14 +94,20 @@ export function OrderWindow({ options, onClose }: Props) {
   const [nudgeOpen, setNudgeOpen] = useState(true);
 
   const placeOrder = usePlaceKiteOrder();
-  const placeGtt = usePlaceKiteGtt();
+  const addPendingProtection = useKitePendingProtectionStore((s) => s.add);
   const marginCalc = useKiteOrderMargins();
+  const chargesCalc = useKiteOrderCharges();
+  const [charges, setCharges] = useState<Record<string, any> | null>(null);
   const { data: funds, refetch: refetchFunds } = useKiteMargins(true);
+  const { data: activity } = useEngineActivity();
+  const variety = resolveVariety(activity?.market_open);
+  const amoConfirmNeeded = variety === 'amo';
+  const [amoConfirmed, setAmoConfirmed] = useState(false);
 
   const fullSym = `${instr.exchange}:${instr.symbol}`;
-  // Depth ladder needs to feel live; quote-mode ticks omit depth, so poll REST
-  // faster than the 30s live heartbeat while the (transient) depth panel is open.
-  const { data: depthQuotes } = useKiteQuote([fullSym], depthOpen, 5_000);
+  // Depth ladder needs to feel live; subscribe full mode so the 5-level depth streams
+  // over the WS (quote-mode ticks omit depth). The 5s REST poll is a cold-start/fallback.
+  const { data: depthQuotes } = useKiteQuote([fullSym], depthOpen, 5_000, 'full');
   const depthQ = (depthQuotes as any)?.[fullSym];
   const nudge = useMemo(() => getOrderNudge(instr.symbol, instr.exchange), [instr.symbol, instr.exchange]);
 
@@ -120,9 +129,9 @@ export function OrderWindow({ options, onClose }: Props) {
 
   const args = useMemo(() => ({
     tradingsymbol: instr.symbol, exchange: instr.exchange, side, quantity: qty, product, orderType,
-    price, trigger, validity, validityTtl: ttlMins, variety: 'regular' as const,
+    price, trigger, validity, validityTtl: ttlMins, variety,
     disclosedQty: tab === 'regular' ? disclosedQty : 0, tag,
-  }), [instr.symbol, instr.exchange, side, qty, product, orderType, price, trigger, validity, ttlMins, disclosedQty, tab, tag]);
+  }), [instr.symbol, instr.exchange, side, qty, product, orderType, price, trigger, validity, ttlMins, disclosedQty, tab, tag, variety]);
 
   const available = useMemo(() => {
     const seg = (funds as any)?.[marginSegment(instr.exchange)];
@@ -139,6 +148,10 @@ export function OrderWindow({ options, onClose }: Props) {
     marginCalc.mutate([buildMarginOrder(args)], {
       onSuccess: (resp) => { if (id === reqId.current) setMargin(parseMargin(resp)); },
       onError: () => { if (id === reqId.current) setMargin(null); },
+    });
+    chargesCalc.mutate([buildMarginOrder(args)], {
+      onSuccess: (resp) => { if (id === reqId.current) setCharges(Array.isArray(resp) ? resp[0]?.charges ?? null : resp?.charges ?? null); },
+      onError: () => { if (id === reqId.current) setCharges(null); },
     });
   };
   useEffect(() => {
@@ -195,6 +208,7 @@ export function OrderWindow({ options, onClose }: Props) {
     setTrigger(0); setValidity('DAY'); setDisclosedQty(0);
     setSlOn(false); setSlPct(0); setTgtOn(false); setTgtPct(0);
     setError(null); setNudgeOpen(true);
+    setAmoConfirmed(false);
     // Note: we intentionally do NOT close the search here — picking a result
     // updates the ticket but keeps the list open. Only an outside click closes it.
   };
@@ -224,14 +238,16 @@ export function OrderWindow({ options, onClose }: Props) {
     if (err) { setError(err); return; }
     placeOrder.mutate(buildOrderBody(args), {
       onSuccess: (res: any) => {
-        // Carry positions can attach a protective GTT created on fill.
+        // Carry positions can attach a protective GTT — queued until the
+        // order actually fills (see PendingGttProtectionWatcher), not fired
+        // on mere submission-acceptance.
         if (product !== 'MIS' && (slOn || tgtOn)) {
           const base = needsPrice(orderType) ? price : instr.lastPrice;
           const gtt = buildProtectionGtt({
             tradingsymbol: instr.symbol, exchange: instr.exchange, entrySide: side, quantity: qty,
             product, basePrice: base, slPct: slOn ? slPct : undefined, tgtPct: tgtOn ? tgtPct : undefined,
           });
-          if (gtt) placeGtt.mutate(gtt);
+          if (gtt && res?.order_id) addPendingProtection({ orderId: res.order_id, gtt });
         }
         onPlaced?.(res?.order_id || ''); onClose();
       },
@@ -242,7 +258,19 @@ export function OrderWindow({ options, onClose }: Props) {
   const required = margin ? margin.total : null;
   const insufficient = required != null && Number.isFinite(available) && required > available;
   const placing = placeOrder.isPending;
-  const buyDisabled = placing || !!nudge?.blocked;
+  const buyDisabled = placing || !!nudge?.blocked || (amoConfirmNeeded && !amoConfirmed);
+
+  const addToBasket = useKiteBasketStore((s) => s.add);
+  const addCurrentToBasket = () => {
+    setError(null);
+    const err = validateTicket({ side, exchange: instr.exchange, quantity: qty, lotSize: instr.lotSize, orderType, price, trigger, ltp: instr.lastPrice });
+    if (err) { setError(err); return; }
+    addToBasket({
+      symbol: instr.symbol, exchange: instr.exchange, side, qty,
+      product, orderType, price, trigger,
+    });
+    onClose();
+  };
 
   // ── reusable fields ──────────────────────────────────────────────────────────
   const qtyField = (
@@ -271,9 +299,12 @@ export function OrderWindow({ options, onClose }: Props) {
     </Field>
   );
 
+  const chargeTooltip = chargeLines(charges);
   const reqAvail = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: k.dim }}>
-      <span>Req. <b style={{ color: insufficient ? k.red : accent, fontWeight: 600 }}>{required != null ? inr(required) : (marginCalc.isPending ? '…' : '—')}</b>{margin && margin.charges > 0 ? <span> + {margin.charges.toFixed(2)}</span> : null}</span>
+      <span>Req. <b style={{ color: insufficient ? k.red : accent, fontWeight: 600 }}>{required != null ? inr(required) : (marginCalc.isPending ? '…' : '—')}</b>{margin && margin.charges > 0 ? (
+        <span title={chargeTooltip} style={{ cursor: chargeTooltip ? 'help' : 'default' }}> + {margin.charges.toFixed(2)}</span>
+      ) : null}</span>
       <span>Avail. <b style={{ color: accent, fontWeight: 600 }}>{Number.isFinite(available) ? inr(available) : '—'}</b></span>
       <button onClick={doRefresh} title="Refresh funds & margin" style={{ background: 'none', border: 'none', color: accent, cursor: 'pointer', display: 'flex', padding: 2 }}>
         <span className={refreshing ? 'ow-spin' : ''} style={{ display: 'flex' }}><Refresh /></span>
@@ -406,6 +437,15 @@ export function OrderWindow({ options, onClose }: Props) {
 
             {error && <div style={{ padding: '8px 16px', background: tint(k.red, 10), color: k.red, fontSize: 12 }}>{error}</div>}
 
+            {amoConfirmNeeded && (
+              <div style={{ padding: '8px 16px', background: tint(k.amber, 12), color: '#8a6100', fontSize: 12 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={amoConfirmed} onChange={(e) => setAmoConfirmed(e.target.checked)} style={{ accentColor: k.amber, width: 14, height: 14, flexShrink: 0 }} />
+                  Market is closed — this will be placed as an After Market Order (AMO) for the next session.
+                </label>
+              </div>
+            )}
+
             {/* Footer */}
             {tab === 'quick' ? (
               <div style={{ borderTop: `1px solid ${k.border}`, background: k.surface, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -417,6 +457,7 @@ export function OrderWindow({ options, onClose }: Props) {
               <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderTop: `1px solid ${k.border}`, background: k.surface }}>
                 {reqAvail}
                 <div style={{ marginLeft: 'auto', paddingLeft: 28, display: 'flex', gap: 10 }}>
+                  <button onClick={addCurrentToBasket} title="Add to basket instead of placing now" style={{ ...cancelBtnWide, width: 'auto', padding: '9px 16px', fontSize: 12.5 }}>+ Basket</button>
                   <button onClick={submit} disabled={buyDisabled} style={{ ...primaryBtn, width: 'auto', padding: '9px 28px', fontSize: 13.5, background: accent, opacity: buyDisabled ? 0.55 : 1, cursor: buyDisabled ? 'not-allowed' : 'pointer' }}>{placing ? '…' : side === 'BUY' ? 'Buy' : 'Sell'}</button>
                   <button onClick={onClose} style={{ ...cancelBtnWide, width: 'auto', padding: '9px 22px' }}>Cancel</button>
                 </div>

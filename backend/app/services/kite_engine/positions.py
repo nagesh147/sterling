@@ -52,6 +52,9 @@ class OpenPosition:
     opened_ms: int = field(default_factory=lambda: int(time.time() * 1000))
     closed_ms: int = 0
     exit_reason: str = ""
+    exit_mode: str = "one_red"  # exit counter chosen at entry time (one_red/two_red/three_red/three_red_signal)
+    current_red_count: int = 0  # latest computed red ST lines against this position (updated on scans)
+    # derived threshold from exit_mode for convenience in responses/UI
 
 
 _positions: Dict[str, Dict[str, OpenPosition]] = {}   # uid → {symbol → OpenPosition}
@@ -141,16 +144,33 @@ def mark_rejected(uid: str, symbol: str, reason: str = "") -> Optional[OpenPosit
 
 
 def update_stop(uid: str, symbol: str, stop_premium: float, gtt_id: Optional[int] = None) -> Optional[OpenPosition]:
-    """Raise (trail-up) or set the stop for a held position. Stops only ratchet
-    UP for a long option — a lower new trail (looser stop) is ignored so the
-    monitor never relaxes protection mid-trade."""
+    """Tighten (trail) or set the stop for a held position. The stop only ratchets
+    in the protective direction so the monitor never relaxes protection mid-trade:
+    UP for a long (option or long future), DOWN for a short future. A looser new
+    trail is ignored."""
     p = _load(uid).get(symbol)
     if p is None:
         return None
-    if stop_premium > p.stop_premium:
+    if p.direction == "short":
+        # short future: the protective stop sits ABOVE price → ratchets DOWN.
+        if stop_premium > 0 and (p.stop_premium <= 0 or stop_premium < p.stop_premium):
+            p.stop_premium = float(stop_premium)
+    elif stop_premium > p.stop_premium:
+        # long (option or long future): the stop sits BELOW price → ratchets UP.
         p.stop_premium = float(stop_premium)
     if gtt_id is not None:
         p.gtt_id = int(gtt_id)
+    _persist(uid)
+    return p
+
+def update_health(uid: str, symbol: str, red_count: int, exit_mode: Optional[str] = None) -> Optional[OpenPosition]:
+    """Update live red count health for a position (from scan regime). Persisted for UI."""
+    p = _load(uid).get(symbol)
+    if p is None:
+        return None
+    p.current_red_count = max(0, int(red_count))
+    if exit_mode:
+        p.exit_mode = exit_mode
     _persist(uid)
     return p
 

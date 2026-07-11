@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
@@ -74,12 +74,12 @@ def _to_out(t: "store.Target") -> TargetOut:
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
-@router.get("", response_model=TargetListResponse)
+@router.get("")
 async def list_targets(user: UserContext = Depends(get_current_user)) -> TargetListResponse:
     return TargetListResponse(targets=[_to_out(t) for t in store.list_targets(user.user_id)])
 
 
-@router.post("", response_model=TargetOut)
+@router.post("")
 async def create_target(body: TargetIn, user: UserContext = Depends(get_current_user)) -> TargetOut:
     t = store.add(
         user.user_id,
@@ -91,7 +91,7 @@ async def create_target(body: TargetIn, user: UserContext = Depends(get_current_
     return _to_out(t)
 
 
-@router.put("/{target_id}", response_model=TargetOut)
+@router.put("/{target_id}")
 async def update_target(target_id: str, body: TargetPatch,
                         user: UserContext = Depends(get_current_user)) -> TargetOut:
     t = store.update(
@@ -104,14 +104,14 @@ async def update_target(target_id: str, body: TargetPatch,
     return _to_out(t)
 
 
-@router.delete("/{target_id}", response_model=OkResponse)
+@router.delete("/{target_id}")
 async def delete_target(target_id: str, user: UserContext = Depends(get_current_user)) -> OkResponse:
     if not store.delete(user.user_id, target_id):
         raise HTTPException(404, "Kite telegram target not found")
     return OkResponse(ok=True)
 
 
-@router.post("/{target_id}/test", response_model=TargetOut)
+@router.post("/{target_id}/test")
 async def test_target(target_id: str, user: UserContext = Depends(get_current_user)) -> TargetOut:
     t = store.get(user.user_id, target_id)
     if t is None:

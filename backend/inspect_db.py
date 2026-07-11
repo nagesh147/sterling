@@ -1,14 +1,25 @@
 import sqlite3
 
-def inspect_more():
-    conn = sqlite3.connect('sterling_paper.db')
-    cursor = conn.cursor()
-    
-    for t in ['positions', 'signal_history']:
-        cursor.execute(f"PRAGMA table_info({t});")
-        print(f"\n{t} schema:")
-        for row in cursor.fetchall():
-            print(row)
+# Fixed SQL only — no dynamic identifier interpolation.
+_PRAGMA_QUERIES = {
+    "positions": 'PRAGMA table_info("positions")',
+    "signal_history": 'PRAGMA table_info("signal_history")',
+}
 
-if __name__ == '__main__':
+
+def inspect_more():
+    conn = sqlite3.connect("sterling_paper.db")
+    try:
+        cursor = conn.cursor()
+        for name, sql in _PRAGMA_QUERIES.items():
+            cursor.execute(sql)
+            print(f"\n{name} schema:")
+            for row in cursor.fetchall():
+                print(row)
+    finally:
+        conn.close()
+
+
+if __name__ == "__main__":
     inspect_more()
+

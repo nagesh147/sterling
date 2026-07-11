@@ -63,3 +63,15 @@ backend/data/ohlcv_full/
 backend/data/equity/
 antigravity-claude-proxy/
 .claude/worktrees/
+
+# Superpowers brainstorm session files
+.superpowers/
+# Added by code-review-graph
+.code-review-graph/
+.truecourse/*
+!.truecourse/config.json
+!.truecourse/.gitignore
+
+# Obsidian local workspace (optional — remove if you want to share settings)
+.obsidian/
+

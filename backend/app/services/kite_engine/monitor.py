@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Optional
 
 from app.core.logging import get_logger
+from app.engines.common.exit_counter import get_exit_threshold
 from app.services.kite_engine import positions as pos
 from app.services.kite_engine import protective_stop as pstop
 from app.services.kite_engine import state
@@ -62,8 +63,8 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         log.debug("kite monitor on_order_update error for %s: %s", uid, exc)
 
 
-async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float) -> None:
-    """Market-exit the full quantity and cancel any broker GTT (trail breach).
+async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reason: Optional[str] = None) -> None:
+    """Market-exit the full quantity and cancel any broker GTT (trail breach or red count).
     For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short)."""
     is_futures = p.vehicle == "futures"
     exit_side = "sell" if p.direction == "long" else "buy"
@@ -82,19 +83,19 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float) -> N
     if p.gtt_id:
         await pstop.cancel_stop(client, p.gtt_id)
     breach_dir = "≥" if p.direction == "short" else "≤"
-    pos.close(uid, p.symbol, reason=f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}")
+    close_reason = reason or f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}"
+    pos.close(uid, p.symbol, reason=close_reason)
     if p.guard_key:
         state.clear_auto_open(uid, p.guard_key)
     state.log(uid, "order_placed",
-              f"{exit_side.upper()} {p.qty} {p.symbol} @ market — trail breach "
-              f"(₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f})")
+              f"{exit_side.upper()} {p.qty} {p.symbol} @ market — {close_reason}")
     # Unsubscribe the token now that we no longer hold this position.
     if p.token:
         try:
             from app.services.exchanges.kite import ticker_manager
             await ticker_manager.unsubscribe(uid, [p.token])
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _exc:# noqa: BLE001
+            log.debug("suppressed: %s", _exc)
 
 
 async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
@@ -110,8 +111,17 @@ async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
                 continue
             if p.status != pos.OPEN:
                 return None  # not filled yet — nothing to protect
-            if pos.should_exit(p.stop_premium, ltp, p.direction):
-                await _exit_position(client, uid, p, ltp)
+            # Price trail breach (original)
+            price_exit = pos.should_exit(p.stop_premium, ltp, p.direction)
+            # Red-count awareness (shared logic): if last scan reported enough reds for this position's entry-time exit_mode, exit.
+            # This makes the 1/2/3-red (or +signal) counter drive auto-exits dynamically on live positions.
+            reds = getattr(p, 'current_red_count', 0)
+            mode = getattr(p, 'exit_mode', 'one_red')
+            thresh = get_exit_threshold(mode)
+            red_exit = reds >= thresh
+            if price_exit or red_exit:
+                close_reason = f"trail breach @ ₹{ltp:.2f} { '≤' if p.direction == 'long' else '≥' } ₹{p.stop_premium:.2f}" if price_exit else f"red count exit {reds}/{thresh} ({mode})"
+                await _exit_position(client, uid, p, ltp, reason=close_reason)
                 return p.symbol
             return None
     except Exception as exc:  # noqa: BLE001

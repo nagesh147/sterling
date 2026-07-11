@@ -14,8 +14,8 @@ from app.services.kite_engine.strikes import chain_rows_for, pick_contracts
 from app.services.kite_engine.scanner import (
     scanner, drop_forming, evaluate_derivative_contract,
 )
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.schemas import EngineConfigModel
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 
 _IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -47,7 +47,7 @@ async def main():
     P("scan_indices    :", saved.scan_indices)
     P("scan_all_stocks :", saved.scan_all_stocks)
     moneyness = saved.strike_moneyness
-    cfg = TripleSupertrendConfig(trail_target=saved.trail_target, early_lock=saved.early_lock)
+    cfg = SterlingKiteEngineConfig(trail_target=saved.trail_target)
     P("warmup bars     :", cfg.warmup)
 
     try:

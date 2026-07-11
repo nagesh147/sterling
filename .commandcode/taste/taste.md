@@ -82,6 +82,11 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 - When displaying scan status, show what specifically is being scanned (e.g., "Scanning BTC options…", "Scanning ETH futures…") instead of a generic "scanning…" indicator — the label should identify the active scan target. Confidence: 0.70
 - Cache and reuse historical scan data when markets are closed — avoid re-scanning unchanged data outside market hours. Only actively poll/refresh during live market hours when data can actually change. Confidence: 0.60
 
+# kite-terminal
+- Terminal status bar items (AUTO mode indicator, time-ago, Next Due countdown) belong in the bottom-right footer, not in the terminal header or inline with other controls. Confidence: 0.70
+- Premium Breakdown should be a separate card/component from Trade Impact Calculator — do not mix them into the same panel. Each gets its own distinct section. Confidence: 0.70
+- Terminal minimize/maximize state must persist across sessions (localStorage or similar), not reset on page reload. Confidence: 0.65
+
 # ui-symbols
 - Core symbols (BTC, ETH, SOL) in Global Strategy Config > SYMBOLS must stay always present but be individually toggleable (enable/disable) — never deletable and never permanently locked. Use a checkbox or similar on/off control, not a remove (×) button. Confidence: 0.75
 
@@ -99,4 +104,4 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 - Background WebSocket managers and stream services must NOT auto-start at module import time (no `manager.start()` at module level). All crypto-related background processes must be explicitly started from the FastAPI lifespan, gated behind the `scalp_mode` kill switch so they stay completely stopped when crypto engines are off. Confidence: 0.75
 
 # git-workflow
-- When user says "push all code; sync branches;updated;", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch origin main && git merge origin/main, then report push hash and main status. Confidence: 0.80
+- When user says "push all code; sync branches;updated;" or "sync all branches;update;push", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch --all, then for each local branch merge from its remote tracking branch (git merge origin/{branch}), and report sync status for all branches. Confidence: 0.80

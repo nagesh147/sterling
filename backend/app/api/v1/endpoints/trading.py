@@ -103,12 +103,12 @@ class VCPModeResponse(BaseModel):
     active_profiles: list[str]
 
 
-@router.get("/algo-mode", response_model=AlgoModeResponse)
+@router.get("/algo-mode")
 async def get_algo_mode(request: Request) -> AlgoModeResponse:
     return AlgoModeResponse(enabled=getattr(request.app.state, "algo_mode", False))
 
 
-@router.post("/algo-mode", response_model=AlgoModeResponse)
+@router.post("/algo-mode")
 async def set_algo_mode(body: AlgoModeRequest, request: Request) -> AlgoModeResponse:
     from app.services.db import set_config
     request.app.state.algo_mode = body.enabled
@@ -124,12 +124,12 @@ class ScalpModeResponse(BaseModel):
     enabled: bool
 
 
-@router.get("/scalp-mode", response_model=ScalpModeResponse)
+@router.get("/scalp-mode")
 async def get_scalp_mode(request: Request) -> ScalpModeResponse:
     return ScalpModeResponse(enabled=getattr(request.app.state, "scalp_mode", False))
 
 
-@router.post("/scalp-mode", response_model=ScalpModeResponse)
+@router.post("/scalp-mode")
 async def set_scalp_mode(body: ScalpModeRequest, request: Request) -> ScalpModeResponse:
     from app.services.db import set_config
     request.app.state.scalp_mode = body.enabled
@@ -145,7 +145,7 @@ class ScoringStrategyResponse(BaseModel):
     strategy: str
 
 
-@router.get("/scoring-strategy", response_model=ScoringStrategyResponse)
+@router.get("/scoring-strategy")
 async def get_scoring_strategy(request: Request) -> ScoringStrategyResponse:
     """
     Get the current ensemble scoring strategy used by the directional engine.
@@ -158,7 +158,7 @@ async def get_scoring_strategy(request: Request) -> ScoringStrategyResponse:
     return ScoringStrategyResponse(strategy=get_active_strategy())
 
 
-@router.post("/scoring-strategy", response_model=ScoringStrategyResponse)
+@router.post("/scoring-strategy")
 async def set_scoring_strategy(
     body: ScoringStrategyRequest, request: Request,
 ) -> ScoringStrategyResponse:
@@ -176,7 +176,7 @@ async def set_scoring_strategy(
     return ScoringStrategyResponse(strategy=body.strategy)
 
 
-@router.get("/algo-router-mode", response_model=AlgoRouterModeResponse)
+@router.get("/algo-router-mode")
 async def get_algo_router_mode(request: Request) -> AlgoRouterModeResponse:
     """
     Phase F: paper / shadow / live dispatch mode for the auto-trader.
@@ -190,7 +190,7 @@ async def get_algo_router_mode(request: Request) -> AlgoRouterModeResponse:
     )
 
 
-@router.post("/algo-router-mode", response_model=AlgoRouterModeResponse)
+@router.post("/algo-router-mode")
 async def set_algo_router_mode(
     body: AlgoRouterModeRequest, request: Request,
 ) -> AlgoRouterModeResponse:
@@ -205,7 +205,7 @@ async def set_algo_router_mode(
     return AlgoRouterModeResponse(mode=body.mode)
 
 
-@router.get("/vcp-mode", response_model=VCPModeResponse)
+@router.get("/vcp-mode")
 async def get_vcp_mode(request: Request) -> VCPModeResponse:
     """
     Get current VCP live-feed state.
@@ -220,7 +220,7 @@ async def get_vcp_mode(request: Request) -> VCPModeResponse:
     )
 
 
-@router.post("/vcp-mode", response_model=VCPModeResponse)
+@router.post("/vcp-mode")
 async def set_vcp_mode(body: VCPModeRequest, request: Request) -> VCPModeResponse:
     """
     Start or stop the VCP live-feed independently of algo_mode.
@@ -271,7 +271,7 @@ async def set_vcp_mode(body: VCPModeRequest, request: Request) -> VCPModeRespons
     )
 
 
-@router.post("/place-order", response_model=LiveOrderResponse)
+@router.post("/place-order")
 async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrderResponse:
     """
     Place a live order on Delta Exchange India (or paper if not configured).
@@ -328,8 +328,6 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
         side = "buy" if body.direction == "long" else "sell"
     now_ms = int(time.time() * 1000)
 
-    # Check if Delta Exchange India is active with credentials
-    algo_mode = getattr(request.app.state, "algo_mode", False)
     # Router mode is the authoritative paper/shadow/live switch. Real orders are
     # placed ONLY in "live" mode — "shadow" runs with keys present but simulates
     # the fill as a paper position (so it never touches real funds), and "paper"
@@ -435,7 +433,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             )
 
         except Exception as exc:
-            log.error("Live order failed: %s", exc)
+            log.exception("Live order failed: %s", exc)
             failed_pos_id = _create_failed_algo_tracking(body, sym, str(exc))
             # Enqueue for operator-driven retry. The retry endpoint at the
             # bottom of this file picks items off this queue.
@@ -452,8 +450,8 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                     },
                     error=str(exc),
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
             error_detail = {"error": f"Order failed: {exc}", "failed_position_id": failed_pos_id}
             if "ip_not_whitelisted" in str(exc).lower() or "whitelist" in str(exc).lower():
                 from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DIA
@@ -463,7 +461,7 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
             raise HTTPException(
                 status_code=502,
                 detail=json.dumps(error_detail),
-            )
+            ) from exc
 
     elif router_mode == "live":
         # ── LIVE REQUESTED BUT NO USABLE CREDENTIALS ──────────────────────
@@ -656,8 +654,8 @@ def _send_order_telegram(body: LiveOrderRequest, sym: str, side: str, entry: flo
             f"Ref: {ref_id}"
         )
         _aio.create_task(_tg.send(msg))
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
 
 def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -> str:
@@ -677,8 +675,8 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
             try:
                 from app.api.v1.endpoints.directional import _stream_last_prices
                 spot_price = float(_stream_last_prices.get(sym, 0.0))
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
 
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         contracts = max(1, int(body.size))
@@ -759,13 +757,12 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
     active = exchange_account_store.get_active()
     if not active or not active.api_key or active.api_key.startswith("DUMMY"):
         paper_store.update_position(position_id, order_status="failed",
-                                     notes=f"[ALGO-FAILED] No live credentials")
+                                     notes="[ALGO-FAILED] No live credentials")
         raise HTTPException(status_code=400, detail="Live credentials required for retry")
 
     s = pos.sized_trade.structure
     direction = "long" if s.direction.value == "long" else "short"
     side = "buy" if direction == "long" else "sell"
-    instrument_type = s.structure_type
     now_ms = int(time.time() * 1000)
 
     try:
@@ -779,8 +776,8 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
         leverage     = pos.sized_trade.leverage if hasattr(pos.sized_trade, 'leverage') else 5
         try:
             await adapter.set_leverage(product_id, leverage)
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
 
         order = await adapter.place_order(
             symbol=delta_symbol, side=side,
@@ -803,8 +800,8 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
     except Exception as exc:
         paper_store.update_position(position_id, order_status="failed",
                                      notes=f"[ALGO-FAILED] Retry error: {exc}")
-        log.error("Retry failed for %s: %s", position_id, exc)
-        raise HTTPException(status_code=502, detail=f"Retry failed: {exc}")
+        log.exception("Retry failed for %s: %s", position_id, exc)
+        raise HTTPException(status_code=502, detail=f"Retry failed: {exc}") from exc
 
 
 @router.post("/update-order-status/{position_id}")
@@ -838,7 +835,7 @@ async def update_order_status(position_id: str, order_id: str, request: Request)
         return {"position_id": position_id, "order_id": order_id, "order_status": order_status,
                 "fill_price": fill_price, "raw_status": status}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Status check failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Status check failed: {exc}") from exc
 
 
 @router.get("/test-credentials")
@@ -920,7 +917,7 @@ async def test_credentials(request: Request) -> dict:
             f"Alternatively, remove all IPs from the whitelist to allow access from any IP."
         )
         label = "India" if india_err else "Global"
-        return {"ok": False, "reason": f"IP not whitelisted for this API key", "hint": hint, "server_ip": server_ip}
+        return {"ok": False, "reason": "IP not whitelisted for this API key", "hint": hint, "server_ip": server_ip}
     elif "invalid_api_key" in primary_err or "Invalid API key" in primary_err:
         hint = ("Key not recognised on either endpoint. Ensure it was generated at "
                 "delta.exchange/app/account/manageapikeys (not testnet) and has Read + Trading permissions.")
@@ -946,7 +943,7 @@ async def get_order_status(order_id: str, request: Request) -> dict:
                 return {"order_id": order_id, "status": o.status, "filled": o.filled_size, "size": o.size}
         return {"order_id": order_id, "status": "filled_or_cancelled"}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.delete("/cancel-order/{order_id}")
@@ -964,7 +961,7 @@ async def cancel_order(order_id: str, product_id: int, request: Request) -> dict
         result = await adapter.cancel_order(order_id, product_id)
         return {"cancelled": True, "order_id": order_id, "result": result}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.delete("/cancel-all")
@@ -988,7 +985,7 @@ async def cancel_all_orders(product_symbol: str, request: Request) -> dict:
         result       = await adapter.cancel_all_orders(product_id)
         return {"cancelled_all": True, "product": delta_symbol, "result": result}
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 # ─── Live execution safety endpoints ────────────────────────────────────────

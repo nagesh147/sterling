@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "autoPort": false,
+      "cwd": "frontend"
+    },
+    {
+      "name": "Backend",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["main.py"],
+      "port": 8000,
+      "autoPort": true,
+      "cwd": "backend"
+    }
+  ]
+}

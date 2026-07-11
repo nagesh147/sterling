@@ -5,7 +5,7 @@ from app.core.config import settings
 
 
 # ── In-memory ring buffer of recent server logs ──────────────────────────────
-# Lets the UI (Kite Terminal) interleave real backend logs with engine activity
+# Lets the UI (Sterling Kite Terminal) interleave real backend logs with engine activity
 # without writing/tailing a file. Bounded so it can never grow unbounded.
 _LOG_RING: "deque[dict]" = deque(maxlen=1000)
 

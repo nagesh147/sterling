@@ -15,14 +15,10 @@ import csv
 import io
 import time
 from datetime import datetime, timezone
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
-from app.schemas.account import (
-    AssetBalance, AccountPosition, AccountOrder, AccountFill,
-    PortfolioSnapshot, AccountSummaryResponse,
-)
+from app.schemas.account import AccountSummaryResponse
 from app.services import exchange_account_store as store
 from app.services.exchanges.adapter_factory import create_account_adapter
 
@@ -52,7 +48,7 @@ async def account_info():
     }
 
 
-@router.get("/summary", response_model=AccountSummaryResponse)
+@router.get("/summary")
 async def account_summary() -> AccountSummaryResponse:
     now_ms = int(time.time() * 1000)
     cfg = store.get_active()
@@ -92,7 +88,7 @@ async def get_balances():
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -112,7 +108,7 @@ async def get_positions(underlying: str = Query(default="")):
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -130,7 +126,7 @@ async def get_open_orders(underlying: str = Query(default="")):
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -148,7 +144,7 @@ async def get_fills(limit: int = Query(default=50, ge=1, le=200)):
             "timestamp_ms": int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -166,12 +162,12 @@ async def get_fills_summary(limit: int = Query(default=200, ge=1, le=500)):
     Returns total commissions paid, GST, liquidation fees, VIP/DETO discounts,
     fill-type breakdown, and average effective rate.
     """
-    from app.services.fees import decode_fill_fee, summarise_fills
+    from app.services.fees import summarise_fills
     cfg, adapter = _get_active_adapter()
     try:
         fills = await adapter.get_fills(limit=limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -249,7 +245,7 @@ async def get_trading_preferences():
             "timestamp_ms":      int(time.time() * 1000),
         }
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -260,7 +256,7 @@ async def export_fills_csv(limit: int = Query(default=200, ge=1, le=500)):
     try:
         fills = await adapter.get_fills(limit=limit)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 
@@ -297,7 +293,7 @@ async def export_positions_csv():
     try:
         positions = await adapter.get_positions()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         await adapter.close()
 

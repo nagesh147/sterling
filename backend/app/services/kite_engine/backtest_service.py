@@ -12,7 +12,7 @@ from typing import List, Optional
 import numpy as np
 
 from app.core.logging import get_logger
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine import backtest as bt
 from app.services.kite_engine.greeks import bs_price
@@ -81,7 +81,7 @@ def _arrays(candles):
 
 async def run_backtest(client, req) -> dict:
     """Execute the requested data mode(s) and return a response dict."""
-    cfg = TripleSupertrendConfig(trail_target=req.trail_target)
+    cfg = SterlingKiteEngineConfig(trail_target=req.trail_target, exit_mode=req.exit_mode)
     costs = _costs(req)
     runs: List[dict] = []
     notes: List[str] = []
@@ -105,7 +105,8 @@ async def run_backtest(client, req) -> dict:
                 ts, o, h, l, c = _arrays(candles)
                 run = bt.run_synthetic(
                     timestamps_ms=ts, u_open=o, u_high=h, u_low=l, u_close=c,
-                    cfg=cfg, trail_target=req.trail_target, iv=req.iv, dte_days=req.dte_days,
+                    cfg=cfg, trail_target=req.trail_target, exit_mode=req.exit_mode,
+                    iv=req.iv, dte_days=req.dte_days,
                     bars_per_day=_BARS_PER_DAY, moneyness_offset_pct=req.moneyness_offset_pct,
                     qty=req.qty, costs=costs, starting_capital=req.starting_capital)
                 runs.append(_run_dict(run))
@@ -127,7 +128,8 @@ async def run_backtest(client, req) -> dict:
                 ts, o, h, l, c = _arrays(real_candles)
                 run = bt.replay_premium_series(
                     timestamps_ms=ts, premium_open=o, premium_high=h, premium_low=l,
-                    premium_close=c, cfg=cfg, trail_target=req.trail_target, qty=req.qty,
+                    premium_close=c, cfg=cfg, trail_target=req.trail_target,
+                    exit_mode=req.exit_mode, qty=req.qty,
                     costs=costs, starting_capital=req.starting_capital, direction_label="long")
                 run.mode = "real"
                 run.caveat = ("Real fetched premium for a currently-listed contract — limited to "

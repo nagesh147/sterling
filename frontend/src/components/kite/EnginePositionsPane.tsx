@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { useEngineOpenPositions, useCloseEnginePosition } from '../../hooks/useTripleSupertrend';
-import type { EngineOpenPosition, EngineVehicle } from '../../types/kiteEngine';
+import { useEngineOpenPositions, useCloseEnginePosition, useEngineSignals } from '../../hooks/useSterlingKiteEngine';
+import type { EngineOpenPosition, EngineVehicle, ExitMode, AlignmentChip } from '../../types/kiteEngine';
 
 // ─── Vehicle badge ────────────────────────────────────────────────────────────
 
@@ -39,6 +39,55 @@ function DirectionBadge({ direction }: { direction: 'long' | 'short' }) {
   );
 }
 
+function ExitRuleBadge({ exitMode }: { exitMode?: string }) {
+  if (!exitMode) return null;
+  const map: Record<string, { label: string; color: string; bg: string }> = {
+    one_red: { label: '1R', color: '#b91c1c', bg: '#fee2e2' },
+    two_red: { label: '2R', color: '#c2410c', bg: '#ffedd5' },
+    three_red: { label: '3R', color: '#854d0e', bg: '#fef9c3' },
+    three_red_signal: { label: '3R+Sig', color: '#166534', bg: '#dcfce7' },
+  };
+  const m = map[exitMode] || { label: exitMode, color: '#334155', bg: '#f1f5f9' };
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 5px', borderRadius: 8,
+      fontSize: 9, fontWeight: 700, letterSpacing: 0.3,
+      color: m.color, background: m.bg, border: `1px solid ${m.color}30`,
+      marginLeft: 4,
+    }} title={`Exit rule at entry: ${exitMode} (counter to 3-green entry)`}>
+      {m.label}
+    </span>
+  );
+}
+
+function getAlignmentForUnderlying(underlying: string, signalsData?: { rows?: any[] }): AlignmentChip | null {
+  if (!signalsData?.rows?.length || !underlying) return null;
+  const norm = (s: string) => (s || '').toUpperCase().replace(/[\s_]/g, '');
+  const target = norm(underlying);
+  const row = signalsData.rows.find((r: any) => norm(r.underlying || '') === target);
+  return row?.alignment || null;
+}
+
+function LiveAlignment({ underlying, signalsData, exitMode }: { underlying?: string; signalsData?: any; exitMode?: string }) {
+  const al = getAlignmentForUnderlying(underlying || '', signalsData);
+  if (!al) return null;
+  const col = (v: number) => v > 0 ? '#22c55e' : v < 0 ? '#ef4444' : '#64748b';
+  const reds = [al.fast, al.mid, al.slow].filter(v => v < 0).length;
+  const threshold = exitMode === 'one_red' ? 1 : exitMode === 'two_red' ? 2 : 3;
+  const nearExit = reds >= threshold;
+  return (
+    <span
+      style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle' }}
+      title={`Current ST lines (F/M/S): ${al.fast}/${al.mid}/${al.slow} — ${reds} red. Your exit rule at entry: ${exitMode || '1R'} (triggers at ${threshold} red). ${nearExit ? 'Near or past exit threshold!' : ''}`}
+    >
+      {[al.fast, al.mid, al.slow].map((v, i) => (
+        <span key={i} style={{ width: 6, height: 10, background: col(v), borderRadius: 1, display: 'inline-block' }} />
+      ))}
+      <span style={{ fontSize: 9, color: nearExit ? k.red : k.dim, marginLeft: 2 }}>{reds}/{threshold}</span>
+    </span>
+  );
+}
+
 function StatusDot({ status }: { status: string }) {
   const color = status === 'open' ? k.green : status === 'pending' ? k.orange : '#aaa';
   return (
@@ -51,7 +100,7 @@ function StatusDot({ status }: { status: string }) {
 
 // ─── Row ─────────────────────────────────────────────────────────────────────
 
-function PositionRow({ p, onClose }: { p: EngineOpenPosition; onClose: (sym: string) => void }) {
+function PositionRow({ p, onClose, signalsData }: { p: EngineOpenPosition; onClose: (sym: string) => void; signalsData?: any }) {
   const [confirm, setConfirm] = useState(false);
 
   const fillPct = p.fill_price > 0 && p.entry_premium > 0
@@ -67,6 +116,8 @@ function PositionRow({ p, onClose }: { p: EngineOpenPosition; onClose: (sym: str
         {p.underlying && (
           <span style={{ color: '#888', fontSize: 11, marginLeft: 6 }}>{p.underlying}</span>
         )}
+        <ExitRuleBadge exitMode={p.exit_mode} />
+        <LiveAlignment underlying={p.underlying} signalsData={signalsData} exitMode={p.exit_mode} />
       </td>
       <td style={{ padding: '8px 10px' }}>
         <VehicleBadge vehicle={p.vehicle} />
@@ -90,6 +141,14 @@ function PositionRow({ p, onClose }: { p: EngineOpenPosition; onClose: (sym: str
       </td>
       <td style={{ padding: '8px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 12 }}>
         {p.stop_premium > 0 ? p.stop_premium.toFixed(2) : '—'}
+      </td>
+      <td style={{ padding: '8px 10px', fontSize: 10, color: (p.current_red_count || 0) >= (p.exit_threshold || 1) ? k.red : k.dim }}>
+        {(p.current_red_count ?? 0)}/{p.exit_threshold ?? 1} red
+        {(p.current_red_count != null && p.exit_threshold) && (
+          <div style={{width: 40, height: 6, background: '#222', borderRadius: 3, display: 'inline-block', marginLeft: 4, verticalAlign: 'middle'}}>
+            <div style={{width: `${Math.min(100, ((p.current_red_count||0) / (p.exit_threshold||1)) * 100)}%`, height: '100%', background: (p.current_red_count||0) >= (p.exit_threshold||1) ? '#f44' : '#4a4'}} />
+          </div>
+        )}
       </td>
       <td style={{ padding: '8px 10px', color: '#888', fontSize: 11 }}>
         {age !== null ? (age < 60 ? `${age}m` : `${Math.floor(age / 60)}h${age % 60}m`) : '—'}
@@ -127,6 +186,7 @@ function PositionRow({ p, onClose }: { p: EngineOpenPosition; onClose: (sym: str
 
 export function EnginePositionsPane() {
   const { data, isLoading } = useEngineOpenPositions();
+  const { data: signalsData } = useEngineSignals();
   const close = useCloseEnginePosition();
 
   const positions = data?.positions ?? [];
@@ -168,6 +228,7 @@ export function EnginePositionsPane() {
                 <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 500 }}>Qty</th>
                 <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 500 }}>Entry</th>
                 <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 500 }}>Stop</th>
+                <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 500 }}>Health (reds)</th>
                 <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 500 }}>Age</th>
                 <th style={{ padding: '6px 10px', fontWeight: 500 }} />
               </tr>
@@ -178,6 +239,7 @@ export function EnginePositionsPane() {
                   key={p.symbol}
                   p={p}
                   onClose={(sym) => close.mutate(sym)}
+                  signalsData={signalsData}
                 />
               ))}
             </tbody>
@@ -190,6 +252,10 @@ export function EnginePositionsPane() {
           Failed to remove position: {String(close.error)}
         </div>
       )}
+
+      <div style={{ fontSize: 9, color: '#888', padding: '6px 10px', borderTop: `1px solid ${k.border}`, marginTop: 4 }}>
+        Entry = 3 green lines + fresh arrow. Exit = your chosen red counter (1/2/3 or 3+signal). Live bars + X/Y = current reds vs your entry-time threshold. Trail ratchets tighter on the innermost still-green ST.
+      </div>
     </div>
   );
 }

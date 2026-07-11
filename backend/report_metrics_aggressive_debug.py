@@ -2,27 +2,31 @@ import sys
 import os
 import sqlite3
 import pandas as pd
-from collections import defaultdict
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app.engines.sterling_engine.config import default_config, ScalpingProfile
-from app.engines.sterling_engine.optimizer import _pf_exp, W_EXEC, W_MACRO, _exit_fixed
+from app.engines.sterling_engine.config import default_config
+from app.engines.sterling_engine.optimizer import W_EXEC, W_MACRO
 from app.engines.sterling_engine.scanner import scan_symbol
 from app.schemas.market import Candle
 
 def get_candles_paper(symbol, resolution, limit=10000):
     conn = sqlite3.connect('backend/sterling_paper.db')
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT time, open, high, low, close, volume FROM ohlcv WHERE symbol='{symbol}' AND resolution='{resolution}' ORDER BY time DESC LIMIT {limit};")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT time, open, high, low, close, volume FROM ohlcv "
+            "WHERE symbol=? AND resolution=? ORDER BY time DESC LIMIT ?",
+            (symbol, resolution, limit),
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
     rows.reverse()
     return [Candle(timestamp_ms=int(r[0])*1000, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5]) for r in rows]
 
 def debug_report():
-    symbols = ["BTCUSD"]
     config = default_config()
     prof = config.profiles.get("aggressive")
     prof.enable_price_action = True

@@ -4,7 +4,6 @@ Option chain browser — returns full chain with per-contract health assessment.
 GET /options/chain?underlying=BTC&type=all&min_dte=5&max_dte=45
 """
 import time
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services.exchanges import instrument_registry as registry
@@ -42,7 +41,7 @@ async def option_chain(
         spot = await adapter.get_index_price(inst)
         raw_chain = await adapter.get_option_chain(inst)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Option chain fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Option chain fetch failed: {exc}") from exc
 
     # Phase 1: BSM-fill any Greeks the adapter didn't ship (Delta India often
     # only returns delta + IV). Every contract in the response carries the

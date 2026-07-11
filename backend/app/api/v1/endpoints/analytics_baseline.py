@@ -156,7 +156,7 @@ async def _fetch_candles(
             if needs[k]:
                 out[k] = await adapter.get_candles(inst, k, limit=limits[k])
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Candle fetch failed: {exc}") from exc
     return out
 
 
@@ -266,7 +266,7 @@ async def get_latest_baseline(underlying: str, profile: Optional[str] = None) ->
             ).fetchone()
         conn.close()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"baseline read failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"baseline read failed: {exc}") from exc
     if not row:
         raise HTTPException(status_code=404, detail="no baseline runs found")
     return {

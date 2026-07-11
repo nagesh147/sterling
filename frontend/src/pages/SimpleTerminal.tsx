@@ -349,7 +349,7 @@ export function SimpleTerminal() {
       {activeTopTab === 'kite' && (
         <>
           {/* KiteTicker now renders inside KiteTab's center column so the right-side
-              Triple SuperTrend panel starts at the top bar's bottom (not below the ticker). */}
+              Sterling Kite Engine panel starts at the top bar's bottom (not below the ticker). */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <KiteTab />
           </div>

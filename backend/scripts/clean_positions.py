@@ -28,40 +28,43 @@ def _audit(db_path: Path) -> list[dict]:
     if not db_path.exists():
         print(f"[clean_positions] db not found: {db_path}", file=sys.stderr)
         return []
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT id, data FROM positions").fetchall()
-    bad: list[dict] = []
-    for r in rows:
-        try:
-            d = json.loads(r["data"]) if r["data"] else {}
-        except (TypeError, ValueError):
-            d = {}
-        esp = d.get("entry_spot_price")
-        try:
-            esp_v = float(esp) if esp is not None else 0.0
-        except (TypeError, ValueError):
-            esp_v = 0.0
-        if esp_v <= 0:
-            bad.append({
-                "id":               r["id"],
-                "entry_spot_price": esp,
-                "underlying":       d.get("underlying"),
-                "entry_ts_ms":      d.get("entry_timestamp_ms"),
-                "status":           d.get("status"),
-                "realized_pnl_usd": d.get("realized_pnl_usd"),
-            })
-    return bad
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT id, data FROM positions").fetchall()
+        bad: list[dict] = []
+        for r in rows:
+            try:
+                d = json.loads(r["data"]) if r["data"] else {}
+            except (TypeError, ValueError):
+                d = {}
+            esp = d.get("entry_spot_price")
+            try:
+                esp_v = float(esp) if esp is not None else 0.0
+            except (TypeError, ValueError):
+                esp_v = 0.0
+            if esp_v <= 0:
+                bad.append({
+                    "id":               r["id"],
+                    "entry_spot_price": esp,
+                    "underlying":       d.get("underlying"),
+                    "entry_ts_ms":      d.get("entry_timestamp_ms"),
+                    "status":           d.get("status"),
+                    "realized_pnl_usd": d.get("realized_pnl_usd"),
+                })
+        return bad
 
 
 def _delete(db_path: Path, ids: list[str]) -> int:
     if not ids:
         return 0
-    conn = sqlite3.connect(str(db_path))
-    placeholders = ",".join("?" for _ in ids)
-    cur = conn.execute(f"DELETE FROM positions WHERE id IN ({placeholders})", ids)
-    conn.commit()
-    return cur.rowcount or 0
+    # Per-id deletes keep the statement fully parameterized (no dynamic SQL).
+    deleted = 0
+    with sqlite3.connect(str(db_path)) as conn:
+        for row_id in ids:
+            cur = conn.execute("DELETE FROM positions WHERE id = ?", (row_id,))
+            deleted += cur.rowcount or 0
+        conn.commit()
+    return deleted
 
 
 def main(argv: list[str]) -> int:

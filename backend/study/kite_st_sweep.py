@@ -1,4 +1,4 @@
-"""Permutation sweep of the Kite Triple-SuperTrend options strategy on REAL data.
+"""Permutation sweep of the Kite Sterling Kite Engine options strategy on REAL data.
 
 Replays the SAME signal logic the live Kite engine uses (Heikin-Ashi triple
 SuperTrend, fresh full-alignment entries, trail-flip exits, optional early-lock)
@@ -28,8 +28,8 @@ from datetime import datetime
 
 import numpy as np
 
-from app.engines.triple_supertrend.config import TripleSupertrendConfig
-from app.engines.triple_supertrend.regime import compute_regime, entry_transitions
+from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.backtest import (
     BacktestTrade, OptionCosts, _stats_from_trades,
 )
@@ -62,7 +62,7 @@ OOS_FRAC = 0.30              # last 30% of bars held out
 
 def replay(
     *, o, h, l, c, ts,
-    cfg: TripleSupertrendConfig, trail_target: str,
+    cfg: SterlingKiteEngineConfig, trail_target: str,
     early_lock: bool, profit_r: float,
     moneyness_pct: float, iv: float, dte_days: float,
     qty: int, costs: OptionCosts, starting_capital: float,
@@ -148,7 +148,7 @@ def run_grid(data: dict) -> list:
 
         for tt in TRAIL_TARGETS:
             for lock_label, el, pr in LOCK_VARIANTS:
-                cfg = TripleSupertrendConfig(trail_target=tt, early_lock=el, early_lock_profit_r=pr)
+                cfg = SterlingKiteEngineConfig(trail_target=tt, early_lock=el, early_lock_profit_r=pr)
                 for mny_label, steps in MONEYNESS_STEPS:
                     mny_pct = steps * step_pct
                     common = dict(cfg=cfg, trail_target=tt, early_lock=el, profit_r=pr,
@@ -178,7 +178,7 @@ def sensitivity(data: dict, best: dict) -> dict:
     median_spot = float(np.median(arrs["c"]))
     step = next(ix["strike_step"] for ix in kite_data.INDICES if ix["name"] == best["underlying"])
     mny_pct = next(s for lbl, s in MONEYNESS_STEPS if lbl == best["moneyness"]) * step / median_spot * 100.0
-    cfg = TripleSupertrendConfig(trail_target=best["trail"])
+    cfg = SterlingKiteEngineConfig(trail_target=best["trail"])
     base = dict(cfg=cfg, trail_target=best["trail"], early_lock=False, profit_r=0.0,
                 moneyness_pct=mny_pct, qty=QTY, costs=costs, starting_capital=STARTING_CAPITAL)
     out = {"iv": [], "dte": []}

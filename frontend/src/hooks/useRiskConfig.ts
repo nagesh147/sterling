@@ -10,6 +10,7 @@ export interface RiskParams {
   time_stop_dte: number;
   financial_stop_pct: number;
   win_rate: number;
+  hybrid_st_weight: number;
 }
 
 export function useRiskConfig() {

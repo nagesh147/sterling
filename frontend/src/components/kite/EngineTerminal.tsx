@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { k } from '../../styles/kiteUI';
-import { useEngineActivity, useEngineServerLogs } from '../../hooks/useTripleSupertrend';
+import { useEngineActivity, useEngineServerLogs } from '../../hooks/useSterlingKiteEngine';
 import type { ActivityEvent } from '../../types/kiteEngine';
 
 type Theme = 'dark' | 'light';
@@ -160,7 +160,15 @@ function ProgressBar({ label, t }: { label?: string; t: typeof THEME.dark }) {
 // component. Without this, a remount would reset mode to 'normal' and the terminal
 // would render full-height inside the minimized slot — looking like it went full
 // screen right after the user clicked minimize.
-let lastTerminalMode: 'minimized' | 'normal' | 'partial' | 'full' = 'normal';
+// It is ALSO mirrored to localStorage (key below) so the minimize/maximize state
+// survives a full page reload, not just remounts. KiteLayout reads the same key.
+export const TERMINAL_MODE_KEY = 'kite_terminal_mode';
+type TerminalMode = 'minimized' | 'normal' | 'partial' | 'full';
+function readTerminalMode(): TerminalMode {
+  const v = localStorage.getItem(TERMINAL_MODE_KEY);
+  return v === 'minimized' || v === 'partial' || v === 'full' || v === 'normal' ? v : 'normal';
+}
+let lastTerminalMode: TerminalMode = readTerminalMode();
 
 export function EngineTerminal() {
   const { data } = useEngineActivity();
@@ -178,12 +186,13 @@ export function EngineTerminal() {
 
   const setMode = (m: 'minimized' | 'normal' | 'partial' | 'full') => {
     lastTerminalMode = m;
+    localStorage.setItem(TERMINAL_MODE_KEY, m);
     setModeState(m);
     window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: m }));
   };
 
   useEffect(() => {
-    const cb = (e: any) => { lastTerminalMode = e.detail; setModeState(e.detail); };
+    const cb = (e: any) => { lastTerminalMode = e.detail; localStorage.setItem(TERMINAL_MODE_KEY, e.detail); setModeState(e.detail); };
     window.addEventListener('kite-terminal-mode', cb);
     return () => window.removeEventListener('kite-terminal-mode', cb);
   }, []);
@@ -240,7 +249,7 @@ export function EngineTerminal() {
       {mode !== 'minimized' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim, flexShrink: 0 }}>
           <span style={{ fontWeight: 600, color: t.headTxt, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span>🖥️</span> KITE TERMINAL
+            <span>🖥️</span> STERLING KITE TERMINAL
           </span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
@@ -276,7 +285,10 @@ export function EngineTerminal() {
       )}
 
       {/* FOOTER */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '5px 14px', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0 }}>
+      <div
+        onClick={() => setMode(mode === 'minimized' ? 'normal' : 'minimized')}
+        title={mode === 'minimized' ? 'Expand terminal' : 'Minimize terminal'}
+        style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '5px 14px', background: t.headerBg, fontSize: 11, color: t.headDim, marginTop: 'auto', flexShrink: 0, cursor: 'pointer' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600, color: t.headTxt }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot, boxShadow: scanning ? `0 0 5px ${k.green}` : 'none', flexShrink: 0 }} />
           TERMINAL
@@ -290,7 +302,7 @@ export function EngineTerminal() {
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Server logs toggle — interleave real backend logs into the terminal */}
           <button
-            onClick={() => setShowServerLogs((v) => !v)}
+            onClick={(e) => { e.stopPropagation(); setShowServerLogs((v) => !v); }}
             title={showServerLogs ? 'Hide server logs' : 'Show server logs'}
             aria-pressed={showServerLogs}
             style={{
@@ -309,7 +321,7 @@ export function EngineTerminal() {
           </button>
           {/* Theme toggle — icon only (shows the mode you'll switch to) */}
           <button
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            onClick={(e) => { e.stopPropagation(); setTheme(theme === 'dark' ? 'light' : 'dark'); }}
             title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
             style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
           >
@@ -328,7 +340,7 @@ export function EngineTerminal() {
           </button>
           {/* Clear terminal — clear/eraser icon (not delete) */}
           <button
-            onClick={clearLog}
+            onClick={(e) => { e.stopPropagation(); clearLog(); }}
             title="Clear terminal"
             disabled={events.length === 0}
             style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 6px', cursor: events.length === 0 ? 'default' : 'pointer', opacity: events.length === 0 ? 0.4 : 1, display: 'flex', alignItems: 'center' }}
@@ -338,11 +350,6 @@ export function EngineTerminal() {
               <line x1="7" y1="20" x2="20" y2="20" />
             </svg>
           </button>
-          {mode === 'minimized' && (
-            <button onClick={() => setMode('normal')} style={{ background: 'none', border: `1px solid ${t.border}`, color: t.headDim, borderRadius: 4, padding: '2px 8px', fontSize: 11, cursor: 'pointer' }}>
-              Expand ↑
-            </button>
-          )}
         </div>
       </div>
     </div>

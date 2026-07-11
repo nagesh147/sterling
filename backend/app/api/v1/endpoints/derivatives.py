@@ -25,12 +25,13 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from app.core.async_tasks import spawn_background
 
 from app.engines.derivatives.freeze_token import get_store as get_freeze_store
 from app.engines.derivatives.preview import preview_one
 from app.engines.derivatives.profiles import DEFAULT_PROFILES, get_profile
 from app.engines.derivatives.schemas import (
-    DecisionStatus, DerivativesDecision, DualDerivativesDecision,
+    DecisionStatus, DerivativesDecision,
     MarketContext, SignalContext, StrategyDerivativesProfile,
 )
 from app.engines.derivatives.selector import decide_both as _decide_both
@@ -115,8 +116,8 @@ async def _market_context(
         pid = await adapter.get_product_id(inst.delta_perp_symbol or f"{underlying.upper()}USD")
         fr = await adapter.get_funding_rate(pid)
         funding_8h = float(fr.get("funding_rate_8h_pct") or 0.0001)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     # CB / regime / calibration consumers
     dd_cb = getattr(app.state, "dd_circuit_breaker", None)
@@ -141,8 +142,8 @@ async def _market_context(
             if chain:
                 from app.engines.derivatives.gex_engine import calculate_gex_profile
                 gex_profile = calculate_gex_profile(chain, spot)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     return MarketContext(
         spot=spot, underlying=underlying.upper(),
@@ -165,7 +166,7 @@ async def _option_chain_or_none(*, underlying: str, app, spot: float):
         log.info(f"Chain for {underlying}: {'None' if chain is None else len(chain)} items")
         return enrich_chain(chain, spot=spot)
     except Exception as e:
-        log.error(f"Failed to fetch option chain for {underlying}: {e}")
+        log.exception(f"Failed to fetch option chain for {underlying}: {e}")
         return None
 
 
@@ -377,8 +378,8 @@ async def _both_rows(
             for leg in (dual.futures, dual.options):
                 if leg is not None:
                     derivatives_audit.record(decision=leg, signal=sig, market=market_cache[ul])
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
 
         if dual.futures and dual.futures.status == DecisionStatus.OK and dual.futures.chosen:
             futures_rows.append(
@@ -430,7 +431,7 @@ class _ScanResponse(BaseModel):
     auto_exec_accepted: int = 0
 
 
-@router.get("/scan", response_model=_ScanResponse)
+@router.get("/scan")
 async def scan(request: Request) -> _ScanResponse:
     """Read the cached scanner snapshot maintained by the background
     derivatives scanner. Fast — no live work. The FE polls this every
@@ -494,8 +495,8 @@ async def preview(
     )
     try:
         derivatives_audit.record(decision=decision, signal=sig, market=market)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
     return decision
 
 
@@ -531,7 +532,7 @@ class _ExecuteResponse(BaseModel):
     timestamp_ms: int
 
 
-@router.post("/execute", response_model=_ExecuteResponse)
+@router.post("/execute")
 async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
     """Execute the frozen decision. The freeze_token MUST match a still-
     valid entry in the store, or we reject with `code=stale_candidate`."""
@@ -645,7 +646,7 @@ async def execute(body: _ExecuteRequest, request: Request) -> _ExecuteResponse:
         resp = await place_live_order(order, request)
     except Exception as e:
         store.restore(body.freeze_token, decision)
-        raise e
+        raise
 
     return _ExecuteResponse(
         accepted=resp.status not in ("rejected", "error"),
@@ -684,13 +685,13 @@ class _ConfigPatchGlobalRequest(BaseModel):
     auto_execute_options: Optional[bool] = None
 
 
-@router.get("/config", response_model=_ConfigResponse)
+@router.get("/config")
 async def get_config(request: Request) -> _ConfigResponse:
     from app.engines.derivatives.profiles import DEFAULT_PROFILES
     return _ConfigResponse(profiles=_profile_overrides(request.app), defaults=DEFAULT_PROFILES)
 
 
-@router.post("/config", response_model=_ConfigResponse)
+@router.post("/config")
 async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigResponse:
     from app.services.db import set_config
     import json
@@ -710,7 +711,7 @@ async def patch_config(body: _ConfigPatchRequest, request: Request) -> _ConfigRe
     return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
 
 
-@router.delete("/config", response_model=_ConfigResponse)
+@router.delete("/config")
 async def reset_all_config(request: Request) -> _ConfigResponse:
     from app.services.db import set_config
     import json
@@ -725,7 +726,7 @@ async def reset_all_config(request: Request) -> _ConfigResponse:
     return _ConfigResponse(profiles={}, defaults=DEFAULT_PROFILES)
 
 
-@router.post("/config/global", response_model=_ConfigResponse)
+@router.post("/config/global")
 async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request) -> _ConfigResponse:
     from app.services.db import set_config
     import json
@@ -749,12 +750,12 @@ async def patch_config_global(body: _ConfigPatchGlobalRequest, request: Request)
     return _ConfigResponse(profiles=overrides, defaults=DEFAULT_PROFILES)
 
 
-@router.get("/config/engine", response_model=DerivativesEngineConfig)
+@router.get("/config/engine")
 async def get_engine_config_ep(request: Request) -> DerivativesEngineConfig:
     return get_engine_config(request.app)
 
 
-@router.post("/config/engine", response_model=DerivativesEngineConfig)
+@router.post("/config/engine")
 async def set_engine_config_ep(
     body: DerivativesEngineConfig, request: Request
 ) -> DerivativesEngineConfig:
@@ -794,7 +795,7 @@ async def study_run(body: dict, request: Request) -> dict:
 
     runner = StudyRunner(app=request.app, data_dir=root, output_dir=root)
     state = runner.init_run(req)
-    asyncio.create_task(runner.run(req))
+    spawn_background(runner.run(req), name=f"study-run-{state.run_id}")
 
     return {"run_id": state.run_id, "status": state.status, "n_configs": 0}
 
@@ -835,10 +836,10 @@ async def study_report(request: Request) -> dict:
             p = os.path.join(d, name)
             if os.path.exists(p):
                 try:
-                    with open(p) as fh:
+                    with open(p, encoding="utf-8") as fh:
                         return {"text": fh.read(), "generated_at": int(os.path.getmtime(p))}
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    log.debug("suppressed: %s", _exc)
         return None
 
     study = _read("DERIVATIVES_EDGE_STUDY.md")
@@ -942,7 +943,7 @@ async def funding(underlying: str, request: Request) -> dict:
         pid = await adapter.get_product_id(inst.delta_perp_symbol or f"{underlying.upper()}USD")
         return await adapter.get_funding_rate(pid)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"funding fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"funding fetch failed: {exc}") from exc
 
 
 @router.get("/book/{symbol}")
@@ -954,7 +955,7 @@ async def book(symbol: str, request: Request, depth: int = Query(default=10, ge=
         pid = await adapter.get_product_id(symbol)
         return await adapter.get_l2_book(pid, depth=depth)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"book fetch failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"book fetch failed: {exc}") from exc
 
 
 # ─── edge feed (validated 4h winners) ─────────────────────────────────
@@ -1113,12 +1114,12 @@ def _edge_gate_response(app) -> _EdgeGateResponse:
     )
 
 
-@router.get("/edge-gate", response_model=_EdgeGateResponse)
+@router.get("/edge-gate")
 async def get_edge_gate(request: Request) -> _EdgeGateResponse:
     return _edge_gate_response(request.app)
 
 
-@router.post("/edge-gate", response_model=_EdgeGateResponse)
+@router.post("/edge-gate")
 async def set_edge_gate(body: _EdgeGateModel, request: Request) -> _EdgeGateResponse:
     """Update the edge admission thresholds and rebuild the allow-list. Changes
     are in-memory (lost on restart), matching the per-strategy profile pattern."""
@@ -1225,7 +1226,7 @@ def _collect_armed_signals(
                 )))
         except Exception as e:
             import traceback
-            log.error(f"Error collecting scalping signals for derivatives: {e}\n{traceback.format_exc()}")
+            log.exception(f"Error collecting scalping signals for derivatives: {e}\n{traceback.format_exc()}")
 
     # Edge-validated feed (4h winners from BACKTEST_EDGE_REPORT)
     try:
@@ -1235,7 +1236,7 @@ def _collect_armed_signals(
         ))
     except Exception as e:
         import traceback
-        log.error(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
+        log.exception(f"Error collecting edge signals for derivatives: {e}\n{traceback.format_exc()}")
 
     # Directional / Grok feed
     if strategy_filter is None or strategy_filter.startswith("directional"):
@@ -1280,6 +1281,6 @@ def _collect_armed_signals(
                     )))
         except Exception as e:
             import traceback
-            log.error(f"Error collecting directional signals for derivatives: {e}\n{traceback.format_exc()}")
+            log.exception(f"Error collecting directional signals for derivatives: {e}\n{traceback.format_exc()}")
 
     return out

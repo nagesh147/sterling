@@ -22,6 +22,9 @@ export interface TradingModeConfig {
   position_pct: number;
   max_concurrent: number;
   poll_interval_s: number;
+  // Hybrid trailing + exit mode unification (v3+)
+  hybrid_st_weight?: number;
+  exit_mode?: string;
 }
 
 export interface TradingModeResponse {

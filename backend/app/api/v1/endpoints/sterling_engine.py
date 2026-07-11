@@ -15,7 +15,7 @@ import json
 import logging
 import time
 from dataclasses import asdict
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -24,6 +24,7 @@ logger = logging.getLogger("sterling.scalping")
 from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
 from app.api.v1.endpoints.directional import _adapter_can_serve
+from app.core.async_tasks import spawn_background
 
 from app.engines.sterling_engine.config import ScalpingConfig, default_config
 from app.engines.sterling_engine.schemas import (
@@ -151,19 +152,19 @@ def _effective_config(request: Request) -> ScalpingConfig:
     })
 
 
-@router.get("/config", response_model=ScalpingConfigResponse)
+@router.get("/config")
 async def get_config(request: Request) -> ScalpingConfigResponse:
     return ScalpingConfigResponse(config=_effective_config(request))
 
 
-@router.get("/config/default", response_model=ScalpingConfigResponse)
+@router.get("/config/default")
 async def get_default_config() -> ScalpingConfigResponse:
     """Factory defaults (powers the 'Reset to defaults' button) — 4h/30m, PA+SMC+MA
     on, 1% risk, etc. Does not change live config; the UI sets the draft from this."""
     return ScalpingConfigResponse(config=default_config())
 
 
-@router.post("/config", response_model=ScalpingConfigResponse)
+@router.post("/config")
 async def set_config(body: ScalpingConfig, request: Request) -> ScalpingConfigResponse:
     from app.services.db import set_config as _sc
     request.app.state.sterling_engine_config = body
@@ -179,10 +180,9 @@ async def presets() -> dict:
     return {k: v.model_dump() for k, v in TIMEFRAME_PRESETS.items()}
 
 
-@router.get("/universe", response_model=ScalpingUniverseResponse)
+@router.get("/universe")
 async def universe(request: Request) -> ScalpingUniverseResponse:
     """Symbols with enough 4H + 15min stored history."""
-    cfg = _get_config(request)
     # Since profiles are independent, we'll use a conservative default min_bars
     min_bars = 200
     syms = _store_symbols(min_bars_hours=min_bars)
@@ -284,9 +284,6 @@ _scan_lock = asyncio.Lock()
 def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     """Evaluate the full universe across all enabled strategies."""
     from app.engines.sterling_engine.scanner import scan_universe
-    import numpy as np
-    from app.engines.sterling_engine.levels import detect_levels
-
     syms = [s.upper() for s in cfg.symbols] if cfg.symbols else _store_symbols(
         min_bars_hours=max(cfg.warmup_bars_4h, cfg.warmup_bars_15m // 4 + 20)
     )
@@ -295,8 +292,6 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     disabled = {s.upper() for s in (cfg.disabled_symbols or [])}
     syms = [s for s in syms if s not in disabled]
 
-    now_ms = int(time.time() * 1000)
-    all_signals: List[ScalpingSignal] = []
     tradeable_set: set = set()
 
     resolutions = set()
@@ -320,7 +315,7 @@ def _scan_all(cfg: ScalpingConfig, src: str) -> ScalpingScanResponse:
     return result
 
 
-@router.get("/signals", response_model=ScalpingScanResponse)
+@router.get("/signals")
 async def signals(request: Request, armed_only: bool = False) -> ScalpingScanResponse:
     """Scan the stored-crypto universe, return signals from all enabled strategies."""
     import time as _t
@@ -347,7 +342,7 @@ async def signals(request: Request, armed_only: bool = False) -> ScalpingScanRes
 # ─── backtest ──────────────────────────────────────────────────────────────
 
 
-@router.post("/backtest", response_model=ScalpingBacktestResult)
+@router.post("/backtest")
 async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingBacktestResult:
     """Honest bar-by-bar replay of the scalping strategies on stored data.
 
@@ -421,7 +416,7 @@ async def backtest(body: ScalpingBacktestRequest, request: Request) -> ScalpingB
 # ─── execute ───────────────────────────────────────────────────────────────
 
 
-@router.post("/execute", response_model=ScalpingExecuteResponse)
+@router.post("/execute")
 async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExecuteResponse:
     """Route a scalping signal through the Paper/Live order path."""
     from app.api.v1.endpoints.trading import LiveOrderRequest, place_live_order
@@ -702,8 +697,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         try:
             from app.services import derivatives_audit as _audit
             _audit.mark_executed(selector_audit_id)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("suppressed: %s", _exc)
 
     logger.info(
         "scalp-exec %s/%s router=%s want_live=%s -> mode=%s status=%s order_id=%s entry=%s sl=%s tp=%s contracts=%s reason=%s",
@@ -714,7 +709,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     # Trigger all active webhooks (Discord, Telegram, Zapier)
     if resp.status not in ("rejected", "error"):
         from app.services import webhook_store
-        asyncio.create_task(
+        spawn_background(
             webhook_store.deliver_all(
                 subject=f"SCALP EXECUTE ({resp.mode.upper()}) — {sym} {sig.direction.upper()}",
                 message=f"Strategy: {strategy}\nOrder Status: {resp.status}\nContracts: {contracts}\nEntry: {sig.entry}\nSL: {sig.stop_loss}\nTP: {sig.take_profit}",
@@ -730,7 +725,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
                     "status": resp.status,
                     "notional_usd": round(report_qty * sig.entry, 2),
                 }
-            )
+            ),
+            name="scalp-execute-webhook",
         )
 
     return ScalpingExecuteResponse(
@@ -824,7 +820,7 @@ async def optimize_run(request: Request, days: int = 60, max_symbols: int = 4) -
     days = max(30, min(int(days), 365))
     max_symbols = max(2, min(int(max_symbols), 10))
     base_cfg = _get_config(request)                          # manual config = the sweep's base
-    asyncio.create_task(_run_optimize(base_cfg, days, max_symbols))
+    spawn_background(_run_optimize(base_cfg, days, max_symbols), name="scalp-optimize")
     return {"status": "started", "days": days, "max_symbols": max_symbols}
 
 

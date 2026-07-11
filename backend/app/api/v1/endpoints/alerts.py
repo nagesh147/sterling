@@ -7,7 +7,6 @@ POST /alerts/check        — check all active alerts against current snapshot
 POST /alerts/{id}/dismiss — dismiss (stop showing)
 DELETE /alerts/{id}       — delete
 """
-import asyncio
 import time
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Query
@@ -23,11 +22,12 @@ from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.engines.directional.orchestrator import compute_ivr
+from app.core.async_tasks import spawn_background
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
-@router.get("", response_model=AlertListResponse)
+@router.get("")
 async def list_alerts(
     underlying: str = Query(default=""),
     status: str = Query(default=""),
@@ -47,7 +47,7 @@ async def list_alerts(
     )
 
 
-@router.get("/triggered", response_model=AlertListResponse)
+@router.get("/triggered")
 async def list_triggered() -> AlertListResponse:
     all_alerts = alert_store.list_alerts()
     triggered = [a for a in all_alerts if a.status == AlertStatus.TRIGGERED]
@@ -58,7 +58,7 @@ async def list_triggered() -> AlertListResponse:
     )
 
 
-@router.post("", response_model=Alert)
+@router.post("")
 async def create_alert(body: AlertCreate) -> Alert:
     sym = body.underlying.upper()
     if not registry.is_supported(sym):
@@ -66,7 +66,7 @@ async def create_alert(body: AlertCreate) -> Alert:
     return alert_store.add_alert(body)
 
 
-@router.post("/check", response_model=AlertsCheckResponse)
+@router.post("/check")
 async def check_alerts(request: Request) -> AlertsCheckResponse:
     """
     Check all ACTIVE alerts against current market data.
@@ -152,13 +152,14 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             newly_triggered += 1
             # Fire webhooks asynchronously — don't block response
             subject = f"{alert.underlying} Alert: {alert.condition.value}"
-            asyncio.create_task(
+            spawn_background(
                 webhook_store.deliver_all(subject, result.message, {
                     "underlying": alert.underlying,
                     "condition": alert.condition.value,
                     "threshold": alert.threshold,
                     "value": result.current_value,
-                })
+                }),
+                name="alert-webhook-deliver",
             )
 
     return AlertsCheckResponse(
@@ -169,7 +170,7 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
     )
 
 
-@router.post("/{alert_id}/dismiss", response_model=Alert)
+@router.post("/{alert_id}/dismiss")
 async def dismiss_alert(alert_id: str) -> Alert:
     alert = alert_store.dismiss_alert(alert_id.upper())
     if not alert:
@@ -177,7 +178,7 @@ async def dismiss_alert(alert_id: str) -> Alert:
     return alert
 
 
-@router.get("/{alert_id}", response_model=Alert)
+@router.get("/{alert_id}")
 async def get_alert(alert_id: str) -> Alert:
     alert = alert_store.get_alert(alert_id.upper())
     if not alert:
@@ -185,7 +186,7 @@ async def get_alert(alert_id: str) -> Alert:
     return alert
 
 
-@router.put("/{alert_id}", response_model=Alert)
+@router.put("/{alert_id}")
 async def update_alert(alert_id: str, body: AlertCreate) -> Alert:
     existing = alert_store.get_alert(alert_id.upper())
     if not existing:

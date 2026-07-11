@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useEngineBacktest } from '../../hooks/useTripleSupertrend';
+import { useEngineBacktest } from '../../hooks/useSterlingKiteEngine';
 import type {
-  BacktestDataMode, BacktestRequest, BacktestRun, BacktestStats,
+  BacktestDataMode, BacktestRequest, BacktestRun, BacktestStats, ExitMode,
 } from '../../types/kiteEngine';
 
 /**
@@ -121,7 +121,8 @@ function RunCard({ run }: { run: BacktestRun }) {
 export function BacktestPane() {
   const [symbol, setSymbol] = useState('NIFTY 50');
   const [mode, setMode] = useState<BacktestDataMode>('both');
-  const [trail, setTrail] = useState<'fast' | 'mid' | 'slow'>('mid');
+  const [trail, setTrail] = useState<'fast' | 'mid' | 'slow'>('fast');
+  const [exitMode, setExitMode] = useState<ExitMode>('two_red');
   const [lookback, setLookback] = useState(2000);
   const [capital, setCapital] = useState(100000);
   const [qty, setQty] = useState(50);
@@ -137,6 +138,7 @@ export function BacktestPane() {
       symbol: symbol.trim(),
       data_mode: mode,
       trail_target: trail,
+      exit_mode: exitMode,
       lookback_bars: lookback,
       starting_capital: capital,
       qty,
@@ -154,7 +156,7 @@ export function BacktestPane() {
     <div style={S.wrap}>
       <div style={S.h1}>Options Backtest</div>
       <div style={S.sub}>
-        Replays the Triple-SuperTrend signal with real Indian F&amp;O costs (STT, brokerage, GST,
+        Replays the Sterling Kite Engine signal with real Indian F&amp;O costs (STT, brokerage, GST,
         slippage). Pick how option prices are sourced — each mode states its honesty caveat.
       </div>
 
@@ -186,6 +188,15 @@ export function BacktestPane() {
               <option value="fast">Fast (tight)</option>
               <option value="mid">Mid (balanced)</option>
               <option value="slow">Slow (loose)</option>
+            </select>
+          </div>
+          <div>
+            <label style={S.label}>Exit mode</label>
+            <select style={S.input} value={exitMode} onChange={(e) => setExitMode(e.target.value as ExitMode)}>
+              <option value="one_red">1 red (tightest)</option>
+              <option value="two_red">2 red (default)</option>
+              <option value="three_red">3 red (loose)</option>
+              <option value="three_red_signal">3 red + arrow</option>
             </select>
           </div>
           <Num label="Lookback bars (1H)" value={lookback} onChange={setLookback} step={100} min={100} />

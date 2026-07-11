@@ -57,16 +57,16 @@ async def _run(user: UserContext, fn):
     except HTTPException:
         raise
     except KiteTokenError as exc:
-        raise HTTPException(401, str(exc))
+        raise HTTPException(401, str(exc)) from exc
     except KiteError as exc:
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     # NB: no close() — the client is cached/shared (see kite_accounts.acquire_client)
 
 
 # ─── Account credentials CRUD (user-scoped) ──────────────────────────────────
-@router.get("/accounts", response_model=KiteAccountListResponse)
+@router.get("/accounts")
 async def list_accounts(user: UserContext = Depends(get_current_user)) -> KiteAccountListResponse:
     accts = kite_accounts.list_accounts(user.user_id)
     active = kite_accounts.get_active(user.user_id)
@@ -77,12 +77,12 @@ async def list_accounts(user: UserContext = Depends(get_current_user)) -> KiteAc
     )
 
 
-@router.post("/accounts", response_model=KiteAccountResponse)
+@router.post("/accounts")
 async def add_account(body: KiteAccountCreate, user: UserContext = Depends(get_current_user)) -> KiteAccountResponse:
     return kite_accounts.to_response(kite_accounts.add(user.user_id, body))
 
 
-@router.put("/accounts/{account_id}", response_model=KiteAccountResponse)
+@router.put("/accounts/{account_id}")
 async def update_account(account_id: str, body: KiteAccountUpdate,
                          user: UserContext = Depends(get_current_user)) -> KiteAccountResponse:
     a = kite_accounts.update(user.user_id, account_id, body)
@@ -99,7 +99,7 @@ async def delete_account(account_id: str, user: UserContext = Depends(get_curren
     await ticker_manager.stop(user.user_id)
 
 
-@router.post("/accounts/{account_id}/activate", response_model=KiteAccountResponse)
+@router.post("/accounts/{account_id}/activate")
 async def activate_account(account_id: str, user: UserContext = Depends(get_current_user)) -> KiteAccountResponse:
     a = kite_accounts.set_active(user.user_id, account_id)
     if not a:
@@ -126,7 +126,7 @@ async def test_account(account_id: str, user: UserContext = Depends(get_current_
 
 
 # ─── Session / login ──────────────────────────────────────────────────────────
-@router.get("/login-url", response_model=LoginUrlResponse)
+@router.get("/login-url")
 async def login_url(user: UserContext = Depends(get_current_user)) -> LoginUrlResponse:
     acct = _require_active(user)
     if not acct.api_key:
@@ -134,7 +134,7 @@ async def login_url(user: UserContext = Depends(get_current_user)) -> LoginUrlRe
     return LoginUrlResponse(login_url=kite_session.login_url(acct.api_key))
 
 
-@router.post("/session", response_model=KiteSessionResult)
+@router.post("/session")
 async def create_session(body: GenerateSessionRequest,
                          user: UserContext = Depends(get_current_user)) -> KiteSessionResult:
     acct = (kite_accounts.get(user.user_id, body.account_id) if body.account_id
@@ -147,9 +147,9 @@ async def create_session(body: GenerateSessionRequest,
     try:
         data = await client.generate_session(body.request_token)
     except KiteError as exc:
-        raise HTTPException(401, str(exc))
+        raise HTTPException(401, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     finally:
         await client.close()
     kite_accounts.save_session(
@@ -166,7 +166,7 @@ async def create_session(body: GenerateSessionRequest,
     )
 
 
-@router.post("/session/refresh", response_model=KiteSessionResult)
+@router.post("/session/refresh")
 async def refresh_session(body: RefreshSessionRequest,
                          user: UserContext = Depends(get_current_user)) -> KiteSessionResult:
     """Renew the access_token from a refresh_token (skips the full login redirect)."""
@@ -183,9 +183,9 @@ async def refresh_session(body: RefreshSessionRequest,
     try:
         data = await client.renew_access_token(refresh_token)
     except KiteError as exc:
-        raise HTTPException(401, str(exc))
+        raise HTTPException(401, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, str(exc))
+        raise HTTPException(502, str(exc)) from exc
     finally:
         await client.close()
     kite_accounts.save_session(
@@ -262,7 +262,7 @@ async def kite_callback(
     )
 
 
-@router.get("/status", response_model=KiteStatus)
+@router.get("/status")
 async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
     acct = kite_accounts.get_active(user.user_id)
     if not acct:
@@ -294,7 +294,7 @@ async def status(user: UserContext = Depends(get_current_user)) -> KiteStatus:
         await client.close()
 
 
-@router.post("/logout", response_model=OkResponse)
+@router.post("/logout")
 async def logout(user: UserContext = Depends(get_current_user)) -> OkResponse:
     acct = kite_accounts.get_active(user.user_id)
     if acct:
@@ -302,8 +302,8 @@ async def logout(user: UserContext = Depends(get_current_user)) -> OkResponse:
             client = kite_accounts.build_client(acct)
             try:
                 await client.invalidate_session()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as _exc:# noqa: BLE001
+                log.debug("suppressed: %s", _exc)
             finally:
                 await client.close()
         kite_accounts.clear_session(user.user_id, acct.id)
@@ -342,6 +342,19 @@ async def instrument_lots(symbols: str = "", user: UserContext = Depends(get_cur
     if not syms:
         return {}
     return await _run(user, lambda c: c.instrument_lot_sizes(syms))
+
+
+@router.get("/instruments/expiries")
+async def instrument_expiries(symbols: str = "", user: UserContext = Depends(get_current_user)):
+    """Bulk expiry lookup: ?symbols=BFO:SENSEX...,NFO:NIFTY... → {symbol: 'YYYY-MM-DD'}.
+
+    Used by the market watch to backfill the expiry shown on an expanded option
+    row (legacy watch items were saved without it).
+    """
+    syms = [s for s in (symbols or "").split(",") if s]
+    if not syms:
+        return {}
+    return await _run(user, lambda c: c.instrument_expiries(syms))
 
 
 @router.get("/quote")

@@ -26,6 +26,13 @@ class RiskParams(BaseModel):
     # Honored by callers that read `app.state.trading_mode` to decide whether
     # an opt-in flag like cold_start_default_win_rate is actually safe to use.
     trading_mode: Optional[str] = None
+    # Unified hybrid trail weight from risk config (0-1 for ATR+ST blend)
+    hybrid_st_weight: float = 0.5
+
+    @field_validator("hybrid_st_weight", mode="before")
+    @classmethod
+    def _clamp_hybrid(cls, v: float) -> float:
+        return round(max(0.0, min(1.0, float(v))), 2)
 
 
 class ExitSignal(BaseModel):

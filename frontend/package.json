@@ -6,7 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npx vitest",
+    "test:ui": "npx vitest --ui",
+    "e2e": "playwright test",
+    "e2e:shard": "playwright test --shard",
+    "e2e:update-snapshots": "playwright test --update-snapshots",
+    "e2e:baseline-bot": "echo 'Run with --update-snapshots after review; commit new -snapshots or use CI label to trigger update job (see e2e/README or CI)'"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.2.8",
@@ -20,11 +26,16 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "vitest": "^1.0.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "jsdom": "^24.0.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "agentation": "^3.0.2",
     "typescript": "^5.9.3",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "@playwright/test": "^1.44.0"
   }
 }
