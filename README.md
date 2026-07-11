@@ -17,7 +17,50 @@ fail-closed safety pipeline, under a hard zero-regression discipline.
 ## Documentation
 
 | Doc | What |
-|---|---|
+|---
+
+## Claude Code Setup (Recommended)
+
+This project is fully optimized for [Claude Code](https://claude.ai/code) / Claude Desktop App.
+
+After cloning the repository, run **one command**:
+
+    ./scripts/setup-claude.sh
+    # or
+    make setup-claude
+
+This automatically sets up:
+
+- `code-review-graph` (knowledge graph for massive token savings)
+- Preferred CLI tools (`rg`, `fd`, `ast-grep`, `jq`, `yq`, `gh`)
+- 100+ useful skills (superpowers, frontend-design, claude-mem, ui-ux-pro-max, etc.)
+- Optimized `CLAUDE.md` with graph-first rules + critical invariants
+- Global MCP registration
+- Skill linking into `~/.claude/skills`
+
+### After running the setup
+
+1. Fully restart the **Claude Desktop App**
+2. Open this project (Sterling)
+3. Start a **new session**
+
+### What Claude will follow
+
+- Always uses `code-review-graph` tools **before** Grep/Read
+- Protects critical trading invariants (CircuitBreaker, CorrelationTracker, CalibrationService, no lookahead)
+- Uses skills selectively (1–3 max per task) for better token efficiency
+- Prefers modern CLI tools (`rg`, `fd`, `sg`, etc.)
+
+### Manual alternatives
+
+    # Only install skills
+    bash install-skills.sh
+
+    # Verify setup
+    bash claude-verify.sh
+
+---
+|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Layered design, module map, design rules |
 | [BROKERS.md](BROKERS.md) | Adding/replacing exchanges (the adapter contract + registry) |
 | [MARKETS.md](MARKETS.md) | Supported markets + how to add one |
