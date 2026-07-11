@@ -69,4 +69,4 @@ class Orchestrator:
                 await self.beat_once()
                 await asyncio.sleep(self.heartbeat_interval)
         except asyncio.CancelledError:
-            pass
+            raise

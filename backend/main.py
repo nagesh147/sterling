@@ -1751,6 +1751,10 @@ def create_app() -> FastAPI:
         return response
 
     app.include_router(health_router)
+    # More-specific stream prefix before generic /api/v1 routers (registration order).
+    from app.api.v1.endpoints import stream
+    app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
+
     app.include_router(instruments_router, prefix="/api/v1")
     app.include_router(paper_router, prefix="/api/v1")
     app.include_router(directional_router, prefix="/api/v1")
@@ -1795,10 +1799,6 @@ def create_app() -> FastAPI:
     # Kite-specific Telegram alert targets (per-user, separate from crypto bot)
     from app.api.v1.endpoints.kite_telegram import router as kite_telegram_router
     app.include_router(kite_telegram_router, prefix="/api/v1")
-
-    # V4 WebSocket Manager Router
-    from app.api.v1.endpoints import stream
-    app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
 
     return app
 

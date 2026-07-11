@@ -25,6 +25,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+from app.core.async_tasks import spawn_background
 
 from app.engines.derivatives.freeze_token import get_store as get_freeze_store
 from app.engines.derivatives.preview import preview_one
@@ -794,7 +795,7 @@ async def study_run(body: dict, request: Request) -> dict:
 
     runner = StudyRunner(app=request.app, data_dir=root, output_dir=root)
     state = runner.init_run(req)
-    asyncio.create_task(runner.run(req))
+    spawn_background(runner.run(req), name=f"study-run-{state.run_id}")
 
     return {"run_id": state.run_id, "status": state.status, "n_configs": 0}
 

@@ -78,7 +78,7 @@ def update_kite_defaults(dry_run=True, default_mode="two_red"):
             if current != default_mode:
                 try:
                     new_cfg = cfg.model_copy(update={"exit_mode": default_mode, "hybrid_st_weight": 0.5})
-                except:
+                except Exception:
                     d = cfg.model_dump() if hasattr(cfg, 'model_dump') else {}
                     d['exit_mode'] = default_mode
                     d['hybrid_st_weight'] = 0.5

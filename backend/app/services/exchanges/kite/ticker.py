@@ -227,7 +227,9 @@ class KiteTicker:
                     async for raw in ws:
                         await self._on_message(raw)
             except asyncio.CancelledError:
-                break
+                self._connected = False
+                self._active = False
+                raise
             except Exception as exc:
                 self._connected = False
                 if not self._active:

@@ -24,6 +24,7 @@ logger = logging.getLogger("sterling.scalping")
 from app.services.exchanges import instrument_registry as registry
 from app.services import adapter_manager as _adm
 from app.api.v1.endpoints.directional import _adapter_can_serve
+from app.core.async_tasks import spawn_background
 
 from app.engines.sterling_engine.config import ScalpingConfig, default_config
 from app.engines.sterling_engine.schemas import (
@@ -714,7 +715,7 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
     # Trigger all active webhooks (Discord, Telegram, Zapier)
     if resp.status not in ("rejected", "error"):
         from app.services import webhook_store
-        asyncio.create_task(
+        spawn_background(
             webhook_store.deliver_all(
                 subject=f"SCALP EXECUTE ({resp.mode.upper()}) — {sym} {sig.direction.upper()}",
                 message=f"Strategy: {strategy}\nOrder Status: {resp.status}\nContracts: {contracts}\nEntry: {sig.entry}\nSL: {sig.stop_loss}\nTP: {sig.take_profit}",
@@ -730,7 +731,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
                     "status": resp.status,
                     "notional_usd": round(report_qty * sig.entry, 2),
                 }
-            )
+            ),
+            name="scalp-execute-webhook",
         )
 
     return ScalpingExecuteResponse(
@@ -824,7 +826,7 @@ async def optimize_run(request: Request, days: int = 60, max_symbols: int = 4) -
     days = max(30, min(int(days), 365))
     max_symbols = max(2, min(int(max_symbols), 10))
     base_cfg = _get_config(request)                          # manual config = the sweep's base
-    asyncio.create_task(_run_optimize(base_cfg, days, max_symbols))
+    spawn_background(_run_optimize(base_cfg, days, max_symbols), name="scalp-optimize")
     return {"status": "started", "days": days, "max_symbols": max_symbols}
 
 

@@ -38,6 +38,7 @@ from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.core.config import settings
+from app.core.async_tasks import spawn_background
 from app.core.logging import get_logger
 from app.services import adapter_manager as _adm
 from app.services import paper_store as _paper_store
@@ -1026,8 +1027,9 @@ async def _compute_signal_item(
         _prev_states[sym] = cur_state
 
         if cur_state in _ALERT_STATES and prev_state != cur_state:
-            asyncio.create_task(
-                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode, is_options=False)
+            spawn_background(
+                _fire_signal_alert(sym, inst, setup, regime, signal, spot_f, stop_price, target_price, atr_val, now_ms, mode, is_options=False),
+                name="dir-signal-alert",
             )
 
         # SL improvement check: fire Telegram when SL tightens on an active signal
@@ -1046,11 +1048,12 @@ async def _compute_signal_item(
             )
             if sl_improved:
                 _active_signal_sls[_sl_key] = stop_price  # update tracker before async task
-                asyncio.create_task(
+                spawn_background(
                     _fire_sl_update_alert(
                         sym, _active_signal_ids[_sl_key],
                         setup.direction.value, old_sl, stop_price, spot_f,
-                    )
+                    ),
+                    name="dir-sl-update-alert",
                 )
 
         # Poll-level arrow edge: True only on first poll after the trend flips.

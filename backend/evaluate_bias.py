@@ -43,7 +43,7 @@ def evaluate_bias_from_db(db_path="sterling_paper.db"):
             side = data.get('side', data.get('direction', data.get('type', None)))
             if side:
                 trades.append({'timestamp': ts, 'side': str(side).lower()})
-        except:
+        except Exception:
             pass
 
     # 2. Check signal_history (if positions is empty, use raw signals)
@@ -56,7 +56,7 @@ def evaluate_bias_from_db(db_path="sterling_paper.db"):
                 side = data.get('side', data.get('direction', None))
                 if side:
                     trades.append({'timestamp': ts, 'side': str(side).lower()})
-            except:
+            except Exception:
                 pass
 
     df_trades = pd.DataFrame(trades)

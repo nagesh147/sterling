@@ -7,7 +7,6 @@ POST /alerts/check        — check all active alerts against current snapshot
 POST /alerts/{id}/dismiss — dismiss (stop showing)
 DELETE /alerts/{id}       — delete
 """
-import asyncio
 import time
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Query
@@ -23,6 +22,7 @@ from app.engines.directional.regime_engine import compute_regime
 from app.engines.directional.signal_engine import compute_signal
 from app.engines.directional.setup_engine import evaluate_setup
 from app.engines.directional.orchestrator import compute_ivr
+from app.core.async_tasks import spawn_background
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -152,13 +152,14 @@ async def check_alerts(request: Request) -> AlertsCheckResponse:
             newly_triggered += 1
             # Fire webhooks asynchronously — don't block response
             subject = f"{alert.underlying} Alert: {alert.condition.value}"
-            asyncio.create_task(
+            spawn_background(
                 webhook_store.deliver_all(subject, result.message, {
                     "underlying": alert.underlying,
                     "condition": alert.condition.value,
                     "threshold": alert.threshold,
                     "value": result.current_value,
-                })
+                }),
+                name="alert-webhook-deliver",
             )
 
     return AlertsCheckResponse(

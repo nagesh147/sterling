@@ -222,7 +222,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                             continue  # ignore individual parse errors
 
             except asyncio.CancelledError:
-                break
+                self._ws_active = False
+                raise
             except Exception as exc:
                 if not self._ws_active:
                     break
