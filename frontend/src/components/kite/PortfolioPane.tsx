@@ -504,6 +504,11 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                         <td style={{...S.td, whiteSpace: 'nowrap'}}>
                           <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={h.tradingsymbol} /></span>
                           <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{h.exchange}</span>
+                          {num(h.t1_quantity) > 0 && (
+                            <span style={{ marginLeft: 6, fontSize: 9, color: '#ff9800', background: 'rgba(255, 152, 0, 0.1)', padding: '1px 4px', borderRadius: 2, fontWeight: 600 }} title={`${num(h.t1_quantity)} of ${num(h.quantity)} shares not yet settled — not sellable today`}>
+                              T1: {num(h.t1_quantity)}
+                            </span>
+                          )}
                         </td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.quantity)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(h.average_price).toFixed(2)}</td>
@@ -519,9 +524,9 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
                             <KiteActionButtons
                               onBuy={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'BUY', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
                               buyLabel="Add"
-                              onSell={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
+                              onSell={(e) => { e.stopPropagation(); const sellable = num(h.quantity) - num(h.t1_quantity); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', Math.max(sellable, 0), h.product || 'CNC', num(h.last_price)); }}
                               sellLabel="Exit"
-                              onBasket={(e) => { e.stopPropagation(); if (num(h.quantity) === 0) return; addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: num(h.quantity), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
+                              onBasket={(e) => { e.stopPropagation(); if (num(h.quantity) === 0) return; addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: Math.max(num(h.quantity) - num(h.t1_quantity), 0), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
                             />
                           </div>
                         </td>
