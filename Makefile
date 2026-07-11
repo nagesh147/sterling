@@ -45,3 +45,7 @@ clean:
 .PHONY: setup-claude
 setup-claude:
 	@./scripts/setup-claude.sh
+
+.PHONY: setup-claude
+setup-claude:
+	@./scripts/setup-claude.sh
