@@ -296,8 +296,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                     ip = r.text.strip()
                     if ip:
                         return ip
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
         return "unknown (check ifconfig.me)"
 
     def _raise_api_error(self, resp, path: str) -> None:
@@ -327,8 +327,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                     raise RuntimeError(f"{friendly}{ctx_str}")
         except RuntimeError:
             raise
-        except (ValueError, KeyError, TypeError):
-            pass
+        except (ValueError, KeyError, TypeError) as _exc:
+            log.debug("suppressed: %s", _exc)
         resp.raise_for_status()
 
     async def _auth_get(self, path, params=None):
@@ -384,8 +384,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                 if cv is not None:
                     try:
                         self._contract_value_cache[sym] = float(cv)
-                    except (TypeError, ValueError):
-                        pass
+                    except (TypeError, ValueError) as _exc:
+                        log.debug("suppressed: %s", _exc)
                 if sym == symbol:
                     return int(p["id"])
             return None
@@ -436,8 +436,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
                 if sym and cv is not None:
                     try:
                         self._contract_value_cache[sym] = float(cv)
-                    except (TypeError, ValueError):
-                        pass
+                    except (TypeError, ValueError) as _exc:
+                        log.debug("suppressed: %s", _exc)
         except Exception as exc:
             log.debug("get_contract_value scan failed for %s: %s", symbol, exc)
         return self._contract_value_cache.get(symbol, 1.0)
@@ -692,8 +692,8 @@ class DeltaIndiaAdapter(TradingExchangeAdapter):
         # 1. Cancel every open order for this product (bracket stops, TPs, etc.)
         try:
             await self.cancel_all_orders(product_id)
-        except Exception:
-            pass  # best-effort — existing stops will be overwritten by new bracket
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
 
         # 2. Place a reduce-only limit carrier ~10% away so it cannot fill
         #    under normal conditions.  The attached bracket_stop_loss becomes

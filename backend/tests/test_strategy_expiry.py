@@ -50,7 +50,7 @@ class TestStrategyExpiry:
             for monday in all_mondays_in_year()[:8]:       # first 8 weeks
                 for offset in range(7):                     # all days of week
                     day = monday + datetime.timedelta(days=offset)
-                    expiry_str, dte = _strategy_expiry(
+                    expiry_str, _dte = _strategy_expiry(
                         mode.dte_min, mode.dte_preferred, mode.dte_max, as_of=day
                     )
                     exp_date = datetime.datetime.strptime(expiry_str, '%d%m%y').date()
@@ -141,7 +141,7 @@ class TestStrategyExpiry:
 
     def test_expiry_format(self):
         """Expiry string must be 6 digits DDMMYY."""
-        _, dte = _strategy_expiry(7, (10, 21), 30)
+        _, _dte = _strategy_expiry(7, (10, 21), 30)
         expiry, _ = _strategy_expiry(7, (10, 21), 30)
         assert len(expiry) == 6 and expiry.isdigit(), f"Bad format: {expiry!r}"
 

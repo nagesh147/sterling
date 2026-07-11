@@ -697,8 +697,8 @@ async def execute(body: ScalpingExecuteRequest, request: Request) -> ScalpingExe
         try:
             from app.services import derivatives_audit as _audit
             _audit.mark_executed(selector_audit_id)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("suppressed: %s", _exc)
 
     logger.info(
         "scalp-exec %s/%s router=%s want_live=%s -> mode=%s status=%s order_id=%s entry=%s sl=%s tp=%s contracts=%s reason=%s",

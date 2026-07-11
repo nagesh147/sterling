@@ -249,8 +249,8 @@ async def close_position(symbol: str, user: UserContext = Depends(get_current_us
                 await pstop.cancel_stop(client, p.gtt_id)
             if p.token:
                 await ticker_manager.unsubscribe(uid, [p.token])
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _exc:# noqa: BLE001
+            log.debug("suppressed: %s", _exc)
     kite_positions.close(uid, symbol, reason="manual_close")
     records = []
     for p in kite_positions.open_positions(uid):

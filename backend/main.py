@@ -599,8 +599,8 @@ async def _background_retry_worker(app: FastAPI, base_interval: int = 60) -> Non
                     product_id = await adapter.get_product_id(delta_symbol)
                     try:
                         await adapter.set_leverage(product_id, leverage)
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        log.debug("suppressed: %s", _exc)
                     order = await adapter.place_order(
                         symbol=delta_symbol, side=side, size=size,
                         order_type="market_order",
@@ -1031,8 +1031,8 @@ async def _background_signal_refresher(app: FastAPI, interval: int = 30) -> None
                                         "level": level,
                                         "message": m
                                     })
-                                except Exception:
-                                    pass
+                                except Exception as _exc:
+                                    log.debug("suppressed: %s", _exc)
                             spawn_background(_broadcast_log(), name="arbitrator-log")
 
             # Persist tracker state so server restarts don't re-fire existing signals
@@ -1626,8 +1626,8 @@ async def lifespan(app: FastAPI):
             await _orch.stop()
         from app.services import event_emit as _ee
         _ee.reset()
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     for _t in (tg_bot_task, tg_alert_task, tg_kite_alert_task):
         _t.cancel()

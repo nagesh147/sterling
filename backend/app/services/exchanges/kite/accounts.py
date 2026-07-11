@@ -113,8 +113,8 @@ def _init_table() -> None:
             # Idempotent migration for DBs created before refresh_token persistence.
             try:
                 c.execute("ALTER TABLE kite_accounts ADD COLUMN refresh_token_enc TEXT NOT NULL DEFAULT ''")
-            except Exception:
-                pass  # column already exists
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
     except Exception as exc:
         log.warning("kite_accounts table init failed: %s", exc)
 
@@ -339,8 +339,8 @@ async def acquire_client(a: _Account):
     if cached is not None:                      # credentials rotated — drop the stale client
         try:
             await cached[2].close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _exc:# noqa: BLE001
+            log.debug("suppressed: %s", _exc)
     client = build_client(a)
     _client_cache[a.id] = (a.api_key, a.access_token_enc, client)
     return client
@@ -352,8 +352,8 @@ async def release_client(account_id: str) -> None:
     if cached is not None:
         try:
             await cached[2].close()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _exc:# noqa: BLE001
+            log.debug("suppressed: %s", _exc)
 
 
 def clear() -> None:

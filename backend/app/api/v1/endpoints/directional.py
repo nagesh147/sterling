@@ -1601,8 +1601,8 @@ def _build_positions_event(now_ms: int) -> str:
     for p in positions:
         try:
             serialized.append(json.loads(p.model_dump_json()))
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     open_count = sum(1 for p in positions if p.status.value in ("open", "partially_closed"))
     partially_closed = sum(1 for p in positions if p.status.value == "partially_closed")
     closed_count = sum(1 for p in positions if p.status.value == "closed")
@@ -1646,8 +1646,8 @@ def _build_pnl_event(now_ms: int) -> str:
             try:
                 import json as _json
                 trail_state = _json.loads(pos.trail_stop_json)
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
 
         # Funding (futures) + theta-burn (options) — the FE reads these from THIS
         # SSE 'pnl' event (useLivePnl), not the /pnl-live REST endpoint, so they

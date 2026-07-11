@@ -45,8 +45,8 @@ async def get_analytics(symbol: str, request: Request):
                 pnl = _estimate_pnl(pos.sized_trade, spot_move, direction_sign,
                                       pos.sized_trade.max_risk_usd, pos.sized_trade.structure.max_gain)
                 unrealized_pnl += pnl or 0.0
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     # Drift: compare entry_spot vs current spot for active positions
     drift_bps = 0.0
@@ -62,8 +62,8 @@ async def get_analytics(symbol: str, request: Request):
                     drift_pct = ((spot - pos.entry_spot_price) / pos.entry_spot_price) * 10_000
                     total_drift += drift_pct
             drift_bps = round(total_drift / len(active), 2) if active else 0.0
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     return AnalyticsResponse(
         ofi=ofi,

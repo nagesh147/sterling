@@ -166,8 +166,8 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
         q = await client.get_ltp([qkey])
         if q and qkey in q:
             entry_premium = float(q[qkey].get("last_price") or 0.0)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as _exc:# noqa: BLE001
+        log.debug("suppressed: %s", _exc)
 
     # delta-implied premium stop: a deep-ITM option's premium moves ≈ delta × the
     # underlying's move, so stop_prem ≈ entry_prem − delta × |spot − ST trail|.
@@ -669,8 +669,8 @@ async def _scan_all_connected_once() -> None:
                 continue
             await scan_user(client, acct.user_id)
             scanned = True
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     if scanned:
         _first_scan_done = True
 

@@ -68,4 +68,6 @@ antigravity-claude-proxy/
 .superpowers/
 # Added by code-review-graph
 .code-review-graph/
-.truecourse/
+.truecourse/*
+!.truecourse/config.json
+!.truecourse/.gitignore

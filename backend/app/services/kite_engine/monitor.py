@@ -94,8 +94,8 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
         try:
             from app.services.exchanges.kite import ticker_manager
             await ticker_manager.unsubscribe(uid, [p.token])
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as _exc:# noqa: BLE001
+            log.debug("suppressed: %s", _exc)
 
 
 async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:

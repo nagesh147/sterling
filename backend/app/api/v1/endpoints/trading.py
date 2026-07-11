@@ -450,8 +450,8 @@ async def place_live_order(body: LiveOrderRequest, request: Request) -> LiveOrde
                     },
                     error=str(exc),
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
             error_detail = {"error": f"Order failed: {exc}", "failed_position_id": failed_pos_id}
             if "ip_not_whitelisted" in str(exc).lower() or "whitelist" in str(exc).lower():
                 from app.services.exchanges.adapters.delta_india import DeltaIndiaAdapter as _DIA
@@ -654,8 +654,8 @@ def _send_order_telegram(body: LiveOrderRequest, sym: str, side: str, entry: flo
             f"Ref: {ref_id}"
         )
         _aio.create_task(_tg.send(msg))
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
 
 def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -> str:
@@ -675,8 +675,8 @@ def _create_failed_algo_tracking(body: LiveOrderRequest, sym: str, error: str) -
             try:
                 from app.api.v1.endpoints.directional import _stream_last_prices
                 spot_price = float(_stream_last_prices.get(sym, 0.0))
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
 
         direction = ExecDir.LONG if body.direction == "long" else ExecDir.SHORT
         contracts = max(1, int(body.size))
@@ -776,8 +776,8 @@ async def retry_failed_order(position_id: str, request: Request) -> dict:
         leverage     = pos.sized_trade.leverage if hasattr(pos.sized_trade, 'leverage') else 5
         try:
             await adapter.set_leverage(product_id, leverage)
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
 
         order = await adapter.place_order(
             symbol=delta_symbol, side=side,

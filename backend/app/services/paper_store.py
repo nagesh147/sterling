@@ -33,8 +33,8 @@ def bootstrap() -> None:
         try:
             pos = PaperPosition.model_validate(raw)
             _positions[pos.id] = pos
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     _loaded = True
 
 
@@ -315,8 +315,8 @@ def close_position(
                 if r["audit_id"].startswith(short):
                     _audit.record_exit(r["audit_id"], exit_pnl=float(estimated_pnl))
                     break
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     closed = update_position(
         pos_id,
@@ -340,8 +340,8 @@ def close_position(
     try:
         from app.services import event_emit
         event_emit.emit_position_closed(pos.underlying, float(estimated_pnl))
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
     return closed
 
 

@@ -54,8 +54,8 @@ def _parse_kite_ts(ts_str) -> int:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=_IST)
         return int(dt.timestamp() * 1000)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
     try:
         dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S").replace(tzinfo=_IST)
         return int(dt.timestamp() * 1000)

@@ -70,7 +70,7 @@ def replay_strategy(sym, cM, cE, c1h, cfg: ScalpingProfile, tsM, step, maxh, str
     import bisect
     cfg.use_optimized = True # Enforce ultra mode
     out = []
-    cooldown, cj = -1, -1
+    cooldown, _cj = -1, -1
     n = len(cE)
     i = W_EXEC
     while i < n - 1:
@@ -161,8 +161,8 @@ def generate_report():
             report_lines.append(f"| {strat_label} | 0.00 | 0.00R | 0.00 | 0.00R | 0.00 | 0.0% |")
             continue
             
-        pf_b, exp_b, n_b = _pf_exp(trades_before)
-        pf_a, exp_a, n_a = _pf_exp(trades_after)
+        pf_b, exp_b, _n_b = _pf_exp(trades_before)
+        pf_a, exp_a, _n_a = _pf_exp(trades_after)
         
         if len(trades_after) > 0:
             wins_a = sum(1 for t in trades_after if t > 0)

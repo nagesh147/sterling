@@ -302,8 +302,8 @@ async def logout(user: UserContext = Depends(get_current_user)) -> OkResponse:
             client = kite_accounts.build_client(acct)
             try:
                 await client.invalidate_session()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as _exc:# noqa: BLE001
+                log.debug("suppressed: %s", _exc)
             finally:
                 await client.close()
         kite_accounts.clear_session(user.user_id, acct.id)

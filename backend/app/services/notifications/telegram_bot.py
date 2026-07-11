@@ -103,8 +103,8 @@ def _load_cfg():
     if raw:
         try:
             return ScalpingConfig.model_validate_json(raw)
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
     return default_config()
 
 

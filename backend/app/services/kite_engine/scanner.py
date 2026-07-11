@@ -441,8 +441,8 @@ class KiteEngineScanner:
             try:
                 us.rows = [EngineSignalRow(**r) for r in rows_data]
                 us.generated_ms = gen_ms
-            except Exception:
-                pass
+            except Exception as _exc:
+                log.debug("suppressed: %s", _exc)
         self._users[uid] = us
         return us
 

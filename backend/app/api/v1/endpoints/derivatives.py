@@ -116,8 +116,8 @@ async def _market_context(
         pid = await adapter.get_product_id(inst.delta_perp_symbol or f"{underlying.upper()}USD")
         fr = await adapter.get_funding_rate(pid)
         funding_8h = float(fr.get("funding_rate_8h_pct") or 0.0001)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     # CB / regime / calibration consumers
     dd_cb = getattr(app.state, "dd_circuit_breaker", None)
@@ -142,8 +142,8 @@ async def _market_context(
             if chain:
                 from app.engines.derivatives.gex_engine import calculate_gex_profile
                 gex_profile = calculate_gex_profile(chain, spot)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
 
     return MarketContext(
         spot=spot, underlying=underlying.upper(),
@@ -378,8 +378,8 @@ async def _both_rows(
             for leg in (dual.futures, dual.options):
                 if leg is not None:
                     derivatives_audit.record(decision=leg, signal=sig, market=market_cache[ul])
-        except Exception:
-            pass
+        except Exception as _exc:
+            log.debug("suppressed: %s", _exc)
 
         if dual.futures and dual.futures.status == DecisionStatus.OK and dual.futures.chosen:
             futures_rows.append(
@@ -495,8 +495,8 @@ async def preview(
     )
     try:
         derivatives_audit.record(decision=decision, signal=sig, market=market)
-    except Exception:
-        pass
+    except Exception as _exc:
+        log.debug("suppressed: %s", _exc)
     return decision
 
 
@@ -838,8 +838,8 @@ async def study_report(request: Request) -> dict:
                 try:
                     with open(p, encoding="utf-8") as fh:
                         return {"text": fh.read(), "generated_at": int(os.path.getmtime(p))}
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    log.debug("suppressed: %s", _exc)
         return None
 
     study = _read("DERIVATIVES_EDGE_STUDY.md")
