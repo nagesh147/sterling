@@ -1,74 +1,52 @@
-<!-- code-review-graph MCP tools -->
-## MCP Tools: code-review-graph
+# Sterling - Project Instructions
 
-**ALWAYS use graph tools FIRST** before Grep/Glob/Read.  
-The graph is faster, cheaper, and provides structural context (callers, dependents, test coverage, impact) that file scanning cannot.
+## Core Rule: Use Graph First
+ALWAYS use code-review-graph MCP tools BEFORE Grep/Glob/Read.
 
-### When to use graph tools
-- Exploring code → `semantic_search_nodes` or `query_graph`
-- Understanding impact / blast radius → `get_impact_radius` or `get_affected_flows`
-- Code review → `detect_changes` + `get_review_context`
-- Relationships → `query_graph` (`callers_of`, `callees_of`, `imports_of`, `tests_for`)
+- Exploring → `semantic_search_nodes` or `query_graph`
+- Impact → `get_impact_radius` or `get_affected_flows`
+- Review → `detect_changes` + `get_review_context`
 - Architecture → `get_architecture_overview` + `list_communities`
+- Relationships → `query_graph` (callers_of / callees_of / tests_for)
 
-Fall back to `rg` / `fd` / `sg` only when the graph does not cover the need.
+Only fall back to rg/fd/sg when the graph cannot answer.
 
-### Key Tools
-| Tool                     | Primary Use                              |
-|--------------------------|------------------------------------------|
-| `detect_changes`         | Code review + risk scoring               |
-| `get_review_context`     | Token-efficient source snippets          |
-| `get_impact_radius`      | Change blast radius                      |
-| `get_affected_flows`     | Impacted execution paths                 |
-| `query_graph`            | Callers / callees / imports / tests / deps |
-| `semantic_search_nodes`  | Find by name or keyword                  |
-| `get_architecture_overview` | High-level structure                  |
-| `refactor_tool`          | Renames, dead code, etc.                 |
+## Critical Invariants (Never Violate)
+- `CorrelationTracker.update()` with 1H closes on EVERY evaluate()
+- `DrawdownCircuitBreaker.update()` (or CircuitBreaker) called FIRST in evaluate()
+- `CalibrationService.record_trade()` on EVERY paper_store position close
+- No lookahead in walk-forward (never use test window for threshold selection)
+- Sensitivity sweep cached 7 days
+- Do NOT confuse `dd_circuit_breaker` (portfolio) vs `circuit_breaker` (execution)
 
-### Workflow
-1. `detect_changes` for reviews
-2. `get_affected_flows` / `get_impact_radius` for scope
-3. `query_graph` (especially `tests_for`) for coverage
-4. Graph auto-updates on file changes
+## Preferred Tools
+- Search: `rg` (not grep)
+- Find: `fd` (not find)
+- AST: `sg` (ast-grep)
+- JSON: `jq` | YAML/TOML: `yq`
+- GitHub: `gh`
+- Typecheck: `tsc --noEmit`
 
----
+## Skill Usage Strategy (Token Efficient)
+Do NOT load many skills by default.  
+Only invoke skills when the task clearly benefits from them.
 
-### v3 Modules & Critical Invariants
+### Recommended Skills by Situation
+- Debugging / bugs → `systematic-debugging` + `investigate-bug`
+- New features → `implement-feature` + `writing-plans` + `executing-plans`
+- Code quality / review → `requesting-code-review` + `architecture-review`
+- Planning / complex work → `brainstorming` + `writing-plans` + `make-plan`
+- Verification → `verification-before-completion` + `test-driven-development`
+- Architecture / big changes → `architecture-review` + `pathfinder`
+- Exploration → `smart-explore` + `learn-codebase`
+- Context / memory issues → `context-optimization` + `memory-systems`
 
-**Modules**
-- `engines/analytics/`: walk-forward, sensitivity, correlation, performance (pure functions, no I/O)
-- `engines/risk/`: slippage, greeks_budget, circuit_breaker (stateful singletons via DI)
-- `services/calibration.py`: adaptive state — **always** inject via Depends, never import directly
+### Rule of Thumb
+- Prefer 1–3 focused skills over many
+- Always prefer skills over long free-form reasoning when a good skill exists
+- After using a skill, continue with graph tools when exploring code
 
-**Key Invariants (never violate)**
-- `CorrelationTracker.update()` is called with 1H close prices on **every** `evaluate()`
-- `DrawdownCircuitBreaker.update()` (alias: `CircuitBreaker`) is called **FIRST** in `evaluate()` before any strategy logic
-- `CalibrationService.record_trade()` is called on **every** paper_store position close
-- Walk-forward: never use test-window data to select threshold (no lookahead)
-- Sensitivity sweep runs on first startup + weekly (cached 7 days)
-- `app.state` singletons:
-  - `dd_circuit_breaker` → DrawdownCircuitBreaker (portfolio drawdown)
-  - `circuit_breaker` → existing execution-level CircuitBreaker
-  - `correlation_tracker`
-  - `calibration_service`
-
-**Note**: Do **not** Grep the v3 modules — use the graph.
-
----
-
-### Preferred Bash Commands
-Use these when available (fall back silently if missing):
-
-- Search content: `rg` (over `grep`)
-- Find files: `fd` (over `find`)
-- Structural / AST search: `sg` (ast-grep) — especially for TS/TSX
-- JSON: `jq`
-- YAML / TOML: `yq`
-- GitHub: `gh` (PRs, issues, reviews, CI, releases)
-- Benchmarking: `hyperfine`
-- Circular deps (JS/TS): `madge --circular`
-- Dead code (JS/TS): `knip`
-- Duplication (JS/TS): `jscpd`
-- Typecheck only: `tsc --noEmit` (or `tsc -b --noEmit` in monorepos)
-
-**Never** use `find -exec` or complex `xargs` chains when `fd -x` or `rg -l | xargs` is cleaner.
+## Style
+- Be precise and concise
+- Prefer small, verifiable steps
+- Always check invariants when touching risk / evaluate / paper_store logic
