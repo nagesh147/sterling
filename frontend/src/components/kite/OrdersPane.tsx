@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useKiteOrders } from '../../hooks/useKite';
+import { useKiteOrders, useCancelKiteOrder } from '../../hooks/useKite';
 import { GttPane } from './GttPane';
 import { AlertsPane } from './AlertsPane';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -32,6 +32,7 @@ const MODIFIABLE_STATUSES = new Set(['OPEN', 'TRIGGER PENDING']);
 
 function OrdersSubPane() {
   const { data: orders } = useKiteOrders(true);
+  const cancelOrder = useCancelKiteOrder();
   const [modifyOrder, setModifyOrder] = useState<any | null>(null);
 
   useEffect(() => {
@@ -100,7 +101,19 @@ function OrdersSubPane() {
               </td>
               <td style={{ ...S.td, textAlign: 'right' }}>
                 {MODIFIABLE_STATUSES.has(o.status) && (
-                  <span onClick={() => setModifyOrder(o)} style={{ cursor: 'pointer', color: '#387ed1', fontSize: 12 }}>Modify</span>
+                  <>
+                    <span onClick={() => setModifyOrder(o)} style={{ cursor: 'pointer', color: '#387ed1', fontSize: 12, marginRight: 12 }}>Modify</span>
+                    <span
+                      onClick={() => {
+                        if (window.confirm(`Cancel this ${o.transaction_type} ${o.quantity} ${o.tradingsymbol} order?`)) {
+                          cancelOrder.mutate({ id: o.order_id, variety: o.variety });
+                        }
+                      }}
+                      style={{ cursor: 'pointer', color: '#df514c', fontSize: 12 }}
+                    >
+                      Cancel
+                    </span>
+                  </>
                 )}
               </td>
             </tr>
