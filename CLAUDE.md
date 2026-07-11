@@ -137,3 +137,21 @@ Rules:
 
 Do not use all three graphs for the same question. Pick one owner from the table.
 Graphify skill is global (`~/.claude/skills/graphify`); per-repo data lives in `graphify-out/`.
+## Context & token discipline
+
+1. **Graph before tools:** code-review-graph for code impact; Graphify for code+docs knowledge; TrueCourse for architecture health only.
+2. **Plan first:** Non-trivial work → plan (writing-plans / brainstorming) → user approves → prefer **new session** before large implementation.
+3. **Small scope:** Small feature branches and focused PRs; new session if the thread drifts or context is heavy.
+4. **No repo dumps:** Never paste entire trees; use graph tools + minimal reads.
+5. **Skills:** 1–3 max per task.
+6. **MCP:** Keep few servers enabled (code-review-graph essential). Disable unused MCPs.
+7. **Model routing (guidance):**
+   - Research/docs/summaries → smaller/faster model
+   - Normal coding → mid-tier model
+   - Hard architecture / risk invariants → strongest model only when needed
+8. **Docs as cache:** Prefer focused files under `docs/` (and `docs/ai/`) over wide search.
+9. **Standards live in repo:** CLAUDE.md + docs/ai — don’t re-prompt the same rules every session.
+
+## AI docs (detail)
+- Token/session: `docs/ai/CONTEXT.md`
+- Workflows: `docs/ai/WORKFLOWS.md`

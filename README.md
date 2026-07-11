@@ -370,3 +370,7 @@ During `./scripts/setup-claude.sh` you may also be asked about **Graphify**:
 - **Git hooks** — optional; default **N** if you already use code-review-graph hooks  
 
 **Capability split:** code-review-graph = daily impact/MCP · TrueCourse = architecture violations · Graphify = knowledge graph (code + docs).
+
+### AI context discipline
+
+See `CLAUDE.md` and `docs/ai/CONTEXT.md` for tool ownership, plan-first workflow, MCP limits, and token-saving habits. Prefer graph tools over wide search; small branches; new session when context drifts.
