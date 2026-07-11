@@ -315,7 +315,13 @@ export function useCancelKiteOrder() {
   const qc = useQueryClient();
   return useMutation<any, Error, { id: string; variety?: string }>({
     mutationFn: ({ id, variety = 'regular' }) => api.delete(`${K}/orders/${id}?variety=${variety}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['kite-orders'] }),
+    onSuccess: (_data, body) => {
+      qc.invalidateQueries({ queryKey: ['kite-orders'] });
+      notifyOrder({ kind: 'cancelled', title: 'Order cancelled', message: `Order ${body.id} was cancelled.` });
+    },
+    onError: (err, body) => {
+      notifyOrder({ kind: 'rejected', title: 'Cancellation failed', message: `Order ${body.id} — ${err.message}` });
+    },
   });
 }
 

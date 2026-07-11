@@ -105,11 +105,12 @@ function OrdersSubPane() {
                     <span onClick={() => setModifyOrder(o)} style={{ cursor: 'pointer', color: '#387ed1', fontSize: 12, marginRight: 12 }}>Modify</span>
                     <span
                       onClick={() => {
+                        if (cancelOrder.isPending) return;
                         if (window.confirm(`Cancel this ${o.transaction_type} ${o.quantity} ${o.tradingsymbol} order?`)) {
                           cancelOrder.mutate({ id: o.order_id, variety: o.variety });
                         }
                       }}
-                      style={{ cursor: 'pointer', color: '#df514c', fontSize: 12 }}
+                      style={{ cursor: cancelOrder.isPending ? 'not-allowed' : 'pointer', color: '#df514c', fontSize: 12, opacity: cancelOrder.isPending ? 0.6 : 1 }}
                     >
                       Cancel
                     </span>
