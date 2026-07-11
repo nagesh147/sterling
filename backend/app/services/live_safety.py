@@ -97,9 +97,9 @@ _IDEMPOTENCY_TTL_MS = 60_000   # 60 seconds
 
 
 def make_idempotency_key(*parts: Any) -> str:
-    """Deterministic SHA-1 prefix from input parts. Use for client_order_id."""
+    """Deterministic SHA-256 prefix from input parts. Use for client_order_id."""
     payload = "|".join(str(p) for p in parts).encode()
-    return hashlib.sha1(payload).hexdigest()[:16]
+    return hashlib.sha256(payload).hexdigest()[:16]
 
 
 def check_idempotency(key: str) -> Optional[str]:

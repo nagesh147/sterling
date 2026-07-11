@@ -7,6 +7,7 @@ report; has_drift() collapses it to a go/no-go. Run via scripts/orm_reconcile.py
 """
 from __future__ import annotations
 
+import re
 from typing import Dict, Set
 
 from app.persistence import sync
@@ -21,14 +22,24 @@ _GENERIC_STORES = [
     ("derivatives_audit", "derivatives_audit", "audit_id"),
 ]
 
+# Identifiers only — never interpolate untrusted input into SQL.
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ALLOWED_TABLE_COLS: Set[tuple[str, str]] = {(t, k) for _, t, k in _GENERIC_STORES}
+
 
 def _sqlite_keys(table: str, key_col: str) -> Set[str]:
+    if (table, key_col) not in _ALLOWED_TABLE_COLS:
+        raise ValueError(f"refusing non-allowlisted table/column: {table!r}.{key_col!r}")
+    if not _IDENT_RE.fullmatch(table) or not _IDENT_RE.fullmatch(key_col):
+        raise ValueError(f"invalid SQL identifier: {table!r}.{key_col!r}")
     from app.services import db
     if not getattr(db, "_available", False):
         return set()
     try:
         with db._conn() as c:
-            return {str(r[0]) for r in c.execute(f"SELECT {key_col} FROM {table}").fetchall()}
+            # Identifiers cannot be bound as parameters; values are allowlisted above.
+            sql = f'SELECT "{key_col}" FROM "{table}"'
+            return {str(r[0]) for r in c.execute(sql).fetchall()}
     except Exception:
         return set()
 

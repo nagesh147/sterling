@@ -727,8 +727,11 @@ class KiteClient(TradingExchangeAdapter):
         from_str = (now - timedelta(days=days_needed)).strftime("%Y-%m-%d %H:%M:%S")
         to_str = now.strftime("%Y-%m-%d %H:%M:%S")
         
-        log.info("Fetching Kite candles: token=%s, resolution=%s, interval=%s, from=%s, to=%s",
-                 token, resolution, interval, from_str, to_str)
+        # Log underlying + interval only — never instrument tokens (confidential).
+        log.info(
+            "Fetching Kite candles: underlying=%s, resolution=%s, interval=%s, from=%s, to=%s",
+            instrument.underlying, resolution, interval, from_str, to_str,
+        )
         max_retries = 5
         for attempt in range(max_retries):
             try:

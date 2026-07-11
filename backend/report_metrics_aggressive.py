@@ -14,13 +14,23 @@ from app.schemas.market import Candle
 
 def get_candles_paper(symbol, resolution, limit=10000):
     conn = sqlite3.connect('backend/sterling_paper.db')
-    cursor = conn.cursor()
-    if resolution == '1m':
-        cursor.execute(f"SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m WHERE symbol='{symbol}' ORDER BY timestamp DESC LIMIT {limit};")
-    else:
-        cursor.execute(f"SELECT time, open, high, low, close, volume FROM ohlcv WHERE symbol='{symbol}' AND resolution='{resolution}' ORDER BY time DESC LIMIT {limit};")
-    rows = cursor.fetchall()
-    conn.close()
+    try:
+        cursor = conn.cursor()
+        if resolution == '1m':
+            cursor.execute(
+                "SELECT timestamp, open, high, low, close, volume FROM ohlcv_1m "
+                "WHERE symbol=? ORDER BY timestamp DESC LIMIT ?",
+                (symbol, limit),
+            )
+        else:
+            cursor.execute(
+                "SELECT time, open, high, low, close, volume FROM ohlcv "
+                "WHERE symbol=? AND resolution=? ORDER BY time DESC LIMIT ?",
+                (symbol, resolution, limit),
+            )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
     rows.reverse()
     if resolution == '1m':
         # the user script already stores ms? wait, Delta's 1m timestamp is mostly ms or s? 
