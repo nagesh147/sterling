@@ -394,3 +394,67 @@ echo
 echo "New users:  ./scripts/setup-claude.sh   OR   make setup-claude"
 echo "Then: restart Claude Desktop → open project → NEW session"
 echo
+
+# ---------- H. Git hooks: self-updating graphs (interactive) ----------
+echo -e "\n${BLD}H. Self-updating graphs (git hooks)...${RST}"
+echo
+echo "  Estimates for a repo the size of Sterling (~600–2000 files):"
+echo "  ┌─────────────────────────────────────────────────────────────────────────┐"
+echo "  │ Hook set              │ When              │ Extra time / commit (approx) │"
+echo "  │───────────────────────┼───────────────────┼─────────────────────────────│"
+echo "  │ Graphify only         │ post-commit/      │ ~5–30s  (graph refresh)     │"
+echo "  │                       │ post-checkout     │                             │"
+echo "  │ CRG update            │ commit / Claude   │ ~2–15s  (incremental)       │"
+echo "  │                       │ session hooks     │                             │"
+echo "  │ TrueCourse --diff     │ pre-commit        │ ~10–60s+ (diff analyze)     │"
+echo "  │ ALL THREE             │ every commit      │ ~20–90s+ (can feel slow)    │"
+echo "  └─────────────────────────────────────────────────────────────────────────┘"
+echo "  Notes:"
+echo "  • Times vary with dirty files, CPU, and whether LLM is involved (TC LLM = minutes)."
+echo "  • TrueCourse pre-commit is usually deterministic --diff (no big LLM bill)."
+echo "  • Graphify keeps graphify-out fresh; CRG keeps .code-review-graph fresh."
+echo
+
+# --- Graphify: stay-fresh default YES ---
+if command -v graphify &>/dev/null; then
+  echo "  Graphify self-update (recommended): refresh knowledge graph on commit/branch switch."
+  read -r -p "  Enable Graphify hooks so graph stays fresh? [Y/n] " gh
+  gh=${gh:-Y}
+  if [[ "$gh" =~ ^[Yy]$ ]]; then
+    graphify hook install 2>/dev/null && echo "  ✔ Graphify hooks ON (self-updating graph)" || echo "  ⚠ graphify hook install failed"
+  else
+    echo "  ⚠ Graphify hooks OFF — run later: graphify extract . --update && graphify hook install"
+  fi
+else
+  echo "  ⚠ graphify not installed — skip Graphify hooks"
+fi
+
+echo
+echo "  Enable ALL heavy hooks at once? (CRG git refresh + Graphify + TrueCourse pre-commit)"
+echo "  Y — maximum freshness; commits can take ~20–90s+ on large repos"
+echo "  N — keep lighter defaults (Graphify choice above; no forced TrueCourse pre-commit) [default]"
+read -r -p "  Enable CRG + Graphify + TrueCourse hooks together? [y/N] " allh
+allh=${allh:-N}
+
+if [[ "$allh" =~ ^[Yy]$ ]]; then
+  echo "  → Installing full hook bundle..."
+  if command -v graphify &>/dev/null; then
+    graphify hook install 2>/dev/null && echo "  ✔ Graphify hooks" || echo "  ⚠ Graphify hooks failed"
+  fi
+  if command -v code-review-graph &>/dev/null; then
+    code-review-graph install --platform claude-code 2>/dev/null || true
+    code-review-graph build 2>/dev/null || echo "  ⚠ CRG build issues"
+    echo "  ✔ CRG install/build attempted"
+  fi
+  if command -v truecourse &>/dev/null; then
+    truecourse hooks install 2>/dev/null && echo "  ✔ TrueCourse pre-commit ON (~10–60s+/commit)" || echo "  ⚠ TrueCourse hooks failed"
+  fi
+  echo
+  echo "  Full bundle ON. Expect slower commits; disable later if painful:"
+  echo "    graphify hook uninstall"
+  echo "    truecourse hooks uninstall"
+else
+  echo "  Skipped full triple-hook bundle (safer/faster commits)"
+  echo "  Graphify stay-fresh = your answer above only."
+  echo "  TrueCourse pre-commit remains off unless you enable it separately."
+fi
