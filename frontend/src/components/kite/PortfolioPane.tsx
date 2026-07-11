@@ -13,6 +13,7 @@ import { toCsv, downloadCsv } from '../../utils/csvExport';
 import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
 import { KiteSettingsPopover } from './KiteSettingsPopover';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
+import { notifyOrder } from '../../store/useKiteNotifications';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
@@ -27,10 +28,10 @@ const S: Record<string, React.CSSProperties> = {
 const num = (v: any) => Number(v ?? 0);
 const pnlColor = (v: number) => (v > 0 ? '#4caf50' : v < 0 ? '#df514c' : '#9b9b9b');
 
-// Exported so it can be unit-tested directly: this control is currently not
-// wired into PortfolioPane's rendered rows (see git history — the render
-// call was dropped in a prior redesign while the component itself was left
-// in place), so a PortfolioPane-level render test cannot reach it.
+// Exported so it can be unit-tested directly (also reachable from a
+// PortfolioPane-level render test): wired into the Positions row via the
+// "Convert" toggle in the hover-actions area, which swaps the Chg% cell for
+// this control when `expandedConvertId` matches the row (see below).
 export function ConvertControl({ p }: { p: any }) {
   const convert = useConvertKitePosition();
   const products = ['MIS', 'CNC', 'NRML'].filter((x) => x !== p.product);
@@ -182,11 +183,12 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
       : `${targets.slice(0, 3).map((p: any) => p.tradingsymbol).join(', ')} +${targets.length - 3} more`;
     if (!window.confirm(`Exit ${targets.length} selected position${targets.length !== 1 ? 's' : ''} (${preview}) at market price?`)) return;
     setExitingSelected(true);
+    let skipped = 0;
     for (const p of targets) {
       const liveNet = qc.getQueryData<{ net: any[] }>(['kite-positions'])?.net ?? [];
       const live = liveNet.find((x: any) => x.exchange === p.exchange && x.tradingsymbol === p.tradingsymbol && x.product === p.product);
       const liveQty = live ? num(live.quantity) : 0;
-      if (liveQty === 0) continue;  // closed elsewhere since selection — nothing left to exit
+      if (liveQty === 0) { skipped++; continue; }  // gone flat OR converted to a different product since selection — either way, nothing left to exit under this (exchange, tradingsymbol, product) key
       try {
         await placeOrder.mutateAsync({
           tradingsymbol: p.tradingsymbol, exchange: p.exchange,
@@ -199,6 +201,18 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     }
     setExitingSelected(false);
     setSelectedPos(new Set());
+    // Per-leg failures already get their own toast from usePlaceKiteOrder's
+    // onError, but a skip (leg vanished from the live snapshot — closed OR
+    // converted to a different product) never calls placeOrder at all, so it
+    // would otherwise be totally silent: the button just reverts and the
+    // selection clears with no indication anything was left unexited.
+    if (skipped > 0) {
+      notifyOrder({
+        kind: 'info',
+        title: 'Some positions were skipped',
+        message: `Exited ${targets.length - skipped} of ${targets.length} selected position${targets.length !== 1 ? 's' : ''} — ${skipped} ${skipped === 1 ? 'was' : 'were'} already closed or changed.`,
+      });
+    }
   };
 
   const showHoldings = view === 'holdings' || !view;

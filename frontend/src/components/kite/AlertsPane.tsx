@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useKiteAlerts, useKiteAlertHistory } from '../../hooks/useKite';
 import type { KiteAlert } from '../../types/kite';
 import { CreateAlertModal } from './CreateAlertModal';
@@ -38,6 +38,15 @@ export function AlertsPane() {
   const [createOpen, setCreateOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingAlert, setEditingAlert] = useState<KiteAlert | null>(null);
+
+  useEffect(() => {
+    if (!editingAlert || !allAlerts) return;
+    const current = allAlerts.find((a) => a.uuid === editingAlert.uuid);
+    if (!current) {
+      setEditingAlert(null);
+    }
+  }, [allAlerts, editingAlert]);
+
   const alerts = query.trim()
     ? allAlerts?.filter((a) => a.name?.toLowerCase().includes(query.trim().toLowerCase()))
     : allAlerts;

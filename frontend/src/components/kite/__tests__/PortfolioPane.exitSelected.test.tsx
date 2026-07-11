@@ -5,6 +5,11 @@ import React from 'react';
 import { PortfolioPane } from '../PortfolioPane';
 
 const mockMutateAsync = vi.fn();
+const mockNotifyOrder = vi.fn();
+
+vi.mock('../../../store/useKiteNotifications', () => ({
+  notifyOrder: (...args: any[]) => mockNotifyOrder(...args),
+}));
 
 const NET_POSITIONS = [
   { exchange: 'NSE', tradingsymbol: 'INFY', product: 'MIS', quantity: 10, average_price: 1500, last_price: 1510, pnl: 100, multiplier: 1 },
@@ -54,6 +59,7 @@ function renderWithClient(net: any[] = NET_POSITIONS) {
 
 beforeEach(() => {
   mockMutateAsync.mockReset();
+  mockNotifyOrder.mockReset();
   mockPositionsNet = NET_POSITIONS;
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -133,6 +139,26 @@ describe('PortfolioPane exitSelected', () => {
     // it's now flat, and skip it — never fire a second mutateAsync call for it.
     await waitFor(() => expect(screen.queryByText(/Exit Selected/)).not.toBeInTheDocument());
     expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+
+    // The user gets a visible notification that a leg was silently skipped
+    // (gone flat OR converted to a different product — both look the same
+    // to the live lookup), instead of the button just reverting with no signal.
+    expect(mockNotifyOrder).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'info',
+      message: expect.stringContaining('Exited 1 of 2'),
+    }));
+  });
+
+  it('does not surface a skip notification when every selected leg is exited', async () => {
+    mockMutateAsync.mockResolvedValue({ order_id: 'o1' });
+    renderWithClient();
+
+    fireEvent.click(screen.getAllByRole('checkbox')[1]); // INFY
+    fireEvent.click(screen.getByText('Exit Selected (1)'));
+
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText(/Exit Selected/)).not.toBeInTheDocument());
+    expect(mockNotifyOrder).not.toHaveBeenCalled();
   });
 
   it('resizes a leg to its current live quantity if it shrank (partial close elsewhere) since selection', async () => {

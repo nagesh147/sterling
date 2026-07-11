@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useKiteGtts } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { CreateGttModal } from './CreateGttModal';
@@ -25,10 +25,20 @@ function gttStatusStyle(status: string): React.CSSProperties {
   return { padding: '2px 6px', background: c.bg, color: c.fg, borderRadius: 3, fontSize: 11 };
 }
 
+const GTT_MODIFIABLE_STATUSES = new Set(['active']);
+
 export function GttPane() {
   const { data: gtts } = useKiteGtts(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [optionsGtt, setOptionsGtt] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!optionsGtt || !gtts) return;
+    const current = gtts.find((g: any) => g.id === optionsGtt.id);
+    if (!current || !GTT_MODIFIABLE_STATUSES.has((current.status || '').toLowerCase())) {
+      setOptionsGtt(null);
+    }
+  }, [gtts, optionsGtt]);
 
   return (
     <>
