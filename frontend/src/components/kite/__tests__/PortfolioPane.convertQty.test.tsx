@@ -94,6 +94,30 @@ describe('ConvertControl partial-quantity conversion (isolated)', () => {
     fireEvent.click(getConvertLink());
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ quantity: 50 }));
   });
+
+  // Regression guard: fullQty/invalidQty must be recomputed fresh from
+  // `p.quantity` on every render (not cached/memoized off a stale
+  // dependency), so a live position that shrinks out from under an
+  // already-open, still-full-qty convert row correctly disables the action
+  // rather than firing a mutate() sized larger than the position that now
+  // actually exists. Task 12 (bulk Exit Selected, same file) had a real bug
+  // in exactly this class — stale position data reaching a live mutation.
+  it('disables convert if the live position shrinks while the row is open and the qty input still holds the old, now-too-large value', () => {
+    const { rerender } = render(<ConvertControl p={{ ...POSITION, quantity: 75 }} />);
+    // Capture the input node itself — its `title` (Max: N) changes with
+    // fullQty on rerender, so it can't be re-queried by that title afterward.
+    const qtyInput = getQtyInput();
+    expect(qtyInput.value).toBe('75');
+
+    // Position shrinks elsewhere (partial exit / poll refresh) while this
+    // row is still expanded; the typed qty state does not auto-resync.
+    rerender(<ConvertControl p={{ ...POSITION, quantity: 30 }} />);
+    expect(qtyInput.value).toBe('75'); // stale input value, unchanged
+
+    fireEvent.click(getConvertLink());
+    expect(mutate).not.toHaveBeenCalled();
+    expect(getConvertLink()).toHaveStyle({ cursor: 'not-allowed' });
+  });
 });
 
 // ─── (2) Wired into the real Positions row ─────────────────────────────────
