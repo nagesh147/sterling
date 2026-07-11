@@ -1077,6 +1077,7 @@ async def _background_derivatives_scanner(app: FastAPI, interval: int = 30) -> N
 
 async def _background_ohlcv_updater(interval_hours: int = 1) -> None:
     """Keeps OHLCV store fresh — runs immediately then every hour."""
+    import asyncio
     from app.services.delta_candle_fetcher import run_full_fetch
     while True:
         try:
@@ -1092,6 +1093,7 @@ async def _background_1m_updater(interval_min: int = 5) -> None:
     every `interval_min`. 1m is excluded from the hourly all-symbol fetch (too
     heavy across every product), so without this dedicated loop the 1m store
     silently freezes. Tight cadence keeps it ~real-time."""
+    import asyncio
     from app.services.delta_candle_fetcher import fetch_core_1m
     while True:
         try:
