@@ -47,7 +47,8 @@
       "Bash(graphify query *)",
       "Bash(xargs -I{} sh -c 'echo \"--{}--\"; cat \"{}\"')",
       "Bash(xargs -I{} sh -c 'echo \"== {} ==\"; cat {}')",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(crontab -l)"
     ],
     "defaultMode": "bypassPermissions"
   },

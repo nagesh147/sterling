@@ -14,11 +14,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+# Target the additive SQLAlchemy dual-write store (app/persistence), never the
+# live raw-sqlite sterling_paper.db. See app/persistence/__init__.py.
+from app.persistence.base import Base, resolve_database_url
+import app.persistence.models  # noqa: F401 - registers models on Base.metadata
+
+target_metadata = Base.metadata
+config.set_main_option("sqlalchemy.url", resolve_database_url())
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
