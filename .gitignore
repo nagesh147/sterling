@@ -16,6 +16,8 @@ bun.lockb
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+frontend/dist/
+
 
 # === System / Editor files ===
 .DS_Store
