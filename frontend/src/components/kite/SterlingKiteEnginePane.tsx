@@ -212,13 +212,22 @@ function rowIsRunning(row: EngineSignalRow, quotes: any): boolean {
   );
 }
 
-function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, showEnded = true }: {
+// Coarse moneyness group (ITM1-5 / ATM / OTM1-5 → ITM / ATM / OTM), shared by the
+// per-bucket best-R:R/delta ranking and the "Best only" display order below.
+function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
+  if (m === 'ATM') return 'ATM';
+  return m?.startsWith('ITM') ? 'ITM' : 'OTM';
+}
+const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
+
+function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, showEnded = true, bestOnly = false }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
   sort: { key: string; dir: string };
   showEnded?: boolean;
+  bestOnly?: boolean;
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -292,31 +301,36 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
     }
   }
 
-  // ✝ BEST R:R — among this signal's option legs, the strike with the best
-  // reward:risk for a 1R move. Same logic as the Trade Impact Calculator, so the
-  // badge stays in sync with the detail page (which marks the best strike for
-  // both spot- and derivatives-source signals). The greeks use the underlying
-  // spot, so a 1R underlying move is meaningful regardless of signal source.
-  const { bestRRSym, bestDeltaSym } = React.useMemo(() => {
+  // ✝ BEST R:R / ▲ HIGHEST DELTA — computed separately WITHIN each moneyness bucket
+  // (ITM / ATM / OTM), not once across the whole ladder, so a deep-ITM winner never
+  // shadows the best OTM strike (or vice versa) — every bucket you've scanned gets
+  // its own pick. Same underlying logic as the Trade Impact Calculator (per-strike,
+  // not per-bucket, there), so the badges stay conceptually in sync. The greeks use
+  // the underlying spot, so a 1R underlying move is meaningful regardless of source.
+  const { bestRRSyms, bestDeltaSyms } = React.useMemo(() => {
     const spot = uLastPx ?? row.spot ?? 0;
     const sd = stopDistance(spot, row.stop_loss ?? 0);
-    let bestRR: string | null = null;
-    let bestRRVal = -Infinity;
-    let bestDelta: string | null = null;
-    let bestDeltaVal = -Infinity;
+    const bestRRByBucket = new Map<string, { sym: string; val: number }>();
+    const bestDeltaByBucket = new Map<string, { sym: string; val: number }>();
     for (const leg of visibleLegs) {
       const lq = quotes?.[`${row.exchange}:${leg.option_symbol}`];
       const premium = lq?.last_price ?? (leg as any).premium_spot ?? 0;
       if (premium <= 0) continue;
       const g = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, spot, lq, leg.lot_size ?? null);
       if (!g) continue;
+      const bucket = moneynessBucket(leg.moneyness);
       const { rr, effPct } = computeLegRR(g.delta, g.gamma, premium, sd);
       const v = rrScore(rr, effPct);
-      if (v > bestRRVal) { bestRRVal = v; bestRR = leg.option_symbol; }
+      const curRR = bestRRByBucket.get(bucket);
+      if (!curRR || v > curRR.val) bestRRByBucket.set(bucket, { sym: leg.option_symbol, val: v });
       const ad = Math.abs(g.delta);
-      if (ad > bestDeltaVal) { bestDeltaVal = ad; bestDelta = leg.option_symbol; }
+      const curDelta = bestDeltaByBucket.get(bucket);
+      if (!curDelta || ad > curDelta.val) bestDeltaByBucket.set(bucket, { sym: leg.option_symbol, val: ad });
     }
-    return { bestRRSym: bestRR, bestDeltaSym: bestDelta };
+    return {
+      bestRRSyms: new Set(Array.from(bestRRByBucket.values(), (x) => x.sym)),
+      bestDeltaSyms: new Set(Array.from(bestDeltaByBucket.values(), (x) => x.sym)),
+    };
   }, [uLastPx, row, visibleLegs, quotes]);
 
   // Publish this signal's ✝/▲ markers (keyed by the full EXCHANGE:tradingsymbol)
@@ -327,17 +341,39 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
   React.useEffect(() => {
     const rowKey = String(row.token);
     const entries: Record<string, Marker> = {};
-    if (bestRRSym) {
-      const key = `${row.exchange}:${bestRRSym}`;
+    for (const sym of bestRRSyms) {
+      const key = `${row.exchange}:${sym}`;
       entries[key] = { ...entries[key], rr: true };
     }
-    if (bestDeltaSym) {
-      const key = `${row.exchange}:${bestDeltaSym}`;
+    for (const sym of bestDeltaSyms) {
+      const key = `${row.exchange}:${sym}`;
       entries[key] = { ...entries[key], delta: true };
     }
     publishMarkers(rowKey, entries);
     return () => clearMarkers(rowKey);
-  }, [bestRRSym, bestDeltaSym, row.exchange, row.token, publishMarkers, clearMarkers]);
+  }, [bestRRSyms, bestDeltaSyms, row.exchange, row.token, publishMarkers, clearMarkers]);
+
+  // Legs always render grouped and ordered ITM → ATM → OTM, regardless of "Best
+  // only" — the fixed order makes a card scannable at a glance whether it's
+  // showing the full ladder or just the picks below. (List view still lets an
+  // explicit column-sort click override this, same as before.)
+  //
+  // "Best only" additionally cuts the card down to just the ✝ best-R:R and ▲
+  // highest-delta legs PER bucket (up to 2 legs × however many of ITM/ATM/OTM are
+  // present, deduped — a bucket with one leg is trivially both). If nothing could
+  // be ranked (e.g. all legs illiquid / no greeks), fall back to the full set so a
+  // card never renders empty.
+  const displayLegs = React.useMemo(() => {
+    let base = visibleLegs;
+    if (bestOnly) {
+      const keep = new Set([...bestRRSyms, ...bestDeltaSyms]);
+      const filtered = keep.size ? visibleLegs.filter((l) => keep.has(l.option_symbol)) : [];
+      if (filtered.length) base = filtered;
+    }
+    return [...base].sort(
+      (a, b) => MONEYNESS_GROUP_ORDER[moneynessBucket(a.moneyness)] - MONEYNESS_GROUP_ORDER[moneynessBucket(b.moneyness)],
+    );
+  }, [bestOnly, visibleLegs, bestRRSyms, bestDeltaSyms]);
 
   return (
     <div
@@ -356,6 +392,22 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
             <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: uColor }}>{row.underlying}</span>
+                {/* Underlying spot LTP next to the name. Derivatives parents carry
+                    row.spot=0 (the premium lives on each leg), so only show when the
+                    live index/stock quote resolved — no misleading "0.00" fallback. */}
+                {uLastPx != null && (
+                  <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: uColor }}>
+                    <span style={{ fontWeight: 500 }}>{uLastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    {s.showPriceChange && uChgAbs != null && <span style={{ fontSize: 10, color: k.dim }}>{uChgAbs.toFixed(2)}</span>}
+                    {s.showPriceChangePct && uChgPct != null && <span style={{ fontSize: 10, color: k.text }}>{uChgPct.toFixed(2)}%</span>}
+                    {s.showPriceDirection && (
+                      <span style={{ display: 'flex', alignItems: 'center', margin: '0 -2px' }}>
+                        {uChgAbs != null && uChgAbs !== 0 ? (uChgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                        {uChgAbs === 0 && <span style={{ fontSize: 14, padding: '0 2px', lineHeight: 1 }}>∘</span>}
+                      </span>
+                    )}
+                  </span>
+                )}
               </span>
             </div>
           ) : (
@@ -433,7 +485,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
       {/* option legs */}
       {isDeriv && viewLayout === 'grid' ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px', borderTop: `1px solid ${k.border}` }}>
-          {visibleLegs.map((leg) => {
+          {displayLegs.map((leg) => {
             const sym = `${row.exchange}:${leg.option_symbol}`;
             const q = quotes?.[sym];
             const lastPx = q?.last_price || (leg as any).premium_spot;
@@ -465,12 +517,12 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
-                      {leg.option_symbol === bestRRSym && (
-                        <span title="Best reward-to-risk among these strikes for a 1R move"
+                      {bestRRSyms.has(leg.option_symbol) && (
+                        <span title="Best reward-to-risk within its ITM/ATM/OTM bucket for a 1R move"
                           style={{ fontSize: 12, color: k.dim, lineHeight: 1 }}>✝</span>
                       )}
-                      {leg.option_symbol === bestDeltaSym && (
-                        <span title="Highest delta — most responsive to the underlying"
+                      {bestDeltaSyms.has(leg.option_symbol) && (
+                        <span title="Highest delta within its ITM/ATM/OTM bucket — most responsive to the underlying"
                           style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: 0.75 }}>▲</span>
                       )}
                     </span>
@@ -530,11 +582,11 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
         </div>
       ) : (
       <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
-        {visibleLegs.length === 0 ? (
+        {displayLegs.length === 0 ? (
           <span style={{ fontSize: 10, color: k.dim }}>no liquid contract at the selected strikes</span>
         ) : (
           <React.Fragment>
-            {[...visibleLegs].sort((a, b) => {
+            {[...displayLegs].sort((a, b) => {
               if (!sort.key || !sort.dir) return 0;
               const symA = `${row.exchange}:${a.option_symbol}`;
               const symB = `${row.exchange}:${b.option_symbol}`;
@@ -640,12 +692,12 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
-                     {leg.option_symbol === bestRRSym && (
-                       <span title="Best reward-to-risk among these strikes for a 1R move"
+                     {bestRRSyms.has(leg.option_symbol) && (
+                       <span title="Best reward-to-risk within its ITM/ATM/OTM bucket for a 1R move"
                          style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
                      )}
-                     {leg.option_symbol === bestDeltaSym && (
-                       <span title="Highest delta — most responsive to the underlying"
+                     {bestDeltaSyms.has(leg.option_symbol) && (
+                       <span title="Highest delta within its ITM/ATM/OTM bucket — most responsive to the underlying"
                          style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
                      )}
                    </span>
@@ -1186,6 +1238,28 @@ function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
   );
 }
 
+// Chip that collapses every signal to only its ✝ best-R:R and ▲ highest-delta legs,
+// hiding the middle-of-the-ladder strikes. Same pill styling as EndedToggle (blue
+// accent to distinguish it) so the two read as a matched pair in the toolbar.
+function BestOnlyToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+      title="Show only the best strikes per signal: ✝ best reward:risk and ▲ highest delta">
+      <span style={{ fontSize: 10, color: on ? k.blue : k.dim }}>Best ✝▲</span>
+      <button onClick={onChange} aria-pressed={on} aria-label="Show best strikes only"
+        style={{
+          position: 'relative', width: 28, height: 16, borderRadius: 999, border: 'none', padding: 0,
+          cursor: 'pointer', flexShrink: 0, background: on ? k.blue : k.border, transition: 'background .18s ease',
+        }}>
+        <span style={{
+          position: 'absolute', top: 1, left: on ? 13 : 1, width: 14, height: 14, borderRadius: '50%',
+          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // Thin progress bar that ticks independently so the rest of the pane doesn't re-render every second.
 function ScanProgressBar({ signals }: { signals?: SignalsResponse }) {
   const [, tick] = React.useReducer((x) => x + 1, 0);
@@ -1417,11 +1491,19 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
 
   const resetCfg = useResetEngineConfig();
 
-  const patch = (p: Partial<EngineConfigModel>, msg?: string) => { 
+  // `rescan=true` for any setting that changes what the scanner computes (universe,
+  // strikes, expiries, trailing/exit logic) — otherwise the signal list keeps showing
+  // pre-change results until the 5-min auto-scan loop catches up (same staleness
+  // changeScanSource already guards against for scan_source, below). Sizing/execution
+  // -only settings (auto_execute, stop_mode, risk_sizing, risk_pct) default to false —
+  // they can't change which signals appear, so forcing a rescan there just wastes a
+  // Kite historical-data sweep.
+  const patch = (p: Partial<EngineConfigModel>, msg?: string, rescan = false) => {
     if (cfg) {
       setCfg.mutate({ ...cfg, ...p }, {
         onSuccess: () => {
           if (msg) notifyOrder({ kind: 'info', title: 'Settings updated', message: msg });
+          if (rescan) doScan();
         }
       });
     }
@@ -1432,7 +1514,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
     const has = cfg.strike_moneyness.includes(m);
     const next = has ? cfg.strike_moneyness.filter((x) => x !== m) : [...cfg.strike_moneyness, m];
     const finalNext = next.length ? next : ['ATM', 'ITM1', 'ITM2', 'ITM3', 'OTM1', 'OTM2', 'OTM3'];
-    patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`);
+    patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`, true);
   };
 
   // Toggle a whole delta bucket: if every member is already selected, remove them
@@ -1445,7 +1527,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
       ? cur.filter((m) => !members.includes(m))
       : [...new Set([...cur, ...members])];
     if (!next.length) next = ['ATM'];
-    patch({ strike_moneyness: next as Moneyness[] }, `Strikes updated to ${next.join(', ')}`);
+    patch({ strike_moneyness: next as Moneyness[] }, `Strikes updated to ${next.join(', ')}`, true);
   };
 
   const toggleExpiry = (e: ScanExpiry) => {
@@ -1453,7 +1535,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
     const has = cfg.scan_expiries.includes(e);
     const next = has ? cfg.scan_expiries.filter((x) => x !== e) : [...cfg.scan_expiries, e];
     const finalNext = next.length ? next : ['weekly', 'monthly'];
-    patch({ scan_expiries: finalNext as ScanExpiry[] }, `Expiries updated to ${finalNext.join(', ')}`);
+    patch({ scan_expiries: finalNext as ScanExpiry[] }, `Expiries updated to ${finalNext.join(', ')}`, true);
   };
 
   const toggleExpiryIndices = (e: ScanExpiry) => {
@@ -1462,7 +1544,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
     const has = cur.includes(e);
     const next = has ? cur.filter((x) => x !== e) : [...cur, e];
     const finalNext = next.length ? next : ['weekly', 'monthly'];
-    patch({ scan_expiries_indices: finalNext as ScanExpiry[] }, `Indices expiries updated to ${finalNext.join(', ')}`);
+    patch({ scan_expiries_indices: finalNext as ScanExpiry[] }, `Indices expiries updated to ${finalNext.join(', ')}`, true);
   };
 
   const toggleExpiryStocks = (e: ScanExpiry) => {
@@ -1471,46 +1553,42 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
     const has = cur.includes(e);
     const next = has ? cur.filter((x) => x !== e) : [...cur, e];
     const finalNext = next.length ? next : ['weekly', 'monthly'];
-    patch({ scan_expiries_stocks: finalNext as ScanExpiry[] }, `Stocks expiries updated to ${finalNext.join(', ')}`);
+    patch({ scan_expiries_stocks: finalNext as ScanExpiry[] }, `Stocks expiries updated to ${finalNext.join(', ')}`, true);
   };
 
   // Changing the scan source must re-scan immediately — otherwise the list keeps
   // showing the previous scan's rows (e.g. spot signals) until the 5-min auto-loop
-  // runs, which reads as "I switched to derivatives but nothing changed".
+  // runs, which reads as "I switched to derivatives but nothing changed". This is
+  // exactly the `rescan` path patch() now covers, so route through it.
   const changeScanSource = (v: ScanSource) => {
     if (!cfg || cfg.scan_source === v) return;
-    setCfg.mutate({ ...cfg, scan_source: v }, { 
-      onSuccess: () => { 
-        notifyOrder({ kind: 'info', title: 'Settings updated', message: `Scan source changed to ${v}` });
-        doScan(); 
-      } 
-    });
+    patch({ scan_source: v }, `Scan source changed to ${v}`, true);
   };
 
   const toggleIndex = (name: string) => {
     if (!cfg) return;
     const has = cfg.scan_indices.includes(name);
     const next = has ? cfg.scan_indices.filter((x) => x !== name) : [...cfg.scan_indices, name];
-    patch({ scan_indices: next }, `Indices updated: ${has ? `Removed ${name}` : `Added ${name}`}`);
+    patch({ scan_indices: next }, `Indices updated: ${has ? `Removed ${name}` : `Added ${name}`}`, true);
   };
 
   const toggleStock = (name: string) => {
     if (!cfg) return;
     const has = cfg.scan_stocks.includes(name);
     const next = has ? cfg.scan_stocks.filter((x) => x !== name) : [...cfg.scan_stocks, name];
-    patch({ scan_stocks: next }, `Stocks updated: ${has ? `Removed ${name}` : `Added ${name}`}`);
+    patch({ scan_stocks: next }, `Stocks updated: ${has ? `Removed ${name}` : `Added ${name}`}`, true);
   };
 
   const addCustomStock = (name: string) => {
     if (!cfg || !name.trim()) return;
     const upper = name.trim().toUpperCase();
     if (cfg.scan_stocks.includes(upper)) return;
-    patch({ scan_stocks: [...cfg.scan_stocks, upper] }, `Added ${upper} to scan`);
+    patch({ scan_stocks: [...cfg.scan_stocks, upper] }, `Added ${upper} to scan`, true);
   };
 
   const removeCustomStock = (name: string) => {
     if (!cfg) return;
-    patch({ scan_stocks: cfg.scan_stocks.filter(x => x !== name) }, `Removed ${name} from scan`);
+    patch({ scan_stocks: cfg.scan_stocks.filter(x => x !== name) }, `Removed ${name} from scan`, true);
   };
 
   const toggleAuto = () => {
@@ -1603,8 +1681,13 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
 
   const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
 
-  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set());
+  // Ended (history) date buckets start collapsed — only "Active now" needs to be
+  // visible on load. User can still expand any bucket manually (still toggleable).
+  const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(
+    () => new Set(['Today (ended)', 'Yesterday (ended)', 'Last week (ended)', 'Last 15 days (ended)']),
+  );
   const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
+  const [bestOnly, setBestOnly] = React.useState<boolean>(() => localStorage.getItem('kite_st_best_only') === 'true');
   const toggleGroup = (label: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -1660,9 +1743,6 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
   }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
 
-  // Ended groups stay expanded by default so past rows are visible (light amber bg).
-  // The user can collapse them manually.
-
   // ── Engine master gate ──────────────────────────────────────────────────────
   if (cfg && !cfg.engine_enabled) {
     return (
@@ -1698,7 +1778,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
             </div>
           </div>
           <button
-            onClick={() => patch({ engine_enabled: true }, 'Sterling Kite Engine enabled')}
+            onClick={() => patch({ engine_enabled: true }, 'Sterling Kite Engine enabled', true)}
             disabled={setCfg.isPending}
             style={{ padding: '10px 28px', borderRadius: 8, border: 'none', cursor: 'pointer',
                      background: k.green, color: '#fff', fontSize: 13, fontWeight: 700,
@@ -1801,6 +1881,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
               />
             </div>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <BestOnlyToggle on={bestOnly} onChange={() => { setBestOnly(v => { const n = !v; localStorage.setItem('kite_st_best_only', String(n)); return n; }); }} />
               <EndedToggle on={showEnded} onChange={() => { setShowEnded(v => { const n = !v; localStorage.setItem('kite_st_show_ended', String(n)); return n; }); }} />
             </div>
           </div>
@@ -1951,8 +2032,8 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
                       <button onClick={() => {
                         const names = group.stocks.map(s => s.name);
                         const allIn = names.every(n => cfg.scan_stocks.includes(n));
-                        if (allIn) { patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`); }
-                        else { patch({ scan_stocks: [...new Set([...cfg.scan_stocks, ...names])] }, `Added ${group.liquidity} stocks`); }
+                        if (allIn) { patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`, true); }
+                        else { patch({ scan_stocks: [...new Set([...cfg.scan_stocks, ...names])] }, `Added ${group.liquidity} stocks`, true); }
                       }} style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                         {group.stocks.every(s => cfg.scan_stocks.includes(s.name)) ? '− all' : '+ all'}
                       </button>
@@ -1986,7 +2067,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
               <Segmented
                 options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
                 isActive={(v) => (cfg.trail_target ?? 'fast') === v}
-                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`)}
+                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`, true)}
               />
             </SettingRow>
             <SettingRow label="Hybrid Weight" hint="Weight for ST vs ATR in hybrid trail (0-1). Only for hybrid mode.">
@@ -1996,7 +2077,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
                 min="0"
                 max="1"
                 value={cfg.hybrid_st_weight ?? 0.5}
-                onChange={e => patch({ hybrid_st_weight: parseFloat(e.target.value) }, `Hybrid weight → ${e.target.value}`)}
+                onChange={e => patch({ hybrid_st_weight: parseFloat(e.target.value) }, `Hybrid weight → ${e.target.value}`, true)}
                 aria-label="Hybrid Weight"
                 data-testid="hybrid-weight-input"
                 style={{ width: 80, padding: 4, background: k.surface, color: k.text, border: `1px solid ${k.border}` }}
@@ -2006,7 +2087,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
               <Segmented
                 options={EXIT_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: `${o.short}: ${o.hint}` }))}
                 isActive={(v) => (cfg.exit_mode ?? 'one_red') === v}
-                onSelect={(v) => patch({ exit_mode: v as 'one_red'|'two_red'|'three_red'|'three_red_signal' }, `Exit mode → ${EXIT_MODE_OPTS.find(x=>x.value===v)?.short || v}`)}
+                onSelect={(v) => patch({ exit_mode: v as 'one_red'|'two_red'|'three_red'|'three_red_signal' }, `Exit mode → ${EXIT_MODE_OPTS.find(x=>x.value===v)?.short || v}`, true)}
               />
               <div style={{ fontSize: 10, color: k.dim, marginTop: 4, lineHeight: 1.3 }}>
                 {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.hint}
@@ -2142,7 +2223,7 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
                   <div className="kv-rows">
                     {group.rows.map((row) => (
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
-                        onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded}
+                        onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                         onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })} />
                     ))}
                   </div>
