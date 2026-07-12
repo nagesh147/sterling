@@ -353,19 +353,24 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
     return () => clearMarkers(rowKey);
   }, [bestRRSyms, bestDeltaSyms, row.exchange, row.token, publishMarkers, clearMarkers]);
 
-  // "Best only" cuts the card down to just the ✝ best-R:R and ▲ highest-delta legs
-  // PER bucket (up to 2 legs × however many of ITM/ATM/OTM are present, deduped —
-  // a bucket with one leg is trivially both), always grouped and ordered ITM → ATM →
-  // OTM regardless of the legs' original scan-time order. If nothing could be ranked
-  // (e.g. all legs illiquid / no greeks), fall back to the full set so a card never
-  // renders empty.
+  // Legs always render grouped and ordered ITM → ATM → OTM, regardless of "Best
+  // only" — the fixed order makes a card scannable at a glance whether it's
+  // showing the full ladder or just the picks below. (List view still lets an
+  // explicit column-sort click override this, same as before.)
+  //
+  // "Best only" additionally cuts the card down to just the ✝ best-R:R and ▲
+  // highest-delta legs PER bucket (up to 2 legs × however many of ITM/ATM/OTM are
+  // present, deduped — a bucket with one leg is trivially both). If nothing could
+  // be ranked (e.g. all legs illiquid / no greeks), fall back to the full set so a
+  // card never renders empty.
   const displayLegs = React.useMemo(() => {
-    if (!bestOnly) return visibleLegs;
-    const keep = new Set([...bestRRSyms, ...bestDeltaSyms]);
-    if (keep.size === 0) return visibleLegs;
-    const filtered = visibleLegs.filter((l) => keep.has(l.option_symbol));
-    if (!filtered.length) return visibleLegs;
-    return [...filtered].sort(
+    let base = visibleLegs;
+    if (bestOnly) {
+      const keep = new Set([...bestRRSyms, ...bestDeltaSyms]);
+      const filtered = keep.size ? visibleLegs.filter((l) => keep.has(l.option_symbol)) : [];
+      if (filtered.length) base = filtered;
+    }
+    return [...base].sort(
       (a, b) => MONEYNESS_GROUP_ORDER[moneynessBucket(a.moneyness)] - MONEYNESS_GROUP_ORDER[moneynessBucket(b.moneyness)],
     );
   }, [bestOnly, visibleLegs, bestRRSyms, bestDeltaSyms]);
