@@ -75,3 +75,9 @@ antigravity-claude-proxy/
 # Obsidian local workspace (optional — remove if you want to share settings)
 .obsidian/
 
+# docs/obsidian/ is its own independent git repo (see docs/obsidian/.git) — the
+# vault used to live untracked-as-its-own-repo inside this repo, so the
+# obsidian-git plugin's auto-commit walked up to THIS .git and swept up
+# in-progress code changes. Kept fully out of Sterling's tracking now.
+docs/obsidian/
+
