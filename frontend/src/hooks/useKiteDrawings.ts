@@ -24,13 +24,63 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
   const [isDragging, setIsDragging] = useState(false);
   const [dragInfo, setDragInfo] = useState<any>(null);
 
-  const setDrawings = useCallback((newDrawings: Drawing[] | ((prev: Drawing[]) => Drawing[])) => {
+  // Undo/redo history: stacks of committed drawings snapshots. Plain refs, not
+  // state - nothing needs to re-render off the stacks themselves, only off
+  // `drawings` changing (via _setDrawings below). Keeping them as refs avoids
+  // ever calling one setState from inside another setState's updater, which
+  // React can legitimately flag as "update during render" once several of
+  // these fire in the same tick (e.g. holding Ctrl+Z).
+  const undoStackRef = useRef<Drawing[][]>([]);
+  const redoStackRef = useRef<Drawing[][]>([]);
+  // Pre-drag snapshot, captured on mousedown-hit and consumed on mouseup so a
+  // whole drag commits as ONE undo entry rather than one per mousemove frame.
+  const dragStartSnapshotRef = useRef<Drawing[] | null>(null);
+  // Whether the current drag actually moved a point (vs. a plain click-to-select).
+  const dragMovedRef = useRef(false);
+  // Mirrors `drawings` so undo/redo/setDrawings can read the latest value
+  // without needing it in their useCallback deps (keeps them stable).
+  const drawingsRef = useRef<Drawing[]>(drawings);
+  useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
+
+  // Raw apply: updates state + forwards to the parent's onChange, with NO
+  // history bookkeeping. Used internally for the many per-frame updates during
+  // a drag (see onMouseMove below) so dragging doesn't spam the undo stack.
+  const applyDrawings = useCallback((newDrawings: Drawing[] | ((prev: Drawing[]) => Drawing[])) => {
     _setDrawings(newDrawings);
     if (onChange) {
-      const updated = typeof newDrawings === 'function' ? newDrawings(drawings) : newDrawings;
+      const updated = typeof newDrawings === 'function' ? newDrawings(drawingsRef.current) : newDrawings;
       onChange(updated);
     }
-  }, [onChange, drawings]);
+  }, [onChange]);
+
+  // Public setter: records the pre-mutation snapshot onto the undo stack (and
+  // clears redo) before applying. This is the one used for every discrete,
+  // committed action (add/delete/clear/text edit) in this hook and by the
+  // consuming component.
+  const setDrawings = useCallback((newDrawings: Drawing[] | ((prev: Drawing[]) => Drawing[])) => {
+    undoStackRef.current = [...undoStackRef.current, drawingsRef.current];
+    redoStackRef.current = [];
+    applyDrawings(newDrawings);
+  }, [applyDrawings]);
+
+  // Step backward/forward through committed snapshots.
+  const undo = useCallback(() => {
+    const stack = undoStackRef.current;
+    if (stack.length === 0) return;
+    const last = stack[stack.length - 1];
+    undoStackRef.current = stack.slice(0, -1);
+    redoStackRef.current = [...redoStackRef.current, drawingsRef.current];
+    applyDrawings(last);
+  }, [applyDrawings]);
+
+  const redo = useCallback(() => {
+    const stack = redoStackRef.current;
+    if (stack.length === 0) return;
+    const last = stack[stack.length - 1];
+    redoStackRef.current = stack.slice(0, -1);
+    undoStackRef.current = [...undoStackRef.current, drawingsRef.current];
+    applyDrawings(last);
+  }, [applyDrawings]);
 
   const saveTimeoutRef = useRef<any>(null);
 
@@ -118,6 +168,8 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
     }
     const hit = findDrawingAt(approxTime, price, baseCandles);
     if (hit) {
+      dragStartSnapshotRef.current = drawingsRef.current; // pre-drag snapshot for a single undo entry on commit
+      dragMovedRef.current = false; // only commit an undo entry if the drag actually moved something
       setSelectedDrawingId(hit.id);
       setDragInfo({ ...hit, startX: x, startY: y, startPrice: price });
       setIsDragging(true);
@@ -141,7 +193,8 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
       const idx = Math.floor((logical + 10) * baseCandles.length / 20);
       newTime = baseCandles[Math.max(0, Math.min(baseCandles.length - 1, Math.floor(idx)))]?.time || newTime;
     }
-    setDrawings((prev: Drawing[]) => prev.map((d: Drawing) => {
+    dragMovedRef.current = true;
+    applyDrawings((prev: Drawing[]) => prev.map((d: Drawing) => {
       if (d.id !== dragInfo.id) return d;
       if (d.type === 'hline') {
         return { ...d, price: newPrice };
@@ -152,15 +205,23 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
       }
       return d;
     }));
-  }, [isDragging, dragInfo, snapToOHLC, setDrawings]);
+  }, [isDragging, dragInfo, snapToOHLC, applyDrawings]);
 
   const onMouseUp = useCallback((onSave?: (drawings: Drawing[]) => void) => {
     if (isDragging) {
       setIsDragging(false);
       setDragInfo(null);
-      if (onSave) onSave(drawings);
+      // Commit the whole drag as a SINGLE undo entry (the pre-drag snapshot),
+      // rather than one entry per mousemove frame - and only if something
+      // actually moved, so a plain click-to-select doesn't waste an undo step.
+      if (dragStartSnapshotRef.current && dragMovedRef.current) {
+        undoStackRef.current = [...undoStackRef.current, dragStartSnapshotRef.current];
+        redoStackRef.current = [];
+      }
+      dragStartSnapshotRef.current = null;
+      if (onSave) onSave(drawingsRef.current);
     }
-  }, [isDragging, drawings]);
+  }, [isDragging]);
 
   const getClickHandler = useCallback((param: any, baseCandles: any[], chart: any, theme: any, snap: any) => {
     if (!param.time) return;
@@ -256,5 +317,7 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
     findDrawingAt,
     updateDrawingText,
     updateDrawing,
+    undo,
+    redo,
   };
 }

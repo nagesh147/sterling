@@ -8,6 +8,11 @@ import {
   ema, bollingerBands, vwap, rsi, macd, supertrend, heikinAshi,
   type Candle,
 } from '../../utils/indicators';
+import {
+  IconCrosshair, IconHLine, IconTrendline, IconRay, IconFib, IconFibExt, IconFibFan,
+  IconRect, IconPitchfork, IconText, IconPencil, IconFullscreen, IconClose, IconMore, IconGear,
+} from './ChartIcons';
+import { MiniGridPane } from './MiniGridPane';
 
 interface TradingViewKiteChartProps {
   symbol: string;
@@ -29,12 +34,14 @@ interface TradingViewKiteChartProps {
   persistedZoom?: any;
   drawMode?: string;
   onDrawModeChange?: (m: any) => void;
+  signalData?: { timestamp_ms: number; direction: string; regime: string };
   // for full TV-like control inside the component
   onTfChange?: (tf: string) => void;
   onIsHAChange?: (ha: boolean) => void;
   onIsLogScaleChange?: (log: boolean) => void;
   onSymbolChange?: (symbol: string) => void;
   onToggleIndicator?: (key: string) => void;
+  onParamsChange?: (params: any) => void;
 }
 
 export function TradingViewKiteChart({
@@ -55,11 +62,13 @@ export function TradingViewKiteChart({
   position,
   symbolPos,
   persistedZoom,
+  signalData,
   onTfChange,
   onIsHAChange,
   onIsLogScaleChange,
   onSymbolChange,
   onToggleIndicator,
+  onParamsChange,
 }: TradingViewKiteChartProps) {
   const [internalDrawings, setInternalDrawings] = useState<Drawing[]>(externalDrawings || []);
   const drawings = onDrawingsChange ? (externalDrawings || []) : internalDrawings;
@@ -80,9 +89,14 @@ export function TradingViewKiteChart({
     clearDrawings,
     snapToOHLC,
     updateDrawingText,
+    setDrawings: recordDrawingsChange,
+    undo: undoDrawing,
+    redo: redoDrawing,
   } = useKiteDrawings({ initialDrawings: drawings, onChange: setDrawings });
 
   const mainRef = useRef<HTMLDivElement>(null);
+  // (drawingPointsRef/drawModeRef are declared below with the other refs, kept
+  // fresh here on every render so long-lived chart callbacks can read live values)
   const profileRef = useRef<HTMLCanvasElement>(null); // for full histo VP
   const rsiRef = useRef<HTMLDivElement>(null);
   const macdRef = useRef<HTMLDivElement>(null);
@@ -90,7 +104,36 @@ export function TradingViewKiteChart({
 
   const mainChartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<Record<string, any>>({});
+  const zoomAppliedRef = useRef<boolean>(false);
   const subChartsRef = useRef<{ rsi?: IChartApi; macd?: IChartApi }>({});
+
+  // Always-fresh refs for drawMode/drawingPoints so long-lived chart callbacks
+  // (subscribeCrosshairMove) can read live values without forcing a chart rebuild.
+  const drawingPointsRef = useRef<any[]>([]);
+  const drawModeRef = useRef<string>('crosshair');
+
+  // Transient live-preview series/price-lines for in-progress multi-point drawings
+  type PreviewEntry = { kind: 'series'; series: any } | { kind: 'priceline'; series: any; line: any };
+  const previewSeriesRef = useRef<PreviewEntry[]>([]);
+
+  // Last-price flash badge
+  const prevCloseRef = useRef<number | null>(null);
+  const flashTimeoutRef = useRef<any>(null);
+  const [priceBadge, setPriceBadge] = useState<{ y: number; price: number } | null>(null);
+  const [priceFlashDir, setPriceFlashDir] = useState<'up' | 'down' | null>(null);
+
+  // Right price-scale width (for sizing the context-menu hit strip) + its context menu
+  const [rightScaleWidth, setRightScaleWidth] = useState<number>(56);
+  const [priceScaleMenu, setPriceScaleMenu] = useState<{ x: number; y: number } | null>(null);
+  // General chart-area right-click menu (distinct from the price-scale one above)
+  const [chartContextMenu, setChartContextMenu] = useState<{ x: number; y: number; price: number } | null>(null);
+
+  // Hover tracking so the keyboard-shortcut listener never hijacks typing elsewhere in the app
+  const isHoveringChartRef = useRef(false);
+
+  // Keep the "always-fresh" refs in sync every render (cheap; no extra re-renders caused)
+  drawingPointsRef.current = drawingPoints;
+  drawModeRef.current = drawMode;
 
   // Force chart resize when terminal minimized or panes hidden (layout changes free up space for chart)
   useEffect(() => {
@@ -131,12 +174,21 @@ export function TradingViewKiteChart({
 
   // Better indicators dropdown (searchable, TV like)
   const [indicatorSearch, setIndicatorSearch] = useState('');
+  // Which indicator row (by key) currently has its inline param-editor form
+  // expanded in the Indicators modal (only one at a time; null = none open).
+  const [paramEditorKey, setParamEditorKey] = useState<string | null>(null);
 
   // Drawing edit popover for right-click properties (TV style)
   const [editingDrawingId, setEditingDrawingId] = useState<number | null>(null);
   const [drawingPopoverPos, setDrawingPopoverPos] = useState<{x: number, y: number} | null>(null);
   const [drawingEditProps, setDrawingEditProps] = useState<any>(null);
   const [layoutMode, setLayoutMode] = useState<'1'|'2'|'4'>('1');
+  // Registry of synced multi-pane grid chart instances (layoutMode '2'/'4') -
+  // each MiniGridPane registers/unregisters itself here so panning/zooming any
+  // one pane broadcasts to the others via the identical subscribeVisibleTimeRangeChange
+  // pattern already used to sync the RSI/MACD sub-panes to the main chart.
+  const gridChartsRef = useRef<Map<number, IChartApi>>(new Map());
+  const gridSyncGuardRef = useRef(false);
 
   // Reset some UI state when symbol changes (new chart context)
   useEffect(() => {
@@ -168,7 +220,9 @@ export function TradingViewKiteChart({
   const ALL_INDICATORS = [
     { key: 'ema', label: 'Exponential Moving Average (EMA)', category: 'Trend' },
     { key: 'bb', label: 'Bollinger Bands', category: 'Volatility' },
-    { key: 'st', label: 'SuperTrend', category: 'Trend' },
+    { key: 'st-fast', label: 'SuperTrend Fast (21,1)', category: 'Trend' },
+    { key: 'st-mid', label: 'SuperTrend Mid (14,2)', category: 'Trend' },
+    { key: 'st-slow', label: 'SuperTrend Slow (7,3)', category: 'Trend' },
     { key: 'vwap', label: 'VWAP', category: 'Volume' },
     { key: 'vol', label: 'Volume', category: 'Volume' },
     { key: 'rsi', label: 'Relative Strength Index (RSI)', category: 'Oscillators' },
@@ -178,10 +232,55 @@ export function TradingViewKiteChart({
     { key: 'stoch', label: 'Stochastic', category: 'Oscillators' },
   ];
 
-  const filteredIndicators = ALL_INDICATORS.filter(ind => 
+  const filteredIndicators = ALL_INDICATORS.filter(ind =>
     ind.label.toLowerCase().includes(indicatorSearch.toLowerCase()) ||
     ind.category.toLowerCase().includes(indicatorSearch.toLowerCase())
   );
+
+  // Numeric param fields per indicator, for the inline gear-icon editor in the
+  // Indicators modal below. Only indicators whose rendering code actually
+  // reads params (EMA/BB/the 3 ST variants/RSI/MACD) get an entry here — vwap/
+  // vol have no numeric params, and sma/atr/stoch are inert list entries with
+  // no rendering code to wire up (see file-audit notes), so they're
+  // deliberately omitted rather than editing values nothing consumes.
+  const INDICATOR_PARAM_FIELDS: Record<string, { key: string; label: string; default: number; step?: number }[]> = {
+    ema: [
+      { key: 'ema1', label: 'Period 1', default: 9 },
+      { key: 'ema2', label: 'Period 2', default: 21 },
+    ],
+    bb: [
+      { key: 'bbPeriod', label: 'Period', default: 20 },
+      { key: 'bbStd', label: 'StdDev', default: 2, step: 0.1 },
+    ],
+    'st-fast': [
+      { key: 'stFastPeriod', label: 'Period', default: 21 },
+      { key: 'stFastMult', label: 'Mult', default: 1, step: 0.1 },
+    ],
+    'st-mid': [
+      { key: 'stMidPeriod', label: 'Period', default: 14 },
+      { key: 'stMidMult', label: 'Mult', default: 2, step: 0.1 },
+    ],
+    'st-slow': [
+      { key: 'stSlowPeriod', label: 'Period', default: 7 },
+      { key: 'stSlowMult', label: 'Mult', default: 3, step: 0.1 },
+    ],
+    rsi: [
+      { key: 'rsiPeriod', label: 'Period', default: 14 },
+    ],
+    macd: [
+      { key: 'macdFast', label: 'Fast', default: 12 },
+      { key: 'macdSlow', label: 'Slow', default: 26 },
+      { key: 'macdSig', label: 'Signal', default: 9 },
+    ],
+  };
+
+  // Commit a single param-field edit. Mirrors the onToggleIndicator fallback
+  // pattern (console.log when the parent hasn't wired the callback) so this
+  // degrades the same way if a caller doesn't pass onParamsChange.
+  const setParamField = (key: string, value: number) => {
+    if (onParamsChange) onParamsChange({ ...params, [key]: value });
+    else console.log('Param change:', key, value, ' (provide onParamsChange prop for full sync)');
+  };
 
   const candles = useMemo(() => {
     const valid = rawCandles.filter((c: any) => c.time != null && !isNaN(c.time));
@@ -332,9 +431,83 @@ export function TradingViewKiteChart({
     });
   }, [selectedDrawingId, drawings, tv]);
 
+  // Remove any transient live-preview series/price-lines from the chart
+  const clearPreview = useCallback(() => {
+    const chart = mainChartRef.current;
+    previewSeriesRef.current.forEach(entry => {
+      try {
+        if (entry.kind === 'priceline') entry.series.removePriceLine(entry.line);
+        else if (chart) chart.removeSeries(entry.series);
+      } catch {}
+    });
+    previewSeriesRef.current = [];
+  }, []);
+
+  // Render a dashed, lower-opacity live preview for an in-progress multi-point drawing
+  // (first point(s) already placed + current cursor position), mirroring the same
+  // rendering approach used for the finished drawing of that type further below.
+  const renderPreview = useCallback((livePoints: { time: number; price: number }[], mode: string) => {
+    const chart = mainChartRef.current;
+    const candleS = seriesRefs.current.candle;
+    if (!chart) return;
+    clearPreview();
+    const dashCommon = { lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false };
+    const addDashedSeries = (color: string, pts: { time: number; price: number }[], width = 1.5) => {
+      const s = chart.addSeries(LineSeries, { color, lineWidth: width as any, ...dashCommon });
+      s.setData(pts.map(p => ({ time: p.time as any, value: p.price })));
+      previewSeriesRef.current.push({ kind: 'series', series: s });
+    };
+
+    if ((mode === 'trend' || mode === 'ray') && livePoints.length === 2) {
+      addDashedSeries((mode === 'ray' ? tv.cyan : tv.green) + 'aa', livePoints);
+    } else if (mode === 'rect' && livePoints.length === 2) {
+      const [p1, p2] = livePoints;
+      const y1 = Math.min(p1.price, p2.price);
+      const y2 = Math.max(p1.price, p2.price);
+      const t1 = Math.min(p1.time, p2.time);
+      const t2 = Math.max(p1.time, p2.time);
+      addDashedSeries((tv.red || '#f23645') + 'aa', [{ time: t1, price: y1 }, { time: t2, price: y1 }]);
+      addDashedSeries((tv.red || '#f23645') + 'aa', [{ time: t1, price: y2 }, { time: t2, price: y2 }]);
+    } else if ((mode === 'fib' || mode === 'fibext') && livePoints.length === 2 && candleS) {
+      const [p1, p2] = livePoints;
+      const minP = Math.min(p1.price, p2.price);
+      const maxP = Math.max(p1.price, p2.price);
+      const ratios = mode === 'fibext'
+        ? [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618, 2.0]
+        : [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+      ratios.forEach(ratio => {
+        const fibPrice = minP + (maxP - minP) * ratio;
+        const line = candleS.createPriceLine({
+          price: fibPrice,
+          color: (tv.purple || '#a371f7') + '99',
+          lineWidth: 1 as any,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: false,
+          title: '',
+        });
+        previewSeriesRef.current.push({ kind: 'priceline', series: candleS, line });
+      });
+    } else if (mode === 'fibfan' && livePoints.length === 2) {
+      const [p1, p2] = livePoints;
+      const fanRatios = [0.382, 0.5, 0.618];
+      fanRatios.forEach(r => {
+        const fanP = { time: p2.time, price: p1.price + (p2.price - p1.price) * r };
+        addDashedSeries((tv.purple || '#a371f7') + 'aa', [p1, fanP]);
+      });
+    } else if (mode === 'pitchfork' && livePoints.length >= 2) {
+      addDashedSeries('#ff9800aa', livePoints);
+    }
+  }, [clearPreview, tv]);
+
+  // Clear the live preview the instant a drawing commits (points reset to empty),
+  // rather than waiting for the next mouse move.
+  useEffect(() => {
+    if (drawingPoints.length === 0) clearPreview();
+  }, [drawingPoints, clearPreview]);
+
   // Main chart + indicators + drawings creation
   useEffect(() => {
-    if (!mainRef.current || !baseCandles.length) return;
+    if (layoutMode !== '1' || !mainRef.current || !baseCandles.length) return;
 
     if (mainChartRef.current) {
       mainChartRef.current.remove();
@@ -367,7 +540,8 @@ export function TradingViewKiteChart({
         rightOffset: 12,
         fixLeftEdge: false,
         lockVisibleTimeRangeOnResize: true,
-        minBarSpacing: 2,
+        rightBarStaysOnScroll: true,
+        minBarSpacing: 0.5,
         // @ts-ignore
         tickMarkFormatter: (time: any, tickMarkType: any) => {
           const d = new Date((time as number) * 1000);
@@ -379,6 +553,7 @@ export function TradingViewKiteChart({
       },
       handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
       handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+      kineticScroll: { mouse: true, touch: true },
       localization: { priceFormatter: (price: number) => price.toFixed(2) },
       width: mainRef.current.clientWidth,
       height: mainRef.current.clientHeight,
@@ -434,23 +609,6 @@ export function TradingViewKiteChart({
       });
     }
 
-    // Session breaks visual (TV-style markers for open/close, e.g. NSE)
-    if (candleS && baseCandles.length > 0) {
-      const firstTime = baseCandles[0].time;
-      const lastTime = baseCandles[baseCandles.length - 1].time;
-      createSeriesMarkers?.(candleS, [
-        { time: firstTime as any, position: 'inBar', color: tv.amber, shape: 'circle', text: 'Open' },
-        { time: lastTime as any, position: 'inBar', color: tv.amber, shape: 'circle', text: 'Close' },
-      ]);
-      // Add more if multi-day (simple mid point marker)
-      if (baseCandles.length > 10) {
-        const mid = baseCandles[Math.floor(baseCandles.length / 2)].time;
-        createSeriesMarkers?.(candleS, [
-          { time: mid as any, position: 'inBar', color: tv.dim, shape: 'circle', text: 'Session' },
-        ]);
-      }
-    }
-
     const closes = baseCandles.map((c: any) => c.close);
     const highs = baseCandles.map((c: any) => c.high);
     const lows = baseCandles.map((c: any) => c.low);
@@ -459,10 +617,10 @@ export function TradingViewKiteChart({
     if (activeIndicators.has('ema')) {
       const e1 = ema(closes, params.ema1 || 9);
       const e2 = ema(closes, params.ema2 || 21);
-      const e9s = chart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
+      const e9s = chart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `EMA(${params.ema1 || 9})` });
       seriesRefs.current.ema9 = e9s;
       e9s.setData(e1.flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
-      const e21s = chart.addSeries(LineSeries, { color: tv.orange, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
+      const e21s = chart.addSeries(LineSeries, { color: tv.orange, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `EMA(${params.ema2 || 21})` });
       seriesRefs.current.ema21 = e21s;
       e21s.setData(e2.flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
     }
@@ -470,9 +628,9 @@ export function TradingViewKiteChart({
     // Bollinger
     if (activeIndicators.has('bb')) {
       const bb = bollingerBands(closes, params.bbPeriod || 20, params.bbStd || 2);
-      const bbMid = chart.addSeries(LineSeries, { color: tv.cyan, lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: true });
-      const bbUpper = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
-      const bbLower = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
+      const bbMid = chart.addSeries(LineSeries, { color: tv.cyan, lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: true, title: `BB(${params.bbPeriod || 20})` });
+      const bbUpper = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: `BB Upper` });
+      const bbLower = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: `BB Lower` });
       seriesRefs.current.bbMid = bbMid; seriesRefs.current.bbUpper = bbUpper; seriesRefs.current.bbLower = bbLower;
       bbMid.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.middle })));
       bbUpper.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.upper })));
@@ -482,14 +640,14 @@ export function TradingViewKiteChart({
     // VWAP
     if (activeIndicators.has('vwap')) {
       const v = vwap(baseCandles as any);
-      const vs = chart.addSeries(LineSeries, { color: tv.purple, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
+      const vs = chart.addSeries(LineSeries, { color: tv.purple, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'VWAP' });
       seriesRefs.current.vwap = vs;
       vs.setData(v.map((p) => ({ time: p.time as any, value: p.value })));
     }
 
-    // SuperTrend
-    if (activeIndicators.has('st')) {
-      const stData = supertrend(highs, lows, closes, params.stPeriod || 10, params.stMult || 3);
+    // SuperTrend - show selected variants with direction-based colors (bull=green, bear=red)
+    const addSupertrendWithDirection = (period: number, mult: number, label: string) => {
+      const stData = supertrend(highs, lows, closes, period, mult);
       const bullPts: { time: any; value: number }[] = [];
       const bearPts: { time: any; value: number }[] = [];
       stData.forEach((p, i) => {
@@ -497,18 +655,31 @@ export function TradingViewKiteChart({
         (p.direction === 'up' ? bullPts : bearPts).push(pt);
       });
       if (bullPts.length) {
-        const s = chart.addSeries(LineSeries, { color: tv.green, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
-        seriesRefs.current.stBull = s; s.setData(bullPts);
+        const s = chart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 2, title: label + ' (up)', priceLineVisible: false, lastValueVisible: false });
+        s.setData(bullPts);
       }
       if (bearPts.length) {
-        const s = chart.addSeries(LineSeries, { color: tv.red, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
-        seriesRefs.current.stBear = s; s.setData(bearPts);
+        const s = chart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 2, title: label + ' (dn)', priceLineVisible: false, lastValueVisible: false });
+        s.setData(bearPts);
       }
+    };
+
+    if (activeIndicators.has('st-fast')) {
+      const p = params.stFastPeriod || 21, m = params.stFastMult || 1;
+      addSupertrendWithDirection(p, m, `ST fast (${p},${m})`);
+    }
+    if (activeIndicators.has('st-mid')) {
+      const p = params.stMidPeriod || 14, m = params.stMidMult || 2;
+      addSupertrendWithDirection(p, m, `ST mid (${p},${m})`);
+    }
+    if (activeIndicators.has('st-slow')) {
+      const p = params.stSlowPeriod || 7, m = params.stSlowMult || 3;
+      addSupertrendWithDirection(p, m, `ST slow (${p},${m})`);
     }
 
     // Volume
     if (activeIndicators.has('vol')) {
-      const volS = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'volume' });
+      const volS = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'volume', title: 'Volume' });
       chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
       seriesRefs.current.vol = volS;
       volS.setData(baseCandles.map((b: any) => ({
@@ -637,23 +808,106 @@ export function TradingViewKiteChart({
       }
     }
 
+    // Signal-entry marker (native chart marker only - no DOM overlay panel, per
+    // the hard rule against bordered/background info boxes on the canvas).
+    // Only rendered when a chart is opened from a signal row (SterlingKiteEnginePane
+    // -> InstrumentPane -> ChartView -> here); absent when opened directly from
+    // the watchlist, since signalData is undefined in that path. Guarded against
+    // an empty baseCandles/times array and against a signal timestamp that falls
+    // well outside the currently loaded candle range (no throw either way).
+    if (signalData && signalData.timestamp_ms != null && times.length && candleS) {
+      try {
+        const targetSec = signalData.timestamp_ms / 1000;
+        let closestIdx = 0;
+        let closestDiff = Math.abs(times[0] - targetSec);
+        for (let i = 1; i < times.length; i++) {
+          const diff = Math.abs(times[i] - targetSec);
+          if (diff < closestDiff) { closestDiff = diff; closestIdx = i; }
+        }
+        // Average bar spacing, used as the "close enough" tolerance (at least
+        // 1h) so a signal from well outside the loaded range is silently
+        // skipped rather than mis-plotted on an unrelated bar.
+        const avgSpacing = times.length > 1 ? Math.abs(times[times.length - 1] - times[0]) / (times.length - 1) : Infinity;
+        const tolerance = Math.max(avgSpacing * 3, 3600);
+        if (closestDiff <= tolerance) {
+          const dirStr = (signalData.direction || '').toUpperCase();
+          const isLong = dirStr.includes('BUY') || dirStr.includes('LONG');
+          createSeriesMarkers?.(candleS, [{
+            time: times[closestIdx] as any,
+            position: isLong ? 'belowBar' : 'aboveBar',
+            color: isLong ? tv.green : tv.red,
+            shape: isLong ? 'arrowUp' : 'arrowDown',
+            text: 'Entry',
+          }]);
+        }
+      } catch { /* never let a bad signal timestamp break chart rendering */ }
+    }
+
     mainChartRef.current = chart;
 
-    // Persisted zoom or fit
-    const applyView = () => {
+    // Last-price flash badge: recompute pixel Y for the latest close + flash green/red on change
+    const updatePriceBadge = () => {
+      if (!candleS || !baseCandles.length) return;
+      const lastClose = baseCandles[baseCandles.length - 1].close;
+      let y: number | null = null;
       try {
-        if (persistedZoom) chart.timeScale().setVisibleRange(persistedZoom);
-        else chart.timeScale().fitContent();
-      } catch { chart.timeScale().fitContent(); }
+        // @ts-ignore - priceToCoordinate exists at runtime across lightweight-charts versions
+        y = candleS.priceToCoordinate ? candleS.priceToCoordinate(lastClose) : null;
+      } catch { y = null; }
+      if (y == null) return;
+      const prev = prevCloseRef.current;
+      if (prev != null && prev !== lastClose) {
+        const dir: 'up' | 'down' = lastClose > prev ? 'up' : 'down';
+        setPriceFlashDir(dir);
+        if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+        flashTimeoutRef.current = setTimeout(() => setPriceFlashDir(null), 400);
+      }
+      prevCloseRef.current = lastClose;
+      setPriceBadge({ y, price: lastClose });
     };
-    setTimeout(applyView, 50);
 
-    // Crosshair OHLC (pin-point)
+    // Right price-scale pixel width (sizes the context-menu hit strip over the axis)
+    const updateRightScaleWidth = () => {
+      try {
+        const w = chart.priceScale('right').width();
+        if (w && w > 0) setRightScaleWidth(w);
+      } catch {}
+    };
+
+    // Persisted zoom or fit - only apply once on first mount
+    if (!zoomAppliedRef.current) {
+      zoomAppliedRef.current = true;
+      const applyView = () => {
+        try {
+          if (persistedZoom) chart.timeScale().setVisibleRange(persistedZoom);
+          else chart.timeScale().fitContent();
+        } catch { chart.timeScale().fitContent(); }
+      };
+      setTimeout(applyView, 50);
+    }
+
+    // Crosshair OHLC (pin-point) + live dashed preview for in-progress multi-point drawings
     chart.subscribeCrosshairMove((param: any) => {
-      if (!param.time || !param.seriesPrices) { setCurrentBarInfo(null); return; }
+      if (!param.time || !param.seriesPrices) { setCurrentBarInfo(null); clearPreview(); return; }
       const c = param.seriesPrices.get(candleS!);
       if (c && typeof c === 'object') {
         setCurrentBarInfo({ time: param.time, open: (c as any).open, high: (c as any).high, low: (c as any).low, close: (c as any).close });
+      }
+
+      const mode = drawModeRef.current;
+      const basePts = drawingPointsRef.current;
+      const previewModes = ['trend', 'ray', 'fib', 'fibext', 'fibfan', 'rect', 'pitchfork'];
+      if (previewModes.includes(mode) && basePts.length >= 1) {
+        let priceVal: number | null = null;
+        if (c && typeof c === 'object') priceVal = (c as any).close;
+        else if (typeof c === 'number') priceVal = c;
+        if (priceVal == null && baseCandles.length) priceVal = baseCandles[baseCandles.length - 1].close;
+        if (priceVal != null) {
+          const snapped = snapToOHLC(priceVal, baseCandles, chart.timeScale().getVisibleRange());
+          renderPreview([...basePts, { time: param.time as number, price: snapped }], mode);
+        }
+      } else {
+        clearPreview();
       }
     });
 
@@ -667,6 +921,8 @@ export function TradingViewKiteChart({
       if (mainRef.current) {
         chart.applyOptions({ width: mainRef.current.clientWidth, height: mainRef.current.clientHeight });
         setTimeout(drawHandles, 0);
+        setTimeout(updatePriceBadge, 0);
+        setTimeout(updateRightScaleWidth, 0);
       }
     });
     ro.observe(mainRef.current);
@@ -679,25 +935,27 @@ export function TradingViewKiteChart({
     const handleSync = () => { if (selectedDrawingId) setTimeout(drawHandles, 0); };
     ts.subscribeVisibleTimeRangeChange(handleSync);
 
-    // initial profile + handles
-    setTimeout(() => { drawVolumeProfile(); drawHandles(); }, 120);
+    // initial profile + handles + price badge + scale width
+    setTimeout(() => { drawVolumeProfile(); drawHandles(); updatePriceBadge(); updateRightScaleWidth(); }, 120);
 
     return () => {
       try { ts.unsubscribeVisibleTimeRangeChange(zh); } catch {}
       try { ts.unsubscribeVisibleTimeRangeChange(handleSync); } catch {}
+      if (flashTimeoutRef.current) { clearTimeout(flashTimeoutRef.current); flashTimeoutRef.current = null; }
       ro.disconnect();
       chart.remove();
       mainChartRef.current = null;
       seriesRefs.current = {};
+      previewSeriesRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, snapToOHLC, onZoomChange, showVP, chartType]);
+  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, snapToOHLC, onZoomChange, showVP, chartType, layoutMode, signalData]);
 
   // Sub RSI pane
   useEffect(() => {
     const el = rsiRef.current;
     const main = mainChartRef.current;
-    if (!el || !activeIndicators.has('rsi') || !baseCandles.length) {
+    if (layoutMode !== '1' || !el || !activeIndicators.has('rsi') || !baseCandles.length) {
       if (subChartsRef.current.rsi) { subChartsRef.current.rsi.remove(); subChartsRef.current.rsi = undefined; }
       return;
     }
@@ -706,16 +964,19 @@ export function TradingViewKiteChart({
       grid: { vertLines: { color: tv.border }, horzLines: { color: tv.border } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true },
+      timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },
+      handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+      handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+      kineticScroll: { mouse: true, touch: true },
       width: el.clientWidth, height: 108,
     });
     const closes = baseCandles.map((c: any) => c.close);
     const times = baseCandles.map((c: any) => c.time);
     const r = rsi(closes, params.rsiPeriod || 14);
-    const line = rChart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
+    const line = rChart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `RSI(${params.rsiPeriod || 14})` });
     line.setData(r.flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
-    const ob = rChart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: false });
-    const os = rChart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: false });
+    const ob = rChart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: false, title: 'Overbought (70)' });
+    const os = rChart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: false, title: 'Oversold (30)' });
     ob.setData(times.map(t => ({ time: t as any, value: 70 })));
     os.setData(times.map(t => ({ time: t as any, value: 30 })));
     subChartsRef.current.rsi = rChart;
@@ -727,13 +988,13 @@ export function TradingViewKiteChart({
     const ro = new ResizeObserver(() => rChart.applyOptions({ width: el.clientWidth }));
     ro.observe(el);
     return () => { ro.disconnect(); rChart.remove(); subChartsRef.current.rsi = undefined; };
-  }, [baseCandles, activeIndicators, params.rsiPeriod, tv]);
+  }, [baseCandles, activeIndicators, params.rsiPeriod, tv, layoutMode]);
 
   // Sub MACD pane
   useEffect(() => {
     const el = macdRef.current;
     const main = mainChartRef.current;
-    if (!el || !activeIndicators.has('macd') || !baseCandles.length) {
+    if (layoutMode !== '1' || !el || !activeIndicators.has('macd') || !baseCandles.length) {
       if (subChartsRef.current.macd) { subChartsRef.current.macd.remove(); subChartsRef.current.macd = undefined; }
       return;
     }
@@ -742,15 +1003,18 @@ export function TradingViewKiteChart({
       grid: { vertLines: { color: tv.border }, horzLines: { color: tv.border } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true },
+      timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },
+      handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+      handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
+      kineticScroll: { mouse: true, touch: true },
       width: el.clientWidth, height: 108,
     });
     const closes = baseCandles.map((c: any) => c.close);
     const times = baseCandles.map((c: any) => c.time);
     const m = macd(closes, params.macdFast || 12, params.macdSlow || 26, params.macdSig || 9);
-    const ml = mChart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
-    const sl = mChart.addSeries(LineSeries, { color: tv.orange, lineWidth: 1, priceLineVisible: false, lastValueVisible: true });
-    const hist = mChart.addSeries(HistogramSeries, { priceScaleId: 'hist' });
+    const ml = mChart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'MACD' });
+    const sl = mChart.addSeries(LineSeries, { color: tv.orange, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'Signal' });
+    const hist = mChart.addSeries(HistogramSeries, { priceScaleId: 'hist', title: 'Histogram' });
     ml.setData(m.flatMap((p, i) => p.macd != null ? [{ time: times[i] as any, value: p.macd }] : []));
     sl.setData(m.flatMap((p, i) => p.signal != null ? [{ time: times[i] as any, value: p.signal }] : []));
     hist.setData(m.flatMap((p, i) => p.hist != null ? [{ time: times[i] as any, value: p.hist, color: p.hist >= 0 ? tv.green + '88' : tv.red + '88' }] : []));
@@ -763,7 +1027,7 @@ export function TradingViewKiteChart({
     const ro = new ResizeObserver(() => mChart.applyOptions({ width: el.clientWidth }));
     ro.observe(el);
     return () => { ro.disconnect(); mChart.remove(); subChartsRef.current.macd = undefined; };
-  }, [baseCandles, activeIndicators, params, tv]);
+  }, [baseCandles, activeIndicators, params, tv, layoutMode]);
 
   // Redraw profile + handles when relevant
   useEffect(() => { setTimeout(drawVolumeProfile, 30); }, [drawVolumeProfile, showVP, volumeProfile]);
@@ -851,10 +1115,16 @@ export function TradingViewKiteChart({
     drawingMouseUp(() => { if (onDrawingsChange) onDrawingsChange(drawings); });
   };
 
-  // Right-click popover for drawing properties (TV style)
+  // Right-click on the chart area: opens the drawing-properties popover (TV
+  // style) if a drawing was hit, otherwise opens the general chart-area
+  // context menu (Add hline / Remove all / Reset view / Toggle log scale).
+  // This is distinct from handlePriceScaleContextMenu below, which lives on
+  // its own sibling hit-strip over the right price-axis and therefore never
+  // fires together with this one (a right-click only targets ONE of the two
+  // sibling elements, and the event never bubbles across siblings).
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!mainRef.current || !mainChartRef.current || drawings.length === 0) return;
+    if (!mainRef.current || !mainChartRef.current) return;
     const rect = mainRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -871,16 +1141,18 @@ export function TradingViewKiteChart({
     } catch {}
     // Simple hit test for nearest drawing point
     let hit: any = null;
-    const tolPrice = (baseCandles[baseCandles.length-1]?.close || 100) * 0.01;
-    for (let i = drawings.length-1; i>=0; i--) {
-      const d = drawings[i];
-      if (d.type === 'hline' && Math.abs((d.price || 0) - price) < tolPrice) {
-        hit = d; break;
-      }
-      if (d.points) {
-        for (const p of d.points) {
-          if (Math.abs(p.price - price) < tolPrice && Math.abs(p.time - time) < 300) {
-            hit = d; break;
+    if (drawings.length > 0) {
+      const tolPrice = (baseCandles[baseCandles.length-1]?.close || 100) * 0.01;
+      for (let i = drawings.length-1; i>=0; i--) {
+        const d = drawings[i];
+        if (d.type === 'hline' && Math.abs((d.price || 0) - price) < tolPrice) {
+          hit = d; break;
+        }
+        if (d.points) {
+          for (const p of d.points) {
+            if (Math.abs(p.price - price) < tolPrice && Math.abs(p.time - time) < 300) {
+              hit = d; break;
+            }
           }
         }
       }
@@ -889,6 +1161,8 @@ export function TradingViewKiteChart({
       setEditingDrawingId(hit.id);
       setDrawingPopoverPos({x: e.clientX, y: e.clientY});
       setDrawingEditProps({...hit});
+    } else {
+      setChartContextMenu({ x: e.clientX, y: e.clientY, price });
     }
   };
 
@@ -908,6 +1182,81 @@ export function TradingViewKiteChart({
       setEditTextValue('');
     }
   };
+
+  // Right price-scale context menu (Auto/Log/Percentage) - right-click over the axis strip
+  const handlePriceScaleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setPriceScaleMenu({ x: e.clientX, y: e.clientY });
+  };
+  const applyPriceScaleMode = (mode: PriceScaleMode) => {
+    try { mainChartRef.current?.priceScale('right').applyOptions({ mode }); } catch {}
+    // Keep in sync with the existing isLogScale prop where sensible (Percentage has no
+    // backing prop, so it's left as a session-only choice until the chart next rebuilds).
+    if (onIsLogScaleChange) {
+      if (mode === PriceScaleMode.Logarithmic) onIsLogScaleChange(true);
+      else if (mode === PriceScaleMode.Normal) onIsLogScaleChange(false);
+    }
+    setPriceScaleMenu(null);
+  };
+
+  // Keyboard shortcuts - only active while hovering the chart wrapper, and never while
+  // typing in an input/textarea/select anywhere in the app.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isHoveringChartRef.current) return;
+      const ae = document.activeElement;
+      if (ae && ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae.tagName)) return;
+
+      // Undo/redo (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y) - handled before
+      // the generic ctrl/meta guard below, which otherwise ignores every
+      // ctrl/cmd combo so it doesn't fight browser/OS shortcuts.
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) redoDrawing(); else undoDrawing();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        redoDrawing();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) return;
+      const chart = mainChartRef.current;
+      if (!chart) return;
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const ts = chart.timeScale();
+        const range = ts.getVisibleLogicalRange();
+        if (range) {
+          const delta = e.key === 'ArrowLeft' ? -3 : 3;
+          ts.setVisibleLogicalRange({ from: range.from + delta, to: range.to + delta });
+        }
+        e.preventDefault();
+      } else if (e.key === '+' || e.key === '=' || e.key === '-') {
+        const ts = chart.timeScale();
+        const cur = ts.options().barSpacing || 6;
+        const next = e.key === '-' ? cur / 1.2 : cur * 1.2;
+        ts.applyOptions({ barSpacing: Math.max(0.5, Math.min(200, next)) });
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        if (drawingPointsRef.current.length > 0) {
+          setDrawingPoints([]);
+          setDrawMode('crosshair');
+        } else if (selectedDrawingId != null) {
+          setSelectedDrawingId(null);
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedDrawingId != null) {
+          e.preventDefault();
+          const updated = drawings.filter(d => d.id !== selectedDrawingId);
+          recordDrawingsChange(updated);
+          setSelectedDrawingId(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [drawings, selectedDrawingId, onDrawingsChange, recordDrawingsChange, undoDrawing, redoDrawing, setDrawingPoints, setDrawMode, setSelectedDrawingId]);
 
   // Toolbar helpers
   const toggleLog = () => {
@@ -932,6 +1281,7 @@ export function TradingViewKiteChart({
     <button
       onClick={() => setDrawMode(mode as any)}
       title={title}
+      className="tv-ctrl"
       style={{
         width: 22, height: 20, padding: 0, margin: 0,
         border: `1px solid ${active ? accent : tv.border}`,
@@ -939,6 +1289,9 @@ export function TradingViewKiteChart({
         color: active ? accent : tv.dim,
         borderRadius: 2,
         cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         lineHeight: '18px',
         fontSize: 11,
       }}
@@ -959,9 +1312,24 @@ export function TradingViewKiteChart({
       right: isFullscreen ? 0 : 'auto',
       bottom: isFullscreen ? 0 : 'auto',
       zIndex: isFullscreen ? 9999 : 'auto',
-      fontFamily: tv.fontFamily, 
-      color: tv.text 
+      fontFamily: tv.fontFamily,
+      color: tv.text
     }}>
+      <style>{`
+        .tv-ctrl { transition: filter 0.12s cubic-bezier(0.4,0,0.2,1), transform 0.08s ease, box-shadow 0.12s ease; cursor: pointer; }
+        .tv-ctrl:hover { filter: brightness(1.35) saturate(1.1); }
+        .tv-ctrl:active { transform: scale(0.93); filter: brightness(0.85); }
+        .tv-ctrl:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(88,166,255,0.5); }
+        @keyframes tvFadeSlideIn { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes tvModalIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+        @keyframes tvBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+        .tv-menu-anim { animation: tvFadeSlideIn 0.15s cubic-bezier(0.4,0,0.2,1) both; transform-origin: top left; }
+        .tv-modal-anim { animation: tvModalIn 0.16s cubic-bezier(0.4,0,0.2,1) both; }
+        .tv-backdrop-anim { animation: tvBackdropIn 0.16s ease both; }
+        .tv-tab { position: relative; transition: color 0.15s ease; }
+        @keyframes tvPriceFlash { 0% { filter: brightness(2); } 100% { filter: brightness(1); } }
+        .tv-flash-up, .tv-flash-down { animation: tvPriceFlash 0.4s ease-out; }
+      `}</style>
       {/* TV EXACT top header bar */}
       <div style={{
         display: 'flex',
@@ -976,12 +1344,13 @@ export function TradingViewKiteChart({
       }}>
         {/* Symbol search - exact TV style */}
         <div style={{ position: 'relative', marginRight: 8 }}>
-          <div 
+          <div
             onClick={() => setShowSymbolSearch(!showSymbolSearch)}
-            style={{ 
-              display: 'flex', alignItems: 'center', gap: 6, 
+            className="tv-ctrl"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
               padding: '2px 6px', border: `1px solid ${tv.border}`, borderRadius: 3,
-              background: tv.surface, cursor: 'pointer', minWidth: 140 
+              background: tv.surface, cursor: 'pointer', minWidth: 140
             }}
           >
             <span style={{ fontWeight: 600, fontSize: 13, color: tv.text }}>{(symbol || '').split(':').pop() || symbol}</span>
@@ -993,7 +1362,7 @@ export function TradingViewKiteChart({
             <span style={{ fontSize: 10, color: tv.dim }}>▼</span>
           </div>
           {showSymbolSearch && (
-            <div style={{
+            <div className="tv-menu-anim" style={{
               position: 'absolute', top: '100%', left: 0, zIndex: 100,
               background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
               width: 220, maxHeight: 220, overflow: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
@@ -1026,7 +1395,7 @@ export function TradingViewKiteChart({
         {/* TV-style interval bar + dropdown for more */}
         <div style={{ display: 'flex', gap: 1, marginRight: 8, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2, padding: 1, position: 'relative' }}>
           {['1m','3m','5m','15m','30m','1H','2H','4H','D','W','M'].map((t) => (
-            <button key={t} onClick={() => {
+            <button key={t} className="tv-ctrl" onClick={() => {
               if (onTfChange) onTfChange(t);
             }} style={{
               background: tf === t ? tv.blue : 'transparent',
@@ -1039,12 +1408,14 @@ export function TradingViewKiteChart({
               minWidth: 24,
             }}>{t}</button>
           ))}
-          <button 
-            onClick={() => setShowTfDropdown(!showTfDropdown)} 
-            style={{ padding: '1px 4px', fontSize: 9, color: tv.dim, background: 'transparent', border: 'none', cursor: 'pointer' }}
-          >⋯</button>
+          <button
+            onClick={() => setShowTfDropdown(!showTfDropdown)}
+            className="tv-ctrl"
+            title="More timeframes"
+            style={{ padding: '1px 4px', fontSize: 9, color: tv.dim, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          ><IconMore /></button>
           {showTfDropdown && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 3, padding: 4, minWidth: 120, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+            <div className="tv-menu-anim" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 3, padding: 4, minWidth: 120, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
               {['1m','5m','15m','30m','60m','120m','240m','D','W','M'].map(t => (
                 <div key={t} onClick={() => { if (onTfChange) onTfChange(t); setShowTfDropdown(false); }} style={{ padding: '3px 6px', cursor: 'pointer', fontSize: 10 }}>{t}</div>
               ))}
@@ -1053,9 +1424,10 @@ export function TradingViewKiteChart({
         </div>
 
         {/* Chart type (TV style) */}
-        <select 
-          value={chartType} 
+        <select
+          value={chartType}
           onChange={(e) => setChartType(e.target.value as any)}
+          className="tv-ctrl"
           style={{ fontSize: 10, background: tv.surface, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 2, padding: '1px 4px' }}
         >
           <option value="candles">Candles</option>
@@ -1063,65 +1435,62 @@ export function TradingViewKiteChart({
           <option value="line">Line</option>
           <option value="area">Area</option>
         </select>
-        <button onClick={() => { const next = !isHA; if (onIsHAChange) onIsHAChange(next); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${isHA ? tv.green : tv.border}`, background: isHA ? tv.green+'22' : 'transparent', color: isHA ? tv.green : tv.dim, borderRadius: 2 }}>HA</button>
+        <button className="tv-ctrl" onClick={() => { const next = !isHA; if (onIsHAChange) onIsHAChange(next); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${isHA ? tv.green : tv.border}`, background: isHA ? tv.green+'22' : 'transparent', color: isHA ? tv.green : tv.dim, borderRadius: 2 }}>HA</button>
 
         {/* Multi-chart layout switcher (TV 1/2/4/8) */}
         <div style={{ display: 'flex', gap: 2, marginLeft: 4, border: `1px solid ${tv.border}`, borderRadius: 2, padding: 1 }}>
           {(['1','2','4'] as const).map(m => (
-            <button key={m} onClick={() => { 
-              setLayoutMode(m); 
-              console.log('Layout switched to', m, 'panes (use MultiPaneChart for full sync)'); 
-            }} style={{ 
-              fontSize: 8, padding: '1px 3px', background: layoutMode === m ? tv.blue : 'transparent', 
-              color: layoutMode === m ? '#fff' : tv.dim, border: 'none', cursor: 'pointer' 
+            <button key={m} className="tv-ctrl" onClick={() => setLayoutMode(m)} style={{
+              fontSize: 8, padding: '1px 3px', background: layoutMode === m ? tv.blue : 'transparent',
+              color: layoutMode === m ? '#fff' : tv.dim, border: 'none', cursor: 'pointer'
             }}>{m}</button>
           ))}
         </div>
 
         {/* Main TV actions - perfect clone style */}
         {/* Indicators - TV style button opening real dialog */}
-        <button onClick={() => setShowStudies(!showStudies)} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: showStudies ? tv.blue + '22' : 'transparent', color: showStudies ? tv.blue : tv.dim, borderRadius: 2 }}>fx Indicators</button>
-        <button onClick={() => { /* drawings in left */ }} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2 }}>🖊 Draw</button>
+        <button className="tv-ctrl" onClick={() => setShowStudies(!showStudies)} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: showStudies ? tv.blue + '22' : 'transparent', color: showStudies ? tv.blue : tv.dim, borderRadius: 2 }}>fx Indicators</button>
+        <button className="tv-ctrl" onClick={() => { /* drawings in left */ }} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 4 }}><IconPencil /> Draw</button>
 
         <span style={{ color: tv.dim, margin: '0 4px' }}>|</span>
 
-        <button onClick={() => { if (onIsLogScaleChange) onIsLogScaleChange(!isLogScale); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${isLogScale ? tv.blue : tv.border}`, background: isLogScale ? tv.blue+'22' : 'transparent', color: isLogScale ? tv.blue : tv.dim }}>Log</button>
-        <button onClick={() => { /* toggle vp */ }} style={toolBtnStyle(showVP, tv, tv.amber)}>VP</button>
-        <button onClick={() => setIsFullscreen(!isFullscreen)} title="Fullscreen" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent' }}>⛶</button>
+        <button className="tv-ctrl" onClick={() => { if (onIsLogScaleChange) onIsLogScaleChange(!isLogScale); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${isLogScale ? tv.blue : tv.border}`, background: isLogScale ? tv.blue+'22' : 'transparent', color: isLogScale ? tv.blue : tv.dim }}>Log</button>
+        <button className="tv-ctrl" onClick={() => { /* toggle vp */ }} style={toolBtnStyle(showVP, tv, tv.amber)}>VP</button>
+        <button className="tv-ctrl" onClick={() => setIsFullscreen(!isFullscreen)} title="Fullscreen" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconFullscreen /></button>
 
         <span style={{ flex: 1 }} />
 
         <span style={{ fontSize: 9, color: tv.dim }}>{baseCandles.length} bars</span>
 
-        {currentBarInfo && (
-          <span style={{ fontSize: 9, fontFamily: 'monospace', color: tv.text, background: tv.surface, padding: '1px 4px', borderRadius: 2, border: `1px solid ${tv.border}` }}>
-            O {currentBarInfo.open?.toFixed(2) || currentBarInfo.o?.toFixed(2)} H {currentBarInfo.high?.toFixed(2) || currentBarInfo.h?.toFixed(2)} L {currentBarInfo.low?.toFixed(2) || currentBarInfo.l?.toFixed(2)} C {currentBarInfo.close?.toFixed(2) || currentBarInfo.c?.toFixed(2)}
-          </span>
-        )}
-
-        <button onClick={() => { clearDrawings(); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent' }} title="Clear drawings">✕</button>
+        <button className="tv-ctrl" onClick={() => { clearDrawings(); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Clear drawings"><IconClose /></button>
       </div>
 
+      {layoutMode === '1' ? (
+      <>
       {/* Main area: side vertical drawing toolbar + chart */}
       <div style={{ display: 'flex', flex: 1, minHeight: 180, overflow: 'hidden' }} onDoubleClick={startEditSelectedText}>
         {/* Side vertical toolbar (TV style) with icons */}
         <div style={vbarStyle}>
-          {vBtn('crosshair', drawMode === 'crosshair', tv.blue, 'Crosshair / Select', '⌖')}
-          {vBtn('hline', drawMode === 'hline', tv.amber, 'Horizontal Line', '—')}
-          {vBtn('trend', drawMode === 'trend', tv.green, 'Trend Line', '↗')}
-          {vBtn('ray', drawMode === 'ray', tv.cyan, 'Ray', '→')}
+          {vBtn('crosshair', drawMode === 'crosshair', tv.blue, 'Crosshair / Select', <IconCrosshair />)}
+          {vBtn('hline', drawMode === 'hline', tv.amber, 'Horizontal Line', <IconHLine />)}
+          {vBtn('trend', drawMode === 'trend', tv.green, 'Trend Line', <IconTrendline />)}
+          {vBtn('ray', drawMode === 'ray', tv.cyan, 'Ray', <IconRay />)}
           <div style={{ height: 3 }} />
-          {vBtn('fib', drawMode === 'fib', tv.purple, 'Fib Retracement', '𝜙')}
-          {vBtn('fibext', drawMode === 'fibext', tv.purple, 'Fib Extension', '𝜙+')}
-          {vBtn('fibfan', drawMode === 'fibfan', tv.purple, 'Fib Fan', '𝜙ᶠ')}
+          {vBtn('fib', drawMode === 'fib', tv.purple, 'Fib Retracement', <IconFib />)}
+          {vBtn('fibext', drawMode === 'fibext', tv.purple, 'Fib Extension', <IconFibExt />)}
+          {vBtn('fibfan', drawMode === 'fibfan', tv.purple, 'Fib Fan', <IconFibFan />)}
           <div style={{ height: 3 }} />
-          {vBtn('rect', drawMode === 'rect', tv.red, 'Rectangle', '□')}
-          {vBtn('pitchfork', drawMode === 'pitchfork', '#ff9800', "Andrew's Pitchfork", 'Ψ')}
-          {vBtn('text', drawMode === 'text', tv.text, 'Text Annotation', 'Aa')}
+          {vBtn('rect', drawMode === 'rect', tv.red, 'Rectangle', <IconRect />)}
+          {vBtn('pitchfork', drawMode === 'pitchfork', '#ff9800', "Andrew's Pitchfork", <IconPitchfork />)}
+          {vBtn('text', drawMode === 'text', tv.text, 'Text Annotation', <IconText />)}
         </div>
 
         {/* Chart container + overlays */}
-        <div style={{ flex: 1, position: 'relative', background: tv.bg }}>
+        <div
+          style={{ flex: 1, position: 'relative', background: tv.bg }}
+          onMouseEnter={() => { isHoveringChartRef.current = true; }}
+          onMouseLeave={() => { isHoveringChartRef.current = false; }}
+        >
           <div
             ref={mainRef}
             style={{ position: 'absolute', inset: 0, cursor: isDragging ? 'grabbing' : 'crosshair' }}
@@ -1151,6 +1520,101 @@ export function TradingViewKiteChart({
           )}
           {/* Drag handles / selection overlay (real coord based) */}
           <canvas ref={handlesRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }} />
+
+          {/* Thin hit-strip over the right price-scale: right-click for Auto/Log/Percentage */}
+          <div
+            onContextMenu={handlePriceScaleContextMenu}
+            title="Right-click: scale mode"
+            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: rightScaleWidth || 56, zIndex: 5, cursor: 'default' }}
+          />
+          {priceScaleMenu && (
+            <>
+              <div onClick={() => setPriceScaleMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
+              <div className="tv-menu-anim" style={{
+                position: 'fixed', left: priceScaleMenu.x, top: priceScaleMenu.y, zIndex: 200,
+                background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
+                minWidth: 140, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
+              }}>
+                {[
+                  { label: 'Auto (Normal)', mode: PriceScaleMode.Normal },
+                  { label: 'Logarithmic', mode: PriceScaleMode.Logarithmic },
+                  { label: 'Percentage', mode: PriceScaleMode.Percentage },
+                ].map(opt => (
+                  <div
+                    key={opt.label}
+                    className="tv-ctrl"
+                    onClick={() => applyPriceScaleMode(opt.mode)}
+                    style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}
+                  >
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* General chart-area right-click menu (distinct from priceScaleMenu above -
+              fires from handleContextMenu on the mainRef div when no drawing was hit) */}
+          {chartContextMenu && (
+            <>
+              <div onClick={() => setChartContextMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
+              <div className="tv-menu-anim" style={{
+                position: 'fixed', left: chartContextMenu.x, top: chartContextMenu.y, zIndex: 200,
+                background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
+                minWidth: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
+              }}>
+                <div
+                  className="tv-ctrl"
+                  onClick={() => {
+                    const newDrawing: Drawing = { id: Date.now(), type: 'hline', price: chartContextMenu.price, color: tv.amber };
+                    recordDrawingsChange([...drawings, newDrawing]);
+                    setChartContextMenu(null);
+                  }}
+                  style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}
+                >Add horizontal line here</div>
+                <div
+                  className="tv-ctrl"
+                  onClick={() => { clearDrawings(); setChartContextMenu(null); }}
+                  style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text, borderTop: `1px solid ${tv.border}` }}
+                >Remove all drawings</div>
+                <div
+                  className="tv-ctrl"
+                  onClick={() => { try { mainChartRef.current?.timeScale().fitContent(); } catch {} setChartContextMenu(null); }}
+                  style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text, borderTop: `1px solid ${tv.border}` }}
+                >Reset view</div>
+                <div
+                  className="tv-ctrl"
+                  onClick={() => { if (onIsLogScaleChange) onIsLogScaleChange(!isLogScale); setChartContextMenu(null); }}
+                  style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text, borderTop: `1px solid ${tv.border}` }}
+                >Toggle log scale</div>
+              </div>
+            </>
+          )}
+
+          {/* Last-price flash badge: pill at the current close's pixel Y, flashes on change */}
+          {priceBadge && (
+            <div
+              className={priceFlashDir === 'up' ? 'tv-flash-up' : priceFlashDir === 'down' ? 'tv-flash-down' : undefined}
+              style={{
+                position: 'absolute',
+                right: 2,
+                top: priceBadge.y - 8,
+                zIndex: 6,
+                pointerEvents: 'none',
+                background: priceFlashDir === 'up' ? tv.green + '33' : priceFlashDir === 'down' ? tv.red + '33' : tv.surface,
+                color: tv.text,
+                border: `1px solid ${priceFlashDir === 'up' ? tv.green : priceFlashDir === 'down' ? tv.red : tv.border}`,
+                borderRadius: 3,
+                padding: '1px 5px',
+                fontSize: 10,
+                fontFamily: 'monospace',
+                lineHeight: '14px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {priceBadge.price.toFixed(2)}
+            </div>
+          )}
 
           {/* (Indicators now in top dropdown - TV style) */}
 
@@ -1188,14 +1652,12 @@ export function TradingViewKiteChart({
               <div style={{ marginTop: 4 }}>
                 <button onClick={() => {
                   const updated = drawings.map(d => d.id === editingDrawingId ? {...d, ...drawingEditProps} : d);
-                  setDrawings(updated);
-                  if (onDrawingsChange) onDrawingsChange(updated);
+                  recordDrawingsChange(updated);
                   setEditingDrawingId(null); setDrawingPopoverPos(null); setDrawingEditProps(null);
                 }} style={{ fontSize: 9, padding: '2px 6px', marginRight: 4 }}>Apply</button>
                 <button onClick={() => {
                   const updated = drawings.filter(d => d.id !== editingDrawingId);
-                  setDrawings(updated);
-                  if (onDrawingsChange) onDrawingsChange(updated);
+                  recordDrawingsChange(updated);
                   setEditingDrawingId(null); setDrawingPopoverPos(null); setDrawingEditProps(null);
                 }} style={{ fontSize: 9, padding: '2px 6px' }}>Delete</button>
                 <button onClick={() => { setEditingDrawingId(null); setDrawingPopoverPos(null); setDrawingEditProps(null); }} style={{ fontSize: 9, padding: '2px 6px', float: 'right' }}>Close</button>
@@ -1223,24 +1685,56 @@ export function TradingViewKiteChart({
           )}
         </div>
       )}
+      </>
+      ) : (
+        /* Multi-pane grid (layoutMode '2'/'4'): N synced mini-charts, same
+           underlying symbol/timeframe/indicators in every pane (per-pane
+           different symbols/timeframes is out of scope for this pass). Each
+           pane gets its own createChart instance (MiniGridPane below) and all
+           panes stay in lockstep via the same subscribeVisibleTimeRangeChange
+           sync pattern already used for the RSI/MACD sub-panes above. */
+        <div style={{
+          flex: 1, minHeight: 180, overflow: 'hidden', background: tv.bg,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gridTemplateRows: layoutMode === '4' ? '1fr 1fr' : '1fr',
+          gap: 1,
+        }}>
+          {Array.from({ length: layoutMode === '4' ? 4 : 2 }).map((_, i) => (
+            <div key={i} style={{ position: 'relative', overflow: 'hidden', border: `1px solid ${tv.border}` }}>
+              <MiniGridPane
+                paneIndex={i}
+                baseCandles={baseCandles}
+                activeIndicators={activeIndicators}
+                params={params}
+                tv={tv}
+                isLogScale={isLogScale}
+                chartsRef={gridChartsRef}
+                syncGuardRef={gridSyncGuardRef}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Real Indicator Dialog (TV fx style modal) */}
       {showStudies && (
-        <div style={{
+        <div className="tv-backdrop-anim" style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)',
           zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }} onClick={() => setShowStudies(false)}>
-          <div 
-            style={{ 
-              background: tv.surface, color: tv.text, width: 400, maxHeight: '70vh', 
+          <div
+            className="tv-modal-anim"
+            style={{
+              background: tv.surface, color: tv.text, width: 400, maxHeight: '70vh',
               border: `1px solid ${tv.border}`, borderRadius: 6, overflow: 'hidden',
               boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
-            }} 
+            }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: tv.bg }}>
               <strong style={{ fontSize: 14 }}>Indicators</strong>
-              <button onClick={() => setShowStudies(false)} style={{ background: 'none', border: 'none', color: tv.dim, fontSize: 16, cursor: 'pointer' }}>×</button>
+              <button onClick={() => setShowStudies(false)} style={{ background: 'none', border: 'none', color: tv.dim, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconClose /></button>
             </div>
             <div style={{ padding: 8 }}>
               <input 
@@ -1251,34 +1745,73 @@ export function TradingViewKiteChart({
               />
               {filteredIndicators.map(ind => {
                 const isActive = activeIndicators.has(ind.key);
+                const paramFields = INDICATOR_PARAM_FIELDS[ind.key];
+                const isEditingParams = isActive && paramFields && paramEditorKey === ind.key;
                 return (
-                  <div key={ind.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderBottom: `1px solid ${tv.border}` }}>
-                    <div>
-                      <div style={{ fontSize: 12 }}>{ind.label}</div>
-                      <div style={{ fontSize: 9, color: tv.dim }}>{ind.category}</div>
+                  <div key={ind.key} style={{ borderBottom: `1px solid ${tv.border}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px' }}>
+                      <div>
+                        <div style={{ fontSize: 12 }}>{ind.label}</div>
+                        <div style={{ fontSize: 9, color: tv.dim }}>{ind.category}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {isActive && paramFields && (
+                          <button
+                            className="tv-ctrl"
+                            title="Edit parameters"
+                            onClick={() => setParamEditorKey(isEditingParams ? null : ind.key)}
+                            style={{
+                              padding: '2px 5px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: isEditingParams ? tv.blue + '33' : tv.bg,
+                              border: `1px solid ${isEditingParams ? tv.blue : tv.border}`,
+                              color: isEditingParams ? tv.blue : tv.dim, borderRadius: 2, cursor: 'pointer',
+                            }}
+                          ><IconGear /></button>
+                        )}
+                        <button
+                          className="tv-ctrl"
+                          onClick={() => {
+                            if (onToggleIndicator) onToggleIndicator(ind.key);
+                            else console.log('Indicator toggle:', ind.key, ' (provide onToggleIndicator prop for full sync)');
+                            // keep dialog open for multi add
+                          }}
+                          style={{
+                            padding: '2px 8px', fontSize: 10,
+                            background: isActive ? tv.green + '33' : tv.bg,
+                            border: `1px solid ${isActive ? tv.green : tv.border}`,
+                            color: isActive ? tv.green : tv.text, borderRadius: 2, cursor: 'pointer'
+                          }}
+                        >
+                          {isActive ? 'Remove' : 'Add'}
+                        </button>
+                      </div>
                     </div>
-                    <button 
-                      onClick={() => {
-                        if (onToggleIndicator) onToggleIndicator(ind.key);
-                        else console.log('Indicator toggle:', ind.key, ' (provide onToggleIndicator prop for full sync)');
-                        // keep dialog open for multi add
-                      }}
-                      style={{ 
-                        padding: '2px 8px', fontSize: 10, 
-                        background: isActive ? tv.green + '33' : tv.bg, 
-                        border: `1px solid ${isActive ? tv.green : tv.border}`, 
-                        color: isActive ? tv.green : tv.text, borderRadius: 2, cursor: 'pointer' 
-                      }}
-                    >
-                      {isActive ? 'Remove' : 'Add'}
-                    </button>
+                    {isEditingParams && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '2px 4px 8px' }}>
+                        {paramFields!.map(field => (
+                          <label key={field.key} style={{ fontSize: 9, color: tv.dim, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {field.label}
+                            <input
+                              type="number"
+                              step={field.step ?? 1}
+                              value={params[field.key] ?? field.default}
+                              onChange={e => {
+                                const n = parseFloat(e.target.value);
+                                setParamField(field.key, isNaN(n) ? field.default : n);
+                              }}
+                              style={{ width: 56, fontSize: 11, padding: '2px 4px', background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 2 }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
               {filteredIndicators.length === 0 && <div style={{ padding: 8, color: tv.dim, fontSize: 11 }}>No matches. Try EMA, RSI, etc.</div>}
             </div>
             <div style={{ padding: 8, fontSize: 9, color: tv.dim, borderTop: `1px solid ${tv.border}`, background: tv.bg }}>
-              Click Add/Remove. Use parent toolbar for params. Close with X or outside.
+              Click Add/Remove. Use the gear icon on an active indicator to edit its params. Close with X or outside.
             </div>
           </div>
         </div>
@@ -1298,3 +1831,4 @@ function toolBtnStyle(active: boolean, t: any, accent: string): React.CSSPropert
     cursor: 'pointer',
   };
 }
+

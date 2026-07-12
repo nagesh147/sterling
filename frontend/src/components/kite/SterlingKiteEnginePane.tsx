@@ -27,7 +27,7 @@ import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 
 interface Props {
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
-  onOpenChart?: (symbol: string, tab: 'chart') => void;
+  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
 }
 
 // Plain-language labels (users were confused by fast/mid/slow + "early lock").
@@ -224,7 +224,7 @@ const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, A
 function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
-  onOpenChart?: (underlying: string) => void;
+  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
   sort: { key: string; dir: string };
@@ -758,7 +758,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           lastPrice: lastPx || 0,
                         });
                       }}
-                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(row.underlying); }}
+                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, { timestamp_ms: row.timestamp_ms, direction: row.direction, regime: row.regime }); }}
                     />
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -2227,7 +2227,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
                         onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                         onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
-                        onOpenChart={onOpenChart ? (symbol) => onOpenChart(symbol, 'chart') : undefined} />
+                        onOpenChart={onOpenChart ? (symbol, tab, trailTarget, signalData) => onOpenChart(symbol, tab, trailTarget, signalData) : undefined} />
                     ))}
                   </div>
                 )}

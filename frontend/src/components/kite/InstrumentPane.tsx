@@ -15,6 +15,8 @@ interface InstrumentPaneProps {
   symbol: string;
   initialTab?: InstrumentTab;
   onSymbolChange?: (symbol: string) => void;
+  trailTarget?: 'fast' | 'mid' | 'slow';
+  signalData?: { timestamp_ms: number; direction: string; regime: string };
 }
 
 const TABS: { id: InstrumentTab; label: string }[] = [
@@ -23,7 +25,7 @@ const TABS: { id: InstrumentTab; label: string }[] = [
   { id: 'fundamentals', label: 'Fundamentals' },
 ];
 
-export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange }: InstrumentPaneProps) {
+export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange, trailTarget, signalData }: InstrumentPaneProps) {
   const [tab, setTab] = useState<InstrumentTab>(initialTab);
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange }:
 
       {/* ── Content ── */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {tab === 'chart' && <ChartView symbol={symbol} onSymbolChange={onSymbolChange} />}
+        {tab === 'chart' && <ChartView symbol={symbol} onSymbolChange={onSymbolChange} trailTarget={trailTarget} signalData={signalData} />}
         {tab === 'option-chain' && <OptionChainView symbol={symbol} />}
         {tab === 'fundamentals' && (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim }}>Fundamentals data not available.</div>
@@ -67,30 +69,57 @@ export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange }:
 
 // ─── Chart View ─────────────────────────────────────────────────────────────
 
-type IndicatorKey = 'ema' | 'bb' | 'st' | 'vwap' | 'vol' | 'rsi' | 'macd';
+type IndicatorKey = 'ema' | 'bb' | 'st-fast' | 'st-mid' | 'st-slow' | 'vwap' | 'vol' | 'rsi' | 'macd';
 
 const ALL_TFS = ['1m', '5m', '15m', '30m', '1H', '4H', 'D'];
 const INDICATOR_LABELS: Record<IndicatorKey, string> = {
   ema: 'EMA',
   bb: 'BB',
-  st: 'SuperTrend',
+  'st-fast': 'ST Fast (21,1)',
+  'st-mid': 'ST Mid (14,2)',
+  'st-slow': 'ST Slow (7,3)',
   vwap: 'VWAP',
   vol: 'Volume',
   rsi: 'RSI',
   macd: 'MACD',
 };
 
-function ChartView({ symbol, onSymbolChange }: { symbol: string; onSymbolChange?: (symbol: string) => void }) {
+function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } }) {
+  // Default active-indicator set: when opened with a trailTarget (from a signal
+  // row) the matching SuperTrend variant is active by default instead of the
+  // plain-watchlist default of st-mid. trailTarget undefined (normal watchlist
+  // open) resolves to 'st-mid', identical to the prior hardcoded behavior.
+  const defaultActiveSet = (target?: 'fast' | 'mid' | 'slow'): Set<IndicatorKey> => {
+    const stKey: IndicatorKey = target === 'fast' ? 'st-fast' : target === 'slow' ? 'st-slow' : 'st-mid';
+    return new Set<IndicatorKey>(['vol', stKey]);
+  };
+
   const [tf, setTf] = useState('15m');
   const [active, setActive] = useState<Set<IndicatorKey>>(
-    () => new Set<IndicatorKey>(['ema', 'vol', 'st'])
+    () => defaultActiveSet(trailTarget)
   );
   const [isHA, setIsHA] = useState(false);
   const [isDark, setIsDark] = useState(false);
+
+  const getSTParams = (target?: 'fast' | 'mid' | 'slow') => {
+    switch (target) {
+      case 'fast': return { stPeriod: 21, stMult: 1 };
+      case 'mid': return { stPeriod: 14, stMult: 2 };
+      case 'slow': return { stPeriod: 7, stMult: 3 };
+      default: return { stPeriod: 10, stMult: 3 };
+    }
+  };
+
   const [params, setParams] = useState({
     ema1: 9, ema2: 21,
     bbPeriod: 20, bbStd: 2,
-    stPeriod: 10, stMult: 3,
+    ...getSTParams(trailTarget),
+    // Per-variant SuperTrend period/multiplier (the chart shows fast/mid/slow
+    // simultaneously, so each needs its own pair - the single stPeriod/stMult
+    // above is legacy/unused by the chart, kept as-is for compatibility).
+    stFastPeriod: 21, stFastMult: 1,
+    stMidPeriod: 14, stMidMult: 2,
+    stSlowPeriod: 7, stSlowMult: 3,
     rsiPeriod: 14,
     macdFast: 12, macdSlow: 26, macdSig: 9,
   });
@@ -176,7 +205,10 @@ function ChartView({ symbol, onSymbolChange }: { symbol: string; onSymbolChange?
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(() => {
-      api.post(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`, payload).catch(() => {});
+      api.post(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`, payload)
+        .catch((err) => {
+          console.error('Failed to save chart state:', err);
+        });
     }, 700);
   }, [drawings, symbol, tf, active, isHA, isLogScale, showVP, params]);
 
@@ -202,7 +234,7 @@ function ChartView({ symbol, onSymbolChange }: { symbol: string; onSymbolChange?
     (async () => {
       // Reset to sensible defaults for the new symbol
       setTf('15m');
-      setActive(new Set<IndicatorKey>(['ema', 'vol', 'st']));
+      setActive(defaultActiveSet(trailTarget));
       setIsHA(false);
       setIsLogScale(false);
       setShowVP(false);
@@ -212,15 +244,18 @@ function ChartView({ symbol, onSymbolChange }: { symbol: string; onSymbolChange?
       try {
         const res: any = await api.get(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`);
         if (!cancelled && res) {
-          if (res.tf) setTf(res.tf);
-          if (Array.isArray(res.active)) setActive(new Set(res.active));
+          if (res.tf !== undefined && res.tf !== null) setTf(res.tf);
+          if (Array.isArray(res.active) && res.active.length > 0) setActive(new Set(res.active));
           if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
           if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
           if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
           if (res.zoom) setPersistedZoom(res.zoom);
           if (Array.isArray(res.drawings)) setDrawings(res.drawings);
+          if (res.params && typeof res.params === 'object') setParams({ ...params, ...res.params });
         }
-      } catch {}
+      } catch (e) {
+        console.error('Failed to load chart state:', e);
+      }
       if (!cancelled) setChartStateLoaded(true);
     })();
     return () => { cancelled = true; };
@@ -298,6 +333,8 @@ function ChartView({ symbol, onSymbolChange }: { symbol: string; onSymbolChange?
           onIsLogScaleChange={setIsLogScale}
           onSymbolChange={onSymbolChange}
           onToggleIndicator={toggleIndicator as any}
+          onParamsChange={setParams}
+          signalData={signalData}
         />
       </div>
     </div>
