@@ -27,6 +27,7 @@ import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 
 interface Props {
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
+  onOpenChart?: (symbol: string, tab: 'chart') => void;
 }
 
 // Plain-language labels (users were confused by fast/mid/slow + "early lock").
@@ -220,9 +221,10 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
-function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, showEnded = true, bestOnly = false }: {
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
+  onOpenChart?: (underlying: string) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
   sort: { key: string; dir: string };
@@ -756,7 +758,7 @@ function SignalCard({ row, onClick, onSelectSignal, quotes, viewLayout, sort, sh
                           lastPrice: lastPx || 0,
                         });
                       }}
-                      onChart={(e) => { e.stopPropagation(); onClick(); }}
+                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(row.underlying); }}
                     />
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -1423,7 +1425,7 @@ function ScanReportView({ data }: { data?: ScanReportResponse }) {
   );
 }
 
-export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
+export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
@@ -2224,7 +2226,8 @@ export function SterlingKiteEnginePane({ onSelectSignal }: Props) {
                     {group.rows.map((row) => (
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
                         onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
-                        onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })} />
+                        onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
+                        onOpenChart={onOpenChart ? (symbol) => onOpenChart(symbol, 'chart') : undefined} />
                     ))}
                   </div>
                 )}

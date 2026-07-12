@@ -162,7 +162,7 @@ export function KiteTab() {
         activeNav={nav}
         onNavClick={handleNavClick}
         sidebar={<SterlingWatchList onOpenInstrument={handleOpenInstrument} />}
-        rightSidebar={<SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} />}
+        rightSidebar={<SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />}
         bottomBar={<EngineTerminal />}
         centerTopBar={<KiteTicker />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
