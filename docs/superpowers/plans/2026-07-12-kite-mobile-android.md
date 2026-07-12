@@ -56,16 +56,16 @@ mobile/
 - Create: `mobile/app.json`
 - Create: `mobile/tsconfig.json`
 
-- [ ] **Step 1: Create `mobile/package.json`**
+- [x] **Step 1: Create `mobile/package.json`**
   Write the package definition with necessary Expo, React, React Native, Zustand, TanStack Query, and layout dependencies.
 
-- [ ] **Step 2: Create `mobile/app.json`**
+- [x] **Step 2: Create `mobile/app.json`**
   Define Expo configurations, setting up custom package names, orientation restrictions (portrait-only for dashboard), and splash screen values.
 
-- [ ] **Step 3: Create `mobile/tsconfig.json`**
+- [x] **Step 3: Create `mobile/tsconfig.json`**
   Set up TypeScript compiler settings for strict React Native and Expo Router configuration.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
   ```bash
   git add mobile/package.json mobile/app.json mobile/tsconfig.json
   git commit -m "feat(mobile): bootstrap mobile configuration and package files"
@@ -80,16 +80,16 @@ mobile/
 - Create: `mobile/src/store/useStore.ts`
 - Create: `mobile/src/services/api.ts`
 
-- [ ] **Step 1: Implement `mobile/src/styles/theme.ts`**
+- [x] **Step 1: Implement `mobile/src/styles/theme.ts`**
   Translate the CSS variables in the web `terminal.css` (Bloomberg-dark) into React Native style variables.
 
-- [ ] **Step 2: Implement `mobile/src/store/useStore.ts`**
+- [x] **Step 2: Implement `mobile/src/store/useStore.ts`**
   Build the Zustand store managing application settings, connection states, and caching.
 
-- [ ] **Step 3: Implement `mobile/src/services/api.ts`**
+- [x] **Step 3: Implement `mobile/src/services/api.ts`**
   Develop the fetch API wrapper communicating with the FastAPI backend.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
   ```bash
   git add mobile/src/styles/theme.ts mobile/src/store/useStore.ts mobile/src/services/api.ts
   git commit -m "feat(mobile): setup styles, state management and API services"
@@ -103,13 +103,13 @@ mobile/
 - Create: `mobile/app/_layout.tsx`
 - Create: `mobile/app/(tabs)/_layout.tsx`
 
-- [ ] **Step 1: Implement root layout `mobile/app/_layout.tsx`**
+- [x] **Step 1: Implement root layout `mobile/app/_layout.tsx`**
   Define the root layout wrapper wrapping the app in context providers (Zustand store initializer, QueryClientProvider, and SafeAreaProvider).
 
-- [ ] **Step 2: Implement tab layout `mobile/app/(tabs)/_layout.tsx`**
+- [x] **Step 2: Implement tab layout `mobile/app/(tabs)/_layout.tsx`**
   Configure the bottom tabs navigation (Kite, Crypto, Settings).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
   ```bash
   git add mobile/app/_layout.tsx mobile/app/(tabs)/_layout.tsx
   git commit -m "feat(mobile): build bottom tab navigation and app layouts"
@@ -124,16 +124,16 @@ mobile/
 - Create: `mobile/src/components/common/Toggle.tsx`
 - Create: `mobile/app/order-modal.tsx`
 
-- [ ] **Step 1: Implement `mobile/src/components/common/Card.tsx`**
+- [x] **Step 1: Implement `mobile/src/components/common/Card.tsx`**
   Create reusable card wrappers styling elements with Bloomberg-dark background colors, border styling, and dynamic hover/active states.
 
-- [ ] **Step 2: Implement `mobile/src/components/common/Toggle.tsx`**
+- [x] **Step 2: Implement `mobile/src/components/common/Toggle.tsx`**
   Create custom Segmented Controls or Switches to mirror the Web's Paper/Live and toggle elements.
 
-- [ ] **Step 3: Implement `mobile/app/order-modal.tsx`**
+- [x] **Step 3: Implement `mobile/app/order-modal.tsx`**
   Create the order placement dialog.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
   ```bash
   git add mobile/src/components/common/Card.tsx mobile/src/components/common/Toggle.tsx mobile/app/order-modal.tsx
   git commit -m "feat(mobile): add cards, toggles and order submission modal"
@@ -149,19 +149,19 @@ mobile/
 - Create: `mobile/src/components/kite/OrdersPane.tsx`
 - Create: `mobile/app/(tabs)/index.tsx`
 
-- [ ] **Step 1: Create `mobile/src/components/kite/ConnectPane.tsx`**
+- [x] **Step 1: Create `mobile/src/components/kite/ConnectPane.tsx`**
   Add status indicators and controls for Kite session validation.
 
-- [ ] **Step 2: Create `mobile/src/components/kite/PositionsPane.tsx`**
+- [x] **Step 2: Create `mobile/src/components/kite/PositionsPane.tsx`**
   Build positions component display.
 
-- [ ] **Step 3: Create `mobile/src/components/kite/OrdersPane.tsx`**
+- [x] **Step 3: Create `mobile/src/components/kite/OrdersPane.tsx`**
   Implement the order logs list.
 
-- [ ] **Step 4: Implement `mobile/app/(tabs)/index.tsx`**
+- [x] **Step 4: Implement `mobile/app/(tabs)/index.tsx`**
   Assemble the components into the main Kite layout.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   ```bash
   git add mobile/src/components/kite/ mobile/app/(tabs)/index.tsx
   git commit -m "feat(mobile): construct Zerodha Kite dashboard and order manager"
@@ -177,19 +177,19 @@ mobile/
 - Create: `mobile/app/(tabs)/crypto.tsx`
 - Create: `mobile/app/(tabs)/settings.tsx`
 
-- [ ] **Step 1: Create `mobile/src/components/crypto/EngineStatus.tsx`**
+- [x] **Step 1: Create `mobile/src/components/crypto/EngineStatus.tsx`**
   Implement controls for algo modes.
 
-- [ ] **Step 2: Create `mobile/src/components/crypto/GrokSignalsPane.tsx`**
+- [x] **Step 2: Create `mobile/src/components/crypto/GrokSignalsPane.tsx`**
   Construct signals table displaying active trade states.
 
-- [ ] **Step 3: Implement `mobile/app/(tabs)/crypto.tsx`**
+- [x] **Step 3: Implement `mobile/app/(tabs)/crypto.tsx`**
   Develop the layout for Crypto tab.
 
-- [ ] **Step 4: Implement `mobile/app/(tabs)/settings.tsx`**
+- [x] **Step 4: Implement `mobile/app/(tabs)/settings.tsx`**
   Build settings page for API connection parameters.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   ```bash
   git add mobile/src/components/crypto/ mobile/app/(tabs)/crypto.tsx mobile/app/(tabs)/settings.tsx
   git commit -m "feat(mobile): add crypto engine, signals monitoring, and API settings screen"
