@@ -11,6 +11,13 @@ import { TradingViewKiteChart } from '../charts/TradingViewKiteChart';
 
 export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals';
 
+// Stable (never-recreated) empty-array reference for the initial useKiteDrawings
+// seed below. useKiteDrawings resyncs its internal state whenever the identity
+// of `initialDrawings` changes (see useKiteDrawings.ts), so passing a fresh `[]`
+// literal here on every render would wipe drawings state on every unrelated
+// re-render instead of only on an actual symbol-driven reset.
+const EMPTY_DRAWINGS: Drawing[] = [];
+
 interface InstrumentPaneProps {
   symbol: string;
   initialTab?: InstrumentTab;
@@ -185,7 +192,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     setSelectedDrawingId,
     isDragging,
     clearDrawings: hookClear,
-  } = useKiteDrawings({ initialDrawings: [], onChange: (d) => { /* parent sees via prop */ } });
+  } = useKiteDrawings({ initialDrawings: EMPTY_DRAWINGS, onChange: (d) => { /* parent sees via prop */ } });
 
   // Proper debounced save for backend (always a function)
   const saveTimeoutRef = useRef<any>(null);
@@ -216,6 +223,21 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     saveChartStateRef.current = saveChartState;
   }, [saveChartState]);
 
+  // Stable identities for the callbacks passed into TradingViewKiteChart.
+  // These used to be inline arrow functions recreated on every InstrumentPane
+  // render, which fed straight into the chart's giant chart-creation useEffect
+  // dep array (via the `onZoomChange`/`onDrawingsChange` props) and forced
+  // that effect (chart.remove() + createChart(...)) to re-run far more often
+  // than the underlying data actually changed.
+  const handleZoomChange = useCallback((range: any) => {
+    if (chartStateLoaded) saveChartState(range);
+  }, [chartStateLoaded, saveChartState]);
+
+  const handleDrawingsChange = useCallback((d: Drawing[]) => {
+    setDrawings(d);
+    if (chartStateLoaded) saveChartState(undefined, d);
+  }, [chartStateLoaded, saveChartState, setDrawings]);
+
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -232,6 +254,12 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Block the save-on-change effects below until THIS symbol's chart state
+      // has actually loaded (or failed) - otherwise, since chartStateLoaded was
+      // left `true` from the PREVIOUS symbol, the synchronous resets just below
+      // would immediately debounce-POST blank/default state to this symbol's
+      // endpoint if the GET below takes longer than the 700ms save debounce.
+      setChartStateLoaded(false);
       // Reset to sensible defaults for the new symbol
       setTf('15m');
       setActive(defaultActiveSet(trailTarget));
@@ -320,11 +348,8 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
           activeIndicators={active}
           params={params}
           drawings={drawings}
-          onDrawingsChange={(d: Drawing[]) => {
-            setDrawings(d);
-            if (chartStateLoaded) saveChartState(undefined, d);
-          }}
-          onZoomChange={(range: any) => { if (chartStateLoaded) saveChartState(range); }}
+          onDrawingsChange={handleDrawingsChange}
+          onZoomChange={handleZoomChange}
           showVP={showVP}
           symbolPos={symbolPos}
           persistedZoom={persistedZoom}

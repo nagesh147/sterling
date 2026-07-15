@@ -691,7 +691,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1, overflow: 'hidden' }}>
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
@@ -735,7 +735,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 </div>
 
                 {!isExp && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
                       onBuy={(e) => {
@@ -1745,6 +1745,15 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
 
+  const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
+
+  // Publish the running count to the Kite footer (rendered in a different tree).
+  // MUST be before the early-return below (hook count consistency) — cfg.engine_enabled
+  // can flip while this component stays mounted, so every hook must run unconditionally.
+  const setLiveCount = useLiveSignalCount((s) => s.setCount);
+  React.useEffect(() => { setLiveCount(liveCount); }, [liveCount, setLiveCount]);
+  React.useEffect(() => () => setLiveCount(0), [setLiveCount]);
+
   // ── Engine master gate ──────────────────────────────────────────────────────
   if (cfg && !cfg.engine_enabled) {
     return (
@@ -1795,13 +1804,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       </div>
     );
   }
-
-  const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
-
-  // Publish the running count to the Kite footer (rendered in a different tree).
-  const setLiveCount = useLiveSignalCount((s) => s.setCount);
-  React.useEffect(() => { setLiveCount(liveCount); }, [liveCount, setLiveCount]);
-  React.useEffect(() => () => setLiveCount(0), [setLiveCount]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: k.bg, fontFamily: k.fontFamily }}>
@@ -1890,16 +1892,17 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           {viewLayout === 'list' && (
             <div style={{ 
               display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 32,
-              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`
+              padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`,
+              overflow: 'hidden',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1, overflow: 'hidden' }}>
                  <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
                  {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
                  {s.showLeg && <SortHeaderDiv label="Leg (Δ)" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 78, flexShrink: 0 }} />}
                  {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry (Δpts)" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 110, flexShrink: 0 }} align="right" />}
                  {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Stop" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexShrink: 0 }}>
                  <div style={{ width: 150 }}></div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                    {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" sort={legSort} handleSort={handleLegSort} style={{ width: 50 }} align="right" />}
@@ -1928,6 +1931,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           padding: 0 16px;
           box-sizing: border-box;
           border-bottom: 1px solid ${k.border};
+          overflow: hidden;
         }
         .st-leg-row:hover { background-color: ${k.surfaceHover} !important; }
         .sort-header-div:hover { color: #444 !important; }
@@ -2227,7 +2231,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
                         onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                         onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
-                        onOpenChart={onOpenChart ? (symbol, tab, trailTarget, signalData) => onOpenChart(symbol, tab, trailTarget, signalData) : undefined} />
+                        onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />
                     ))}
                   </div>
                 )}

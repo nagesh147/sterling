@@ -1,7 +1,7 @@
 export type TimePoint = { time: number; value: number };
-export type BandPoint = { time: number; upper: number; middle: number; lower: number };
+export type BandPoint = { time: number; upper: number | null; middle: number | null; lower: number | null };
 export type STPoint = { time: number; value: number; direction: 'up' | 'down' };
-export type MACDPoint = { time: number; macd: number; signal: number; hist: number };
+export type MACDPoint = { time: number; macd: number | null; signal: number | null; hist: number | null };
 
 export interface Candle {
   time: number;
@@ -71,7 +71,11 @@ export function bollingerBands(closes: number[], period = 20, stdDev = 2): BandP
   const m = sma(closes, period);
   for (let i = 0; i < closes.length; i++) {
     if (m[i] == null) {
-      out.push({ time: 0, upper: 0, middle: 0, lower: 0 });
+      // Warm-up bar - emit null (not a literal 0) so callers can filter it out,
+      // matching the ema()/rsi() convention. A concrete 0 here previously got
+      // plotted as a real data point, dragging the price-scale autoscale down
+      // to 0 on first paint.
+      out.push({ time: 0, upper: null, middle: null, lower: null });
       continue;
     }
     const slice = closes.slice(Math.max(0, i - period + 1), i + 1);
@@ -137,7 +141,10 @@ export function macd(closes: number[], fast = 12, slow = 26, signalP = 9): MACDP
     const m = macdLine[i];
     const s = sig[i];
     if (m == null || s == null) {
-      out.push({ time: 0, macd: 0, signal: 0, hist: 0 });
+      // Warm-up bar - emit null (not a literal 0); the render call sites
+      // already filter with `!= null`, but a concrete 0 defeated that check
+      // since `0 != null` is true in JS.
+      out.push({ time: 0, macd: null, signal: null, hist: null });
     } else {
       out.push({ time: 0, macd: m, signal: s, hist: m - s });
     }

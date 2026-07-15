@@ -80,8 +80,8 @@ export function MiniGridPane({ paneIndex, baseCandles, activeIndicators, params,
       const bb = bollingerBands(closes, params.bbPeriod || 20, params.bbStd || 2);
       const bbUpper = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       const bbLower = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      bbUpper.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.upper })));
-      bbLower.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.lower })));
+      bbUpper.setData(bb.flatMap((b, i) => (b.upper != null ? [{ time: times[i] as any, value: b.upper }] : [])));
+      bbLower.setData(bb.flatMap((b, i) => (b.lower != null ? [{ time: times[i] as any, value: b.lower }] : [])));
     }
 
     if (activeIndicators.has('vwap')) {

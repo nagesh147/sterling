@@ -172,6 +172,19 @@ export function TradingViewKiteChart({
   // Timeframe dropdown (more TFs)
   const [showTfDropdown, setShowTfDropdown] = useState(false);
 
+  // Escape closes these two toolbar dropdowns regardless of where the mouse is
+  // hovering (they live in the top toolbar, outside the chart-hover-gated
+  // keyboard-shortcut listener below, so they need their own lightweight
+  // listener rather than piggybacking on that one).
+  useEffect(() => {
+    if (!showSymbolSearch && !showTfDropdown) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setShowSymbolSearch(false); setShowTfDropdown(false); }
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [showSymbolSearch, showTfDropdown]);
+
   // Better indicators dropdown (searchable, TV like)
   const [indicatorSearch, setIndicatorSearch] = useState('');
   // Which indicator row (by key) currently has its inline param-editor form
@@ -203,8 +216,12 @@ export function TradingViewKiteChart({
   }, [symbol]);
 
   // TV-like symbol suggestions (extendable)
+  // Index tradingsymbols must match Kite's actual space-separated names
+  // (instrument_registry.py / schemas.py) — bare underlying codes like
+  // 'NIFTY'/'BANKNIFTY'/'FINNIFTY' 404 against the candles endpoint, and
+  // SENSEX trades/quotes on BSE, not NSE.
   const COMMON_SYMBOLS = [
-    'NSE:NIFTY', 'NSE:BANKNIFTY', 'NSE:FINNIFTY', 'NSE:SENSEX',
+    'NSE:NIFTY 50', 'NSE:NIFTY BANK', 'NSE:NIFTY FIN SERVICE', 'BSE:SENSEX',
     'NSE:RELIANCE', 'NSE:TCS', 'NSE:INFY', 'NSE:HDFCBANK', 'NSE:ICICIBANK',
     'NSE:SBIN', 'NSE:BHARTIARTL', 'NSE:ITC', 'NSE:LT', 'NSE:AXISBANK'
   ];
@@ -306,7 +323,20 @@ export function TradingViewKiteChart({
   };
 
   // Exact TradingView dark theme colors + tokens for look & feel
-  const tv = isDark ? {
+  //
+  // ROOT CAUSE OF DRAG/ZOOM DEAD-CHART BUG: this used to be a plain object
+  // literal recomputed on *every* render (identity changed even when isDark/
+  // theme didn't). It sits in the dep array of the main chart-creation effect
+  // (chart.remove() + createChart(...)) below, and that effect also depends
+  // on `baseCandles`/`drawings`/etc which don't change on mouse movement — but
+  // `subscribeCrosshairMove` calls `setCurrentBarInfo(...)` on every mousemove
+  // tick over the chart, which re-renders this component, which regenerated
+  // `tv` with a new reference, which re-ran the chart-creation effect (tearing
+  // down + rebuilding the chart's canvas and the library's internal pan/zoom
+  // state machine) on essentially every mousemove sample during a drag or
+  // right before a wheel event — making pan/zoom appear completely dead.
+  // useMemo keyed on the real inputs (isDark/theme) fixes this at the source.
+  const tv = useMemo(() => (isDark ? {
     bg: '#131722',
     surface: '#1e2c3f',
     surfaceHover: '#2a3a4f',
@@ -330,7 +360,7 @@ export function TradingViewKiteChart({
     dim: theme.dim || '#787b86',
     green: theme.green || '#089981',
     red: theme.red || '#f23645',
-  };
+  }), [isDark, theme]);
 
   // Compute volume profile data (full histogram)
   const volumeProfile = useMemo(() => {
@@ -555,7 +585,10 @@ export function TradingViewKiteChart({
       handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
       kineticScroll: { mouse: true, touch: true },
       localization: { priceFormatter: (price: number) => price.toFixed(2) },
-      width: mainRef.current.clientWidth,
+      // Floor the initial size: a mount that races a layout collapse should never
+      // hand lightweight-charts a 0-width canvas (see ResizeObserver below for the
+      // ongoing case).
+      width: Math.max(mainRef.current.clientWidth || 0, 300),
       height: mainRef.current.clientHeight,
     });
 
@@ -632,9 +665,9 @@ export function TradingViewKiteChart({
       const bbUpper = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: `BB Upper` });
       const bbLower = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: `BB Lower` });
       seriesRefs.current.bbMid = bbMid; seriesRefs.current.bbUpper = bbUpper; seriesRefs.current.bbLower = bbLower;
-      bbMid.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.middle })));
-      bbUpper.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.upper })));
-      bbLower.setData(bb.map((b, i) => ({ time: times[i] as any, value: b.lower })));
+      bbMid.setData(bb.flatMap((b, i) => (b.middle != null ? [{ time: times[i] as any, value: b.middle }] : [])));
+      bbUpper.setData(bb.flatMap((b, i) => (b.upper != null ? [{ time: times[i] as any, value: b.upper }] : [])));
+      bbLower.setData(bb.flatMap((b, i) => (b.lower != null ? [{ time: times[i] as any, value: b.lower }] : [])));
     }
 
     // VWAP
@@ -919,10 +952,17 @@ export function TradingViewKiteChart({
 
     const ro = new ResizeObserver(() => {
       if (mainRef.current) {
-        chart.applyOptions({ width: mainRef.current.clientWidth, height: mainRef.current.clientHeight });
-        setTimeout(drawHandles, 0);
-        setTimeout(updatePriceBadge, 0);
-        setTimeout(updateRightScaleWidth, 0);
+        const w = mainRef.current.clientWidth;
+        const h = mainRef.current.clientHeight;
+        // Defensive floor (mirrors the window-resize handler above): never push a
+        // transient 0/near-0 size into the chart instance — a brief layout collapse
+        // during a panel-toggle race would otherwise permanently zero the canvas.
+        if (w > 10 && h > 10) {
+          chart.applyOptions({ width: w, height: h });
+          setTimeout(drawHandles, 0);
+          setTimeout(updatePriceBadge, 0);
+          setTimeout(updateRightScaleWidth, 0);
+        }
       }
     });
     ro.observe(mainRef.current);
@@ -949,7 +989,7 @@ export function TradingViewKiteChart({
       previewSeriesRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, snapToOHLC, onZoomChange, showVP, chartType, layoutMode, signalData]);
+  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, snapToOHLC, onZoomChange, showVP, chartType, layoutMode, signalData, symbolPos]);
 
   // Sub RSI pane
   useEffect(() => {
@@ -981,14 +1021,30 @@ export function TradingViewKiteChart({
     os.setData(times.map(t => ({ time: t as any, value: 30 })));
     subChartsRef.current.rsi = rChart;
 
+    // Track the subscribed callback so cleanup can unsubscribe it from the
+    // exact main-chart instance it was attached to (the main chart is torn
+    // down/recreated by its own effect whenever any of its deps change, so
+    // this pane's deps below are widened to match the deps that trigger a
+    // main-chart rebuild — otherwise this sync would go stale against a
+    // disposed chart and the RSI pane would silently stop following pans/zooms).
+    let sync: ((rg: any) => void) | null = null;
     if (main) {
-      const sync = (rg: any) => { try { rChart.timeScale().setVisibleRange(rg); } catch {} };
+      sync = (rg: any) => { try { rChart.timeScale().setVisibleRange(rg); } catch {} };
       main.timeScale().subscribeVisibleTimeRangeChange(sync);
     }
     const ro = new ResizeObserver(() => rChart.applyOptions({ width: el.clientWidth }));
     ro.observe(el);
-    return () => { ro.disconnect(); rChart.remove(); subChartsRef.current.rsi = undefined; };
-  }, [baseCandles, activeIndicators, params.rsiPeriod, tv, layoutMode]);
+    return () => {
+      if (main && sync) { try { main.timeScale().unsubscribeVisibleTimeRangeChange(sync); } catch {} }
+      ro.disconnect(); rChart.remove(); subChartsRef.current.rsi = undefined;
+    };
+    // Deps intentionally mirror the main chart-creation effect's dep array
+    // (minus snapToOHLC, which this pane never calls) so this pane is torn
+    // down/recreated in lockstep with the main chart on every trigger that
+    // rebuilds it — otherwise `sync` above goes stale against a disposed
+    // chart instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, onZoomChange, showVP, chartType, layoutMode, signalData, symbolPos]);
 
   // Sub MACD pane
   useEffect(() => {
@@ -1020,14 +1076,25 @@ export function TradingViewKiteChart({
     hist.setData(m.flatMap((p, i) => p.hist != null ? [{ time: times[i] as any, value: p.hist, color: p.hist >= 0 ? tv.green + '88' : tv.red + '88' }] : []));
     subChartsRef.current.macd = mChart;
 
+    // See the RSI pane above for why `sync` is hoisted + explicitly
+    // unsubscribed, and why the deps below are widened to match whatever
+    // triggers the main chart to be torn down/rebuilt.
+    let sync: ((rg: any) => void) | null = null;
     if (main) {
-      const sync = (rg: any) => { try { mChart.timeScale().setVisibleRange(rg); } catch {} };
+      sync = (rg: any) => { try { mChart.timeScale().setVisibleRange(rg); } catch {} };
       main.timeScale().subscribeVisibleTimeRangeChange(sync);
     }
     const ro = new ResizeObserver(() => mChart.applyOptions({ width: el.clientWidth }));
     ro.observe(el);
-    return () => { ro.disconnect(); mChart.remove(); subChartsRef.current.macd = undefined; };
-  }, [baseCandles, activeIndicators, params, tv, layoutMode]);
+    return () => {
+      if (main && sync) { try { main.timeScale().unsubscribeVisibleTimeRangeChange(sync); } catch {} }
+      ro.disconnect(); mChart.remove(); subChartsRef.current.macd = undefined;
+    };
+    // Deps intentionally mirror the main chart-creation effect's dep array
+    // (minus snapToOHLC, which this pane never calls) — see the RSI pane
+    // above for why.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, onZoomChange, showVP, chartType, layoutMode, signalData, symbolPos]);
 
   // Redraw profile + handles when relevant
   useEffect(() => { setTimeout(drawVolumeProfile, 30); }, [drawVolumeProfile, showVP, volumeProfile]);
@@ -1158,10 +1225,14 @@ export function TradingViewKiteChart({
       }
     }
     if (hit) {
+      setChartContextMenu(null);
       setEditingDrawingId(hit.id);
       setDrawingPopoverPos({x: e.clientX, y: e.clientY});
       setDrawingEditProps({...hit});
     } else {
+      setEditingDrawingId(null);
+      setDrawingPopoverPos(null);
+      setDrawingEditProps(null);
       setChartContextMenu({ x: e.clientX, y: e.clientY, price });
     }
   };
@@ -1239,7 +1310,13 @@ export function TradingViewKiteChart({
         ts.applyOptions({ barSpacing: Math.max(0.5, Math.min(200, next)) });
         e.preventDefault();
       } else if (e.key === 'Escape') {
-        if (drawingPointsRef.current.length > 0) {
+        if (chartContextMenu || priceScaleMenu || (editingDrawingId != null && drawingPopoverPos)) {
+          setChartContextMenu(null);
+          setPriceScaleMenu(null);
+          setEditingDrawingId(null);
+          setDrawingPopoverPos(null);
+          setDrawingEditProps(null);
+        } else if (drawingPointsRef.current.length > 0) {
           setDrawingPoints([]);
           setDrawMode('crosshair');
         } else if (selectedDrawingId != null) {
@@ -1256,7 +1333,7 @@ export function TradingViewKiteChart({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [drawings, selectedDrawingId, onDrawingsChange, recordDrawingsChange, undoDrawing, redoDrawing, setDrawingPoints, setDrawMode, setSelectedDrawingId]);
+  }, [drawings, selectedDrawingId, onDrawingsChange, recordDrawingsChange, undoDrawing, redoDrawing, setDrawingPoints, setDrawMode, setSelectedDrawingId, chartContextMenu, priceScaleMenu, editingDrawingId, drawingPopoverPos]);
 
   // Toolbar helpers
   const toggleLog = () => {
@@ -1362,6 +1439,8 @@ export function TradingViewKiteChart({
             <span style={{ fontSize: 10, color: tv.dim }}>▼</span>
           </div>
           {showSymbolSearch && (
+            <>
+            <div onClick={() => setShowSymbolSearch(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
             <div className="tv-menu-anim" style={{
               position: 'absolute', top: '100%', left: 0, zIndex: 100,
               background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
@@ -1389,6 +1468,7 @@ export function TradingViewKiteChart({
                 </div>
               )) : <div style={{ padding: 6, fontSize: 10, color: tv.dim }}>No matches</div>}
             </div>
+            </>
           )}
         </div>
 
@@ -1415,11 +1495,14 @@ export function TradingViewKiteChart({
             style={{ padding: '1px 4px', fontSize: 9, color: tv.dim, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           ><IconMore /></button>
           {showTfDropdown && (
+            <>
+            <div onClick={() => setShowTfDropdown(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
             <div className="tv-menu-anim" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 3, padding: 4, minWidth: 120, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
               {['1m','5m','15m','30m','60m','120m','240m','D','W','M'].map(t => (
                 <div key={t} onClick={() => { if (onTfChange) onTfChange(t); setShowTfDropdown(false); }} style={{ padding: '3px 6px', cursor: 'pointer', fontSize: 10 }}>{t}</div>
               ))}
             </div>
+            </>
           )}
         </div>
 
@@ -1490,6 +1573,28 @@ export function TradingViewKiteChart({
           style={{ flex: 1, position: 'relative', background: tv.bg }}
           onMouseEnter={() => { isHoveringChartRef.current = true; }}
           onMouseLeave={() => { isHoveringChartRef.current = false; }}
+          onMouseMove={(e) => {
+            // A full-viewport transparent backdrop (price-scale/context menus)
+            // is a DOM descendant of this wrapper, so moving the mouse anywhere
+            // on screen while one is open never fires onMouseLeave (the pointer
+            // never leaves this subtree) - leaving keyboard shortcuts wrongly
+            // armed elsewhere on the page. Recompute against real cursor
+            // position vs this element's own box on every move as a correction.
+            // Exception: while a menu/popover owned by this chart is open, its
+            // content can render past this wrapper's own right/bottom edge
+            // (e.g. the price-scale menu, anchored to this box, clamped only
+            // to the viewport) - don't let the box check flip hovering off
+            // while the cursor is over that overflow, or Escape can't close it.
+            if (priceScaleMenu || chartContextMenu || (editingDrawingId != null && drawingPopoverPos)) {
+              isHoveringChartRef.current = true;
+              return;
+            }
+            const rect = e.currentTarget.getBoundingClientRect();
+            isHoveringChartRef.current = (
+              e.clientX >= rect.left && e.clientX <= rect.right &&
+              e.clientY >= rect.top && e.clientY <= rect.bottom
+            );
+          }}
         >
           <div
             ref={mainRef}
@@ -1531,7 +1636,10 @@ export function TradingViewKiteChart({
             <>
               <div onClick={() => setPriceScaleMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
               <div className="tv-menu-anim" style={{
-                position: 'fixed', left: priceScaleMenu.x, top: priceScaleMenu.y, zIndex: 200,
+                position: 'fixed',
+                left: Math.max(4, Math.min(priceScaleMenu.x, window.innerWidth - 148)),
+                top: Math.max(4, Math.min(priceScaleMenu.y, window.innerHeight - 108)),
+                zIndex: 200,
                 background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
                 minWidth: 140, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
               }}>
@@ -1559,7 +1667,10 @@ export function TradingViewKiteChart({
             <>
               <div onClick={() => setChartContextMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
               <div className="tv-menu-anim" style={{
-                position: 'fixed', left: chartContextMenu.x, top: chartContextMenu.y, zIndex: 200,
+                position: 'fixed',
+                left: Math.max(4, Math.min(chartContextMenu.x, window.innerWidth - 188)),
+                top: Math.max(4, Math.min(chartContextMenu.y, window.innerHeight - 138)),
+                zIndex: 200,
                 background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
                 minWidth: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
               }}>
@@ -1634,10 +1745,12 @@ export function TradingViewKiteChart({
 
           {/* Drawing properties popover (right-click, TV style) */}
           {drawingPopoverPos && editingDrawingId != null && drawingEditProps && (
-            <div 
-              style={{ 
-                position: 'fixed', left: drawingPopoverPos.x + 10, top: drawingPopoverPos.y + 10, 
-                zIndex: 20, background: tv.surface, border: `1px solid ${tv.border}`, padding: 8, 
+            <div
+              style={{
+                position: 'fixed',
+                left: Math.max(4, Math.min(drawingPopoverPos.x + 10, window.innerWidth - 190)),
+                top: Math.max(4, Math.min(drawingPopoverPos.y + 10, window.innerHeight - 160)),
+                zIndex: 20, background: tv.surface, border: `1px solid ${tv.border}`, padding: 8,
                 borderRadius: 4, fontSize: 11, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', minWidth: 180
               }}
               onClick={e => e.stopPropagation()}
@@ -1788,21 +1901,30 @@ export function TradingViewKiteChart({
                     </div>
                     {isEditingParams && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '2px 4px 8px' }}>
-                        {paramFields!.map(field => (
+                        {paramFields!.map(field => {
+                          // Periods/multipliers must stay positive - a negative
+                          // (or zero) period poisons ema/bollingerBands/atr/
+                          // supertrend/rsi/macd with NaN or runaway values (their
+                          // `|| default` fallbacks only catch exactly 0), so floor
+                          // every field at its smallest sensible positive step.
+                          const floor = field.step && field.step < 1 ? field.step : 1;
+                          return (
                           <label key={field.key} style={{ fontSize: 9, color: tv.dim, display: 'flex', flexDirection: 'column', gap: 2 }}>
                             {field.label}
                             <input
                               type="number"
                               step={field.step ?? 1}
+                              min={floor}
                               value={params[field.key] ?? field.default}
                               onChange={e => {
                                 const n = parseFloat(e.target.value);
-                                setParamField(field.key, isNaN(n) ? field.default : n);
+                                setParamField(field.key, isNaN(n) ? field.default : Math.max(floor, n));
                               }}
                               style={{ width: 56, fontSize: 11, padding: '2px 4px', background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 2 }}
                             />
                           </label>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

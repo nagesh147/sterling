@@ -42,6 +42,21 @@ export function useKiteDrawings({ initialDrawings = [], onChange }: UseKiteDrawi
   const drawingsRef = useRef<Drawing[]>(drawings);
   useEffect(() => { drawingsRef.current = drawings; }, [drawings]);
 
+  // Keep this hook's internal drawings state in sync with the caller-supplied
+  // `initialDrawings` whenever ITS identity changes - not just at mount (the
+  // `useState(initialDrawings)` above only seeds the very first render). Without
+  // this, a caller that swaps in a different `initialDrawings` array later (e.g.
+  // a symbol switch loading a different chart's saved drawings, while this same
+  // hook instance stays mounted) would leave every mutation below (add/drag/
+  // undo/redo) operating on the PREVIOUS symbol's stale snapshot, silently
+  // merging its old drawings into the new symbol's saved state on the next edit.
+  // Safe to run unconditionally: when the caller instead just echoes back this
+  // hook's own last `onChange` output, `initialDrawings` arrives as the same
+  // (or an equal-content) array, so this is a no-op re-set.
+  useEffect(() => {
+    _setDrawings(initialDrawings);
+  }, [initialDrawings]);
+
   // Raw apply: updates state + forwards to the parent's onChange, with NO
   // history bookkeeping. Used internally for the many per-frame updates during
   // a drag (see onMouseMove below) so dragging doesn't spam the undo stack.

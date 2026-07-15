@@ -67,7 +67,11 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('kite_sidebar_width');
-    return saved ? parseInt(saved, 10) : 420;
+    const n = saved ? parseInt(saved, 10) : NaN;
+    // Guard against a corrupted/garbage persisted value (NaN, negative, or
+    // absurdly large) — the viewport-relative reclamp effect below handles
+    // the "valid but too wide for this screen" case.
+    return Number.isFinite(n) && n > 0 ? n : 420;
   });
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
@@ -92,7 +96,8 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('kite_right_sidebar_width');
-    return saved ? parseInt(saved, 10) : 640;
+    const n = saved ? parseInt(saved, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 640;
   });
 
   const [isLocked, setIsLocked] = useState(() => {
@@ -112,6 +117,13 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
 
   // Defaults — used by the reset button.
   const DEFAULTS = { left: 420, right: 640, bottom: 200 };
+
+  // Floor for the center chart column so it can never collapse to 0/near-0
+  // width (e.g. persisted sidebar widths from a wider screen, or a preset
+  // whose combined width exceeds the current viewport). See resize-reclamp
+  // effect below for the dynamic backstop; this constant is also applied
+  // directly as the center column's minWidth.
+  const MIN_CENTER_WIDTH = 300;
 
   const isDragging = useRef(false);
   const isDraggingBottom = useRef(false);
@@ -198,9 +210,13 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
   const resetLayout2 = useCallback(() => {
     if (isLocked) return;
     
-    // Using exact pixel values requested to prevent layout breakage
+    // Using exact pixel values requested to prevent layout breakage.
+    // rightSidebarWidth capped to 1000 (this preset's own drag-clamp max,
+    // see handleMouseMove above) — 1050 exceeded it and could starve the
+    // center chart column on narrower viewports; the resize-reclamp effect
+    // above is the general backstop for any remaining case.
     setSidebarWidth(425);
-    setRightSidebarWidth(1050);
+    setRightSidebarWidth(1000);
     setBottomBarHeight(425);
   }, [isLocked]);
 
@@ -226,6 +242,41 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
+
+  // Defensive reclamp: the two sidebars are the only flex-shrink:0 siblings
+  // of the center chart column, and neither their persisted-from-localStorage
+  // widths nor the drag clamps are re-validated against the *current*
+  // viewport. If their combined width leaves less than MIN_CENTER_WIDTH for
+  // the center column, shrink them (proportionally) until it doesn't — this
+  // runs on mount (catches stale/too-wide persisted values or a resize
+  // preset like "preset 2") and on every window resize (catches a
+  // wide-screen layout carried into a narrower window). Does not touch
+  // anything when both sidebars already fit — invisible in the normal case.
+  useEffect(() => {
+    const reclamp = () => {
+      // NOTE: deliberately does NOT bail on `isLocked` - locking only disables
+      // manual dragging (see handleMouseDown/handleRightMouseDown above); this
+      // is an automatic safety net against a locked-but-oversized layout
+      // clipping a sidebar with no way to fix it (dragging is unavailable
+      // while locked), so it must keep running regardless.
+      if (macOn) return;
+      const leftW = isSidebarOpen ? sidebarWidth : 0;
+      const rightW = isRightSidebarOpen ? rightSidebarWidth : 0;
+      const combined = leftW + rightW;
+      if (combined <= 0) return;
+      const overflow = combined - (window.innerWidth - MIN_CENTER_WIDTH);
+      if (overflow <= 0) return;
+      if (isSidebarOpen && leftW > 0) {
+        setSidebarWidth(Math.max(250, Math.round(leftW - overflow * (leftW / combined))));
+      }
+      if (isRightSidebarOpen && rightW > 0) {
+        setRightSidebarWidth(Math.max(320, Math.round(rightW - overflow * (rightW / combined))));
+      }
+    };
+    reclamp();
+    window.addEventListener('resize', reclamp);
+    return () => window.removeEventListener('resize', reclamp);
+  }, [sidebarWidth, rightSidebarWidth, isSidebarOpen, isRightSidebarOpen, isLocked, macOn]);
 
   const footBtn = (active: boolean, disabled = false): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -282,6 +333,7 @@ export function KiteLayout({ activeNav, onNavClick, sidebar, rightSidebar, botto
         {/* Center column: content + bottom bar (terminal stays BETWEEN the sidebars) */}
         <div style={{
           flex: 1,
+          minWidth: MIN_CENTER_WIDTH,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
