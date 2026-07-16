@@ -106,6 +106,11 @@ export function TradingViewKiteChart({
   const seriesRefs = useRef<Record<string, any>>({});
   const zoomAppliedRef = useRef<boolean>(false);
   const subChartsRef = useRef<{ rsi?: IChartApi; macd?: IChartApi }>({});
+  // Baseline {from,to} for wheel-driven price-axis zoom (see handlePriceAxisWheel
+  // below) - re-seeded from the live auto-fit range whenever the price scale is
+  // in (or returns to, via native double-click reset) autoScale mode, so clamp
+  // bounds always track the current data-driven range rather than a stale one.
+  const priceZoomBaseRef = useRef<{ from: number; to: number } | null>(null);
 
   // Always-fresh refs for drawMode/drawingPoints so long-lived chart callbacks
   // (subscribeCrosshairMove) can read live values without forcing a chart rebuild.
@@ -544,6 +549,9 @@ export function TradingViewKiteChart({
       mainChartRef.current = null;
       seriesRefs.current = {};
     }
+    // New chart instance -> forget any previous wheel-zoom baseline so the
+    // next price-axis wheel tick re-seeds from this chart's own auto-fit range.
+    priceZoomBaseRef.current = null;
 
     const chart = createChart(mainRef.current, {
       layout: {
@@ -1109,8 +1117,17 @@ export function TradingViewKiteChart({
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!mainRef.current || !mainChartRef.current) return;
     const rect = mainRef.current.getBoundingClientRect();
-    rectRef.current = rect;
     const x = e.clientX - rect.left;
+    // The right price-scale strip is pointer-events:none (so wheel/right-click
+    // reach the native chart underneath for price-axis zoom/menu), which means
+    // mousedown/mousemove landing in that x-range are seen here too. Ignore a
+    // mousedown that originates there so useKiteDrawings' hit-test (which
+    // matches an hline purely by price, with no x/time constraint - see
+    // findDrawingAt in useKiteDrawings.ts) never gets a chance to start a drag
+    // from what the user intends as a price-axis interaction. Same x-range
+    // check used in handleContextMenu below.
+    if (x >= rect.width - (rightScaleWidth || 56)) return;
+    rectRef.current = rect;
     const y = e.clientY - rect.top;
     const chartApi: any = mainChartRef.current;
     // @ts-ignore
@@ -1125,6 +1142,14 @@ export function TradingViewKiteChart({
   };
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!rectRef.current) return;
+    // Mirror the handleMouseDown exclusion: only skip when nothing is already
+    // in progress, so a drag/box-select that legitimately started on the
+    // chart and crosses into the price-scale strip mid-drag keeps working -
+    // new interactions are blocked at the source in handleMouseDown above.
+    if (!isMouseDownRef.current) {
+      const rx = rectRef.current;
+      if ((e.clientX - rx.left) >= rx.width - (rightScaleWidth || 56)) return;
+    }
     drawingMouseMove(e, baseCandles, mainChartRef.current, rectRef.current);
 
     // Only show drag-select box on Shift+drag in crosshair (to not interfere with normal chart panning/clicking)
@@ -1185,16 +1210,21 @@ export function TradingViewKiteChart({
   // Right-click on the chart area: opens the drawing-properties popover (TV
   // style) if a drawing was hit, otherwise opens the general chart-area
   // context menu (Add hline / Remove all / Reset view / Toggle log scale).
-  // This is distinct from handlePriceScaleContextMenu below, which lives on
-  // its own sibling hit-strip over the right price-axis and therefore never
-  // fires together with this one (a right-click only targets ONE of the two
-  // sibling elements, and the event never bubbles across siblings).
+  // The right price-scale strip is pointer-events:none (so wheel-to-zoom the
+  // price axis reaches the chart underneath), so right-clicks landing in that
+  // strip are detected here by coordinate and delegated to
+  // handlePriceScaleContextMenu (Auto/Log/Percentage) below, before any
+  // drawing-hit-test / general chart menu logic runs.
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!mainRef.current || !mainChartRef.current) return;
     const rect = mainRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    if (x >= rect.width - (rightScaleWidth || 56)) {
+      handlePriceScaleContextMenu(e);
+      return;
+    }
     const chart: any = mainChartRef.current;
     let price = 0;
     let time = 0;
@@ -1269,6 +1299,139 @@ export function TradingViewKiteChart({
     }
     setPriceScaleMenu(null);
   };
+
+  // Wheel-driven vertical (price-axis) zoom, TradingView-style: lightweight-charts'
+  // own wheel handler (attached natively inside the container passed to
+  // createChart, i.e. a descendant of mainRef) always zooms TIME on any wheel
+  // tick, even over the price-scale strip - there is no built-in option for
+  // wheel-to-zoom-price. This is wired as a manually-attached, CAPTURE-phase,
+  // NON-PASSIVE native 'wheel' listener on mainRef (see the useEffect below) -
+  // NOT React's onWheelCapture prop - because React registers its own
+  // synthetic wheel listeners as passive for scroll-perf reasons (confirmed
+  // empirically: e.preventDefault() inside onWheelCapture is silently a
+  // no-op there), which would defeat requirement #2 below. A plain native
+  // listener with {capture:true, passive:false} runs before the library's own
+  // listener (capture fires top-down from ancestor to descendant, and
+  // mainRef is an ancestor of the library's internal canvases) and can
+  // actually call preventDefault(). It only intercepts wheel ticks landing in
+  // the same x-range used by handleMouseDown/handleContextMenu above (the
+  // price-scale strip) - wheel events anywhere else on the chart body return
+  // immediately and fall through to the library's default time-zoom, unchanged.
+  //
+  // Mechanism: IPriceScaleApi.setVisibleRange({from,to}) (public API) - this is
+  // exactly what a price-axis drag uses internally (both flip autoScale off and
+  // write an explicit price range), so it composes cleanly with the native
+  // double-click-to-reset-price-scale behavior (handleScale.axisDoubleClickReset.price,
+  // on by default and left untouched in this file's chart options) - double-click
+  // resets autoScale back on and recomputes the range with zero extra code here;
+  // the `autoScale` check below just re-seeds this handler's own clamp baseline
+  // the next time the user wheels afterward.
+  const handlePriceAxisWheel = (e: WheelEvent) => {
+    if (!mainRef.current || !mainChartRef.current) return;
+    const rect = mainRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    // Same x-range check used by handleMouseDown/handleContextMenu above.
+    if (x < rect.width - (rightScaleWidth || 56)) return;
+
+    const chart: any = mainChartRef.current;
+    let priceScale: any;
+    try { priceScale = chart.priceScale('right'); } catch { return; }
+    if (!priceScale) return;
+
+    let mode: PriceScaleMode = PriceScaleMode.Normal;
+    try { mode = priceScale.options().mode; } catch {}
+    // Log/Percentage price scales have non-linear semantics that a naive
+    // coordinate-delta zoom would get wrong - leave the library's default
+    // wheel behavior (time zoom) in place for those, exactly as before this
+    // feature existed.
+    if (mode !== PriceScaleMode.Normal) return;
+
+    const series = seriesRefs.current.main || seriesRefs.current.candle;
+    if (!series) return;
+
+    // From here on we are fully replacing the library's default wheel
+    // behavior for this event - never let it also see it (that would double
+    // up with a time-zoom on top of our price-zoom).
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      const current = priceScale.getVisibleRange();
+      if (!current || !isFinite(current.from) || !isFinite(current.to)) return;
+
+      let autoScale = false;
+      try { autoScale = !!priceScale.options().autoScale; } catch {}
+      if (autoScale || !priceZoomBaseRef.current) {
+        priceZoomBaseRef.current = { from: current.from, to: current.to };
+      }
+      const base = priceZoomBaseRef.current;
+      const baseHeight = base.to - base.from;
+      if (!isFinite(baseHeight) || baseHeight <= 0) return;
+
+      const y = e.clientY - rect.top;
+      let cursorPrice: number | null = null;
+      try { cursorPrice = series.coordinateToPrice(y); } catch { cursorPrice = null; }
+      if (cursorPrice == null || !isFinite(cursorPrice)) {
+        cursorPrice = (current.from + current.to) / 2;
+      }
+
+      // ~10% per wheel notch (TradingView-ish feel). Negative deltaY (scroll
+      // up) zooms IN (shrinks the range, taller candles); positive deltaY
+      // (scroll down) zooms OUT (grows the range).
+      const ZOOM_STEP = 0.1;
+      const factor = e.deltaY < 0 ? (1 - ZOOM_STEP) : 1 / (1 - ZOOM_STEP);
+      let newFrom = cursorPrice - (cursorPrice - current.from) * factor;
+      let newTo = cursorPrice + (current.to - cursorPrice) * factor;
+
+      // Clamp total zoom relative to the last auto-fit baseline so this can
+      // never invert min/max, collapse to a degenerate zero-height range, or
+      // be scrolled into some other unusable state.
+      const MIN_MULT = 0.02; // up to ~50x zoomed in
+      const MAX_MULT = 25;   // up to ~25x zoomed out
+      const newHeight = newTo - newFrom;
+      const minHeight = baseHeight * MIN_MULT;
+      const maxHeight = baseHeight * MAX_MULT;
+      if (newHeight < minHeight) {
+        const mid = (newFrom + newTo) / 2;
+        newFrom = mid - minHeight / 2;
+        newTo = mid + minHeight / 2;
+      } else if (newHeight > maxHeight) {
+        const mid = (newFrom + newTo) / 2;
+        newFrom = mid - maxHeight / 2;
+        newTo = mid + maxHeight / 2;
+      }
+      if (!(newTo > newFrom)) return;
+
+      priceScale.setVisibleRange({ from: newFrom, to: newTo });
+    } catch {
+      /* never let a wheel-zoom edge case break the chart */
+    }
+  };
+  // Always-fresh ref so the native listener below (attached once) never
+  // closes over a stale rightScaleWidth/mainChartRef snapshot.
+  const handlePriceAxisWheelRef = useRef(handlePriceAxisWheel);
+  handlePriceAxisWheelRef.current = handlePriceAxisWheel;
+
+  // Attach the native, non-passive, capture-phase 'wheel' listener described
+  // above, and always delegate to the latest handler via the ref (so the
+  // listener body itself never needs to change). NOTE: mainRef.current is
+  // NOT stable for the component's life - the <div ref={mainRef}> only
+  // exists inside the `layoutMode === '1'` branch of the JSX (multi-chart
+  // 2/4-up layouts render a different tree), so toggling layoutMode away
+  // from '1' and back unmounts and remounts a brand-new DOM node. A one-shot
+  // `useEffect(..., [])` would attach to the first node only and silently go
+  // stale (listener never re-attached) after any such round-trip. Depending
+  // on `layoutMode` here mirrors the main chart-creation effect above (which
+  // already includes `layoutMode` in its deps for the same reason) and makes
+  // this effect tear down/re-run whenever the node is swapped, so it always
+  // (re)binds to whichever DOM node is currently mounted.
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    const listener = (e: WheelEvent) => handlePriceAxisWheelRef.current(e);
+    el.addEventListener('wheel', listener, { capture: true, passive: false });
+    return () => el.removeEventListener('wheel', listener, { capture: true } as any);
+  }, [layoutMode]);
 
   // Keyboard shortcuts - only active while hovering the chart wrapper, and never while
   // typing in an input/textarea/select anywhere in the app.
@@ -1626,11 +1789,14 @@ export function TradingViewKiteChart({
           {/* Drag handles / selection overlay (real coord based) */}
           <canvas ref={handlesRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }} />
 
-          {/* Thin hit-strip over the right price-scale: right-click for Auto/Log/Percentage */}
+          {/* Marks the right price-scale region for visual/debug reference only.
+              pointerEvents:'none' so wheel/right-click pass through to the chart's
+              own wrapper underneath (native price-axis wheel-zoom) - the
+              right-click-for-scale-menu is now detected by coordinate in
+              handleContextMenu on mainRef and delegated to
+              handlePriceScaleContextMenu. */}
           <div
-            onContextMenu={handlePriceScaleContextMenu}
-            title="Right-click: scale mode"
-            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: rightScaleWidth || 56, zIndex: 5, cursor: 'default' }}
+            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: rightScaleWidth || 56, zIndex: 5, pointerEvents: 'none' }}
           />
           {priceScaleMenu && (
             <>

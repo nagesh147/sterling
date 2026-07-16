@@ -1240,6 +1240,48 @@ function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
   );
 }
 
+// Quick-access 3-way cycle across Spot / Derivatives / Both scan source, for the
+// table toolbar — same pill chrome as Best/Ended so it reads as a matched control, but
+// it drives the REAL cfg.scan_source field via the same changeScanSource()/patch()
+// mutation the Universe & Execution panel's 3-way Segmented picker uses (single
+// source of truth — both controls always stay in sync, and the click order below is
+// derived from SCAN_SOURCE_OPTS so there's no second list to drift out of sync).
+// Each of the three modes gets its own label/color/knob position — "Both" is never
+// collapsed into or displayed as "Deriv" — and clicking always advances to the next
+// mode in SCAN_SOURCE_OPTS order, so every mode (including "Both") stays reachable
+// from this control alone. The full picker stays in the settings drawer for power users.
+const SCAN_SOURCE_QUICK_STYLE: Record<ScanSource, { label: string; color: string; knobLeft: number }> = {
+  spot: { label: 'Spot', color: k.dim, knobLeft: 1 },
+  derivatives: { label: 'Deriv', color: k.orange, knobLeft: 13 },
+  both: { label: 'Both', color: k.purple, knobLeft: 7 },
+};
+
+function ScanSourceQuickToggle({ source, onChange }: { source: ScanSource; onChange: (v: ScanSource) => void }) {
+  const { label, color, knobLeft } = SCAN_SOURCE_QUICK_STYLE[source];
+  const advance = () => {
+    const i = SCAN_SOURCE_OPTS.findIndex((o) => o.value === source);
+    const next = SCAN_SOURCE_OPTS[(i + 1) % SCAN_SOURCE_OPTS.length].value;
+    onChange(next);
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+      title="Quick-cycle signal source (Spot -> Derivatives -> Both -> Spot): Deriv = SuperTrend on each option contract's own premium chart. Spot = SuperTrend on the underlying index/stock chart. Both = run both scans. (Full picker is in Universe & Execution settings.)">
+      <span style={{ fontSize: 10, color }}>{label}</span>
+      <button onClick={advance} aria-pressed={source !== 'spot'}
+        aria-label={`Scan source: ${label}. Click to cycle to the next scan source.`}
+        style={{
+          position: 'relative', width: 28, height: 16, borderRadius: 999, border: 'none', padding: 0,
+          cursor: 'pointer', flexShrink: 0, background: color, transition: 'background .18s ease',
+        }}>
+        <span style={{
+          position: 'absolute', top: 1, left: knobLeft, width: 14, height: 14, borderRadius: '50%',
+          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // Chip that collapses every signal to only its ✝ best-R:R and ▲ highest-delta legs,
 // hiding the middle-of-the-ladder strikes. Same pill styling as EndedToggle (blue
 // accent to distinguish it) so the two read as a matched pair in the toolbar.
@@ -1885,6 +1927,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               />
             </div>
             <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+              {cfg && <ScanSourceQuickToggle source={cfg.scan_source} onChange={changeScanSource} />}
               <BestOnlyToggle on={bestOnly} onChange={() => { setBestOnly(v => { const n = !v; localStorage.setItem('kite_st_best_only', String(n)); return n; }); }} />
               <EndedToggle on={showEnded} onChange={() => { setShowEnded(v => { const n = !v; localStorage.setItem('kite_st_show_ended', String(n)); return n; }); }} />
             </div>

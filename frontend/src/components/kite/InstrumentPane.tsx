@@ -223,6 +223,13 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     saveChartStateRef.current = saveChartState;
   }, [saveChartState]);
 
+  // Persisted state from backend (zoom + drawings per symbol)
+  // (Declared before handleZoomChange/handleDrawingsChange below since those
+  // callbacks close over chartStateLoaded — TS block-scoping requires the
+  // declaration to precede any use, even inside a different callback.)
+  const [persistedZoom, setPersistedZoom] = useState<any>(null);
+  const [chartStateLoaded, setChartStateLoaded] = useState(false);
+
   // Stable identities for the callbacks passed into TradingViewKiteChart.
   // These used to be inline arrow functions recreated on every InstrumentPane
   // render, which fed straight into the chart's giant chart-creation useEffect
@@ -243,10 +250,6 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, []);
-
-  // Persisted state from backend (zoom + drawings per symbol)
-  const [persistedZoom, setPersistedZoom] = useState<any>(null);
-  const [chartStateLoaded, setChartStateLoaded] = useState(false);
 
   // TradingView-style current bar info (OHLC + indicators)
   const [currentBarInfo, setCurrentBarInfo] = useState<any>(null);
