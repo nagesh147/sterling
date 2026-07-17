@@ -32,6 +32,15 @@ log = get_logger(__name__)
 _DEAD_STATUSES = {"REJECTED", "CANCELLED"}
 _FILLED_STATUS = "COMPLETE"
 
+# (uid, symbol) whose market exit order is mid-flight. The exit paths — the WS tick
+# monitor (on_tick) and the scan loop (_square_off_expiring / _time_stop_positions) —
+# are separate coroutines on one event loop and each calls _exit_position, which
+# awaits the SELL placement BEFORE it marks the position closed. This set is claimed
+# synchronously (no await between the check and the add, so it is race-free on the
+# single-threaded loop) so a second exit path for the same position bails instead of
+# placing a duplicate SELL (the double-sell / naked-short bug).
+_exiting: set = set()
+
 
 def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None:
     """Book a closed position's realized PnL (INR) into the per-day accumulator that
@@ -76,7 +85,12 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         is_entry = bool(oid) and oid == str(p.order_id)
 
         # ── protective/GTT exit already filled at the broker → reconcile ──────
-        if status == _FILLED_STATUS and txn == exit_side and not is_entry:
+        # Only when the position is still live (pending/open). If it is already CLOSED
+        # the monitor's OWN _exit_position placed and recorded this SELL — its COMPLETE
+        # postback must NOT re-enter here and book realized PnL a second time (which
+        # would trip the INR daily-loss breaker at ~half the configured limit).
+        if (status == _FILLED_STATUS and txn == exit_side and not is_entry
+                and p.status in (pos.PENDING, pos.OPEN)):
             avg = float(order.get("average_price") or 0.0)
             pos.close(uid, symbol,
                       reason=(f"broker stop/exit fill @ ₹{avg:.2f}" if avg else "broker stop/exit fill"))
@@ -111,6 +125,15 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reason: Optional[str] = None) -> None:
     """Market-exit the full quantity and cancel any broker GTT (trail breach or red count).
     For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short)."""
+    # Claim the exit synchronously (single-threaded loop → check-then-add is atomic):
+    # if another exit path already holds this claim, or the position is no longer live,
+    # bail without placing a duplicate SELL. The claim is released on placement failure
+    # so a genuine retry can proceed; on success the position ends CLOSED and the status
+    # check keeps any later exit out.
+    key = (uid, p.symbol)
+    if key in _exiting or p.status not in (pos.OPEN, pos.PENDING):
+        return
+    _exiting.add(key)
     is_futures = p.vehicle == "futures"
     exit_side = "sell" if p.direction == "long" else "buy"
     try:
@@ -123,6 +146,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
                 p.symbol, "sell", p.qty, exchange=p.exchange,
                 tag=f"trailexit:{p.symbol}")
     except Exception as exc:  # noqa: BLE001
+        _exiting.discard(key)
         state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
         return
     if p.gtt_id:
@@ -130,6 +154,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
     breach_dir = "≥" if p.direction == "short" else "≤"
     close_reason = reason or f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}"
     pos.close(uid, p.symbol, reason=close_reason)
+    _exiting.discard(key)  # closed now; status guard keeps later exits out
     _record_realized(uid, p, ltp)
     if p.guard_key:
         state.clear_auto_open(uid, p.guard_key)

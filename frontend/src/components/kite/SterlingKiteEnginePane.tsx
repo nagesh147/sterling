@@ -227,7 +227,7 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
-function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false }: {
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
@@ -236,6 +236,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   sort: { key: string; dir: string };
   showEnded?: boolean;
   bestOnly?: boolean;
+  scanSource?: string;
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -260,6 +261,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   // Spot legs are candidate strikes with no per-option premium, so those columns stay
   // hidden for them (the header mirrors this via scan_source !== 'spot').
   const hasPremium = isDeriv || row.source === 'confluence';
+  // Whether the list header is showing the premium columns (Entry/SL/TSL/Target).
+  // The header gates on the GLOBAL scan_source (!== 'spot'); the row MUST use the
+  // same condition or its cells drift out from under the headers. In 'both' mode a
+  // spot-source row has no per-leg premium (hasPremium=false) but the header still
+  // shows those columns — so we render fixed-width placeholders ('—') to stay aligned.
+  const showPremiumCols = scanSource !== undefined ? scanSource !== 'spot' : hasPremium;
 
   // Live LTP for a leg's contract (no entry-snapshot fallback — we need the live tick
   // to reconcile the frozen is_active flag, not the frozen entry).
@@ -738,9 +745,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                        {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
                      </span>
                    )}
-                   {hasPremium && (
+                   {showPremiumCols && (
                      // Entry — fired fill premium. Dimmed + struck once the trend flips
                      // (history, not a live order). Bracket = live LTP move from entry.
+                     // '—' for a spot-source row (no per-leg premium) so the column stays aligned.
                      <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 96, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                        {entryPx != null ? entryPx.toFixed(2) : '—'}
                        {entryDiff != null && (
@@ -750,13 +758,13 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                        )}
                      </span>
                    )}
-                   {hasPremium && (
+                   {showPremiumCols && (
                      // SL — initial hard stop at the entry bar (fast ST line), static.
                      <span title="Initial stop at entry (fast SuperTrend line)" style={{ fontSize: 10, color: k.dim, width: 56, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                        {initSlPx != null ? initSlPx.toFixed(1) : '—'}
                      </span>
                    )}
-                   {hasPremium && (
+                   {showPremiumCols && (
                      // TSL — live ratcheting trail stop (tightens as ST lines flip red).
                      <span title="Trailing stop — ratchets tighter as SuperTrend lines flip red" style={{ fontSize: 10, color: k.dim, width: 56, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                        {slPx != null ? slPx.toFixed(1) : '—'}
@@ -766,7 +774,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                    <span title="Red-counter progress toward the auto-exit rule (exit_mode)" style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: 58, textAlign: 'right', flexShrink: 0 }}>
                      {row.exit_state ?? '—'}
                    </span>
-                   {hasPremium && (
+                   {showPremiumCols && (
                      // Target — trend-following: no fixed take-profit. Exit is owned by the
                      // trail (TSL) + the red counter (Exit), so this stays "— (trail)".
                      <span title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)" style={{ fontSize: 10, color: k.dim, width: 44, textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
@@ -2396,6 +2404,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                   <div className="kv-rows">
                     {group.rows.map((row) => (
                       <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
+                        scanSource={cfg?.scan_source}
                         onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                         onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
                         onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />

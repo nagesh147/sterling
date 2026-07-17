@@ -202,15 +202,43 @@ def _ist_today_iso() -> str:
     return datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
 
 
+def _load_daily_pnl(uid: str) -> tuple | None:
+    """Hydrate the day's realized-PnL accumulator from DB on first access. DB-persisted
+    (key ``kite_engine_daily_pnl_{uid}``, JSON ``[day_iso, total]``) so a mid-day process
+    restart does NOT zero the INR daily-loss breaker — otherwise a restart would re-arm
+    new real-money entries after the day's loss limit was already breached. The stored
+    day rolls over exactly like the in-memory value (a stale prior-day total reads as 0)."""
+    if uid not in _daily_pnl:
+        try:
+            raw = db.get_config(f"kite_engine_daily_pnl_{uid}")
+            if raw:
+                d = json.loads(raw)
+                _daily_pnl[uid] = (str(d[0]), float(d[1]))
+        except Exception:
+            pass
+    return _daily_pnl.get(uid)
+
+
+def _persist_daily_pnl(uid: str) -> None:
+    try:
+        cur = _daily_pnl.get(uid)
+        db.set_config(f"kite_engine_daily_pnl_{uid}",
+                      json.dumps([cur[0], cur[1]]) if cur else "")
+    except Exception:
+        pass
+
+
 def record_realized_pnl(uid: str, pnl: float, *, day_iso: str | None = None) -> float:
     """Accumulate a closed trade's realized PnL (INR) into the running total for the
     current IST trading day. Resets automatically when the day rolls over. Returns the
     new day total. Feeds the INR daily-loss breaker (there is no USD/crypto breaker on
-    Kite). ``day_iso`` is injectable for deterministic tests."""
+    Kite). Persisted so the breaker survives a restart. ``day_iso`` is injectable for
+    deterministic tests."""
     day = day_iso or _ist_today_iso()
-    cur = _daily_pnl.get(uid)
+    cur = _load_daily_pnl(uid)
     total = (cur[1] + float(pnl)) if (cur and cur[0] == day) else float(pnl)
     _daily_pnl[uid] = (day, total)
+    _persist_daily_pnl(uid)
     return total
 
 
@@ -218,7 +246,7 @@ def daily_realized_pnl(uid: str, *, day_iso: str | None = None) -> float:
     """Realized PnL (INR) accumulated so far in the current IST trading day (0 if none
     or the stored total is from a previous day)."""
     day = day_iso or _ist_today_iso()
-    cur = _daily_pnl.get(uid)
+    cur = _load_daily_pnl(uid)
     return cur[1] if (cur and cur[0] == day) else 0.0
 
 
@@ -274,6 +302,12 @@ def reset(uid: str = "") -> None:
         _status.pop(uid, None); _auto_open.pop(uid, None)
         _breakers.pop(uid, None); _correlation.pop(uid, None)
         _daily_pnl.pop(uid, None)
+        # daily_pnl is DB-persisted — clear the key too so a reset (test helper) is a
+        # true clean slate and doesn't re-hydrate a stale total on next access.
+        try:
+            db.set_config(f"kite_engine_daily_pnl_{uid}", "")
+        except Exception:
+            pass
     else:
         _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear()
         _breakers.clear(); _correlation.clear(); _daily_pnl.clear()
