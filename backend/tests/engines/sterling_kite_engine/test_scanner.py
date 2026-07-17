@@ -27,6 +27,31 @@ def _candles(close_path, start_ms=0):
     return out
 
 
+def test_exit_aligned_trail_moves_stop_to_mode_line():
+    """D2 wiring: with exit_aligned_trail ON + two_red, a row's stop rides the MID ST
+    line (breach ≈ 2nd red); OFF it rides the tightest still-green (fast) line. The
+    default (OFF) keeps the validated fast trail unchanged."""
+    candles = _candles(_fresh_long_path())
+    item = UniverseItem(name="NIFTY 50", tradingsymbol="NIFTY", token=1,
+                        exchange="INDICES", option_exchange="NFO", is_index=True)
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    cl = np.array([c.close for c in candles], float)
+
+    cfg_off = SterlingKiteEngineConfig(exit_mode="two_red", exit_aligned_trail=False)
+    cfg_on = SterlingKiteEngineConfig(exit_mode="two_red", exit_aligned_trail=True)
+    r = compute_regime(o, h, l, cl, cfg_on)
+    last = len(cl) - 1
+
+    rows_off = evaluate_item(SterlingKiteEngine(cfg_off), item, candles, cfg_off)
+    rows_on = evaluate_item(SterlingKiteEngine(cfg_on), item, candles, cfg_on)
+    assert rows_off and rows_on
+    assert rows_off[-1].stop_loss == pytest.approx(float(r.l_fast[last]))   # tightest green
+    assert rows_on[-1].stop_loss == pytest.approx(float(r.l_mid[last]))     # exit_mode-th line
+    assert rows_on[-1].stop_loss != rows_off[-1].stop_loss
+
+
 def _fresh_long_path():
     return list(np.linspace(300, 150, 60)) + list(np.linspace(150, 600, 80))
 
@@ -318,7 +343,7 @@ def test_engine_config_default_offers_itm_and_otm():
 def test_engine_config_scan_source_and_universe_defaults():
     from app.engines.sterling_kite_engine.schemas import EngineConfigModel
     c = EngineConfigModel()
-    assert c.scan_source == "derivatives"   # default engine mode
+    assert c.scan_source == "spot"          # validated default source (was "derivatives")
     assert c.scan_all_stocks is False       # indices/curated only by default
     assert "NIFTY 50" in c.scan_indices and len(c.scan_indices) == 4
     c2 = EngineConfigModel(scan_source="both", scan_all_stocks=False,
@@ -715,3 +740,115 @@ def test_row_for_token_respects_timestamp():
     us.generated_ms = 1000
     assert us.row_for_token(111, timestamp_ms=1000).token == 111
     assert us.row_for_token(111, timestamp_ms=9999) is None   # ts mismatch
+
+
+# ── New per-signal fields: entry_sl (initial stop) + exit_state (red counter) ──
+def test_evaluate_item_populates_entry_sl_and_exit_state():
+    """Every emitted underlying row carries the SL column (initial stop at the entry
+    bar = the validated fast ST line) and the Exit column (red-counter progress
+    "<reds>/<threshold> red" per exit_mode)."""
+    cfg = SterlingKiteEngineConfig()  # trail_target=fast, exit_mode=one_red
+    eng = SterlingKiteEngine(cfg)
+    item = UniverseItem("ACME", "ACME", 1, "NSE", "NFO")
+    candles = _trim_to_transition(_candles(_fresh_long_path()), cfg)
+    rows = evaluate_item(eng, item, candles, cfg)
+    assert rows
+    row = rows[-1]  # the fresh long
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    cl = np.array([c.close for c in candles], float)
+    r = compute_regime(o, h, l, cl, cfg)
+    longs, _ = entry_transitions(r)
+    i = int(np.where(longs)[0][-1])
+    assert row.entry_sl == pytest.approx(float(r.l_fast[i]))  # initial stop = fast line at entry
+    # fresh long ⇒ 0 reds against under one_red (threshold 1)
+    assert row.exit_state == "0/1 red"
+
+
+def test_evaluate_derivative_contract_populates_entry_sl_and_exit_state():
+    cfg = SterlingKiteEngineConfig()
+    item = UniverseItem("NIFTY 50", "NIFTY", 256265, "INDICES", "NFO", is_index=True)
+    pick = OptionPick(option_symbol="NIFTY25JUN24500CE", strike=24500.0, option_type="CE",
+                      expiry="2026-06-26", dte=8, lot_size=75, token=44001)
+    candles = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+    rows = evaluate_derivative_contract(item, "ATM", pick, candles, cfg)
+    assert rows
+    row = rows[-1]
+    assert row.entry_sl is not None and row.entry_sl > 0
+    assert row.legs[0].entry_sl is not None and row.legs[0].entry_sl > 0
+    assert row.exit_state and row.exit_state.endswith("red")
+
+
+def test_engine_config_accepts_confluence_source():
+    from app.engines.sterling_kite_engine.schemas import EngineConfigModel
+    c = EngineConfigModel(scan_source="confluence")
+    assert c.scan_source == "confluence"
+
+
+def _wide_ce_pe_chain(base: int):
+    """A CE+PE chain spanning ±200 around ``base`` so pick_strikes finds an ATM with a
+    real instrument_token whatever the exact spot turns out to be."""
+    nfo, tok = [], 7000
+    for s in range(base - 200, base + 201, 50):
+        tok += 1
+        nfo.append({"name": "ACME", "tradingsymbol": f"ACME25JUN{s}CE", "instrument_type": "CE",
+                    "strike": s, "expiry": "2099-01-01", "instrument_token": tok, "lot_size": 50})
+        tok += 1
+        nfo.append({"name": "ACME", "tradingsymbol": f"ACME25JUN{s}PE", "instrument_type": "PE",
+                    "strike": s, "expiry": "2099-01-01", "instrument_token": tok, "lot_size": 50})
+    return nfo
+
+
+@pytest.mark.asyncio
+async def test_scan_confluence_emits_merged_row_when_both_fire():
+    """confluence source: the underlying fires a fresh long AND the chosen option's own
+    premium ST also confirms → ONE merged source='confluence' row with the confirmed leg
+    carrying its premium entry/stop."""
+    cfg = SterlingKiteEngineConfig()
+    fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:      # the underlying fires long
+                return fired
+            return _candles(_fresh_long_path())  # whichever option is picked, its premium confirms
+
+    base = int(round(fired[-1].close / 50) * 50)
+    nfo = _wide_ce_pe_chain(base)
+    conf = [UniverseItem("ACME", "ACME", 100, "NSE", "NFO")]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], confluence_universe=conf)
+    snap = sc.snapshot("u1")
+    rows = [r for r in snap.rows if r.source == "confluence"]
+    assert rows, "expected a confluence row when both spot and premium fire"
+    row = max(rows, key=lambda r: r.timestamp_ms)
+    assert row.direction == "long" and row.option_type == "CE"
+    assert len(row.legs) == 1 and row.legs[0].moneyness == "ATM"
+    assert row.legs[0].premium_spot is not None and row.legs[0].premium_sl is not None
+    assert row.legs[0].entry_sl is not None
+    assert row.entry_sl is not None and row.exit_state
+
+
+@pytest.mark.asyncio
+async def test_scan_confluence_no_row_when_premium_does_not_confirm():
+    """confluence source: the underlying fires but the option premium is flat (no
+    confirming BUY) → no leg confirmed → no confluence row."""
+    cfg = SterlingKiteEngineConfig()
+    fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return fired
+            return _candles(list(np.linspace(100, 101, 40)))  # flat premium → never confirms
+
+    base = int(round(fired[-1].close / 50) * 50)
+    nfo = _wide_ce_pe_chain(base)
+    conf = [UniverseItem("ACME", "ACME", 100, "NSE", "NFO")]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], confluence_universe=conf)
+    snap = sc.snapshot("u1")
+    assert [r for r in snap.rows if r.source == "confluence"] == []

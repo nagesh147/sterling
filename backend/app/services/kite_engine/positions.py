@@ -54,6 +54,18 @@ class OpenPosition:
     exit_reason: str = ""
     exit_mode: str = "one_red"  # exit counter chosen at entry time (one_red/two_red/three_red/three_red_signal)
     current_red_count: int = 0  # latest computed red ST lines against this position (updated on scans)
+    # ── delta-translation context (workstream: spot-mode + deep-ITM premium stop) ──
+    # For option vehicles the protective stop lives in PREMIUM space but the signal's
+    # trail lives in UNDERLYING space. We store the entry underlying spot + the BS
+    # delta so every trailing update can re-translate the fresh underlying ST level
+    # into a premium stop (``greeks.premium_stop_from_move``) — both at entry and each
+    # scan. 0.0 delta means "no translation context" (e.g. futures, which trail in
+    # index points directly).
+    entry_spot: float = 0.0     # underlying price at entry (index level)
+    entry_delta: float = 0.0    # |BS delta| of the held option at entry
+    strike: float = 0.0         # option strike (for re-pricing / display)
+    expiry: str = ""            # option expiry "YYYY-MM-DD" (for the expiry square-off guard)
+    initial_stop_premium: float = 0.0  # first stop set at entry — the step-out floor (never risk more than this)
     # derived threshold from exit_mode for convenience in responses/UI
 
 

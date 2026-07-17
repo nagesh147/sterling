@@ -96,16 +96,23 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // row) the matching SuperTrend variant is active by default instead of the
   // plain-watchlist default of st-mid. trailTarget undefined (normal watchlist
   // open) resolves to 'st-mid', identical to the prior hardcoded behavior.
-  const defaultActiveSet = (target?: 'fast' | 'mid' | 'slow'): Set<IndicatorKey> => {
+  const defaultActiveSet = (target?: 'fast' | 'mid' | 'slow', forSignal?: boolean): Set<IndicatorKey> => {
+    // Opened from a signal row: show ALL three SuperTrends so the full 3-line
+    // alignment the engine keys off is visible, not just one variant.
+    if (forSignal) return new Set<IndicatorKey>(['vol', 'st-fast', 'st-mid', 'st-slow']);
     const stKey: IndicatorKey = target === 'fast' ? 'st-fast' : target === 'slow' ? 'st-slow' : 'st-mid';
     return new Set<IndicatorKey>(['vol', stKey]);
   };
 
-  const [tf, setTf] = useState('15m');
+  // The engine evaluates entries on 1H Heikin-Ashi candles. When the chart is
+  // opened from a signal row, default to that same view so the SuperTrends and the
+  // Entry marker match what the engine actually saw; plain watchlist opens keep the
+  // lighter 15m/raw default.
+  const [tf, setTf] = useState(signalData ? '1H' : '15m');
   const [active, setActive] = useState<Set<IndicatorKey>>(
-    () => defaultActiveSet(trailTarget)
+    () => defaultActiveSet(trailTarget, !!signalData)
   );
-  const [isHA, setIsHA] = useState(false);
+  const [isHA, setIsHA] = useState(!!signalData);
   const [isDark, setIsDark] = useState(false);
 
   const getSTParams = (target?: 'fast' | 'mid' | 'slow') => {
@@ -263,10 +270,11 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       // would immediately debounce-POST blank/default state to this symbol's
       // endpoint if the GET below takes longer than the 700ms save debounce.
       setChartStateLoaded(false);
-      // Reset to sensible defaults for the new symbol
-      setTf('15m');
-      setActive(defaultActiveSet(trailTarget));
-      setIsHA(false);
+      // Reset to sensible defaults for the new symbol (signal opens mirror the
+      // engine's 1H Heikin-Ashi view; persisted state below still wins if present).
+      setTf(signalData ? '1H' : '15m');
+      setActive(defaultActiveSet(trailTarget, !!signalData));
+      setIsHA(!!signalData);
       setIsLogScale(false);
       setShowVP(false);
       setPersistedZoom(null);

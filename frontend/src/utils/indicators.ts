@@ -169,6 +169,41 @@ export function atr(highs: number[], lows: number[], closes: number[], period = 
   return out;
 }
 
+// A lightweight-charts line datum, or a whitespace gap ({ time } only).
+export type LinePointOrGap = { time: number; value?: number };
+
+/**
+ * Split a SuperTrend series into two FULL-LENGTH line datasets (up-trend green,
+ * down-trend red) for two-colour rendering.
+ *
+ * Bars belonging to the OTHER trend are emitted as whitespace points ({ time }
+ * with no `value`), which makes lightweight-charts BREAK the line at that bar
+ * instead of drawing a straight segment across it. Handing a series only its
+ * own-direction points (the old approach) makes it connect consecutive points
+ * across the gaps, so BOTH the green and red series span the whole chart and you
+ * see two crossing lines per indicator. Keeping both arrays full-length, with
+ * whitespace on the inactive bars, yields a single visually-correct SuperTrend
+ * line whose colour flips with the trend.
+ */
+export function supertrendSegments(
+  stData: { value: number; direction: 'up' | 'down' }[],
+  times: number[]
+): { bull: LinePointOrGap[]; bear: LinePointOrGap[] } {
+  const bull: LinePointOrGap[] = [];
+  const bear: LinePointOrGap[] = [];
+  for (let i = 0; i < stData.length; i++) {
+    const time = times[i];
+    if (stData[i].direction === 'up') {
+      bull.push({ time, value: stData[i].value });
+      bear.push({ time });
+    } else {
+      bull.push({ time });
+      bear.push({ time, value: stData[i].value });
+    }
+  }
+  return { bull, bear };
+}
+
 // SuperTrend (classic)
 export function supertrend(
   highs: number[],
@@ -177,42 +212,54 @@ export function supertrend(
   period = 10,
   multiplier = 3
 ): STPoint[] {
+  // Mirrors the backend engine (app/engines/indicators/supertrend.py) EXACTLY:
+  // separate final upper/lower bands, standard clamping, trend seeded +1 at
+  // `period`. The previous version reused the single ST value for both bands,
+  // which produced a different (wrong) indicator — verified to disagree with the
+  // engine on ~40-50% of bars — so charts never matched the engine's decisions.
   const n = closes.length;
   const atrVals = atr(highs, lows, closes, period);
-  const out: STPoint[] = [];
-  let prevSt = 0;
-  let direction: 'up' | 'down' = 'up';
+  const out: STPoint[] = new Array(n);
+
+  const basicUpper = new Array<number>(n);
+  const basicLower = new Array<number>(n);
+  const finalUpper = new Array<number>(n);
+  const finalLower = new Array<number>(n);
+  const trend = new Array<number>(n).fill(0);
 
   for (let i = 0; i < n; i++) {
-    const atrV = atrVals[i];
-    if (atrV == null) {
-      out.push({ time: 0, value: closes[i], direction: 'up' });
-      continue;
-    }
+    const atrV = atrVals[i] ?? 0; // 0 during warmup, matching backend compute_atr
     const mid = (highs[i] + lows[i]) / 2;
-    let upper = mid + multiplier * atrV;
-    let lower = mid - multiplier * atrV;
+    basicUpper[i] = mid + multiplier * atrV;
+    basicLower[i] = mid - multiplier * atrV;
+    finalUpper[i] = basicUpper[i];
+    finalLower[i] = basicLower[i];
+  }
 
-    if (i > 0) {
-      const prevClose = closes[i - 1];
-      const prevUpper = out[i - 1]?.value ?? upper; // fallback
-      upper = closes[i - 1] > prevUpper ? Math.min(upper, prevUpper) : upper;
-      const prevLower = out[i - 1]?.value ?? lower;
-      lower = closes[i - 1] < prevLower ? Math.max(lower, prevLower) : lower;
-    }
+  const start = period;
+  if (start >= n) {
+    for (let i = 0; i < n; i++) out[i] = { time: 0, value: closes[i], direction: 'up' };
+    return out;
+  }
+  // Warmup bars have no seeded trend yet — render neutral (green) on the lower band.
+  for (let i = 0; i <= start; i++) out[i] = { time: 0, value: finalLower[i], direction: 'up' };
+  trend[start] = 1;
 
-    let st = direction === 'up' ? lower : upper;
-    if (closes[i] > st) {
-      direction = 'up';
-      st = lower;
-    } else if (closes[i] < st) {
-      direction = 'down';
-      st = upper;
-    } else {
-      // maintain
-    }
-    prevSt = st;
-    out.push({ time: 0, value: st, direction });
+  for (let i = start + 1; i < n; i++) {
+    const prevClose = closes[i - 1];
+    finalUpper[i] = (basicUpper[i] < finalUpper[i - 1] || prevClose > finalUpper[i - 1])
+      ? basicUpper[i] : finalUpper[i - 1];
+    finalLower[i] = (basicLower[i] > finalLower[i - 1] || prevClose < finalLower[i - 1])
+      ? basicLower[i] : finalLower[i - 1];
+
+    if (trend[i - 1] === 1) trend[i] = closes[i] < finalLower[i] ? -1 : 1;
+    else trend[i] = closes[i] > finalUpper[i] ? 1 : -1;
+
+    out[i] = {
+      time: 0,
+      value: trend[i] === 1 ? finalLower[i] : finalUpper[i],
+      direction: trend[i] === 1 ? 'up' : 'down',
+    };
   }
   return out;
 }

@@ -230,6 +230,67 @@ async def test_unknown_order_ignored():
     assert pos.get("m5", "UNKNOWN") is None
 
 
+@pytest.mark.asyncio
+async def test_protective_exit_fill_closes_position_not_refills(monkeypatch):
+    """A broker-GTT (or any protective) exit SELL that fills at the broker must
+    reconcile our registry to CLOSED — NOT be mis-read as an entry fill. Before the
+    fix, on_order_update matched by symbol only and marked the exit-price as a fill,
+    leaving the position OPEN so the monitor could market-SELL a second time (a naked
+    short). Guards against the double-sell."""
+    pos.reset("mx1")
+    released = []
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda uid, key: released.append((uid, key)))
+    pos.register(pos.OpenPosition(
+        uid="mx1", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+        qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
+        status=pos.OPEN, direction="long", guard_key="NIFTY"))
+    # GTT-fired exit: a SELL whose order_id is NOT the entry order.
+    await monitor.on_order_update("mx1", {
+        "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+        "transaction_type": "SELL", "order_id": "GTT-EXIT-1", "average_price": 79.0})
+    p = pos.get("mx1", "NIFTY24JUN24000CE")
+    assert p.status == pos.CLOSED, "protective exit fill must close the position"
+    assert released == [("mx1", "NIFTY")], "guard released after exit"
+
+    # a subsequent tick must NOT place a second sell (position no longer OPEN)
+    client = _FakeClient()
+    out = await monitor.on_tick("mx1", 777, 40.0, client=client)
+    assert out is None and client.sells == []
+
+
+@pytest.mark.asyncio
+async def test_futures_short_cover_fill_closes_position(monkeypatch):
+    """For a short future the protective exit is a BUY-to-cover; its fill closes."""
+    pos.reset("mx2")
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    pos.register(pos.OpenPosition(
+        uid="mx2", symbol="BANKNIFTY25JULFUT", exchange="NFO", token=888,
+        qty=15, entry_premium=48000, stop_premium=48500, order_id="ENTRY-F",
+        status=pos.OPEN, direction="short", vehicle="futures", guard_key="BANKNIFTY"))
+    await monitor.on_order_update("mx2", {
+        "tradingsymbol": "BANKNIFTY25JULFUT", "status": "COMPLETE",
+        "transaction_type": "BUY", "order_id": "COVER-1", "average_price": 48550.0})
+    assert pos.get("mx2", "BANKNIFTY25JULFUT").status == pos.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_entry_fill_still_confirmed_when_order_id_matches():
+    """Regression guard: the ENTRY fill (order_id matches) still marks OPEN, even
+    though a BUY entry for a long shares the 'BUY' side."""
+    pos.reset("mx3")
+    pos.register(pos.OpenPosition(
+        uid="mx3", symbol="NIFTY24JUN24000CE", exchange="NFO", token=1, qty=50,
+        entry_premium=100, stop_premium=80, order_id="ENTRY-9",
+        status=pos.PENDING, direction="long"))
+    await monitor.on_order_update("mx3", {
+        "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+        "transaction_type": "BUY", "order_id": "ENTRY-9", "average_price": 101.5})
+    p = pos.get("mx3", "NIFTY24JUN24000CE")
+    assert p.status == pos.OPEN and p.fill_price == pytest.approx(101.5)
+
+
 # ── C: broker-side protective GTT stop ───────────────────────────────────────
 class _GttClient:
     def __init__(self):

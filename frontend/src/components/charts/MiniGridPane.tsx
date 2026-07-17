@@ -6,6 +6,7 @@ import {
 import {
   ema, bollingerBands, vwap, supertrend,
   type Candle,
+  supertrendSegments,
 } from '../../utils/indicators';
 
 // --- Synced multi-pane grid cell (layoutMode '2'/'4') ---
@@ -94,14 +95,12 @@ export function MiniGridPane({ paneIndex, baseCandles, activeIndicators, params,
     // matching the main chart's rendering exactly.
     const addST = (period: number, mult: number) => {
       const stData = supertrend(highs, lows, closes, period, mult);
-      const bullPts: { time: any; value: number }[] = [];
-      const bearPts: { time: any; value: number }[] = [];
-      stData.forEach((p, i) => {
-        const pt = { time: times[i] as any, value: p.value };
-        (p.direction === 'up' ? bullPts : bearPts).push(pt);
-      });
-      if (bullPts.length) { const s = chart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 1, priceLineVisible: false, lastValueVisible: false }); s.setData(bullPts); }
-      if (bearPts.length) { const s = chart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 1, priceLineVisible: false, lastValueVisible: false }); s.setData(bearPts); }
+      // Full-length green/red segments with whitespace on the inactive-trend bars
+      // so the two series don't each connect across the other's gaps (which drew
+      // two crossing lines per indicator). See supertrendSegments.
+      const { bull, bear } = supertrendSegments(stData, times);
+      chart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(bull as any);
+      chart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(bear as any);
     };
     if (activeIndicators.has('st-fast')) addST(params.stFastPeriod || 21, params.stFastMult || 1);
     if (activeIndicators.has('st-mid')) addST(params.stMidPeriod || 14, params.stMidMult || 2);

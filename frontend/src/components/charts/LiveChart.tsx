@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, IChartApi, ColorType, CandlestickSeries, LineSeries, HistogramSeries, LineStyle, CrosshairMode, createSeriesMarkers } from 'lightweight-charts';
 import type { OHLCVBar } from '../../hooks/useCandles';
 import { PositionOverlay } from './overlays/PositionOverlay';
-import { ema, supertrend, heikinAshi } from '../../utils/indicators';
+import { ema, supertrend, supertrendSegments, heikinAshi } from '../../utils/indicators';
 import { useKiteDrawings, type Drawing } from '../../hooks/useKiteDrawings';
 
 export interface PositionOverlayData {
@@ -153,13 +153,12 @@ export function LiveChart({
       if (!seriesRefs.current.stBear) {
         seriesRefs.current.stBear = chartRef.current.addSeries(LineSeries, { color: '#cc4444', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       }
-      const bullPts: any[] = []; const bearPts: any[] = [];
-      st.forEach((p, i) => {
-        const pt = { time: times[i] as any, value: p.value };
-        (p.direction === 'up' ? bullPts : bearPts).push(pt);
-      });
-      seriesRefs.current.stBull.setData(bullPts);
-      seriesRefs.current.stBear.setData(bearPts);
+      // Full-length green/red segments with whitespace on the inactive-trend bars
+      // so the two series don't each connect across the other's gaps (which drew
+      // two crossing lines). See supertrendSegments.
+      const { bull, bear } = supertrendSegments(st, times);
+      seriesRefs.current.stBull.setData(bull as any);
+      seriesRefs.current.stBear.setData(bear as any);
     }
 
     // VWAP (simple)

@@ -83,6 +83,7 @@ const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
   { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
   { value: 'both', label: 'Both', hint: 'Run both scans; each signal is tagged Spot or DERIV.' },
+  { value: 'confluence', label: 'Confluence', hint: "Highest conviction: emit a strike only when the underlying fires a fresh entry AND that option's own premium ST also confirms. One merged row per underlying." },
 ];
 // Granular universe pickers. `name` is the value stored in config (matches the
 // backend UniverseItem display name); `label` is the short chip text.
@@ -109,6 +110,11 @@ function scanCost(cfg: EngineConfigModel): string {
   }
   if (cfg.scan_source === 'derivatives') {
     return `${nIdx} indices + ${nStocks} stocks × ${nStrikes} strikes × 2 (CE+PE) = ${charts} option charts · ${fmtTime(charts)}/scan`;
+  }
+  if (cfg.scan_source === 'confluence') {
+    // underlying spot chart + one premium per candidate strike (signal direction only)
+    const premiums = instruments * nStrikes;
+    return `${instruments} spot + up to ${premiums} premiums (confirmed legs only) · ${fmtTime(instruments + premiums)}/scan`;
   }
   return `${instruments} instruments · ${charts} option charts · spot ${fmtTime(instruments)} + deriv ${fmtTime(charts)}/scan`;
 }
@@ -249,6 +255,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   // the contract is the headline and spot/stop_loss are premium values.
   const isDeriv = row.source === 'derivatives';
   const derivLeg = isDeriv ? row.legs[0] : undefined;
+  // Legs that carry their own premium entry/stop columns: derivatives AND confluence
+  // (confluence confirms each leg on its own premium chart, so it has the same data).
+  // Spot legs are candidate strikes with no per-option premium, so those columns stay
+  // hidden for them (the header mirrors this via scan_source !== 'spot').
+  const hasPremium = isDeriv || row.source === 'confluence';
 
   // Live LTP for a leg's contract (no entry-snapshot fallback — we need the live tick
   // to reconcile the frozen is_active flag, not the frozen entry).
@@ -610,6 +621,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
               } else if (sort.key === 'stop') {
                  valA = (a as any).premium_sl || 0;
                  valB = (b as any).premium_sl || 0;
+              } else if (sort.key === 'sl') {
+                 valA = (a as any).entry_sl || 0;
+                 valB = (b as any).entry_sl || 0;
               } else if (sort.key === 'exc') {
                  valA = row.exchange;
                  valB = row.exchange;
@@ -665,6 +679,16 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           const entryPx = rawEntryPx != null && rawEntryPx > 0 ? rawEntryPx : null;
           const rawSlPx = (leg as any).premium_sl;
           const slPx = rawSlPx != null && rawSlPx > 0 ? rawSlPx : null;
+          // Initial hard stop at entry (fast ST line) — the static SL column, distinct
+          // from the live ratcheting TSL (premium_sl) above.
+          const rawInitSl = (leg as any).entry_sl;
+          const initSlPx = rawInitSl != null && rawInitSl > 0 ? rawInitSl : null;
+          // Exit column — red-counter progress ("<reds>/<threshold> red") toward the
+          // auto-exit rule. Row-level (the underlying/premium regime), coloured by how
+          // close it is to firing: green→safe, amber→approaching, red→at/over threshold.
+          const exitReds = row.exit_state ? (parseInt(row.exit_state, 10) || 0) : 0;
+          const exitThr = row.exit_state ? (parseInt(row.exit_state.split('/')[1] || '1', 10) || 1) : 1;
+          const exitColor = !row.exit_state ? k.dim : exitReds <= 0 ? k.dim : exitReds >= exitThr ? k.red : k.orange;
           const ended = legIsExited(leg);
           const legActive = !ended;
           // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the
@@ -714,11 +738,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                        {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
                      </span>
                    )}
-                   {isDeriv && (
-                     // Keep the fired Entry visible even after exit — but dimmed + struck
-                     // through so it reads as history, not a live order to act on. The bracket
-                     // shows how many points the live LTP has moved from that entry.
-                     <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 110, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                   {hasPremium && (
+                     // Entry — fired fill premium. Dimmed + struck once the trend flips
+                     // (history, not a live order). Bracket = live LTP move from entry.
+                     <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 96, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                        {entryPx != null ? entryPx.toFixed(2) : '—'}
                        {entryDiff != null && (
                          <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
@@ -727,9 +750,27 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                        )}
                      </span>
                    )}
-                   {isDeriv && (
-                     <span title={snapTitle} style={{ fontSize: 10, color: k.dim, width: 70, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                   {hasPremium && (
+                     // SL — initial hard stop at the entry bar (fast ST line), static.
+                     <span title="Initial stop at entry (fast SuperTrend line)" style={{ fontSize: 10, color: k.dim, width: 56, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                       {initSlPx != null ? initSlPx.toFixed(1) : '—'}
+                     </span>
+                   )}
+                   {hasPremium && (
+                     // TSL — live ratcheting trail stop (tightens as ST lines flip red).
+                     <span title="Trailing stop — ratchets tighter as SuperTrend lines flip red" style={{ fontSize: 10, color: k.dim, width: 56, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                        {slPx != null ? slPx.toFixed(1) : '—'}
+                     </span>
+                   )}
+                   {/* Exit — red-counter progress toward the auto-exit rule (row-level) */}
+                   <span title="Red-counter progress toward the auto-exit rule (exit_mode)" style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: 58, textAlign: 'right', flexShrink: 0 }}>
+                     {row.exit_state ?? '—'}
+                   </span>
+                   {hasPremium && (
+                     // Target — trend-following: no fixed take-profit. Exit is owned by the
+                     // trail (TSL) + the red counter (Exit), so this stays "— (trail)".
+                     <span title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)" style={{ fontSize: 10, color: k.dim, width: 44, textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
+                       —
                      </span>
                    )}
                 </div>
@@ -1250,10 +1291,13 @@ function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
 // collapsed into or displayed as "Deriv" — and clicking always advances to the next
 // mode in SCAN_SOURCE_OPTS order, so every mode (including "Both") stays reachable
 // from this control alone. The full picker stays in the settings drawer for power users.
+// Four modes ⇒ a 40px track (knob 14px slides 1→27). Confluence is green — it is the
+// strongest-conviction mode (all-green entry on BOTH the underlying and the premium).
 const SCAN_SOURCE_QUICK_STYLE: Record<ScanSource, { label: string; color: string; knobLeft: number }> = {
   spot: { label: 'Spot', color: k.dim, knobLeft: 1 },
-  derivatives: { label: 'Deriv', color: k.orange, knobLeft: 13 },
-  both: { label: 'Both', color: k.purple, knobLeft: 7 },
+  derivatives: { label: 'Deriv', color: k.orange, knobLeft: 10 },
+  both: { label: 'Both', color: k.purple, knobLeft: 18 },
+  confluence: { label: 'Conf', color: k.green, knobLeft: 27 },
 };
 
 function ScanSourceQuickToggle({ source, onChange }: { source: ScanSource; onChange: (v: ScanSource) => void }) {
@@ -1270,7 +1314,7 @@ function ScanSourceQuickToggle({ source, onChange }: { source: ScanSource; onCha
       <button onClick={advance} aria-pressed={source !== 'spot'}
         aria-label={`Scan source: ${label}. Click to cycle to the next scan source.`}
         style={{
-          position: 'relative', width: 28, height: 16, borderRadius: 999, border: 'none', padding: 0,
+          position: 'relative', width: 40, height: 16, borderRadius: 999, border: 'none', padding: 0,
           cursor: 'pointer', flexShrink: 0, background: color, transition: 'background .18s ease',
         }}>
         <span style={{
@@ -1942,8 +1986,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                  <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
                  {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
                  {s.showLeg && <SortHeaderDiv label="Leg (Δ)" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 78, flexShrink: 0 }} />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry (Δpts)" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 110, flexShrink: 0 }} align="right" />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Stop" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 70, flexShrink: 0 }} align="right" />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry (Δpts)" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 96, flexShrink: 0 }} align="right" />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="SL" sortKey="sl" sort={legSort} handleSort={handleLegSort} style={{ width: 56, flexShrink: 0 }} align="right" />}
+                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="TSL" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 56, flexShrink: 0 }} align="right" />}
+                 <span style={{ width: 58, flexShrink: 0, textAlign: 'right' }} title="Red-counter progress toward the auto-exit rule (exit_mode)">Exit</span>
+                 {cfg?.scan_source !== 'spot' && <span style={{ width: 44, flexShrink: 0, textAlign: 'right' }} title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)">Target</span>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexShrink: 0 }}>
                  <div style={{ width: 150 }}></div>
@@ -2021,6 +2068,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         }
 
         // ── Group bodies (same controls, reused across both layouts) ──────────
+        const numInput: React.CSSProperties = {
+          width: 60, padding: '3px 5px', fontSize: 11, border: `1px solid ${k.border}`,
+          borderRadius: 4, background: k.surface, color: k.text, textAlign: 'right', outline: 'none',
+        };
         const scanGroup = (
           <>
             <SettingRow label="Source" hint="Spot: SuperTrend on underlying chart. Derivatives: on each contract's premium chart. Both: run both.">
@@ -2142,6 +2193,19 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.hint}
               </div>
             </SettingRow>
+            <SettingRow label="Stop anchor" hint="Where the trailing price stop sits. Tightest (default) trails the fast SuperTrend — the OOS-validated exit in the 7.5y sweep. Aligned instead pins the stop to the exit-counter line (1→fast, 2→mid, 3→slow) so the stop breach coincides with the red count; the sweep found looser exits lose, so leave off unless you specifically want that.">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Switch on={cfg.exit_aligned_trail ?? false} color={k.blue} label="Anchor stop to exit counter"
+                  onChange={() => patch(
+                    { exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) },
+                    `Stop anchor → ${!(cfg.exit_aligned_trail ?? false) ? 'aligned to counter' : 'tightest (fast)'}`,
+                    true,
+                  )} />
+                <span style={{ fontSize: 10, color: k.dim }}>
+                  {(cfg.exit_aligned_trail ?? false) ? 'Aligned to exit-counter line' : 'Tightest (fast) — validated'}
+                </span>
+              </div>
+            </SettingRow>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
               onClick={toggleAuto}>
               <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={() => {}} />
@@ -2152,6 +2216,66 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Places option BUY orders on ready signals (live-safety gated).</span>
               </div>
             </div>
+            <details data-testid="autoexec-guards">
+              <summary style={{ listStyle: 'none', display: 'flex', alignItems: 'baseline', gap: 8, padding: '11px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer', userSelect: 'none', background: tint(k.blue, 3) }}>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.dim }}>Auto-exec guards</span>
+                <span style={{ fontSize: 10, color: k.dim }}>expiry · time-stop · session · liquidity · daily loss — all optional</span>
+              </summary>
+              <SettingRow label="Expiry" hint="Square off an option position this many calendar days before its expiry, so a weekly can't ride into expiry unmanaged (median signal hold ≈ 3.7d). 0 = off. Options only — futures roll instead.">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
+                  <input type="number" min={0} max={10} step={1} aria-label="Expiry square-off days" data-testid="expiry-squareoff-input"
+                    value={cfg.expiry_square_off_days ?? 1}
+                    onChange={(e) => patch({ expiry_square_off_days: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, `Expiry square-off → ${e.target.value} day(s)`)}
+                    style={numInput} />
+                  days before expiry (0 = off)
+                </label>
+              </SettingRow>
+              <SettingRow label="Time stop" hint="Square off a held position after this many 1H bars, capping theta bleed on long options. A ~48-bar cap was the one robust, cross-lens improvement in the 7.5y exit sweep — but its benefit concentrates on the long-OTM vehicle, so it ships opt-in. 0 = off.">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
+                  <input type="number" min={0} max={500} step={1} aria-label="Time stop bars" data-testid="time-stop-input"
+                    value={cfg.time_stop_bars ?? 0}
+                    onChange={(e) => patch({ time_stop_bars: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, `Time stop → ${e.target.value} bars`)}
+                    style={numInput} />
+                  1H bars (0 = off)
+                </label>
+              </SettingRow>
+              <SettingRow label="Session" hint="Block NEW auto-exec entries in the last N minutes before the 15:30 close, so a fresh late-session signal doesn't enter straight into an overnight index gap. 0 = off.">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
+                  <input type="number" min={0} max={375} step={5} aria-label="Block entry minutes before close" data-testid="block-entry-input"
+                    value={cfg.block_entry_minutes_before_close ?? 0}
+                    onChange={(e) => patch({ block_entry_minutes_before_close: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, `Block entry ${e.target.value} min before close`)}
+                    style={numInput} />
+                  min before close (0 = off)
+                </label>
+              </SettingRow>
+              <SettingRow label="Liquidity" align="top" full hint="Skip an auto-exec entry whose chosen option leg is too illiquid to trade well: quoted spread wider than max %, or open interest below the floor. Empty = off (adds one quote call at entry).">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
+                    Max spread %
+                    <input type="number" min={0} step={0.5} placeholder="off" aria-label="Max spread percent" data-testid="max-spread-input"
+                      value={cfg.max_spread_pct ?? ''}
+                      onChange={(e) => { const r = e.target.value; patch({ max_spread_pct: r === '' ? null : Math.max(0, Number(r)) }, r === '' ? 'Spread guard off' : `Max spread → ${r}%`); }}
+                      style={numInput} />
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
+                    Min OI
+                    <input type="number" min={0} step={50} placeholder="off" aria-label="Minimum open interest" data-testid="min-oi-input"
+                      value={cfg.min_oi ?? ''}
+                      onChange={(e) => { const r = e.target.value; patch({ min_oi: r === '' ? null : Math.max(0, Math.floor(Number(r))) }, r === '' ? 'OI guard off' : `Min OI → ${r}`); }}
+                      style={numInput} />
+                  </label>
+                </div>
+              </SettingRow>
+              <SettingRow label="Daily loss" hint="Halt NEW auto-exec entries once realized losses for the IST day reach this % of available F&O capital (fills the gap left by the crypto-only USD breaker). Never force-closes open positions. Empty = off.">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
+                  <input type="number" min={0} max={100} step={0.5} placeholder="off" aria-label="Max daily loss percent" data-testid="daily-loss-input"
+                    value={cfg.max_daily_loss_pct ?? ''}
+                    onChange={(e) => { const r = e.target.value; patch({ max_daily_loss_pct: r === '' ? null : Math.max(0, Number(r)) }, r === '' ? 'Daily-loss breaker off' : `Daily-loss cap → ${r}%`); }}
+                    style={numInput} />
+                  % of capital (empty = off)
+                </label>
+              </SettingRow>
+            </details>
             <SettingRow label="Stop" hint="GTT broker stop survives disconnects; tick monitor exits intrabar. Both = recommended for real money.">
               <Segmented
                 options={STOP_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}

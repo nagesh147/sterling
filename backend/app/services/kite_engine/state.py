@@ -38,6 +38,9 @@ _breakers: Dict[str, DrawdownCircuitBreaker] = {}
 # underlying's latest 1H close so a new entry that's highly correlated with an
 # already-open position is downsized (don't stack 3 full-size correlated longs).
 _correlation: Dict[str, CorrelationTracker] = {}
+# Per-user realized PnL for the current IST trading day → INR daily-loss breaker.
+# Value is (day_iso, cumulative_pnl); resets when the day rolls over.
+_daily_pnl: Dict[str, tuple] = {}
 
 
 # ── config ──────────────────────────────────────────────────────────────────
@@ -194,6 +197,31 @@ def drawdown_multiplier(uid: str, portfolio_value: float) -> tuple:
     return brk.size_multiplier(), st.value
 
 
+def _ist_today_iso() -> str:
+    from datetime import datetime, timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=5, minutes=30))).date().isoformat()
+
+
+def record_realized_pnl(uid: str, pnl: float, *, day_iso: str | None = None) -> float:
+    """Accumulate a closed trade's realized PnL (INR) into the running total for the
+    current IST trading day. Resets automatically when the day rolls over. Returns the
+    new day total. Feeds the INR daily-loss breaker (there is no USD/crypto breaker on
+    Kite). ``day_iso`` is injectable for deterministic tests."""
+    day = day_iso or _ist_today_iso()
+    cur = _daily_pnl.get(uid)
+    total = (cur[1] + float(pnl)) if (cur and cur[0] == day) else float(pnl)
+    _daily_pnl[uid] = (day, total)
+    return total
+
+
+def daily_realized_pnl(uid: str, *, day_iso: str | None = None) -> float:
+    """Realized PnL (INR) accumulated so far in the current IST trading day (0 if none
+    or the stored total is from a previous day)."""
+    day = day_iso or _ist_today_iso()
+    cur = _daily_pnl.get(uid)
+    return cur[1] if (cur and cur[0] == day) else 0.0
+
+
 def feed_correlation(uid: str, asset: str, close: float) -> None:
     """Feed the per-user correlation tracker one 1H close for ``asset``."""
     if close <= 0:
@@ -245,9 +273,10 @@ def reset(uid: str = "") -> None:
         _config.pop(uid, None); _activity.pop(uid, None)
         _status.pop(uid, None); _auto_open.pop(uid, None)
         _breakers.pop(uid, None); _correlation.pop(uid, None)
+        _daily_pnl.pop(uid, None)
     else:
         _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear()
-        _breakers.clear(); _correlation.clear()
+        _breakers.clear(); _correlation.clear(); _daily_pnl.clear()
 
 
 def load_signal_cache(uid: str):

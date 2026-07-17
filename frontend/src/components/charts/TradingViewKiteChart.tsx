@@ -5,7 +5,7 @@ import {
 } from 'lightweight-charts';
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import {
-  ema, bollingerBands, vwap, rsi, macd, supertrend, heikinAshi,
+  ema, bollingerBands, vwap, rsi, macd, supertrend, supertrendSegments, heikinAshi,
   type Candle,
 } from '../../utils/indicators';
 import {
@@ -689,20 +689,18 @@ export function TradingViewKiteChart({
     // SuperTrend - show selected variants with direction-based colors (bull=green, bear=red)
     const addSupertrendWithDirection = (period: number, mult: number, label: string) => {
       const stData = supertrend(highs, lows, closes, period, mult);
-      const bullPts: { time: any; value: number }[] = [];
-      const bearPts: { time: any; value: number }[] = [];
-      stData.forEach((p, i) => {
-        const pt = { time: times[i] as any, value: p.value };
-        (p.direction === 'up' ? bullPts : bearPts).push(pt);
-      });
-      if (bullPts.length) {
-        const s = chart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 2, title: label + ' (up)', priceLineVisible: false, lastValueVisible: false });
-        s.setData(bullPts);
-      }
-      if (bearPts.length) {
-        const s = chart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 2, title: label + ' (dn)', priceLineVisible: false, lastValueVisible: false });
-        s.setData(bearPts);
-      }
+      // One SuperTrend line, split into green (bull) + red (bear) segments so the
+      // colour flips with the trend. Both series are FULL-LENGTH with whitespace
+      // on the inactive-trend bars (see supertrendSegments), so the line breaks at
+      // the flips instead of the two series each connecting straight across the
+      // other's gaps — which drew two crossing lines per indicator. Only the green
+      // series carries the legend title, so the indicator shows up once; the colour
+      // itself conveys direction.
+      const { bull, bear } = supertrendSegments(stData, times);
+      const bs = chart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 2, title: label, priceLineVisible: false, lastValueVisible: false });
+      bs.setData(bull as any);
+      const rs = chart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+      rs.setData(bear as any);
     };
 
     if (activeIndicators.has('st-fast')) {
@@ -859,22 +857,57 @@ export function TradingViewKiteChart({
     if (signalData && signalData.timestamp_ms != null && times.length && candleS) {
       try {
         const targetSec = signalData.timestamp_ms / 1000;
-        let closestIdx = 0;
-        let closestDiff = Math.abs(times[0] - targetSec);
-        for (let i = 1; i < times.length; i++) {
-          const diff = Math.abs(times[i] - targetSec);
-          if (diff < closestDiff) { closestDiff = diff; closestIdx = i; }
-        }
-        // Average bar spacing, used as the "close enough" tolerance (at least
-        // 1h) so a signal from well outside the loaded range is silently
-        // skipped rather than mis-plotted on an unrelated bar.
         const avgSpacing = times.length > 1 ? Math.abs(times[times.length - 1] - times[0]) / (times.length - 1) : Infinity;
         const tolerance = Math.max(avgSpacing * 3, 3600);
-        if (closestDiff <= tolerance) {
-          const dirStr = (signalData.direction || '').toUpperCase();
-          const isLong = dirStr.includes('BUY') || dirStr.includes('LONG');
+
+        // The engine's entry rule = a FRESH full alignment of all three SuperTrends
+        // (3 green = long, 3 red = short) that was NOT aligned on the prior bar.
+        // Re-derive it here on the SAME candles the chart draws so the arrow always
+        // lands on a real 3-line flip and points the right way — instead of dropping
+        // it on whatever bar happens to be nearest the timestamp.
+        const stF = supertrend(highs, lows, closes, params.stFastPeriod || 21, params.stFastMult || 1);
+        const stM = supertrend(highs, lows, closes, params.stMidPeriod || 14, params.stMidMult || 2);
+        const stS = supertrend(highs, lows, closes, params.stSlowPeriod || 7, params.stSlowMult || 3);
+        const n = Math.min(stF.length, stM.length, stS.length, times.length);
+        const allUp = (i: number) => stF[i].direction === 'up' && stM[i].direction === 'up' && stS[i].direction === 'up';
+        const allDn = (i: number) => stF[i].direction === 'down' && stM[i].direction === 'down' && stS[i].direction === 'down';
+
+        let pickIdx = -1;
+        let pickLong = true;
+        let pickDiff = Infinity;
+        for (let i = 1; i < n; i++) {
+          const fresh = (allUp(i) && !allUp(i - 1)) ? true : (allDn(i) && !allDn(i - 1)) ? false : null;
+          if (fresh === null) continue;
+          const diff = Math.abs(times[i] - targetSec);
+          if (diff < pickDiff) { pickDiff = diff; pickIdx = i; pickLong = fresh; }
+        }
+
+        let markIdx = -1;
+        let isLong = pickLong;
+        if (pickIdx >= 0 && pickDiff <= tolerance) {
+          // Found the actual fresh-alignment bar near the signal — use it.
+          markIdx = pickIdx;
+        } else {
+          // No fresh 3-line flip near the signal on THIS instrument (e.g. a
+          // spot-source signal viewed on the option-premium chart, where the entry
+          // was decided on the underlying). Fall back to the entry bar by time, and
+          // take the direction from the signal itself.
+          let closestIdx = 0;
+          let closestDiff = Math.abs(times[0] - targetSec);
+          for (let i = 1; i < times.length; i++) {
+            const diff = Math.abs(times[i] - targetSec);
+            if (diff < closestDiff) { closestDiff = diff; closestIdx = i; }
+          }
+          if (closestDiff <= tolerance) {
+            markIdx = closestIdx;
+            const dir = (signalData.direction || '').toLowerCase();
+            isLong = dir === 'long' || dir.includes('buy') || (signalData.regime || '').toUpperCase() === 'BULL';
+          }
+        }
+
+        if (markIdx >= 0) {
           createSeriesMarkers?.(candleS, [{
-            time: times[closestIdx] as any,
+            time: times[markIdx] as any,
             position: isLong ? 'belowBar' : 'aboveBar',
             color: isLong ? tv.green : tv.red,
             shape: isLong ? 'arrowUp' : 'arrowDown',
