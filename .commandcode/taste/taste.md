@@ -105,3 +105,7 @@ See [ui-layout/taste.md](ui-layout/taste.md)
 
 # git-workflow
 - When user says "push all code; sync branches;updated;" or "sync all branches;update;push", run: git status, git add -A, git commit with structured message ("chore: sync {module} — {details}") including Co-authored-by: CommandCodeBot trailer, git push origin {current-branch}, git fetch --all, then for each local branch merge from its remote tracking branch (git merge origin/{branch}), and report sync status for all branches. Confidence: 0.80
+
+# communication
+- Avoid AskUserQuestion formal prompts — user prefers conversational clarification over structured question forks. When clarification is needed, ask inline in the chat rather than using formal UI question components. Confidence: 0.65
+- When user says "go ahead. all in one go." (often repeated twice), skip all intermediate approval gates including brainstorming design review — execute the full implementation end-to-end without pausing for confirmation. Confidence: 0.75

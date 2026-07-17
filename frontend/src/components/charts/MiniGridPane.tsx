@@ -45,7 +45,7 @@ export function MiniGridPane({ paneIndex, baseCandles, activeIndicators, params,
 
     const chart = createChart(elRef.current, {
       layout: { background: { type: ColorType.Solid, color: tv.bg }, textColor: tv.dim, fontFamily: tv.fontFamily },
-      grid: { vertLines: { color: tv.border }, horzLines: { color: tv.border } },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: { mode: CrosshairMode.Magnet },
       rightPriceScale: { borderVisible: false, mode: isLogScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal },
       timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },

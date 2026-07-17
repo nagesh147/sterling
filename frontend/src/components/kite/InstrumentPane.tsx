@@ -124,10 +124,15 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     }
   };
 
-  const [params, setParams] = useState({
+  // The full default indicator-params object for a given trail target. Factored
+  // out of the useState initializer so the symbol-change effect can reset params
+  // to these same defaults - otherwise the previous symbol's params leak into the
+  // next symbol and get persisted onto it (the load merges over whatever params
+  // are currently in state).
+  const buildDefaultParams = (target?: 'fast' | 'mid' | 'slow') => ({
     ema1: 9, ema2: 21,
     bbPeriod: 20, bbStd: 2,
-    ...getSTParams(trailTarget),
+    ...getSTParams(target),
     // Per-variant SuperTrend period/multiplier (the chart shows fast/mid/slow
     // simultaneously, so each needs its own pair - the single stPeriod/stMult
     // above is legacy/unused by the chart, kept as-is for compatibility).
@@ -137,6 +142,8 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     rsiPeriod: 14,
     macdFast: 12, macdSlow: 26, macdSig: 9,
   });
+
+  const [params, setParams] = useState(() => buildDefaultParams(trailTarget));
   const [showVP, setShowVP] = useState(false);
   const [isLogScale, setIsLogScale] = useState(false);
 
@@ -204,9 +211,25 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // Proper debounced save for backend (always a function)
   const saveTimeoutRef = useRef<any>(null);
   const saveChartStateRef = useRef<any>(null);
+  // Last known visible-range (zoom) for THIS symbol. The backend does a full
+  // replace, so a save that omits zoom (any config/drawing change) would persist
+  // zoom:null and wipe the stored zoom. We remember the live range here (seeded
+  // from the loaded state, updated on pan/zoom) and use it as the zoom default so
+  // non-zoom saves keep the existing zoom instead of clobbering it. Reset to null
+  // on symbol change so one symbol's zoom never leaks into another's.
+  const lastZoomRef = useRef<any>(null);
+  // The concrete POST to run when the debounce fires, captured with THIS
+  // symbol + payload. Kept in a ref so we can also fire it *immediately*
+  // (flushSave) when the pane is about to stop tracking the current symbol -
+  // on a symbol switch or unmount - instead of letting the pending timer be
+  // silently cancelled, which used to drop the just-made change. The optional
+  // `keepalive` arg is set from the page-unload path so the POST survives the
+  // tab closing (see the pagehide/visibilitychange effect below).
+  const pendingSaveRef = useRef<null | ((keepalive?: boolean) => void)>(null);
+
   const saveChartState = useCallback((zoomArg?: any, drawingsArg?: any) => {
     const payload = {
-      zoom: zoomArg ?? null,
+      zoom: zoomArg ?? lastZoomRef.current ?? null,
       drawings: drawingsArg ?? drawings,
       tf,
       active: Array.from(active),
@@ -215,16 +238,44 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       showVP,
       params,
     };
+    const targetSymbol = symbol;
+    const doPost = (keepalive = false) => {
+      saveTimeoutRef.current = null;
+      pendingSaveRef.current = null;
+      api.post(
+        `/api/v1/kite/chart-state/${encodeURIComponent(targetSymbol)}`,
+        payload,
+        keepalive ? { keepalive: true } : undefined,
+      ).catch((err) => {
+        console.error('Failed to save chart state:', err);
+      });
+    };
+    pendingSaveRef.current = doPost;
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    saveTimeoutRef.current = setTimeout(() => {
-      api.post(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`, payload)
-        .catch((err) => {
-          console.error('Failed to save chart state:', err);
-        });
-    }, 700);
+    saveTimeoutRef.current = setTimeout(() => doPost(), 700);
   }, [drawings, symbol, tf, active, isHA, isLogScale, showVP, params]);
+
+  // Fire any pending debounced save immediately. Called when the pane leaves the
+  // current symbol (symbol switch or unmount). Without it, switching symbols
+  // within the 700ms debounce window dropped the outgoing symbol's save two ways:
+  // (a) the incoming symbol's load schedules its own save whose clearTimeout
+  // cancels the still-pending one, and (b) in Mac motion mode MacSectionFade
+  // remounts the pane, whose unmount cleanup cleared the timer. Flushing POSTs
+  // the outgoing symbol's state before either can happen. doPost captured the
+  // outgoing symbol + payload, so this always saves to the correct endpoint.
+  const flushSave = useCallback((keepalive = false) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    if (pendingSaveRef.current) {
+      const run = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      run(keepalive);
+    }
+  }, []);
 
   useEffect(() => {
     saveChartStateRef.current = saveChartState;
@@ -244,6 +295,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // that effect (chart.remove() + createChart(...)) to re-run far more often
   // than the underlying data actually changed.
   const handleZoomChange = useCallback((range: any) => {
+    lastZoomRef.current = range;
     if (chartStateLoaded) saveChartState(range);
   }, [chartStateLoaded, saveChartState]);
 
@@ -253,15 +305,43 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   }, [chartStateLoaded, saveChartState, setDrawings]);
 
   useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    // On unmount (incl. Mac-mode MacSectionFade remount on symbol switch), flush
+    // the pending save instead of dropping it, so a change made <700ms before the
+    // switch still reaches the backend for the outgoing symbol.
+    return () => { flushSave(); };
+  }, [flushSave]);
+
+  useEffect(() => {
+    // A hard page unload - tab close, refresh, or browser navigation away - does
+    // NOT run React unmount, so the flush above never fires and a change made
+    // within the 700ms debounce window is lost. Flush on the unload signals
+    // instead. `pagehide` covers close/refresh/navigation (and bfcache); the
+    // `visibilitychange`->hidden check is the reliable mobile/bfcache signal
+    // where pagehide/beforeunload are unreliable. We flush with keepalive so the
+    // POST survives the unload - a normal fetch would be cancelled mid-flight.
+    // flushSave nulls the pending save after running, so whichever signal fires
+    // first wins and the other is a no-op (no double POST).
+    const flushOnUnload = () => { flushSave(true); };
+    const flushIfHidden = () => {
+      if (document.visibilityState === 'hidden') flushSave(true);
     };
-  }, []);
+    window.addEventListener('pagehide', flushOnUnload);
+    document.addEventListener('visibilitychange', flushIfHidden);
+    return () => {
+      window.removeEventListener('pagehide', flushOnUnload);
+      document.removeEventListener('visibilitychange', flushIfHidden);
+    };
+  }, [flushSave]);
 
   // TradingView-style current bar info (OHLC + indicators)
   const [currentBarInfo, setCurrentBarInfo] = useState<any>(null);
 
   useEffect(() => {
+    // Flush any save still pending for the PREVIOUS symbol before we reset and
+    // load this one. Without this, the load below (setChartStateLoaded(true) +
+    // applied state) schedules a fresh save whose clearTimeout would cancel the
+    // outgoing symbol's pending save. No-op on first mount (nothing pending).
+    flushSave();
     let cancelled = false;
     (async () => {
       // Block the save-on-change effects below until THIS symbol's chart state
@@ -278,6 +358,8 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       setIsLogScale(false);
       setShowVP(false);
       setPersistedZoom(null);
+      lastZoomRef.current = null;
+      setParams(buildDefaultParams(trailTarget));
       setDrawings([]);
 
       try {
@@ -288,9 +370,9 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
           if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
           if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
           if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
-          if (res.zoom) setPersistedZoom(res.zoom);
+          if (res.zoom) { setPersistedZoom(res.zoom); lastZoomRef.current = res.zoom; }
           if (Array.isArray(res.drawings)) setDrawings(res.drawings);
-          if (res.params && typeof res.params === 'object') setParams({ ...params, ...res.params });
+          if (res.params && typeof res.params === 'object') setParams({ ...buildDefaultParams(trailTarget), ...res.params });
         }
       } catch (e) {
         console.error('Failed to load chart state:', e);
@@ -298,7 +380,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       if (!cancelled) setChartStateLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, [symbol]);
+  }, [symbol, flushSave]);
 
   // Save drawings when they change (outside of click path) - use ref to get latest fn
   useEffect(() => {

@@ -723,8 +723,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1, overflow: 'hidden' }}>
-                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
+                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
+                     <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
                        <span title="Best reward-to-risk within its ITM/ATM/OTM bucket for a 1R move"
                          style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>

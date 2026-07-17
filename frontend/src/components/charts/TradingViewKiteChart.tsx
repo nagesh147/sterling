@@ -4,6 +4,7 @@ import {
   createSeriesMarkers, CrosshairMode, LineStyle, PriceScaleMode,
 } from 'lightweight-charts';
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
+import { InstrumentLabel } from '../kite/InstrumentLabel';
 import {
   ema, bollingerBands, vwap, rsi, macd, supertrend, supertrendRuns, heikinAshi,
   type Candle,
@@ -104,7 +105,18 @@ export function TradingViewKiteChart({
 
   const mainChartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<Record<string, any>>({});
-  const zoomAppliedRef = useRef<boolean>(false);
+  // Zoom continuity across chart rebuilds. The chart-creation effect re-runs on
+  // every useCandles poll (baseCandles is in its deps → the forming bar mutates
+  // ~every minute), destroying and recreating the chart. Without these, each
+  // rebuild snaps the view back to the post-setData default, so the user's zoom
+  // appears to "randomly" change while idle. We remember the last range the user
+  // was viewing (lastRangeRef) and restore it after a data-only rebuild; we track
+  // the instrument key so a genuine symbol/timeframe switch fits fresh; and we
+  // track the persisted-zoom object identity so a freshly loaded saved range is
+  // honoured exactly once (not re-applied over a later user pan).
+  const lastRangeRef = useRef<any>(null);
+  const instrumentKeyRef = useRef<string>('');
+  const appliedPersistedRef = useRef<any>(null);
   const subChartsRef = useRef<{ rsi?: IChartApi; macd?: IChartApi }>({});
   // Baseline {from,to} for wheel-driven price-axis zoom (see handlePriceAxisWheel
   // below) - re-seeded from the live auto-fit range whenever the price scale is
@@ -559,7 +571,7 @@ export function TradingViewKiteChart({
         textColor: tv.dim,
         fontFamily: tv.fontFamily,
       },
-      grid: { vertLines: { color: tv.border, style: 1 }, horzLines: { color: tv.border, style: 1 } },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: {
         mode: CrosshairMode.Magnet,
         vertLine: { width: 1, color: '#758696', style: LineStyle.Solid, labelBackgroundColor: tv.surface, labelVisible: true },
@@ -953,17 +965,33 @@ export function TradingViewKiteChart({
       } catch {}
     };
 
-    // Persisted zoom or fit - only apply once on first mount
-    if (!zoomAppliedRef.current) {
-      zoomAppliedRef.current = true;
-      const applyView = () => {
-        try {
-          if (persistedZoom) chart.timeScale().setVisibleRange(persistedZoom);
-          else chart.timeScale().fitContent();
-        } catch { chart.timeScale().fitContent(); }
-      };
-      setTimeout(applyView, 50);
-    }
+    // Apply the visible range on EVERY (re)build - the effect re-runs on each
+    // data poll, so gating this to first-mount lost the zoom on every refresh.
+    const instrumentKey = `${symbol}|${tf}`;
+    const isNewInstrument = instrumentKeyRef.current !== instrumentKey;
+    instrumentKeyRef.current = instrumentKey;
+    const applyView = () => {
+      try {
+        const timeScale = chart.timeScale();
+        if (persistedZoom && appliedPersistedRef.current !== persistedZoom) {
+          // A freshly loaded/reset saved range for this instrument - honour it once.
+          appliedPersistedRef.current = persistedZoom;
+          timeScale.setVisibleRange(persistedZoom);
+        } else if (isNewInstrument) {
+          // Genuine symbol/timeframe switch - start from a fresh fit (or saved zoom).
+          lastRangeRef.current = null;
+          if (persistedZoom) { appliedPersistedRef.current = persistedZoom; timeScale.setVisibleRange(persistedZoom); }
+          else timeScale.fitContent();
+        } else if (lastRangeRef.current) {
+          // Same instrument, rebuilt only because candle data refreshed - keep the
+          // exact range the user was viewing instead of snapping to default.
+          timeScale.setVisibleRange(lastRangeRef.current);
+        } else {
+          timeScale.fitContent();
+        }
+      } catch { try { chart.timeScale().fitContent(); } catch {} }
+    };
+    setTimeout(applyView, 50);
 
     // Crosshair OHLC (pin-point) + live dashed preview for in-progress multi-point drawings
     chart.subscribeCrosshairMove((param: any) => {
@@ -1014,7 +1042,12 @@ export function TradingViewKiteChart({
     ro.observe(mainRef.current);
 
     const ts = chart.timeScale();
-    const zh = (range: any) => { if (range && onZoomChange) onZoomChange(range); };
+    const zh = (range: any) => {
+      if (!range) return;
+      // Remember what the user is looking at so a data-poll rebuild can restore it.
+      lastRangeRef.current = range;
+      if (onZoomChange) onZoomChange(range);
+    };
     ts.subscribeVisibleTimeRangeChange(zh);
 
     // Redraw handles on pan/zoom so point positions stay accurate (real coords)
@@ -1047,7 +1080,7 @@ export function TradingViewKiteChart({
     }
     const rChart = createChart(el, {
       layout: { background: { type: ColorType.Solid, color: tv.bg }, textColor: tv.dim, fontFamily: tv.fontFamily },
-      grid: { vertLines: { color: tv.border }, horzLines: { color: tv.border } },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },
@@ -1102,7 +1135,7 @@ export function TradingViewKiteChart({
     }
     const mChart = createChart(el, {
       layout: { background: { type: ColorType.Solid, color: tv.bg }, textColor: tv.dim, fontFamily: tv.fontFamily },
-      grid: { vertLines: { color: tv.border }, horzLines: { color: tv.border } },
+      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },
@@ -1631,7 +1664,7 @@ export function TradingViewKiteChart({
               background: tv.surface, cursor: 'pointer', minWidth: 140
             }}
           >
-            <span style={{ fontWeight: 600, fontSize: 13, color: tv.text }}>{(symbol || '').split(':').pop() || symbol}</span>
+            <span style={{ fontWeight: 600, fontSize: 13, color: tv.text }}><InstrumentLabel symbol={symbol} /></span>
             {baseCandles.length > 0 && (
               <span style={{ fontSize: 11, fontFamily: 'monospace', color: tv.text }}>
                 {baseCandles[baseCandles.length-1].close.toFixed(2)}
