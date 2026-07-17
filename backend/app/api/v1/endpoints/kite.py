@@ -889,6 +889,11 @@ async def get_chart_state(
     state.setdefault("symbol", symbol)
     state.setdefault("zoom", None)
     state.setdefault("drawings", [])
+    # Per-symbol drawings map for the GLOBAL chart-state blob (symbol="__global__").
+    # Chart config (tf/indicators/params/zoom/toggles) is shared across all symbols;
+    # only drawing geometry stays keyed by symbol, kept here so the global blob is
+    # still a single KV key with one save path.
+    state.setdefault("drawingsBySymbol", {})
     state.setdefault("tf", "15m")
     state.setdefault("active", ["vol", "st-mid"])
     state.setdefault("isHA", False)
@@ -911,6 +916,7 @@ async def save_chart_state(
         "symbol": symbol,
         "zoom": body.get("zoom"),
         "drawings": body.get("drawings", []),
+        "drawingsBySymbol": body.get("drawingsBySymbol", {}),
         "tf": body.get("tf", "15m"),
         "active": body.get("active", ["vol", "st-mid"]),
         "isHA": body.get("isHA", False),

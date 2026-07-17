@@ -8,8 +8,9 @@ import { api } from '../../utils/api';
 import { heikinAshi, type Candle } from '../../utils/indicators';
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import { TradingViewKiteChart } from '../charts/TradingViewKiteChart';
+import { OIView } from './OIView';
 
-export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals';
+export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals' | 'oi-change' | 'open-interest';
 
 // Stable (never-recreated) empty-array reference for the initial useKiteDrawings
 // seed below. useKiteDrawings resyncs its internal state whenever the identity
@@ -17,6 +18,25 @@ export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals';
 // literal here on every render would wipe drawings state on every unrelated
 // re-render instead of only on an actual symbol-driven reset.
 const EMPTY_DRAWINGS: Drawing[] = [];
+
+// ── Global chart configuration ───────────────────────────────────────────────
+// The chart config (timeframe, indicators, params, toggles, zoom) is shared
+// across EVERY symbol - switching symbols must keep the same view ("same
+// throughout"), not reset to per-symbol defaults. Only drawing geometry stays
+// keyed by symbol (a trendline at NIFTY 23900 is meaningless on BANKNIFTY
+// 51000), carried inside the one global blob under `drawingsBySymbol`.
+const GLOBAL_CHART_KEY = '__global__';
+
+// Module-level cache of the loaded global blob for this page session. It is
+// populated by the first GET and then updated SYNCHRONOUSLY on every save, so
+// that Mac motion mode's MacSectionFade REMOUNT of the pane on a symbol switch
+// re-seeds the fresh pane from current in-memory state (via the lazy useState
+// initializers below) instead of racing a fresh GET against the just-flushed
+// POST on the same key. On a hard page reload it starts null and is re-fetched.
+let globalChartStateCache: any = null;
+
+// Test-only: clear the module-level session cache so each test starts cold.
+export function __resetGlobalChartStateCache() { globalChartStateCache = null; }
 
 interface InstrumentPaneProps {
   symbol: string;
@@ -26,10 +46,12 @@ interface InstrumentPaneProps {
   signalData?: { timestamp_ms: number; direction: string; regime: string };
 }
 
-const TABS: { id: InstrumentTab; label: string }[] = [
+const TABS: { id: InstrumentTab; label: string; badge?: string }[] = [
   { id: 'chart', label: 'Chart' },
   { id: 'option-chain', label: 'Option chain' },
   { id: 'fundamentals', label: 'Fundamentals' },
+  { id: 'oi-change', label: 'OI Change', badge: 'NEW' },
+  { id: 'open-interest', label: 'Open Interest', badge: 'NEW' },
 ];
 
 export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange, trailTarget, signalData }: InstrumentPaneProps) {
@@ -55,9 +77,18 @@ export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange, t
               color: tab === tItem.id ? k.orange : k.dim,
               borderBottom: tab === tItem.id ? `2px solid ${k.orange}` : '2px solid transparent',
               transition: 'color 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              whiteSpace: 'nowrap',
             }}
           >
             {tItem.label}
+            {tItem.badge && (
+              <span style={{ background: k.orange, color: '#fff', fontSize: 8, fontWeight: 700, letterSpacing: 0.3, padding: '1px 4px', borderRadius: 3, lineHeight: 1.4 }}>
+                {tItem.badge}
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -66,6 +97,8 @@ export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange, t
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {tab === 'chart' && <ChartView symbol={symbol} onSymbolChange={onSymbolChange} trailTarget={trailTarget} signalData={signalData} />}
         {tab === 'option-chain' && <OptionChainView symbol={symbol} />}
+        {tab === 'oi-change' && <OIView symbol={symbol} mode="change" />}
+        {tab === 'open-interest' && <OIView symbol={symbol} mode="total" />}
         {tab === 'fundamentals' && (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim }}>Fundamentals data not available.</div>
         )}
@@ -108,11 +141,17 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // opened from a signal row, default to that same view so the SuperTrends and the
   // Entry marker match what the engine actually saw; plain watchlist opens keep the
   // lighter 15m/raw default.
-  const [tf, setTf] = useState(signalData ? '1H' : '15m');
-  const [active, setActive] = useState<Set<IndicatorKey>>(
-    () => defaultActiveSet(trailTarget, !!signalData)
-  );
-  const [isHA, setIsHA] = useState(!!signalData);
+  // Config state seeds from the global cache for a plain (watchlist) open so a
+  // Mac-mode remount on symbol switch re-appears with the same view. A signal
+  // open ignores the cache and forces the engine's 1H Heikin-Ashi view (and does
+  // not persist - see the signalData guard in saveChartState).
+  const [tf, setTf] = useState(() => (signalData ? '1H' : (globalChartStateCache?.tf ?? '15m')));
+  const [active, setActive] = useState<Set<IndicatorKey>>(() => {
+    if (signalData) return defaultActiveSet(trailTarget, true);
+    const cached = globalChartStateCache?.active;
+    return Array.isArray(cached) && cached.length ? new Set(cached) : defaultActiveSet(trailTarget, false);
+  });
+  const [isHA, setIsHA] = useState(() => (signalData ? true : (globalChartStateCache?.isHA ?? false)));
   const [isDark, setIsDark] = useState(false);
 
   const getSTParams = (target?: 'fast' | 'mid' | 'slow') => {
@@ -143,9 +182,16 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     macdFast: 12, macdSlow: 26, macdSig: 9,
   });
 
-  const [params, setParams] = useState(() => buildDefaultParams(trailTarget));
-  const [showVP, setShowVP] = useState(false);
-  const [isLogScale, setIsLogScale] = useState(false);
+  const [params, setParams] = useState(() =>
+    signalData
+      ? buildDefaultParams(trailTarget)
+      : {
+          ...buildDefaultParams(trailTarget),
+          ...((globalChartStateCache?.params ?? {}) as Partial<ReturnType<typeof buildDefaultParams>>),
+        }
+  );
+  const [showVP, setShowVP] = useState(() => (signalData ? false : (globalChartStateCache?.showVP ?? false)));
+  const [isLogScale, setIsLogScale] = useState(() => (signalData ? false : (globalChartStateCache?.isLogScale ?? false)));
 
   const { data: rawCandles = [] } = useCandles(symbol, tf, 800);
   const { data: kitePosData } = useKitePositions();
@@ -211,13 +257,13 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // Proper debounced save for backend (always a function)
   const saveTimeoutRef = useRef<any>(null);
   const saveChartStateRef = useRef<any>(null);
-  // Last known visible-range (zoom) for THIS symbol. The backend does a full
-  // replace, so a save that omits zoom (any config/drawing change) would persist
-  // zoom:null and wipe the stored zoom. We remember the live range here (seeded
-  // from the loaded state, updated on pan/zoom) and use it as the zoom default so
-  // non-zoom saves keep the existing zoom instead of clobbering it. Reset to null
-  // on symbol change so one symbol's zoom never leaks into another's.
-  const lastZoomRef = useRef<any>(null);
+  // Last known visible-range (zoom) - GLOBAL, not per-symbol. The backend does a
+  // full replace, so a save that omits zoom (any config/drawing change) would
+  // persist zoom:null and wipe the stored zoom. We remember the live range here
+  // (seeded from the loaded/cached state, updated on pan/zoom) and use it as the
+  // zoom default so non-zoom saves keep the existing zoom. NOT reset on symbol
+  // change - the same visible window carries to the next symbol ("same throughout").
+  const lastZoomRef = useRef<any>(signalData ? null : (globalChartStateCache?.zoom ?? null));
   // The concrete POST to run when the debounce fires, captured with THIS
   // symbol + payload. Kept in a ref so we can also fire it *immediately*
   // (flushSave) when the pane is about to stop tracking the current symbol -
@@ -226,11 +272,27 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // `keepalive` arg is set from the page-unload path so the POST survives the
   // tab closing (see the pagehide/visibilitychange effect below).
   const pendingSaveRef = useRef<null | ((keepalive?: boolean) => void)>(null);
+  // Per-symbol drawing geometry for the single GLOBAL chart-state blob. Seeded
+  // from the mount load; the current symbol's entry is kept in sync on every save.
+  const drawingsBySymbolRef = useRef<Record<string, Drawing[]>>(
+    (globalChartStateCache?.drawingsBySymbol && typeof globalChartStateCache.drawingsBySymbol === 'object')
+      ? globalChartStateCache.drawingsBySymbol : {}
+  );
+  // Symbol the swap-effect last handled, so it no-ops on initial mount (the mount
+  // load applies the initial symbol's drawings) and swaps only on a real change.
+  const prevSymbolRef = useRef<string>(symbol);
 
   const saveChartState = useCallback((zoomArg?: any, drawingsArg?: any) => {
+    // Signal opens are a transient engine-view; they must never overwrite the
+    // user's shared global config (opening a signal would otherwise persist its
+    // 1H/HA view onto every symbol).
+    if (signalData) return;
+    const nextDrawings = drawingsArg ?? drawings;
+    const drawingsBySymbol = { ...drawingsBySymbolRef.current, [symbol]: nextDrawings };
+    drawingsBySymbolRef.current = drawingsBySymbol;
     const payload = {
       zoom: zoomArg ?? lastZoomRef.current ?? null,
-      drawings: drawingsArg ?? drawings,
+      drawingsBySymbol,
       tf,
       active: Array.from(active),
       isHA,
@@ -238,12 +300,14 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       showVP,
       params,
     };
-    const targetSymbol = symbol;
+    // Keep the session cache current SYNCHRONOUSLY so a Mac-mode remount that
+    // happens before the debounced POST lands still re-seeds from this state.
+    globalChartStateCache = payload;
     const doPost = (keepalive = false) => {
       saveTimeoutRef.current = null;
       pendingSaveRef.current = null;
       api.post(
-        `/api/v1/kite/chart-state/${encodeURIComponent(targetSymbol)}`,
+        `/api/v1/kite/chart-state/${GLOBAL_CHART_KEY}`,
         payload,
         keepalive ? { keepalive: true } : undefined,
       ).catch((err) => {
@@ -255,7 +319,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       clearTimeout(saveTimeoutRef.current);
     }
     saveTimeoutRef.current = setTimeout(() => doPost(), 700);
-  }, [drawings, symbol, tf, active, isHA, isLogScale, showVP, params]);
+  }, [drawings, symbol, tf, active, isHA, isLogScale, showVP, params, signalData]);
 
   // Fire any pending debounced save immediately. Called when the pane leaves the
   // current symbol (symbol switch or unmount). Without it, switching symbols
@@ -285,8 +349,11 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // (Declared before handleZoomChange/handleDrawingsChange below since those
   // callbacks close over chartStateLoaded — TS block-scoping requires the
   // declaration to precede any use, even inside a different callback.)
-  const [persistedZoom, setPersistedZoom] = useState<any>(null);
-  const [chartStateLoaded, setChartStateLoaded] = useState(false);
+  const [persistedZoom, setPersistedZoom] = useState<any>(() => (signalData ? null : (globalChartStateCache?.zoom ?? null)));
+  // When the cache is already populated (a remount within this page session), the
+  // lazy initializers above have fully seeded config, so saves can start
+  // immediately. Only a cold first mount must wait for the GET below.
+  const [chartStateLoaded, setChartStateLoaded] = useState(() => !signalData && !!globalChartStateCache);
 
   // Stable identities for the callbacks passed into TradingViewKiteChart.
   // These used to be inline arrow functions recreated on every InstrumentPane
@@ -336,34 +403,28 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // TradingView-style current bar info (OHLC + indicators)
   const [currentBarInfo, setCurrentBarInfo] = useState<any>(null);
 
+  // ── Mount: load the GLOBAL chart config ONCE per pane instance ──────────────
+  // Config is shared across symbols, so it is NOT reloaded/reset on symbol change
+  // (that reset was the "config wiped on symbol switch" bug). On a cold first
+  // mount the session cache is null and we GET it; a remount within the session
+  // (incl. Mac-mode MacSectionFade on a symbol switch) already seeded every config
+  // field from the cache via the lazy useState initializers, so we only apply
+  // this symbol's drawings and enable saves.
   useEffect(() => {
-    // Flush any save still pending for the PREVIOUS symbol before we reset and
-    // load this one. Without this, the load below (setChartStateLoaded(true) +
-    // applied state) schedules a fresh save whose clearTimeout would cancel the
-    // outgoing symbol's pending save. No-op on first mount (nothing pending).
-    flushSave();
+    if (signalData) return;   // signal opens keep the engine view; nothing to load/persist
     let cancelled = false;
+    const applyDrawingsFor = (map: Record<string, Drawing[]>, sym: string) => {
+      drawingsBySymbolRef.current = map;
+      setDrawings(Array.isArray(map[sym]) ? map[sym] : []);
+    };
+    if (globalChartStateCache) {
+      applyDrawingsFor(globalChartStateCache.drawingsBySymbol ?? {}, symbol);
+      setChartStateLoaded(true);
+      return;
+    }
     (async () => {
-      // Block the save-on-change effects below until THIS symbol's chart state
-      // has actually loaded (or failed) - otherwise, since chartStateLoaded was
-      // left `true` from the PREVIOUS symbol, the synchronous resets just below
-      // would immediately debounce-POST blank/default state to this symbol's
-      // endpoint if the GET below takes longer than the 700ms save debounce.
-      setChartStateLoaded(false);
-      // Reset to sensible defaults for the new symbol (signal opens mirror the
-      // engine's 1H Heikin-Ashi view; persisted state below still wins if present).
-      setTf(signalData ? '1H' : '15m');
-      setActive(defaultActiveSet(trailTarget, !!signalData));
-      setIsHA(!!signalData);
-      setIsLogScale(false);
-      setShowVP(false);
-      setPersistedZoom(null);
-      lastZoomRef.current = null;
-      setParams(buildDefaultParams(trailTarget));
-      setDrawings([]);
-
       try {
-        const res: any = await api.get(`/api/v1/kite/chart-state/${encodeURIComponent(symbol)}`);
+        const res: any = await api.get(`/api/v1/kite/chart-state/${GLOBAL_CHART_KEY}`);
         if (!cancelled && res) {
           if (res.tf !== undefined && res.tf !== null) setTf(res.tf);
           if (Array.isArray(res.active) && res.active.length > 0) setActive(new Set(res.active));
@@ -371,16 +432,40 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
           if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
           if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
           if (res.zoom) { setPersistedZoom(res.zoom); lastZoomRef.current = res.zoom; }
-          if (Array.isArray(res.drawings)) setDrawings(res.drawings);
           if (res.params && typeof res.params === 'object') setParams({ ...buildDefaultParams(trailTarget), ...res.params });
+          const map = (res.drawingsBySymbol && typeof res.drawingsBySymbol === 'object') ? res.drawingsBySymbol : {};
+          globalChartStateCache = res;
+          applyDrawingsFor(map, symbol);
         }
       } catch (e) {
         console.error('Failed to load chart state:', e);
+        // GET failed: we do NOT know the real stored state, so leave persistence
+        // disabled (chartStateLoaded stays false). Flipping it true here would
+        // fire the save-on-change effects with DEFAULT config and clobber the
+        // real saved global state (the backend POST is a full replace). The
+        // session cache stays null too, so a pane remount re-runs this GET and
+        // recovers once the backend is reachable again.
+        return;
       }
       if (!cancelled) setChartStateLoaded(true);
     })();
     return () => { cancelled = true; };
-  }, [symbol, flushSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);   // once per pane instance
+
+  // ── Symbol change: swap drawings + carry zoom (NO config reset, NO reload) ──
+  useEffect(() => {
+    if (prevSymbolRef.current === symbol) return;   // initial mount handled by the load effect
+    prevSymbolRef.current = symbol;
+    if (signalData) return;
+    // Per-symbol drawings: show this symbol's saved geometry (empty if none).
+    setDrawings(Array.isArray(drawingsBySymbolRef.current[symbol]) ? drawingsBySymbolRef.current[symbol] : []);
+    // Carry the live visible window to the new symbol so zoom is "same throughout";
+    // the chart re-applies a non-null persistedZoom on an instrument switch (see
+    // the apply-view block in TradingViewKiteChart).
+    if (lastZoomRef.current) setPersistedZoom(lastZoomRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
 
   // Save drawings when they change (outside of click path) - use ref to get latest fn
   useEffect(() => {
