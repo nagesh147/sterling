@@ -170,38 +170,44 @@ export function atr(highs: number[], lows: number[], closes: number[], period = 
 }
 
 // A lightweight-charts line datum, or a whitespace gap ({ time } only).
-export type LinePointOrGap = { time: number; value?: number };
+export interface StColorRun {
+  up: boolean;                                    // true = up-trend (green), false = down (red)
+  points: { time: number; value: number }[];
+}
 
 /**
- * Split a SuperTrend series into two FULL-LENGTH line datasets (up-trend green,
- * down-trend red) for two-colour rendering.
+ * Split a SuperTrend series into contiguous same-direction RUNS for two-colour
+ * rendering — one short line series per run (green for up-runs, red for down-runs).
  *
- * Bars belonging to the OTHER trend are emitted as whitespace points ({ time }
- * with no `value`), which makes lightweight-charts BREAK the line at that bar
- * instead of drawing a straight segment across it. Handing a series only its
- * own-direction points (the old approach) makes it connect consecutive points
- * across the gaps, so BOTH the green and red series span the whole chart and you
- * see two crossing lines per indicator. Keeping both arrays full-length, with
- * whitespace on the inactive bars, yields a single visually-correct SuperTrend
- * line whose colour flips with the trend.
+ * Why runs and not two full-length series with whitespace on the inactive bars:
+ * in lightweight-charts v5 a LineSeries CONNECTS STRAIGHT ACROSS whitespace points
+ * (whitespace no longer breaks a line — verified against 5.2.0). So a single green
+ * series carrying every up-bar draws a straight segment through the down-trends,
+ * and the red one through the up-trends → two crossing lines per indicator. Each
+ * run is instead its own series that spans only its own trend, so it never crosses.
+ *
+ * Each run is seeded with the PREVIOUS bar's point (the last bar of the prior run)
+ * so adjacent runs share a boundary vertex: the colour flips exactly at the trend
+ * change with no gap and no crossing. Render each run as its own LineSeries.
  */
-export function supertrendSegments(
+export function supertrendRuns(
   stData: { value: number; direction: 'up' | 'down' }[],
   times: number[]
-): { bull: LinePointOrGap[]; bear: LinePointOrGap[] } {
-  const bull: LinePointOrGap[] = [];
-  const bear: LinePointOrGap[] = [];
+): StColorRun[] {
+  const runs: StColorRun[] = [];
   for (let i = 0; i < stData.length; i++) {
-    const time = times[i];
-    if (stData[i].direction === 'up') {
-      bull.push({ time, value: stData[i].value });
-      bear.push({ time });
+    const up = stData[i].direction === 'up';
+    const pt = { time: times[i], value: stData[i].value };
+    const last = runs[runs.length - 1];
+    if (!last || last.up !== up) {
+      // Seed the new run with the prior bar so the two colours touch at the flip.
+      const seed = i > 0 ? [{ time: times[i - 1], value: stData[i - 1].value }] : [];
+      runs.push({ up, points: [...seed, pt] });
     } else {
-      bull.push({ time });
-      bear.push({ time, value: stData[i].value });
+      last.points.push(pt);
     }
   }
-  return { bull, bear };
+  return runs;
 }
 
 // SuperTrend (classic)

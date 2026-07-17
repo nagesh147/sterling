@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, IChartApi, ColorType, CandlestickSeries, LineSeries, HistogramSeries, LineStyle, CrosshairMode, createSeriesMarkers } from 'lightweight-charts';
 import type { OHLCVBar } from '../../hooks/useCandles';
 import { PositionOverlay } from './overlays/PositionOverlay';
-import { ema, supertrend, supertrendSegments, heikinAshi } from '../../utils/indicators';
+import { ema, supertrend, supertrendRuns, heikinAshi } from '../../utils/indicators';
 import { useKiteDrawings, type Drawing } from '../../hooks/useKiteDrawings';
 
 export interface PositionOverlayData {
@@ -147,18 +147,23 @@ export function LiveChart({
     // Supertrend
     if (showSupertrend) {
       const st = supertrend(highs, lows, closes, 10, 3);
-      if (!seriesRefs.current.stBull) {
-        seriesRefs.current.stBull = chartRef.current.addSeries(LineSeries, { color: '#44cc88', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      }
-      if (!seriesRefs.current.stBear) {
-        seriesRefs.current.stBear = chartRef.current.addSeries(LineSeries, { color: '#cc4444', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      }
-      // Full-length green/red segments with whitespace on the inactive-trend bars
-      // so the two series don't each connect across the other's gaps (which drew
-      // two crossing lines). See supertrendSegments.
-      const { bull, bear } = supertrendSegments(st, times);
-      seriesRefs.current.stBull.setData(bull as any);
-      seriesRefs.current.stBear.setData(bear as any);
+      // One series per contiguous same-direction run (green up / red down). v5
+      // LineSeries connects across whitespace, so the old two-full-length-series
+      // approach drew two crossing lines. The run count changes as the trend flips,
+      // so re-create the run series each update. See supertrendRuns.
+      const ch = chartRef.current;
+      (seriesRefs.current.stRuns || []).forEach((s: any) => { try { ch.removeSeries(s); } catch { /* ignore */ } });
+      // Drop any legacy single bull/bear series from a previous build.
+      ['stBull', 'stBear'].forEach((k) => {
+        if (seriesRefs.current[k]) { try { ch.removeSeries(seriesRefs.current[k]); } catch { /* ignore */ } delete seriesRefs.current[k]; }
+      });
+      const runSeries: any[] = [];
+      supertrendRuns(st, times).forEach((run) => {
+        const s = ch.addSeries(LineSeries, { color: run.up ? '#44cc88' : '#cc4444', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+        s.setData(run.points as any);
+        runSeries.push(s);
+      });
+      seriesRefs.current.stRuns = runSeries;
     }
 
     // VWAP (simple)

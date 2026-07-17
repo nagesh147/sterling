@@ -5,7 +5,7 @@ import {
 } from 'lightweight-charts';
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import {
-  ema, bollingerBands, vwap, rsi, macd, supertrend, supertrendSegments, heikinAshi,
+  ema, bollingerBands, vwap, rsi, macd, supertrend, supertrendRuns, heikinAshi,
   type Candle,
 } from '../../utils/indicators';
 import {
@@ -689,18 +689,23 @@ export function TradingViewKiteChart({
     // SuperTrend - show selected variants with direction-based colors (bull=green, bear=red)
     const addSupertrendWithDirection = (period: number, mult: number, label: string) => {
       const stData = supertrend(highs, lows, closes, period, mult);
-      // One SuperTrend line, split into green (bull) + red (bear) segments so the
-      // colour flips with the trend. Both series are FULL-LENGTH with whitespace
-      // on the inactive-trend bars (see supertrendSegments), so the line breaks at
-      // the flips instead of the two series each connecting straight across the
-      // other's gaps — which drew two crossing lines per indicator. Only the green
-      // series carries the legend title, so the indicator shows up once; the colour
-      // itself conveys direction.
-      const { bull, bear } = supertrendSegments(stData, times);
-      const bs = chart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 2, title: label, priceLineVisible: false, lastValueVisible: false });
-      bs.setData(bull as any);
-      const rs = chart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
-      rs.setData(bear as any);
+      // One SuperTrend line whose colour flips with the trend. Rendered as one short
+      // line series per contiguous same-direction RUN (green up / red down) — NOT two
+      // full-length green/red series, because v5 LineSeries connects across whitespace
+      // so those drew the green line straight through down-trends and vice-versa = two
+      // crossing lines per indicator. See supertrendRuns. Only ONE series carries the
+      // legend title (the first up-run, else the first run) so the indicator shows once.
+      const runs = supertrendRuns(stData, times);
+      const titleIdx = runs.findIndex((r) => r.up);
+      const ti = titleIdx >= 0 ? titleIdx : 0;
+      runs.forEach((run, ri) => {
+        const s = chart.addSeries(LineSeries, {
+          color: (run.up ? tv.green : tv.red) + '66', lineWidth: 2,
+          priceLineVisible: false, lastValueVisible: false,
+          ...(ri === ti ? { title: label } : {}),
+        });
+        s.setData(run.points as any);
+      });
     };
 
     if (activeIndicators.has('st-fast')) {
