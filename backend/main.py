@@ -41,7 +41,6 @@ from app.api.v1.endpoints.vectorized_backtest import router as vectorized_backte
 from app.api.v1.endpoints.sterling_v2 import router as sterling_v2_router
 from app.api.v1.endpoints.paper import router as paper_router
 from app.services import alert_store as _alert_store_svc
-from app.services.db_postgres import init_db_schema
 
 log = get_logger(__name__)
 
@@ -1340,13 +1339,6 @@ async def lifespan(app: FastAPI):
     from app.services.ohlcv_store import init_ohlcv_table
     init_ohlcv_table()
     
-    # --- V4 TimescaleDB / Postgres Bootstrap ---
-    try:
-        await init_db_schema()
-        log.info("V4 Postgres schema bootstrap complete.")
-    except Exception as e:
-        log.warning(f"V4 Postgres bootstrap skipped (falling back to SQLite): {e}")
-
     # Restore signal tracker state — prevents re-firing Telegram on server restart
     from app.api.v1.endpoints.directional import _load_signal_tracker_state, _migrate_signal_ids_to_v2
     _load_signal_tracker_state()
