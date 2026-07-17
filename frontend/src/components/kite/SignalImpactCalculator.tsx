@@ -345,6 +345,7 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
                 <br />Figures are first-order greeks (with a gamma boost on big moves); exit IV and spread will shift the real fill.
               </div>
             )}
+          </div>
         );
       })()}
     </div>
