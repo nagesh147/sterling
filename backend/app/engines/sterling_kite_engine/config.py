@@ -41,7 +41,25 @@ class SterlingKiteEngineConfig:
     # "one_red" is the tightest (original behaviour — trail_target flip = one line
     # going red). "three_red_signal" is the loosest (holds until a full counter-entry).
     # The trailing stop rides the BEST still-green line, tightening as lines flip.
-    exit_mode: ExitMode = "two_red"  # balanced default: exit on any 2 ST lines red (good room vs protection)
+    # MEASURED default (study/kite_st_exit_mode_sweep.py, real 7.5y 1H, IS/OOS):
+    # ``one_red`` is best on BOTH lenses — delta1 mean OOS +4.0% (3/4 idx +) vs
+    # two_red −6.4% / three_red −18.4%; options −134% vs −184% / −338%. Tighter exits
+    # win; the earlier ``two_red`` default was asserted, never measured, and lost. It
+    # also matches live behaviour (the monotonic premium ratchet already pinned exits
+    # near one_red). Looser modes stay selectable but are worse on this data.
+    exit_mode: ExitMode = "one_red"
+    # ── Exit-mode-aligned trail (opt-in; default OFF = validated fast-trail) ────
+    # OFF: the price stop rides the tightest still-green line (``best_trail_line_value``).
+    #      Because the tightest (fast) line flips FIRST, its breach ≈ one_red, which
+    #      pre-empts a two_red/three_red counter → the exit_mode knob is near-inert live.
+    # ON:  the price stop rides the line whose flip is the ``exit_mode``-th red
+    #      (one_red→fast, two_red→mid, three_red→slow), so the stop breach and the red
+    #      count fire together and the exit_mode actually governs how much room a trade
+    #      gets. Kept as an opt-in research lever, but the sweep it was built to enable
+    #      (``study/kite_st_exit_mode_sweep.py``) has now RUN and found tighter exits
+    #      strictly better (see ``exit_mode`` above) — so widening the trail to honour a
+    #      looser mode is NOT recommended. Default OFF = the validated tightest/fast trail.
+    exit_aligned_trail: bool = False
     # Removed from the live engine + UI + API (provably inert: 0.0 P&L change across
     # 7.5y — it keyed off the slow/widest ST, which always flips after the trail has
     # already exited). Retained here ONLY so the offline study scripts that documented

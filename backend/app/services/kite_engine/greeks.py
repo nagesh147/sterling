@@ -58,6 +58,33 @@ def black_scholes_greeks(
     return Greeks(delta=delta, gamma=gamma, theta=theta, vega=vega)
 
 
+def premium_stop_from_move(
+    *, entry_premium: float, delta: float, spot: float, trail_level: float,
+) -> float:
+    """Translate an underlying SuperTrend level into an option-premium stop.
+
+    First-order (delta) model of the option premium as a linear function of the
+    underlying, anchored at the entry: the premium when the underlying sits at the
+    ST ``trail_level`` is ``entry_premium + delta × (trail_level − spot)``, floored
+    at zero. ``delta`` is SIGNED (positive for a CE, negative for a PE) and ``spot``
+    is the entry underlying, so the formula is correct for both option sides AND in
+    both regimes:
+
+      * at ENTRY the trail sits against the position, so the term is negative and the
+        stop lands below the entry premium (a real protective stop);
+      * as the trade works and the trail RATCHETS toward/through the entry spot, the
+        term turns positive and the stop rises above the entry premium — i.e. it
+        trails into profit — with no live re-quote needed.
+
+    Single source of truth for the spot→premium stop used by the OTM (spot-signal)
+    and deep-ITM auto-exec paths, at entry and on every trailing update. Returns 0.0
+    for a degenerate (non-positive) entry premium (caller treats 0 as "no stop").
+    """
+    if entry_premium <= 0:
+        return 0.0
+    return max(0.0, float(entry_premium) + float(delta) * (float(trail_level) - float(spot)))
+
+
 def bs_price(*, spot: float, strike: float, dte_days: float, iv: float,
              option_type: str, rate: float = _R_DEFAULT) -> float:
     """Black-Scholes option premium."""

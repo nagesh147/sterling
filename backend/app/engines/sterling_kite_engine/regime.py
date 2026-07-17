@@ -69,6 +69,21 @@ class RegimeSeries:
             lines.append("fast")
         return lines
 
+    def trail_value_for_threshold(self, i: int, threshold: int) -> float:
+        """Return the ST-line level whose flip is the ``threshold``-th red.
+
+        The three lines, ordered by tightness (multiplier), are fast (tightest) →
+        mid → slow (widest). As price turns against a position it crosses them in
+        that order, so the k-th red = the k-th-tightest line flipping. Anchoring the
+        price stop to the ``threshold``-th line makes a breach of the stop coincide
+        with the ``exit_mode`` red count (one_red→fast, two_red→mid, three_red→slow),
+        instead of always the tightest line pre-empting the counter. Used only when
+        ``exit_aligned_trail`` is enabled; the default path keeps the tightest-green
+        trail (``best_trail_line_value``). Unknown thresholds fail safe to ``fast``.
+        """
+        name = {1: "fast", 2: "mid", 3: "slow"}.get(int(threshold), "fast")
+        return float(self.line(name)[i])
+
     def best_trail_line_value(self, direction: str, i: int) -> float:
         """Return the trail value from the tightest still-green ST line at bar ``i``.
 

@@ -17,9 +17,10 @@ from app.core.logging import get_logger
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services import live_safety
-from app.services.kite_engine import positions, protective_stop, sizing, state
+from app.services.kite_engine import monitor, positions, protective_stop, sizing, state
 from app.services.kite_engine import futures as futures_mod
-from app.services.kite_engine.greeks import black_scholes_greeks
+from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
+from app.services.kite_engine import market_hours
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import option_order_args, scanner
 from app.services.kite_engine.strikes import chain_rows_for, pick_by_delta, pick_strikes
@@ -47,6 +48,7 @@ def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
     return SterlingKiteEngineConfig(
         trail_target=c.trail_target,
         exit_mode=c.exit_mode,
+        exit_aligned_trail=getattr(c, 'exit_aligned_trail', False),
         hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
     )
 
@@ -106,6 +108,74 @@ async def available_fo_capital(client) -> float:
         return 0.0
 
 
+_IV_ASSUMPTION = 0.18  # fixed BS IV for delta translation (matches the study harness)
+
+
+def _dte_from_expiry(expiry: str, today: Optional[datetime] = None) -> float:
+    """Calendar days to an option ``expiry`` ("YYYY-MM-DD…"). Floored at 1 so a
+    same-/next-day weekly still prices with non-degenerate greeks. Returns a safe
+    default (7) if the string can't be parsed."""
+    try:
+        d = datetime.strptime(str(expiry)[:10], "%Y-%m-%d").date()
+        ref = (today or datetime.now(_IST)).date()
+        return float(max(1, (d - ref).days))
+    except Exception:  # noqa: BLE001
+        return 7.0
+
+
+def _passes_liquidity(quote, max_spread_pct, min_oi) -> tuple:
+    """(_ok, reason) for an option leg's quote against optional spread/OI gates.
+
+    Fail-OPEN on missing data (no quote / no depth / no OI) — a data gap must not
+    block a real signal; the protective stop still guards the position. Only an
+    explicit breach (spread too wide / OI too thin) rejects the entry."""
+    if quote is None:
+        return True, ""
+    if min_oi is not None:
+        oi = float(quote.get("oi") or quote.get("open_interest") or 0.0)
+        if oi and oi < float(min_oi):
+            return False, f"OI {oi:.0f} < {min_oi}"
+    if max_spread_pct is not None:
+        depth = quote.get("depth") or {}
+        bid = float(((depth.get("buy") or [{}])[0]).get("price") or 0.0)
+        ask = float(((depth.get("sell") or [{}])[0]).get("price") or 0.0)
+        if bid > 0 and ask > 0:
+            mid = 0.5 * (bid + ask)
+            spread_pct = (ask - bid) / mid * 100.0 if mid > 0 else 0.0
+            if spread_pct > float(max_spread_pct):
+                return False, f"spread {spread_pct:.1f}% > {max_spread_pct}%"
+    return True, ""
+
+
+async def _resolve_premium_stop(
+    client, *, exch: str, symbol: str, strike: float, expiry: str,
+    option_type: str, spot: float, trail_level: float, iv: float = _IV_ASSUMPTION,
+) -> tuple:
+    """Fetch an option's LTP and derive a delta-implied premium stop from the
+    underlying ST ``trail_level``. Returns ``(entry_premium, stop_premium, delta)``.
+
+    Shared by the OTM (spot-signal) and deep-ITM auto-exec paths so the spot→premium
+    stop translation lives in exactly one place. ``entry_premium`` is 0 when the quote
+    is unavailable (caller then degrades to single-lot sizing + the tick monitor)."""
+    entry_premium = 0.0
+    qkey = f"{exch}:{symbol}"
+    try:
+        q = await client.get_ltp([qkey])
+        if q and qkey in q:
+            entry_premium = float(q[qkey].get("last_price") or 0.0)
+    except Exception as _exc:  # noqa: BLE001
+        log.debug("suppressed: %s", _exc)
+    dte = _dte_from_expiry(expiry)
+    g = black_scholes_greeks(spot=float(spot), strike=float(strike), dte_days=dte,
+                             iv=iv, option_type=option_type)
+    # SIGNED delta: + for a CE, − for a PE. Falls back to a signed ±0.5 if BS returns
+    # a degenerate 0 so the translation still produces a stop on either side.
+    delta = g.delta if g.delta != 0.0 else (0.5 if str(option_type).upper().startswith("C") else -0.5)
+    stop_premium = premium_stop_from_move(
+        entry_premium=entry_premium, delta=delta, spot=float(spot), trail_level=float(trail_level))
+    return entry_premium, stop_premium, delta
+
+
 @dataclass
 class _ResolvedTrade:
     """The instrument the auto-exec should actually trade for the chosen vehicle."""
@@ -115,6 +185,9 @@ class _ResolvedTrade:
     lot_size: int
     entry_px: float            # premium (options) or index price (futures)
     stop_px: float             # premium stop (options) or index-point stop (futures)
+    delta: float = 0.0         # |BS delta| for option vehicles (0 for futures)
+    strike: float = 0.0
+    expiry: str = ""
 
 
 async def _resolve_future(client, item, expiry_pref: str) -> Optional[futures_mod.FuturesPick]:
@@ -159,27 +232,16 @@ async def _resolve_deep_itm(client, item, row, cfg) -> Optional[_ResolvedTrade]:
     if pick is None or not pick.option_symbol:
         return None
 
-    # entry premium from a single LTP quote (cheap; signals are rare)
-    entry_premium = 0.0
-    qkey = f"{exch}:{pick.option_symbol}"
-    try:
-        q = await client.get_ltp([qkey])
-        if q and qkey in q:
-            entry_premium = float(q[qkey].get("last_price") or 0.0)
-    except Exception as _exc:# noqa: BLE001
-        log.debug("suppressed: %s", _exc)
-
-    # delta-implied premium stop: a deep-ITM option's premium moves ≈ delta × the
-    # underlying's move, so stop_prem ≈ entry_prem − delta × |spot − ST trail|.
-    g = black_scholes_greeks(spot=float(row.spot), strike=float(pick.strike),
-                             dte_days=max(1.0, float(pick.dte)), iv=iv,
-                             option_type=pick.option_type)
-    delta = abs(g.delta) or 0.9
-    move = abs(float(row.spot) - float(row.stop_loss or row.spot))
-    stop_premium = max(0.0, entry_premium - delta * move) if entry_premium > 0 else 0.0
+    # entry premium (single LTP quote) + delta-implied premium stop from the
+    # underlying ST trail — the SAME translation used for spot-mode OTM legs.
+    entry_premium, stop_premium, delta = await _resolve_premium_stop(
+        client, exch=exch, symbol=pick.option_symbol, strike=float(pick.strike),
+        expiry=pick.expiry, option_type=pick.option_type,
+        spot=float(row.spot), trail_level=float(row.stop_loss or row.spot), iv=iv)
     return _ResolvedTrade(
         symbol=pick.option_symbol, exchange=exch, token=int(pick.token or 0),
-        lot_size=int(pick.lot_size or 0), entry_px=entry_premium, stop_px=stop_premium)
+        lot_size=int(pick.lot_size or 0), entry_px=entry_premium, stop_px=stop_premium,
+        delta=delta, strike=float(pick.strike), expiry=str(pick.expiry))
 
 
 def _make_place_cb(client, uid: str):
@@ -200,6 +262,37 @@ def _make_place_cb(client, uid: str):
         guard_key = args["option_symbol"] if row.source == "derivatives" else row.underlying
         if state.is_auto_open(uid, guard_key):
             return
+
+        # ── "both"-mode cross guard ────────────────────────────────────────────
+        # In scan_source="both", a spot signal and a derivatives signal on the SAME
+        # underlying can both fire in one scan (their guard keys differ: underlying
+        # vs option symbol). Block the second so one move isn't traded twice.
+        if getattr(cfg, "scan_source", "spot") == "both" and any(
+                op.underlying == row.underlying for op in positions.open_positions(uid)):
+            state.log(uid, "info",
+                      f"{row.underlying}: entry skipped — already holding a position on this "
+                      f"underlying (both-mode cross guard)")
+            return
+
+        # ── session-time gate: no new entries just before the close (opt-in) ────
+        blk = int(getattr(cfg, "block_entry_minutes_before_close", 0) or 0)
+        if blk > 0:
+            mtc = market_hours.minutes_to_close()
+            if mtc is not None and mtc < blk:
+                state.log(uid, "info",
+                          f"{row.underlying}: entry skipped — {mtc:.0f}m to close < {blk}m "
+                          f"(overnight-gap guard)")
+                return
+
+        # ── INR daily-loss breaker (opt-in): halt new entries after a bad day ───
+        if getattr(cfg, "max_daily_loss_pct", None) is not None:
+            cap0 = await available_fo_capital(client)
+            day_pnl = state.daily_realized_pnl(uid)
+            if cap0 > 0 and day_pnl < 0 and (-day_pnl) >= (float(cfg.max_daily_loss_pct) / 100.0) * cap0:
+                state.log(uid, "order_blocked",
+                          f"{row.underlying}: daily loss ₹{-day_pnl:.0f} ≥ {cfg.max_daily_loss_pct}% of "
+                          f"₹{cap0:.0f} — new entries halted for today")
+                return
 
         # ── vehicle selection (directional mode; OFF ⇒ existing behavior) ──────
         use_futures = (cfg.directional_mode and cfg.vehicle == "futures"
@@ -233,6 +326,13 @@ def _make_place_cb(client, uid: str):
         trade_lot = int(args["lot_size"] or 0)
         entry_px = float(args.get("entry_premium") or 0.0)
         stop_px = float(args.get("stop_premium") or 0.0)
+        # Delta-translation context stored on the position so every trailing update can
+        # re-price the underlying ST level into a premium stop. Futures leave delta 0
+        # (they trail in index points directly).
+        pos_entry_spot = float(row.spot or 0.0)
+        pos_delta = 0.0
+        pos_strike = 0.0
+        pos_expiry = ""
 
         if use_futures:
             fp = await _resolve_future(client, item, cfg.futures_expiry)
@@ -252,6 +352,23 @@ def _make_place_cb(client, uid: str):
             trade_symbol, trade_exchange = rt.symbol, rt.exchange
             trade_token, trade_lot = rt.token, rt.lot_size
             entry_px, stop_px = rt.entry_px, rt.stop_px
+            pos_delta, pos_strike, pos_expiry = rt.delta, rt.strike, rt.expiry
+        else:
+            # ── default OTM path ──────────────────────────────────────────────
+            # Derivatives rows carry premium_spot/premium_sl → entry_px/stop_px are
+            # already set from option_order_args. SPOT-source rows carry NO premium,
+            # so their stop_px was 0 → the position was UNPROTECTED (no GTT, monitor
+            # exit inert, sizing floored to 1 lot). D1 fix: fetch the leg LTP and derive
+            # a delta-implied premium stop from the underlying ST trail (row.stop_loss).
+            leg = min(row.legs, key=lambda l: abs(l.strike - row.spot)) if row.legs else None
+            if leg is not None:
+                pos_strike = float(leg.strike or 0.0)
+                pos_expiry = str(leg.expiry or "")
+                if entry_px <= 0 or stop_px <= 0:
+                    entry_px, stop_px, pos_delta = await _resolve_premium_stop(
+                        client, exch=trade_exchange, symbol=trade_symbol,
+                        strike=pos_strike, expiry=pos_expiry, option_type=row.option_type,
+                        spot=float(row.spot), trail_level=float(row.stop_loss or row.spot))
 
         # ── risk sizing (the default options branch is byte-identical to before) ─
         qty = int(args["size"])
@@ -278,19 +395,35 @@ def _make_place_cb(client, uid: str):
                 if sized.qty > 0:
                     qty, lots = sized.qty, sized.lots
                     state.log(uid, "info", f"{trade_symbol} sizing → {sized.reason}")
-        elif cfg.risk_sizing and args.get("entry_premium") and args.get("stop_premium") is not None:
+        elif cfg.risk_sizing and entry_px > 0 and stop_px > 0 and trade_lot > 0:
+            # Default OTM sizing. Now keyed off the RESOLVED premium (entry_px/stop_px)
+            # rather than args, so spot-source signals (whose args carry no premium) are
+            # risk-sized too instead of always defaulting to a single lot.
             capital = await available_fo_capital(client)
             sized = sizing.size_position(
-                entry_premium=float(args["entry_premium"]),
-                stop_premium=float(args["stop_premium"]),
-                lot_size=int(args["lot_size"] or 0),
+                entry_premium=entry_px,
+                stop_premium=stop_px,
+                lot_size=trade_lot,
                 available_capital=capital,
                 risk_pct=cfg.risk_pct,
                 max_lots=cfg.max_lots,
             )
             if sized.qty > 0:
                 qty, lots = sized.qty, sized.lots
-                state.log(uid, "info", f"{args['option_symbol']} sizing → {sized.reason}")
+                state.log(uid, "info", f"{trade_symbol} sizing → {sized.reason}")
+
+        # ── option-leg liquidity gate (opt-in): skip thin / wide-spread strikes ─
+        if (not use_futures) and (cfg.max_spread_pct is not None or cfg.min_oi is not None):
+            try:
+                qkey = f"{trade_exchange}:{trade_symbol}"
+                q = await client.get_quote([qkey])
+                ok, why = _passes_liquidity((q or {}).get(qkey), cfg.max_spread_pct, cfg.min_oi)
+            except Exception as _exc:  # noqa: BLE001
+                log.debug("suppressed: %s", _exc)
+                ok, why = True, ""   # fail-open on a quote error
+            if not ok:
+                state.log(uid, "info", f"{row.underlying} {trade_symbol} entry skipped — {why}")
+                return
 
         # ── portfolio drawdown breaker (opt-in; only ever downsizes or halts) ──
         if cfg.wire_risk_infra:
@@ -353,7 +486,9 @@ def _make_place_cb(client, uid: str):
             order_id=oid, status=positions.PENDING,
             stop_mode=cfg.stop_mode, guard_key=guard_key,
             direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying,
-            exit_mode=cfg.exit_mode))
+            exit_mode=cfg.exit_mode,
+            entry_spot=pos_entry_spot, entry_delta=pos_delta,
+            strike=pos_strike, expiry=pos_expiry, initial_stop_premium=stop_px))
 
         # ── auto-subscribe the position's token to the ticker (tick monitor) ──
         if trade_token and cfg.stop_mode in ("monitor", "both"):
@@ -389,6 +524,72 @@ def _make_place_cb(client, uid: str):
     return _cb
 
 
+def _is_expiring(expiry: str, today, within_days: int = 1) -> bool:
+    """True if an option ``expiry`` ("YYYY-MM-DD…") is within ``within_days`` calendar
+    days of ``today`` (or already past). ``within_days <= 0`` disables (always False);
+    an empty/unparseable expiry is treated as not-expiring (futures carry none)."""
+    if within_days <= 0 or not expiry:
+        return False
+    try:
+        d = datetime.strptime(str(expiry)[:10], "%Y-%m-%d").date()
+    except Exception:  # noqa: BLE001
+        return False
+    return (d - today).days <= within_days
+
+
+async def _square_off_expiring(client, uid: str) -> None:
+    """Market-exit auto-exec option positions inside the configured expiry window.
+
+    Without this, a held weekly can settle at/after expiry with no managed exit (the
+    ST signal exit + premium stop both assume a live, tradable contract). Runs only
+    during market hours (an exit order off-hours is pointless) and reuses the tick
+    monitor's exit path (correct side, GTT cancel, guard release, unsubscribe)."""
+    cfg = state.get_config(uid)
+    days = int(getattr(cfg, "expiry_square_off_days", 1) or 0)
+    if days <= 0 or not is_market_open():
+        return
+    today = datetime.now(_IST).date()
+    for p in positions.open_positions(uid):
+        if p.status != positions.OPEN or not _is_expiring(p.expiry, today, days):
+            continue
+        try:
+            key = f"{p.exchange}:{p.symbol}"
+            q = await client.get_ltp([key])
+            ltp = float((q or {}).get(key, {}).get("last_price") or p.stop_premium)
+        except Exception:  # noqa: BLE001
+            ltp = p.stop_premium
+        await monitor._exit_position(
+            client, uid, p, ltp,
+            reason=f"expiry square-off (T-{days}, exp {str(p.expiry)[:10]})")
+
+
+async def _time_stop_positions(client, uid: str) -> None:
+    """Square off auto-exec positions held beyond ``time_stop_bars`` 1H bars (opt-in).
+
+    The exit-mechanics sweep's one robust, cross-lens finding: a hold cap curbs theta
+    bleed on long-option positions. Off unless configured; market-hours gated; reuses
+    the tick-monitor exit path (correct side, GTT cancel, guard release, unsubscribe)."""
+    cfg = state.get_config(uid)
+    bars = int(getattr(cfg, "time_stop_bars", 0) or 0)
+    if bars <= 0 or not is_market_open():
+        return
+    now_ms = int(datetime.now(_IST).timestamp() * 1000)
+    for p in positions.open_positions(uid):
+        if p.status != positions.OPEN or not p.opened_ms:
+            continue
+        held = (now_ms - int(p.opened_ms)) // 3_600_000
+        if held < bars:
+            continue
+        try:
+            key = f"{p.exchange}:{p.symbol}"
+            q = await client.get_ltp([key])
+            ltp = float((q or {}).get(key, {}).get("last_price") or p.stop_premium)
+        except Exception:  # noqa: BLE001
+            ltp = p.stop_premium
+        await monitor._exit_position(
+            client, uid, p, ltp, reason=f"time stop ({held}≥{bars} bars held)")
+
+
 def _new_trail_for_open(p, rows) -> Optional[float]:
     """Given an open position ``p``, find the matching fresh signal row and return
     the updated trail stop price.  Returns None if no match or no improvement.
@@ -397,10 +598,15 @@ def _new_trail_for_open(p, rows) -> Optional[float]:
       tightens monotonically only for the correct direction:
         long  → trail moves UP   → take max(p.stop_premium, new)
         short → trail moves DOWN → take min(p.stop_premium, new)
-    - OTM options (long premium): trail is ``leg.premium_sl`` from the matching
-      leg in the signal row — tighter means higher (we take max).
-    - Deep-ITM: no intra-scan re-price here (premium_sl is not in the deep-ITM
-      row; the tick monitor handles the actual exit granularly).
+    - OTM options (long premium): if the matching leg carries ``premium_sl`` (a
+      derivatives-mode row), trail to it. Otherwise (a spot-mode leg — whose
+      option_symbol drifts as the ATM re-picks) re-derive the premium stop from the
+      fresh underlying ST level via the stored entry delta.
+    - Deep-ITM: always re-translate the fresh underlying ST level via the stored
+      delta (D3 — previously deep-ITM never trailed after entry).
+
+    Re-translation trails INTO profit as the ST ratchets past the entry spot, and
+    ratchets monotonically (only returns a value that tightens the current stop).
     """
     for row in rows:
         if row.underlying != p.underlying:
@@ -419,7 +625,27 @@ def _new_trail_for_open(p, rows) -> Optional[float]:
                     new_sl = float(leg.premium_sl)
                     # OTM option long: stop is a floor price — tighter = higher floor
                     return new_sl if new_sl > p.stop_premium else None
+            # spot-mode leg (no premium_sl / symbol drifted): delta re-translation
+            new_sl = _retranslated_stop(p, row)
+            if new_sl is not None:
+                return new_sl
+        elif p.vehicle == "deep_itm_options":
+            new_sl = _retranslated_stop(p, row)
+            if new_sl is not None:
+                return new_sl
     return None
+
+
+def _retranslated_stop(p, row) -> Optional[float]:
+    """Re-derive a long-option premium stop from the fresh underlying ST level using
+    the stored entry delta, returning it only if it TIGHTENS the current stop (higher
+    for a long premium). Needs the delta-translation context captured at entry."""
+    if not (p.entry_delta and p.entry_spot and (row.stop_loss or 0) > 0):
+        return None
+    new_sl = premium_stop_from_move(
+        entry_premium=p.entry_premium, delta=p.entry_delta,
+        spot=p.entry_spot, trail_level=float(row.stop_loss))
+    return new_sl if (new_sl > p.stop_premium and new_sl > 0) else None
 
 
 async def _update_open_position_trails(client, uid: str) -> None:
@@ -516,9 +742,12 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             stocks=cfg_model.scan_stocks, all_stocks=cfg_model.scan_all_stocks)
         spot_universe = selected if source in ("spot", "both") else []
         deriv_universe = selected if source in ("derivatives", "both") else None
+        # Confluence runs its own pass (underlying regime + per-leg premium confirmation),
+        # so it uses neither the plain spot nor the plain deriv universe.
+        confluence_universe = selected if source == "confluence" else None
         state.log(uid, "info", f"Scan plan: Scanning {len(selected)} instruments using '{source}' source.")
-        
-        # Auto-exec is universal — it fires on both spot and derivatives signals.
+
+        # Auto-exec is universal — it fires on spot, derivatives, and confluence signals.
         place_cb = _make_place_cb(client, uid) if cfg_model.auto_execute else None
         await scanner.scan(
             uid=uid, client=client, universe=spot_universe, nfo_rows=nfo, bfo_rows=bfo,
@@ -527,7 +756,8 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             expiry_types_indices=cfg_model.scan_expiries_indices,
             expiry_types_stocks=cfg_model.scan_expiries_stocks,
             place_cb=place_cb,
-            deriv_universe=deriv_universe, log_cb=lambda msg: state.log(uid, "info", msg),
+            deriv_universe=deriv_universe, confluence_universe=confluence_universe,
+            log_cb=lambda msg: state.log(uid, "info", msg),
             close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
                         if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
@@ -559,9 +789,18 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             if d.deriv_resolved == 0 and d.deriv_no_spot == 0:
                 dv += " — no option contracts resolved from chains"
             parts.append(dv)
-        # Trail-update pass: push tightened stops to open positions.
+        if source == "confluence":
+            # Merged rows where the underlying AND a leg's own premium both fired.
+            # deriv_charts here counts the candidate premiums checked for confirmation.
+            cf = (f"confluence {d.confluence_fired} fired (spot+premium), "
+                  f"{d.deriv_charts} premiums checked (bars {d.deriv_min_bars}–{d.deriv_max_bars})")
+            parts.append(cf)
+        # Trail-update pass: push tightened stops to open positions, then square off
+        # any position nearing expiry.
         if cfg_model.auto_execute:
             await _update_open_position_trails(client, uid)
+            await _square_off_expiring(client, uid)
+            await _time_stop_positions(client, uid)
         board = f"{live} live signal(s)" + (f" + {ended} ended" if ended else "")
         state.log(uid, "scan_done",
                   f"Scan complete — {board} / {len(selected)} instruments "

@@ -1,4 +1,44 @@
-from app.services.kite_engine.greeks import black_scholes_greeks
+from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
+
+
+# ── delta-implied premium stop (shared spot→premium stop translation) ─────────
+def test_premium_stop_from_move_call_entry_below():
+    # CE (delta +0.5). At entry the trail sits 40 pts BELOW spot → premium ~20 lower
+    # → stop 80 (a real protective stop below entry).
+    assert premium_stop_from_move(entry_premium=100.0, delta=0.5, spot=25000.0,
+                                  trail_level=24960.0) == 80.0
+
+
+def test_premium_stop_from_move_put_entry_above():
+    # PE (delta −0.5, signed). At entry the bear trail sits 40 pts ABOVE spot →
+    # premium ~20 lower → stop 80, symmetric with the call case.
+    assert premium_stop_from_move(entry_premium=100.0, delta=-0.5, spot=25000.0,
+                                  trail_level=25040.0) == 80.0
+
+
+def test_premium_stop_from_move_call_trails_into_profit():
+    # CE: once the ST trail RATCHETS 100 pts ABOVE the entry spot, the stop rises
+    # above the entry premium (locks profit) — no re-quote needed.
+    assert premium_stop_from_move(entry_premium=100.0, delta=0.5, spot=25000.0,
+                                  trail_level=25100.0) == 150.0
+
+
+def test_premium_stop_from_move_put_trails_into_profit():
+    # PE: trail ratchets 100 pts BELOW entry spot → signed delta flips the term
+    # positive → stop above entry premium.
+    assert premium_stop_from_move(entry_premium=100.0, delta=-0.5, spot=25000.0,
+                                  trail_level=24900.0) == 150.0
+
+
+def test_premium_stop_from_move_floors_at_zero():
+    # a move larger than the whole premium can't produce a negative stop.
+    assert premium_stop_from_move(entry_premium=10.0, delta=0.9, spot=25000.0,
+                                  trail_level=24000.0) == 0.0
+
+
+def test_premium_stop_from_move_degenerate_entry_returns_zero():
+    assert premium_stop_from_move(entry_premium=0.0, delta=0.9, spot=100.0,
+                                  trail_level=90.0) == 0.0
 
 
 def test_atm_call_put_delta_relationship():

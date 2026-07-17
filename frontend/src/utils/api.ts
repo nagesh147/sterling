@@ -27,8 +27,12 @@ const json = (body: unknown) => ({
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: 'POST', ...json(body) }),
+  // `keepalive: true` lets a POST outlive a page unload (tab close / refresh /
+  // navigation) — a normal fetch is cancelled by the unload and the body never
+  // leaves. Used by the chart-state unload flush. Routing it through the same
+  // request() keeps the URL and headers identical to a regular save.
+  post: <T>(path: string, body?: unknown, opts?: { keepalive?: boolean }) =>
+    request<T>(path, { method: 'POST', ...json(body), ...(opts?.keepalive ? { keepalive: true } : {}) }),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PUT', ...json(body) }),
   patch: <T>(path: string, body?: unknown) =>
