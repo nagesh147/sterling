@@ -158,6 +158,16 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
         { label: '100', v: 100 },
       ];
 
+  const rec = rows.find((r) => r.leg.option_symbol === recommended) ?? null;
+  const intrinsic = rec
+    ? data.option_type === 'CE'
+      ? Math.max(0, spot - rec.leg.strike)
+      : Math.max(0, rec.leg.strike - spot)
+    : 0;
+  const tv = rec ? Math.max(0, rec.premium - intrinsic) : 0;
+  const intrinsicFrac = rec && rec.premium > 0 ? intrinsic / rec.premium : 0;
+  const maxGain = Math.max(...rows.map((r) => r.projGainPerLot * lotsMult), 1);
+
   return (
     <div style={headless ? { overflow: 'hidden', background: k.bg } : { border: `1px solid ${k.border}`, borderRadius: 10, overflow: 'hidden', background: k.bg }}>
       <div style={{ padding: '13px 20px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
@@ -335,7 +345,6 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
                 <br />Figures are first-order greeks (with a gamma boost on big moves); exit IV and spread will shift the real fill.
               </div>
             )}
-          </div>
         );
       })()}
     </div>
