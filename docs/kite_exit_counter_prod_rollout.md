@@ -1,7 +1,15 @@
 # Sterling Kite Engine Exit Counter - Production Rollout Notes
 
+> **UPDATE 2026-07-16 — default is now `one_red`, and it is MEASURED, not asserted.**
+> `study/kite_st_exit_mode_sweep.py` was run on the real 7.5y 1H data (IS/OOS, 4
+> indices, both lenses): `one_red` beats `two_red`/`three_red` on every axis
+> (delta1 mean OOS **+4.0%** vs −6.4% / −18.4%; options −134% vs −184% / −338%).
+> The "balanced `two_red`" rationale below was qualitative and is superseded —
+> tighter exits win. Looser modes stay selectable but are not the default.
+
 ## Overview
-The exit logic for auto-exec positions now uses a configurable `exit_mode` (default: `two_red`):
+The exit logic for auto-exec positions uses a configurable `exit_mode` (default:
+`one_red`, measured best; was `two_red`):
 - Entry: fresh full 3 ST green alignment + green arrow on 1H HA.
 - Exit: counter based on red ST lines (1/2/3 or 3 + fresh counter red arrow) + adaptive trailing SL on best remaining green line.
 - Health exposed: `current_red_count` / `exit_threshold` per open position.

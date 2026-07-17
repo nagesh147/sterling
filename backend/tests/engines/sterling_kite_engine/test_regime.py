@@ -25,6 +25,22 @@ def test_three_trend_arrays_present(uptrend):
         assert set(np.unique(tr[cfg.warmup:])).issubset({-1, 1})
 
 
+def test_trail_value_for_threshold_maps_to_line(uptrend):
+    """exit-mode-aligned trail: threshold 1→fast, 2→mid, 3→slow line value, so the
+    price stop is breached on the threshold-th red (not always the tightest/fast)."""
+    o, h, l, c = uptrend
+    cfg = SterlingKiteEngineConfig()
+    r = compute_regime(o, h, l, c, cfg)
+    i = len(c) - 1
+    assert r.trail_value_for_threshold(i, 1) == float(r.l_fast[i])
+    assert r.trail_value_for_threshold(i, 2) == float(r.l_mid[i])
+    assert r.trail_value_for_threshold(i, 3) == float(r.l_slow[i])
+    # unknown thresholds fall back to the tightest (fast) line — fail safe.
+    assert r.trail_value_for_threshold(i, 9) == float(r.l_fast[i])
+    # in a long, the wider line gives more room: fast (tightest) sits ABOVE slow.
+    assert r.l_fast[i] >= r.l_slow[i]
+
+
 def test_fresh_transition_fires_once(down_then_up):
     o, h, l, c = down_then_up
     cfg = SterlingKiteEngineConfig()

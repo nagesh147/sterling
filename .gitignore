@@ -16,6 +16,8 @@ bun.lockb
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+frontend/dist/
+
 
 # === System / Editor files ===
 .DS_Store
@@ -61,6 +63,9 @@ backend/data/ohlcv_full/
 
 # Equity-index history (regenerate via study.equity_pipeline)
 backend/data/equity/
+
+# Kite 1H candle cache (regenerate via study.kite_st_exit_sweep; binary .npz OHLCV)
+backend/study/kite_cache/
 antigravity-claude-proxy/
 .claude/worktrees/
 
