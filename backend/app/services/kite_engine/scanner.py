@@ -69,6 +69,40 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
     return candles
 
 
+def _trail_stop_value(r, direction: str, i: int, last_idx: int,
+                      cfg: SterlingKiteEngineConfig) -> float:
+    """The stop level to attach to a signal row.
+
+    Default: the tightest still-green line at the latest bar (the validated fast
+    trail). When ``exit_aligned_trail`` is on: the line whose flip is the
+    ``exit_mode``-th red (one_red→fast, two_red→mid, three_red→slow), so the stop
+    breach coincides with the red-count exit instead of the tightest line pre-empting
+    it. Falls back to the entry-bar ``trail_target`` line when no green line remains.
+    """
+    if getattr(cfg, "exit_aligned_trail", False):
+        trail_val = r.trail_value_for_threshold(last_idx, get_exit_threshold(cfg.exit_mode))
+    else:
+        trail_val = r.best_trail_line_value(direction, last_idx)
+    return trail_val if trail_val > 0 else float(r.line(cfg.trail_target)[i])
+
+
+def _exit_state_str(r, direction: str, last_idx: int, cfg: SterlingKiteEngineConfig) -> str:
+    """Red-counter progress at the latest bar as ``"<reds>/<threshold> red"``.
+
+    ``reds`` = how many of the three ST lines are against the position now; threshold =
+    the count that triggers the exit under ``exit_mode`` (one_red→1, two_red→2,
+    three_red[_signal]→3). This is the live Exit-column readout.
+    """
+    reds = r.red_line_count(direction, last_idx)
+    return f"{reds}/{get_exit_threshold(cfg.exit_mode)} red"
+
+
+def _entry_sl_value(r, i: int, cfg: SterlingKiteEngineConfig) -> float:
+    """Initial hard stop at the entry bar = the ``trail_target`` (validated fast) ST
+    line at the trigger index. Static reference for the SL column (vs. the live TSL)."""
+    return float(r.line(cfg.trail_target)[i])
+
+
 def _retain_signals(eval_rows: List[EngineSignalRow], now_ms: int) -> List[EngineSignalRow]:
     """Filter one instrument's transitions to the rows worth showing.
 
@@ -140,16 +174,17 @@ def evaluate_item(
                 else:
                     active = False
                     break
-        # Adaptive stop: use the tightest still-green line at the latest bar.
+        # Adaptive stop: tightest still-green line, or the exit_mode-aligned line.
         last_idx = len(c) - 1
-        trail_val = r.best_trail_line_value(direction, last_idx)
-        stop_loss = trail_val if trail_val > 0 else float(r.line(cfg.trail_target)[i])
+        stop_loss = _trail_stop_value(r, direction, i, last_idx, cfg)
         rows.append(EngineSignalRow(
             underlying=item.name, token=item.token, exchange=item.option_exchange,
             regime="BULL" if direction == "long" else "BEAR",
             alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
             direction=direction, option_type="CE" if direction == "long" else "PE",
             spot=float(c[i]), stop_loss=stop_loss,
+            entry_sl=_entry_sl_value(r, i, cfg),
+            exit_state=_exit_state_str(r, direction, last_idx, cfg),
             score=85.0, timestamp_ms=ts,
             is_active=active,
             is_fresh=(ts == latest_ts),
@@ -184,6 +219,7 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
         if key not in grouped_derivs:
             r.spot = 0
             r.stop_loss = 0
+            r.entry_sl = None   # per-leg (leg.entry_sl) is authoritative for grouped deriv rows
             r.legs = [leg]
             grouped_derivs[key] = r
             leg_ts[sym_key] = r.timestamp_ms
@@ -256,10 +292,10 @@ def evaluate_derivative_contract(
                 else:
                     active = False
                     break
-        # Adaptive stop: tightest still-green line at latest bar.
+        # Adaptive stop: tightest still-green line, or the exit_mode-aligned line.
         last_idx = len(c) - 1
-        trail_val = r.best_trail_line_value("long", last_idx)
-        stop_loss = trail_val if trail_val > 0 else float(r.line(cfg.trail_target)[i])
+        stop_loss = _trail_stop_value(r, "long", i, last_idx, cfg)
+        entry_sl = _entry_sl_value(r, i, cfg)
         rows.append(EngineSignalRow(
             underlying=item.name, token=pick.token, exchange=item.option_exchange,
             regime="BULL" if is_ce else "BEAR",
@@ -268,8 +304,9 @@ def evaluate_derivative_contract(
             legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
                             option_symbol=pick.option_symbol, strike=pick.strike,
                             expiry=pick.expiry, lot_size=pick.lot_size or None,
-                            is_active=active)],
-            spot=float(c[i]), stop_loss=stop_loss,
+                            entry_sl=entry_sl, is_active=active)],
+            spot=float(c[i]), stop_loss=stop_loss, entry_sl=entry_sl,
+            exit_state=_exit_state_str(r, "long", last_idx, cfg),
             score=85.0, timestamp_ms=ts, source="derivatives",
             is_active=active, is_fresh=(ts == latest_ts),
         ))
@@ -363,6 +400,7 @@ class ScanDiag:
     deriv_fired: int = 0       # contracts that produced a BUY signal
     deriv_min_bars: int = 0    # premium-chart bar depth of charted contracts (history)
     deriv_max_bars: int = 0
+    confluence_fired: int = 0  # merged rows where the underlying AND a leg's premium both fired
     contracts: List[ContractScanDiag] = field(default_factory=list)
 
 
@@ -483,6 +521,7 @@ class KiteEngineScanner:
         expiry_types_stocks: Optional[Sequence[ExpiryType]] = None,
         place_cb: Optional[PlaceCb] = None,
         deriv_universe: Optional[List[UniverseItem]] = None,
+        confluence_universe: Optional[List[UniverseItem]] = None,
         log_cb: Optional[Callable[[str], None]] = None,
         close_feed: Optional[Callable[[str, float], None]] = None,
     ) -> None:
@@ -711,6 +750,112 @@ class KiteEngineScanner:
                 _flush()
 
             await asyncio.gather(*[_deriv_one(i) for i in (deriv_universe or [])])
+
+            # ── confluence scan: underlying regime AND the leg's own premium ──────
+            # A candidate strike is emitted only when the UNDERLYING fires a fresh
+            # entry (spot regime, direction → CE/PE) AND that option's OWN premium
+            # triple-ST also confirms (a running/fresh BUY). One merged row per
+            # underlying signal, carrying only the confirmed legs — the highest-
+            # conviction filter ("the index turned AND the option is actually moving").
+            async def _confluence_one(item: UniverseItem) -> None:
+                if us.cancelled:
+                    return
+                if not item.token:
+                    _no_data(item)
+                    return
+                us.scanning_label = item.name
+                if log_cb:
+                    log_cb(f"Scanning confluence: {item.name} ({item.exchange})")
+                async with sem:
+                    try:
+                        candles = drop_forming(await self._fetch_1h(client, us, item))
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("kite-engine confluence candle fail %s: %s", item.name, exc)
+                        _no_data(item)
+                        return
+                if close_feed and candles:
+                    close_feed(item.name, float(candles[-1].close))
+                if len(candles) <= cfg.warmup + 1:
+                    _no_data(item)
+                    return
+                diag.evaluated += 1
+                if item.is_index:
+                    diag.index_evaluated += 1
+                eval_rows = evaluate_item(us.engine, item, candles, cfg)
+                if not eval_rows:
+                    return
+                option_rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
+                _expiry = expiry_types_indices if (expiry_types_indices is not None and item.is_index) else expiry_types_stocks if (expiry_types_stocks is not None and not item.is_index) else expiry_types
+                chain = chain_rows_for(option_rows, item.tradingsymbol, today)
+                ordered = sorted(moneyness, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
+                latest_ts = candles[-1].timestamp_ms
+
+                for row in _retain_signals(eval_rows, now_ms):
+                    # Candidate strikes for this signal's direction — the SAME picks
+                    # attach_strikes resolves — then confirm each on its own premium.
+                    picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
+                                         moneynesses=ordered, expiry_types=_expiry, today=today)
+                    confirmed: List[OptionLeg] = []
+                    for m, pick in picks:
+                        if us.cancelled:
+                            return
+                        if not pick.token:
+                            continue  # no premium series to confirm against
+                        async with sem:
+                            try:
+                                oc = drop_forming(await self._fetch_candles(
+                                    client, us, pick.token, pick.option_symbol))
+                            except Exception as exc:  # noqa: BLE001
+                                log.warning("kite-engine confluence chart fail %s: %s",
+                                            pick.option_symbol, exc)
+                                continue
+                        if len(oc) <= 1:
+                            continue
+                        diag.deriv_charts += 1
+                        bars = len(oc)
+                        diag.deriv_min_bars = bars if diag.deriv_min_bars == 0 else min(diag.deriv_min_bars, bars)
+                        diag.deriv_max_bars = max(diag.deriv_max_bars, bars)
+                        drows = evaluate_derivative_contract(item, m, pick, oc, cfg)
+                        # Confirmed = the premium is CURRENTLY trending up (running/fresh
+                        # BUY), not merely a stale historical entry.
+                        live = [d for d in drows if d.is_active or d.is_fresh]
+                        if not live:
+                            continue
+                        d = max(live, key=lambda x: x.timestamp_ms)
+                        leg = d.legs[0]
+                        # Entry basis = the option's CURRENT premium (last closed bar),
+                        # NOT d.spot. d.spot is the premium at the leg's OWN ST entry bar;
+                        # when the underlying fires fresh but the premium has been trending
+                        # for several bars (is_active, not is_fresh) that is a stale historical
+                        # price. Confluence enters NOW on the underlying's fresh signal, so the
+                        # entry price is the current premium — using the stale value as
+                        # premium_spot → entry_premium would show a fake unrealized gain and,
+                        # if the WS fill postback is missed, book a wrong realized PnL into the
+                        # INR daily-loss breaker. (For a fresh leg oc[-1].close == d.spot.)
+                        leg.premium_spot = float(oc[-1].close)
+                        leg.premium_sl = d.stop_loss
+                        leg.entry_sl = d.entry_sl
+                        leg.token = pick.token
+                        leg.is_active = d.is_active
+                        confirmed.append(leg)
+                    if not confirmed:
+                        continue
+                    confirmed.sort(key=lambda l: _MONEYNESS_ORDER.get(l.moneyness, 99))
+                    row.source = "confluence"
+                    row.legs = confirmed
+                    row.underlying_spot = row.spot  # spot mode: `spot` IS the underlying
+                    rows.append(row)
+                    if row.timestamp_ms == latest_ts:
+                        diag.confluence_fired += 1
+                        if place_cb is not None:
+                            try:
+                                await place_cb(row, item)
+                            except Exception as exc:  # noqa: BLE001
+                                log.warning("kite-engine confluence auto-exec fail %s: %s",
+                                            item.name, exc)
+                _flush()
+
+            await asyncio.gather(*[_confluence_one(i) for i in (confluence_universe or [])])
 
             us.diag = diag
             us.generated_ms = int(time.time() * 1000)

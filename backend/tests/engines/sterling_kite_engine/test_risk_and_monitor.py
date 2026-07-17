@@ -1,9 +1,12 @@
 """Tests for workstreams F (sizing), E (fill tracking), C/D (tick-driven exit)."""
+import asyncio
+
 import pytest
 
 from app.services.kite_engine import sizing
 from app.services.kite_engine import positions as pos
 from app.services.kite_engine import monitor
+from app.services.kite_engine import state
 import app.services.exchanges.kite.ticker_manager as _ticker_manager
 
 
@@ -228,6 +231,130 @@ async def test_unknown_order_ignored():
     # no registered position — must be a no-op, not raise
     await monitor.on_order_update("m5", {"tradingsymbol": "UNKNOWN", "status": "COMPLETE"})
     assert pos.get("m5", "UNKNOWN") is None
+
+
+@pytest.mark.asyncio
+async def test_protective_exit_fill_closes_position_not_refills(monkeypatch):
+    """A broker-GTT (or any protective) exit SELL that fills at the broker must
+    reconcile our registry to CLOSED — NOT be mis-read as an entry fill. Before the
+    fix, on_order_update matched by symbol only and marked the exit-price as a fill,
+    leaving the position OPEN so the monitor could market-SELL a second time (a naked
+    short). Guards against the double-sell."""
+    pos.reset("mx1")
+    released = []
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda uid, key: released.append((uid, key)))
+    pos.register(pos.OpenPosition(
+        uid="mx1", symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+        qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
+        status=pos.OPEN, direction="long", guard_key="NIFTY"))
+    # GTT-fired exit: a SELL whose order_id is NOT the entry order.
+    await monitor.on_order_update("mx1", {
+        "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+        "transaction_type": "SELL", "order_id": "GTT-EXIT-1", "average_price": 79.0})
+    p = pos.get("mx1", "NIFTY24JUN24000CE")
+    assert p.status == pos.CLOSED, "protective exit fill must close the position"
+    assert released == [("mx1", "NIFTY")], "guard released after exit"
+
+    # a subsequent tick must NOT place a second sell (position no longer OPEN)
+    client = _FakeClient()
+    out = await monitor.on_tick("mx1", 777, 40.0, client=client)
+    assert out is None and client.sells == []
+
+
+@pytest.mark.asyncio
+async def test_futures_short_cover_fill_closes_position(monkeypatch):
+    """For a short future the protective exit is a BUY-to-cover; its fill closes."""
+    pos.reset("mx2")
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    pos.register(pos.OpenPosition(
+        uid="mx2", symbol="BANKNIFTY25JULFUT", exchange="NFO", token=888,
+        qty=15, entry_premium=48000, stop_premium=48500, order_id="ENTRY-F",
+        status=pos.OPEN, direction="short", vehicle="futures", guard_key="BANKNIFTY"))
+    await monitor.on_order_update("mx2", {
+        "tradingsymbol": "BANKNIFTY25JULFUT", "status": "COMPLETE",
+        "transaction_type": "BUY", "order_id": "COVER-1", "average_price": 48550.0})
+    assert pos.get("mx2", "BANKNIFTY25JULFUT").status == pos.CLOSED
+
+
+@pytest.mark.asyncio
+async def test_entry_fill_still_confirmed_when_order_id_matches():
+    """Regression guard: the ENTRY fill (order_id matches) still marks OPEN, even
+    though a BUY entry for a long shares the 'BUY' side."""
+    pos.reset("mx3")
+    pos.register(pos.OpenPosition(
+        uid="mx3", symbol="NIFTY24JUN24000CE", exchange="NFO", token=1, qty=50,
+        entry_premium=100, stop_premium=80, order_id="ENTRY-9",
+        status=pos.PENDING, direction="long"))
+    await monitor.on_order_update("mx3", {
+        "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+        "transaction_type": "BUY", "order_id": "ENTRY-9", "average_price": 101.5})
+    p = pos.get("mx3", "NIFTY24JUN24000CE")
+    assert p.status == pos.OPEN and p.fill_price == pytest.approx(101.5)
+
+
+@pytest.mark.asyncio
+async def test_monitor_own_exit_fill_not_double_booked(monkeypatch):
+    """The monitor's OWN exit SELL fills, then Kite streams that SELL's COMPLETE
+    postback. on_order_update must NOT re-book the realized PnL: the position is
+    already CLOSED (the monitor recorded it once), so a second booking would trip the
+    INR daily-loss breaker at ~half the real limit. Regression for the double-book."""
+    uid = "mbook1"
+    pos.reset(uid)
+    state.reset(uid)  # clean daily-PnL slate (in-memory + persisted key)
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    pos.register(pos.OpenPosition(
+        uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+        qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
+        status=pos.OPEN, direction="long", gtt_id=0, guard_key="NIFTY"))
+    client = _FakeClient()
+
+    # trail breach → monitor exits at 80 and books realized (80-100)*50 = -1000 once.
+    out = await monitor.on_tick(uid, 777, 80.0, client=client)
+    assert out == "NIFTY24JUN24000CE"
+    assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)]
+    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
+
+    # Kite now streams the monitor's OWN SELL fill (different order_id than the entry).
+    await monitor.on_order_update(uid, {
+        "tradingsymbol": "NIFTY24JUN24000CE", "status": "COMPLETE",
+        "transaction_type": "SELL", "order_id": "EXIT-1", "average_price": 80.0})
+    # Still booked exactly once — NOT -2000.
+    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exit_paths_place_single_sell(monkeypatch):
+    """Two exit paths (the WS tick monitor + a scan-loop square-off) can call
+    _exit_position for the same position concurrently. The synchronous claim must let
+    only the first place a SELL; the second bails during the placement await instead of
+    double-selling into a naked short. Regression for the double-sell race."""
+    uid = "mrace1"
+    pos.reset(uid)
+    state.reset(uid)
+    monkeypatch.setattr("app.services.kite_engine.monitor.state.clear_auto_open",
+                        lambda *a, **k: None)
+    p = pos.register(pos.OpenPosition(
+        uid=uid, symbol="NIFTY24JUN24000CE", exchange="NFO", token=777,
+        qty=50, entry_premium=100, stop_premium=80, order_id="ENTRY-1",
+        status=pos.OPEN, direction="long", gtt_id=0, guard_key="NIFTY"))
+
+    class _SlowClient(_FakeClient):
+        async def place_order_option(self, sym, side, size, **kw):
+            await asyncio.sleep(0)  # yield mid-placement so the second caller interleaves
+            return await super().place_order_option(sym, side, size, **kw)
+
+    client = _SlowClient()
+    # Fire both exit paths concurrently against the SAME open position.
+    await asyncio.gather(
+        monitor._exit_position(client, uid, p, 80.0, reason="tick breach"),
+        monitor._exit_position(client, uid, p, 80.0, reason="expiry square-off"),
+    )
+    assert client.sells == [("NIFTY24JUN24000CE", "sell", 50)], "exactly one SELL placed"
+    assert pos.get(uid, "NIFTY24JUN24000CE").status == pos.CLOSED
+    assert state.daily_realized_pnl(uid) == pytest.approx(-1000.0), "booked once, not twice"
 
 
 # ── C: broker-side protective GTT stop ───────────────────────────────────────

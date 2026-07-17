@@ -16,6 +16,8 @@ bun.lockb
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+frontend/dist/
+
 
 # === System / Editor files ===
 .DS_Store
@@ -61,6 +63,9 @@ backend/data/ohlcv_full/
 
 # Equity-index history (regenerate via study.equity_pipeline)
 backend/data/equity/
+
+# Kite 1H candle cache (regenerate via study.kite_st_exit_sweep; binary .npz OHLCV)
+backend/study/kite_cache/
 antigravity-claude-proxy/
 .claude/worktrees/
 
@@ -74,4 +79,10 @@ antigravity-claude-proxy/
 
 # Obsidian local workspace (optional — remove if you want to share settings)
 .obsidian/
+
+# docs/obsidian/ is its own independent git repo (see docs/obsidian/.git) — the
+# vault used to live untracked-as-its-own-repo inside this repo, so the
+# obsidian-git plugin's auto-commit walked up to THIS .git and swept up
+# in-progress code changes. Kept fully out of Sterling's tracking now.
+docs/obsidian/
 

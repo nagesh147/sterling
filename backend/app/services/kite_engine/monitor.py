@@ -32,13 +32,44 @@ log = get_logger(__name__)
 _DEAD_STATUSES = {"REJECTED", "CANCELLED"}
 _FILLED_STATUS = "COMPLETE"
 
+# (uid, symbol) whose market exit order is mid-flight. The exit paths — the WS tick
+# monitor (on_tick) and the scan loop (_square_off_expiring / _time_stop_positions) —
+# are separate coroutines on one event loop and each calls _exit_position, which
+# awaits the SELL placement BEFORE it marks the position closed. This set is claimed
+# synchronously (no await between the check and the add, so it is race-free on the
+# single-threaded loop) so a second exit path for the same position bails instead of
+# placing a duplicate SELL (the double-sell / naked-short bug).
+_exiting: set = set()
+
+
+def _record_realized(uid: str, p: "pos.OpenPosition", exit_price: float) -> None:
+    """Book a closed position's realized PnL (INR) into the per-day accumulator that
+    backs the INR daily-loss breaker. Long: (exit − entry)·qty; short future: negated.
+    Uses the confirmed fill price when known, else the intended entry premium."""
+    entry = float(p.fill_price or p.entry_premium or 0.0)
+    if entry <= 0 or not exit_price or p.qty <= 0:
+        return
+    sign = 1.0 if p.direction == "long" else -1.0
+    state.record_realized_pnl(uid, (float(exit_price) - entry) * p.qty * sign)
+
 
 async def on_order_update(uid: str, order: dict, *, client=None) -> None:
     """Handle one Kite order postback for ``uid`` (workstream E).
 
-    Matches the postback to a registered position by tradingsymbol and updates its
-    fill price / status. Unknown orders (manual trades, other strategies) are
-    ignored. Never raises — a bad postback must not kill the WS loop.
+    Matches the postback to a registered position by tradingsymbol, then classifies
+    it by order_id + transaction_type so the ENTRY fill and a PROTECTIVE-EXIT fill
+    are never confused:
+
+      * ENTRY (order_id matches the entry, or a legacy postback with no id) → confirm
+        the fill price / status, or mark rejected and release the guard.
+      * EXIT  (a COMPLETE on the position's exit side — SELL for a long, BUY to cover
+        a short — from a *different* order id) → a broker GTT / protective stop fired
+        at Zerodha. Reconcile our registry to CLOSED and release the guard, so the tick
+        monitor does not later market-SELL the same position AGAIN (the double-sell /
+        naked-short bug). Best-effort token unsubscribe.
+
+    Unknown orders (manual trades, other strategies) are ignored. Never raises — a bad
+    postback must not kill the WS loop.
     """
     try:
         symbol = str(order.get("tradingsymbol", "")).strip()
@@ -48,12 +79,40 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         if p is None:
             return  # not one of ours
         status = str(order.get("status", "")).upper()
-        if status == _FILLED_STATUS:
+        txn = str(order.get("transaction_type", "")).upper()
+        oid = str(order.get("order_id", "")).strip()
+        exit_side = "SELL" if p.direction == "long" else "BUY"  # side that CLOSES us
+        is_entry = bool(oid) and oid == str(p.order_id)
+
+        # ── protective/GTT exit already filled at the broker → reconcile ──────
+        # Only when the position is still live (pending/open). If it is already CLOSED
+        # the monitor's OWN _exit_position placed and recorded this SELL — its COMPLETE
+        # postback must NOT re-enter here and book realized PnL a second time (which
+        # would trip the INR daily-loss breaker at ~half the configured limit).
+        if (status == _FILLED_STATUS and txn == exit_side and not is_entry
+                and p.status in (pos.PENDING, pos.OPEN)):
+            avg = float(order.get("average_price") or 0.0)
+            pos.close(uid, symbol,
+                      reason=(f"broker stop/exit fill @ ₹{avg:.2f}" if avg else "broker stop/exit fill"))
+            _record_realized(uid, p, avg)
+            if p.guard_key:
+                state.clear_auto_open(uid, p.guard_key)
+            if p.token:
+                try:
+                    from app.services.exchanges.kite import ticker_manager
+                    await ticker_manager.unsubscribe(uid, [p.token])
+                except Exception as _exc:  # noqa: BLE001
+                    log.debug("suppressed: %s", _exc)
+            state.log(uid, "order_placed",
+                      f"{symbol} exit filled at broker @ ₹{avg:.2f} — position reconciled closed")
+            return
+
+        if status == _FILLED_STATUS and (is_entry or not oid):
             avg = float(order.get("average_price") or 0.0)
             pos.mark_filled(uid, symbol, avg)
             state.log(uid, "info",
-                      f"Fill confirmed: {symbol} @ ₹{avg:.2f} (#{order.get('order_id', '')})")
-        elif status in _DEAD_STATUSES:
+                      f"Fill confirmed: {symbol} @ ₹{avg:.2f} (#{oid})")
+        elif status in _DEAD_STATUSES and (is_entry or not oid):
             pos.mark_rejected(uid, symbol, reason=str(order.get("status_message") or status))
             # Entry never filled → release the auto-open guard so the slot can re-enter.
             if p.guard_key:
@@ -66,6 +125,15 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
 async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reason: Optional[str] = None) -> None:
     """Market-exit the full quantity and cancel any broker GTT (trail breach or red count).
     For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short)."""
+    # Claim the exit synchronously (single-threaded loop → check-then-add is atomic):
+    # if another exit path already holds this claim, or the position is no longer live,
+    # bail without placing a duplicate SELL. The claim is released on placement failure
+    # so a genuine retry can proceed; on success the position ends CLOSED and the status
+    # check keeps any later exit out.
+    key = (uid, p.symbol)
+    if key in _exiting or p.status not in (pos.OPEN, pos.PENDING):
+        return
+    _exiting.add(key)
     is_futures = p.vehicle == "futures"
     exit_side = "sell" if p.direction == "long" else "buy"
     try:
@@ -78,6 +146,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
                 p.symbol, "sell", p.qty, exchange=p.exchange,
                 tag=f"trailexit:{p.symbol}")
     except Exception as exc:  # noqa: BLE001
+        _exiting.discard(key)
         state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
         return
     if p.gtt_id:
@@ -85,6 +154,8 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
     breach_dir = "≥" if p.direction == "short" else "≤"
     close_reason = reason or f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}"
     pos.close(uid, p.symbol, reason=close_reason)
+    _exiting.discard(key)  # closed now; status guard keeps later exits out
+    _record_realized(uid, p, ltp)
     if p.guard_key:
         state.clear_auto_open(uid, p.guard_key)
     state.log(uid, "order_placed",

@@ -875,9 +875,9 @@ import json
 async def get_chart_state(
     symbol: str, user: UserContext = Depends(get_current_user)
 ) -> dict:
-    """Load persisted chart view state for a symbol (zoom range + drawings).
+    """Load persisted chart view state for a symbol (timeframe, indicators, settings, zoom, drawings).
 
-    Used by InstrumentPane to restore zoom and user drawings across sessions.
+    Used by InstrumentPane to restore user preferences across sessions.
     """
     from app.services import db as app_db
     key = f"kite_chart_state_{user.user_id}_{symbol}"
@@ -889,6 +889,17 @@ async def get_chart_state(
     state.setdefault("symbol", symbol)
     state.setdefault("zoom", None)
     state.setdefault("drawings", [])
+    # Per-symbol drawings map for the GLOBAL chart-state blob (symbol="__global__").
+    # Chart config (tf/indicators/params/zoom/toggles) is shared across all symbols;
+    # only drawing geometry stays keyed by symbol, kept here so the global blob is
+    # still a single KV key with one save path.
+    state.setdefault("drawingsBySymbol", {})
+    state.setdefault("tf", "15m")
+    state.setdefault("active", ["vol", "st-mid"])
+    state.setdefault("isHA", False)
+    state.setdefault("isLogScale", False)
+    state.setdefault("showVP", False)
+    state.setdefault("params", {})
     return state
 
 
@@ -898,13 +909,20 @@ async def save_chart_state(
     body: dict = Body(...),
     user: UserContext = Depends(get_current_user),
 ) -> dict:
-    """Save chart view state (zoom + drawings). Debounce on frontend recommended."""
+    """Save chart view state (timeframe, indicators, settings, zoom, drawings). Debounce on frontend recommended."""
     from app.services import db as app_db
     key = f"kite_chart_state_{user.user_id}_{symbol}"
     data = {
         "symbol": symbol,
         "zoom": body.get("zoom"),
         "drawings": body.get("drawings", []),
+        "drawingsBySymbol": body.get("drawingsBySymbol", {}),
+        "tf": body.get("tf", "15m"),
+        "active": body.get("active", ["vol", "st-mid"]),
+        "isHA": body.get("isHA", False),
+        "isLogScale": body.get("isLogScale", False),
+        "showVP": body.get("showVP", False),
+        "params": body.get("params", {}),
     }
     app_db.set_config(key, json.dumps(data))
     return {"ok": True}
