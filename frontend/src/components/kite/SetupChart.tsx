@@ -19,48 +19,6 @@ function dedupeSorted<T extends { time: number }>(arr: T[]): T[] {
   return sorted.filter((v, i, a) => i === 0 || v.time !== a[i - 1].time);
 }
 
-function draw(container: HTMLDivElement, data: SetupChartData) {
-  const chart = createChart(container, {
-    layout: { background: { type: ColorType.Solid, color: k.bg }, textColor: k.dim, fontFamily: k.fontFamily },
-    grid: { vertLines: { color: k.border }, horzLines: { color: k.border } },
-    crosshair: { mode: 1 },
-    rightPriceScale: { borderVisible: false },
-    timeScale: { borderVisible: false, timeVisible: true },
-    width: container.clientWidth,
-    height: container.clientHeight,
-  });
-
-  const candleSeries = chart.addSeries(CandlestickSeries, {
-    upColor: k.green, downColor: k.red, borderUpColor: k.green,
-    borderDownColor: k.red, wickUpColor: k.green, wickDownColor: k.red,
-  });
-  candleSeries.setData(dedupeSorted(data.candles).map((b) => ({
-    time: b.time as any, open: b.open, high: b.high, low: b.low, close: b.close,
-  })));
-
-  const addLine = (rows: { time: number; value: number }[], color: string, title: string) => {
-    const s = chart.addSeries(LineSeries, { color, lineWidth: 2, title, priceLineVisible: false, lastValueVisible: false });
-    s.setData(dedupeSorted(rows).map((p) => ({ time: p.time as any, value: p.value })));
-  };
-  addLine(data.st_fast, k.blue, 'ST fast (21,1)');
-  addLine(data.st_mid, k.orange, 'ST mid (14,2)');
-  addLine(data.st_slow, k.dim, 'ST slow (7,3)');
-
-  if (data.entry_index != null && data.candles[data.entry_index]) {
-    createSeriesMarkers(candleSeries, [{
-      time: data.candles[data.entry_index].time as any,
-      position: 'belowBar', color: k.orange, shape: 'arrowUp', text: 'Entry',
-    }]);
-  }
-
-  chart.timeScale().fitContent();
-  const ro = new ResizeObserver(() => {
-    chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
-  });
-  ro.observe(container);
-  return () => { ro.disconnect(); chart.remove(); };
-}
-
 export function SetupChart({ token, underlying, onClose }: Props) {
   const { data, isLoading, isError } = useEngineSetup(token, underlying, true);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,11 +51,6 @@ export function SetupChart({ token, underlying, onClose }: Props) {
     addLine(data.st_fast, k.blue, 'ST fast (21,1)');
     addLine(data.st_mid, k.orange, 'ST mid (14,2)');
     addLine(data.st_slow, k.dim, 'ST slow (7,3)');
-    // Exit threshold viz: dashed version of mid line as example "2-red exit boundary" (tightens with best-green trail)
-    if (data.st_mid && data.st_mid.length) {
-      const dashS = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, lineStyle: 2 as any, title: 'exit thresh (ex: 2-red)', priceLineVisible: false, lastValueVisible: false });
-      dashS.setData(dedupeSorted(data.st_mid).map((p) => ({ time: p.time as any, value: p.value })));
-    }
     // Exit threshold viz: dashed version of mid line as example "2-red exit boundary" (tightens with best-green trail)
     if (data.st_mid && data.st_mid.length) {
       const dashS = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 1, lineStyle: 2 as any, title: 'exit thresh (ex: 2-red)', priceLineVisible: false, lastValueVisible: false });

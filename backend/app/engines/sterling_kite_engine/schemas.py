@@ -21,8 +21,9 @@ class OptionLeg(BaseModel):
     strike: float
     expiry: str
     lot_size: Optional[int] = None
-    premium_spot: Optional[float] = None
-    premium_sl: Optional[float] = None
+    premium_spot: Optional[float] = None   # entry premium (fill reference) — the Entry column
+    premium_sl: Optional[float] = None     # live ratcheting trail stop — the TSL column
+    entry_sl: Optional[float] = None       # initial hard stop at the entry bar (fast ST line) — the SL column
     token: Optional[int] = None
     is_active: bool = False   # this contract's SuperTrend is still aligned on the latest bar
 
@@ -37,7 +38,14 @@ class EngineSignalRow(BaseModel):
     option_type: Literal["CE", "PE"]
     legs: List[OptionLeg] = []  # one per selected moneyness (ATM/ITM1-5/OTM1-5)
     spot: float
-    stop_loss: float
+    stop_loss: float          # live ratcheting trail stop (underlying pts for spot/confluence) — TSL column
+    # Initial hard stop at the entry bar = the validated fast ST line at the trigger.
+    # Underlying pts for spot/confluence rows; premium for derivatives (leg-level too).
+    # None for legacy cached rows. Surfaced as the signal table's SL column.
+    entry_sl: Optional[float] = None
+    # Live red-counter progress at the latest bar, "<reds>/<threshold> red" (threshold
+    # from exit_mode). The Exit column; None for legacy cached rows.
+    exit_state: Optional[str] = None
     score: float
     timestamp_ms: int
     # Underlying spot at the trigger bar. For "spot"-source signals this equals
@@ -53,8 +61,9 @@ class EngineSignalRow(BaseModel):
     is_active: bool = False
     is_fresh: bool = False
     # "spot" = SuperTrend on the underlying chart (legs are candidate strikes to BUY);
-    # "derivatives" = SuperTrend on this contract's OWN premium chart (single leg, BUY-only).
-    source: Literal["spot", "derivatives"] = "spot"
+    # "derivatives" = SuperTrend on this contract's OWN premium chart (single leg, BUY-only);
+    # "confluence" = underlying fired AND the leg's own premium confirmed (merged row).
+    source: Literal["spot", "derivatives", "confluence"] = "spot"
     # Trend-quality readings at the entry bar (for the optional directional-mode
     # entry filters). None when not computed; never gates anything unless adx_min /
     # atr_pct_min are set in the engine config.
@@ -237,14 +246,29 @@ class EngineConfigModel(BaseModel):
     #   two_red          — any TWO lines red → exit
     #   three_red        — ALL THREE lines red → exit (full reversal)
     #   three_red_signal — all three red AND a fresh counter-arrow → exit (loosest)
-    exit_mode: ExitMode = "two_red"  # balanced: 2 red lines for exit (see config.py)
+    # MEASURED best on real 7.5y IS/OOS (study/kite_st_exit_mode_sweep.py): one_red
+    # beats two_red/three_red on both delta1 and options lenses (see config.py). Was
+    # "two_red" (asserted, never measured). Looser modes stay selectable.
+    exit_mode: ExitMode = "one_red"
+    # Opt-in: anchor the price stop to the exit_mode-th ST line (one_red→fast,
+    # two_red→mid, three_red→slow) so the stop breach coincides with the red count
+    # instead of the tightest line pre-empting it. OFF (default) = validated fast trail.
+    exit_aligned_trail: bool = False
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
     # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.
     strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]] = [
         "ITM1", "ATM", "OTM1"]
     # Where the SuperTrend runs: "spot" = underlying chart (legs are candidate strikes);
     # "derivatives" = each selected contract's own premium chart (BUY-only); "both".
-    scan_source: Literal["spot", "derivatives", "both"] = "derivatives"
+    # Default "spot": it is the only source with an OOS-durable edge in the 7.5y study
+    # (delta-1 OOS-positive on 4/4 indices), gives both directions, and is now fully
+    # stop-protected (delta-translated premium stop). Premium-chart ("derivatives")
+    # signals are unvalidated and structurally unvalidatable over history; keep that
+    # mode for confirmation/manual use. "both" runs both but auto-exec then guards
+    # per-underlying to avoid stacking the same move (see service._make_place_cb).
+    # "confluence" = highest conviction: emit a strike only when the underlying fires a
+    # fresh entry AND that option's own premium ST also confirms (merged row).
+    scan_source: Literal["spot", "derivatives", "both", "confluence"] = "spot"
     # Option expiries to scan — weekly, monthly, or both. Defaults to all.
     scan_expiries: List[Literal["weekly", "monthly"]] = ["weekly", "monthly"]
     # Per-category override: indices (default both), stocks (default monthly only).
@@ -263,6 +287,20 @@ class EngineConfigModel(BaseModel):
     risk_sizing: bool = True
     risk_pct: float = 1.0          # % of available FO capital risked per trade
     max_lots: int = 10             # hard ceiling on auto-exec lots per order
+    # ── Expiry square-off guard ────────────────────────────────────────────────
+    # Market-exit an auto-exec option position when its contract comes within this
+    # many calendar days of expiry, so a weekly can't ride into expiry unmanaged
+    # (median signal hold ≈ 3.7d, p90 ≈ 10d, vs a weekly's ~5 sessions). 0 disables.
+    # Applies to options only (futures roll rather than square off → empty expiry).
+    expiry_square_off_days: int = 1
+    # ── Time-stop (opt-in, default off) ────────────────────────────────────────
+    # Square off an auto-exec position after it has been held this many 1H bars.
+    # The exit-mechanics sweep (study/kite_st_exit_sweep.py, real 7.5y) found a
+    # ~48-bar cap is the one robust, cross-lens improvement — it curbs theta bleed on
+    # long-option holds (options-lens mean OOS −134% → −32%). Default 0 = off, because
+    # the sweep's IS→OOS rank corr is negative (specific configs overfit) and the
+    # delta-1 benefit is marginal; it mainly helps the long-OTM-options vehicle. 0 = off.
+    time_stop_bars: int = 0
     # ── Protective stop mode (workstreams C/D) ────────────────────────────────
     # "broker"  = place a GTT/SL-M stop at Zerodha at entry (survives server death)
     # "monitor" = tick-driven WS monitor exits on trail breach (intrabar, server-side)
@@ -290,6 +328,21 @@ class EngineConfigModel(BaseModel):
     # ── Entry quality filters (Phase-0 survivors; None = off) ─────────────────
     adx_min: Optional[float] = None          # minimum ADX to allow entry (e.g. 20)
     atr_pct_min: Optional[float] = None      # minimum ATR percentile (e.g. 50)
+    # ── Session / liquidity entry gates (auto-exec; opt-in, default off) ──────
+    # Block NEW auto-exec entries in the last N minutes before the 15:30 close so a
+    # fresh late-session signal doesn't enter straight into an overnight index gap
+    # (there is no INR daily-loss breaker behind an overnight hold). 0 = off.
+    block_entry_minutes_before_close: int = 0
+    # Skip an auto-exec entry whose chosen option leg is too illiquid to trade well:
+    # bid-ask spread wider than this % of mid, or open interest below this floor.
+    # None = off (the scanner itself makes no quote calls; these add one at entry).
+    max_spread_pct: Optional[float] = None   # e.g. 5.0 → reject > 5% quoted spread
+    min_oi: Optional[int] = None             # e.g. 100 → reject thin strikes
+    # ── INR daily-loss breaker (auto-exec; opt-in, default off) ───────────────
+    # Halt NEW auto-exec entries once realized losses for the IST day reach this % of
+    # available F&O capital. Fills the gap left by the USD daily-loss breaker being
+    # crypto-only. None = off. Only ever blocks entries; never force-closes.
+    max_daily_loss_pct: Optional[float] = None
     # ── Risk infrastructure wiring ────────────────────────────────────────────
     # Wires the drawdown circuit breaker + correlation penalty into sizing.
     wire_risk_infra: bool = False

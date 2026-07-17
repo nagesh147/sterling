@@ -3,7 +3,7 @@
 
 export type TrailTarget = 'fast' | 'mid' | 'slow';
 export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
-export type ScanSource = 'spot' | 'derivatives' | 'both';
+export type ScanSource = 'spot' | 'derivatives' | 'both' | 'confluence';
 export type ScanExpiry = 'weekly' | 'monthly';
 export type Vehicle = 'otm_options' | 'deep_itm_options' | 'futures';
 export type DeepItmMoneyness = 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20';
@@ -22,8 +22,9 @@ export interface OptionLeg {
   strike: number;
   expiry: string;
   lot_size: number | null;
-  premium_spot?: number;
-  premium_sl?: number;
+  premium_spot?: number;  // entry premium (Entry column)
+  premium_sl?: number;    // live ratcheting trail stop (TSL column)
+  entry_sl?: number;      // initial hard stop at the entry bar (SL column)
   token?: number;
   is_active?: boolean; // this contract's SuperTrend still aligned on the latest bar
 }
@@ -38,10 +39,12 @@ export interface EngineSignalRow {
   option_type: 'CE' | 'PE';
   legs: OptionLeg[];
   spot: number;
-  stop_loss: number;
+  stop_loss: number;       // live ratcheting trail stop (TSL column)
+  entry_sl?: number;       // initial hard stop at the entry bar (SL column)
+  exit_state?: string;     // red-counter progress "<reds>/<threshold> red" (Exit column)
   score: number;
   timestamp_ms: number;
-  source?: 'spot' | 'derivatives';
+  source?: 'spot' | 'derivatives' | 'confluence';
   is_active?: boolean; // SuperTrend still aligned on the latest bar (trade running)
   is_fresh?: boolean;  // entered on the latest closed bar (the live "ready now" trigger)
   adx?: number | null;      // ADX at signal time (trend strength, 0–100)
@@ -144,6 +147,10 @@ export interface EngineConfigModel {
   engine_enabled: boolean;
   trail_target: TrailTarget;
   exit_mode: ExitMode;
+  // Opt-in: anchor the price stop to the exit_mode-th ST line (one_red→fast,
+  // two_red→mid, three_red→slow) instead of always the tightest. Default off =
+  // validated fast trail. Changes the computed stop → a scan-affecting setting.
+  exit_aligned_trail?: boolean;
   strike_moneyness: Moneyness[];
   scan_source: ScanSource;
   scan_expiries: ScanExpiry[];
@@ -157,6 +164,20 @@ export interface EngineConfigModel {
   risk_sizing: boolean;
   risk_pct: number;
   max_lots: number;
+  // ── Exit / auto-exec guards (all default off / conservative) ───────────────
+  // Square off an option this many calendar days before expiry (0 = off; options only).
+  expiry_square_off_days?: number;
+  // Square off a held position after this many 1H bars (0 = off; opt-in theta cap).
+  time_stop_bars?: number;
+  // Block NEW auto-exec entries in the last N minutes before the 15:30 close (0 = off).
+  block_entry_minutes_before_close?: number;
+  // Skip an auto-exec entry whose leg is too illiquid: spread wider than this % of mid
+  // (null = off) or open interest below this floor (null = off).
+  max_spread_pct?: number | null;
+  min_oi?: number | null;
+  // Halt NEW auto-exec entries once realized losses for the IST day reach this % of
+  // F&O capital (null = off; never force-closes).
+  max_daily_loss_pct?: number | null;
   // Protective stop mode (workstreams C/D)
   stop_mode: 'broker' | 'monitor' | 'both';
   // ── Directional mode (additive, opt-in) ────────────────────────────────

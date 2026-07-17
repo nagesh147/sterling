@@ -53,44 +53,54 @@ premium, full Indian F&O costs. Not re-generated here; re-analysed:
 - **Honest ceiling:** no SuperTrend exit makes long OTM options OOS-robust. Pair the
   `fast` trail with **deep-ITM or futures** (delta ≈ 1, low theta) to realise the edge.
 
-## 5. What is NOT yet tested — `kite_st_exit_sweep.py` (ready to run)
+## 5. Exit-mechanics sweep — RUN (`kite_st_exit_sweep.py`, 2026-07-16 real data)
 
-The existing sweep only tested the 3 fixed ST lines. The new script holds entry
-fixed and sweeps the **exit mechanics**, SuperTrends only, IS/OOS + Spearman, on
-both a delta-1 lens (isolates the exit) and a costed ATM-options lens:
+Entry fixed; swept trail_period {10,14,21} × trail_mult {0.75,1.0,1.5,2.0} ×
+time_stop {off,48} × breakeven {off,1.0R}, IS/OOS + Spearman, delta-1 + costed-options
+lenses, on the fresh 7.5y pull (`study/kite_st_exit_sweep_results.csv`).
 
-    trail_period   × 10 / 14 / 21        (decoupled from the entry triple)
-    trail_mult     × 0.75 / 1.0 / 1.5 / 2.0
-    time_stop_bars × off / 48            (cap the hold → attack theta directly)
-    breakeven_R    × off / 1.0R          (lift stop to entry once +1R)
+| lens | shipped baseline (p21,m1.0) | best config | IS→OOS Spearman |
+|---|---:|---|---:|
+| delta1 | +4.0% | p21, m0.75, tstop48 → **+10.3%** (3/4 +) | **−0.20** |
+| options | −134.0% | p10, m0.75, tstop48 → **−31.7%** | **−0.19** |
 
-Run (needs a logged-in Kite account in the DB; caches to `study/kite_cache/`):
+Two findings, opposite in how much to trust them:
+1. **Rankings don't generalize — Spearman is negative.** The tighter `m0.75` optimum is
+   overfit; **NOT adopted** — the validated `fast`/m1.0 trail stays. (Chasing the top
+   cell would be the textbook error.)
+2. **A ~48-bar time-stop is the one robust, cross-lens win** — cuts the options-lens
+   mean OOS loss −134% → ~−32% (caps theta). **Shipped as opt-in `time_stop_bars`
+   (default off)**; enforced by `service._time_stop_positions`. Off by default because
+   the delta-1 gain is marginal and it mainly helps the long-OTM vehicle.
 
-    cd backend && python -m study.kite_st_exit_sweep
-
-It answers the open questions: is a trail tighter/looser than `fast` better once
-premium whipsaw + costs are paid, and do a time-stop or breakeven help on options?
-Numbers are intentionally **not** included here — they require a live data pull.
+Breakeven-at-1R barely moved anything (on ≈ off). No SuperTrend exit makes long
+OTM/ATM options OOS-positive — the vehicle is still the binding constraint.
 
 ## 6. Exit-counter (`exit_mode`) addendum — shipped later, NOT yet measured
 
 A later change added a configurable **`exit_mode`** (`one_red` / `two_red` /
 `three_red` / `three_red_signal`): exit once that many of the three STs are red
 against the position (`engines/common/exit_counter.py`; live in `scanner.is_active`
-+ `monitor.on_tick`). The default was set to **`two_red`**. Two problems, both open:
++ `monitor.on_tick`). The default was set to **`two_red`**. Both open problems are
+now RESOLVED:
 
-1. **`two_red` is asserted, not measured.** Unlike the `mid→fast` decision above
-   (7.5y IS/OOS), no sweep backs `two_red` — `docs/kite_exit_counter_prod_rollout.md`
-   argues it qualitatively ("balanced") with zero numbers, and `kite_st_exit_sweep.py`
-   never tested the red-count modes. **`kite_st_exit_mode_sweep.py`** (new) fills the
-   gap: entry fixed, sweep the four modes on the delta1 + costed-options lenses,
-   IS/OOS. Run it before trusting any default but `one_red`.
+1. **`two_red` was asserted, not measured — now MEASURED, and it loses.**
+   `kite_st_exit_mode_sweep.py` was run on the real 7.5y 1H data (IS 70% / OOS 30%,
+   4 indices, both lenses). Mean OOS return by mode:
 
-2. **`two_red`+ is shadowed in the live path → effective exit ≈ `one_red`.** The stop
-   is the tightest still-green line (`regime.best_trail_line_value`), meant to step
-   OUT (loosen) to `mid`/`slow` as tighter lines flip so the trade can reach a 2-/3-red
-   exit. But `positions.update_stop` ratchets the premium stop UP-only and REJECTS
-   that loosening, pinning it near the peak `fast` level — so the price-trail breach
-   fires around the first (`fast`) flip and pre-empts the counter. Net: the `exit_mode`
-   knob barely moves live behaviour. Reconcile the ratchet with the stepping-out stop
-   before the counter means anything.
+   | exit_mode | delta1 OOS | idx + | options OOS | ~trades/idx |
+   |---|---:|---:|---:|---:|
+   | **one_red** | **+4.0%** | **3/4** | **−134.0%** | 554 |
+   | two_red | −6.4% | 1/4 | −184.5% | 355 |
+   | three_red | −18.4% | 0/4 | −338.1% | 200 |
+   | three_red_signal | −18.4% | 0/4 | −338.1% | 200 |
+
+   **`one_red` is best on both lenses; tighter is strictly better.** The shipped
+   default was changed **`two_red` → `one_red`** (`config.py`, `schemas.py`).
+   (Artifact: `kite_st_exit_mode_sweep_results.csv`.)
+
+2. **The ratchet-vs-stepout tension is moot given (1).** The monotonic fast-line
+   ratchet (`positions.update_stop`) pinned the live stop near the tightest flip →
+   live exits were already ≈ `one_red` — which the sweep now says is the *right*
+   place to be. The opt-in `exit_aligned_trail` (widen the stop to honour a looser
+   mode) was built but, per (1), is **not recommended**; it stays default-OFF.
