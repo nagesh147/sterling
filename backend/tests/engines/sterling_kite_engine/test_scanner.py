@@ -832,6 +832,49 @@ async def test_scan_confluence_emits_merged_row_when_both_fire():
 
 
 @pytest.mark.asyncio
+async def test_scan_confluence_leg_premium_is_current_not_stale_entry():
+    """Regression (scanner.py:826): when the underlying fires fresh but the chosen
+    option's premium has been trending for several bars (is_active, NOT is_fresh),
+    the confirmed leg's premium_spot must be the CURRENT premium (last closed bar) —
+    the price we actually enter at now — not the option's stale ST entry-bar premium.
+    Stamping the stale entry-bar value would show a fake unrealized gain and, if the
+    WS fill postback is missed, book a wrong realized PnL into the daily-loss breaker."""
+    cfg = SterlingKiteEngineConfig()
+    fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+    # Option premium climbs 150→600 through the up-leg; its ST long fires mid-climb and
+    # stays running to the last bar, so the entry-bar premium is far below the last close.
+    premium = _candles(_fresh_long_path())
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return fired
+            return premium
+
+    base = int(round(fired[-1].close / 50) * 50)
+    nfo = _wide_ce_pe_chain(base)
+    conf = [UniverseItem("ACME", "ACME", 100, "NSE", "NFO")]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], confluence_universe=conf)
+    row = max((r for r in sc.snapshot("u1").rows if r.source == "confluence"),
+              key=lambda r: r.timestamp_ms)
+    leg = row.legs[0]
+    assert leg.is_active  # the confirmed premium leg is running (entered bars ago), not fresh
+
+    current_premium = float(premium[-1].close)
+    # The stale entry-bar premium the OLD code stamped (d.spot).
+    pick = OptionPick(option_symbol=leg.option_symbol, strike=leg.strike,
+                      option_type=leg.option_type, expiry=leg.expiry, dte=0,
+                      lot_size=leg.lot_size or 0, token=leg.token or 0)
+    drows = evaluate_derivative_contract(conf[0], "ATM", pick, premium, cfg)
+    d = max((x for x in drows if x.is_active or x.is_fresh), key=lambda x: x.timestamp_ms)
+    assert d.spot < current_premium - 100  # entry-bar premium is materially stale
+    assert leg.premium_spot == pytest.approx(current_premium)  # fix: current, not d.spot
+    assert leg.premium_spot != pytest.approx(d.spot)
+
+
+@pytest.mark.asyncio
 async def test_scan_confluence_no_row_when_premium_does_not_confirm():
     """confluence source: the underlying fires but the option premium is flat (no
     confirming BUY) → no leg confirmed → no confluence row."""

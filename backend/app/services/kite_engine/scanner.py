@@ -823,7 +823,16 @@ class KiteEngineScanner:
                             continue
                         d = max(live, key=lambda x: x.timestamp_ms)
                         leg = d.legs[0]
-                        leg.premium_spot = d.spot
+                        # Entry basis = the option's CURRENT premium (last closed bar),
+                        # NOT d.spot. d.spot is the premium at the leg's OWN ST entry bar;
+                        # when the underlying fires fresh but the premium has been trending
+                        # for several bars (is_active, not is_fresh) that is a stale historical
+                        # price. Confluence enters NOW on the underlying's fresh signal, so the
+                        # entry price is the current premium — using the stale value as
+                        # premium_spot → entry_premium would show a fake unrealized gain and,
+                        # if the WS fill postback is missed, book a wrong realized PnL into the
+                        # INR daily-loss breaker. (For a fresh leg oc[-1].close == d.spot.)
+                        leg.premium_spot = float(oc[-1].close)
                         leg.premium_sl = d.stop_loss
                         leg.entry_sl = d.entry_sl
                         leg.token = pick.token
