@@ -36,6 +36,11 @@ interface TradingViewKiteChartProps {
   drawMode?: string;
   onDrawModeChange?: (m: any) => void;
   signalData?: { timestamp_ms: number; direction: string; regime: string };
+  /** Fired once the main chart has finished a structural rebuild (createChart +
+   *  all series/indicators/drawings set) — used by the parent to hide a
+   *  switch-instrument loading overlay in sync with the actual expensive work,
+   *  not just when candle data has arrived. */
+  onChartReady?: () => void;
   // for full TV-like control inside the component
   onTfChange?: (tf: string) => void;
   onIsHAChange?: (ha: boolean) => void;
@@ -70,6 +75,7 @@ export function TradingViewKiteChart({
   onSymbolChange,
   onToggleIndicator,
   onParamsChange,
+  onChartReady,
 }: TradingViewKiteChartProps) {
   const [internalDrawings, setInternalDrawings] = useState<Drawing[]>(externalDrawings || []);
   const drawings = onDrawingsChange ? (externalDrawings || []) : internalDrawings;
@@ -105,19 +111,55 @@ export function TradingViewKiteChart({
 
   const mainChartRef = useRef<IChartApi | null>(null);
   const seriesRefs = useRef<Record<string, any>>({});
-  // Zoom continuity across chart rebuilds. The chart-creation effect re-runs on
-  // every useCandles poll (baseCandles is in its deps → the forming bar mutates
-  // ~every minute), destroying and recreating the chart. Without these, each
-  // rebuild snaps the view back to the post-setData default, so the user's zoom
-  // appears to "randomly" change while idle. We remember the last range the user
-  // was viewing (lastRangeRef) and restore it after a data-only rebuild; we track
-  // the instrument key so a genuine symbol/timeframe switch fits fresh; and we
+  // Zoom continuity across chart rebuilds. We remember the last range the user
+  // was viewing (lastRangeRef) and restore it after a genuine structural rebuild;
+  // we track the instrument key so a symbol/timeframe switch fits fresh; and we
   // track the persisted-zoom object identity so a freshly loaded saved range is
   // honoured exactly once (not re-applied over a later user pan).
   const lastRangeRef = useRef<any>(null);
   const instrumentKeyRef = useRef<string>('');
   const appliedPersistedRef = useRef<any>(null);
-  const subChartsRef = useRef<{ rsi?: IChartApi; macd?: IChartApi }>({});
+  const subChartsRef = useRef<{ rsi?: IChartApi; macd?: IChartApi; rsiSeries?: any; macdSeries?: any }>({});
+  // Always-fresh candle data + related inputs, read by the chart-creation effects
+  // via `.current` instead of a reactive dependency. The forming (in-progress) bar
+  // mutates on essentially every useCandles poll, so putting `baseCandles` directly
+  // in a chart-creation effect's dep array means that effect (and its expensive
+  // chart.remove()+createChart() teardown/rebuild) reruns on every idle poll tick,
+  // not just on a genuine symbol/timeframe/indicator/theme change — this is what
+  // produced the reported "repositioning/stutter" both on load and while idle.
+  // A separate lightweight effect below pushes fresh data onto the already-built
+  // chart via setData() (no teardown) whenever only the candle data changed.
+  const baseCandlesRef = useRef<any[]>([]);
+  const activeIndicatorsRef = useRef<Set<string>>(new Set());
+  const paramsRef = useRef<any>({});
+  const chartTypeRef = useRef<'candles' | 'line' | 'area' | 'bars'>('candles');
+  const tvRef = useRef<any>({});
+  // symbolPos/signalData come from a 5s position poll + the signal feed, both of
+  // which hand back a brand-new object reference on every tick even when the
+  // value is unchanged. They used to sit directly in the structural effects'
+  // dep arrays below, so a plain position poll (every 5s) forced the same
+  // chart.remove()+createChart() teardown/rebuild the baseCandles fix above was
+  // written to eliminate — read via `.current` instead so only a genuine value
+  // change (new position/new signal) needs to be reflected, on the next
+  // structural rebuild rather than on every poll tick.
+  const symbolPosRef = useRef<any>(null);
+  const signalDataRef = useRef<any>(undefined);
+  // Kept fresh via a ref (not a dep) so calling it doesn't force the expensive
+  // structural effect below to re-run whenever the parent passes a new closure.
+  const onChartReadyRef = useRef<(() => void) | undefined>(onChartReady);
+  // handleChartClick/snapToOHLC come from useKiteDrawings, which hands back a
+  // NEW function identity most renders (its own useCallback deps churn as
+  // drawingPoints/drawMode/etc. tick) - measured live, this was forcing a full
+  // chart.remove()+createChart() rebuild on essentially every InstrumentPane
+  // re-render (candle poll, position poll, chart-state load settling...), not
+  // just genuine symbol/timeframe switches. That's the actual "loads at one
+  // zoom, snaps to another a split second later" bug: two (or more) full
+  // rebuilds firing in a burst right after a chart opens, each doing its own
+  // fitContent() pass. Read via `.current` instead of a reactive dependency,
+  // same fix already applied to baseCandles/symbolPos/signalData above.
+  const handleChartClickRef = useRef(handleChartClick);
+  const snapToOHLCRef = useRef(snapToOHLC);
+  const lastSyncedCandlesRef = useRef<any[] | null>(null);
   // Baseline {from,to} for wheel-driven price-axis zoom (see handlePriceAxisWheel
   // below) - re-seeded from the live auto-fit range whenever the price scale is
   // in (or returns to, via native double-click reset) autoScale mode, so clamp
@@ -325,6 +367,15 @@ export function TradingViewKiteChart({
   const baseCandles = useMemo(() => {
     return isHA ? heikinAshi(candles as Candle[]) : (candles as Candle[]);
   }, [candles, isHA]);
+  // Boolean (not the array itself) so it only flips once, on the empty->non-empty
+  // transition, instead of on every poll tick like `baseCandles` would. The three
+  // structural chart-build effects below read candle data via baseCandlesRef and
+  // bail out with no chart when it's still empty (candles not fetched yet) - on a
+  // fresh mount that race is common (this effect runs before the async candle
+  // fetch resolves), and none of those effects' other deps change once the data
+  // lands, so without this they never got a second chance to build the chart -
+  // the "first load goes blank forever" bug.
+  const hasCandles = baseCandles.length > 0;
 
   // local effective theme (dark/light)
   const effTheme = theme;
@@ -378,6 +429,20 @@ export function TradingViewKiteChart({
     green: theme.green || '#089981',
     red: theme.red || '#f23645',
   }), [isDark, theme]);
+
+  // Keep always-fresh refs in sync every render (cheap; no extra re-renders caused).
+  // Read by the data-only sync effect further below instead of being reactive
+  // dependencies, so that effect isn't tied to indicator/param/theme identity.
+  baseCandlesRef.current = baseCandles;
+  onChartReadyRef.current = onChartReady;
+  handleChartClickRef.current = handleChartClick;
+  snapToOHLCRef.current = snapToOHLC;
+  activeIndicatorsRef.current = activeIndicators;
+  paramsRef.current = params;
+  chartTypeRef.current = chartType;
+  tvRef.current = tv;
+  symbolPosRef.current = symbolPos;
+  signalDataRef.current = signalData;
 
   // Compute volume profile data (full histogram)
   const volumeProfile = useMemo(() => {
@@ -552,8 +617,16 @@ export function TradingViewKiteChart({
     if (drawingPoints.length === 0) clearPreview();
   }, [drawingPoints, clearPreview]);
 
-  // Main chart + indicators + drawings creation
+  // Main chart + indicators + drawings creation. Reads baseCandles via the ref
+  // (kept fresh every render above) instead of depending on it reactively, so
+  // this full teardown+rebuild only runs on genuine structural changes (symbol/
+  // timeframe/indicator/theme/etc) — not on every candle-data poll tick. See the
+  // data-only sync effect further below for the "just push new candle data"
+  // path that doesn't touch the chart instance at all.
   useEffect(() => {
+    const baseCandles = baseCandlesRef.current;
+    const symbolPos = symbolPosRef.current;
+    const signalData = signalDataRef.current;
     if (layoutMode !== '1' || !mainRef.current || !baseCandles.length) return;
 
     if (mainChartRef.current) {
@@ -589,7 +662,13 @@ export function TradingViewKiteChart({
         secondsVisible: false,
         rightOffset: 12,
         fixLeftEdge: false,
-        lockVisibleTimeRangeOnResize: true,
+        // false (not the library default true): a container resize (e.g. the
+        // bottom-terminal's 0.2s collapse animation firing right as a chart
+        // opens) must NOT re-stretch the already-visible bars to fill the new
+        // width - that reads as "the zoom level changed" with no user action.
+        // false keeps bar spacing (px/bar) constant across a resize and reveals
+        // more/less history at the edges instead, matching real TradingView feel.
+        lockVisibleTimeRangeOnResize: false,
         rightBarStaysOnScroll: true,
         minBarSpacing: 0.5,
         // @ts-ignore
@@ -991,7 +1070,11 @@ export function TradingViewKiteChart({
         }
       } catch { try { chart.timeScale().fitContent(); } catch {} }
     };
-    setTimeout(applyView, 50);
+    // Apply synchronously (no setTimeout) so the browser never paints the
+    // library's default auto-fit frame before the persisted/last-viewed range
+    // is applied - that gap was the visible "jump" on chart load.
+    applyView();
+    lastSyncedCandlesRef.current = baseCandles;
 
     // Crosshair OHLC (pin-point) + live dashed preview for in-progress multi-point drawings
     chart.subscribeCrosshairMove((param: any) => {
@@ -1010,7 +1093,7 @@ export function TradingViewKiteChart({
         else if (typeof c === 'number') priceVal = c;
         if (priceVal == null && baseCandles.length) priceVal = baseCandles[baseCandles.length - 1].close;
         if (priceVal != null) {
-          const snapped = snapToOHLC(priceVal, baseCandles, chart.timeScale().getVisibleRange());
+          const snapped = snapToOHLCRef.current(priceVal, baseCandles, chart.timeScale().getVisibleRange());
           renderPreview([...basePts, { time: param.time as number, price: snapped }], mode);
         }
       } else {
@@ -1020,8 +1103,8 @@ export function TradingViewKiteChart({
 
     // Drawing placement via click
     chart.subscribeClick((param: any) => {
-      const snapFn = (p: number, bc: any[], _r?: any) => snapToOHLC(p, bc, chart.timeScale().getVisibleRange());
-      handleChartClick(param, baseCandles, chart, tv, snapFn);
+      const snapFn = (p: number, bc: any[], _r?: any) => snapToOHLCRef.current(p, bc, chart.timeScale().getVisibleRange());
+      handleChartClickRef.current(param, baseCandles, chart, tv, snapFn);
     });
 
     const ro = new ResizeObserver(() => {
@@ -1055,7 +1138,7 @@ export function TradingViewKiteChart({
     ts.subscribeVisibleTimeRangeChange(handleSync);
 
     // initial profile + handles + price badge + scale width
-    setTimeout(() => { drawVolumeProfile(); drawHandles(); updatePriceBadge(); updateRightScaleWidth(); }, 120);
+    setTimeout(() => { drawVolumeProfile(); drawHandles(); updatePriceBadge(); updateRightScaleWidth(); onChartReadyRef.current?.(); }, 120);
 
     return () => {
       try { ts.unsubscribeVisibleTimeRangeChange(zh); } catch {}
@@ -1068,10 +1151,13 @@ export function TradingViewKiteChart({
       previewSeriesRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, snapToOHLC, onZoomChange, showVP, chartType, layoutMode, signalData, symbolPos]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles]);
 
-  // Sub RSI pane
+  // Sub RSI pane. Reads baseCandles via the ref (see main chart effect above) so
+  // this pane also only tears down/rebuilds on structural changes, not on every
+  // candle-data poll tick.
   useEffect(() => {
+    const baseCandles = baseCandlesRef.current;
     const el = rsiRef.current;
     const main = mainChartRef.current;
     if (layoutMode !== '1' || !el || !activeIndicators.has('rsi') || !baseCandles.length) {
@@ -1083,7 +1169,10 @@ export function TradingViewKiteChart({
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },
+      // lockVisibleTimeRangeOnResize: false to match the main chart above -
+      // keeps bar spacing in sync with it across a resize instead of the sub-pane
+      // stretching independently while the main pane doesn't (or vice versa).
+      timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: false, minBarSpacing: 0.5 },
       handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
       handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
       kineticScroll: { mouse: true, touch: true },
@@ -1099,6 +1188,7 @@ export function TradingViewKiteChart({
     ob.setData(times.map(t => ({ time: t as any, value: 70 })));
     os.setData(times.map(t => ({ time: t as any, value: 30 })));
     subChartsRef.current.rsi = rChart;
+    subChartsRef.current.rsiSeries = { line, ob, os };
 
     // Track the subscribed callback so cleanup can unsubscribe it from the
     // exact main-chart instance it was attached to (the main chart is torn
@@ -1115,18 +1205,19 @@ export function TradingViewKiteChart({
     ro.observe(el);
     return () => {
       if (main && sync) { try { main.timeScale().unsubscribeVisibleTimeRangeChange(sync); } catch {} }
-      ro.disconnect(); rChart.remove(); subChartsRef.current.rsi = undefined;
+      ro.disconnect(); rChart.remove(); subChartsRef.current.rsi = undefined; subChartsRef.current.rsiSeries = undefined;
     };
     // Deps intentionally mirror the main chart-creation effect's dep array
-    // (minus snapToOHLC, which this pane never calls) so this pane is torn
-    // down/recreated in lockstep with the main chart on every trigger that
-    // rebuilds it — otherwise `sync` above goes stale against a disposed
-    // chart instance.
+    // (minus baseCandles/snapToOHLC - see the comment above this effect) so
+    // this pane is torn down/recreated in lockstep with the main chart on every
+    // trigger that rebuilds it — otherwise `sync` above goes stale against a
+    // disposed chart instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, onZoomChange, showVP, chartType, layoutMode, signalData, symbolPos]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles]);
 
-  // Sub MACD pane
+  // Sub MACD pane. Reads baseCandles via the ref - see the RSI pane above.
   useEffect(() => {
+    const baseCandles = baseCandlesRef.current;
     const el = macdRef.current;
     const main = mainChartRef.current;
     if (layoutMode !== '1' || !el || !activeIndicators.has('macd') || !baseCandles.length) {
@@ -1138,7 +1229,10 @@ export function TradingViewKiteChart({
       grid: { vertLines: { visible: false }, horzLines: { visible: false } },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: true, minBarSpacing: 0.5 },
+      // lockVisibleTimeRangeOnResize: false to match the main chart above -
+      // keeps bar spacing in sync with it across a resize instead of the sub-pane
+      // stretching independently while the main pane doesn't (or vice versa).
+      timeScale: { borderVisible: false, timeVisible: true, rightBarStaysOnScroll: true, lockVisibleTimeRangeOnResize: false, minBarSpacing: 0.5 },
       handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
       handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
       kineticScroll: { mouse: true, touch: true },
@@ -1154,6 +1248,7 @@ export function TradingViewKiteChart({
     sl.setData(m.flatMap((p, i) => p.signal != null ? [{ time: times[i] as any, value: p.signal }] : []));
     hist.setData(m.flatMap((p, i) => p.hist != null ? [{ time: times[i] as any, value: p.hist, color: p.hist >= 0 ? tv.green + '88' : tv.red + '88' }] : []));
     subChartsRef.current.macd = mChart;
+    subChartsRef.current.macdSeries = { ml, sl, hist };
 
     // See the RSI pane above for why `sync` is hoisted + explicitly
     // unsubscribed, and why the deps below are widened to match whatever
@@ -1167,13 +1262,102 @@ export function TradingViewKiteChart({
     ro.observe(el);
     return () => {
       if (main && sync) { try { main.timeScale().unsubscribeVisibleTimeRangeChange(sync); } catch {} }
-      ro.disconnect(); mChart.remove(); subChartsRef.current.macd = undefined;
+      ro.disconnect(); mChart.remove(); subChartsRef.current.macd = undefined; subChartsRef.current.macdSeries = undefined;
     };
     // Deps intentionally mirror the main chart-creation effect's dep array
-    // (minus snapToOHLC, which this pane never calls) — see the RSI pane
-    // above for why.
+    // (minus baseCandles/snapToOHLC) — see the RSI pane above for why.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseCandles, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, handleChartClick, onZoomChange, showVP, chartType, layoutMode, signalData, symbolPos]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles]);
+
+  // Live data-only sync: pushes fresh candle data onto the ALREADY-BUILT chart(s)
+  // via setData() whenever only the candle data changed (the common idle-poll
+  // case, since the in-progress bar mutates on ~every useCandles tick) — no
+  // chart.remove()/createChart(), no ResizeObserver/crosshair resubscription, no
+  // zoom reset. SuperTrend runs, drawings, and markers are intentionally left
+  // alone here (they only need a recompute on a structural rebuild above) since
+  // SuperTrend's per-run line series aren't tracked by stable keys and can't be
+  // patched in place without leaking series on every tick.
+  useEffect(() => {
+    const chart = mainChartRef.current;
+    if (!chart || !baseCandles.length) return;
+    if (lastSyncedCandlesRef.current === baseCandles) return; // just applied by a structural rebuild this tick
+    lastSyncedCandlesRef.current = baseCandles;
+
+    const ind = activeIndicatorsRef.current;
+    const p = paramsRef.current;
+    const ct = chartTypeRef.current;
+    const tv2 = tvRef.current;
+    const refs = seriesRefs.current;
+
+    const times = baseCandles.map((c: any) => c.time);
+    const closes = baseCandles.map((c: any) => c.close);
+
+    try {
+      if (refs.main) {
+        const data = baseCandles.map((b: any) => (ct === 'line' || ct === 'area')
+          ? { time: b.time as any, value: b.close }
+          : { time: b.time as any, open: b.open, high: b.high, low: b.low, close: b.close });
+        refs.main.setData(data);
+      }
+      if (ind.has('ema')) {
+        refs.ema9?.setData(ema(closes, p.ema1 || 9).flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
+        refs.ema21?.setData(ema(closes, p.ema2 || 21).flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
+      }
+      if (ind.has('bb') && refs.bbMid) {
+        const bb = bollingerBands(closes, p.bbPeriod || 20, p.bbStd || 2);
+        refs.bbMid.setData(bb.flatMap((b, i) => (b.middle != null ? [{ time: times[i] as any, value: b.middle }] : [])));
+        refs.bbUpper?.setData(bb.flatMap((b, i) => (b.upper != null ? [{ time: times[i] as any, value: b.upper }] : [])));
+        refs.bbLower?.setData(bb.flatMap((b, i) => (b.lower != null ? [{ time: times[i] as any, value: b.lower }] : [])));
+      }
+      if (ind.has('vwap') && refs.vwap) {
+        const v = vwap(baseCandles as any);
+        refs.vwap.setData(v.map((pt) => ({ time: pt.time as any, value: pt.value })));
+      }
+      if (ind.has('vol') && refs.vol) {
+        refs.vol.setData(baseCandles.map((b: any) => ({
+          time: b.time as any, value: b.volume || 0,
+          color: b.close >= b.open ? `${tv2.green}55` : `${tv2.red}55`,
+        })));
+      }
+    } catch { /* a mid-tick series/chart disposal race - next poll will retry */ }
+
+    // Price flash badge (mirrors the structural effect's updatePriceBadge)
+    try {
+      if (refs.main && baseCandles.length) {
+        const lastClose = baseCandles[baseCandles.length - 1].close;
+        const y = refs.main.priceToCoordinate ? refs.main.priceToCoordinate(lastClose) : null;
+        if (y != null) {
+          const prev = prevCloseRef.current;
+          if (prev != null && prev !== lastClose) {
+            const dir: 'up' | 'down' = lastClose > prev ? 'up' : 'down';
+            setPriceFlashDir(dir);
+            if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+            flashTimeoutRef.current = setTimeout(() => setPriceFlashDir(null), 400);
+          }
+          prevCloseRef.current = lastClose;
+          setPriceBadge({ y, price: lastClose });
+        }
+      }
+    } catch {}
+
+    // RSI / MACD sub-panes
+    try {
+      const rsiSeries = subChartsRef.current.rsiSeries;
+      if (subChartsRef.current.rsi && rsiSeries && ind.has('rsi')) {
+        const r = rsi(closes, p.rsiPeriod || 14);
+        rsiSeries.line.setData(r.flatMap((v: any, i: number) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
+        rsiSeries.ob.setData(times.map((t: number) => ({ time: t as any, value: 70 })));
+        rsiSeries.os.setData(times.map((t: number) => ({ time: t as any, value: 30 })));
+      }
+      const macdSeries = subChartsRef.current.macdSeries;
+      if (subChartsRef.current.macd && macdSeries && ind.has('macd')) {
+        const m = macd(closes, p.macdFast || 12, p.macdSlow || 26, p.macdSig || 9);
+        macdSeries.ml.setData(m.flatMap((pt, i) => (pt.macd != null ? [{ time: times[i] as any, value: pt.macd }] : [])));
+        macdSeries.sl.setData(m.flatMap((pt, i) => (pt.signal != null ? [{ time: times[i] as any, value: pt.signal }] : [])));
+        macdSeries.hist.setData(m.flatMap((pt, i) => (pt.hist != null ? [{ time: times[i] as any, value: pt.hist, color: pt.hist >= 0 ? tv2.green + '88' : tv2.red + '88' }] : [])));
+      }
+    } catch { /* sub-pane may be mid-teardown from a concurrent structural rebuild */ }
+  }, [baseCandles]);
 
   // Redraw profile + handles when relevant
   useEffect(() => { setTimeout(drawVolumeProfile, 30); }, [drawVolumeProfile, showVP, volumeProfile]);

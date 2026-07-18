@@ -23,13 +23,20 @@ export interface KiteSettingsState {
   showLeg: boolean;
   sortBy: string;
   legSort: { key: string; dir: string };
+  /** Signal-table column order, drag-to-reorder. Two independent groups matching
+   *  the table's two flex sections (left flowing group vs. right price-pinned
+   *  group) — see SIGNAL_LEFT_COLUMNS/SIGNAL_RIGHT_COLUMNS in
+   *  SterlingKiteEnginePane.tsx for the width/label source of truth each key maps to. */
+  signalLeftColumnOrder: string[];
+  signalRightColumnOrder: string[];
   setMacKite: (on: boolean) => void;
   setLoaderStyle: (s: LoaderStyle) => void;
   setEngineSettingsLayout: (l: 'tabs' | 'cards') => void;
   setChgType: (t: 'close' | 'open') => void;
-  toggleShow: (key: keyof Omit<KiteSettingsState, 'chgType'|'sortBy'|'setChgType'|'toggleShow'|'setSortBy'|'legSort'|'setLegSort'|'macKite'|'setMacKite'|'loaderStyle'|'setLoaderStyle'|'engineSettingsLayout'|'setEngineSettingsLayout'>) => void;
+  toggleShow: (key: keyof Omit<KiteSettingsState, 'chgType'|'sortBy'|'setChgType'|'toggleShow'|'setSortBy'|'legSort'|'setLegSort'|'macKite'|'setMacKite'|'loaderStyle'|'setLoaderStyle'|'engineSettingsLayout'|'setEngineSettingsLayout'|'signalLeftColumnOrder'|'signalRightColumnOrder'|'reorderSignalColumn'>) => void;
   setSortBy: (s: string) => void;
   setLegSort: (sort: { key: string; dir: string }) => void;
+  reorderSignalColumn: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
 }
 
 export const useKiteSettings = create<KiteSettingsState>()(
@@ -49,6 +56,8 @@ export const useKiteSettings = create<KiteSettingsState>()(
       showLeg: true,
       sortBy: 'Custom',
       legSort: { key: '', dir: '' },
+      signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
+      signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
       setMacKite: (on) => set({ macKite: on }),
       setLoaderStyle: (s) => set({ loaderStyle: s }),
       setEngineSettingsLayout: (l) => set({ engineSettingsLayout: l }),
@@ -56,6 +65,16 @@ export const useKiteSettings = create<KiteSettingsState>()(
       toggleShow: (key) => set((state) => ({ [key]: !state[key as keyof KiteSettingsState] })),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
+      reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
+        const field = group === 'left' ? 'signalLeftColumnOrder' : 'signalRightColumnOrder';
+        const order = [...state[field]];
+        const fromIdx = order.indexOf(fromKey);
+        const toIdx = order.indexOf(toKey);
+        if (fromIdx === -1 || toIdx === -1) return {};
+        order.splice(fromIdx, 1);
+        order.splice(toIdx, 0, fromKey);
+        return { [field]: order } as Partial<KiteSettingsState>;
+      }),
     }),
     {
       name: 'kite-settings',

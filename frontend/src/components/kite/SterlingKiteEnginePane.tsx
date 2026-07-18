@@ -12,6 +12,7 @@ import type {
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
+import { KiteLoader } from './KiteLoader';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './SterlingWatchList';
 import { KiteActionButtons } from './KiteActionButtons';
@@ -189,6 +190,126 @@ export function SortHeaderDiv({ label, sortKey, sort, handleSort, style, align =
       </div>
     </div>
   );
+}
+
+/** Single source of truth for the signal-table column widths/labels — read by
+ *  BOTH the list-view header and each leg row so they can never drift out of
+ *  alignment (previously each side hand-typed its own copy of every width).
+ *  Split into two groups matching the table's two flex sections: LEFT flows
+ *  next to the (flex:1) Instrument column; RIGHT is pinned after the action
+ *  buttons. `visibleWhen` is a tag both the header and the row resolve against
+ *  their own (equivalent, differently-named) boolean for that condition. */
+type SignalColVisibility = 'always' | 'exchange' | 'leg' | 'premium' | 'chg' | 'chgPct' | 'dir';
+interface SignalColumnDef {
+  key: string;
+  label: string;
+  width: number;
+  align: 'left' | 'right';
+  sortKey?: string;
+  tooltip?: string;
+  visibleWhen: SignalColVisibility;
+}
+const SIGNAL_LEFT_COLUMNS: Record<string, SignalColumnDef> = {
+  exc: { key: 'exc', label: 'Exc.', width: 40, align: 'left', sortKey: 'exc', visibleWhen: 'exchange' },
+  leg: { key: 'leg', label: 'Leg (Δ)', width: 78, align: 'right', sortKey: 'leg', visibleWhen: 'leg' },
+  entry: { key: 'entry', label: 'Entry (Δpts)', width: 96, align: 'right', sortKey: 'entry', visibleWhen: 'premium' },
+  sl: { key: 'sl', label: 'SL', width: 56, align: 'right', sortKey: 'sl', visibleWhen: 'premium' },
+  tsl: { key: 'tsl', label: 'TSL', width: 56, align: 'right', sortKey: 'stop', visibleWhen: 'premium' },
+  exit: { key: 'exit', label: 'Exit', width: 58, align: 'right', visibleWhen: 'always', tooltip: 'Red-counter progress toward the auto-exit rule (exit_mode)' },
+  target: { key: 'target', label: 'Target', width: 44, align: 'right', visibleWhen: 'premium', tooltip: 'Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)' },
+};
+const SIGNAL_RIGHT_COLUMNS: Record<string, SignalColumnDef> = {
+  chg: { key: 'chg', label: 'Chg.', width: 50, align: 'right', sortKey: 'chg', visibleWhen: 'chg' },
+  chgPct: { key: 'chgPct', label: 'Chg. %', width: 60, align: 'right', sortKey: 'chgPct', visibleWhen: 'chgPct' },
+  dir: { key: 'dir', label: '', width: 14, align: 'right', visibleWhen: 'dir' },
+  ltp: { key: 'ltp', label: 'LTP', width: 70, align: 'right', sortKey: 'ltp', visibleWhen: 'always' },
+};
+/** Drag-to-reorder header cell wrapper. Uses raw pointer events (not native
+ *  HTML5 draggable/dragstart) because native drag-and-drop's gesture
+ *  recognition is unreliable for plain `<div>`s across browsers/trackpads —
+ *  many devices never fire `dragstart` for a generic element, which is why
+ *  this looked wired up correctly yet didn't respond to a real drag. Pointer
+ *  events are dispatched directly for every mouse/touch/pen down-move-up, so
+ *  there's no browser-level gesture heuristic in the way. */
+function DraggableColHeader({ colKey, group, width, reorder, children }: {
+  colKey: string; group: 'left' | 'right'; width: number;
+  reorder: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
+  children: React.ReactNode;
+}) {
+  const draggingRef = React.useRef(false);
+  const startRef = React.useRef<{ x: number; y: number } | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    startRef.current = { x: e.clientX, y: e.clientY };
+    draggingRef.current = false;
+
+    const clearHighlight = () => {
+      document.querySelectorAll('.col-drag-over').forEach((el) => el.classList.remove('col-drag-over'));
+    };
+    const targetAt = (x: number, y: number) =>
+      document.elementFromPoint(x, y)?.closest('[data-col-key]') as HTMLElement | null;
+
+    const onMove = (ev: PointerEvent) => {
+      const start = startRef.current;
+      if (!start) return;
+      if (!draggingRef.current) {
+        // Small movement threshold so a plain click still reaches the sort handler.
+        if (Math.abs(ev.clientX - start.x) < 4 && Math.abs(ev.clientY - start.y) < 4) return;
+        draggingRef.current = true;
+        document.body.style.cursor = 'grabbing';
+      }
+      clearHighlight();
+      const el = targetAt(ev.clientX, ev.clientY);
+      if (el && el.getAttribute('data-col-group') === group && el.getAttribute('data-col-key') !== colKey) {
+        el.classList.add('col-drag-over');
+      }
+    };
+    const onUp = (ev: PointerEvent) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.body.style.cursor = '';
+      clearHighlight();
+      if (draggingRef.current) {
+        const el = targetAt(ev.clientX, ev.clientY);
+        const toKey = el?.getAttribute('data-col-key');
+        if (toKey && el?.getAttribute('data-col-group') === group && toKey !== colKey) {
+          reorder(group, colKey, toKey);
+        }
+        // A drag that ends over a different header would otherwise still fire
+        // that header's onClick (sort) right after pointerup - swallow it once.
+        document.addEventListener('click', (ce) => { ce.stopPropagation(); ce.preventDefault(); }, { capture: true, once: true });
+      }
+      draggingRef.current = false;
+      startRef.current = null;
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  };
+
+  return (
+    <div
+      data-col-key={colKey}
+      data-col-group={group}
+      onPointerDown={onPointerDown}
+      style={{ width, flexShrink: 0, cursor: 'grab', userSelect: 'none', touchAction: 'none' }}
+      title="Drag to reorder column"
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Header row and each leg row now scroll independently (both can overflow a
+ *  narrow right-sidebar width) — without syncing scrollLeft between them, a
+ *  scrolled row's columns stop lining up under the header's labels. Shared at
+ *  module scope since the header lives in SterlingKiteEnginePane while each
+ *  row is its own SignalCard instance. */
+function syncHscroll(e: React.UIEvent<HTMLDivElement>) {
+  const left = e.currentTarget.scrollLeft;
+  document.querySelectorAll('.st-header-row, .st-leg-row').forEach((el) => {
+    if (el !== e.currentTarget) (el as HTMLElement).scrollLeft = left;
+  });
 }
 
 // A long option leg has EXITED once the last scan flagged its SuperTrend as no longer
@@ -718,12 +839,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           return (
             <div key={leg.option_symbol}>
               <div 
-                className="st-leg-row" 
+                className="st-leg-row"
+                onScroll={syncHscroll}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
                 style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1, overflow: 'hidden' }}>
-                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
+                   <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
                        <span title="Best reward-to-risk within its ITM/ATM/OTM bucket for a 1R move"
@@ -734,57 +855,83 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                          style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
                      )}
                    </span>
-                   {s.showExchange && (
-                     <span style={{ fontSize: 11, color: k.dim, width: 40, flexShrink: 0 }}>
-                       {row.exchange}
-                     </span>
-                   )}
-                   {s.showLeg && (
-                     <span style={{ fontSize: 11, color: k.dim, width: 78, flexShrink: 0 }}>
-                       {leg.moneyness}
-                       {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
-                     </span>
-                   )}
-                   {showPremiumCols && (
-                     // Entry — fired fill premium. Dimmed + struck once the trend flips
-                     // (history, not a live order). Bracket = live LTP move from entry.
-                     // '—' for a spot-source row (no per-leg premium) so the column stays aligned.
-                     <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: 96, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                       {entryPx != null ? entryPx.toFixed(2) : '—'}
-                       {entryDiff != null && (
-                         <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
-                           ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
-                         </span>
-                       )}
-                     </span>
-                   )}
-                   {showPremiumCols && (
-                     // SL — initial hard stop at the entry bar (fast ST line), static.
-                     <span title="Initial stop at entry (fast SuperTrend line)" style={{ fontSize: 10, color: k.dim, width: 56, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                       {initSlPx != null ? initSlPx.toFixed(1) : '—'}
-                     </span>
-                   )}
-                   {showPremiumCols && (
-                     // TSL — live ratcheting trail stop (tightens as ST lines flip red).
-                     <span title="Trailing stop — ratchets tighter as SuperTrend lines flip red" style={{ fontSize: 10, color: k.dim, width: 56, textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                       {slPx != null ? slPx.toFixed(1) : '—'}
-                     </span>
-                   )}
-                   {/* Exit — red-counter progress toward the auto-exit rule (row-level) */}
-                   <span title="Red-counter progress toward the auto-exit rule (exit_mode)" style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: 58, textAlign: 'right', flexShrink: 0 }}>
-                     {row.exit_state ?? '—'}
-                   </span>
-                   {showPremiumCols && (
-                     // Target — trend-following: no fixed take-profit. Exit is owned by the
-                     // trail (TSL) + the red counter (Exit), so this stays "— (trail)".
-                     <span title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)" style={{ fontSize: 10, color: k.dim, width: 44, textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
-                       —
-                     </span>
-                   )}
-                </div>
+                   {(() => {
+                     const colVisible: Record<SignalColVisibility, boolean> = {
+                       always: true, exchange: s.showExchange, leg: s.showLeg,
+                       premium: showPremiumCols, chg: s.showPriceChange,
+                       chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
+                     };
+                     const renderLeftCell = (key: string) => {
+                       switch (key) {
+                         case 'exc':
+                           return <span style={{ fontSize: 11, color: k.dim, width: '100%', flexShrink: 0 }}>{row.exchange}</span>;
+                         case 'leg':
+                           return (
+                             <span style={{ fontSize: 11, color: k.dim, width: '100%', flexShrink: 0 }}>
+                               {leg.moneyness}
+                               {deltaTxt && <span style={{ opacity: 0.75 }}> (Δ{deltaTxt})</span>}
+                             </span>
+                           );
+                         case 'entry':
+                           // Fired fill premium. Dimmed + struck once the trend flips (history,
+                           // not a live order). Bracket = live LTP move from entry. '—' for a
+                           // spot-source row (no per-leg premium) so the column stays aligned.
+                           return (
+                             <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               {entryPx != null ? entryPx.toFixed(2) : '—'}
+                               {entryDiff != null && (
+                                 <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
+                                   ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
+                                 </span>
+                               )}
+                             </span>
+                           );
+                         case 'sl':
+                           // Initial hard stop at the entry bar (fast ST line), static.
+                           return (
+                             <span title="Initial stop at entry (fast SuperTrend line)" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               {initSlPx != null ? initSlPx.toFixed(1) : '—'}
+                             </span>
+                           );
+                         case 'tsl':
+                           // Live ratcheting trail stop (tightens as ST lines flip red).
+                           return (
+                             <span title="Trailing stop — ratchets tighter as SuperTrend lines flip red" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               {slPx != null ? slPx.toFixed(1) : '—'}
+                             </span>
+                           );
+                         case 'exit':
+                           // Red-counter progress toward the auto-exit rule (row-level).
+                           return (
+                             <span title="Red-counter progress toward the auto-exit rule (exit_mode)" style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
+                               {row.exit_state ?? '—'}
+                             </span>
+                           );
+                         case 'target':
+                           // Trend-following: no fixed take-profit. Exit is owned by the
+                           // trail (TSL) + the red counter (Exit), so this stays "—".
+                           return (
+                             <span title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
+                               —
+                             </span>
+                           );
+                         default:
+                           return null;
+                       }
+                     };
+                     return s.signalLeftColumnOrder.map((key) => {
+                       const col = SIGNAL_LEFT_COLUMNS[key];
+                       if (!col || !colVisible[col.visibleWhen]) return null;
+                       return (
+                         <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
+                           {renderLeftCell(col.key)}
+                         </div>
+                       );
+                     });
+                   })()}
 
                 {!isExp && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, overflow: 'hidden', flexShrink: 0, marginLeft: 'auto' }}>
                     <KiteActionButtons
                       className="st-actions-persistent"
                       onBuy={(e) => {
@@ -811,17 +958,45 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     />
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      {s.showPriceChange && <span style={{ color: k.dim, fontSize: 11, width: 50, textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>}
-                      {s.showPriceChangePct && <span style={{ color: k.text, fontSize: 11, width: 60, textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>}
-                      {s.showPriceDirection && (
-                        <span style={{ color: color, display: 'flex', alignItems: 'center', width: 14, justifyContent: 'center' }}>
-                          {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
-                          {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
-                        </span>
-                      )}
-                      <span style={{ color: color, fontWeight: 500, fontSize: 13, width: 70, textAlign: 'right' }}>
-                        {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
-                      </span>
+                      {(() => {
+                        const colVisible: Record<SignalColVisibility, boolean> = {
+                          always: true, exchange: s.showExchange, leg: s.showLeg,
+                          premium: showPremiumCols, chg: s.showPriceChange,
+                          chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
+                        };
+                        const renderRightCell = (key: string) => {
+                          switch (key) {
+                            case 'chg':
+                              return <span style={{ color: k.dim, fontSize: 11, width: '100%', textAlign: 'right' }}>{chgAbs != null ? chgAbs.toFixed(2) : '—'}</span>;
+                            case 'chgPct':
+                              return <span style={{ color: k.text, fontSize: 11, width: '100%', textAlign: 'right' }}>{chgPct != null ? `${chgPct.toFixed(2)}%` : '—'}</span>;
+                            case 'dir':
+                              return (
+                                <span style={{ color: color, display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
+                                  {chgAbs != null && chgAbs !== 0 ? (chgAbs > 0 ? <Icons.ChevronUp /> : <Icons.ChevronDown />) : null}
+                                  {chgAbs === 0 && <span style={{fontSize:14, padding:'0 2px', lineHeight:1}}>∘</span>}
+                                </span>
+                              );
+                            case 'ltp':
+                              return (
+                                <span style={{ color: color, fontWeight: 500, fontSize: 13, width: '100%', textAlign: 'right' }}>
+                                  {lastPx != null ? lastPx.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                                </span>
+                              );
+                            default:
+                              return null;
+                          }
+                        };
+                        return s.signalRightColumnOrder.map((key) => {
+                          const col = SIGNAL_RIGHT_COLUMNS[key];
+                          if (!col || !colVisible[col.visibleWhen]) return null;
+                          return (
+                            <div key={col.key} style={{ width: col.width, flexShrink: 0 }}>
+                              {renderRightCell(col.key)}
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
 
                     <KiteActionButtons
@@ -1985,28 +2160,51 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             </div>
           </div>
           {viewLayout === 'list' && (
-            <div style={{ 
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 32,
+            <div className="st-header-row" onScroll={syncHscroll} style={{
+              display: 'flex', alignItems: 'center', gap: 16,
               padding: '12px 16px', fontSize: 12, fontWeight: 400, color: k.dim, borderBottom: `1px solid ${k.border}`,
-              overflow: 'hidden',
+              overflowX: 'auto', overflowY: 'hidden',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0, paddingRight: 8, flex: 1, overflow: 'hidden' }}>
-                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: 1 }} />
-                 {s.showExchange && <SortHeaderDiv label="Exc." sortKey="exc" sort={legSort} handleSort={handleLegSort} style={{ width: 40, flexShrink: 0 }} />}
-                 {s.showLeg && <SortHeaderDiv label="Leg (Δ)" sortKey="leg" sort={legSort} handleSort={handleLegSort} style={{ width: 78, flexShrink: 0 }} />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="Entry (Δpts)" sortKey="entry" sort={legSort} handleSort={handleLegSort} style={{ width: 96, flexShrink: 0 }} align="right" />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="SL" sortKey="sl" sort={legSort} handleSort={handleLegSort} style={{ width: 56, flexShrink: 0 }} align="right" />}
-                 {cfg?.scan_source !== 'spot' && <SortHeaderDiv label="TSL" sortKey="stop" sort={legSort} handleSort={handleLegSort} style={{ width: 56, flexShrink: 0 }} align="right" />}
-                 <span style={{ width: 58, flexShrink: 0, textAlign: 'right' }} title="Red-counter progress toward the auto-exit rule (exit_mode)">Exit</span>
-                 {cfg?.scan_source !== 'spot' && <span style={{ width: 44, flexShrink: 0, textAlign: 'right' }} title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)">Target</span>}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexShrink: 0 }}>
+                 <SortHeaderDiv label="Instrument" sortKey="instrument" sort={legSort} handleSort={handleLegSort} style={{ flex: '1 1 150px', minWidth: 150 }} />
+                 {(() => {
+                   const colVisible: Record<SignalColVisibility, boolean> = {
+                     always: true, exchange: s.showExchange, leg: s.showLeg,
+                     premium: cfg?.scan_source !== 'spot', chg: s.showPriceChange,
+                     chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
+                   };
+                   return s.signalLeftColumnOrder.map((key) => {
+                     const col = SIGNAL_LEFT_COLUMNS[key];
+                     if (!col || !colVisible[col.visibleWhen]) return null;
+                     return (
+                       <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn}>
+                         {col.sortKey
+                           ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
+                           : <span style={{ display: 'block', width: '100%', textAlign: col.align }} title={col.tooltip}>{col.label}</span>}
+                       </DraggableColHeader>
+                     );
+                   });
+                 })()}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16, flexShrink: 0, marginLeft: 'auto' }}>
                  <div style={{ width: 150 }}></div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                   {s.showPriceChange && <SortHeaderDiv label="Chg." sortKey="chg" sort={legSort} handleSort={handleLegSort} style={{ width: 50 }} align="right" />}
-                   {s.showPriceChangePct && <SortHeaderDiv label="Chg. %" sortKey="chgPct" sort={legSort} handleSort={handleLegSort} style={{ width: 60 }} align="right" />}
-                   {s.showPriceDirection && <span style={{ width: 14 }}></span>}
-                   <SortHeaderDiv label="LTP" sortKey="ltp" sort={legSort} handleSort={handleLegSort} style={{ width: 70 }} align="right" />
+                   {(() => {
+                     const colVisible: Record<SignalColVisibility, boolean> = {
+                       always: true, exchange: s.showExchange, leg: s.showLeg,
+                       premium: cfg?.scan_source !== 'spot', chg: s.showPriceChange,
+                       chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
+                     };
+                     return s.signalRightColumnOrder.map((key) => {
+                       const col = SIGNAL_RIGHT_COLUMNS[key];
+                       if (!col || !colVisible[col.visibleWhen]) return null;
+                       return (
+                         <DraggableColHeader key={col.key} colKey={col.key} group="right" width={col.width} reorder={s.reorderSignalColumn}>
+                           {col.sortKey
+                             ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
+                             : <span style={{ display: 'block', width: '100%' }} />}
+                         </DraggableColHeader>
+                       );
+                     });
+                   })()}
                  </div>
                  <div style={{ width: 28 }}></div>
               </div>
@@ -2019,18 +2217,26 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           position: relative;
         }
 
+        .col-drag-over {
+          box-shadow: inset 2px 0 0 0 ${k.blue};
+        }
+
         .st-leg-row {
           position: relative;
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          gap: 32px;
+          gap: 16px;
           height: 41px;
           padding: 0 16px;
           box-sizing: border-box;
           border-bottom: 1px solid ${k.border};
-          overflow: hidden;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
         }
+        .st-leg-row::-webkit-scrollbar { display: none; }
+        .st-header-row { scrollbar-width: none; }
+        .st-header-row::-webkit-scrollbar { display: none; }
         .st-leg-row:hover { background-color: ${k.surfaceHover} !important; }
         .sort-header-div:hover { color: #444 !important; }
         .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
@@ -2373,7 +2579,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-            {scanning ? `Scanning ${signals?.scanning_label || '…'}` : signals?.market_open ? 'No active or recent setups on the board yet. The engine re-scans every ~5 min.' : `No recent signals on the board. Recent setups stay listed; the engine resumes when markets open (Mon–Fri 9:15 AM – 3:30 PM IST).`}
+            {scanning ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <KiteLoader size={26} />
+                <span>{`Scanning ${signals?.scanning_label || '…'}`}</span>
+              </div>
+            ) : signals?.market_open ? 'No active or recent setups on the board yet. The engine re-scans every ~5 min.' : `No recent signals on the board. Recent setups stay listed; the engine resumes when markets open (Mon–Fri 9:15 AM – 3:30 PM IST).`}
           </div>
         ) : (
           groupedRows.map(group => {

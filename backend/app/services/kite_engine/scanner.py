@@ -667,9 +667,7 @@ class KiteEngineScanner:
                     if log_cb:
                         try:
                             ed = datetime.strptime(pick.expiry[:10], "%Y-%m-%d")
-                            day = ed.day
-                            sfx = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-                            readable = f"{item.name} {day}{sfx} w {ed.strftime('%b').upper()} {int(pick.strike)} {pick.option_type}"
+                            readable = f"{item.name} {ed.strftime('%b').upper()} {int(pick.strike)} {pick.option_type}"
                         except Exception:
                             readable = pick.option_symbol
                         us.scanning_label = readable

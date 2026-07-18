@@ -9,6 +9,7 @@ import { heikinAshi, type Candle } from '../../utils/indicators';
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import { TradingViewKiteChart } from '../charts/TradingViewKiteChart';
 import { OIView } from './OIView';
+import { KiteLoader } from './KiteLoader';
 
 export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals' | 'oi-change' | 'open-interest';
 
@@ -193,8 +194,45 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   const [showVP, setShowVP] = useState(() => (signalData ? false : (globalChartStateCache?.showVP ?? false)));
   const [isLogScale, setIsLogScale] = useState(() => (signalData ? false : (globalChartStateCache?.isLogScale ?? false)));
 
-  const { data: rawCandles = [] } = useCandles(symbol, tf, 800);
+  // `useCandles` inherits the app-wide `placeholderData: keepPreviousData` query
+  // default (App.tsx) - it exists so background refetches on the SAME symbol/tf
+  // don't blank the chart, but it has a side effect here: on a genuine symbol
+  // switch (a different query key), react-query serves the OUTGOING symbol's
+  // candles as a "placeholder" for the incoming key and reports isLoading=false
+  // (there IS data, just stale) - so `candlesLoading` never goes true and the
+  // switch loader below would hide immediately, letting the previous symbol's
+  // fully-rendered chart sit on screen until the real fetch lands moments later.
+  // `isPlaceholderData` is the one flag that's true specifically during that
+  // window; it must gate the loader alongside isLoading/isSwitching.
+  const { data: rawCandles = [], isLoading: candlesLoading, isPlaceholderData: candlesArePlaceholder } = useCandles(symbol, tf, 800);
   const { data: kitePosData } = useKitePositions();
+
+  // ── Switch loader ────────────────────────────────────────────────────────
+  // Visible from the moment the user picks a different instrument or timeframe
+  // until the chart has actually finished its (expensive) rebuild - covers both
+  // the network wait for fresh candles AND the synchronous createChart()+
+  // indicator-recompute work that follows, which is what made a switch feel
+  // "stuck" rather than just slow. Adjust state during render (React's
+  // documented pattern for "reset state when a prop changes") so the overlay
+  // appears on the very same paint as the new instrument, not one frame late.
+  const instrumentKey = `${symbol}|${tf}`;
+  const [renderedInstrumentKey, setRenderedInstrumentKey] = useState(instrumentKey);
+  // Starts true: the very first chart build is exactly as expensive as a later
+  // switch, so the initial mount waits for the same onChartReady signal.
+  const [isSwitching, setIsSwitching] = useState(true);
+  if (instrumentKey !== renderedInstrumentKey) {
+    setRenderedInstrumentKey(instrumentKey);
+    setIsSwitching(true);
+  }
+  const handleChartReady = useCallback(() => setIsSwitching(false), []);
+  useEffect(() => {
+    if (!isSwitching) return;
+    // Safety net: never let the overlay get stuck (failed fetch, disabled
+    // layoutMode, etc.) - the same ceiling a slow mobile connection would hit.
+    const t = setTimeout(() => setIsSwitching(false), 6000);
+    return () => clearTimeout(t);
+  }, [isSwitching, instrumentKey]);
+  const showChartLoader = isSwitching || candlesArePlaceholder || (candlesLoading && rawCandles.length === 0);
 
   // Refs and low-level chart instances now inside <TradingViewKiteChart> shared component
   // (no direct access needed at this level)
@@ -354,6 +392,16 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // lazy initializers above have fully seeded config, so saves can start
   // immediately. Only a cold first mount must wait for the GET below.
   const [chartStateLoaded, setChartStateLoaded] = useState(() => !signalData && !!globalChartStateCache);
+  // True once we KNOW the final persistedZoom value for this pane instance -
+  // either synchronously (signal open, or the cache already had it) or once the
+  // chart-state GET below has settled (success or failure). Gates the chart's
+  // FIRST mount below: mounting before this resolves let TradingViewKiteChart's
+  // very first createChart() call fitContent() to a default range, then a split
+  // second later (once the GET resolved with a saved zoom) rebuild again to
+  // setVisibleRange() the real one - the "loads at one zoom, snaps to another"
+  // bug. Waiting here means the first-ever createChart() already has the right
+  // range baked in, so there's only ever one build, not two.
+  const [zoomResolved, setZoomResolved] = useState(() => !!signalData || !!globalChartStateCache);
 
   // Stable identities for the callbacks passed into TradingViewKiteChart.
   // These used to be inline arrow functions recreated on every InstrumentPane
@@ -431,12 +479,20 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
           if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
           if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
           if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
-          if (res.zoom) { setPersistedZoom(res.zoom); lastZoomRef.current = res.zoom; }
+          // Only seed the saved zoom if the user hasn't already panned/zoomed
+          // the live chart while this GET was in flight - lastZoomRef is set
+          // by handleZoomChange the instant the user interacts, and applying
+          // the (older) fetched value over that would silently undo their pan
+          // a few seconds after they made it.
+          if (res.zoom && lastZoomRef.current == null) { setPersistedZoom(res.zoom); lastZoomRef.current = res.zoom; }
           if (res.params && typeof res.params === 'object') setParams({ ...buildDefaultParams(trailTarget), ...res.params });
           const map = (res.drawingsBySymbol && typeof res.drawingsBySymbol === 'object') ? res.drawingsBySymbol : {};
           globalChartStateCache = res;
           applyDrawingsFor(map, symbol);
         }
+        // The final zoom value is known now (whatever was seeded above, or still
+        // null if this instrument had none saved) - safe to mount the real chart.
+        if (!cancelled) setZoomResolved(true);
       } catch (e) {
         console.error('Failed to load chart state:', e);
         // GET failed: we do NOT know the real stored state, so leave persistence
@@ -445,6 +501,11 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
         // real saved global state (the backend POST is a full replace). The
         // session cache stays null too, so a pane remount re-runs this GET and
         // recovers once the backend is reachable again.
+        // zoomResolved, however, is safe (and necessary) to flip regardless -
+        // it only gates the chart's first mount, not persistence, and the
+        // chart must still render (at a default fit) even when the backend
+        // is unreachable rather than stay hidden behind the loader forever.
+        if (!cancelled) setZoomResolved(true);
         return;
       }
       if (!cancelled) setChartStateLoaded(true);
@@ -514,31 +575,55 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       </div>
 
       {/* The true shared advanced chart */}
-      <div style={{ flex: 1, minHeight: 220 }}>
-        <TradingViewKiteChart
-          symbol={symbol}
-          rawCandles={rawCandles}
-          tf={tf}
-          isHA={isHA}
-          isLogScale={isLogScale}
-          isDark={isDark}
-          theme={theme}
-          activeIndicators={active}
-          params={params}
-          drawings={drawings}
-          onDrawingsChange={handleDrawingsChange}
-          onZoomChange={handleZoomChange}
-          showVP={showVP}
-          symbolPos={symbolPos}
-          persistedZoom={persistedZoom}
-          onTfChange={setTf}
-          onIsHAChange={setIsHA}
-          onIsLogScaleChange={setIsLogScale}
-          onSymbolChange={onSymbolChange}
-          onToggleIndicator={toggleIndicator as any}
-          onParamsChange={setParams}
-          signalData={signalData}
-        />
+      <div style={{ flex: 1, minHeight: 220, position: 'relative' }}>
+        {/* Held back until the saved zoom (if any) is known - see zoomResolved
+            above. Mounting earlier let the first createChart() default-fit,
+            then rebuild moments later once the GET resolved with a real zoom -
+            visible as "loads at one zoom, snaps to another" a beat later. */}
+        {(signalData || zoomResolved) && (
+          <TradingViewKiteChart
+            symbol={symbol}
+            rawCandles={rawCandles}
+            tf={tf}
+            isHA={isHA}
+            isLogScale={isLogScale}
+            isDark={isDark}
+            theme={theme}
+            activeIndicators={active}
+            params={params}
+            drawings={drawings}
+            onDrawingsChange={handleDrawingsChange}
+            onZoomChange={handleZoomChange}
+            showVP={showVP}
+            symbolPos={symbolPos}
+            persistedZoom={persistedZoom}
+            onTfChange={setTf}
+            onIsHAChange={setIsHA}
+            onIsLogScaleChange={setIsLogScale}
+            onSymbolChange={onSymbolChange}
+            onToggleIndicator={toggleIndicator as any}
+            onParamsChange={setParams}
+            signalData={signalData}
+            onChartReady={handleChartReady}
+          />
+        )}
+        {showChartLoader && (
+          // Fully opaque (no `opacity` shorthand - that would composite this
+          // whole layer, spinner included, at <100% and let the previous
+          // symbol's chart bleed through underneath it). The user must never
+          // see even a sliver of the outgoing chart while switching.
+          <div
+            style={{
+              position: 'absolute', inset: 0, zIndex: 20,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+              background: theme.bg,
+              pointerEvents: 'none',
+            }}
+          >
+            <KiteLoader size={30} />
+            <span style={{ fontSize: 11, color: theme.dim }}>Loading chart…</span>
+          </div>
+        )}
       </div>
     </div>
   );
