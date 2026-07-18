@@ -6,14 +6,31 @@ import {
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import { InstrumentLabel } from '../kite/InstrumentLabel';
 import {
-  ema, bollingerBands, vwap, rsi, macd, supertrend, supertrendRuns, heikinAshi,
+  ema, sma, atr, bollingerBands, vwap, rsi, macd, supertrend, supertrendRuns, heikinAshi,
   type Candle,
 } from '../../utils/indicators';
+import { useCandles } from '../../hooks/useCandles';
+import { useCreateAlert } from '../../hooks/useAlerts';
 import {
   IconCrosshair, IconHLine, IconTrendline, IconRay, IconFib, IconFibExt, IconFibFan,
   IconRect, IconPitchfork, IconText, IconPencil, IconFullscreen, IconClose, IconMore, IconGear,
 } from './ChartIcons';
 import { MiniGridPane } from './MiniGridPane';
+import {
+  ChartTemplate,
+  DEFAULT_WORKSPACE,
+  ExtraIndicatorKind,
+  IndicatorStyle,
+  compileFormula,
+  createExtraIndicator,
+  formulaSeries,
+  loadTemplates,
+  loadWorkspace,
+  nearestCandleIndex,
+  saveTemplates,
+  saveWorkspace,
+  stochastic,
+} from './chartWorkspace';
 
 interface TradingViewKiteChartProps {
   symbol: string;
@@ -45,8 +62,10 @@ interface TradingViewKiteChartProps {
   onTfChange?: (tf: string) => void;
   onIsHAChange?: (ha: boolean) => void;
   onIsLogScaleChange?: (log: boolean) => void;
+  onShowVPChange?: (show: boolean) => void;
   onSymbolChange?: (symbol: string) => void;
   onToggleIndicator?: (key: string) => void;
+  onActiveIndicatorsChange?: (keys: string[]) => void;
   onParamsChange?: (params: any) => void;
 }
 
@@ -72,8 +91,10 @@ export function TradingViewKiteChart({
   onTfChange,
   onIsHAChange,
   onIsLogScaleChange,
+  onShowVPChange,
   onSymbolChange,
   onToggleIndicator,
+  onActiveIndicatorsChange,
   onParamsChange,
   onChartReady,
 }: TradingViewKiteChartProps) {
@@ -130,6 +151,7 @@ export function TradingViewKiteChart({
   // A separate lightweight effect below pushes fresh data onto the already-built
   // chart via setData() (no teardown) whenever only the candle data changed.
   const baseCandlesRef = useRef<any[]>([]);
+  const comparisonCandlesRef = useRef<any[]>([]);
   const activeIndicatorsRef = useRef<Set<string>>(new Set());
   const paramsRef = useRef<any>({});
   const chartTypeRef = useRef<'candles' | 'line' | 'area' | 'bars'>('candles');
@@ -223,6 +245,31 @@ export function TradingViewKiteChart({
   const [chartType, setChartType] = useState<'candles' | 'line' | 'area' | 'bars'>('candles');
   const [showStudies, setShowStudies] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [workspace, setWorkspace] = useState(() => {
+    if (typeof window === 'undefined') return structuredClone(DEFAULT_WORKSPACE);
+    return loadWorkspace();
+  });
+  const [templates, setTemplates] = useState<ChartTemplate[]>(() => typeof window === 'undefined' ? [] : loadTemplates());
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
+  const [showChartSettings, setShowChartSettings] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [compareSearch, setCompareSearch] = useState('');
+  const [goToDateValue, setGoToDateValue] = useState('');
+  const [showGoToDate, setShowGoToDate] = useState(false);
+  const [replayIndex, setReplayIndex] = useState<number | null>(null);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [alertDialog, setAlertDialog] = useState<{ price: number } | null>(null);
+  const [alertCondition, setAlertCondition] = useState<'price_above' | 'price_below'>('price_above');
+  const [alertNotes, setAlertNotes] = useState('');
+  const [alertDraft, setAlertDraft] = useState<{ price: number; y: number } | null>(null);
+  const createAlert = useCreateAlert();
+
+  const { data: comparisonRawCandles = [] } = useCandles(workspace.compareSymbol || '', tf, 800);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') saveWorkspace(workspace);
+  }, [workspace]);
 
   // Symbol search (TV style dropdown)
   const [showSymbolSearch, setShowSymbolSearch] = useState(false);
@@ -316,9 +363,8 @@ export function TradingViewKiteChart({
   // Numeric param fields per indicator, for the inline gear-icon editor in the
   // Indicators modal below. Only indicators whose rendering code actually
   // reads params (EMA/BB/the 3 ST variants/RSI/MACD) get an entry here — vwap/
-  // vol have no numeric params, and sma/atr/stoch are inert list entries with
-  // no rendering code to wire up (see file-audit notes), so they're
-  // deliberately omitted rather than editing values nothing consumes.
+  // vol has no numeric params. The remaining catalog entries map directly to
+  // rendering code below, including SMA/ATR/Stochastic.
   const INDICATOR_PARAM_FIELDS: Record<string, { key: string; label: string; default: number; step?: number }[]> = {
     ema: [
       { key: 'ema1', label: 'Period 1', default: 9 },
@@ -348,6 +394,9 @@ export function TradingViewKiteChart({
       { key: 'macdSlow', label: 'Slow', default: 26 },
       { key: 'macdSig', label: 'Signal', default: 9 },
     ],
+    sma: [{ key: 'smaPeriod', label: 'Period', default: 50 }],
+    atr: [{ key: 'atrPeriod', label: 'Period', default: 14 }],
+    stoch: [{ key: 'stochPeriod', label: 'Period', default: 14 }],
   };
 
   // Commit a single param-field edit. Mirrors the onToggleIndicator fallback
@@ -364,9 +413,39 @@ export function TradingViewKiteChart({
       .filter((v: any, i: number, a: any[]) => i === 0 || v.time !== a[i - 1].time);
   }, [rawCandles]);
 
-  const baseCandles = useMemo(() => {
+  const fullBaseCandles = useMemo(() => {
     return isHA ? heikinAshi(candles as Candle[]) : (candles as Candle[]);
   }, [candles, isHA]);
+
+  const baseCandles = useMemo(() => {
+    if (replayIndex == null) return fullBaseCandles;
+    return fullBaseCandles.slice(0, Math.min(replayIndex + 1, fullBaseCandles.length));
+  }, [fullBaseCandles, replayIndex]);
+
+  const comparisonCandles = useMemo(() => {
+    const valid = comparisonRawCandles.filter((c: any) => c.time != null && !isNaN(c.time));
+    return [...valid].sort((a: any, b: any) => a.time - b.time)
+      .filter((value: any, index: number, all: any[]) => index === 0 || value.time !== all[index - 1].time);
+  }, [comparisonRawCandles]);
+
+  useEffect(() => {
+    if (replayIndex == null || replayIndex < fullBaseCandles.length) return;
+    setReplayIndex(Math.max(0, fullBaseCandles.length - 1));
+  }, [fullBaseCandles.length, replayIndex]);
+
+  useEffect(() => {
+    if (!replayPlaying || replayIndex == null) return;
+    const timer = window.setInterval(() => {
+      setReplayIndex((current) => {
+        if (current == null || current >= fullBaseCandles.length - 1) {
+          setReplayPlaying(false);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [replayPlaying, replayIndex, fullBaseCandles.length]);
   // Boolean (not the array itself) so it only flips once, on the empty->non-empty
   // transition, instead of on every poll tick like `baseCandles` would. The three
   // structural chart-build effects below read candle data via baseCandlesRef and
@@ -388,6 +467,9 @@ export function TradingViewKiteChart({
     vol: 'Volume',
     rsi: 'RSI',
     macd: 'MACD',
+    sma: 'SMA',
+    atr: 'ATR',
+    stoch: 'Stochastic',
   };
 
   // Exact TradingView dark theme colors + tokens for look & feel
@@ -430,10 +512,26 @@ export function TradingViewKiteChart({
     red: theme.red || '#f23645',
   }), [isDark, theme]);
 
+  const indicatorStyle = (key: string, fallback: IndicatorStyle): IndicatorStyle => ({
+    ...fallback,
+    ...(workspace.styles[key] || {}),
+  });
+
+  const updateIndicatorStyle = (key: string, patch: Partial<IndicatorStyle>) => {
+    setWorkspace((current) => ({
+      ...current,
+      styles: {
+        ...current.styles,
+        [key]: { ...indicatorStyle(key, { color: tv.blue, lineWidth: 2, visible: true }), ...patch },
+      },
+    }));
+  };
+
   // Keep always-fresh refs in sync every render (cheap; no extra re-renders caused).
   // Read by the data-only sync effect further below instead of being reactive
   // dependencies, so that effect isn't tied to indicator/param/theme identity.
   baseCandlesRef.current = baseCandles;
+  comparisonCandlesRef.current = comparisonCandles;
   onChartReadyRef.current = onChartReady;
   handleChartClickRef.current = handleChartClick;
   snapToOHLCRef.current = snapToOHLC;
@@ -644,9 +742,12 @@ export function TradingViewKiteChart({
         textColor: tv.dim,
         fontFamily: tv.fontFamily,
       },
-      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
+      grid: {
+        vertLines: { visible: workspace.appearance.gridVisible, color: tv.border + '66' },
+        horzLines: { visible: workspace.appearance.gridVisible, color: tv.border + '66' },
+      },
       crosshair: {
-        mode: CrosshairMode.Magnet,
+        mode: workspace.appearance.magnetCrosshair ? CrosshairMode.Magnet : CrosshairMode.Normal,
         vertLine: { width: 1, color: '#758696', style: LineStyle.Solid, labelBackgroundColor: tv.surface, labelVisible: true },
         horzLine: { width: 1, color: '#758696', style: LineStyle.Solid, labelBackgroundColor: tv.surface, labelVisible: true },
       },
@@ -680,7 +781,7 @@ export function TradingViewKiteChart({
           return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         },
       },
-      handleScale: { axisPressedMouseMove: { time: true, price: true }, mouseWheel: true, pinch: true },
+      handleScale: { axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: { time: true, price: true }, mouseWheel: true, pinch: true },
       handleScroll: { vertTouchDrag: true, horzTouchDrag: true, mouseWheel: true, pressedMouseMove: true },
       kineticScroll: { mouse: true, touch: true },
       localization: { priceFormatter: (price: number) => price.toFixed(2) },
@@ -701,9 +802,9 @@ export function TradingViewKiteChart({
     const mainOpts = { priceLineVisible: true, lastValueVisible: true };
     if (chartType === 'candles') {
       mainS = chart.addSeries(CandlestickSeries, {
-        upColor: tv.green, downColor: tv.red,
-        borderUpColor: tv.green, borderDownColor: tv.red,
-        wickUpColor: tv.green, wickDownColor: tv.red,
+        upColor: workspace.appearance.candleUp, downColor: workspace.appearance.candleDown,
+        borderUpColor: workspace.appearance.candleUp, borderDownColor: workspace.appearance.candleDown,
+        wickUpColor: workspace.appearance.candleUp, wickDownColor: workspace.appearance.candleDown,
         borderVisible: true,
         ...mainOpts,
       });
@@ -747,22 +848,24 @@ export function TradingViewKiteChart({
 
     // EMA
     if (activeIndicators.has('ema')) {
+      const style = indicatorStyle('ema', { color: tv.blue, secondaryColor: tv.orange, lineWidth: 2, visible: true });
       const e1 = ema(closes, params.ema1 || 9);
       const e2 = ema(closes, params.ema2 || 21);
-      const e9s = chart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `EMA(${params.ema1 || 9})` });
+      const e9s = chart.addSeries(LineSeries, { color: style.color, lineWidth: style.lineWidth as any, visible: style.visible, priceLineVisible: false, lastValueVisible: true, title: `EMA(${params.ema1 || 9})` });
       seriesRefs.current.ema9 = e9s;
       e9s.setData(e1.flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
-      const e21s = chart.addSeries(LineSeries, { color: tv.orange, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `EMA(${params.ema2 || 21})` });
+      const e21s = chart.addSeries(LineSeries, { color: style.secondaryColor || tv.orange, lineWidth: style.lineWidth as any, visible: style.visible, priceLineVisible: false, lastValueVisible: true, title: `EMA(${params.ema2 || 21})` });
       seriesRefs.current.ema21 = e21s;
       e21s.setData(e2.flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
     }
 
     // Bollinger
     if (activeIndicators.has('bb')) {
+      const style = indicatorStyle('bb', { color: tv.cyan, secondaryColor: tv.purple || '#a371f7', lineWidth: 1, visible: true });
       const bb = bollingerBands(closes, params.bbPeriod || 20, params.bbStd || 2);
-      const bbMid = chart.addSeries(LineSeries, { color: tv.cyan, lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: true, title: `BB(${params.bbPeriod || 20})` });
-      const bbUpper = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: `BB Upper` });
-      const bbLower = chart.addSeries(LineSeries, { color: (tv.purple || '#a371f7') + '99', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: `BB Lower` });
+      const bbMid = chart.addSeries(LineSeries, { color: style.color, lineWidth: style.lineWidth as any, visible: style.visible, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: true, title: `BB(${params.bbPeriod || 20})` });
+      const bbUpper = chart.addSeries(LineSeries, { color: (style.secondaryColor || tv.purple || '#a371f7') + '99', lineWidth: style.lineWidth as any, visible: style.visible, priceLineVisible: false, lastValueVisible: true, title: `BB Upper` });
+      const bbLower = chart.addSeries(LineSeries, { color: (style.secondaryColor || tv.purple || '#a371f7') + '99', lineWidth: style.lineWidth as any, visible: style.visible, priceLineVisible: false, lastValueVisible: true, title: `BB Lower` });
       seriesRefs.current.bbMid = bbMid; seriesRefs.current.bbUpper = bbUpper; seriesRefs.current.bbLower = bbLower;
       bbMid.setData(bb.flatMap((b, i) => (b.middle != null ? [{ time: times[i] as any, value: b.middle }] : [])));
       bbUpper.setData(bb.flatMap((b, i) => (b.upper != null ? [{ time: times[i] as any, value: b.upper }] : [])));
@@ -771,14 +874,16 @@ export function TradingViewKiteChart({
 
     // VWAP
     if (activeIndicators.has('vwap')) {
+      const style = indicatorStyle('vwap', { color: tv.purple, lineWidth: 2, visible: true });
       const v = vwap(baseCandles as any);
-      const vs = chart.addSeries(LineSeries, { color: tv.purple, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'VWAP' });
+      const vs = chart.addSeries(LineSeries, { color: style.color, lineWidth: style.lineWidth as any, visible: style.visible, priceLineVisible: false, lastValueVisible: true, title: 'VWAP' });
       seriesRefs.current.vwap = vs;
       vs.setData(v.map((p) => ({ time: p.time as any, value: p.value })));
     }
 
     // SuperTrend - show selected variants with direction-based colors (bull=green, bear=red)
-    const addSupertrendWithDirection = (period: number, mult: number, label: string) => {
+    const addSupertrendWithDirection = (period: number, mult: number, label: string, styleKey: string) => {
+      const style = indicatorStyle(styleKey, { color: tv.green, secondaryColor: tv.red, lineWidth: 2, visible: true });
       const stData = supertrend(highs, lows, closes, period, mult);
       // One SuperTrend line whose colour flips with the trend. Rendered as one short
       // line series per contiguous same-direction RUN (green up / red down) — NOT two
@@ -791,7 +896,7 @@ export function TradingViewKiteChart({
       const ti = titleIdx >= 0 ? titleIdx : 0;
       runs.forEach((run, ri) => {
         const s = chart.addSeries(LineSeries, {
-          color: (run.up ? tv.green : tv.red) + '66', lineWidth: 2,
+          color: (run.up ? style.color : (style.secondaryColor || tv.red)) + '99', lineWidth: style.lineWidth as any, visible: style.visible,
           priceLineVisible: false, lastValueVisible: false,
           ...(ri === ti ? { title: label } : {}),
         });
@@ -801,26 +906,91 @@ export function TradingViewKiteChart({
 
     if (activeIndicators.has('st-fast')) {
       const p = params.stFastPeriod || 21, m = params.stFastMult || 1;
-      addSupertrendWithDirection(p, m, `ST fast (${p},${m})`);
+      addSupertrendWithDirection(p, m, `ST fast (${p},${m})`, 'st-fast');
     }
     if (activeIndicators.has('st-mid')) {
       const p = params.stMidPeriod || 14, m = params.stMidMult || 2;
-      addSupertrendWithDirection(p, m, `ST mid (${p},${m})`);
+      addSupertrendWithDirection(p, m, `ST mid (${p},${m})`, 'st-mid');
     }
     if (activeIndicators.has('st-slow')) {
       const p = params.stSlowPeriod || 7, m = params.stSlowMult || 3;
-      addSupertrendWithDirection(p, m, `ST slow (${p},${m})`);
+      addSupertrendWithDirection(p, m, `ST slow (${p},${m})`, 'st-slow');
     }
 
     // Volume
     if (activeIndicators.has('vol')) {
-      const volS = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'volume', title: 'Volume' });
+      const volumeStyle = indicatorStyle('vol', { color: tv.green, secondaryColor: tv.red, lineWidth: 1, visible: true });
+      const volS = chart.addSeries(HistogramSeries, { visible: volumeStyle.visible, priceFormat: { type: 'volume' }, priceScaleId: 'volume', title: 'Volume' });
       chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
       seriesRefs.current.vol = volS;
       volS.setData(baseCandles.map((b: any) => ({
         time: b.time as any, value: b.volume || 0,
-        color: b.close >= b.open ? `${tv.green}55` : `${tv.red}55`,
+        color: b.close >= b.open ? `${volumeStyle.color}55` : `${volumeStyle.secondaryColor || tv.red}55`,
       })));
+    }
+
+    const addLineIndicator = (
+      refKey: string,
+      title: string,
+      values: Array<number | null>,
+      style: IndicatorStyle,
+      priceScaleId?: string,
+    ) => {
+      const series = chart.addSeries(LineSeries, {
+        color: style.color,
+        lineWidth: style.lineWidth as any,
+        visible: style.visible,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title,
+        ...(priceScaleId ? { priceScaleId } : {}),
+      });
+      if (priceScaleId) chart.priceScale(priceScaleId).applyOptions({ visible: false, scaleMargins: { top: 0.78, bottom: 0.02 } });
+      series.setData(values.flatMap((value, index) => value != null && Number.isFinite(value)
+        ? [{ time: times[index] as any, value }]
+        : []));
+      seriesRefs.current[refKey] = series;
+    };
+
+    if (activeIndicators.has('sma')) {
+      const period = params.smaPeriod || 50;
+      addLineIndicator('sma', `SMA(${period})`, sma(closes, period), indicatorStyle('sma', { color: tv.orange, lineWidth: 2, visible: true }));
+    }
+    if (activeIndicators.has('atr')) {
+      const period = params.atrPeriod || 14;
+      addLineIndicator('atr', `ATR(${period})`, atr(highs, lows, closes, period), indicatorStyle('atr', { color: tv.cyan, lineWidth: 2, visible: true }), 'atr');
+    }
+    if (activeIndicators.has('stoch')) {
+      const period = params.stochPeriod || 14;
+      addLineIndicator('stoch', `Stochastic(${period})`, stochastic(highs, lows, closes, period), indicatorStyle('stoch', { color: tv.purple, lineWidth: 2, visible: true }), 'stoch');
+    }
+
+    workspace.extraIndicators.forEach((indicator) => {
+      const period = Math.max(1, indicator.period || 1);
+      let values: Array<number | null> = [];
+      let scaleId: string | undefined;
+      if (indicator.kind === 'ema') values = ema(closes, period);
+      if (indicator.kind === 'sma') values = sma(closes, period);
+      if (indicator.kind === 'rsi') { values = rsi(closes, period); scaleId = `extra-${indicator.id}`; }
+      if (indicator.kind === 'atr') { values = atr(highs, lows, closes, period); scaleId = `extra-${indicator.id}`; }
+      if (indicator.kind === 'stochastic') { values = stochastic(highs, lows, closes, period); scaleId = `extra-${indicator.id}`; }
+      if (indicator.kind === 'formula') values = formulaSeries(indicator.formula || 'hlc3', baseCandles);
+      addLineIndicator(`extra:${indicator.id}`, `${indicator.name}(${indicator.kind === 'formula' ? indicator.formula : period})`, values, indicator.style, scaleId);
+    });
+
+    const comparison = comparisonCandlesRef.current;
+    if (workspace.compareSymbol && comparison.length) {
+      const compareSeries = chart.addSeries(LineSeries, {
+        color: tv.amber,
+        lineWidth: 2,
+        priceScaleId: 'compare',
+        priceLineVisible: false,
+        lastValueVisible: true,
+        title: workspace.compareSymbol,
+      });
+      chart.priceScale('compare').applyOptions({ visible: false, autoScale: true });
+      compareSeries.setData(comparison.map((bar: any) => ({ time: bar.time as any, value: bar.close })));
+      seriesRefs.current.compare = compareSeries;
     }
 
     // Drawings render (full support + fib variants + ray extend)
@@ -1151,7 +1321,7 @@ export function TradingViewKiteChart({
       previewSeriesRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles, workspace, replayIndex]);
 
   // Sub RSI pane. Reads baseCandles via the ref (see main chart effect above) so
   // this pane also only tears down/rebuilds on structural changes, not on every
@@ -1181,7 +1351,8 @@ export function TradingViewKiteChart({
     const closes = baseCandles.map((c: any) => c.close);
     const times = baseCandles.map((c: any) => c.time);
     const r = rsi(closes, params.rsiPeriod || 14);
-    const line = rChart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: `RSI(${params.rsiPeriod || 14})` });
+    const rsiStyle = indicatorStyle('rsi', { color: tv.blue, lineWidth: 2, visible: true });
+    const line = rChart.addSeries(LineSeries, { color: rsiStyle.color, lineWidth: rsiStyle.lineWidth as any, visible: rsiStyle.visible, priceLineVisible: false, lastValueVisible: true, title: `RSI(${params.rsiPeriod || 14})` });
     line.setData(r.flatMap((v, i) => (v != null ? [{ time: times[i] as any, value: v }] : [])));
     const ob = rChart.addSeries(LineSeries, { color: tv.red + '66', lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: false, title: 'Overbought (70)' });
     const os = rChart.addSeries(LineSeries, { color: tv.green + '66', lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: false, title: 'Oversold (30)' });
@@ -1213,7 +1384,7 @@ export function TradingViewKiteChart({
     // trigger that rebuilds it — otherwise `sync` above goes stale against a
     // disposed chart instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles, workspace.styles, replayIndex]);
 
   // Sub MACD pane. Reads baseCandles via the ref - see the RSI pane above.
   useEffect(() => {
@@ -1241,8 +1412,9 @@ export function TradingViewKiteChart({
     const closes = baseCandles.map((c: any) => c.close);
     const times = baseCandles.map((c: any) => c.time);
     const m = macd(closes, params.macdFast || 12, params.macdSlow || 26, params.macdSig || 9);
-    const ml = mChart.addSeries(LineSeries, { color: tv.blue, lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'MACD' });
-    const sl = mChart.addSeries(LineSeries, { color: tv.orange, lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: 'Signal' });
+    const macdStyle = indicatorStyle('macd', { color: tv.blue, secondaryColor: tv.orange, lineWidth: 2, visible: true });
+    const ml = mChart.addSeries(LineSeries, { color: macdStyle.color, lineWidth: macdStyle.lineWidth as any, visible: macdStyle.visible, priceLineVisible: false, lastValueVisible: true, title: 'MACD' });
+    const sl = mChart.addSeries(LineSeries, { color: macdStyle.secondaryColor || tv.orange, lineWidth: Math.max(1, macdStyle.lineWidth - 1) as any, visible: macdStyle.visible, priceLineVisible: false, lastValueVisible: true, title: 'Signal' });
     const hist = mChart.addSeries(HistogramSeries, { priceScaleId: 'hist', title: 'Histogram' });
     ml.setData(m.flatMap((p, i) => p.macd != null ? [{ time: times[i] as any, value: p.macd }] : []));
     sl.setData(m.flatMap((p, i) => p.signal != null ? [{ time: times[i] as any, value: p.signal }] : []));
@@ -1267,7 +1439,7 @@ export function TradingViewKiteChart({
     // Deps intentionally mirror the main chart-creation effect's dep array
     // (minus baseCandles/snapToOHLC) — see the RSI pane above for why.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles, workspace.styles, replayIndex]);
 
   // Live data-only sync: pushes fresh candle data onto the ALREADY-BUILT chart(s)
   // via setData() whenever only the candle data changed (the common idle-poll
@@ -1291,6 +1463,8 @@ export function TradingViewKiteChart({
 
     const times = baseCandles.map((c: any) => c.time);
     const closes = baseCandles.map((c: any) => c.close);
+    const highs = baseCandles.map((c: any) => c.high);
+    const lows = baseCandles.map((c: any) => c.low);
 
     try {
       if (refs.main) {
@@ -1314,11 +1488,34 @@ export function TradingViewKiteChart({
         refs.vwap.setData(v.map((pt) => ({ time: pt.time as any, value: pt.value })));
       }
       if (ind.has('vol') && refs.vol) {
+        const volumeStyle = indicatorStyle('vol', { color: tv2.green, secondaryColor: tv2.red, lineWidth: 1, visible: true });
         refs.vol.setData(baseCandles.map((b: any) => ({
           time: b.time as any, value: b.volume || 0,
-          color: b.close >= b.open ? `${tv2.green}55` : `${tv2.red}55`,
+          color: b.close >= b.open ? `${volumeStyle.color}55` : `${volumeStyle.secondaryColor || tv2.red}55`,
         })));
       }
+      if (ind.has('sma') && refs.sma) {
+        refs.sma.setData(sma(closes, p.smaPeriod || 50).flatMap((value, index) => value != null ? [{ time: times[index] as any, value }] : []));
+      }
+      if (ind.has('atr') && refs.atr) {
+        refs.atr.setData(atr(highs, lows, closes, p.atrPeriod || 14).flatMap((value, index) => value != null ? [{ time: times[index] as any, value }] : []));
+      }
+      if (ind.has('stoch') && refs.stoch) {
+        refs.stoch.setData(stochastic(highs, lows, closes, p.stochPeriod || 14).flatMap((value, index) => value != null ? [{ time: times[index] as any, value }] : []));
+      }
+      workspace.extraIndicators.forEach((indicator) => {
+        const series = refs[`extra:${indicator.id}`];
+        if (!series) return;
+        const period = Math.max(1, indicator.period || 1);
+        let values: Array<number | null> = [];
+        if (indicator.kind === 'ema') values = ema(closes, period);
+        if (indicator.kind === 'sma') values = sma(closes, period);
+        if (indicator.kind === 'rsi') values = rsi(closes, period);
+        if (indicator.kind === 'atr') values = atr(highs, lows, closes, period);
+        if (indicator.kind === 'stochastic') values = stochastic(highs, lows, closes, period);
+        if (indicator.kind === 'formula') values = formulaSeries(indicator.formula || 'hlc3', baseCandles);
+        series.setData(values.flatMap((value, index) => value != null && Number.isFinite(value) ? [{ time: times[index] as any, value }] : []));
+      });
     } catch { /* a mid-tick series/chart disposal race - next poll will retry */ }
 
     // Price flash badge (mirrors the structural effect's updatePriceBadge)
@@ -1357,7 +1554,15 @@ export function TradingViewKiteChart({
         macdSeries.hist.setData(m.flatMap((pt, i) => (pt.hist != null ? [{ time: times[i] as any, value: pt.hist, color: pt.hist >= 0 ? tv2.green + '88' : tv2.red + '88' }] : [])));
       }
     } catch { /* sub-pane may be mid-teardown from a concurrent structural rebuild */ }
-  }, [baseCandles]);
+  }, [baseCandles, workspace.extraIndicators]);
+
+  useEffect(() => {
+    const compareSeries = seriesRefs.current.compare;
+    if (!compareSeries || !workspace.compareSymbol) return;
+    try {
+      compareSeries.setData(comparisonCandles.map((bar: any) => ({ time: bar.time as any, value: bar.close })));
+    } catch { /* chart may be rebuilding while comparison data settles */ }
+  }, [comparisonCandles, workspace.compareSymbol]);
 
   // Redraw profile + handles when relevant
   useEffect(() => { setTimeout(drawVolumeProfile, 30); }, [drawVolumeProfile, showVP, volumeProfile]);
@@ -1484,7 +1689,7 @@ export function TradingViewKiteChart({
     let price = 0;
     let time = 0;
     try {
-      price = chart.priceScale().coordinateToPrice?.(y) || 0;
+      price = seriesRefs.current.main?.coordinateToPrice?.(y) || 0;
       const logical = chart.timeScale().coordinateToLogical?.(x) || 0;
       if (baseCandles.length) {
         const idx = Math.floor(logical + baseCandles.length / 2);
@@ -1759,6 +1964,150 @@ export function TradingViewKiteChart({
     // for standalone, we could lift but keep controlled from outside for InstrumentPane
   };
 
+  const downloadChartImage = () => {
+    try {
+      const canvas = (mainChartRef.current as any)?.takeScreenshot?.();
+      if (!canvas) return;
+      canvas.toBlob((blob: Blob | null) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${symbol.replace(/[^a-z0-9]+/gi, '-')}-${tf}.png`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } catch (error) {
+      console.error('Failed to export chart image:', error);
+    }
+  };
+
+  const beginAlertDraft = (price?: number) => {
+    const nextPrice = price || baseCandles[baseCandles.length - 1]?.close;
+    const mainSeries = seriesRefs.current.main;
+    if (!nextPrice || !mainSeries?.priceToCoordinate) return;
+    const y = mainSeries.priceToCoordinate(nextPrice);
+    if (y == null) return;
+    setAlertDraft({ price: nextPrice, y });
+    setChartContextMenu(null);
+  };
+
+  const startAlertDrag = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const move = (moveEvent: MouseEvent) => {
+      if (!mainRef.current || !seriesRefs.current.main?.coordinateToPrice) return;
+      const rect = mainRef.current.getBoundingClientRect();
+      const y = Math.max(0, Math.min(rect.height, moveEvent.clientY - rect.top));
+      const price = seriesRefs.current.main.coordinateToPrice(y);
+      if (price != null) setAlertDraft({ price, y });
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      setAlertDraft((current) => {
+        if (current) setAlertDialog({ price: current.price });
+        return current;
+      });
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up, { once: true });
+  };
+
+  const submitAlert = () => {
+    if (!alertDialog) return;
+    createAlert.mutate({
+      underlying: symbol,
+      condition: alertCondition,
+      threshold: Number(alertDialog.price.toFixed(4)),
+      notes: alertNotes || `Created from ${tf} chart`,
+    }, {
+      onSuccess: () => {
+        setAlertDialog(null);
+        setAlertDraft(null);
+        setAlertNotes('');
+      },
+    });
+  };
+
+  const jumpToDate = () => {
+    const timestamp = Date.parse(goToDateValue);
+    if (!Number.isFinite(timestamp) || !fullBaseCandles.length) return;
+    const index = nearestCandleIndex(fullBaseCandles, Math.floor(timestamp / 1000));
+    if (index < 0) return;
+    const fromIndex = Math.max(0, index - 50);
+    const toIndex = Math.min(fullBaseCandles.length - 1, index + 50);
+    try {
+      mainChartRef.current?.timeScale().setVisibleRange({
+        from: fullBaseCandles[fromIndex].time as any,
+        to: fullBaseCandles[toIndex].time as any,
+      });
+      setShowGoToDate(false);
+    } catch {}
+  };
+
+  const startReplay = () => {
+    const dateTimestamp = Date.parse(goToDateValue);
+    const requested = Number.isFinite(dateTimestamp)
+      ? nearestCandleIndex(fullBaseCandles, Math.floor(dateTimestamp / 1000))
+      : Math.max(20, fullBaseCandles.length - 100);
+    setReplayIndex(Math.max(0, requested));
+    setReplayPlaying(false);
+    setShowGoToDate(false);
+  };
+
+  const saveCurrentTemplate = () => {
+    const name = templateName.trim();
+    if (!name) return;
+    const template: ChartTemplate = {
+      id: `template-${Date.now()}`,
+      name,
+      createdAt: Date.now(),
+      snapshot: {
+        tf,
+        chartType,
+        layoutMode,
+        isHA,
+        isLogScale,
+        showVP,
+        activeIndicators: Array.from(activeIndicators),
+        params: { ...params },
+        workspace: structuredClone(workspace),
+      },
+    };
+    const next = [...templates, template];
+    setTemplates(next);
+    saveTemplates(next);
+    setTemplateName('');
+  };
+
+  const applyTemplate = (template: ChartTemplate) => {
+    const snapshot = template.snapshot;
+    setChartType(snapshot.chartType);
+    setLayoutMode(snapshot.layoutMode);
+    setWorkspace(snapshot.workspace);
+    onTfChange?.(snapshot.tf);
+    onIsHAChange?.(snapshot.isHA);
+    onIsLogScaleChange?.(snapshot.isLogScale);
+    onShowVPChange?.(snapshot.showVP);
+    onParamsChange?.(snapshot.params);
+    onActiveIndicatorsChange?.(snapshot.activeIndicators);
+    setShowTemplates(false);
+  };
+
+  const deleteTemplate = (id: string) => {
+    const next = templates.filter((template) => template.id !== id);
+    setTemplates(next);
+    saveTemplates(next);
+  };
+
+  const addExtraIndicator = (kind: ExtraIndicatorKind) => {
+    setWorkspace((current) => ({
+      ...current,
+      extraIndicators: [...current.extraIndicators, createExtraIndicator(kind)],
+    }));
+  };
+
   // Vertical side toolbar style (TV drawing toolbar on left) - closer to TV
   const vbarStyle: React.CSSProperties = {
     width: 28,
@@ -1825,7 +2174,7 @@ export function TradingViewKiteChart({
         @keyframes tvPriceFlash { 0% { filter: brightness(2); } 100% { filter: brightness(1); } }
         .tv-flash-up, .tv-flash-down { animation: tvPriceFlash 0.4s ease-out; }
       `}</style>
-      {/* TV EXACT top header bar */}
+      {/* TradingView-style top header bar */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -1948,15 +2297,29 @@ export function TradingViewKiteChart({
           ))}
         </div>
 
-        {/* Main TV actions - perfect clone style */}
+        {/* Main chart actions */}
         {/* Indicators - TV style button opening real dialog */}
         <button className="tv-ctrl" onClick={() => setShowStudies(!showStudies)} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: showStudies ? tv.blue + '22' : 'transparent', color: showStudies ? tv.blue : tv.dim, borderRadius: 2 }}>fx Indicators</button>
         <button className="tv-ctrl" onClick={() => { /* drawings in left */ }} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 4 }}><IconPencil /> Draw</button>
+        <button className="tv-ctrl" onClick={() => setShowCompare(true)} title="Compare another symbol" style={toolBtnStyle(!!workspace.compareSymbol, tv, tv.blue)}>Compare{workspace.compareSymbol ? `: ${workspace.compareSymbol.split(':').pop()}` : ''}</button>
+        <button className="tv-ctrl" onClick={() => beginAlertDraft()} title="Create a draggable price alert" style={toolBtnStyle(!!alertDraft, tv, tv.orange)}>Alert</button>
+        <button className="tv-ctrl" onClick={() => setShowTemplates(true)} title="Save or apply chart template" style={toolBtnStyle(false, tv, tv.blue)}>Templates</button>
+        <button className="tv-ctrl" onClick={() => setShowGoToDate(true)} title="Go to date or start bar replay" style={toolBtnStyle(replayIndex != null, tv, tv.purple)}>Replay</button>
+
+        {replayIndex != null && (
+          <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 1, border: `1px solid ${tv.border}`, borderRadius: 2 }}>
+            <button className="tv-ctrl" onClick={() => setReplayIndex((index) => Math.max(0, (index ?? 0) - 1))} title="Previous bar" style={toolBtnStyle(false, tv, tv.blue)}>Back</button>
+            <button className="tv-ctrl" onClick={() => setReplayPlaying((playing) => !playing)} title={replayPlaying ? 'Pause replay' : 'Play replay'} style={toolBtnStyle(replayPlaying, tv, tv.green)}>{replayPlaying ? 'Pause' : 'Play'}</button>
+            <button className="tv-ctrl" onClick={() => setReplayIndex((index) => Math.min(fullBaseCandles.length - 1, (index ?? 0) + 1))} title="Next bar" style={toolBtnStyle(false, tv, tv.blue)}>Next</button>
+            <button className="tv-ctrl" onClick={() => { setReplayPlaying(false); setReplayIndex(null); }} title="Exit replay" style={toolBtnStyle(false, tv, tv.red)}>Live</button>
+          </div>
+        )}
 
         <span style={{ color: tv.dim, margin: '0 4px' }}>|</span>
 
         <button className="tv-ctrl" onClick={() => { if (onIsLogScaleChange) onIsLogScaleChange(!isLogScale); }} style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${isLogScale ? tv.blue : tv.border}`, background: isLogScale ? tv.blue+'22' : 'transparent', color: isLogScale ? tv.blue : tv.dim }}>Log</button>
-        <button className="tv-ctrl" onClick={() => { /* toggle vp */ }} style={toolBtnStyle(showVP, tv, tv.amber)}>VP</button>
+        <button className="tv-ctrl" onClick={() => onShowVPChange?.(!showVP)} style={toolBtnStyle(showVP, tv, tv.amber)}>VP</button>
+        <button className="tv-ctrl" onClick={downloadChartImage} title="Download chart image" style={toolBtnStyle(false, tv, tv.blue)}>PNG</button>
         <button className="tv-ctrl" onClick={() => setIsFullscreen(!isFullscreen)} title="Fullscreen" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconFullscreen /></button>
 
         <span style={{ flex: 1 }} />
@@ -2089,11 +2452,11 @@ export function TradingViewKiteChart({
               <div onClick={() => setChartContextMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
               <div className="tv-menu-anim" style={{
                 position: 'fixed',
-                left: Math.max(4, Math.min(chartContextMenu.x, window.innerWidth - 188)),
-                top: Math.max(4, Math.min(chartContextMenu.y, window.innerHeight - 138)),
+                left: Math.max(4, Math.min(chartContextMenu.x, window.innerWidth - 228)),
+                top: Math.max(4, Math.min(chartContextMenu.y, window.innerHeight - 388)),
                 zIndex: 200,
                 background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 4,
-                minWidth: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
+                minWidth: 220, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', fontSize: 11, overflow: 'hidden',
               }}>
                 <div
                   className="tv-ctrl"
@@ -2104,6 +2467,15 @@ export function TradingViewKiteChart({
                   }}
                   style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}
                 >Add horizontal line here</div>
+                <div className="tv-ctrl" onClick={() => { setDrawMode('trend'); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Draw trend line</div>
+                <div className="tv-ctrl" onClick={() => { setDrawMode('fib'); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Draw Fibonacci retracement</div>
+                <div className="tv-ctrl" onClick={() => { setShowStudies(true); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text, borderTop: `1px solid ${tv.border}` }}>Add indicator...</div>
+                <div className="tv-ctrl" onClick={() => beginAlertDraft(chartContextMenu.price)} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Create alert at {chartContextMenu.price.toFixed(2)}</div>
+                <div className="tv-ctrl" onClick={() => { setShowCompare(true); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Compare symbol...</div>
+                <div className="tv-ctrl" onClick={() => { setShowGoToDate(true); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Go to date...</div>
+                <div className="tv-ctrl" onClick={() => { setShowTemplates(true); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Chart templates...</div>
+                <div className="tv-ctrl" onClick={() => { setShowChartSettings(true); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Chart settings...</div>
+                <div className="tv-ctrl" onClick={() => { downloadChartImage(); setChartContextMenu(null); }} style={{ padding: '6px 10px', cursor: 'pointer', color: tv.text }}>Save chart image</div>
                 <div
                   className="tv-ctrl"
                   onClick={() => { clearDrawings(); setChartContextMenu(null); }}
@@ -2121,6 +2493,22 @@ export function TradingViewKiteChart({
                 >Toggle log scale</div>
               </div>
             </>
+          )}
+
+          {alertDraft && (
+            <div
+              onMouseDown={startAlertDrag}
+              title="Drag alert price, then release to create"
+              style={{
+                position: 'absolute', left: 0, right: rightScaleWidth || 56, top: alertDraft.y - 5,
+                height: 10, zIndex: 8, cursor: 'ns-resize', pointerEvents: 'auto',
+              }}
+            >
+              <div style={{ position: 'absolute', left: 0, right: 0, top: 4, borderTop: `1px dashed ${tv.orange}` }} />
+              <span style={{ position: 'absolute', right: 4, top: -8, padding: '1px 4px', borderRadius: 2, background: tv.orange, color: '#fff', fontSize: 9 }}>
+                Alert {alertDraft.price.toFixed(2)}
+              </span>
+            </div>
           )}
 
           {/* Last-price flash badge: pill at the current close's pixel Y, flashes on change */}
@@ -2260,7 +2648,7 @@ export function TradingViewKiteChart({
           <div
             className="tv-modal-anim"
             style={{
-              background: tv.surface, color: tv.text, width: 400, maxHeight: '70vh',
+              background: tv.surface, color: tv.text, width: 520, maxWidth: 'calc(100vw - 24px)', maxHeight: '78vh',
               border: `1px solid ${tv.border}`, borderRadius: 6, overflow: 'hidden',
               boxShadow: '0 8px 30px rgba(0,0,0,0.4)'
             }}
@@ -2270,7 +2658,7 @@ export function TradingViewKiteChart({
               <strong style={{ fontSize: 14 }}>Indicators</strong>
               <button onClick={() => setShowStudies(false)} style={{ background: 'none', border: 'none', color: tv.dim, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconClose /></button>
             </div>
-            <div style={{ padding: 8 }}>
+            <div style={{ padding: 8, maxHeight: '62vh', overflowY: 'auto' }}>
               <input 
                 placeholder="Search (e.g. EMA, RSI, MACD)..." 
                 value={indicatorSearch} 
@@ -2280,7 +2668,9 @@ export function TradingViewKiteChart({
               {filteredIndicators.map(ind => {
                 const isActive = activeIndicators.has(ind.key);
                 const paramFields = INDICATOR_PARAM_FIELDS[ind.key];
-                const isEditingParams = isActive && paramFields && paramEditorKey === ind.key;
+                const isEditingParams = isActive && paramEditorKey === ind.key;
+                const duplicateKind = ({ ema: 'ema', sma: 'sma', rsi: 'rsi', atr: 'atr', stoch: 'stochastic' } as Record<string, ExtraIndicatorKind>)[ind.key];
+                const style = indicatorStyle(ind.key, { color: tv.blue, secondaryColor: tv.orange, lineWidth: 2, visible: true });
                 return (
                   <div key={ind.key} style={{ borderBottom: `1px solid ${tv.border}` }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px' }}>
@@ -2289,7 +2679,7 @@ export function TradingViewKiteChart({
                         <div style={{ fontSize: 9, color: tv.dim }}>{ind.category}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {isActive && paramFields && (
+                        {isActive && (
                           <button
                             className="tv-ctrl"
                             title="Edit parameters"
@@ -2301,6 +2691,9 @@ export function TradingViewKiteChart({
                               color: isEditingParams ? tv.blue : tv.dim, borderRadius: 2, cursor: 'pointer',
                             }}
                           ><IconGear /></button>
+                        )}
+                        {duplicateKind && (
+                          <button className="tv-ctrl" title="Add another instance" onClick={() => addExtraIndicator(duplicateKind)} style={{ padding: '2px 6px', fontSize: 10, background: tv.bg, border: `1px solid ${tv.border}`, color: tv.text, borderRadius: 2, cursor: 'pointer' }}>+1</button>
                         )}
                         <button
                           className="tv-ctrl"
@@ -2322,7 +2715,7 @@ export function TradingViewKiteChart({
                     </div>
                     {isEditingParams && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '2px 4px 8px' }}>
-                        {paramFields!.map(field => {
+                        {(paramFields || []).map(field => {
                           // Periods/multipliers must stay positive - a negative
                           // (or zero) period poisons ema/bollingerBands/atr/
                           // supertrend/rsi/macd with NaN or runaway values (their
@@ -2346,16 +2739,171 @@ export function TradingViewKiteChart({
                           </label>
                           );
                         })}
+                        <label style={{ fontSize: 9, color: tv.dim, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          Color
+                          <input type="color" value={style.color} onChange={(event) => updateIndicatorStyle(ind.key, { color: event.target.value })} style={{ width: 42, height: 24, padding: 1, background: tv.bg, border: `1px solid ${tv.border}` }} />
+                        </label>
+                        {['ema', 'bb', 'st-fast', 'st-mid', 'st-slow', 'macd', 'vol'].includes(ind.key) && (
+                          <label style={{ fontSize: 9, color: tv.dim, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            Secondary
+                            <input type="color" value={style.secondaryColor || tv.orange} onChange={(event) => updateIndicatorStyle(ind.key, { secondaryColor: event.target.value })} style={{ width: 42, height: 24, padding: 1, background: tv.bg, border: `1px solid ${tv.border}` }} />
+                          </label>
+                        )}
+                        <label style={{ fontSize: 9, color: tv.dim, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          Width
+                          <select value={style.lineWidth} onChange={(event) => updateIndicatorStyle(ind.key, { lineWidth: Number(event.target.value) as IndicatorStyle['lineWidth'] })} style={{ height: 24, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }}>
+                            {[1, 2, 3, 4].map((width) => <option key={width} value={width}>{width}px</option>)}
+                          </select>
+                        </label>
+                        <label style={{ fontSize: 9, color: tv.dim, display: 'flex', alignItems: 'center', gap: 4, alignSelf: 'end', height: 24 }}>
+                          <input type="checkbox" checked={style.visible} onChange={(event) => updateIndicatorStyle(ind.key, { visible: event.target.checked })} /> Visible
+                        </label>
                       </div>
                     )}
                   </div>
                 );
               })}
               {filteredIndicators.length === 0 && <div style={{ padding: 8, color: tv.dim, fontSize: 11 }}>No matches. Try EMA, RSI, etc.</div>}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${tv.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>Additional instances and formulas</div>
+                    <div style={{ fontSize: 9, color: tv.dim }}>Add repeated indicators or a safe OHLC formula.</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {(['ema', 'sma', 'rsi', 'atr', 'stochastic', 'formula'] as ExtraIndicatorKind[]).map((kind) => (
+                      <button key={kind} className="tv-ctrl" onClick={() => addExtraIndicator(kind)} style={{ padding: '2px 6px', fontSize: 9, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 2 }}>+ {kind === 'formula' ? 'Formula' : kind.toUpperCase()}</button>
+                    ))}
+                  </div>
+                </div>
+                {workspace.extraIndicators.map((indicator) => {
+                  let formulaError = '';
+                  if (indicator.kind === 'formula') {
+                    try { compileFormula(indicator.formula || ''); } catch (error: any) { formulaError = error?.message || 'Invalid formula'; }
+                  }
+                  const updateExtra = (patch: Partial<typeof indicator>) => setWorkspace((current) => ({
+                    ...current,
+                    extraIndicators: current.extraIndicators.map((item) => item.id === indicator.id ? { ...item, ...patch } : item),
+                  }));
+                  return (
+                    <div key={indicator.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'end', padding: '7px 4px', borderTop: `1px solid ${tv.border}` }}>
+                      <label style={{ fontSize: 9, color: tv.dim }}>
+                        {indicator.kind === 'formula' ? 'Formula (open, high, low, close, volume, hl2, hlc3, ohlc4, change)' : 'Name'}
+                        <input
+                          value={indicator.kind === 'formula' ? (indicator.formula || '') : indicator.name}
+                          onChange={(event) => updateExtra(indicator.kind === 'formula' ? { formula: event.target.value } : { name: event.target.value })}
+                          style={{ display: 'block', width: '100%', marginTop: 2, padding: '3px 5px', background: tv.bg, color: tv.text, border: `1px solid ${formulaError ? tv.red : tv.border}`, borderRadius: 2 }}
+                        />
+                        {formulaError && <span style={{ display: 'block', marginTop: 2, color: tv.red }}>{formulaError}</span>}
+                      </label>
+                      {indicator.kind !== 'formula' && (
+                        <label style={{ fontSize: 9, color: tv.dim }}>
+                          Period
+                          <input type="number" min={1} value={indicator.period} onChange={(event) => updateExtra({ period: Math.max(1, Number(event.target.value) || 1) })} style={{ display: 'block', width: 54, marginTop: 2, padding: '3px', background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }} />
+                        </label>
+                      )}
+                      <label style={{ fontSize: 9, color: tv.dim }}>
+                        Color
+                        <input type="color" value={indicator.style.color} onChange={(event) => updateExtra({ style: { ...indicator.style, color: event.target.value } })} style={{ display: 'block', width: 38, height: 24, marginTop: 2 }} />
+                      </label>
+                      <button className="tv-ctrl" title="Remove instance" onClick={() => setWorkspace((current) => ({ ...current, extraIndicators: current.extraIndicators.filter((item) => item.id !== indicator.id) }))} style={{ height: 24, padding: '2px 7px', color: tv.red, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2 }}>Remove</button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
             <div style={{ padding: 8, fontSize: 9, color: tv.dim, borderTop: `1px solid ${tv.border}`, background: tv.bg }}>
-              Click Add/Remove. Use the gear icon on an active indicator to edit its params. Close with X or outside.
+              Add/remove indicators, use the gear for parameters and style, or add repeated/custom instances below.
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCompare && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowCompare(false)}>
+          <div style={{ width: 380, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.35)' }} onClick={(event) => event.stopPropagation()}>
+            <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}>
+              <strong>Compare symbol</strong>
+              <button onClick={() => setShowCompare(false)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button>
+            </div>
+            <div style={{ padding: 12 }}>
+              <input autoFocus value={compareSearch} onChange={(event) => setCompareSearch(event.target.value)} placeholder="NSE:TCS" style={{ width: '100%', padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} />
+              <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 6 }}>
+                {COMMON_SYMBOLS.filter((item) => item !== symbol && item.toLowerCase().includes(compareSearch.toLowerCase())).map((item) => (
+                  <button key={item} onClick={() => { setWorkspace((current) => ({ ...current, compareSymbol: item })); setShowCompare(false); setCompareSearch(''); }} style={{ display: 'block', width: '100%', padding: '7px 8px', textAlign: 'left', background: workspace.compareSymbol === item ? tv.blue + '22' : 'transparent', color: tv.text, border: 0, borderBottom: `1px solid ${tv.border}`, cursor: 'pointer' }}>{item}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: 10, borderTop: `1px solid ${tv.border}`, display: 'flex', gap: 8 }}>
+              <button onClick={() => { setWorkspace((current) => ({ ...current, compareSymbol: null })); setShowCompare(false); }} style={{ flex: 1, padding: 7, background: tv.bg, color: tv.red, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Remove comparison</button>
+              <button onClick={() => { const value = compareSearch.trim().toUpperCase(); if (value) { setWorkspace((current) => ({ ...current, compareSymbol: value })); setShowCompare(false); setCompareSearch(''); } }} style={{ flex: 1, padding: 7, background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer' }}>Compare</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showChartSettings && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowChartSettings(false)}>
+          <div style={{ width: 360, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6 }} onClick={(event) => event.stopPropagation()}>
+            <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}><strong>Chart settings</strong><button onClick={() => setShowChartSettings(false)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button></div>
+            <div style={{ padding: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              {([['candleUp', 'Up candle'], ['candleDown', 'Down candle']] as const).map(([key, label]) => (
+                <label key={key} style={{ fontSize: 10, color: tv.dim }}>{label}<input type="color" value={workspace.appearance[key]} onChange={(event) => setWorkspace((current) => ({ ...current, appearance: { ...current.appearance, [key]: event.target.value } }))} style={{ display: 'block', width: '100%', height: 30, marginTop: 4 }} /></label>
+              ))}
+              <label style={{ fontSize: 11, color: tv.text, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={workspace.appearance.gridVisible} onChange={(event) => setWorkspace((current) => ({ ...current, appearance: { ...current.appearance, gridVisible: event.target.checked } }))} /> Grid lines</label>
+              <label style={{ fontSize: 11, color: tv.text, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={workspace.appearance.magnetCrosshair} onChange={(event) => setWorkspace((current) => ({ ...current, appearance: { ...current.appearance, magnetCrosshair: event.target.checked } }))} /> Magnet crosshair</label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTemplates && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowTemplates(false)}>
+          <div style={{ width: 440, maxWidth: 'calc(100vw - 24px)', maxHeight: '75vh', overflow: 'hidden', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6 }} onClick={(event) => event.stopPropagation()}>
+            <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}><strong>Chart templates</strong><button onClick={() => setShowTemplates(false)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button></div>
+            <div style={{ padding: 10, display: 'flex', gap: 8 }}>
+              <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Template name" style={{ flex: 1, padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} />
+              <button onClick={saveCurrentTemplate} disabled={!templateName.trim()} style={{ padding: '7px 12px', background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer', opacity: templateName.trim() ? 1 : 0.5 }}>Save current</button>
+            </div>
+            <div style={{ maxHeight: '50vh', overflowY: 'auto', borderTop: `1px solid ${tv.border}` }}>
+              {templates.map((template) => (
+                <div key={template.id} style={{ padding: 10, display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${tv.border}` }}>
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 12 }}>{template.name}</div><div style={{ fontSize: 9, color: tv.dim }}>{template.snapshot.tf} / {template.snapshot.chartType} / {template.snapshot.activeIndicators.length} indicators</div></div>
+                  <button onClick={() => applyTemplate(template)} style={{ padding: '4px 9px', background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer' }}>Apply</button>
+                  <button onClick={() => deleteTemplate(template.id)} style={{ padding: '4px 9px', background: tv.bg, color: tv.red, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Delete</button>
+                </div>
+              ))}
+              {!templates.length && <div style={{ padding: 18, textAlign: 'center', color: tv.dim, fontSize: 11 }}>No saved templates.</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGoToDate && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowGoToDate(false)}>
+          <div style={{ width: 360, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6 }} onClick={(event) => event.stopPropagation()}>
+            <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}><strong>Go to date / Bar Replay</strong><button onClick={() => setShowGoToDate(false)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button></div>
+            <div style={{ padding: 14 }}><input type="datetime-local" value={goToDateValue} onChange={(event) => setGoToDateValue(event.target.value)} style={{ width: '100%', padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} /></div>
+            <div style={{ padding: 12, borderTop: `1px solid ${tv.border}`, display: 'flex', gap: 8 }}>
+              <button onClick={jumpToDate} disabled={!goToDateValue} style={{ flex: 1, padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Go to date</button>
+              <button onClick={startReplay} disabled={!fullBaseCandles.length} style={{ flex: 1, padding: 8, background: tv.purple, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer' }}>Start replay</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {alertDialog && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAlertDialog(null)}>
+          <div style={{ width: 380, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6 }} onClick={(event) => event.stopPropagation()}>
+            <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}><strong>Create price alert</strong><button onClick={() => setAlertDialog(null)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button></div>
+            <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 11, color: tv.dim }}>{symbol}</div>
+              <select value={alertCondition} onChange={(event) => setAlertCondition(event.target.value as typeof alertCondition)} style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }}><option value="price_above">Price crosses above</option><option value="price_below">Price crosses below</option></select>
+              <input type="number" step="0.05" value={Number(alertDialog.price.toFixed(4))} onChange={(event) => setAlertDialog({ price: Number(event.target.value) })} style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }} />
+              <input value={alertNotes} onChange={(event) => setAlertNotes(event.target.value)} placeholder="Optional note" style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }} />
+              {createAlert.isError && <div style={{ fontSize: 10, color: tv.red }}>{createAlert.error.message}</div>}
+            </div>
+            <div style={{ padding: 12, borderTop: `1px solid ${tv.border}`, display: 'flex', gap: 8 }}><button onClick={() => { setAlertDialog(null); setAlertDraft(null); }} style={{ flex: 1, padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }}>Cancel</button><button onClick={submitAlert} disabled={createAlert.isPending || !(alertDialog.price > 0)} style={{ flex: 1, padding: 8, background: tv.orange, color: '#fff', border: 0, borderRadius: 3, opacity: createAlert.isPending ? 0.6 : 1 }}>{createAlert.isPending ? 'Creating...' : 'Create alert'}</button></div>
           </div>
         </div>
       )}
@@ -2374,4 +2922,3 @@ function toolBtnStyle(active: boolean, t: any, accent: string): React.CSSPropert
     cursor: 'pointer',
   };
 }
-
