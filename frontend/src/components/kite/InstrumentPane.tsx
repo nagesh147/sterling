@@ -110,7 +110,7 @@ export function InstrumentPane({ symbol, initialTab = 'chart', onSymbolChange, t
 
 // ─── Chart View ─────────────────────────────────────────────────────────────
 
-type IndicatorKey = 'ema' | 'bb' | 'st-fast' | 'st-mid' | 'st-slow' | 'vwap' | 'vol' | 'rsi' | 'macd';
+type IndicatorKey = 'ema' | 'bb' | 'st-fast' | 'st-mid' | 'st-slow' | 'vwap' | 'vol' | 'rsi' | 'macd' | 'sma' | 'atr' | 'stoch';
 
 const ALL_TFS = ['1m', '5m', '15m', '30m', '1H', '4H', 'D'];
 const INDICATOR_LABELS: Record<IndicatorKey, string> = {
@@ -123,6 +123,9 @@ const INDICATOR_LABELS: Record<IndicatorKey, string> = {
   vol: 'Volume',
   rsi: 'RSI',
   macd: 'MACD',
+  sma: 'SMA',
+  atr: 'ATR',
+  stoch: 'Stochastic',
 };
 
 function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } }) {
@@ -181,6 +184,9 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     stSlowPeriod: 7, stSlowMult: 3,
     rsiPeriod: 14,
     macdFast: 12, macdSlow: 26, macdSig: 9,
+    smaPeriod: 50,
+    atrPeriod: 14,
+    stochPeriod: 14,
   });
 
   const [params, setParams] = useState(() =>
@@ -600,8 +606,10 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
             onTfChange={setTf}
             onIsHAChange={setIsHA}
             onIsLogScaleChange={setIsLogScale}
+            onShowVPChange={setShowVP}
             onSymbolChange={onSymbolChange}
             onToggleIndicator={toggleIndicator as any}
+            onActiveIndicatorsChange={(keys) => setActive(new Set(keys as IndicatorKey[]))}
             onParamsChange={setParams}
             signalData={signalData}
             onChartReady={handleChartReady}
