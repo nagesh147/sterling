@@ -145,7 +145,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
           position: 'absolute', top: 3, right: 3,
           width: 14, height: 14, padding: 0, lineHeight: '12px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 600,
+          fontSize: 11, fontWeight: 100,
           background: 'transparent', border: 'none', borderRadius: 3,
           color: DIM, cursor: 'pointer',
           opacity: hover ? 0.7 : 0,
@@ -161,7 +161,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
           <span style={{
-            fontSize: 12, fontWeight: 700, color: TEXT,
+            fontSize: 12, fontWeight: 100, color: TEXT,
             letterSpacing: '0.015em', textTransform: 'uppercase', lineHeight: 1.2,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
@@ -171,7 +171,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
         </div>
 
         <span ref={flashRef} style={{
-          fontSize: 24, fontWeight: 500, color: priceColor,
+          fontSize: 24, fontWeight: 100, color: priceColor,
           fontVariantNumeric: 'tabular-nums lining-nums', letterSpacing: '-0.015em',
           marginTop: 7, lineHeight: 1.08,
         }}>
@@ -180,12 +180,12 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
 
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 6, minHeight: 16 }}>
           {abs != null && (
-            <span style={{ fontSize: 12.5, fontWeight: 500, color: chgColor, fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2 }}>{absStr}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 100, color: chgColor, fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2 }}>{absStr}</span>
           )}
           {pct != null && (
-            <span style={{ fontSize: 12.5, fontWeight: 500, color: chgColor, fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2 }}>{pctStr}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 100, color: chgColor, fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2 }}>{pctStr}</span>
           )}
-          {abs == null && <span style={{ fontSize: 11, fontWeight: 500, color: DIM }}>{hasPrice ? exch : 'no data'}</span>}
+          {abs == null && <span style={{ fontSize: 11, fontWeight: 100, color: DIM }}>{hasPrice ? exch : 'no data'}</span>}
         </div>
       </div>
 
