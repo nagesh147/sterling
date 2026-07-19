@@ -72,6 +72,23 @@ describe('InstrumentPane cold-mount zoom race', () => {
     expect(screen.getByText('Loading chart…')).toBeTruthy();
   });
 
+  it('does not let a slow chart-state GET block first paint for more than the soft timeout', async () => {
+    vi.useFakeTimers();
+    const { unmount } = render(<InstrumentPane symbol={A} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(chartMounts.length).toBe(0);
+
+    await act(async () => { vi.advanceTimersByTime(449); });
+    expect(chartMounts.length).toBe(0);
+
+    await act(async () => { vi.advanceTimersByTime(1); });
+    expect(chartMounts.length).toBe(1);
+    expect(chartMounts[0].persistedZoom).toBeNull();
+
+    unmount();
+    vi.useRealTimers();
+  });
+
   it('mounts the chart exactly once, already carrying the resolved zoom - no fit-then-snap', async () => {
     render(<InstrumentPane symbol={A} />);
     await act(async () => { await Promise.resolve(); });
