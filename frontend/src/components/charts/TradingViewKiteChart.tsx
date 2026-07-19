@@ -46,6 +46,8 @@ import {
   upsertTemplate,
 } from './chartWorkspace';
 
+const COMPARISON_CANDLE_LIMIT = 360;
+
 interface TradingViewKiteChartProps {
   symbol: string;
   rawCandles: any[];
@@ -283,10 +285,10 @@ export function TradingViewKiteChart({
   const createAlert = useCreateAlert();
 
   const comparisonSlots = useMemo(() => workspace.comparisons.slice(0, MAX_COMPARISONS), [workspace.comparisons]);
-  const { data: comparisonRawCandles0 = [] } = useCandles(comparisonSlots[0]?.symbol || '', tf, 800);
-  const { data: comparisonRawCandles1 = [] } = useCandles(comparisonSlots[1]?.symbol || '', tf, 800);
-  const { data: comparisonRawCandles2 = [] } = useCandles(comparisonSlots[2]?.symbol || '', tf, 800);
-  const { data: comparisonRawCandles3 = [] } = useCandles(comparisonSlots[3]?.symbol || '', tf, 800);
+  const { data: comparisonRawCandles0 = [] } = useCandles(comparisonSlots[0]?.symbol || '', tf, COMPARISON_CANDLE_LIMIT);
+  const { data: comparisonRawCandles1 = [] } = useCandles(comparisonSlots[1]?.symbol || '', tf, COMPARISON_CANDLE_LIMIT);
+  const { data: comparisonRawCandles2 = [] } = useCandles(comparisonSlots[2]?.symbol || '', tf, COMPARISON_CANDLE_LIMIT);
+  const { data: comparisonRawCandles3 = [] } = useCandles(comparisonSlots[3]?.symbol || '', tf, COMPARISON_CANDLE_LIMIT);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
