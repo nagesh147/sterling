@@ -87,7 +87,9 @@ describe('chart workspace', () => {
 
   it('evaluates custom formulas without exposing object access or arbitrary calls', () => {
     expect(compileFormula('sqrt(close) + abs(change)')({ close: 16, change: -2 })).toBe(6);
+    expect(compileFormula('close > open ? max(close, high) : min(open, low)')({ open: 10, high: 13, low: 9, close: 12 })).toBe(13);
     expect(() => compileFormula('constructor.constructor("return 1")()')({})).toThrow();
+    expect(() => compileFormula('close.toString()')({ close: 1 })).toThrow();
     expect(formulaSeries('hlc3', [{ open: 1, high: 4, low: 1, close: 4, volume: 3 }])).toEqual([3]);
   });
 
