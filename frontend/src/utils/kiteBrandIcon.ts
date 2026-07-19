@@ -37,7 +37,7 @@ function upsertLink(rel: string, href: string, type?: string): void {
     link.rel = rel;
     document.head.appendChild(link);
   }
-  link.href = href;
+  link.setAttribute('href', href);
   if (type) link.type = type;
   else link.removeAttribute('type');
 }
@@ -51,5 +51,5 @@ export function applyKiteBrandIcon(value: unknown): void {
   upsertLink('apple-touch-icon', icon.href);
 
   const og = document.head.querySelector<HTMLMetaElement>('meta[property="og:image"]');
-  if (og) og.content = icon.href;
+  if (og) og.setAttribute('content', icon.href);
 }
