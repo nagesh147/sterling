@@ -52,6 +52,7 @@ describe('TradingViewKiteChart workspace controls', () => {
   beforeEach(() => {
     localStorage.clear();
     useCandlesMock.mockReturnValue({ data: [] });
+    createChartMock.mockClear();
     chartInstances.length = 0;
     class ResizeObserverMock { observe() {} disconnect() {} }
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
@@ -99,6 +100,48 @@ describe('TradingViewKiteChart workspace controls', () => {
     fireEvent.click(screen.getByTitle('Go to date or start bar replay'));
     expect(screen.getByText('Go to date / Bar Replay')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start replay' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('starts replay with progress and speed controls', () => {
+    const bars = Array.from({ length: 80 }, (_, index) => ({ time: index + 1, open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 1000 + index }));
+    renderChart({ rawCandles: bars });
+    fireEvent.click(screen.getByTitle('Go to date or start bar replay'));
+    fireEvent.change(screen.getByLabelText('Replay speed'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start replay' }));
+    expect(screen.getByLabelText('Replay progress')).toBeTruthy();
+    expect(screen.getByLabelText('Replay speed')).toBeTruthy();
+  });
+
+  it('imports and exports templates as normalized JSON', () => {
+    renderChart();
+    fireEvent.click(screen.getByTitle('Save or apply chart template'));
+    fireEvent.change(screen.getByPlaceholderText('Template name'), { target: { value: 'Momentum desk' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
+    expect((screen.getByPlaceholderText('Paste or export template JSON') as HTMLTextAreaElement).value).toContain('"Momentum desk"');
+
+    const imported = JSON.stringify({
+      templates: [{
+        id: 'imported',
+        name: 'Imported layout',
+        createdAt: 1,
+        snapshot: {
+          tf: '5m',
+          chartType: 'line',
+          layoutMode: '1',
+          isHA: false,
+          isLogScale: false,
+          showVP: false,
+          activeIndicators: ['ema', 'ema'],
+          params: {},
+          workspace: { styles: {}, extraIndicators: [], compareSymbol: 'nse:tcs', appearance: {} },
+        },
+      }],
+    });
+    fireEvent.change(screen.getByPlaceholderText('Paste or export template JSON'), { target: { value: imported } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import JSON' }));
+    const saved = JSON.parse(localStorage.getItem('sterling:kite-chart-templates:v1') || '[]');
+    expect(saved.some((template: any) => template.name === 'Imported layout')).toBe(true);
   });
 
   it('builds the complete indicator roster, duplicates, formulas, and comparison series', async () => {
