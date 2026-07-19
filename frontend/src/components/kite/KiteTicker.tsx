@@ -2,22 +2,20 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { useKiteQuote } from '../../hooks/useKite';
 import { useCandles } from '../../hooks/useCandles';
 import { useTickerPins } from '../../store/useTickerPins';
-import { InstrumentLabel } from './InstrumentLabel';
-import { SignalMarker } from './SignalMarker';
 
 // Keep the classic Chromium card treatment, but use the native UI stack so text
 // stays crisp across Chrome/Chromium instead of depending on a downloaded webfont.
 const TILE_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-// Match Kite/light-theme watchlist semantics: profit/up = Fruit Salad green.
+// Match the Kite light-theme watchlist semantics exactly.
 const UP = '#4caf50';
-const DOWN = '#EF4444';
-const SPARK = '#4caf50';
-const TICKER_BG = '#fff';
-const TICKER_BORDER = '#e0e0e0';
-const CARD_BORDER = '#9b9b9b';
-const TEXT = '#333';
-const DIM = '#777';
+const DOWN = '#df514c';
+const TICKER_BG = '#f7f9fc';
+const TICKER_BORDER = '#e5e7eb';
+const CARD_BG = '#ffffff';
+const CARD_BORDER = '#e0e0e0';
+const TEXT = '#333333';
+const DIM = '#9b9b9b';
 
 const HIST = new Map<string, number[]>();
 const HIST_CAP = 48;
@@ -35,22 +33,35 @@ function pushHist(sym: string, seed: number | undefined, px: number | undefined)
   return arr;
 }
 
-function Sparkline({ points, color, width = 80, height = 40 }: {
+function isIndexSymbol(symbol: string, exchange: string): boolean {
+  const value = symbol.toUpperCase();
+  return exchange === 'INDICES'
+    || value.includes('INDEX')
+    || value === 'NIFTY 50'
+    || value === 'NIFTY BANK'
+    || value === 'NIFTY FIN SERVICE'
+    || value === 'NIFTY 100'
+    || value === 'NIFTY COMMODITIES'
+    || value === 'SENSEX'
+    || value === 'BANKEX';
+}
+
+function Sparkline({ points, color, width = 138, height = 82 }: {
   points: number[]; color: string; width?: number; height?: number;
 }) {
   if (!points || points.length < 2) return <div style={{ width, height }} />;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
-  const pad = 3;
+  const pad = 5;
   const h = height - pad * 2;
   const stepX = width / (points.length - 1);
   const d = points
     .map((p, i) => `${(i * stepX).toFixed(1)},${(pad + h - ((p - min) / range) * h).toFixed(1)}`)
     .join(' ');
   return (
-    <svg width={width} height={height} style={{ display: 'block', overflow: 'visible', flexShrink: 0 }}>
-      <polyline points={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+    <svg width={width} height={height} style={{ display: 'block', overflow: 'visible', flexShrink: 0 }} aria-hidden>
+      <polyline points={d} fill="none" stroke={color} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -58,8 +69,6 @@ function Sparkline({ points, color, width = 80, height = 40 }: {
 function KiteCard({ sym, q }: { sym: string; q: any }) {
   const flashRef = useRef<HTMLSpanElement>(null);
   const prevRef = useRef<number | null>(null);
-  const unpin = useTickerPins((s) => s.unpin);
-  const [hover, setHover] = useState(false);
 
   const last: number | undefined = q?.last_price;
   const close: number | undefined = q?.ohlc?.close;
@@ -75,8 +84,8 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
     abs = q.net_change;
   }
   const isUp = (abs ?? 0) > 0;
-  const chgColor = abs == null || abs === 0 ? DIM : isUp ? UP : DOWN;
-  const priceColor = abs == null || abs === 0 ? TEXT : chgColor;
+  const isFlat = abs == null || abs === 0;
+  const movementColor = isFlat ? DIM : isUp ? UP : DOWN;
 
   const { data: candles } = useCandles(sym, '5m', 90);
   const series = useMemo(() => {
@@ -111,6 +120,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const segments = sym.split(':');
   const exch = segments[0] || '';
   const rawTs = segments.slice(1).join(':') || sym;
+  const marketLabel = isIndexSymbol(rawTs, exch) ? 'INDEX' : exch;
 
   const priceStr = hasPrice
     ? last!.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -120,77 +130,70 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
 
   return (
     <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        background: TICKER_BG,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18,
+        background: CARD_BG,
         border: `1px solid ${CARD_BORDER}`,
-        borderRadius: 6,
-        padding: '12px 14px',
-        width: 250,
+        borderRadius: 16,
+        padding: '20px 20px 18px 22px',
+        width: 360,
+        minHeight: 146,
         flexShrink: 0,
-        position: 'relative',
-        boxShadow: 'none',
+        boxShadow: '0 1px 4px rgba(15, 23, 42, 0.08)',
         boxSizing: 'border-box',
         color: TEXT,
         WebkitFontSmoothing: 'antialiased',
         MozOsxFontSmoothing: 'grayscale',
         textRendering: 'geometricPrecision',
-      }}>
-      <button
-        onClick={(e) => { e.stopPropagation(); unpin(sym); }}
-        title="Remove from ticker"
-        aria-label={`Remove ${rawTs} from ticker`}
-        style={{
-          position: 'absolute', top: 3, right: 3,
-          width: 14, height: 14, padding: 0, lineHeight: '12px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, fontWeight: 100,
-          background: 'transparent', border: 'none', borderRadius: 3,
-          color: DIM, cursor: 'pointer',
-          opacity: hover ? 0.7 : 0,
-          pointerEvents: hover ? 'auto' : 'none',
-          transition: 'opacity .12s',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = TEXT; }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = DIM; }}
-      >
-        ×
-      </button>
-
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, marginBottom: 15 }}>
           <span style={{
-            fontSize: 12, fontWeight: 100, color: TEXT,
-            letterSpacing: '0.015em', textTransform: 'uppercase', lineHeight: 1.2,
+            fontSize: 18, fontWeight: 700, color: TEXT, lineHeight: 1.2,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            <InstrumentLabel symbol={rawTs} />
+            {rawTs}
           </span>
-          <SignalMarker symbol={sym} color={DIM} />
+          {marketLabel && (
+            <span style={{ fontSize: 15, fontWeight: 600, color: DIM, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+              {marketLabel}
+            </span>
+          )}
         </div>
 
         <span ref={flashRef} style={{
-          fontSize: 24, fontWeight: 100, color: priceColor,
-          fontVariantNumeric: 'tabular-nums lining-nums', letterSpacing: '-0.015em',
-          marginTop: 7, lineHeight: 1.08,
+          fontSize: 42, fontWeight: 300, color: TEXT,
+          fontVariantNumeric: 'tabular-nums lining-nums', letterSpacing: '-0.02em',
+          lineHeight: 1,
         }}>
           {priceStr}
         </span>
 
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginTop: 6, minHeight: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 26, marginTop: 14, minHeight: 24 }}>
           {abs != null && (
-            <span style={{ fontSize: 12.5, fontWeight: 100, color: chgColor, fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2 }}>{absStr}</span>
+            <span style={{
+              fontSize: 19, fontWeight: 400, color: movementColor,
+              fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2,
+            }}>
+              {absStr}
+            </span>
           )}
           {pct != null && (
-            <span style={{ fontSize: 12.5, fontWeight: 100, color: chgColor, fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2 }}>{pctStr}</span>
+            <span style={{
+              fontSize: 19, fontWeight: 400, color: movementColor,
+              fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2,
+            }}>
+              {pctStr}
+            </span>
           )}
-          {abs == null && <span style={{ fontSize: 11, fontWeight: 100, color: DIM }}>{hasPrice ? exch : 'no data'}</span>}
+          {abs == null && <span style={{ fontSize: 12, fontWeight: 400, color: DIM }}>{hasPrice ? marketLabel : 'no data'}</span>}
         </div>
       </div>
 
-      <Sparkline points={series} color={abs == null || abs === 0 ? SPARK : isUp ? UP : DOWN} width={76} height={46} />
+      <div style={{ flex: '0 0 138px', alignSelf: 'center', marginTop: 16 }}>
+        <Sparkline points={series} color={movementColor} width={138} height={82} />
+      </div>
     </div>
   );
 }
@@ -211,10 +214,10 @@ export function KiteTicker() {
     if (!outer || !copy) return;
     const measure = () => {
       const copyW = copy.scrollWidth;
-      const avail = outer.clientWidth - 40;
+      const avail = outer.clientWidth - 32;
       const over = copyW > 0 && copyW > avail;
       setOverflow(over);
-      setShift(over ? copyW + 8 : 0);
+      setShift(over ? copyW + 12 : 0);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -226,8 +229,8 @@ export function KiteTicker() {
   if (items.length === 0) {
     return (
       <div style={{
-        height: 56, background: TICKER_BG, borderBottom: `1px solid ${TICKER_BORDER}`,
-        display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0,
+        height: 72, background: TICKER_BG, borderBottom: `1px solid ${TICKER_BORDER}`,
+        display: 'flex', alignItems: 'center', padding: '0 16px', flexShrink: 0,
         fontFamily: TILE_FONT,
       }}>
         <span style={{ color: DIM, fontSize: 11 }}>
@@ -241,14 +244,14 @@ export function KiteTicker() {
     <KiteCard key={w.symbol} sym={w.symbol} q={quotes?.[w.symbol]} />
   ));
 
-  const GAP = 10;
+  const GAP = 12;
   const duration = Math.min(120, Math.max(12, shift / 45));
 
   return (
     <div ref={outerRef} style={{
       background: TICKER_BG,
       borderBottom: `1px solid ${TICKER_BORDER}`,
-      padding: '10px 20px', flexShrink: 0, overflow: 'hidden',
+      padding: '14px 16px', flexShrink: 0, overflow: 'hidden',
       fontFamily: TILE_FONT,
     }}>
       <div
