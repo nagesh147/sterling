@@ -18,11 +18,15 @@ import {
 import { MiniGridPane } from './MiniGridPane';
 import {
   ChartTemplate,
+  ComparisonOverlay,
   DEFAULT_WORKSPACE,
   ExtraIndicatorKind,
   IndicatorStyle,
+  MAX_COMPARISONS,
   compileFormula,
+  comparisonSeriesData,
   createChartTemplate,
+  createComparisonOverlay,
   createExtraIndicator,
   exportTemplatesToJson,
   formulaSeries,
@@ -160,7 +164,7 @@ export function TradingViewKiteChart({
   // A separate lightweight effect below pushes fresh data onto the already-built
   // chart via setData() (no teardown) whenever only the candle data changed.
   const baseCandlesRef = useRef<any[]>([]);
-  const comparisonCandlesRef = useRef<any[]>([]);
+  const comparisonCandlesRef = useRef<Array<{ overlay: ComparisonOverlay; candles: any[] }>>([]);
   const activeIndicatorsRef = useRef<Set<string>>(new Set());
   const paramsRef = useRef<any>({});
   const chartTypeRef = useRef<'candles' | 'line' | 'area' | 'bars'>('candles');
@@ -277,7 +281,11 @@ export function TradingViewKiteChart({
   const [templateError, setTemplateError] = useState('');
   const createAlert = useCreateAlert();
 
-  const { data: comparisonRawCandles = [] } = useCandles(workspace.compareSymbol || '', tf, 800);
+  const comparisonSlots = useMemo(() => workspace.comparisons.slice(0, MAX_COMPARISONS), [workspace.comparisons]);
+  const { data: comparisonRawCandles0 = [] } = useCandles(comparisonSlots[0]?.symbol || '', tf, 800);
+  const { data: comparisonRawCandles1 = [] } = useCandles(comparisonSlots[1]?.symbol || '', tf, 800);
+  const { data: comparisonRawCandles2 = [] } = useCandles(comparisonSlots[2]?.symbol || '', tf, 800);
+  const { data: comparisonRawCandles3 = [] } = useCandles(comparisonSlots[3]?.symbol || '', tf, 800);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -446,11 +454,26 @@ export function TradingViewKiteChart({
     return fullBaseCandles.slice(0, Math.min(replayIndex + 1, fullBaseCandles.length));
   }, [fullBaseCandles, replayIndex]);
 
-  const comparisonCandles = useMemo(() => {
-    const valid = comparisonRawCandles.filter((c: any) => c.time != null && !isNaN(c.time));
+  const normalizeComparisonCandles = useCallback((raw: any[]) => {
+    const valid = raw.filter((c: any) => c.time != null && !isNaN(c.time));
     return [...valid].sort((a: any, b: any) => a.time - b.time)
       .filter((value: any, index: number, all: any[]) => index === 0 || value.time !== all[index - 1].time);
-  }, [comparisonRawCandles]);
+  }, []);
+
+  const comparisonCandles = useMemo(() => {
+    const rawSlots = [comparisonRawCandles0, comparisonRawCandles1, comparisonRawCandles2, comparisonRawCandles3];
+    return comparisonSlots.map((overlay, index) => ({
+      overlay,
+      candles: normalizeComparisonCandles(rawSlots[index] || []),
+    }));
+  }, [
+    comparisonSlots,
+    comparisonRawCandles0,
+    comparisonRawCandles1,
+    comparisonRawCandles2,
+    comparisonRawCandles3,
+    normalizeComparisonCandles,
+  ]);
 
   useEffect(() => {
     if (replayIndex == null || replayIndex < fullBaseCandles.length) return;
@@ -1003,20 +1026,22 @@ export function TradingViewKiteChart({
       addLineIndicator(`extra:${indicator.id}`, `${indicator.name}(${indicator.kind === 'formula' ? indicator.formula : period})`, values, indicator.style, scaleId);
     });
 
-    const comparison = comparisonCandlesRef.current;
-    if (workspace.compareSymbol && comparison.length) {
+    const comparisons = comparisonCandlesRef.current;
+    comparisons.forEach(({ overlay, candles }) => {
+      if (!overlay.visible || !candles.length) return;
+      const priceScaleId = overlay.mode === 'percent' ? 'compare-percent' : `compare-${overlay.id}`;
       const compareSeries = chart.addSeries(LineSeries, {
-        color: tv.amber,
+        color: overlay.color,
         lineWidth: 2,
-        priceScaleId: 'compare',
+        priceScaleId,
         priceLineVisible: false,
         lastValueVisible: true,
-        title: workspace.compareSymbol,
+        title: overlay.mode === 'percent' ? `${overlay.symbol} %` : overlay.symbol,
       });
-      chart.priceScale('compare').applyOptions({ visible: false, autoScale: true });
-      compareSeries.setData(comparison.map((bar: any) => ({ time: bar.time as any, value: bar.close })));
-      seriesRefs.current.compare = compareSeries;
-    }
+      chart.priceScale(priceScaleId).applyOptions({ visible: false, autoScale: true });
+      compareSeries.setData(comparisonSeriesData(candles, overlay.mode).map((point) => ({ time: point.time as any, value: point.value })));
+      seriesRefs.current[`compare:${overlay.id}`] = compareSeries;
+    });
 
     // Drawings render (full support + fib variants + ray extend)
     drawings.forEach((d, idx) => {
@@ -1582,12 +1607,14 @@ export function TradingViewKiteChart({
   }, [baseCandles, workspace.extraIndicators]);
 
   useEffect(() => {
-    const compareSeries = seriesRefs.current.compare;
-    if (!compareSeries || !workspace.compareSymbol) return;
     try {
-      compareSeries.setData(comparisonCandles.map((bar: any) => ({ time: bar.time as any, value: bar.close })));
+      comparisonCandles.forEach(({ overlay, candles }) => {
+        const series = seriesRefs.current[`compare:${overlay.id}`];
+        if (!series || !overlay.visible) return;
+        series.setData(comparisonSeriesData(candles, overlay.mode).map((point) => ({ time: point.time as any, value: point.value })));
+      });
     } catch { /* chart may be rebuilding while comparison data settles */ }
-  }, [comparisonCandles, workspace.compareSymbol]);
+  }, [comparisonCandles]);
 
   // Redraw profile + handles when relevant
   useEffect(() => { setTimeout(drawVolumeProfile, 30); }, [drawVolumeProfile, showVP, volumeProfile]);
@@ -2227,6 +2254,7 @@ export function TradingViewKiteChart({
       styles: {},
       extraIndicators: [],
       compareSymbol: null,
+      comparisons: [],
       appearance: { ...DEFAULT_WORKSPACE.appearance },
     });
     setReplayPlaying(false);
@@ -2240,6 +2268,39 @@ export function TradingViewKiteChart({
       ...current,
       extraIndicators: [...current.extraIndicators, createExtraIndicator(kind)],
     }));
+  };
+
+  const setComparisons = (comparisons: ComparisonOverlay[]) => ({
+    comparisons,
+    compareSymbol: comparisons[0]?.symbol ?? null,
+  });
+
+  const addComparison = (symbolValue: string) => {
+    const value = symbolValue.trim().toUpperCase();
+    if (!value) return;
+    setWorkspace((current) => {
+      if (current.comparisons.some((item) => item.symbol === value)) return current;
+      const comparisons = [
+        ...current.comparisons,
+        createComparisonOverlay(value, Date.now(), current.comparisons.length),
+      ].slice(0, MAX_COMPARISONS);
+      return { ...current, ...setComparisons(comparisons) };
+    });
+    setCompareSearch('');
+  };
+
+  const updateComparison = (id: string, patch: Partial<ComparisonOverlay>) => {
+    setWorkspace((current) => {
+      const comparisons = current.comparisons.map((item) => item.id === id ? { ...item, ...patch } : item);
+      return { ...current, ...setComparisons(comparisons) };
+    });
+  };
+
+  const removeComparison = (id: string) => {
+    setWorkspace((current) => {
+      const comparisons = current.comparisons.filter((item) => item.id !== id);
+      return { ...current, ...setComparisons(comparisons) };
+    });
   };
 
   // Vertical side toolbar style (TV drawing toolbar on left) - closer to TV
@@ -2435,7 +2496,9 @@ export function TradingViewKiteChart({
         {/* Indicators - TV style button opening real dialog */}
         <button className="tv-ctrl" onClick={() => setShowStudies(!showStudies)} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: showStudies ? tv.blue + '22' : 'transparent', color: showStudies ? tv.blue : tv.dim, borderRadius: 2 }}>fx Indicators</button>
         <button className="tv-ctrl" onClick={() => { /* drawings in left */ }} style={{ fontSize: 10, padding: '1px 6px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 4 }}><IconPencil /> Draw</button>
-        <button className="tv-ctrl" onClick={() => setShowCompare(true)} title="Compare another symbol" style={toolBtnStyle(!!workspace.compareSymbol, tv, tv.blue)}>Compare{workspace.compareSymbol ? `: ${workspace.compareSymbol.split(':').pop()}` : ''}</button>
+        <button className="tv-ctrl" onClick={() => setShowCompare(true)} title="Compare another symbol" style={toolBtnStyle(workspace.comparisons.length > 0, tv, tv.blue)}>
+          Compare{workspace.comparisons.length ? ` (${workspace.comparisons.length})` : ''}
+        </button>
         <button className="tv-ctrl" onClick={() => beginAlertDraft()} title="Create a draggable price alert" style={toolBtnStyle(!!alertDraft, tv, tv.orange)}>Alert</button>
         <button className="tv-ctrl" onClick={() => setShowTemplates(true)} title="Save or apply chart template" style={toolBtnStyle(false, tv, tv.blue)}>Templates</button>
         <button className="tv-ctrl" onClick={() => setShowGoToDate(true)} title="Go to date or start bar replay" style={toolBtnStyle(replayIndex != null, tv, tv.purple)}>Replay</button>
@@ -2972,22 +3035,53 @@ export function TradingViewKiteChart({
 
       {showCompare && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowCompare(false)}>
-          <div style={{ width: 380, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.35)' }} onClick={(event) => event.stopPropagation()}>
+          <div style={{ width: 460, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6, boxShadow: '0 8px 30px rgba(0,0,0,0.35)' }} onClick={(event) => event.stopPropagation()}>
             <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}>
-              <strong>Compare symbol</strong>
+              <strong>Compare symbols</strong>
               <button onClick={() => setShowCompare(false)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button>
             </div>
             <div style={{ padding: 12 }}>
-              <input autoFocus value={compareSearch} onChange={(event) => setCompareSearch(event.target.value)} placeholder="NSE:TCS" style={{ width: '100%', padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} />
-              <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input autoFocus value={compareSearch} onChange={(event) => setCompareSearch(event.target.value)} placeholder="NSE:TCS" style={{ flex: 1, padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} />
+                <button
+                  onClick={() => addComparison(compareSearch)}
+                  disabled={!compareSearch.trim() || workspace.comparisons.length >= MAX_COMPARISONS}
+                  style={{ padding: '7px 12px', background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer', opacity: compareSearch.trim() && workspace.comparisons.length < MAX_COMPARISONS ? 1 : 0.5 }}
+                >
+                  Add
+                </button>
+              </div>
+              <div style={{ maxHeight: 150, overflowY: 'auto', marginTop: 6 }}>
                 {COMMON_SYMBOLS.filter((item) => item !== symbol && item.toLowerCase().includes(compareSearch.toLowerCase())).map((item) => (
-                  <button key={item} onClick={() => { setWorkspace((current) => ({ ...current, compareSymbol: item })); setShowCompare(false); setCompareSearch(''); }} style={{ display: 'block', width: '100%', padding: '7px 8px', textAlign: 'left', background: workspace.compareSymbol === item ? tv.blue + '22' : 'transparent', color: tv.text, border: 0, borderBottom: `1px solid ${tv.border}`, cursor: 'pointer' }}>{item}</button>
+                  <button
+                    key={item}
+                    onClick={() => addComparison(item)}
+                    disabled={workspace.comparisons.length >= MAX_COMPARISONS || workspace.comparisons.some((overlay) => overlay.symbol === item)}
+                    style={{ display: 'block', width: '100%', padding: '7px 8px', textAlign: 'left', background: workspace.comparisons.some((overlay) => overlay.symbol === item) ? tv.blue + '22' : 'transparent', color: tv.text, border: 0, borderBottom: `1px solid ${tv.border}`, cursor: 'pointer', opacity: workspace.comparisons.length >= MAX_COMPARISONS ? 0.6 : 1 }}
+                  >
+                    {item}
+                  </button>
                 ))}
+              </div>
+              <div style={{ marginTop: 10, borderTop: `1px solid ${tv.border}` }}>
+                {workspace.comparisons.map((overlay) => (
+                  <div key={overlay.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: 8, alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${tv.border}` }}>
+                    <input aria-label={`${overlay.symbol} visible`} type="checkbox" checked={overlay.visible} onChange={(event) => updateComparison(overlay.id, { visible: event.target.checked })} />
+                    <span style={{ fontSize: 12, color: tv.text }}>{overlay.symbol}</span>
+                    <select aria-label={`${overlay.symbol} comparison mode`} value={overlay.mode} onChange={(event) => updateComparison(overlay.id, { mode: event.target.value as ComparisonOverlay['mode'] })} style={{ height: 26, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, fontSize: 10 }}>
+                      <option value="percent">% change</option>
+                      <option value="price">Price</option>
+                    </select>
+                    <input aria-label={`${overlay.symbol} color`} type="color" value={overlay.color} onChange={(event) => updateComparison(overlay.id, { color: event.target.value })} style={{ width: 34, height: 26 }} />
+                    <button onClick={() => removeComparison(overlay.id)} style={{ padding: '4px 8px', background: tv.bg, color: tv.red, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Remove</button>
+                  </div>
+                ))}
+                {!workspace.comparisons.length && <div style={{ padding: '14px 0 4px', textAlign: 'center', color: tv.dim, fontSize: 11 }}>No comparison overlays.</div>}
               </div>
             </div>
             <div style={{ padding: 10, borderTop: `1px solid ${tv.border}`, display: 'flex', gap: 8 }}>
-              <button onClick={() => { setWorkspace((current) => ({ ...current, compareSymbol: null })); setShowCompare(false); }} style={{ flex: 1, padding: 7, background: tv.bg, color: tv.red, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Remove comparison</button>
-              <button onClick={() => { const value = compareSearch.trim().toUpperCase(); if (value) { setWorkspace((current) => ({ ...current, compareSymbol: value })); setShowCompare(false); setCompareSearch(''); } }} style={{ flex: 1, padding: 7, background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer' }}>Compare</button>
+              <button onClick={() => setWorkspace((current) => ({ ...current, ...setComparisons([]) }))} style={{ flex: 1, padding: 7, background: tv.bg, color: tv.red, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Clear all</button>
+              <button onClick={() => setShowCompare(false)} style={{ flex: 1, padding: 7, background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer' }}>Done</button>
             </div>
           </div>
         </div>
