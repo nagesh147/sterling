@@ -6,12 +6,25 @@ const MODE_KEY = 'sterling_app_mode';
 
 type Theme = 'dark' | 'grey' | 'light';
 
-function loadTheme(): Theme {
-  try { return (localStorage.getItem(THEME_KEY) as Theme) || 'dark'; }
-  catch { return 'dark'; }
+const DEFAULT_THEME: Theme = 'light';
+const THEME_CYCLE: Theme[] = ['light', 'dark', 'grey'];
+
+function isTheme(value: string | null): value is Theme {
+  return value === 'dark' || value === 'grey' || value === 'light';
 }
 
-const THEME_CYCLE: Theme[] = ['dark', 'grey', 'light'];
+function applyThemeToDocument(theme: Theme): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark';
+}
+
+function loadTheme(): Theme {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    return isTheme(saved) ? saved : DEFAULT_THEME;
+  } catch { return DEFAULT_THEME; }
+}
 
 function loadUnderlying(): string {
   try {
@@ -105,14 +118,14 @@ export const useStore = create<StoreState>((set) => ({
   theme: loadTheme(),
   setTheme: (t: Theme) => {
     try { localStorage.setItem(THEME_KEY, t); } catch { /* ignore */ }
-    document.documentElement.setAttribute('data-theme', t);
+    applyThemeToDocument(t);
     set({ theme: t });
   },
   toggleTheme: () => set((s) => {
-    const idx  = THEME_CYCLE.indexOf(s.theme);
-    const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length];
+    const idx = THEME_CYCLE.indexOf(s.theme);
+    const next = THEME_CYCLE[(idx + 1) % THEME_CYCLE.length] ?? DEFAULT_THEME;
     try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
-    document.documentElement.setAttribute('data-theme', next);
+    applyThemeToDocument(next);
     return { theme: next };
   }),
   appMode: loadMode(),
@@ -145,11 +158,11 @@ export const useStore = create<StoreState>((set) => ({
   resetUI: () => {
     try {
       localStorage.setItem(ZOOM_KEY, '1');
-      localStorage.setItem(THEME_KEY, 'dark');
+      localStorage.setItem(THEME_KEY, DEFAULT_THEME);
     } catch { /* ignore */ }
-    document.documentElement.setAttribute('data-theme', 'dark');
+    applyThemeToDocument(DEFAULT_THEME);
     document.documentElement.style.setProperty('--app-zoom', '1');
-    set({ zoomLevel: 1, theme: 'dark', tabOrder: DEFAULT_TAB_ORDER });
+    set({ zoomLevel: 1, theme: DEFAULT_THEME, tabOrder: DEFAULT_TAB_ORDER });
   },
 }));
 
@@ -172,6 +185,7 @@ export const useSetRouterModeStore = () =>
   useStore((s) => s.setRouterMode);
 
 export type { Theme };
+export { DEFAULT_THEME };
 export const useTheme = () => useStore((s) => s.theme);
 export const useSetTheme = () => useStore((s) => s.setTheme);
 export const useToggleTheme = () => useStore((s) => s.toggleTheme);
