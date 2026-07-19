@@ -85,6 +85,21 @@ describe('TradingViewKiteChart workspace controls', () => {
     expect(screen.getByDisplayValue('hlc3')).toBeTruthy();
   });
 
+  it('duplicates and toggles extra indicator instances', async () => {
+    renderChart();
+    fireEvent.click(screen.getByRole('button', { name: /fx Indicators/i }));
+    fireEvent.click(screen.getByRole('button', { name: /\+ Formula/i }));
+    fireEvent.click(screen.getByLabelText('Duplicate Custom formula'));
+    expect(screen.getAllByDisplayValue('hlc3')).toHaveLength(2);
+    fireEvent.click(screen.getAllByLabelText('Custom formula visible')[0]);
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('sterling:kite-chart-workspace:v1') || '{}');
+      expect(saved.extraIndicators).toHaveLength(2);
+      expect(saved.extraIndicators[0].style.visible).toBe(false);
+    });
+  });
+
   it('saves a named template containing the current chart state', () => {
     renderChart();
     fireEvent.click(screen.getByTitle('Save or apply chart template'));
