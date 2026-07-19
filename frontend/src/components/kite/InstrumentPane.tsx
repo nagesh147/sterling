@@ -469,6 +469,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // range baked in, so there's only ever one build, not two.
   const [zoomResolved, setZoomResolved] = useState(() => !!signalData || !!globalChartStateCache);
   const chartStateSoftTimedOutRef = useRef(false);
+  const userEditedBeforeChartStateLoadRef = useRef(false);
 
   useEffect(() => {
     if (signalData || zoomResolved) return;
@@ -570,21 +571,25 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
         const res: any = await api.get(`/api/v1/kite/chart-state/${GLOBAL_CHART_KEY}`);
         if (!cancelled && res) {
           writeLocalChartStateCache(res);
-          if (res.tf !== undefined && res.tf !== null) setTf(res.tf);
-          if (Array.isArray(res.active) && res.active.length > 0) setActive(new Set(res.active));
-          if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
-          if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
-          if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
-          // Only seed the saved zoom if the user hasn't already panned/zoomed
-          // the live chart while this GET was in flight - lastZoomRef is set
-          // by handleZoomChange the instant the user interacts, and applying
-          // the (older) fetched value over that would silently undo their pan
-          // a few seconds after they made it.
-          if (res.zoom && lastZoomRef.current == null) { setPersistedZoom(res.zoom); lastZoomRef.current = res.zoom; }
-          if (res.params && typeof res.params === 'object') setParams({ ...buildDefaultParams(trailTarget), ...res.params });
+          const mayApplyLoadedState = !userEditedBeforeChartStateLoadRef.current;
+          if (mayApplyLoadedState) {
+            if (res.tf !== undefined && res.tf !== null) setTf(res.tf);
+            if (Array.isArray(res.active) && res.active.length > 0) setActive(new Set(res.active));
+            if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
+            if (typeof res.isLogScale === 'boolean') setIsLogScale(res.isLogScale);
+            if (typeof res.showVP === 'boolean') setShowVP(res.showVP);
+            // Only seed the saved zoom if the user hasn't already panned/zoomed
+            // the live chart while this GET was in flight - lastZoomRef is set
+            // by handleZoomChange the instant the user interacts, and applying
+            // the (older) fetched value over that would silently undo their pan
+            // a few seconds after they made it.
+            if (res.zoom && lastZoomRef.current == null) { setPersistedZoom(res.zoom); lastZoomRef.current = res.zoom; }
+            if (res.params && typeof res.params === 'object') setParams({ ...buildDefaultParams(trailTarget), ...res.params });
+          }
           const map = (res.drawingsBySymbol && typeof res.drawingsBySymbol === 'object') ? res.drawingsBySymbol : {};
           globalChartStateCache = res;
-          applyDrawingsFor(map, symbol);
+          if (mayApplyLoadedState) applyDrawingsFor(map, symbol);
+          else drawingsBySymbolRef.current = map;
         }
         // The final zoom value is known now (whatever was seeded above, or still
         // null if this instrument had none saved) - safe to mount the real chart.
@@ -638,7 +643,42 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     }
   }, [tf, active, isHA, isLogScale, showVP, params, chartStateLoaded]);
 
+  const markUserChartConfigEdit = useCallback(() => {
+    if (!chartStateLoaded) userEditedBeforeChartStateLoadRef.current = true;
+  }, [chartStateLoaded]);
+
+  const handleTfChange = useCallback((nextTf: string) => {
+    markUserChartConfigEdit();
+    setTf(nextTf);
+  }, [markUserChartConfigEdit]);
+
+  const handleIsHAChange = useCallback((nextIsHA: boolean) => {
+    markUserChartConfigEdit();
+    setIsHA(nextIsHA);
+  }, [markUserChartConfigEdit]);
+
+  const handleIsLogScaleChange = useCallback((nextIsLogScale: boolean) => {
+    markUserChartConfigEdit();
+    setIsLogScale(nextIsLogScale);
+  }, [markUserChartConfigEdit]);
+
+  const handleShowVPChange = useCallback((nextShowVP: boolean) => {
+    markUserChartConfigEdit();
+    setShowVP(nextShowVP);
+  }, [markUserChartConfigEdit]);
+
+  const handleActiveIndicatorsChange = useCallback((keys: string[]) => {
+    markUserChartConfigEdit();
+    setActive(new Set(keys as IndicatorKey[]));
+  }, [markUserChartConfigEdit]);
+
+  const handleParamsChange = useCallback((nextParams: typeof params) => {
+    markUserChartConfigEdit();
+    setParams(nextParams);
+  }, [markUserChartConfigEdit]);
+
   const toggleIndicator = (key: IndicatorKey) => {
+    markUserChartConfigEdit();
     setActive((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
@@ -658,6 +698,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
 
   // Simple param quick adjust (for demo; full popover could be added)
   const updateParam = (key: keyof typeof params, delta: number) => {
+    markUserChartConfigEdit();
     setParams(p => ({ ...p, [key]: Math.max(1, Math.round((p[key] as number) + delta)) }));
   };
 
@@ -693,14 +734,14 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
             showVP={showVP}
             symbolPos={symbolPos}
             persistedZoom={persistedZoom}
-            onTfChange={setTf}
-            onIsHAChange={setIsHA}
-            onIsLogScaleChange={setIsLogScale}
-            onShowVPChange={setShowVP}
+            onTfChange={handleTfChange}
+            onIsHAChange={handleIsHAChange}
+            onIsLogScaleChange={handleIsLogScaleChange}
+            onShowVPChange={handleShowVPChange}
             onSymbolChange={onSymbolChange}
             onToggleIndicator={toggleIndicator as any}
-            onActiveIndicatorsChange={(keys) => setActive(new Set(keys as IndicatorKey[]))}
-            onParamsChange={setParams}
+            onActiveIndicatorsChange={handleActiveIndicatorsChange}
+            onParamsChange={handleParamsChange}
             signalData={signalData}
             onChartReady={handleChartReady}
           />
