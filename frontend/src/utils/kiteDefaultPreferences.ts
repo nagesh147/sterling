@@ -1,4 +1,10 @@
-import { applyKiteBrandIcon, normalizeKiteBrandIcon, type KiteBrandIcon } from './kiteBrandIcon';
+import {
+  applyKiteBrandIcon,
+  normalizeKiteBrandIcon,
+  normalizeKiteBrandIconSize,
+  type KiteBrandIcon,
+  type KiteBrandIconSize,
+} from './kiteBrandIcon';
 
 export const KITE_SIGNAL_TABLE_LAYOUT_KEY = 'kite_st_view_layout';
 export const KITE_TERMINAL_THEME_KEY = 'kite_terminal_theme';
@@ -17,14 +23,25 @@ function getBrowserStorage(): PreferenceStorage | null {
   }
 }
 
-function readStoredBrandIcon(storage: PreferenceStorage): KiteBrandIcon {
+function readStoredKiteSettings(storage: PreferenceStorage): any {
   try {
     const raw = storage.getItem(KITE_SETTINGS_STORAGE_KEY);
-    if (!raw) return 'phoenix';
-    return normalizeKiteBrandIcon(JSON.parse(raw)?.state?.brandIcon);
+    return raw ? JSON.parse(raw)?.state : null;
   } catch {
-    return 'phoenix';
+    return null;
   }
+}
+
+function readStoredBrandIcon(storage: PreferenceStorage): KiteBrandIcon {
+  return normalizeKiteBrandIcon(readStoredKiteSettings(storage)?.brandIcon);
+}
+
+function readStoredBrandIconSize(storage: PreferenceStorage): KiteBrandIconSize {
+  return normalizeKiteBrandIconSize(readStoredKiteSettings(storage)?.brandIconSize);
+}
+
+function applyStoredBrandIcon(storage: PreferenceStorage): void {
+  applyKiteBrandIcon(readStoredBrandIcon(storage), readStoredBrandIconSize(storage));
 }
 
 /**
@@ -47,13 +64,13 @@ export function installKiteDefaultPreferences(storage: PreferenceStorage | null 
       if (layout === null || layout === 'grid') storage.setItem(KITE_SIGNAL_TABLE_LAYOUT_KEY, 'list');
       if (theme === null || theme === 'dark') storage.setItem(KITE_TERMINAL_THEME_KEY, 'light');
       storage.setItem(KITE_DEFAULT_PREFERENCES_MIGRATION_KEY, KITE_DEFAULT_PREFERENCES_VERSION);
-      applyKiteBrandIcon(readStoredBrandIcon(storage));
+      applyStoredBrandIcon(storage);
       return;
     }
 
     if (layout === null) storage.setItem(KITE_SIGNAL_TABLE_LAYOUT_KEY, 'list');
     if (theme === null) storage.setItem(KITE_TERMINAL_THEME_KEY, 'light');
-    applyKiteBrandIcon(readStoredBrandIcon(storage));
+    applyStoredBrandIcon(storage);
   } catch {
     // Storage can be unavailable in restricted/private contexts. Keep boot non-fatal.
   }
