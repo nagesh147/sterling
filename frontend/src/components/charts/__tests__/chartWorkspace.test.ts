@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   compileFormula,
+  comparisonSeriesData,
   createChartTemplate,
+  createComparisonOverlay,
   createExtraIndicator,
   exportTemplatesToJson,
   formulaSeries,
@@ -35,6 +37,10 @@ describe('chart workspace', () => {
         { ...createExtraIndicator('sma', 1), period: -20 },
         { ...createExtraIndicator('ema', 1), id: 'sma-1', period: 900 },
       ],
+      comparisons: [
+        { id: 'c1', symbol: 'nse:infy', color: '#123456', mode: 'price', visible: false },
+        { id: 'c2', symbol: 'nse:infy', color: 'bad', mode: 'bad', visible: true },
+      ],
       compareSymbol: ' nse:tcs ',
       appearance: { candleUp: '#abc', candleDown: 'red', gridVisible: true },
     });
@@ -44,6 +50,9 @@ describe('chart workspace', () => {
     expect(state.extraIndicators[1].id).toBe('sma-1-2');
     expect(state.extraIndicators[1].period).toBe(500);
     expect(state.compareSymbol).toBe('NSE:TCS');
+    expect(state.comparisons.map((item) => item.symbol)).toEqual(['NSE:TCS', 'NSE:INFY']);
+    expect(state.comparisons[1].mode).toBe('price');
+    expect(state.comparisons[1].visible).toBe(false);
     expect(state.appearance.candleUp).toBe('#abc');
     expect(state.appearance.candleDown).toBe('#e05260');
     expect(state.appearance.gridVisible).toBe(true);
@@ -84,6 +93,9 @@ describe('chart workspace', () => {
 
   it('computes stochastic warmup and locates the nearest replay bar', () => {
     expect(stochastic([2, 3, 4], [0, 1, 2], [1, 2, 3], 2)).toEqual([null, 2 / 3 * 100, 2 / 3 * 100]);
+    expect(createComparisonOverlay('nse:tcs', 1, 2)).toMatchObject({ symbol: 'NSE:TCS', color: '#ab47bc', mode: 'percent' });
+    expect(comparisonSeriesData([{ time: 1, close: 100 }, { time: 2, close: 110 }], 'percent')).toEqual([{ time: 1, value: 0 }, { time: 2, value: 10 }]);
+    expect(comparisonSeriesData([{ time: 1, close: 100 }], 'price')).toEqual([{ time: 1, value: 100 }]);
     expect(nearestCandleIndex([{ time: 10 }, { time: 20 }, { time: 30 }], 24)).toBe(1);
     expect(nearestCandleIndex([], 24)).toBe(-1);
     expect(replayDelayMs(2)).toBe(350);
