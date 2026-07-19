@@ -120,6 +120,7 @@ describe('InstrumentPane chart-switch loader', () => {
     useCandlesMock.mockReturnValue({ data: staleData, isLoading: false, isPlaceholderData: true });
     await act(async () => { rerender(<InstrumentPane symbol={B} />); });
     expect(screen.getByText(LOADING_TEXT)).toBeTruthy();
+    expect(chartProps.rawCandles).toEqual([]);
 
     // The structural rebuild finishes (using the stale placeholder data) and
     // calls back - the loader must stay up regardless, since the data on
@@ -131,7 +132,52 @@ describe('InstrumentPane chart-switch loader', () => {
     const freshData = [{ time: 1, open: 1, high: 1, low: 1, close: 1, volume: 1 }, { time: 2, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
     useCandlesMock.mockReturnValue({ data: freshData, isLoading: false, isPlaceholderData: false });
     await act(async () => { rerender(<InstrumentPane symbol={B} />); });
+    expect(screen.getByText(LOADING_TEXT)).toBeTruthy();
+    expect(chartProps.rawCandles).toEqual(freshData);
+    await act(async () => { chartProps.onChartReady(`${B}|15m|2|1|2`); });
     expect(screen.queryByText(LOADING_TEXT)).toBeNull();
+  });
+
+  it('does not rebuild the chart with stale candles during a timeframe switch', async () => {
+    const m15Data = [{ time: 10, open: 1, high: 1, low: 1, close: 1, volume: 1 }];
+    const h1Data = [
+      { time: 100, open: 1, high: 1, low: 1, close: 1, volume: 1 },
+      { time: 200, open: 2, high: 2, low: 2, close: 2, volume: 2 },
+    ];
+    let candlesState = { data: m15Data, isLoading: false, isPlaceholderData: false };
+    useCandlesMock.mockImplementation(() => candlesState);
+
+    const { rerender } = render(<InstrumentPane symbol={A} />);
+    await waitFor(() => expect(chartProps).toBeTruthy());
+    await act(async () => { chartProps.onChartReady(`${A}|15m|1|10|10`); });
+    expect(screen.queryByText(LOADING_TEXT)).toBeNull();
+
+    candlesState = { data: m15Data, isLoading: false, isPlaceholderData: true };
+    await act(async () => { chartProps.onTfChange('1H'); });
+    expect(chartProps.tf).toBe('1H');
+    expect(chartProps.rawCandles).toEqual([]);
+    expect(screen.getByText(LOADING_TEXT)).toBeTruthy();
+
+    // A stale/no-key ready signal from the placeholder phase must not dismiss
+    // the switch loader for the new timeframe.
+    await act(async () => { chartProps.onChartReady(); });
+    expect(screen.getByText(LOADING_TEXT)).toBeTruthy();
+
+    candlesState = { data: h1Data, isLoading: false, isPlaceholderData: false };
+    await act(async () => { rerender(<InstrumentPane symbol={A} />); });
+    expect(chartProps.rawCandles).toEqual(h1Data);
+    expect(screen.getByText(LOADING_TEXT)).toBeTruthy();
+
+    await act(async () => { chartProps.onChartReady(`${A}|1H|2|100|200`); });
+    expect(screen.queryByText(LOADING_TEXT)).toBeNull();
+  });
+
+  it('shows an empty-data state instead of spinning until the safety timeout', async () => {
+    useCandlesMock.mockReturnValue({ data: [], isLoading: false, isPlaceholderData: false });
+    render(<InstrumentPane symbol={A} />);
+    await waitFor(() => expect(chartProps).toBeTruthy());
+    await waitFor(() => expect(screen.queryByText(LOADING_TEXT)).toBeNull());
+    expect(screen.getByText('No chart data for 15m')).toBeTruthy();
   });
 
   it('does not get stuck forever if the chart never signals ready (safety timeout)', async () => {
