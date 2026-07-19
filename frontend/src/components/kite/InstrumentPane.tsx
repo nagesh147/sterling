@@ -19,6 +19,7 @@ export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals' | 'oi-chan
 // literal here on every render would wipe drawings state on every unrelated
 // re-render instead of only on an actual symbol-driven reset.
 const EMPTY_DRAWINGS: Drawing[] = [];
+const EMPTY_CANDLES: any[] = [];
 
 // ── Global chart configuration ───────────────────────────────────────────────
 // The chart config (timeframe, indicators, params, toggles, zoom) is shared
@@ -210,7 +211,17 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // fully-rendered chart sit on screen until the real fetch lands moments later.
   // `isPlaceholderData` is the one flag that's true specifically during that
   // window; it must gate the loader alongside isLoading/isSwitching.
-  const { data: rawCandles = [], isLoading: candlesLoading, isPlaceholderData: candlesArePlaceholder } = useCandles(symbol, tf, 800);
+  const {
+    data: rawCandles = [],
+    isLoading: candlesLoading,
+    isPlaceholderData: candlesArePlaceholder,
+    isError: candlesError,
+  } = useCandles(symbol, tf, 800);
+  // React Query can keep serving the previous symbol/timeframe's candles while a
+  // new query key is fetching. Do not let those placeholder candles reach the
+  // chart builder: it would rebuild the new timeframe using stale bars, then
+  // patch real bars into the old visible range and sometimes look blank.
+  const chartRawCandles = candlesArePlaceholder ? EMPTY_CANDLES : rawCandles;
   const { data: kitePosData } = useKitePositions();
 
   // ── Switch loader ────────────────────────────────────────────────────────
@@ -230,7 +241,6 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     setRenderedInstrumentKey(instrumentKey);
     setIsSwitching(true);
   }
-  const handleChartReady = useCallback(() => setIsSwitching(false), []);
   useEffect(() => {
     if (!isSwitching) return;
     // Safety net: never let the overlay get stuck (failed fetch, disabled
@@ -238,20 +248,37 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     const t = setTimeout(() => setIsSwitching(false), 6000);
     return () => clearTimeout(t);
   }, [isSwitching, instrumentKey]);
-  const showChartLoader = isSwitching || candlesArePlaceholder || (candlesLoading && rawCandles.length === 0);
 
   // Refs and low-level chart instances now inside <TradingViewKiteChart> shared component
   // (no direct access needed at this level)
 
   const candles = React.useMemo(() => {
-    const valid = rawCandles.filter((c: any) => c.time != null && !isNaN(c.time));
+    const valid = chartRawCandles.filter((c: any) => c.time != null && !isNaN(c.time));
     return [...valid].sort((a: any, b: any) => a.time - b.time)
       .filter((v: any, i: number, a: any[]) => i === 0 || v.time !== a[i - 1].time);
-  }, [rawCandles]);
+  }, [chartRawCandles]);
 
   const baseCandles = React.useMemo(() => {
     return isHA ? heikinAshi(candles as Candle[]) : (candles as Candle[]);
   }, [candles, isHA]);
+
+  const hasRenderableCandles = baseCandles.length > 0;
+  const chartReadyKey = React.useMemo(() => {
+    if (!hasRenderableCandles) return null;
+    const first = baseCandles[0]?.time ?? '';
+    const last = baseCandles[baseCandles.length - 1]?.time ?? '';
+    return `${instrumentKey}|${baseCandles.length}|${first}|${last}`;
+  }, [baseCandles, hasRenderableCandles, instrumentKey]);
+  const chartReadyKeyRef = useRef<string | null>(chartReadyKey);
+  useEffect(() => {
+    chartReadyKeyRef.current = chartReadyKey;
+  }, [chartReadyKey]);
+  const handleChartReady = useCallback((readyKey?: string) => {
+    const expected = chartReadyKeyRef.current;
+    if (!expected) return;
+    if (readyKey && readyKey !== expected) return;
+    setIsSwitching(false);
+  }, []);
 
   const theme = React.useMemo(() => {
     if (!isDark) return k;
@@ -408,6 +435,25 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // bug. Waiting here means the first-ever createChart() already has the right
   // range baked in, so there's only ever one build, not two.
   const [zoomResolved, setZoomResolved] = useState(() => !!signalData || !!globalChartStateCache);
+
+  useEffect(() => {
+    if (!isSwitching || !zoomResolved) return;
+    if (!candlesLoading && !candlesArePlaceholder && !hasRenderableCandles) {
+      setIsSwitching(false);
+    }
+  }, [isSwitching, zoomResolved, candlesLoading, candlesArePlaceholder, hasRenderableCandles, instrumentKey]);
+
+  const showChartLoader =
+    !zoomResolved ||
+    candlesArePlaceholder ||
+    (candlesLoading && !hasRenderableCandles) ||
+    (isSwitching && hasRenderableCandles);
+  const showNoChartData =
+    !showChartLoader &&
+    !hasRenderableCandles &&
+    (signalData || zoomResolved) &&
+    !candlesLoading &&
+    !candlesArePlaceholder;
 
   // Stable identities for the callbacks passed into TradingViewKiteChart.
   // These used to be inline arrow functions recreated on every InstrumentPane
@@ -589,7 +635,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
         {(signalData || zoomResolved) && (
           <TradingViewKiteChart
             symbol={symbol}
-            rawCandles={rawCandles}
+            rawCandles={chartRawCandles}
             tf={tf}
             isHA={isHA}
             isLogScale={isLogScale}
@@ -614,6 +660,18 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
             signalData={signalData}
             onChartReady={handleChartReady}
           />
+        )}
+        {showNoChartData && (
+          <div
+            style={{
+              position: 'absolute', inset: 0, zIndex: 15,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: theme.bg, color: candlesError ? theme.red : theme.dim,
+              fontSize: 12,
+            }}
+          >
+            {candlesError ? `Unable to load chart data for ${tf}` : `No chart data for ${tf}`}
+          </div>
         )}
         {showChartLoader && (
           // Fully opaque (no `opacity` shorthand - that would composite this
