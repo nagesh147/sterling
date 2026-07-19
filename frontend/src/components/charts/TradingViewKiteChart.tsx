@@ -23,6 +23,7 @@ import {
   ExtraIndicatorKind,
   IndicatorStyle,
   MAX_COMPARISONS,
+  MAX_EXTRA_INDICATORS,
   compileFormula,
   comparisonSeriesData,
   createChartTemplate,
@@ -2266,7 +2267,9 @@ export function TradingViewKiteChart({
   const addExtraIndicator = (kind: ExtraIndicatorKind) => {
     setWorkspace((current) => ({
       ...current,
-      extraIndicators: [...current.extraIndicators, createExtraIndicator(kind)],
+      extraIndicators: current.extraIndicators.length >= MAX_EXTRA_INDICATORS
+        ? current.extraIndicators
+        : [...current.extraIndicators, createExtraIndicator(kind)],
     }));
   };
 
@@ -2990,7 +2993,7 @@ export function TradingViewKiteChart({
                     ))}
                   </div>
                 </div>
-                {workspace.extraIndicators.map((indicator) => {
+                {workspace.extraIndicators.map((indicator, index) => {
                   let formulaError = '';
                   if (indicator.kind === 'formula') {
                     try { compileFormula(indicator.formula || ''); } catch (error: any) { formulaError = error?.message || 'Invalid formula'; }
@@ -2999,8 +3002,29 @@ export function TradingViewKiteChart({
                     ...current,
                     extraIndicators: current.extraIndicators.map((item) => item.id === indicator.id ? { ...item, ...patch } : item),
                   }));
+                  const moveExtra = (delta: number) => setWorkspace((current) => {
+                    const from = current.extraIndicators.findIndex((item) => item.id === indicator.id);
+                    const to = Math.max(0, Math.min(current.extraIndicators.length - 1, from + delta));
+                    if (from < 0 || from === to) return current;
+                    const next = [...current.extraIndicators];
+                    const [moved] = next.splice(from, 1);
+                    next.splice(to, 0, moved);
+                    return { ...current, extraIndicators: next };
+                  });
+                  const duplicateExtra = () => setWorkspace((current) => {
+                    const from = current.extraIndicators.findIndex((item) => item.id === indicator.id);
+                    if (from < 0 || current.extraIndicators.length >= MAX_EXTRA_INDICATORS) return current;
+                    const next = [...current.extraIndicators];
+                    next.splice(from + 1, 0, {
+                      ...indicator,
+                      id: `${indicator.kind}-${Date.now()}`,
+                      name: indicator.kind === 'formula' ? indicator.name : `${indicator.name} copy`,
+                      style: { ...indicator.style },
+                    });
+                    return { ...current, extraIndicators: next };
+                  });
                   return (
-                    <div key={indicator.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 6, alignItems: 'end', padding: '7px 4px', borderTop: `1px solid ${tv.border}` }}>
+                    <div key={indicator.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto auto auto auto', gap: 6, alignItems: 'end', padding: '7px 4px', borderTop: `1px solid ${tv.border}` }}>
                       <label style={{ fontSize: 9, color: tv.dim }}>
                         {indicator.kind === 'formula' ? 'Formula (open, high, low, close, volume, hl2, hlc3, ohlc4, change)' : 'Name'}
                         <input
@@ -3020,6 +3044,18 @@ export function TradingViewKiteChart({
                         Color
                         <input type="color" value={indicator.style.color} onChange={(event) => updateExtra({ style: { ...indicator.style, color: event.target.value } })} style={{ display: 'block', width: 38, height: 24, marginTop: 2 }} />
                       </label>
+                      <label style={{ fontSize: 9, color: tv.dim }}>
+                        Width
+                        <select value={indicator.style.lineWidth} onChange={(event) => updateExtra({ style: { ...indicator.style, lineWidth: Number(event.target.value) as IndicatorStyle['lineWidth'] } })} style={{ display: 'block', height: 24, marginTop: 2, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}` }}>
+                          {[1, 2, 3, 4].map((width) => <option key={width} value={width}>{width}</option>)}
+                        </select>
+                      </label>
+                      <label style={{ fontSize: 9, color: tv.dim, display: 'flex', alignItems: 'center', gap: 4, height: 24 }}>
+                        <input aria-label={`${indicator.name} visible`} type="checkbox" checked={indicator.style.visible} onChange={(event) => updateExtra({ style: { ...indicator.style, visible: event.target.checked } })} /> On
+                      </label>
+                      <button className="tv-ctrl" aria-label={`Move ${indicator.name} up`} disabled={index === 0} onClick={() => moveExtra(-1)} style={{ height: 24, padding: '2px 6px', color: tv.text, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2, opacity: index === 0 ? 0.45 : 1 }}>Up</button>
+                      <button className="tv-ctrl" aria-label={`Move ${indicator.name} down`} disabled={index === workspace.extraIndicators.length - 1} onClick={() => moveExtra(1)} style={{ height: 24, padding: '2px 6px', color: tv.text, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2, opacity: index === workspace.extraIndicators.length - 1 ? 0.45 : 1 }}>Down</button>
+                      <button className="tv-ctrl" aria-label={`Duplicate ${indicator.name}`} onClick={duplicateExtra} style={{ height: 24, padding: '2px 7px', color: tv.text, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2 }}>Copy</button>
                       <button className="tv-ctrl" title="Remove instance" onClick={() => setWorkspace((current) => ({ ...current, extraIndicators: current.extraIndicators.filter((item) => item.id !== indicator.id) }))} style={{ height: 24, padding: '2px 7px', color: tv.red, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2 }}>Remove</button>
                     </div>
                   );
