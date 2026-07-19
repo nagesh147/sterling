@@ -20,6 +20,9 @@ export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals' | 'oi-chan
 // re-render instead of only on an actual symbol-driven reset.
 const EMPTY_DRAWINGS: Drawing[] = [];
 const EMPTY_CANDLES: any[] = [];
+const CHART_CANDLE_LIMIT = 360;
+const CHART_STATE_LOCAL_KEY = 'sterling:kite-chart-state:__global__:v1';
+const CHART_STATE_SOFT_TIMEOUT_MS = 450;
 
 // ── Global chart configuration ───────────────────────────────────────────────
 // The chart config (timeframe, indicators, params, toggles, zoom) is shared
@@ -37,8 +40,33 @@ const GLOBAL_CHART_KEY = '__global__';
 // POST on the same key. On a hard page reload it starts null and is re-fetched.
 let globalChartStateCache: any = null;
 
+function readLocalChartStateCache() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(CHART_STATE_LOCAL_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalChartStateCache(state: any) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CHART_STATE_LOCAL_KEY, JSON.stringify(state));
+  } catch {
+    // Local storage is only a fast-start cache; backend persistence remains canonical.
+  }
+}
+
 // Test-only: clear the module-level session cache so each test starts cold.
-export function __resetGlobalChartStateCache() { globalChartStateCache = null; }
+export function __resetGlobalChartStateCache() {
+  globalChartStateCache = null;
+  if (typeof window !== 'undefined') {
+    try { window.localStorage.removeItem(CHART_STATE_LOCAL_KEY); } catch {}
+  }
+}
 
 interface InstrumentPaneProps {
   symbol: string;
@@ -130,6 +158,10 @@ const INDICATOR_LABELS: Record<IndicatorKey, string> = {
 };
 
 function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } }) {
+  if (!signalData && !globalChartStateCache) {
+    globalChartStateCache = readLocalChartStateCache();
+  }
+
   // Default active-indicator set: when opened with a trailTarget (from a signal
   // row) the matching SuperTrend variant is active by default instead of the
   // plain-watchlist default of st-mid. trailTarget undefined (normal watchlist
@@ -216,7 +248,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     isLoading: candlesLoading,
     isPlaceholderData: candlesArePlaceholder,
     isError: candlesError,
-  } = useCandles(symbol, tf, 800);
+  } = useCandles(symbol, tf, CHART_CANDLE_LIMIT);
   // React Query can keep serving the previous symbol/timeframe's candles while a
   // new query key is fetching. Do not let those placeholder candles reach the
   // chart builder: it would rebuild the new timeframe using stale bars, then
@@ -374,6 +406,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
     // Keep the session cache current SYNCHRONOUSLY so a Mac-mode remount that
     // happens before the debounced POST lands still re-seeds from this state.
     globalChartStateCache = payload;
+    writeLocalChartStateCache(payload);
     const doPost = (keepalive = false) => {
       saveTimeoutRef.current = null;
       pendingSaveRef.current = null;
@@ -435,6 +468,16 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   // bug. Waiting here means the first-ever createChart() already has the right
   // range baked in, so there's only ever one build, not two.
   const [zoomResolved, setZoomResolved] = useState(() => !!signalData || !!globalChartStateCache);
+  const chartStateSoftTimedOutRef = useRef(false);
+
+  useEffect(() => {
+    if (signalData || zoomResolved) return;
+    const timer = window.setTimeout(() => {
+      chartStateSoftTimedOutRef.current = true;
+      setZoomResolved(true);
+    }, CHART_STATE_SOFT_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [signalData, zoomResolved]);
 
   useEffect(() => {
     if (!isSwitching || !zoomResolved) return;
@@ -526,6 +569,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
       try {
         const res: any = await api.get(`/api/v1/kite/chart-state/${GLOBAL_CHART_KEY}`);
         if (!cancelled && res) {
+          writeLocalChartStateCache(res);
           if (res.tf !== undefined && res.tf !== null) setTf(res.tf);
           if (Array.isArray(res.active) && res.active.length > 0) setActive(new Set(res.active));
           if (typeof res.isHA === 'boolean') setIsHA(res.isHA);
