@@ -5,7 +5,16 @@ import {
 } from '../../hooks/useKiteTelegram';
 import type { KiteTelegramTarget } from '../../types/kiteTelegram';
 import { useKiteSettings } from '../../store/useKiteSettings';
-import { applyKiteBrandIcon, KITE_BRAND_ICON_OPTIONS, type KiteBrandIcon } from '../../utils/kiteBrandIcon';
+import {
+  applyKiteBrandIcon,
+  getKiteBrandIconHref,
+  KITE_BRAND_ICON_GROUPS,
+  KITE_BRAND_ICON_OPTIONS,
+  KITE_BRAND_ICON_SIZES,
+  type KiteBrandIcon,
+  type KiteBrandIconOption,
+  type KiteBrandIconSize,
+} from '../../utils/kiteBrandIcon';
 
 // Kite light theme — white cards, #e0e0e0 borders, orange #f06428 accents.
 // Matches ConnectPane's inline-style conventions; this panel is the Kite-specific
@@ -82,47 +91,120 @@ function FirstRunGuide() {
   );
 }
 
+function IconPreview({ option, size, px = 32 }: { option: KiteBrandIconOption; size: KiteBrandIconSize; px?: number }) {
+  if (option.emoji) {
+    return <span style={{ fontSize: px, lineHeight: 1 }}>{option.emoji}</span>;
+  }
+  return <img src={getKiteBrandIconHref(option.value, size)} alt="" width={px} height={px} style={{ display: 'block' }} />;
+}
+
+function IconChoice({ option, selected, size, onPick, compact = false }: {
+  option: KiteBrandIconOption;
+  selected: boolean;
+  size: KiteBrandIconSize;
+  onPick: (value: KiteBrandIcon) => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(option.value)}
+      aria-pressed={selected}
+      title={option.label}
+      style={{
+        display: 'flex', alignItems: 'center', gap: compact ? 6 : 8,
+        minWidth: compact ? 106 : 132,
+        padding: compact ? '7px 9px' : '8px 10px', cursor: 'pointer',
+        background: selected ? 'rgba(240,100,40,0.06)' : '#fff',
+        border: `1.5px solid ${selected ? ORANGE : '#e0e0e0'}`,
+        borderRadius: 8, fontFamily: 'inherit', textAlign: 'left',
+      }}
+    >
+      <span style={{ width: compact ? 28 : 30, height: compact ? 28 : 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <IconPreview option={option} size={size} px={compact ? 25 : 28} />
+      </span>
+      <span style={{ fontSize: 12, fontWeight: selected ? 700 : 600, color: selected ? ORANGE : '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {option.label}
+      </span>
+    </button>
+  );
+}
+
 function BrandIconPicker() {
   const brandIcon = useKiteSettings((s) => s.brandIcon);
+  const brandIconSize = useKiteSettings((s) => s.brandIconSize);
+  const recentBrandIcons = useKiteSettings((s) => s.recentBrandIcons);
   const setBrandIcon = useKiteSettings((s) => s.setBrandIcon);
-  const choose = (value: KiteBrandIcon) => {
+  const setBrandIconSize = useKiteSettings((s) => s.setBrandIconSize);
+
+  const pickIcon = (value: KiteBrandIcon) => {
     setBrandIcon(value);
-    applyKiteBrandIcon(value);
+    applyKiteBrandIcon(value, brandIconSize);
   };
+  const pickSize = (size: KiteBrandIconSize) => {
+    setBrandIconSize(size);
+    applyKiteBrandIcon(brandIcon, size);
+  };
+
+  const optionFor = (value: KiteBrandIcon) => KITE_BRAND_ICON_OPTIONS.find((o) => o.value === value);
+  const recentOptions = [brandIcon, ...recentBrandIcons]
+    .filter((value, idx, arr) => arr.indexOf(value) === idx)
+    .map(optionFor)
+    .filter(Boolean)
+    .slice(0, 5) as KiteBrandIconOption[];
 
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={S.title}>APP / TAB ICON</div>
-      <div style={S.sub}>Choose the icon shown before Sterling in the browser tab. Phoenix is the clean 🐦‍🔥 only — transparent, no square, no white background.</div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {KITE_BRAND_ICON_OPTIONS.map((o) => {
-          const selected = brandIcon === o.value;
-          return (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => choose(o.value)}
-              aria-pressed={selected}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                minWidth: 178, padding: '10px 12px', cursor: 'pointer',
-                background: selected ? 'rgba(240,100,40,0.06)' : '#fff',
-                border: `1.5px solid ${selected ? ORANGE : '#e0e0e0'}`,
-                borderRadius: 8, fontFamily: 'inherit', textAlign: 'left',
-              }}
-            >
-              <span style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {o.value === 'phoenix'
-                  ? <span style={{ fontSize: 30, lineHeight: 1 }}>🐦‍🔥</span>
-                  : <img src={o.href} alt="" width={34} height={34} style={{ display: 'block' }} />}
-              </span>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                <span style={{ fontSize: 12, fontWeight: selected ? 700 : 600, color: selected ? ORANGE : '#444' }}>{o.label}</span>
-                <span style={{ fontSize: 10.5, color: '#9b9b9b', lineHeight: 1.35 }}>{o.description}</span>
-              </span>
-            </button>
-          );
-        })}
+      <div style={S.sub}>Choose the icon shown before Sterling.</div>
+
+      {recentOptions.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ ...S.label, marginBottom: 7 }}>RECENT 5</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {recentOptions.map((o) => (
+              <IconChoice key={o.value} option={o} selected={brandIcon === o.value} size={brandIconSize} onPick={pickIcon} compact />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ ...S.label, marginBottom: 7 }}>FAVICON SIZE</div>
+        <div style={{ display: 'inline-flex', border: '1px solid #e0e0e0', borderRadius: 6, overflow: 'hidden' }}>
+          {KITE_BRAND_ICON_SIZES.map((size) => {
+            const selected = brandIconSize === size.value;
+            return (
+              <button
+                key={size.value}
+                type="button"
+                onClick={() => pickSize(size.value)}
+                style={{
+                  background: selected ? ORANGE : '#fff',
+                  color: selected ? '#fff' : '#444',
+                  border: 'none', borderRight: size.value === 'xlarge' ? 'none' : '1px solid #e0e0e0',
+                  padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+                  fontWeight: selected ? 700 : 500,
+                }}
+              >
+                {size.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ maxHeight: 360, overflowY: 'auto', padding: '8px 10px 10px', border: '1px solid #e0e0e0', borderRadius: 8, background: '#fff' }}>
+        {KITE_BRAND_ICON_GROUPS.map((group, idx) => (
+          <div key={group.category} style={{ paddingTop: idx === 0 ? 0 : 12, marginTop: idx === 0 ? 0 : 12, borderTop: idx === 0 ? 'none' : '1px solid #f0f0f0' }}>
+            <div style={{ ...S.label, marginBottom: 8 }}>{group.category}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8 }}>
+              {group.options.map((o) => (
+                <IconChoice key={o.value} option={o} selected={brandIcon === o.value} size={brandIconSize} onPick={pickIcon} />
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
