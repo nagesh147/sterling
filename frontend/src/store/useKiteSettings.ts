@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { KiteBrandIcon } from '../utils/kiteBrandIcon';
+import type { KiteBrandIcon, KiteBrandIconSize } from '../utils/kiteBrandIcon';
 
 /** Visual style for loaders/spinners across the Kite UI. More styles can be added
  *  here later (e.g. 'aurora', 'pulse'); 'mac' is the Apple-grade default. */
 export type LoaderStyle = 'mac' | 'classic' | 'off';
+
+type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection' | 'showHoldings' | 'showNotes' | 'showGroupColors' | 'showExchange' | 'showLeg';
 
 export interface KiteSettingsState {
   /** Mac Kite — Apple-grade physics/motion layer. Off ⇒ stock Kite behaviour. */
@@ -13,6 +15,10 @@ export interface KiteSettingsState {
   loaderStyle: LoaderStyle;
   /** Browser/tab icon shown next to the Sterling title. */
   brandIcon: KiteBrandIcon;
+  /** Visual fill size used when generating emoji favicons. */
+  brandIconSize: KiteBrandIconSize;
+  /** Most recently selected app/tab icons, newest first. */
+  recentBrandIcons: KiteBrandIcon[];
   /** SuperTrend settings-drawer layout: tab bar vs collapsible cards (chosen in Connect). */
   engineSettingsLayout: 'tabs' | 'cards';
   chgType: 'close' | 'open';
@@ -35,9 +41,10 @@ export interface KiteSettingsState {
   setMacKite: (on: boolean) => void;
   setLoaderStyle: (s: LoaderStyle) => void;
   setBrandIcon: (icon: KiteBrandIcon) => void;
+  setBrandIconSize: (size: KiteBrandIconSize) => void;
   setEngineSettingsLayout: (l: 'tabs' | 'cards') => void;
   setChgType: (t: 'close' | 'open') => void;
-  toggleShow: (key: keyof Omit<KiteSettingsState, 'chgType'|'sortBy'|'setChgType'|'toggleShow'|'setSortBy'|'legSort'|'setLegSort'|'macKite'|'setMacKite'|'loaderStyle'|'setLoaderStyle'|'brandIcon'|'setBrandIcon'|'engineSettingsLayout'|'setEngineSettingsLayout'|'signalLeftColumnOrder'|'signalRightColumnOrder'|'reorderSignalColumn'>) => void;
+  toggleShow: (key: ToggleShowKey) => void;
   setSortBy: (s: string) => void;
   setLegSort: (sort: { key: string; dir: string }) => void;
   reorderSignalColumn: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
@@ -49,6 +56,8 @@ export const useKiteSettings = create<KiteSettingsState>()(
       macKite: false,
       loaderStyle: 'mac',
       brandIcon: 'phoenix',
+      brandIconSize: 'medium',
+      recentBrandIcons: [],
       engineSettingsLayout: 'tabs',
       chgType: 'close',
       showPriceChange: true,
@@ -65,10 +74,14 @@ export const useKiteSettings = create<KiteSettingsState>()(
       signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
       setMacKite: (on) => set({ macKite: on }),
       setLoaderStyle: (s) => set({ loaderStyle: s }),
-      setBrandIcon: (icon) => set({ brandIcon: icon }),
+      setBrandIcon: (icon) => set((state) => ({
+        brandIcon: icon,
+        recentBrandIcons: [icon, ...state.recentBrandIcons.filter((i) => i !== icon)].slice(0, 5),
+      })),
+      setBrandIconSize: (size) => set({ brandIconSize: size }),
       setEngineSettingsLayout: (l) => set({ engineSettingsLayout: l }),
       setChgType: (t) => set({ chgType: t }),
-      toggleShow: (key) => set((state) => ({ [key]: !state[key as keyof KiteSettingsState] })),
+      toggleShow: (key) => set((state) => ({ [key]: !state[key] })),
       setSortBy: (s) => set({ sortBy: s }),
       setLegSort: (sort) => set({ legSort: sort }),
       reorderSignalColumn: (group, fromKey, toKey) => set((state) => {
