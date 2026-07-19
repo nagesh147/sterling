@@ -24,6 +24,7 @@ function ThemedApp() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark';
     const savedZoom = localStorage.getItem('sterling-zoom');
     if (savedZoom) {
       document.querySelector('.term-root')?.setAttribute('style', `--app-zoom: ${savedZoom}`);
