@@ -20,7 +20,7 @@ describe('installKiteDefaultPreferences', () => {
     expect(localStorage.getItem(KITE_SIGNAL_TABLE_LAYOUT_KEY)).toBe('list');
     expect(localStorage.getItem(KITE_TERMINAL_THEME_KEY)).toBe('light');
     expect(localStorage.getItem(KITE_DEFAULT_PREFERENCES_MIGRATION_KEY)).toBe(KITE_DEFAULT_PREFERENCES_VERSION);
-    expect(document.head.querySelector<HTMLLinkElement>('link[rel="icon"]')?.getAttribute('href')).toBe('/favicon.svg?v=6');
+    expect(document.head.querySelector<HTMLLinkElement>('link[rel="icon"]')?.getAttribute('href')).toContain('data:image/svg+xml');
   });
 
   it('migrates the old implicit defaults once for existing browsers', () => {
@@ -51,6 +51,16 @@ describe('installKiteDefaultPreferences', () => {
     installKiteDefaultPreferences(localStorage);
 
     expect(document.head.querySelector<HTMLLinkElement>('link[rel="icon"]')?.getAttribute('href')).toBe('/favicon-terminal.svg?v=1');
+  });
+
+  it('applies a persisted emoji favicon size on boot', () => {
+    localStorage.setItem(KITE_SETTINGS_STORAGE_KEY, JSON.stringify({ state: { brandIcon: 'rocket', brandIconSize: 'xlarge' } }));
+
+    installKiteDefaultPreferences(localStorage);
+
+    const href = document.head.querySelector<HTMLLinkElement>('link[rel="icon"]')?.getAttribute('href') ?? '';
+    expect(href).toContain('data:image/svg+xml');
+    expect(decodeURIComponent(href)).toContain('font-size="66"');
   });
 
   it('keeps boot non-fatal when storage is unavailable', () => {
