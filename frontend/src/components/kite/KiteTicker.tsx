@@ -204,9 +204,14 @@ function KiteCard({ sym, q, tileScale, onOpenChart }: { sym: string; q: any; til
 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, maxWidth: cardW - chartW - scaled(tileScale, 38, 28) }}>
         {compactDerivative ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: scaled(tileScale, 1, 0), minWidth: 0, marginBottom: scaled(tileScale, 6, 3), paddingRight: scaled(tileScale, 8, 4) }}>
-            <span style={{ fontSize: titleSize, fontWeight: 700, color: TEXT, lineHeight: 1.12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label.primary}</span>
-            <span style={{ fontSize: secondarySize, fontWeight: 600, color: TEXT, lineHeight: 1.12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label.secondary}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: scaled(tileScale, 5, 3), minWidth: 0, marginBottom: scaled(tileScale, 7, 4), paddingRight: scaled(tileScale, 8, 4) }}>
+            <span style={{
+              fontSize: titleSize, fontWeight: 700, color: TEXT,
+              letterSpacing: '0.015em', textTransform: 'uppercase', lineHeight: 1.2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+            }}>
+              {label.full}
+            </span>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: scaled(tileScale, 5, 3), minWidth: 0, marginBottom: scaled(tileScale, 7, 4), paddingRight: scaled(tileScale, 8, 4) }}>
