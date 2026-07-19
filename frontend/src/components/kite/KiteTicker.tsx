@@ -9,9 +9,10 @@ import { SignalMarker } from './SignalMarker';
 // stays crisp across Chrome/Chromium instead of depending on a downloaded webfont.
 const TILE_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-const UP = '#10B981';
+// Match Kite/light-theme watchlist semantics: profit/up = Fruit Salad green.
+const UP = '#4caf50';
 const DOWN = '#EF4444';
-const SPARK = '#10B981';
+const SPARK = '#4caf50';
 const TICKER_BG = '#fff';
 const TICKER_BORDER = '#e0e0e0';
 const CARD_BORDER = '#9b9b9b';
