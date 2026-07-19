@@ -73,8 +73,10 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   } else if (q?.net_change != null) {
     abs = q.net_change;
   }
-  const up = (abs ?? 0) >= 0;
-  const chgColor = abs == null ? DIM : up ? UP : DOWN;
+  const isUp = (abs ?? 0) > 0;
+  const isDown = (abs ?? 0) < 0;
+  const chgColor = abs == null || abs === 0 ? DIM : isUp ? UP : DOWN;
+  const priceColor = abs == null || abs === 0 ? TEXT : isUp ? UP : DOWN;
 
   const { data: candles } = useCandles(sym, '5m', 90);
   const series = useMemo(() => {
@@ -170,7 +172,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
         </div>
 
         <span ref={flashRef} style={{
-          fontSize: 24, fontWeight: 500, color: TEXT,
+          fontSize: 24, fontWeight: 500, color: priceColor,
           fontVariantNumeric: 'tabular-nums lining-nums', letterSpacing: '-0.015em',
           marginTop: 7, lineHeight: 1.08,
         }}>
@@ -188,7 +190,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
         </div>
       </div>
 
-      <Sparkline points={series} color={abs == null ? SPARK : up ? UP : DOWN} width={76} height={46} />
+      <Sparkline points={series} color={abs == null || abs === 0 ? SPARK : isUp ? UP : DOWN} width={76} height={46} />
     </div>
   );
 }
