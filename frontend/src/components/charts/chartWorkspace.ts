@@ -1,6 +1,7 @@
 import jsep from 'jsep';
 
 export type ExtraIndicatorKind = 'ema' | 'sma' | 'rsi' | 'atr' | 'stochastic' | 'formula';
+export type ComparisonMode = 'price' | 'percent';
 
 export interface IndicatorStyle {
   color: string;
@@ -25,10 +26,19 @@ export interface ChartAppearance {
   magnetCrosshair: boolean;
 }
 
+export interface ComparisonOverlay {
+  id: string;
+  symbol: string;
+  color: string;
+  mode: ComparisonMode;
+  visible: boolean;
+}
+
 export interface ChartWorkspaceState {
   styles: Record<string, IndicatorStyle>;
   extraIndicators: ExtraIndicator[];
   compareSymbol: string | null;
+  comparisons: ComparisonOverlay[];
   appearance: ChartAppearance;
 }
 
@@ -54,9 +64,11 @@ export interface ChartTemplate {
 export const WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
 export const TEMPLATE_KEY = 'sterling:kite-chart-templates:v1';
 export const MAX_EXTRA_INDICATORS = 24;
+export const MAX_COMPARISONS = 4;
 export const MAX_TEMPLATES = 40;
 export const MAX_INDICATOR_PERIOD = 500;
 export const REPLAY_SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
+export const DEFAULT_COMPARISON_COLORS = ['#ff9800', '#2962ff', '#ab47bc', '#26a69a'] as const;
 
 export const DEFAULT_APPEARANCE: ChartAppearance = {
   candleUp: '#2db784',
@@ -69,6 +81,7 @@ export const DEFAULT_WORKSPACE: ChartWorkspaceState = {
   styles: {},
   extraIndicators: [],
   compareSymbol: null,
+  comparisons: [],
   appearance: DEFAULT_APPEARANCE,
 };
 
@@ -85,6 +98,18 @@ export function createExtraIndicator(kind: ExtraIndicatorKind, now = Date.now())
   return { ...KIND_DEFAULTS[kind], id: `${kind}-${now}`, style: { ...KIND_DEFAULTS[kind].style } };
 }
 
+export function createComparisonOverlay(symbol: string, now = Date.now(), index = 0): ComparisonOverlay {
+  const normalized = normalizeSymbol(symbol);
+  if (!normalized) throw new Error('Comparison symbol is required');
+  return {
+    id: `compare-${now}-${index}`,
+    symbol: normalized,
+    color: DEFAULT_COMPARISON_COLORS[index % DEFAULT_COMPARISON_COLORS.length],
+    mode: 'percent',
+    visible: true,
+  };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -94,6 +119,7 @@ function cloneWorkspace(): ChartWorkspaceState {
     styles: {},
     extraIndicators: [],
     compareSymbol: null,
+    comparisons: [],
     appearance: { ...DEFAULT_APPEARANCE },
   };
 }
@@ -112,6 +138,40 @@ function normalizeSymbol(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const next = value.trim().toUpperCase().replace(/\s+/g, ' ');
   return next ? next.slice(0, 80) : null;
+}
+
+function normalizeComparisonMode(value: unknown): ComparisonMode {
+  return value === 'price' || value === 'percent' ? value : 'percent';
+}
+
+function normalizeComparisons(value: unknown, legacySymbol: unknown): ComparisonOverlay[] {
+  const seen = new Set<string>();
+  const rawComparisons = Array.isArray(value) ? value : [];
+  const fromComparisons = rawComparisons.flatMap((item, index): ComparisonOverlay[] => {
+    if (!isObject(item)) return [];
+    const symbol = normalizeSymbol(item.symbol);
+    if (!symbol || seen.has(symbol)) return [];
+    seen.add(symbol);
+    const baseId = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 80) : `compare-${index}`;
+    return [{
+      id: baseId,
+      symbol,
+      color: isColor(item.color) ? item.color : DEFAULT_COMPARISON_COLORS[index % DEFAULT_COMPARISON_COLORS.length],
+      mode: normalizeComparisonMode(item.mode),
+      visible: typeof item.visible === 'boolean' ? item.visible : true,
+    }];
+  });
+  const legacy = normalizeSymbol(legacySymbol);
+  if (legacy && !seen.has(legacy)) {
+    fromComparisons.unshift({
+      id: 'compare-legacy',
+      symbol: legacy,
+      color: DEFAULT_COMPARISON_COLORS[0],
+      mode: 'percent',
+      visible: true,
+    });
+  }
+  return fromComparisons.slice(0, MAX_COMPARISONS);
 }
 
 function normalizeStyle(value: unknown, fallback: IndicatorStyle): IndicatorStyle {
@@ -159,10 +219,12 @@ export function normalizeWorkspace(value: unknown): ChartWorkspaceState {
     : [];
 
   const appearanceRaw = isObject(value.appearance) ? value.appearance : {};
+  const comparisons = normalizeComparisons(value.comparisons, value.compareSymbol);
   return {
     styles,
     extraIndicators,
-    compareSymbol: normalizeSymbol(value.compareSymbol),
+    compareSymbol: comparisons[0]?.symbol ?? null,
+    comparisons,
     appearance: {
       candleUp: isColor(appearanceRaw.candleUp) ? appearanceRaw.candleUp : DEFAULT_APPEARANCE.candleUp,
       candleDown: isColor(appearanceRaw.candleDown) ? appearanceRaw.candleDown : DEFAULT_APPEARANCE.candleDown,
@@ -361,6 +423,21 @@ export function formulaSeries(expression: string, candles: Array<{ open: number;
     } catch {
       return null;
     }
+  });
+}
+
+export function comparisonSeriesData(
+  candles: Array<{ time: number; close: number }>,
+  mode: ComparisonMode,
+): Array<{ time: number; value: number }> {
+  const firstClose = candles.find((candle) => Number.isFinite(candle.close) && candle.close > 0)?.close ?? null;
+  return candles.flatMap((candle) => {
+    if (!Number.isFinite(candle.time) || !Number.isFinite(candle.close)) return [];
+    if (mode === 'percent') {
+      if (!firstClose) return [];
+      return [{ time: candle.time, value: ((candle.close - firstClose) / firstClose) * 100 }];
+    }
+    return [{ time: candle.time, value: candle.close }];
   });
 }
 
