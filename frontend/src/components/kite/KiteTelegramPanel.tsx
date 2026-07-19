@@ -4,6 +4,8 @@ import {
   useTestKiteTelegram, useUpdateKiteTelegram,
 } from '../../hooks/useKiteTelegram';
 import type { KiteTelegramTarget } from '../../types/kiteTelegram';
+import { useKiteSettings } from '../../store/useKiteSettings';
+import { applyKiteBrandIcon, KITE_BRAND_ICON_OPTIONS, type KiteBrandIcon } from '../../utils/kiteBrandIcon';
 
 // Kite light theme — white cards, #e0e0e0 borders, orange #f06428 accents.
 // Matches ConnectPane's inline-style conventions; this panel is the Kite-specific
@@ -75,6 +77,52 @@ function FirstRunGuide() {
       <div style={S.step}>
         <span style={S.stepNum}>3</span>
         <span>Paste both below, name the bot, <strong>Add</strong>, then <strong>Test</strong>.</span>
+      </div>
+    </div>
+  );
+}
+
+function BrandIconPicker() {
+  const brandIcon = useKiteSettings((s) => s.brandIcon);
+  const setBrandIcon = useKiteSettings((s) => s.setBrandIcon);
+  const choose = (value: KiteBrandIcon) => {
+    setBrandIcon(value);
+    applyKiteBrandIcon(value);
+  };
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={S.title}>APP / TAB ICON</div>
+      <div style={S.sub}>Choose the icon shown before Sterling in the browser tab. Phoenix is the clean 🐦‍🔥 only — transparent, no square, no white background.</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {KITE_BRAND_ICON_OPTIONS.map((o) => {
+          const selected = brandIcon === o.value;
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => choose(o.value)}
+              aria-pressed={selected}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                minWidth: 178, padding: '10px 12px', cursor: 'pointer',
+                background: selected ? 'rgba(240,100,40,0.06)' : '#fff',
+                border: `1.5px solid ${selected ? ORANGE : '#e0e0e0'}`,
+                borderRadius: 8, fontFamily: 'inherit', textAlign: 'left',
+              }}
+            >
+              <span style={{ width: 34, height: 34, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {o.value === 'phoenix'
+                  ? <span style={{ fontSize: 30, lineHeight: 1 }}>🐦‍🔥</span>
+                  : <img src={o.href} alt="" width={34} height={34} style={{ display: 'block' }} />}
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span style={{ fontSize: 12, fontWeight: selected ? 700 : 600, color: selected ? ORANGE : '#444' }}>{o.label}</span>
+                <span style={{ fontSize: 10.5, color: '#9b9b9b', lineHeight: 1.35 }}>{o.description}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -241,30 +289,34 @@ export function KiteTelegramPanel() {
 
   return (
     <div>
-      <div style={S.title}>KITE TELEGRAM ALERTS</div>
-      <div style={S.sub}>
-        Send Kite signal alerts to your own Telegram bot(s) — separate from the crypto dashboard’s Telegram.
-        Add one or more bots, enable the ones you want, and Test to confirm delivery.
+      <BrandIconPicker />
+
+      <div style={{ paddingTop: 16, borderTop: '1px solid #e0e0e0' }}>
+        <div style={S.title}>KITE TELEGRAM ALERTS</div>
+        <div style={S.sub}>
+          Send Kite signal alerts to your own Telegram bot(s) — separate from the crypto dashboard’s Telegram.
+          Add one or more bots, enable the ones you want, and Test to confirm delivery.
+        </div>
+
+        {isLoading && <div style={S.hint}>Loading…</div>}
+
+        {/* No backend yet during dev → treat errors like an empty list and show the
+            first-run guide rather than crashing. */}
+        {!isLoading && targets.length === 0 && (
+          <>
+            <FirstRunGuide />
+            {isError && <div style={{ ...S.hint, marginBottom: 10 }}>Could not load saved bots ({error?.message}). Add one to get started.</div>}
+            <AddTarget />
+          </>
+        )}
+
+        {!isLoading && targets.length > 0 && (
+          <>
+            {targets.map((tg) => <TargetRow key={tg.id} target={tg} />)}
+            <div style={{ marginTop: 4 }}><AddTarget /></div>
+          </>
+        )}
       </div>
-
-      {isLoading && <div style={S.hint}>Loading…</div>}
-
-      {/* No backend yet during dev → treat errors like an empty list and show the
-          first-run guide rather than crashing. */}
-      {!isLoading && targets.length === 0 && (
-        <>
-          <FirstRunGuide />
-          {isError && <div style={{ ...S.hint, marginBottom: 10 }}>Could not load saved bots ({error?.message}). Add one to get started.</div>}
-          <AddTarget />
-        </>
-      )}
-
-      {!isLoading && targets.length > 0 && (
-        <>
-          {targets.map((tg) => <TargetRow key={tg.id} target={tg} />)}
-          <div style={{ marginTop: 4 }}><AddTarget /></div>
-        </>
-      )}
     </div>
   );
 }
