@@ -166,7 +166,7 @@ export function KiteTab() {
         sidebar={<SterlingWatchList onOpenInstrument={handleOpenInstrument} />}
         rightSidebar={<SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />}
         bottomBar={<EngineTerminal />}
-        centerTopBar={<KiteTicker />}
+        centerTopBar={<KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
         onBasketClick={() => setBasketOpen(true)}
         basketCount={basketCount}
