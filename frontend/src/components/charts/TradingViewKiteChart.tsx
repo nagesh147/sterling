@@ -71,7 +71,7 @@ interface TradingViewKiteChartProps {
    *  all series/indicators/drawings set) — used by the parent to hide a
    *  switch-instrument loading overlay in sync with the actual expensive work,
    *  not just when candle data has arrived. */
-  onChartReady?: () => void;
+  onChartReady?: (readyKey?: string) => void;
   // for full TV-like control inside the component
   onTfChange?: (tf: string) => void;
   onIsHAChange?: (ha: boolean) => void;
@@ -182,7 +182,7 @@ export function TradingViewKiteChart({
   const signalDataRef = useRef<any>(undefined);
   // Kept fresh via a ref (not a dep) so calling it doesn't force the expensive
   // structural effect below to re-run whenever the parent passes a new closure.
-  const onChartReadyRef = useRef<(() => void) | undefined>(onChartReady);
+  const onChartReadyRef = useRef<((readyKey?: string) => void) | undefined>(onChartReady);
   // handleChartClick/snapToOHLC come from useKiteDrawings, which hands back a
   // NEW function identity most renders (its own useCallback deps churn as
   // drawingPoints/drawMode/etc. tick) - measured live, this was forcing a full
@@ -774,7 +774,22 @@ export function TradingViewKiteChart({
     const baseCandles = baseCandlesRef.current;
     const symbolPos = symbolPosRef.current;
     const signalData = signalDataRef.current;
-    if (layoutMode !== '1' || !mainRef.current || !baseCandles.length) return;
+    const instrumentKey = `${symbol}|${tf}`;
+    if (layoutMode !== '1' || !mainRef.current || !baseCandles.length) {
+      if (mainChartRef.current) {
+        mainChartRef.current.remove();
+        mainChartRef.current = null;
+        seriesRefs.current = {};
+        previewSeriesRef.current = [];
+        lastSyncedCandlesRef.current = null;
+      }
+      if (!baseCandles.length) {
+        lastRangeRef.current = null;
+        priceZoomBaseRef.current = null;
+        setPriceBadge(null);
+      }
+      return;
+    }
 
     if (mainChartRef.current) {
       mainChartRef.current.remove();
@@ -842,6 +857,8 @@ export function TradingViewKiteChart({
     });
 
     const times = baseCandles.map((c: any) => c.time);
+    const readySourceCandles = fullBaseCandles.length ? fullBaseCandles : baseCandles;
+    const readyKey = `${symbol}|${tf}|${readySourceCandles.length}|${readySourceCandles[0]?.time ?? ''}|${readySourceCandles[readySourceCandles.length - 1]?.time ?? ''}`;
     const candleData = baseCandles.map((b: any) => ({
       time: b.time as any, open: b.open, high: b.high, low: b.low, close: b.close,
     }));
@@ -1267,7 +1284,6 @@ export function TradingViewKiteChart({
 
     // Apply the visible range on EVERY (re)build - the effect re-runs on each
     // data poll, so gating this to first-mount lost the zoom on every refresh.
-    const instrumentKey = `${symbol}|${tf}`;
     const isNewInstrument = instrumentKeyRef.current !== instrumentKey;
     instrumentKeyRef.current = instrumentKey;
     const applyView = () => {
@@ -1358,10 +1374,20 @@ export function TradingViewKiteChart({
     const handleSync = () => { if (selectedDrawingId) setTimeout(drawHandles, 0); };
     ts.subscribeVisibleTimeRangeChange(handleSync);
 
-    // initial profile + handles + price badge + scale width
-    setTimeout(() => { drawVolumeProfile(); drawHandles(); updatePriceBadge(); updateRightScaleWidth(); onChartReadyRef.current?.(); }, 120);
+    // Initial profile + handles + price badge + scale width. A zero-delay timer
+    // gives lightweight-charts one layout pass without imposing a visible 120ms
+    // delay on every timeframe switch, and cleanup cancels stale ready callbacks
+    // from charts that were removed during rapid switches.
+    const readyTimer = window.setTimeout(() => {
+      drawVolumeProfile();
+      drawHandles();
+      updatePriceBadge();
+      updateRightScaleWidth();
+      onChartReadyRef.current?.(readyKey);
+    }, 0);
 
     return () => {
+      window.clearTimeout(readyTimer);
       try { ts.unsubscribeVisibleTimeRangeChange(zh); } catch {}
       try { ts.unsubscribeVisibleTimeRangeChange(handleSync); } catch {}
       if (flashTimeoutRef.current) { clearTimeout(flashTimeoutRef.current); flashTimeoutRef.current = null; }
