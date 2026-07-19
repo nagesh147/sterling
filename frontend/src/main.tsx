@@ -2,8 +2,10 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/globals.css';
 import { App } from './App';
+import { installKiteDefaultPreferences } from './utils/kiteDefaultPreferences';
 import { installScrollAutohide } from './utils/scrollAutohide';
 
+installKiteDefaultPreferences();
 installScrollAutohide();   // macOS-style: reveal scrollbars while scrolling, fade when idle
 
 const root = document.getElementById('root');
