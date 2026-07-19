@@ -2,12 +2,13 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { useKiteQuote } from '../../hooks/useKite';
 import { useCandles } from '../../hooks/useCandles';
 import { useTickerPins } from '../../store/useTickerPins';
+import { parseInstrument } from './InstrumentLabel';
 
-// Keep the classic Chromium card treatment, but use the native UI stack so text
-// stays crisp across Chrome/Chromium instead of depending on a downloaded webfont.
-const TILE_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+// Keep the card close to the supplied Kite-style reference while still honoring
+// the app font picker when the user customizes typography.
+const TILE_FONT = "var(--app-font, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif)";
 
-// Match the Kite light-theme watchlist semantics exactly.
+// Match Kite/light-theme watchlist semantics.
 const UP = '#4caf50';
 const DOWN = '#df514c';
 const TICKER_BG = '#f7f9fc';
@@ -46,14 +47,32 @@ function isIndexSymbol(symbol: string, exchange: string): boolean {
     || value === 'BANKEX';
 }
 
-function Sparkline({ points, color, width = 138, height = 82 }: {
-  points: number[]; color: string; width?: number; height?: number;
+function formatTickerLabel(rawTs: string, exchange: string): { primary: string; secondary: string; market: string; full: string } {
+  const parsed = parseInstrument(rawTs);
+  if (parsed) {
+    const expiry = [parsed.day ? String(parsed.day) : null, parsed.month].filter(Boolean).join(' ');
+    const secondary = [expiry, parsed.strike, parsed.type].filter(Boolean).join(' ');
+    const full = [parsed.underlying, secondary].filter(Boolean).join(' ');
+    return { primary: parsed.underlying, secondary, market: exchange, full };
+  }
+
+  const market = isIndexSymbol(rawTs, exchange) ? 'INDEX' : exchange;
+  return { primary: rawTs, secondary: '', market, full: rawTs };
+}
+
+const scaled = (scale: number, value: number, min?: number) => {
+  const next = Math.round(value * scale * 10) / 10;
+  return min == null ? next : Math.max(min, next);
+};
+
+function Sparkline({ points, color, width, height }: {
+  points: number[]; color: string; width: number; height: number;
 }) {
   if (!points || points.length < 2) return <div style={{ width, height }} />;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
-  const pad = 5;
+  const pad = Math.max(4, Math.round(height * 0.06));
   const h = height - pad * 2;
   const stepX = width / (points.length - 1);
   const d = points
@@ -61,14 +80,16 @@ function Sparkline({ points, color, width = 138, height = 82 }: {
     .join(' ');
   return (
     <svg width={width} height={height} style={{ display: 'block', overflow: 'visible', flexShrink: 0 }} aria-hidden>
-      <polyline points={d} fill="none" stroke={color} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={d} fill="none" stroke={color} strokeWidth={scaled(width / 138, 2.4, 1.6)} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
 
-function KiteCard({ sym, q }: { sym: string; q: any }) {
+function KiteCard({ sym, q, tileScale, onOpenChart }: { sym: string; q: any; tileScale: number; onOpenChart?: (symbol: string) => void }) {
   const flashRef = useRef<HTMLSpanElement>(null);
   const prevRef = useRef<number | null>(null);
+  const unpin = useTickerPins((s) => s.unpin);
+  const [hover, setHover] = useState(false);
 
   const last: number | undefined = q?.last_price;
   const close: number | undefined = q?.ohlc?.close;
@@ -120,7 +141,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const segments = sym.split(':');
   const exch = segments[0] || '';
   const rawTs = segments.slice(1).join(':') || sym;
-  const marketLabel = isIndexSymbol(rawTs, exch) ? 'INDEX' : exch;
+  const label = formatTickerLabel(rawTs, exch);
 
   const priceStr = hasPrice
     ? last!.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -128,52 +149,87 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
   const absStr = abs != null ? `${abs >= 0 ? '+' : ''}${abs.toFixed(2)}` : '';
   const pctStr = pct != null ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '';
 
+  const cardW = scaled(tileScale, 360, 280);
+  const cardH = scaled(tileScale, 146, 112);
+  const chartW = scaled(tileScale, 138, 96);
+  const chartH = scaled(tileScale, 82, 58);
+  const padX = scaled(tileScale, 20, 14);
+  const padY = scaled(tileScale, 20, 14);
+
   return (
     <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={label.full}
       style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: scaled(tileScale, 18, 12),
         background: CARD_BG,
         border: `1px solid ${CARD_BORDER}`,
-        borderRadius: 16,
-        padding: '20px 20px 18px 22px',
-        width: 360,
-        minHeight: 146,
+        borderRadius: scaled(tileScale, 16, 12),
+        padding: `${padY}px ${padX}px ${scaled(tileScale, 18, 13)}px ${scaled(tileScale, 22, 15)}px`,
+        width: cardW,
+        minHeight: cardH,
         flexShrink: 0,
         boxShadow: '0 1px 4px rgba(15, 23, 42, 0.08)',
         boxSizing: 'border-box',
         color: TEXT,
+        position: 'relative',
         WebkitFontSmoothing: 'antialiased',
         MozOsxFontSmoothing: 'grayscale',
         textRendering: 'geometricPrecision',
       }}
     >
+      <button
+        onClick={(e) => { e.stopPropagation(); unpin(sym); }}
+        title="Remove from ticker"
+        aria-label={`Remove ${label.full} from ticker`}
+        style={{
+          position: 'absolute', top: 8, right: 8,
+          width: 20, height: 20, padding: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, fontWeight: 300, lineHeight: 1,
+          background: 'transparent', border: 'none', borderRadius: 4,
+          color: DIM, cursor: 'pointer', opacity: hover ? 0.85 : 0.45,
+          transition: 'opacity .12s, color .12s',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = TEXT; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = hover ? '0.85' : '0.45'; e.currentTarget.style.color = DIM; }}
+      >
+        ×
+      </button>
+
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: '1 1 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, marginBottom: 15 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: scaled(tileScale, 8, 5), minWidth: 0, marginBottom: scaled(tileScale, 15, 9), paddingRight: 14 }}>
           <span style={{
-            fontSize: 18, fontWeight: 700, color: TEXT, lineHeight: 1.2,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            fontSize: scaled(tileScale, 18, 14), fontWeight: 700, color: TEXT, lineHeight: 1.2,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
           }}>
-            {rawTs}
+            {label.primary}
           </span>
-          {marketLabel && (
-            <span style={{ fontSize: 15, fontWeight: 600, color: DIM, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
-              {marketLabel}
+          {label.secondary && (
+            <span style={{ fontSize: scaled(tileScale, 15, 11), fontWeight: 600, color: TEXT, lineHeight: 1.2, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {label.secondary}
+            </span>
+          )}
+          {!label.secondary && label.market && (
+            <span style={{ fontSize: scaled(tileScale, 15, 11), fontWeight: 700, color: DIM, lineHeight: 1.2, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {label.market}
             </span>
           )}
         </div>
 
         <span ref={flashRef} style={{
-          fontSize: 42, fontWeight: 300, color: TEXT,
+          fontSize: scaled(tileScale, 42, 30), fontWeight: 300, color: TEXT,
           fontVariantNumeric: 'tabular-nums lining-nums', letterSpacing: '-0.02em',
           lineHeight: 1,
         }}>
           {priceStr}
         </span>
 
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 26, marginTop: 14, minHeight: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: scaled(tileScale, 26, 14), marginTop: scaled(tileScale, 14, 8), minHeight: scaled(tileScale, 24, 18) }}>
           {abs != null && (
             <span style={{
-              fontSize: 19, fontWeight: 400, color: movementColor,
+              fontSize: scaled(tileScale, 19, 14), fontWeight: 500, color: movementColor,
               fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2,
             }}>
               {absStr}
@@ -181,25 +237,55 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
           )}
           {pct != null && (
             <span style={{
-              fontSize: 19, fontWeight: 400, color: movementColor,
+              fontSize: scaled(tileScale, 19, 14), fontWeight: 500, color: movementColor,
               fontVariantNumeric: 'tabular-nums lining-nums', lineHeight: 1.2,
             }}>
               {pctStr}
             </span>
           )}
-          {abs == null && <span style={{ fontSize: 12, fontWeight: 400, color: DIM }}>{hasPrice ? marketLabel : 'no data'}</span>}
+          {abs == null && <span style={{ fontSize: scaled(tileScale, 12, 10), fontWeight: 400, color: DIM }}>{hasPrice ? (label.market || exch) : 'no data'}</span>}
         </div>
       </div>
 
-      <div style={{ flex: '0 0 138px', alignSelf: 'center', marginTop: 16 }}>
-        <Sparkline points={series} color={movementColor} width={138} height={82} />
-      </div>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onOpenChart?.(sym); }}
+        disabled={!onOpenChart}
+        title={onOpenChart ? `Open ${label.full} chart` : undefined}
+        style={{
+          flex: `0 0 ${chartW}px`, alignSelf: 'center', marginTop: scaled(tileScale, 16, 8),
+          border: 'none', background: 'transparent', padding: 0,
+          cursor: onOpenChart ? 'pointer' : 'default', opacity: onOpenChart ? 1 : 0.95,
+        }}
+      >
+        <Sparkline points={series} color={movementColor} width={chartW} height={chartH} />
+      </button>
     </div>
   );
 }
 
-export function KiteTicker() {
+function SizeControlButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      style={{
+        width: 24, height: 22, border: '1px solid #d6d6d6', borderRadius: 5,
+        background: '#fff', color: TEXT, cursor: 'pointer', fontFamily: TILE_FONT,
+        fontSize: 13, lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+export function KiteTicker({ onOpenChart }: { onOpenChart?: (symbol: string) => void }) {
   const pins = useTickerPins((s) => s.pins);
+  const tileScale = useTickerPins((s) => s.tileScale ?? 1);
+  const increaseTileScale = useTickerPins((s) => s.increaseTileScale);
+  const decreaseTileScale = useTickerPins((s) => s.decreaseTileScale);
+  const resetTileScale = useTickerPins((s) => s.resetTileScale);
   const items = useMemo(() => pins.map((symbol) => ({ symbol })), [pins]);
   const symbols = pins;
   const { data: quotes } = useKiteQuote(symbols, items.length > 0);
@@ -207,6 +293,7 @@ export function KiteTicker() {
   const copyRef = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState(false);
   const [shift, setShift] = useState(0);
+  const [hover, setHover] = useState(false);
 
   useLayoutEffect(() => {
     const outer = outerRef.current;
@@ -224,7 +311,7 @@ export function KiteTicker() {
     ro.observe(outer);
     ro.observe(copy);
     return () => ro.disconnect();
-  }, [items.length]);
+  }, [items.length, tileScale]);
 
   if (items.length === 0) {
     return (
@@ -241,19 +328,50 @@ export function KiteTicker() {
   }
 
   const cards = items.map((w) => (
-    <KiteCard key={w.symbol} sym={w.symbol} q={quotes?.[w.symbol]} />
+    <KiteCard key={w.symbol} sym={w.symbol} q={quotes?.[w.symbol]} tileScale={tileScale} onOpenChart={onOpenChart} />
   ));
 
   const GAP = 12;
-  const duration = Math.min(120, Math.max(12, shift / 45));
+  const duration = Math.min(140, Math.max(14, shift / 45));
 
   return (
-    <div ref={outerRef} style={{
-      background: TICKER_BG,
-      borderBottom: `1px solid ${TICKER_BORDER}`,
-      padding: '14px 16px', flexShrink: 0, overflow: 'hidden',
-      fontFamily: TILE_FONT,
-    }}>
+    <div
+      ref={outerRef}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: TICKER_BG,
+        borderBottom: `1px solid ${TICKER_BORDER}`,
+        padding: '14px 16px', flexShrink: 0, overflow: 'hidden',
+        fontFamily: TILE_FONT, position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute', top: 8, right: 12, zIndex: 4,
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '3px 5px', borderRadius: 7,
+          background: 'rgba(255,255,255,0.94)', border: '1px solid #e0e0e0',
+          boxShadow: '0 1px 5px rgba(15, 23, 42, 0.10)',
+          opacity: hover ? 1 : 0, pointerEvents: hover ? 'auto' : 'none',
+          transition: 'opacity .12s ease',
+        }}
+      >
+        <SizeControlButton label="−" onClick={decreaseTileScale} />
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); resetTileScale(); }}
+          title="Reset ticker tile size"
+          style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', color: DIM,
+            fontSize: 10, minWidth: 34, fontFamily: TILE_FONT,
+          }}
+        >
+          {Math.round(tileScale * 100)}%
+        </button>
+        <SizeControlButton label="+" onClick={increaseTileScale} />
+      </div>
+
       <div
         className={overflow ? 'ticker-marquee' : undefined}
         style={{
