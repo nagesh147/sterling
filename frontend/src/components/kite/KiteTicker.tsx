@@ -4,14 +4,19 @@ import { useCandles } from '../../hooks/useCandles';
 import { useTickerPins } from '../../store/useTickerPins';
 import { InstrumentLabel } from './InstrumentLabel';
 import { SignalMarker } from './SignalMarker';
-import { k } from '../../styles/kiteUI';
 
-// Use the single app-wide Kite font (Inter stack) so tiles match the rest of the UI.
-const TILE_FONT = k.fontFamily;
+// Match the classic Kite index-tile look from Chromium: Open Sans, white cards,
+// fixed light borders, and no dependency on the terminal theme variables.
+const TILE_FONT = "'Open Sans', sans-serif";
 
 const UP = '#10B981';
 const DOWN = '#EF4444';
-const SPARK = '#4184f3';
+const SPARK = '#10B981';
+const TICKER_BG = '#fff';
+const TICKER_BORDER = '#e0e0e0';
+const CARD_BORDER = '#9b9b9b';
+const TEXT = '#444';
+const DIM = '#9b9b9b';
 
 // Per-symbol intraday tick buffer, kept module-level so it accumulates across
 // re-renders/remounts (like the price-flash prevRef). Seeded from the day's open
@@ -73,7 +78,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
     abs = q.net_change;
   }
   const up = (abs ?? 0) >= 0;
-  const chgColor = abs == null ? 'var(--t-dim)' : up ? UP : DOWN;
+  const chgColor = abs == null ? DIM : up ? UP : DOWN;
 
   // Real intraday shape: drive the sparkline from 5-minute candles of the latest
   // trading day. This shows a proper curve (not a 2-point slanted line) and, at
@@ -127,9 +132,16 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
       onMouseLeave={() => setHover(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        border: '1px solid var(--t-border)',
-        borderRadius: 8, padding: '12px 14px', width: 250, flexShrink: 0,
+        background: TICKER_BG,
+        border: `1px solid ${CARD_BORDER}`,
+        borderRadius: 6,
+        padding: '12px 14px',
+        width: 250,
+        flexShrink: 0,
         position: 'relative',
+        boxShadow: 'none',
+        boxSizing: 'border-box',
+        color: TEXT,
       }}>
       {/* Tiny close — appears on hover; removes this instrument from the ticker row */}
       <button
@@ -142,13 +154,13 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 11, fontWeight: 600,
           background: 'transparent', border: 'none', borderRadius: 3,
-          color: 'var(--t-dim)', cursor: 'pointer',
+          color: DIM, cursor: 'pointer',
           opacity: hover ? 0.7 : 0,
           pointerEvents: hover ? 'auto' : 'none',
           transition: 'opacity .12s',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--t-bright)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = 'var(--t-dim)'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = TEXT; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7'; e.currentTarget.style.color = DIM; }}
       >
         ×
       </button>
@@ -157,17 +169,17 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
           <span style={{
-            fontSize: 12, fontWeight: 700, color: 'var(--t-bright)',
+            fontSize: 12, fontWeight: 700, color: TEXT,
             letterSpacing: '0.04em', textTransform: 'uppercase',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             <InstrumentLabel symbol={rawTs} />
           </span>
-          <SignalMarker symbol={sym} color="var(--t-dim)" />
+          <SignalMarker symbol={sym} color={DIM} />
         </div>
 
         <span ref={flashRef} style={{
-          fontSize: 24, fontWeight: 300, color: 'var(--t-bright)',
+          fontSize: 24, fontWeight: 300, color: TEXT,
           fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em',
           marginTop: 8, lineHeight: 1.1,
         }}>
@@ -181,7 +193,7 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
           {pct != null && (
             <span style={{ fontSize: 12.5, fontWeight: 400, color: chgColor, fontVariantNumeric: 'tabular-nums' }}>{pctStr}</span>
           )}
-          {abs == null && <span style={{ fontSize: 11, color: 'var(--t-dim)' }}>{hasPrice ? exch : 'no data'}</span>}
+          {abs == null && <span style={{ fontSize: 11, color: DIM }}>{hasPrice ? exch : 'no data'}</span>}
         </div>
       </div>
 
@@ -225,11 +237,11 @@ export function KiteTicker() {
   if (items.length === 0) {
     return (
       <div style={{
-        height: 56, borderBottom: '1px solid var(--t-border)',
+        height: 56, background: TICKER_BG, borderBottom: `1px solid ${TICKER_BORDER}`,
         display: 'flex', alignItems: 'center', padding: '0 20px', flexShrink: 0,
         fontFamily: TILE_FONT,
       }}>
-        <span style={{ color: 'var(--t-dim)', fontSize: 11 }}>
+        <span style={{ color: DIM, fontSize: 11 }}>
           No pinned tiles — add instruments from a Market Watch or Signals row’s “Add to Ticker”.
         </span>
       </div>
@@ -245,7 +257,8 @@ export function KiteTicker() {
 
   return (
     <div ref={outerRef} style={{
-      borderBottom: '1px solid var(--t-border)',
+      background: TICKER_BG,
+      borderBottom: `1px solid ${TICKER_BORDER}`,
       padding: '10px 20px', flexShrink: 0, overflow: 'hidden',
       fontFamily: TILE_FONT,
     }}>
