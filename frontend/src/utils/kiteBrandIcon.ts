@@ -10,7 +10,7 @@ export const KITE_BRAND_ICON_OPTIONS: Array<{
     value: 'phoenix',
     label: 'Phoenix',
     description: 'Clean 🐦‍🔥 icon only — transparent, no square or white background.',
-    href: '/favicon.svg?v=6',
+    href: '/favicon.svg?v=7',
   },
   {
     value: 'terminal',
