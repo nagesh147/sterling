@@ -1,5 +1,3 @@
-import jsep from 'jsep';
-
 export type ExtraIndicatorKind = 'ema' | 'sma' | 'rsi' | 'atr' | 'stochastic' | 'formula';
 export type ComparisonMode = 'price' | 'percent';
 
@@ -347,59 +345,195 @@ const FORMULA_FUNCTIONS: Record<string, (...args: number[]) => number> = {
   sqrt: Math.sqrt,
 };
 
-function evaluateNode(node: any, context: FormulaContext): number {
-  switch (node.type) {
-    case 'Literal':
-      if (typeof node.value !== 'number') throw new Error('Only numeric literals are allowed');
-      return node.value;
-    case 'Identifier':
-      if (!(node.name in context)) throw new Error(`Unknown variable: ${node.name}`);
-      return context[node.name];
-    case 'UnaryExpression': {
-      const value = evaluateNode(node.argument, context);
-      if (node.operator === '+') return value;
-      if (node.operator === '-') return -value;
-      if (node.operator === '!') return value ? 0 : 1;
-      throw new Error(`Unsupported operator: ${node.operator}`);
-    }
-    case 'BinaryExpression': {
-      const left = evaluateNode(node.left, context);
-      const right = evaluateNode(node.right, context);
-      switch (node.operator) {
-        case '+': return left + right;
-        case '-': return left - right;
-        case '*': return left * right;
-        case '/': return right === 0 ? Number.NaN : left / right;
-        case '%': return right === 0 ? Number.NaN : left % right;
-        case '^': return Math.pow(left, right);
-        case '>': return left > right ? 1 : 0;
-        case '>=': return left >= right ? 1 : 0;
-        case '<': return left < right ? 1 : 0;
-        case '<=': return left <= right ? 1 : 0;
-        case '==': case '===': return left === right ? 1 : 0;
-        case '!=': case '!==': return left !== right ? 1 : 0;
-        default: throw new Error(`Unsupported operator: ${node.operator}`);
-      }
-    }
-    case 'CallExpression': {
-      if (node.callee?.type !== 'Identifier' || !(node.callee.name in FORMULA_FUNCTIONS)) {
-        throw new Error('Only approved math functions are allowed');
-      }
-      return FORMULA_FUNCTIONS[node.callee.name](...node.arguments.map((arg: any) => evaluateNode(arg, context)));
-    }
-    case 'ConditionalExpression':
-      return evaluateNode(node.test, context) ? evaluateNode(node.consequent, context) : evaluateNode(node.alternate, context);
-    default:
-      throw new Error(`Unsupported expression: ${node.type}`);
-  }
-}
-
 export function compileFormula(expression: string): (context: FormulaContext) => number {
-  const ast = jsep(expression);
+  const parser = new FormulaParser(expression);
+  const evaluate = parser.parse();
   return (context) => {
-    const value = evaluateNode(ast, context);
+    const value = evaluate(context);
     return Number.isFinite(value) ? value : Number.NaN;
   };
+}
+
+type FormulaEvaluator = (context: FormulaContext) => number;
+
+class FormulaParser {
+  private pos = 0;
+
+  constructor(private readonly input: string) {}
+
+  parse(): FormulaEvaluator {
+    const expression = this.parseConditional();
+    this.skipWhitespace();
+    if (this.pos !== this.input.length) throw new Error(`Unexpected token: ${this.input[this.pos]}`);
+    return expression;
+  }
+
+  private parseConditional(): FormulaEvaluator {
+    const test = this.parseComparison();
+    this.skipWhitespace();
+    if (!this.consume('?')) return test;
+    const consequent = this.parseConditional();
+    this.expect(':');
+    const alternate = this.parseConditional();
+    return (context) => test(context) ? consequent(context) : alternate(context);
+  }
+
+  private parseComparison(): FormulaEvaluator {
+    let left = this.parseAdditive();
+    while (true) {
+      this.skipWhitespace();
+      const op = this.consumeOperator(['===', '!==', '>=', '<=', '==', '!=', '>', '<']);
+      if (!op) return left;
+      const right = this.parseAdditive();
+      const previous = left;
+      left = (context) => {
+        const a = previous(context);
+        const b = right(context);
+        switch (op) {
+          case '>': return a > b ? 1 : 0;
+          case '>=': return a >= b ? 1 : 0;
+          case '<': return a < b ? 1 : 0;
+          case '<=': return a <= b ? 1 : 0;
+          case '==':
+          case '===': return a === b ? 1 : 0;
+          case '!=':
+          case '!==': return a !== b ? 1 : 0;
+          default: return Number.NaN;
+        }
+      };
+    }
+  }
+
+  private parseAdditive(): FormulaEvaluator {
+    let left = this.parseMultiplicative();
+    while (true) {
+      this.skipWhitespace();
+      const op = this.consumeOperator(['+', '-']);
+      if (!op) return left;
+      const right = this.parseMultiplicative();
+      const previous = left;
+      left = op === '+'
+        ? (context) => previous(context) + right(context)
+        : (context) => previous(context) - right(context);
+    }
+  }
+
+  private parseMultiplicative(): FormulaEvaluator {
+    let left = this.parsePower();
+    while (true) {
+      this.skipWhitespace();
+      const op = this.consumeOperator(['*', '/', '%']);
+      if (!op) return left;
+      const right = this.parsePower();
+      const previous = left;
+      left = (context) => {
+        const a = previous(context);
+        const b = right(context);
+        if (op === '*') return a * b;
+        if (op === '/') return b === 0 ? Number.NaN : a / b;
+        return b === 0 ? Number.NaN : a % b;
+      };
+    }
+  }
+
+  private parsePower(): FormulaEvaluator {
+    const left = this.parseUnary();
+    this.skipWhitespace();
+    if (!this.consume('^')) return left;
+    const right = this.parsePower();
+    return (context) => Math.pow(left(context), right(context));
+  }
+
+  private parseUnary(): FormulaEvaluator {
+    this.skipWhitespace();
+    if (this.consume('+')) return this.parseUnary();
+    if (this.consume('-')) {
+      const value = this.parseUnary();
+      return (context) => -value(context);
+    }
+    if (this.consume('!')) {
+      const value = this.parseUnary();
+      return (context) => value(context) ? 0 : 1;
+    }
+    return this.parsePrimary();
+  }
+
+  private parsePrimary(): FormulaEvaluator {
+    this.skipWhitespace();
+    if (this.consume('(')) {
+      const expression = this.parseConditional();
+      this.expect(')');
+      return expression;
+    }
+    const numeric = this.parseNumber();
+    if (numeric) return numeric;
+    const identifier = this.parseIdentifier();
+    if (identifier) {
+      this.skipWhitespace();
+      if (this.consume('(')) {
+        const fn = FORMULA_FUNCTIONS[identifier];
+        if (!fn) throw new Error('Only approved math functions are allowed');
+        const args: FormulaEvaluator[] = [];
+        this.skipWhitespace();
+        if (!this.consume(')')) {
+          do {
+            args.push(this.parseConditional());
+            this.skipWhitespace();
+          } while (this.consume(','));
+          this.expect(')');
+        }
+        return (context) => fn(...args.map((arg) => arg(context)));
+      }
+      return (context) => {
+        if (!(identifier in context)) throw new Error(`Unknown variable: ${identifier}`);
+        return context[identifier];
+      };
+    }
+    throw new Error(`Unexpected token: ${this.input[this.pos] ?? 'end of expression'}`);
+  }
+
+  private parseNumber(): FormulaEvaluator | null {
+    this.skipWhitespace();
+    const rest = this.input.slice(this.pos);
+    const match = rest.match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i);
+    if (!match) return null;
+    this.pos += match[0].length;
+    const value = Number(match[0]);
+    if (!Number.isFinite(value)) throw new Error('Invalid numeric literal');
+    return () => value;
+  }
+
+  private parseIdentifier(): string | null {
+    this.skipWhitespace();
+    const rest = this.input.slice(this.pos);
+    const match = rest.match(/^[A-Za-z_][A-Za-z0-9_]*/);
+    if (!match) return null;
+    this.pos += match[0].length;
+    return match[0];
+  }
+
+  private skipWhitespace(): void {
+    while (/\s/.test(this.input[this.pos] || '')) this.pos += 1;
+  }
+
+  private consume(token: string): boolean {
+    this.skipWhitespace();
+    if (!this.input.startsWith(token, this.pos)) return false;
+    this.pos += token.length;
+    return true;
+  }
+
+  private expect(token: string): void {
+    if (!this.consume(token)) throw new Error(`Expected "${token}"`);
+  }
+
+  private consumeOperator(operators: string[]): string | null {
+    this.skipWhitespace();
+    const op = operators.find((operator) => this.input.startsWith(operator, this.pos));
+    if (!op) return null;
+    this.pos += op.length;
+    return op;
+  }
 }
 
 export function formulaSeries(expression: string, candles: Array<{ open: number; high: number; low: number; close: number; volume?: number }>): Array<number | null> {
