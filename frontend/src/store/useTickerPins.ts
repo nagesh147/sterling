@@ -54,7 +54,7 @@ export const useTickerPins = create<TickerPinsState>()(
     }),
     {
       name: 'sterling.kite.tickerPins.v1',
-      version: 3,
+      version: 4,
       migrate: (persisted: unknown) => {
         const state = (persisted ?? {}) as Partial<TickerPinsState>;
         return {
