@@ -221,6 +221,8 @@ describe('TradingViewKiteChart workspace controls', () => {
       expect(saved.comparisons.map((overlay: any) => overlay.symbol)).toEqual(['NSE:TCS', 'NSE:INFY']);
       expect(saved.comparisons[0].mode).toBe('price');
     });
+    expect(useCandlesMock).toHaveBeenCalledWith('NSE:TCS', '15m', 360);
+    expect(useCandlesMock).toHaveBeenCalledWith('NSE:INFY', '15m', 360);
   });
 
   it('builds the complete indicator roster, duplicates, formulas, and comparison series', async () => {
