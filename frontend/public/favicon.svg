@@ -1,12 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sterling">
-  <defs>
-    <linearGradient id="bg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#fff7ed"/>
-      <stop offset="0.55" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#ecfeff"/>
-    </linearGradient>
-  </defs>
-  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
-  <rect x="2" y="2" width="60" height="60" rx="14" fill="none" stroke="#fb923c" stroke-width="4"/>
-  <text x="32" y="43" text-anchor="middle" font-size="34" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif">🐦‍🔥</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sterling Phoenix">
+  <text x="32" y="48" text-anchor="middle" font-size="46" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif">🐦‍🔥</text>
 </svg>
