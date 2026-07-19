@@ -10,12 +10,12 @@ import { persist } from 'zustand/middleware';
 // A zustand store (not per-component useState) so the ticker reacts instantly
 // when any pane adds/removes, and the choice persists across reloads.
 const DEFAULT_PINS = ['NSE:NIFTY 50', 'BSE:SENSEX'];
-export const DEFAULT_TILE_SCALE = 1;
-export const MIN_TILE_SCALE = 0.58;
-export const MAX_TILE_SCALE = 1;
-const TILE_SCALE_STEP = 0.06;
+const DEFAULT_TILE_SCALE = 1;
+const MIN_TILE_SCALE = 0.78;
+const MAX_TILE_SCALE = 1.34;
+const TILE_SCALE_STEP = 0.08;
 
-export function clampTileScale(value: number): number {
+function clampTileScale(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_TILE_SCALE;
   return Math.min(MAX_TILE_SCALE, Math.max(MIN_TILE_SCALE, Number(value.toFixed(2))));
 }
@@ -54,12 +54,12 @@ export const useTickerPins = create<TickerPinsState>()(
     }),
     {
       name: 'sterling.kite.tickerPins.v1',
-      version: 2,
+      version: 3,
       migrate: (persisted: unknown) => {
         const state = (persisted ?? {}) as Partial<TickerPinsState>;
         return {
           ...state,
-          tileScale: clampTileScale(Number(state.tileScale ?? DEFAULT_TILE_SCALE)),
+          tileScale: DEFAULT_TILE_SCALE,
         };
       },
     },
