@@ -1,5 +1,8 @@
+import { applyKiteBrandIcon, normalizeKiteBrandIcon, type KiteBrandIcon } from './kiteBrandIcon';
+
 export const KITE_SIGNAL_TABLE_LAYOUT_KEY = 'kite_st_view_layout';
 export const KITE_TERMINAL_THEME_KEY = 'kite_terminal_theme';
+export const KITE_SETTINGS_STORAGE_KEY = 'kite-settings';
 export const KITE_DEFAULT_PREFERENCES_MIGRATION_KEY = 'kite_default_preferences_migration';
 export const KITE_DEFAULT_PREFERENCES_VERSION = 'list-layout-light-terminal-v1';
 
@@ -11,6 +14,16 @@ function getBrowserStorage(): PreferenceStorage | null {
     return window.localStorage;
   } catch {
     return null;
+  }
+}
+
+function readStoredBrandIcon(storage: PreferenceStorage): KiteBrandIcon {
+  try {
+    const raw = storage.getItem(KITE_SETTINGS_STORAGE_KEY);
+    if (!raw) return 'phoenix';
+    return normalizeKiteBrandIcon(JSON.parse(raw)?.state?.brandIcon);
+  } catch {
+    return 'phoenix';
   }
 }
 
@@ -34,11 +47,13 @@ export function installKiteDefaultPreferences(storage: PreferenceStorage | null 
       if (layout === null || layout === 'grid') storage.setItem(KITE_SIGNAL_TABLE_LAYOUT_KEY, 'list');
       if (theme === null || theme === 'dark') storage.setItem(KITE_TERMINAL_THEME_KEY, 'light');
       storage.setItem(KITE_DEFAULT_PREFERENCES_MIGRATION_KEY, KITE_DEFAULT_PREFERENCES_VERSION);
+      applyKiteBrandIcon(readStoredBrandIcon(storage));
       return;
     }
 
     if (layout === null) storage.setItem(KITE_SIGNAL_TABLE_LAYOUT_KEY, 'list');
     if (theme === null) storage.setItem(KITE_TERMINAL_THEME_KEY, 'light');
+    applyKiteBrandIcon(readStoredBrandIcon(storage));
   } catch {
     // Storage can be unavailable in restricted/private contexts. Keep boot non-fatal.
   }
