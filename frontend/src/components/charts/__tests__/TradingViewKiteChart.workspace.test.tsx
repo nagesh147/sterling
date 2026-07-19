@@ -144,6 +144,26 @@ describe('TradingViewKiteChart workspace controls', () => {
     expect(saved.some((template: any) => template.name === 'Imported layout')).toBe(true);
   });
 
+  it('manages multiple comparison overlays', async () => {
+    renderChart();
+    fireEvent.click(screen.getByTitle('Compare another symbol'));
+
+    const input = screen.getByPlaceholderText('NSE:TCS');
+    fireEvent.change(input, { target: { value: 'NSE:TCS' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.change(screen.getByLabelText('NSE:TCS comparison mode'), { target: { value: 'price' } });
+
+    fireEvent.change(input, { target: { value: 'NSE:INFY' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByLabelText('NSE:INFY visible')).toBeTruthy();
+
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem('sterling:kite-chart-workspace:v1') || '{}');
+      expect(saved.comparisons.map((overlay: any) => overlay.symbol)).toEqual(['NSE:TCS', 'NSE:INFY']);
+      expect(saved.comparisons[0].mode).toBe('price');
+    });
+  });
+
   it('builds the complete indicator roster, duplicates, formulas, and comparison series', async () => {
     localStorage.setItem('sterling:kite-chart-workspace:v1', JSON.stringify({
       styles: {},
