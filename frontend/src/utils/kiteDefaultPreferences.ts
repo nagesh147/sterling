@@ -9,6 +9,7 @@ import {
 export const KITE_SIGNAL_TABLE_LAYOUT_KEY = 'kite_st_view_layout';
 export const KITE_TERMINAL_THEME_KEY = 'kite_terminal_theme';
 export const KITE_SETTINGS_STORAGE_KEY = 'kite-settings';
+export const STERLING_SHOW_CRYPTO_TAB_KEY = 'sterling_show_crypto_tab';
 export const KITE_DEFAULT_PREFERENCES_MIGRATION_KEY = 'kite_default_preferences_migration';
 export const KITE_DEFAULT_PREFERENCES_VERSION = 'list-layout-light-terminal-v1';
 
@@ -44,6 +45,12 @@ function applyStoredBrandIcon(storage: PreferenceStorage): void {
   applyKiteBrandIcon(readStoredBrandIcon(storage), readStoredBrandIconSize(storage));
 }
 
+function seedStableDefaults(storage: PreferenceStorage): void {
+  if (storage.getItem(STERLING_SHOW_CRYPTO_TAB_KEY) === null) {
+    storage.setItem(STERLING_SHOW_CRYPTO_TAB_KEY, 'false');
+  }
+}
+
 /**
  * Seed and migrate Kite UI defaults without fighting the user forever.
  *
@@ -59,6 +66,8 @@ export function installKiteDefaultPreferences(storage: PreferenceStorage | null 
     const migrated = storage.getItem(KITE_DEFAULT_PREFERENCES_MIGRATION_KEY) === KITE_DEFAULT_PREFERENCES_VERSION;
     const layout = storage.getItem(KITE_SIGNAL_TABLE_LAYOUT_KEY);
     const theme = storage.getItem(KITE_TERMINAL_THEME_KEY);
+
+    seedStableDefaults(storage);
 
     if (!migrated) {
       if (layout === null || layout === 'grid') storage.setItem(KITE_SIGNAL_TABLE_LAYOUT_KEY, 'list');
