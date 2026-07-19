@@ -65,6 +65,7 @@ describe('InstrumentPane chart-switch loader', () => {
     useCandlesMock.mockReturnValue({ data: [], isLoading: true });
     render(<InstrumentPane symbol={A} />);
     await waitFor(() => expect(chartProps).toBeTruthy());
+    expect(useCandlesMock).toHaveBeenCalledWith(A, '15m', 360);
     expect(screen.getByText(LOADING_TEXT)).toBeTruthy();
   });
 
