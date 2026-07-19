@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const useCandlesMock = vi.hoisted(() => vi.fn((..._args: any[]) => ({ data: [] })));
 const createChartMock = vi.hoisted(() => vi.fn());
@@ -125,6 +125,50 @@ describe('TradingViewKiteChart workspace controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start replay' }));
     expect(screen.getByLabelText('Replay progress')).toBeTruthy();
     expect(screen.getByLabelText('Replay speed')).toBeTruthy();
+  });
+
+  it('clears a stale chart while waiting for real candles after a timeframe switch', async () => {
+    vi.useFakeTimers();
+    const onChartReady = vi.fn();
+    const bars15m = Array.from({ length: 3 }, (_, index) => ({ time: index + 1, open: 100, high: 101, low: 99, close: 100 + index, volume: 1000 }));
+    const bars1h = Array.from({ length: 3 }, (_, index) => ({ time: 100 + index, open: 200, high: 201, low: 199, close: 200 + index, volume: 2000 }));
+
+    const { rerender, unmount } = renderChart({ rawCandles: bars15m, onChartReady });
+    await act(async () => { vi.runOnlyPendingTimers(); });
+    expect(createChartMock).toHaveBeenCalledTimes(1);
+    expect(onChartReady).toHaveBeenLastCalledWith('NSE:RELIANCE|15m|3|1|3');
+
+    rerender(
+      <TradingViewKiteChart
+        symbol="NSE:RELIANCE"
+        rawCandles={[]}
+        tf="1H"
+        theme={theme}
+        activeIndicators={new Set(['vol'])}
+        params={{}}
+        onChartReady={onChartReady}
+      />,
+    );
+    expect(chartInstances[0].remove).toHaveBeenCalledTimes(1);
+    expect(createChartMock).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TradingViewKiteChart
+        symbol="NSE:RELIANCE"
+        rawCandles={bars1h}
+        tf="1H"
+        theme={theme}
+        activeIndicators={new Set(['vol'])}
+        params={{}}
+        onChartReady={onChartReady}
+      />,
+    );
+    await act(async () => { vi.runOnlyPendingTimers(); });
+    expect(createChartMock).toHaveBeenCalledTimes(2);
+    expect(onChartReady).toHaveBeenLastCalledWith('NSE:RELIANCE|1H|3|100|102');
+
+    unmount();
+    vi.useRealTimers();
   });
 
   it('imports and exports templates as normalized JSON', () => {
