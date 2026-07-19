@@ -51,8 +51,12 @@ export interface ChartTemplate {
   snapshot: ChartTemplateSnapshot;
 }
 
-const WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
-const TEMPLATE_KEY = 'sterling:kite-chart-templates:v1';
+export const WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
+export const TEMPLATE_KEY = 'sterling:kite-chart-templates:v1';
+export const MAX_EXTRA_INDICATORS = 24;
+export const MAX_TEMPLATES = 40;
+export const MAX_INDICATOR_PERIOD = 500;
+export const REPLAY_SPEEDS = [0.25, 0.5, 1, 2, 4] as const;
 
 export const DEFAULT_APPEARANCE: ChartAppearance = {
   candleUp: '#2db784',
@@ -85,49 +89,83 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function cloneWorkspace(): ChartWorkspaceState {
+  return {
+    styles: {},
+    extraIndicators: [],
+    compareSymbol: null,
+    appearance: { ...DEFAULT_APPEARANCE },
+  };
+}
+
+function isColor(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(value.trim());
+}
+
+function normalizePeriod(value: unknown, fallback: number): number {
+  const period = Math.floor(Number(value));
+  if (!Number.isFinite(period)) return fallback;
+  return Math.min(MAX_INDICATOR_PERIOD, Math.max(1, period));
+}
+
+function normalizeSymbol(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const next = value.trim().toUpperCase().replace(/\s+/g, ' ');
+  return next ? next.slice(0, 80) : null;
+}
+
 function normalizeStyle(value: unknown, fallback: IndicatorStyle): IndicatorStyle {
   const raw = isObject(value) ? value : {};
   const width = Number(raw.lineWidth);
   return {
-    color: typeof raw.color === 'string' ? raw.color : fallback.color,
-    secondaryColor: typeof raw.secondaryColor === 'string' ? raw.secondaryColor : fallback.secondaryColor,
+    color: isColor(raw.color) ? raw.color : fallback.color,
+    secondaryColor: isColor(raw.secondaryColor) ? raw.secondaryColor : fallback.secondaryColor,
     lineWidth: ([1, 2, 3, 4].includes(width) ? width : fallback.lineWidth) as IndicatorStyle['lineWidth'],
     visible: typeof raw.visible === 'boolean' ? raw.visible : fallback.visible,
   };
 }
 
 export function normalizeWorkspace(value: unknown): ChartWorkspaceState {
-  if (!isObject(value)) return structuredClone(DEFAULT_WORKSPACE);
+  if (!isObject(value)) return cloneWorkspace();
   const rawStyles = isObject(value.styles) ? value.styles : {};
   const styles: Record<string, IndicatorStyle> = {};
   for (const [key, style] of Object.entries(rawStyles)) {
     styles[key] = normalizeStyle(style, { color: '#2962ff', lineWidth: 2, visible: true });
   }
 
+  const seenIds = new Set<string>();
   const extraIndicators = Array.isArray(value.extraIndicators)
     ? value.extraIndicators.flatMap((item): ExtraIndicator[] => {
         if (!isObject(item) || typeof item.id !== 'string' || typeof item.kind !== 'string') return [];
         if (!(item.kind in KIND_DEFAULTS)) return [];
         const fallback = KIND_DEFAULTS[item.kind as ExtraIndicatorKind];
+        const baseId = item.id.trim() || `${item.kind}-${seenIds.size}`;
+        let id = baseId;
+        let suffix = 2;
+        while (seenIds.has(id)) {
+          id = `${baseId}-${suffix}`;
+          suffix += 1;
+        }
+        seenIds.add(id);
         return [{
-          id: item.id,
+          id,
           kind: item.kind as ExtraIndicatorKind,
-          name: typeof item.name === 'string' ? item.name : fallback.name,
-          period: Math.max(1, Number(item.period) || fallback.period),
+          name: typeof item.name === 'string' && item.name.trim() ? item.name.trim().slice(0, 48) : fallback.name,
+          period: normalizePeriod(item.period, fallback.period),
           formula: typeof item.formula === 'string' ? item.formula : fallback.formula,
           style: normalizeStyle(item.style, fallback.style),
         }];
-      })
+      }).slice(0, MAX_EXTRA_INDICATORS)
     : [];
 
   const appearanceRaw = isObject(value.appearance) ? value.appearance : {};
   return {
     styles,
     extraIndicators,
-    compareSymbol: typeof value.compareSymbol === 'string' && value.compareSymbol ? value.compareSymbol : null,
+    compareSymbol: normalizeSymbol(value.compareSymbol),
     appearance: {
-      candleUp: typeof appearanceRaw.candleUp === 'string' ? appearanceRaw.candleUp : DEFAULT_APPEARANCE.candleUp,
-      candleDown: typeof appearanceRaw.candleDown === 'string' ? appearanceRaw.candleDown : DEFAULT_APPEARANCE.candleDown,
+      candleUp: isColor(appearanceRaw.candleUp) ? appearanceRaw.candleUp : DEFAULT_APPEARANCE.candleUp,
+      candleDown: isColor(appearanceRaw.candleDown) ? appearanceRaw.candleDown : DEFAULT_APPEARANCE.candleDown,
       gridVisible: typeof appearanceRaw.gridVisible === 'boolean' ? appearanceRaw.gridVisible : DEFAULT_APPEARANCE.gridVisible,
       magnetCrosshair: typeof appearanceRaw.magnetCrosshair === 'boolean' ? appearanceRaw.magnetCrosshair : DEFAULT_APPEARANCE.magnetCrosshair,
     },
@@ -137,9 +175,9 @@ export function normalizeWorkspace(value: unknown): ChartWorkspaceState {
 export function loadWorkspace(storage: Pick<Storage, 'getItem'> = localStorage): ChartWorkspaceState {
   try {
     const raw = storage.getItem(WORKSPACE_KEY);
-    return raw ? normalizeWorkspace(JSON.parse(raw)) : structuredClone(DEFAULT_WORKSPACE);
+    return raw ? normalizeWorkspace(JSON.parse(raw)) : cloneWorkspace();
   } catch {
-    return structuredClone(DEFAULT_WORKSPACE);
+    return cloneWorkspace();
   }
 }
 
@@ -147,19 +185,90 @@ export function saveWorkspace(state: ChartWorkspaceState, storage: Pick<Storage,
   storage.setItem(WORKSPACE_KEY, JSON.stringify(normalizeWorkspace(state)));
 }
 
+const CHART_TYPES = ['candles', 'line', 'area', 'bars'] as const;
+const LAYOUT_MODES = ['1', '2', '4'] as const;
+
+function normalizeSnapshot(value: unknown): ChartTemplateSnapshot {
+  const raw = isObject(value) ? value : {};
+  const chartType = CHART_TYPES.includes(raw.chartType as any) ? raw.chartType as ChartTemplateSnapshot['chartType'] : 'candles';
+  const layoutMode = LAYOUT_MODES.includes(raw.layoutMode as any) ? raw.layoutMode as ChartTemplateSnapshot['layoutMode'] : '1';
+  const activeIndicators = Array.isArray(raw.activeIndicators)
+    ? Array.from(new Set(raw.activeIndicators.filter((item): item is string => typeof item === 'string' && !!item.trim()).map((item) => item.trim()))).slice(0, 32)
+    : [];
+  return {
+    tf: typeof raw.tf === 'string' && raw.tf ? raw.tf : '15m',
+    chartType,
+    layoutMode,
+    isHA: !!raw.isHA,
+    isLogScale: !!raw.isLogScale,
+    showVP: !!raw.showVP,
+    activeIndicators,
+    params: isObject(raw.params) ? { ...raw.params } : {},
+    workspace: normalizeWorkspace(raw.workspace),
+  };
+}
+
+export function normalizeTemplates(value: unknown): ChartTemplate[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((item, index): ChartTemplate[] => {
+    if (!isObject(item)) return [];
+    const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim().slice(0, 80) : '';
+    if (!name) return [];
+    const baseId = typeof item.id === 'string' && item.id.trim() ? item.id.trim().slice(0, 80) : `template-${index}`;
+    let id = baseId;
+    let suffix = 2;
+    while (seen.has(id)) {
+      id = `${baseId}-${suffix}`;
+      suffix += 1;
+    }
+    seen.add(id);
+    const createdAt = Number(item.createdAt);
+    return [{
+      id,
+      name,
+      createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now(),
+      snapshot: normalizeSnapshot(item.snapshot),
+    }];
+  }).slice(0, MAX_TEMPLATES);
+}
+
 export function loadTemplates(storage: Pick<Storage, 'getItem'> = localStorage): ChartTemplate[] {
   try {
     const raw = storage.getItem(TEMPLATE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item) => isObject(item) && typeof item.id === 'string' && typeof item.name === 'string' && isObject(item.snapshot)) as unknown as ChartTemplate[];
+    return normalizeTemplates(parsed);
   } catch {
     return [];
   }
 }
 
 export function saveTemplates(templates: ChartTemplate[], storage: Pick<Storage, 'setItem'> = localStorage): void {
-  storage.setItem(TEMPLATE_KEY, JSON.stringify(templates));
+  storage.setItem(TEMPLATE_KEY, JSON.stringify(normalizeTemplates(templates)));
+}
+
+export function createChartTemplate(name: string, snapshot: ChartTemplateSnapshot, now = Date.now()): ChartTemplate {
+  const normalized = normalizeTemplates([{ id: `template-${now}`, name, createdAt: now, snapshot }])[0];
+  if (!normalized) throw new Error('Template name is required');
+  return normalized;
+}
+
+export function upsertTemplate(templates: ChartTemplate[], template: ChartTemplate): ChartTemplate[] {
+  const normalized = normalizeTemplates([template])[0];
+  if (!normalized) return normalizeTemplates(templates);
+  const key = normalized.name.toLowerCase();
+  const retained = normalizeTemplates(templates).filter((item) => item.id !== normalized.id && item.name.toLowerCase() !== key);
+  return [normalized, ...retained].slice(0, MAX_TEMPLATES);
+}
+
+export function exportTemplatesToJson(templates: ChartTemplate[], exportedAt = Date.now()): string {
+  return JSON.stringify({ version: 1, exportedAt, templates: normalizeTemplates(templates) }, null, 2);
+}
+
+export function mergeImportedTemplates(rawJson: string, existing: ChartTemplate[] = []): ChartTemplate[] {
+  const parsed = JSON.parse(rawJson);
+  const incoming = normalizeTemplates(Array.isArray(parsed) ? parsed : isObject(parsed) ? parsed.templates : []);
+  return incoming.reduce((all, template) => upsertTemplate(all, template), normalizeTemplates(existing));
 }
 
 type FormulaContext = Record<string, number>;
@@ -275,4 +384,15 @@ export function nearestCandleIndex(candles: Array<{ time: number }>, timestampSe
   }
   if (low === 0) return 0;
   return Math.abs(candles[low].time - timestampSeconds) < Math.abs(candles[low - 1].time - timestampSeconds) ? low : low - 1;
+}
+
+export function replayDelayMs(speed: number): number {
+  const sanitized = REPLAY_SPEEDS.includes(speed as any) ? speed : 1;
+  return Math.round(700 / sanitized);
+}
+
+export function stepReplayIndex(current: number | null, maxIndex: number, delta: number): number | null {
+  if (maxIndex < 0) return null;
+  const base = current == null ? maxIndex : current;
+  return Math.max(0, Math.min(maxIndex, base + delta));
 }
