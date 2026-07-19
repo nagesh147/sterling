@@ -22,14 +22,23 @@ import {
   ExtraIndicatorKind,
   IndicatorStyle,
   compileFormula,
+  createChartTemplate,
   createExtraIndicator,
+  exportTemplatesToJson,
   formulaSeries,
   loadTemplates,
   loadWorkspace,
+  mergeImportedTemplates,
   nearestCandleIndex,
+  replayDelayMs,
   saveTemplates,
   saveWorkspace,
+  stepReplayIndex,
   stochastic,
+  TEMPLATE_KEY,
+  WORKSPACE_KEY,
+  REPLAY_SPEEDS,
+  upsertTemplate,
 } from './chartWorkspace';
 
 interface TradingViewKiteChartProps {
@@ -259,17 +268,32 @@ export function TradingViewKiteChart({
   const [showGoToDate, setShowGoToDate] = useState(false);
   const [replayIndex, setReplayIndex] = useState<number | null>(null);
   const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState<number>(1);
   const [alertDialog, setAlertDialog] = useState<{ price: number } | null>(null);
   const [alertCondition, setAlertCondition] = useState<'price_above' | 'price_below'>('price_above');
   const [alertNotes, setAlertNotes] = useState('');
   const [alertDraft, setAlertDraft] = useState<{ price: number; y: number } | null>(null);
+  const [templateImportText, setTemplateImportText] = useState('');
+  const [templateError, setTemplateError] = useState('');
   const createAlert = useCreateAlert();
 
   const { data: comparisonRawCandles = [] } = useCandles(workspace.compareSymbol || '', tf, 800);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') saveWorkspace(workspace);
+    if (typeof window === 'undefined') return;
+    const timer = window.setTimeout(() => saveWorkspace(workspace), 120);
+    return () => window.clearTimeout(timer);
   }, [workspace]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === WORKSPACE_KEY) setWorkspace(loadWorkspace());
+      if (event.key === TEMPLATE_KEY) setTemplates(loadTemplates());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   // Symbol search (TV style dropdown)
   const [showSymbolSearch, setShowSymbolSearch] = useState(false);
@@ -336,8 +360,8 @@ export function TradingViewKiteChart({
     s.toLowerCase().includes(symbolSearch.toLowerCase())
   );
 
-  // Extended TF list for dropdown
-  const ALL_TFS = ['1m','3m','5m','15m','30m','1H','2H','4H','D','W','M','1m','5m','15m','30m','60m','240m','D','W','M'];
+  const PRIMARY_TFS = ['1m','3m','5m','15m','30m','1H','2H','4H','D','W','M'];
+  const ALL_TFS = ['1m','3m','5m','15m','30m','1H','2H','4H','60m','120m','240m','D','W','M'];
 
   // Indicators list for searchable dropdown (TV style)
   const ALL_INDICATORS = [
@@ -435,17 +459,18 @@ export function TradingViewKiteChart({
 
   useEffect(() => {
     if (!replayPlaying || replayIndex == null) return;
+    const delay = replayDelayMs(replaySpeed);
     const timer = window.setInterval(() => {
       setReplayIndex((current) => {
         if (current == null || current >= fullBaseCandles.length - 1) {
           setReplayPlaying(false);
           return current;
         }
-        return current + 1;
+        return stepReplayIndex(current, fullBaseCandles.length - 1, 1);
       });
-    }, 700);
+    }, delay);
     return () => window.clearInterval(timer);
-  }, [replayPlaying, replayIndex, fullBaseCandles.length]);
+  }, [replayPlaying, replayIndex, fullBaseCandles.length, replaySpeed]);
   // Boolean (not the array itself) so it only flips once, on the empty->non-empty
   // transition, instead of on every poll tick like `baseCandles` would. The three
   // structural chart-build effects below read candle data via baseCandlesRef and
@@ -1918,6 +1943,87 @@ export function TradingViewKiteChart({
       const chart = mainChartRef.current;
       if (!chart) return;
 
+      const key = e.key.toLowerCase();
+      if (replayIndex != null && e.key === ' ') {
+        e.preventDefault();
+        setReplayPlaying((playing) => !playing);
+        return;
+      }
+      if (key === 'i') {
+        e.preventDefault();
+        setShowStudies(true);
+        return;
+      }
+      if (key === 's') {
+        e.preventDefault();
+        setShowSymbolSearch(true);
+        return;
+      }
+      if (key === 'c') {
+        e.preventDefault();
+        setShowCompare(true);
+        return;
+      }
+      if (key === 'p') {
+        e.preventDefault();
+        setShowTemplates(true);
+        return;
+      }
+      if (key === 'g') {
+        e.preventDefault();
+        setShowGoToDate(true);
+        return;
+      }
+      if (key === 'r') {
+        e.preventDefault();
+        setShowGoToDate(true);
+        return;
+      }
+      if (key === 'a') {
+        e.preventDefault();
+        const candles = baseCandlesRef.current;
+        const price = candles[candles.length - 1]?.close;
+        const mainSeries = seriesRefs.current.main;
+        const y = price && mainSeries?.priceToCoordinate ? mainSeries.priceToCoordinate(price) : null;
+        if (price && y != null) setAlertDraft({ price, y });
+        return;
+      }
+      if (key === 'f') {
+        e.preventDefault();
+        setIsFullscreen((current) => !current);
+        return;
+      }
+      if (key === 'l') {
+        e.preventDefault();
+        onIsLogScaleChange?.(!isLogScale);
+        return;
+      }
+      if (key === 'v') {
+        e.preventDefault();
+        onShowVPChange?.(!showVP);
+        return;
+      }
+      if (key === 'x') {
+        e.preventDefault();
+        setDrawMode('crosshair');
+        return;
+      }
+      if (key === 'h') {
+        e.preventDefault();
+        setDrawMode('hline');
+        return;
+      }
+      if (key === 't') {
+        e.preventDefault();
+        setDrawMode('trend');
+        return;
+      }
+      if (key === '1' || key === '2' || key === '4') {
+        e.preventDefault();
+        setLayoutMode(key as '1' | '2' | '4');
+        return;
+      }
+
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         const ts = chart.timeScale();
         const range = ts.getVisibleLogicalRange();
@@ -1956,7 +2062,7 @@ export function TradingViewKiteChart({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [drawings, selectedDrawingId, onDrawingsChange, recordDrawingsChange, undoDrawing, redoDrawing, setDrawingPoints, setDrawMode, setSelectedDrawingId, chartContextMenu, priceScaleMenu, editingDrawingId, drawingPopoverPos]);
+  }, [drawings, selectedDrawingId, onDrawingsChange, recordDrawingsChange, undoDrawing, redoDrawing, setDrawingPoints, setDrawMode, setSelectedDrawingId, chartContextMenu, priceScaleMenu, editingDrawingId, drawingPopoverPos, replayIndex, isLogScale, onIsLogScaleChange, showVP, onShowVPChange]);
 
   // Toolbar helpers
   const toggleLog = () => {
@@ -2056,29 +2162,27 @@ export function TradingViewKiteChart({
     setShowGoToDate(false);
   };
 
+  const workspaceSnapshot = () => ({
+    tf,
+    chartType,
+    layoutMode,
+    isHA,
+    isLogScale,
+    showVP,
+    activeIndicators: Array.from(activeIndicators),
+    params: { ...params },
+    workspace: structuredClone(workspace),
+  });
+
   const saveCurrentTemplate = () => {
     const name = templateName.trim();
     if (!name) return;
-    const template: ChartTemplate = {
-      id: `template-${Date.now()}`,
-      name,
-      createdAt: Date.now(),
-      snapshot: {
-        tf,
-        chartType,
-        layoutMode,
-        isHA,
-        isLogScale,
-        showVP,
-        activeIndicators: Array.from(activeIndicators),
-        params: { ...params },
-        workspace: structuredClone(workspace),
-      },
-    };
-    const next = [...templates, template];
+    const template = createChartTemplate(name, workspaceSnapshot());
+    const next = upsertTemplate(templates, template);
     setTemplates(next);
     saveTemplates(next);
     setTemplateName('');
+    setTemplateError('');
   };
 
   const applyTemplate = (template: ChartTemplate) => {
@@ -2099,6 +2203,36 @@ export function TradingViewKiteChart({
     const next = templates.filter((template) => template.id !== id);
     setTemplates(next);
     saveTemplates(next);
+  };
+
+  const exportTemplateJson = () => {
+    setTemplateImportText(exportTemplatesToJson(templates));
+    setTemplateError('');
+  };
+
+  const importTemplateJson = () => {
+    try {
+      const next = mergeImportedTemplates(templateImportText, templates);
+      setTemplates(next);
+      saveTemplates(next);
+      setTemplateImportText('');
+      setTemplateError('');
+    } catch (error: any) {
+      setTemplateError(error?.message || 'Invalid template JSON');
+    }
+  };
+
+  const resetCurrentWorkspace = () => {
+    setWorkspace({
+      styles: {},
+      extraIndicators: [],
+      compareSymbol: null,
+      appearance: { ...DEFAULT_WORKSPACE.appearance },
+    });
+    setReplayPlaying(false);
+    setReplayIndex(null);
+    setAlertDraft(null);
+    setTemplateError('');
   };
 
   const addExtraIndicator = (kind: ExtraIndicatorKind) => {
@@ -2241,7 +2375,7 @@ export function TradingViewKiteChart({
 
         {/* TV-style interval bar + dropdown for more */}
         <div style={{ display: 'flex', gap: 1, marginRight: 8, background: tv.bg, border: `1px solid ${tv.border}`, borderRadius: 2, padding: 1, position: 'relative' }}>
-          {['1m','3m','5m','15m','30m','1H','2H','4H','D','W','M'].map((t) => (
+          {PRIMARY_TFS.map((t) => (
             <button key={t} className="tv-ctrl" onClick={() => {
               if (onTfChange) onTfChange(t);
             }} style={{
@@ -2265,7 +2399,7 @@ export function TradingViewKiteChart({
             <>
             <div onClick={() => setShowTfDropdown(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
             <div className="tv-menu-anim" style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 3, padding: 4, minWidth: 120, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-              {['1m','5m','15m','30m','60m','120m','240m','D','W','M'].map(t => (
+              {ALL_TFS.map(t => (
                 <div key={t} onClick={() => { if (onTfChange) onTfChange(t); setShowTfDropdown(false); }} style={{ padding: '3px 6px', cursor: 'pointer', fontSize: 10 }}>{t}</div>
               ))}
             </div>
@@ -2307,10 +2441,27 @@ export function TradingViewKiteChart({
         <button className="tv-ctrl" onClick={() => setShowGoToDate(true)} title="Go to date or start bar replay" style={toolBtnStyle(replayIndex != null, tv, tv.purple)}>Replay</button>
 
         {replayIndex != null && (
-          <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 1, border: `1px solid ${tv.border}`, borderRadius: 2 }}>
-            <button className="tv-ctrl" onClick={() => setReplayIndex((index) => Math.max(0, (index ?? 0) - 1))} title="Previous bar" style={toolBtnStyle(false, tv, tv.blue)}>Back</button>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center', padding: 1, border: `1px solid ${tv.border}`, borderRadius: 2 }}>
+            <button className="tv-ctrl" onClick={() => setReplayIndex((index) => stepReplayIndex(index, fullBaseCandles.length - 1, -1))} title="Previous bar" style={toolBtnStyle(false, tv, tv.blue)}>Back</button>
             <button className="tv-ctrl" onClick={() => setReplayPlaying((playing) => !playing)} title={replayPlaying ? 'Pause replay' : 'Play replay'} style={toolBtnStyle(replayPlaying, tv, tv.green)}>{replayPlaying ? 'Pause' : 'Play'}</button>
-            <button className="tv-ctrl" onClick={() => setReplayIndex((index) => Math.min(fullBaseCandles.length - 1, (index ?? 0) + 1))} title="Next bar" style={toolBtnStyle(false, tv, tv.blue)}>Next</button>
+            <button className="tv-ctrl" onClick={() => setReplayIndex((index) => stepReplayIndex(index, fullBaseCandles.length - 1, 1))} title="Next bar" style={toolBtnStyle(false, tv, tv.blue)}>Next</button>
+            <input
+              aria-label="Replay progress"
+              type="range"
+              min={0}
+              max={Math.max(0, fullBaseCandles.length - 1)}
+              value={replayIndex}
+              onChange={(event) => { setReplayPlaying(false); setReplayIndex(Number(event.target.value)); }}
+              style={{ width: 92, accentColor: tv.purple }}
+            />
+            <select
+              aria-label="Replay speed"
+              value={replaySpeed}
+              onChange={(event) => setReplaySpeed(Number(event.target.value))}
+              style={{ height: 22, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, fontSize: 10 }}
+            >
+              {REPLAY_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
+            </select>
             <button className="tv-ctrl" onClick={() => { setReplayPlaying(false); setReplayIndex(null); }} title="Exit replay" style={toolBtnStyle(false, tv, tv.red)}>Live</button>
           </div>
         )}
@@ -2865,7 +3016,22 @@ export function TradingViewKiteChart({
               <input value={templateName} onChange={(event) => setTemplateName(event.target.value)} placeholder="Template name" style={{ flex: 1, padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} />
               <button onClick={saveCurrentTemplate} disabled={!templateName.trim()} style={{ padding: '7px 12px', background: tv.blue, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer', opacity: templateName.trim() ? 1 : 0.5 }}>Save current</button>
             </div>
-            <div style={{ maxHeight: '50vh', overflowY: 'auto', borderTop: `1px solid ${tv.border}` }}>
+            <div style={{ padding: '0 10px 10px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+              <button onClick={exportTemplateJson} style={{ padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Export JSON</button>
+              <button onClick={importTemplateJson} disabled={!templateImportText.trim()} style={{ padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer', opacity: templateImportText.trim() ? 1 : 0.5 }}>Import JSON</button>
+              <button onClick={resetCurrentWorkspace} style={{ padding: 7, background: tv.bg, color: tv.red, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Reset workspace</button>
+            </div>
+            <div style={{ padding: '0 10px 10px' }}>
+              <textarea
+                value={templateImportText}
+                onChange={(event) => { setTemplateImportText(event.target.value); setTemplateError(''); }}
+                placeholder="Paste or export template JSON"
+                rows={templateImportText ? 5 : 2}
+                style={{ width: '100%', resize: 'vertical', padding: 7, background: tv.bg, color: tv.text, border: `1px solid ${templateError ? tv.red : tv.border}`, borderRadius: 3, fontFamily: 'monospace', fontSize: 10 }}
+              />
+              {templateError && <div style={{ color: tv.red, fontSize: 10, marginTop: 4 }}>{templateError}</div>}
+            </div>
+            <div style={{ maxHeight: '38vh', overflowY: 'auto', borderTop: `1px solid ${tv.border}` }}>
               {templates.map((template) => (
                 <div key={template.id} style={{ padding: 10, display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${tv.border}` }}>
                   <div style={{ flex: 1 }}><div style={{ fontSize: 12 }}>{template.name}</div><div style={{ fontSize: 9, color: tv.dim }}>{template.snapshot.tf} / {template.snapshot.chartType} / {template.snapshot.activeIndicators.length} indicators</div></div>
@@ -2883,7 +3049,15 @@ export function TradingViewKiteChart({
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowGoToDate(false)}>
           <div style={{ width: 360, maxWidth: 'calc(100vw - 24px)', background: tv.surface, border: `1px solid ${tv.border}`, borderRadius: 6 }} onClick={(event) => event.stopPropagation()}>
             <div style={{ padding: 12, borderBottom: `1px solid ${tv.border}`, display: 'flex', justifyContent: 'space-between' }}><strong>Go to date / Bar Replay</strong><button onClick={() => setShowGoToDate(false)} style={{ border: 0, background: 'none', color: tv.dim, cursor: 'pointer' }}><IconClose /></button></div>
-            <div style={{ padding: 14 }}><input type="datetime-local" value={goToDateValue} onChange={(event) => setGoToDateValue(event.target.value)} style={{ width: '100%', padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} /></div>
+            <div style={{ padding: 14, display: 'grid', gap: 10 }}>
+              <input type="datetime-local" value={goToDateValue} onChange={(event) => setGoToDateValue(event.target.value)} style={{ width: '100%', padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }} />
+              <label style={{ display: 'grid', gap: 4, fontSize: 10, color: tv.dim }}>
+                Replay speed
+                <select value={replaySpeed} onChange={(event) => setReplaySpeed(Number(event.target.value))} style={{ padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3 }}>
+                  {REPLAY_SPEEDS.map((speed) => <option key={speed} value={speed}>{speed}x</option>)}
+                </select>
+              </label>
+            </div>
             <div style={{ padding: 12, borderTop: `1px solid ${tv.border}`, display: 'flex', gap: 8 }}>
               <button onClick={jumpToDate} disabled={!goToDateValue} style={{ flex: 1, padding: 8, background: tv.bg, color: tv.text, border: `1px solid ${tv.border}`, borderRadius: 3, cursor: 'pointer' }}>Go to date</button>
               <button onClick={startReplay} disabled={!fullBaseCandles.length} style={{ flex: 1, padding: 8, background: tv.purple, color: '#fff', border: 0, borderRadius: 3, cursor: 'pointer' }}>Start replay</button>
