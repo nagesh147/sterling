@@ -74,9 +74,8 @@ function KiteCard({ sym, q }: { sym: string; q: any }) {
     abs = q.net_change;
   }
   const isUp = (abs ?? 0) > 0;
-  const isDown = (abs ?? 0) < 0;
   const chgColor = abs == null || abs === 0 ? DIM : isUp ? UP : DOWN;
-  const priceColor = abs == null || abs === 0 ? TEXT : isUp ? UP : DOWN;
+  const priceColor = abs == null || abs === 0 ? TEXT : chgColor;
 
   const { data: candles } = useCandles(sym, '5m', 90);
   const series = useMemo(() => {
