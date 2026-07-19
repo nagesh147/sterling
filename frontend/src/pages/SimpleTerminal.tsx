@@ -152,6 +152,16 @@ const TOP_TAB = (active: boolean): React.CSSProperties => ({
 
 type TopTab = 'kite' | 'crypto';
 
+const CRYPTO_TAB_VISIBILITY_KEY = 'sterling_show_crypto_tab';
+function readCryptoTabVisible(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(CRYPTO_TAB_VISIBILITY_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 const CRYPTO_TABS: TabId[] = ['sterlingEngine', 'grok', 'sterling_v2', 'positions', 'backtest', 'paper'];
 const CRYPTO_LABELS: Record<TabId, string> = {
   sterlingEngine: 'STERLING',
@@ -183,14 +193,28 @@ export function SimpleTerminal() {
     setKiteNav(nav);
     window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: nav }));
   };
-  const [showCryptoTab, setShowCryptoTab] = useState(() => {
-    const stored = localStorage.getItem('sterling_show_crypto_tab');
-    return stored === null ? true : stored === 'true';
-  });
+  const [showCryptoTab, setShowCryptoTab] = useState(readCryptoTabVisible);
 
   useEffect(() => {
-    localStorage.setItem('sterling_show_crypto_tab', String(showCryptoTab));
-  }, [showCryptoTab]);
+    const syncCryptoVisibility = () => setShowCryptoTab(readCryptoTabVisible());
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key || e.key === CRYPTO_TAB_VISIBILITY_KEY) syncCryptoVisibility();
+    };
+    const interval = window.setInterval(syncCryptoVisibility, 250);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('focus', syncCryptoVisibility);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('focus', syncCryptoVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showCryptoTab && activeTopTab === 'crypto') {
+      setActiveTopTab('kite');
+    }
+  }, [showCryptoTab, activeTopTab]);
 
   // Sync SSE connection to scalp_mode: when crypto is disabled, kill the live data stream
   useEffect(() => {
@@ -305,7 +329,7 @@ export function SimpleTerminal() {
         </div>
 
         {/* Row 2: crypto sub-tabs + controls — only when crypto is selected */}
-        {activeTopTab === 'crypto' && (
+        {showCryptoTab && activeTopTab === 'crypto' && (
           <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px', borderTop: '1px solid var(--t-border)', overflow: 'hidden' }}>
             {CRYPTO_TABS.map((id) => (
               <button
@@ -356,7 +380,7 @@ export function SimpleTerminal() {
         </>
       )}
 
-      {activeTopTab === 'crypto' && (
+      {showCryptoTab && activeTopTab === 'crypto' && (
         <>
           <TickerStrip />
           <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: 'transparent', display: 'flex', flexDirection: 'column' }}>
