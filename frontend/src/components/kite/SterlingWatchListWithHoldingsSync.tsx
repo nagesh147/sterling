@@ -146,6 +146,7 @@ export function SterlingWatchListWithHoldingsSync({
         : holdings.isError
           ? 'Unable to check Kite holdings'
           : 'No Kite holdings found';
+  const hideDefaultEmptyPrompt = watchSnapshot.length === 0 && !manualEmpty;
 
   if (freshEmptyBoot && !autoAttempted && !holdings.isError) {
     return (
@@ -159,6 +160,21 @@ export function SterlingWatchListWithHoldingsSync({
   return (
     <div style={{ position: 'relative', height: '100%' }}>
       <SterlingWatchList key={childKey} onOpenInstrument={onOpenInstrument} />
+      {hideDefaultEmptyPrompt && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 50,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 15,
+            background: t.bg,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       <div style={{ position: 'absolute', top: 12, right: 52, zIndex: 25, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
         <button
           type="button"
