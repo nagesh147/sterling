@@ -46,3 +46,9 @@ textarea,
 .mac-kite .mac-gpu:not(:active) {
   will-change: auto !important;
 }
+
+/* TradingView's canonical down colour. KiteTicker emits the legacy red as an SVG
+ * presentation attribute, so this narrow selector updates only declining sparklines. */
+polyline[stroke="#df514c"] {
+  stroke: #f23645 !important;
+}
