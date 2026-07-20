@@ -28,7 +28,12 @@ import { BasketPane } from './BasketPane';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { MacMotionProvider } from './mac/MacMotionProvider';
 import { MacSectionFade } from './mac/MacSectionFade';
-import { MacBootOverlay } from './MacLoadingSurface';
+import {
+  EngineStartupBoundary,
+  KiteStartupCoordinator,
+  TickerStartupBoundary,
+  WatchlistStartupBoundary,
+} from './KiteStartupSurfaces';
 import { k } from '../../styles/kiteUI';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
@@ -168,14 +173,26 @@ export function KiteTab() {
 
   return (
     <MacMotionProvider>
-      <MacBootOverlay active={kiteStatusLoading && !kiteStatus} />
+      <KiteStartupCoordinator statusLoading={kiteStatusLoading} hasStatus={!!kiteStatus} />
       <KiteLayout
         activeNav={nav}
         onNavClick={handleNavClick}
-        sidebar={<SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />}
-        rightSidebar={portfolioNav ? undefined : <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />}
+        sidebar={(
+          <WatchlistStartupBoundary>
+            <SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />
+          </WatchlistStartupBoundary>
+        )}
+        rightSidebar={portfolioNav ? undefined : (
+          <EngineStartupBoundary>
+            <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
+          </EngineStartupBoundary>
+        )}
         bottomBar={<EngineTerminal />}
-        centerTopBar={portfolioNav ? undefined : <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />}
+        centerTopBar={portfolioNav ? undefined : (
+          <TickerStartupBoundary>
+            <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />
+          </TickerStartupBoundary>
+        )}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
         onBasketClick={() => setBasketOpen(true)}
         basketCount={basketCount}
