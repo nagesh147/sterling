@@ -34,6 +34,7 @@ import {
   TickerStartupBoundary,
   WatchlistStartupBoundary,
 } from './KiteStartupSurfaces';
+import { KiteInteractionMotion } from './KiteInteractionMotion';
 import { k } from '../../styles/kiteUI';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
@@ -172,38 +173,40 @@ export function KiteTab() {
   const portfolioNav = !instrumentView && !setupView && !detailView && (nav === 'positions' || nav === 'holdings');
 
   return (
-    <MacMotionProvider>
-      <KiteStartupCoordinator statusLoading={kiteStatusLoading} hasStatus={!!kiteStatus} />
-      <KiteLayout
-        activeNav={nav}
-        onNavClick={handleNavClick}
-        sidebar={(
-          <WatchlistStartupBoundary>
-            <SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />
-          </WatchlistStartupBoundary>
-        )}
-        rightSidebar={portfolioNav ? undefined : (
-          <EngineStartupBoundary>
-            <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
-          </EngineStartupBoundary>
-        )}
-        bottomBar={<EngineTerminal />}
-        centerTopBar={portfolioNav ? undefined : (
-          <TickerStartupBoundary>
-            <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />
-          </TickerStartupBoundary>
-        )}
-        content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
-        onBasketClick={() => setBasketOpen(true)}
-        basketCount={basketCount}
-      />
-      <KiteNotifications />
-      <PendingGttProtectionWatcher />
-      <KiteSessionGuard />
-      <KiteAuthOverlay />
-      {isOpen && options && <OrderWindow options={options} onClose={closeOrderWindow} />}
-      {basketOpen && <BasketPane onClose={() => setBasketOpen(false)} />}
-    </MacMotionProvider>
+    <KiteInteractionMotion>
+      <MacMotionProvider>
+        <KiteStartupCoordinator statusLoading={kiteStatusLoading} hasStatus={!!kiteStatus} />
+        <KiteLayout
+          activeNav={nav}
+          onNavClick={handleNavClick}
+          sidebar={(
+            <WatchlistStartupBoundary>
+              <SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />
+            </WatchlistStartupBoundary>
+          )}
+          rightSidebar={portfolioNav ? undefined : (
+            <EngineStartupBoundary>
+              <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
+            </EngineStartupBoundary>
+          )}
+          bottomBar={<EngineTerminal />}
+          centerTopBar={portfolioNav ? undefined : (
+            <TickerStartupBoundary>
+              <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />
+            </TickerStartupBoundary>
+          )}
+          content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
+          onBasketClick={() => setBasketOpen(true)}
+          basketCount={basketCount}
+        />
+        <KiteNotifications />
+        <PendingGttProtectionWatcher />
+        <KiteSessionGuard />
+        <KiteAuthOverlay />
+        {isOpen && options && <OrderWindow options={options} onClose={closeOrderWindow} />}
+        {basketOpen && <BasketPane onClose={() => setBasketOpen(false)} />}
+      </MacMotionProvider>
+    </KiteInteractionMotion>
   );
 }
 
