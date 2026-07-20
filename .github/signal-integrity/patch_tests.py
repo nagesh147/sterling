@@ -1,5 +1,7 @@
 from pathlib import Path
 
+# Trigger the pull-request workflow after its checkout target was corrected.
+
 
 def replace(path, old, new):
     p = Path(path)
