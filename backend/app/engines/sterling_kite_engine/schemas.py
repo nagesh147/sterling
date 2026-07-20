@@ -26,6 +26,11 @@ class OptionLeg(BaseModel):
     entry_sl: Optional[float] = None       # initial hard stop at the entry bar (fast ST line) — the SL column
     token: Optional[int] = None
     is_active: bool = False   # this contract's SuperTrend is still aligned on the latest bar
+    # Contract-local evidence. The grouped parent is a display/sort summary only.
+    signal_timestamp_ms: Optional[int] = None
+    entry_timestamp_ms: Optional[int] = None
+    alignment: Optional[AlignmentChip] = None
+    exit_state: Optional[str] = None
 
 
 class EngineSignalRow(BaseModel):

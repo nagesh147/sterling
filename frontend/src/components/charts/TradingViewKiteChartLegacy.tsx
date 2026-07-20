@@ -16,6 +16,8 @@ import {
   IconRect, IconPitchfork, IconText, IconPencil, IconFullscreen, IconClose, IconMore, IconGear,
 } from './ChartIcons';
 import { MiniGridPane } from './MiniGridPane';
+import { freshTripleAlignmentIndex, nearestTimeIndex } from './signalMarkerLogic';
+import type { SignalChartData } from '../../types/kiteEngine';
 import {
   ChartTemplate,
   ComparisonOverlay,
@@ -68,7 +70,7 @@ interface TradingViewKiteChartProps {
   persistedZoom?: any;
   drawMode?: string;
   onDrawModeChange?: (m: any) => void;
-  signalData?: { timestamp_ms: number; direction: string; regime: string };
+  signalData?: SignalChartData;
   /** Fired once the main chart has finished a structural rebuild (createChart +
    *  all series/indicators/drawings set) — used by the parent to hide a
    *  switch-instrument loading overlay in sync with the actual expensive work,
@@ -1183,74 +1185,45 @@ export function TradingViewKiteChart({
       }
     }
 
-    // Signal-entry marker (native chart marker only - no DOM overlay panel, per
-    // the hard rule against bordered/background info boxes on the canvas).
-    // Only rendered when a chart is opened from a signal row (SterlingKiteEnginePane
-    // -> InstrumentPane -> ChartView -> here); absent when opened directly from
-    // the watchlist, since signalData is undefined in that path. Guarded against
-    // an empty baseCandles/times array and against a signal timestamp that falls
-    // well outside the currently loaded candle range (no throw either way).
+    // Source-aware signal marker. CE and PE derivative entries are both
+    // long-premium BUYs, therefore both require a fresh THREE-GREEN transition
+    // on the selected contract's own premium chart. A bearish underlying regime
+    // must never turn a nearby three-red premium transition into an Entry marker.
     if (signalData && signalData.timestamp_ms != null && times.length && candleS) {
       try {
-        const targetSec = signalData.timestamp_ms / 1000;
+        const entryTargetSec = signalData.timestamp_ms / 1000;
+        const premiumTargetSec = (signalData.premium_signal_ms ?? signalData.timestamp_ms) / 1000;
         const avgSpacing = times.length > 1 ? Math.abs(times[times.length - 1] - times[0]) / (times.length - 1) : Infinity;
-        const tolerance = Math.max(avgSpacing * 3, 3600);
-
-        // The engine's entry rule = a FRESH full alignment of all three SuperTrends
-        // (3 green = long, 3 red = short) that was NOT aligned on the prior bar.
-        // Re-derive it here on the SAME candles the chart draws so the arrow always
-        // lands on a real 3-line flip and points the right way — instead of dropping
-        // it on whatever bar happens to be nearest the timestamp.
+        const tolerance = Math.max(avgSpacing * 1.25, 3600);
         const stF = supertrend(highs, lows, closes, params.stFastPeriod || 21, params.stFastMult || 1);
         const stM = supertrend(highs, lows, closes, params.stMidPeriod || 14, params.stMidMult || 2);
         const stS = supertrend(highs, lows, closes, params.stSlowPeriod || 7, params.stSlowMult || 3);
-        const n = Math.min(stF.length, stM.length, stS.length, times.length);
-        const allUp = (i: number) => stF[i].direction === 'up' && stM[i].direction === 'up' && stS[i].direction === 'up';
-        const allDn = (i: number) => stF[i].direction === 'down' && stM[i].direction === 'down' && stS[i].direction === 'down';
+        const source = signalData.source || 'spot';
+        const markers: any[] = [];
 
-        let pickIdx = -1;
-        let pickLong = true;
-        let pickDiff = Infinity;
-        for (let i = 1; i < n; i++) {
-          const fresh = (allUp(i) && !allUp(i - 1)) ? true : (allDn(i) && !allDn(i - 1)) ? false : null;
-          if (fresh === null) continue;
-          const diff = Math.abs(times[i] - targetSec);
-          if (diff < pickDiff) { pickDiff = diff; pickIdx = i; pickLong = fresh; }
-        }
-
-        let markIdx = -1;
-        let isLong = pickLong;
-        if (pickIdx >= 0 && pickDiff <= tolerance) {
-          // Found the actual fresh-alignment bar near the signal — use it.
-          markIdx = pickIdx;
+        if (source === 'derivatives' || signalData.marker_basis === 'premium') {
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
+          if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Entry' });
+        } else if (source === 'confluence') {
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
+          if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Confluence' });
+        } else if (signalData.marker_basis === 'external') {
+          const idx = nearestTimeIndex(times, entryTargetSec, tolerance);
+          if (idx >= 0) markers.push({ time: times[idx] as any, position: 'aboveBar', color: tv.blue, shape: 'circle', text: 'Underlying entry' });
         } else {
-          // No fresh 3-line flip near the signal on THIS instrument (e.g. a
-          // spot-source signal viewed on the option-premium chart, where the entry
-          // was decided on the underlying). Fall back to the entry bar by time, and
-          // take the direction from the signal itself.
-          let closestIdx = 0;
-          let closestDiff = Math.abs(times[0] - targetSec);
-          for (let i = 1; i < times.length; i++) {
-            const diff = Math.abs(times[i] - targetSec);
-            if (diff < closestDiff) { closestDiff = diff; closestIdx = i; }
-          }
-          if (closestDiff <= tolerance) {
-            markIdx = closestIdx;
-            const dir = (signalData.direction || '').toLowerCase();
-            isLong = dir === 'long' || dir.includes('buy') || (signalData.regime || '').toUpperCase() === 'BULL';
-          }
-        }
-
-        if (markIdx >= 0) {
-          createSeriesMarkers?.(candleS, [{
-            time: times[markIdx] as any,
-            position: isLong ? 'belowBar' : 'aboveBar',
-            color: isLong ? tv.green : tv.red,
-            shape: isLong ? 'arrowUp' : 'arrowDown',
+          const dir = (signalData.direction || '').toLowerCase();
+          const wanted = dir === 'short' || (signalData.regime || '').toUpperCase() === 'BEAR' ? 'down' : 'up';
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, entryTargetSec, wanted, tolerance);
+          if (idx >= 0) markers.push({
+            time: times[idx] as any,
+            position: wanted === 'up' ? 'belowBar' : 'aboveBar',
+            color: wanted === 'up' ? tv.green : tv.red,
+            shape: wanted === 'up' ? 'arrowUp' : 'arrowDown',
             text: 'Entry',
-          }]);
+          });
         }
-      } catch { /* never let a bad signal timestamp break chart rendering */ }
+        if (markers.length) createSeriesMarkers?.(candleS, markers);
+      } catch { /* invalid signal metadata must never break chart rendering */ }
     }
 
     mainChartRef.current = chart;

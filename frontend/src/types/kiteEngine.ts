@@ -27,6 +27,19 @@ export interface OptionLeg {
   entry_sl?: number;      // initial hard stop at the entry bar (SL column)
   token?: number;
   is_active?: boolean; // this contract's SuperTrend still aligned on the latest bar
+  signal_timestamp_ms?: number | null;
+  entry_timestamp_ms?: number | null;
+  alignment?: AlignmentChip | null;
+  exit_state?: string | null;
+}
+
+export interface SignalChartData {
+  timestamp_ms: number;
+  direction: string;
+  regime: string;
+  source?: 'spot' | 'derivatives' | 'confluence';
+  premium_signal_ms?: number | null;
+  marker_basis?: 'underlying' | 'premium' | 'external';
 }
 
 export interface EngineSignalRow {

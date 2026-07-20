@@ -360,7 +360,12 @@ def _make_place_cb(client, uid: str):
             # so their stop_px was 0 → the position was UNPROTECTED (no GTT, monitor
             # exit inert, sizing floored to 1 lot). D1 fix: fetch the leg LTP and derive
             # a delta-implied premium stop from the underlying ST trail (row.stop_loss).
-            leg = min(row.legs, key=lambda l: abs(l.strike - row.spot)) if row.legs else None
+            # Reuse the exact leg selected by option_order_args. Independently
+            # resolving against grouped row.spot (zero) could select another strike.
+            leg = next((l for l in row.legs if l.option_symbol == trade_symbol), None)
+            if leg is None and row.legs:
+                reference_spot = float(row.underlying_spot or row.spot or 0.0)
+                leg = min(row.legs, key=lambda l: abs(l.strike - reference_spot))
             if leg is not None:
                 pos_strike = float(leg.strike or 0.0)
                 pos_expiry = str(leg.expiry or "")
