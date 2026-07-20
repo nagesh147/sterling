@@ -2,24 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { KiteBrandIcon, KiteBrandIconSize } from '../utils/kiteBrandIcon';
 
-/** Visual style for loaders/spinners across the Kite UI. More styles can be added
- *  here later (e.g. 'aurora', 'pulse'); 'mac' is the Apple-grade default. */
-export type LoaderStyle = 'mac' | 'classic' | 'off';
+export type LoaderStyle = 'ubuntu' | 'mac' | 'material' | 'windows' | 'gnome' | 'kde' | 'minimal';
 
 type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection' | 'showHoldings' | 'showNotes' | 'showGroupColors' | 'showExchange' | 'showLeg';
 
 export interface KiteSettingsState {
-  /** Mac Kite — Apple-grade physics/motion layer. Off ⇒ stock Kite behaviour. */
   macKite: boolean;
-  /** Loader/spinner visual style used for auth overlays, buttons and pending states. */
   loaderStyle: LoaderStyle;
-  /** Browser/tab icon shown next to the Sterling title. */
   brandIcon: KiteBrandIcon;
-  /** Visual fill size used when generating emoji favicons. */
   brandIconSize: KiteBrandIconSize;
-  /** Most recently selected app/tab icons, newest first. */
   recentBrandIcons: KiteBrandIcon[];
-  /** SuperTrend settings-drawer layout: tab bar vs collapsible cards (chosen in Connect). */
   engineSettingsLayout: 'tabs' | 'cards';
   chgType: 'close' | 'open';
   showPriceChange: boolean;
@@ -32,10 +24,6 @@ export interface KiteSettingsState {
   showLeg: boolean;
   sortBy: string;
   legSort: { key: string; dir: string };
-  /** Signal-table column order, drag-to-reorder. Two independent groups matching
-   *  the table's two flex sections (left flowing group vs. right price-pinned
-   *  group) — see SIGNAL_LEFT_COLUMNS/SIGNAL_RIGHT_COLUMNS in
-   *  SterlingKiteEnginePane.tsx for the width/label source of truth each key maps to. */
   signalLeftColumnOrder: string[];
   signalRightColumnOrder: string[];
   setMacKite: (on: boolean) => void;
@@ -54,7 +42,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
   persist(
     (set) => ({
       macKite: false,
-      loaderStyle: 'mac',
+      loaderStyle: 'ubuntu',
       brandIcon: 'phoenix',
       brandIconSize: 'medium',
       recentBrandIcons: [],
@@ -97,6 +85,14 @@ export const useKiteSettings = create<KiteSettingsState>()(
     }),
     {
       name: 'kite-settings',
-    }
-  )
+      version: 2,
+      migrate: (persisted: any) => {
+        const legacy = persisted?.loaderStyle;
+        if (legacy === 'classic') return { ...persisted, loaderStyle: 'material' };
+        if (legacy === 'off') return { ...persisted, loaderStyle: 'minimal' };
+        if (legacy === 'mac') return persisted;
+        return { ...persisted, loaderStyle: 'ubuntu' };
+      },
+    },
+  ),
 );
