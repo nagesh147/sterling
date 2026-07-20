@@ -4,6 +4,8 @@ from pathlib import Path
 def replace(path, old, new):
     p = Path(path)
     text = p.read_text()
+    if new in text:
+        return
     if text.count(old) != 1:
         raise RuntimeError(f'{path}: expected one match, got {text.count(old)}')
     p.write_text(text.replace(old, new, 1))
@@ -21,7 +23,9 @@ replace(
 
 p = Path('backend/tests/engines/sterling_kite_engine/test_scanner.py')
 text = p.read_text()
-text += r'''
+marker = '# ── signal provenance / CE+PE premium semantics regressions ──────────────────'
+if marker not in text:
+    text += r'''
 
 # ── signal provenance / CE+PE premium semantics regressions ──────────────────
 @pytest.mark.parametrize(
@@ -34,11 +38,7 @@ text += r'''
 def test_derivative_option_is_long_premium_and_stamps_three_green_leg_provenance(
     option_type, expected_regime, symbol,
 ):
-    """Both CE and PE derivative entries BUY a rising option premium.
-
-    CE/PE only changes the underlying view (BULL/BEAR); it must never change the
-    premium entry requirement from a fresh three-green alignment to three-red.
-    """
+    """CE and PE derivative entries both buy a rising option premium."""
     cfg = SterlingKiteEngineConfig()
     item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")
     pick = OptionPick(option_symbol=symbol, strike=825.0, option_type=option_type,
@@ -107,7 +107,7 @@ def test_option_order_args_grouped_derivative_uses_underlying_spot_and_leg_stop(
 p.write_text(text)
 
 Path('frontend/src/components/charts/signalMarkerLogic.test.ts').write_text('''import { describe, expect, it } from 'vitest';
-import { freshTripleAlignmentIndex, nearestCandleIndex } from './signalMarkerLogic';
+import { freshTripleAlignmentIndex, nearestTimeIndex } from './signalMarkerLogic';
 
 const p = (direction: 'up' | 'down') => ({ direction });
 
@@ -129,9 +129,9 @@ describe('signal marker integrity', () => {
     expect(freshTripleAlignmentIndex(fast, mid, slow, times, 205, 'up', 20)).toBe(1);
   });
 
-  it('only returns a time fallback inside tolerance', () => {
-    expect(nearestCandleIndex([100, 200, 300], 205, 10)).toBe(1);
-    expect(nearestCandleIndex([100, 200, 300], 500, 10)).toBe(-1);
+  it('only returns an external time marker inside tolerance', () => {
+    expect(nearestTimeIndex([100, 200, 300], 205, 10)).toBe(1);
+    expect(nearestTimeIndex([100, 200, 300], 500, 10)).toBe(-1);
   });
 });
 ''')
