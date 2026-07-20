@@ -1,3 +1,5 @@
+import { filterKitePayload } from './kiteExchanges';
+
 // Docker: VITE_API_BASE_URL="" → relative paths, nginx proxies /api/ to backend
 // Dev: unset → fallback to localhost:8000
 const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000';
@@ -17,7 +19,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(msg);
   }
   if (resp.status === 204) return undefined as T;
-  return resp.json() as Promise<T>;
+  const payload = await resp.json() as T;
+  return filterKitePayload(path, payload);
 }
 
 const json = (body: unknown) => ({
