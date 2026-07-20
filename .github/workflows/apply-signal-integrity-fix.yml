@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/kite-signal-integrity-audit
+          ref: ${{ github.event.pull_request.head.ref || 'fix/kite-signal-integrity-audit' }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -94,9 +94,11 @@ jobs:
           rm -f .github/workflows/apply-signal-integrity-fix.yml
 
       - name: Commit verified fix
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref || 'fix/kite-signal-integrity-audit' }}
         run: |
           git config user.name 'OpenAI'
           git config user.email 'noreply@openai.com'
           git add -A
           git commit -m 'fix(kite): preserve CE/PE per-contract signal integrity [signal-integrity-applied]'
-          git push origin HEAD:fix/kite-signal-integrity-audit
+          git push origin HEAD:${TARGET_BRANCH}
