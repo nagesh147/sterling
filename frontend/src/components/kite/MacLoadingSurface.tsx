@@ -70,8 +70,25 @@ const MAC_LOADING_CSS = `
 }
 `;
 
+let loadingStylesInstalled = false;
+
+function ensureMacLoadingStyles() {
+  if (loadingStylesInstalled || typeof document === 'undefined') return;
+  const existing = document.getElementById('sterling-mac-loading-styles');
+  if (existing) {
+    loadingStylesInstalled = true;
+    return;
+  }
+  const style = document.createElement('style');
+  style.id = 'sterling-mac-loading-styles';
+  style.textContent = MAC_LOADING_CSS;
+  document.head.appendChild(style);
+  loadingStylesInstalled = true;
+}
+
 export function MacLoadingStyles() {
-  return <style>{MAC_LOADING_CSS}</style>;
+  ensureMacLoadingStyles();
+  return null;
 }
 
 export function MacSkeleton({
@@ -87,16 +104,14 @@ export function MacSkeleton({
   style?: React.CSSProperties;
   testId?: string;
 }) {
+  ensureMacLoadingStyles();
   return (
-    <>
-      <MacLoadingStyles />
-      <span
-        data-testid={testId}
-        className="mls-skeleton"
-        aria-hidden="true"
-        style={{ width, height, borderRadius: radius, ...style }}
-      />
-    </>
+    <span
+      data-testid={testId}
+      className="mls-skeleton"
+      aria-hidden="true"
+      style={{ width, height, borderRadius: radius, ...style }}
+    />
   );
 }
 
@@ -111,16 +126,14 @@ export function MacReveal({
   style?: React.CSSProperties;
   className?: string;
 }) {
+  ensureMacLoadingStyles();
   return (
-    <>
-      <MacLoadingStyles />
-      <div
-        className={`mls-reveal${className ? ` ${className}` : ''}`}
-        style={{ animationDelay: `${Math.max(0, delay)}ms`, ...style }}
-      >
-        {children}
-      </div>
-    </>
+    <div
+      className={`mls-reveal${className ? ` ${className}` : ''}`}
+      style={{ animationDelay: `${Math.max(0, delay)}ms`, ...style }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -135,6 +148,8 @@ export function MacBootOverlay({
 }) {
   const [mounted, setMounted] = React.useState(active);
   const [leaving, setLeaving] = React.useState(false);
+
+  ensureMacLoadingStyles();
 
   React.useEffect(() => {
     if (active) {
@@ -154,65 +169,62 @@ export function MacBootOverlay({
   if (!mounted || typeof document === 'undefined') return null;
 
   return createPortal(
-    <>
-      <MacLoadingStyles />
+    <div
+      className="mls-overlay"
+      data-leaving={leaving ? 'true' : 'false'}
+      role="status"
+      aria-live="polite"
+      aria-label={title}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(145deg, rgba(252,253,254,.985), rgba(246,248,251,.97))',
+        fontFamily: k.fontFamily,
+      }}
+    >
       <div
-        className="mls-overlay"
-        data-leaving={leaving ? 'true' : 'false'}
-        role="status"
-        aria-live="polite"
-        aria-label={title}
+        className="mls-boot-card"
         style={{
-          position: 'fixed', inset: 0, zIndex: 100000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'linear-gradient(145deg, rgba(252,253,254,.985), rgba(246,248,251,.97))',
-          fontFamily: k.fontFamily,
+          width: 'min(360px, calc(100vw - 40px))',
+          padding: '24px 26px 22px',
+          borderRadius: 18,
+          background: 'rgba(255,255,255,.96)',
+          border: '1px solid rgba(15,23,42,.08)',
+          boxShadow: '0 24px 70px rgba(15,23,42,.14), 0 2px 10px rgba(15,23,42,.06)',
+          boxSizing: 'border-box',
         }}
       >
-        <div
-          className="mls-boot-card"
-          style={{
-            width: 'min(360px, calc(100vw - 40px))',
-            padding: '24px 26px 22px',
-            borderRadius: 18,
-            background: 'rgba(255,255,255,.96)',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'linear-gradient(145deg, #ffffff, #eef1f5)',
             border: '1px solid rgba(15,23,42,.08)',
-            boxShadow: '0 24px 70px rgba(15,23,42,.14), 0 2px 10px rgba(15,23,42,.06)',
-            boxSizing: 'border-box',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              width: 42, height: 42, borderRadius: 13,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'linear-gradient(145deg, #ffffff, #eef1f5)',
-              border: '1px solid rgba(15,23,42,.08)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.9), 0 5px 14px rgba(15,23,42,.08)',
-              flexShrink: 0,
-            }}>
-              <KiteLoader size={24} color="#6b7280" styleOverride="mac" />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 650, color: '#20242b', letterSpacing: '-.01em' }}>{title}</div>
-              <div style={{ marginTop: 4, fontSize: 11.5, lineHeight: 1.45, color: '#7c838d' }}>{detail}</div>
-            </div>
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,.9), 0 5px 14px rgba(15,23,42,.08)',
+            flexShrink: 0,
+          }}>
+            <KiteLoader size={24} color="#6b7280" styleOverride="mac" />
           </div>
-
-          <div style={{ marginTop: 20, height: 3, borderRadius: 999, overflow: 'hidden', background: '#edf0f3' }}>
-            <div
-              className="mls-progress-runner"
-              style={{ width: '34%', height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, #8bb8ff, #4184f3)' }}
-            />
-          </div>
-
-          <div style={{ marginTop: 13, display: 'flex', alignItems: 'center', gap: 12, color: '#a0a6ae', fontSize: 9.5, letterSpacing: '.03em', textTransform: 'uppercase' }}>
-            <span>Session</span><span style={{ width: 3, height: 3, borderRadius: '50%', background: '#c5c9cf' }} />
-            <span>Workspace</span><span style={{ width: 3, height: 3, borderRadius: '50%', background: '#c5c9cf' }} />
-            <span>Market data</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 650, color: '#20242b', letterSpacing: '-.01em' }}>{title}</div>
+            <div style={{ marginTop: 4, fontSize: 11.5, lineHeight: 1.45, color: '#7c838d' }}>{detail}</div>
           </div>
         </div>
+
+        <div style={{ marginTop: 20, height: 3, borderRadius: 999, overflow: 'hidden', background: '#edf0f3' }}>
+          <div
+            className="mls-progress-runner"
+            style={{ width: '34%', height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, #8bb8ff, #4184f3)' }}
+          />
+        </div>
+
+        <div style={{ marginTop: 13, display: 'flex', alignItems: 'center', gap: 12, color: '#a0a6ae', fontSize: 9.5, letterSpacing: '.03em', textTransform: 'uppercase' }}>
+          <span>Session</span><span style={{ width: 3, height: 3, borderRadius: '50%', background: '#c5c9cf' }} />
+          <span>Workspace</span><span style={{ width: 3, height: 3, borderRadius: '50%', background: '#c5c9cf' }} />
+          <span>Market data</span>
+        </div>
       </div>
-    </>,
+    </div>,
     document.body,
   );
 }
