@@ -5,6 +5,7 @@ import { SterlingWatchListWithHoldingsSync } from './SterlingWatchListWithHoldin
 import { MarketDataPane } from './MarketDataPane';
 import { ConnectPane } from './ConnectPane';
 import { MotionStyleSettings } from './MotionStyleSettings';
+import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { MutualFundsPane } from './MutualFundsPane';
 import { PortfolioPane } from './PortfolioPane';
 import { PositionsPane } from './PositionsPane';
@@ -201,6 +202,7 @@ export function KiteTab() {
           onBasketClick={() => setBasketOpen(true)}
           basketCount={basketCount}
         />
+        {nav === 'connect' && <KiteExchangeSettingsCard />}
         <KiteNotifications />
         <PendingGttProtectionWatcher />
         <KiteSessionGuard />
