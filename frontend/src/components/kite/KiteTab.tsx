@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { KiteLayout, NavItem, MoreTab } from './KiteLayout';
 import { KiteDashboard } from './KiteDashboard';
-import { SterlingWatchList } from './SterlingWatchList';
+import { SterlingWatchListWithHoldingsSync } from './SterlingWatchListWithHoldingsSync';
 import { MarketDataPane } from './MarketDataPane';
 import { ConnectPane } from './ConnectPane';
 import { MutualFundsPane } from './MutualFundsPane';
@@ -163,10 +163,10 @@ export function KiteTab() {
       <KiteLayout
         activeNav={nav}
         onNavClick={handleNavClick}
-        sidebar={<SterlingWatchList onOpenInstrument={handleOpenInstrument} />}
+        sidebar={<SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />}
         rightSidebar={<SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />}
         bottomBar={<EngineTerminal />}
-        centerTopBar={<KiteTicker />}
+        centerTopBar={<KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
         onBasketClick={() => setBasketOpen(true)}
         basketCount={basketCount}
