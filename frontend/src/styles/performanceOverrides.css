@@ -8,3 +8,69 @@
 body::before {
   display: none !important;
   animation: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Global transform and shadow transitions make clicks and hovers feel delayed and can
+ * promote many controls to compositor layers. Keep only very short colour feedback.
+ */
+button,
+a,
+input,
+select,
+textarea,
+[role="tab"],
+[role="button"] {
+  transition-property: background-color, border-color, color !important;
+  transition-duration: 60ms !important;
+  transition-timing-function: linear !important;
+}
+
+/* The signal engine can render a large history. Let Chromium skip layout/paint for
+ * rows outside the scroll viewport while preserving an estimated row footprint.
+ */
+.st-parent-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 110px;
+  contain: layout paint style;
+}
+
+/* Isolate dense watchlist/search rows so hover repaint stays local to the row. */
+.mw-item,
+.sr-item {
+  contain: layout paint style;
+}
+
+/* Avoid permanent layer promotion outside an active animation/drag. */
+.mac-kite .mac-gpu:not(:active) {
+  will-change: auto !important;
+}
+
+/* TradingView's canonical down colour. KiteTicker emits the legacy red as an SVG
+ * presentation attribute, so this narrow selector updates only declining sparklines. */
+polyline[stroke="#df514c"] {
+  stroke: #f23645 !important;
+}
+
+/* Keep the Sterling Engine action strip out of the way until the header is engaged.
+ * The row containing the settings marker is the exact compact engine header shown in
+ * the reference screenshot. Keyboard focus also reveals the controls for accessibility.
+ */
+@media (hover: hover) and (pointer: fine) {
+  div:has(> span[data-st-settings]) > div:nth-last-child(2),
+  div:has(> span[data-st-settings]) > span[data-st-settings] {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  div:has(> span[data-st-settings]):hover > div:nth-last-child(2),
+  div:has(> span[data-st-settings]):hover > span[data-st-settings],
+  div:has(> span[data-st-settings]):focus-within > div:nth-last-child(2),
+  div:has(> span[data-st-settings]):focus-within > span[data-st-settings] {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
