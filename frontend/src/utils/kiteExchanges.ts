@@ -2,9 +2,76 @@ export const KITE_EXCHANGES = ['NSE', 'NFO', 'BSE', 'BFO', 'CDS', 'BCD', 'MCX'] 
 
 export type KiteExchange = typeof KITE_EXCHANGES[number];
 
-// "NSE market" means cash equities/indices on NSE plus its F&O segment, NFO.
-// This preserves the options-first Sterling workflow while excluding BSE/BFO by default.
+// The Sterling workflow is options-first, so the default NSE market preset includes
+// NSE cash/indices and NFO derivatives while excluding BSE/BFO and other venues.
 export const DEFAULT_KITE_EXCHANGES: KiteExchange[] = ['NSE', 'NFO'];
-export const KITE_SETTINGS_STORAGE_KEY = 'kite-settings';
+export const KITE_EXCHANGE_FILTER_KEY = 'sterling:kite:exchange-filter:v1';
 
-const EXCHANGE_SET = new Set<string>(
+const EXCHANGE_SET = new Set<string>(KITE_EXCHANGES);
+
+export function normalizeKiteExchanges(value: unknown): KiteExchange[] {
+  if (!Array.isArray(value)) return [...DEFAULT_KITE_EXCHANGES];
+  const selected = Array.from(new Set(
+    value
+      .map((item) => String(item || '').toUpperCase())
+      .filter((item): item is KiteExchange => EXCHANGE_SET.has(item)),
+  ));
+  return selected.length ? selected : [...DEFAULT_KITE_EXCHANGES];
+}
+
+export function readKiteExchanges(storage: Pick<Storage, 'getItem'> | null = typeof window === 'undefined' ? null : window.localStorage): KiteExchange[] {
+  if (!storage) return [...DEFAULT_KITE_EXCHANGES];
+  try {
+    const raw = storage.getItem(KITE_EXCHANGE_FILTER_KEY);
+    return raw ? normalizeKiteExchanges(JSON.parse(raw)) : [...DEFAULT_KITE_EXCHANGES];
+  } catch {
+    return [...DEFAULT_KITE_EXCHANGES];
+  }
+}
+
+export function writeKiteExchanges(
+  exchanges: readonly string[],
+  storage: Pick<Storage, 'setItem'> | null = typeof window === 'undefined' ? null : window.localStorage,
+): KiteExchange[] {
+  const normalized = normalizeKiteExchanges(exchanges);
+  try {
+    storage?.setItem(KITE_EXCHANGE_FILTER_KEY, JSON.stringify(normalized));
+  } catch {
+    // Restricted storage must not break Kite.
+  }
+  return normalized;
+}
+
+export function exchangeFromSymbol(symbol: unknown): string {
+  const raw = String(symbol || '').toUpperCase();
+  return raw.includes(':') ? raw.split(':', 1)[0] : '';
+}
+
+export function isKiteExchangeEnabled(exchange: unknown, selected = readKiteExchanges()): boolean {
+  const normalized = String(exchange || '').toUpperCase();
+  if (!normalized) return true;
+  return selected.includes(normalized as KiteExchange);
+}
+
+export function filterKitePayload<T>(path: string, payload: T): T {
+  if (!payload || typeof payload !== 'object') return payload;
+  const selected = readKiteExchanges();
+  const value = payload as any;
+
+  if (path.includes('/api/v1/kite/instruments') && Array.isArray(value.instruments)) {
+    const instruments = value.instruments.filter((row: any) => isKiteExchangeEnabled(row?.exchange, selected));
+    return { ...value, instruments, count: instruments.length } as T;
+  }
+
+  if (path.includes('/api/v1/kite/watchlist/sync') && Array.isArray(value.items)) {
+    const items = value.items.filter((row: any) => isKiteExchangeEnabled(exchangeFromSymbol(row?.symbol), selected));
+    return { ...value, items, count: items.length } as T;
+  }
+
+  if (path.includes('/api/v1/kite/engine/signals') && Array.isArray(value.rows)) {
+    const rows = value.rows.filter((row: any) => isKiteExchangeEnabled(row?.exchange, selected));
+    return { ...value, rows } as T;
+  }
+
+  return payload;
+}
