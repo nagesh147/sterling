@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { KiteBrandIcon, KiteBrandIconSize } from '../utils/kiteBrandIcon';
 
-export type LoaderStyle = 'ubuntu' | 'mac' | 'material' | 'windows' | 'gnome' | 'kde' | 'minimal';
+export type LoaderStyle = 'ubuntu' | 'mac' | 'material' | 'windows' | 'gnome' | 'kde' | 'minimal' | 'classic' | 'off';
+
+export type MotionStyle = Exclude<LoaderStyle, 'classic' | 'off'>;
 
 type ToggleShowKey = 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection' | 'showHoldings' | 'showNotes' | 'showGroupColors' | 'showExchange' | 'showLeg';
 
@@ -61,7 +63,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
       signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
       signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
       setMacKite: (on) => set({ macKite: on }),
-      setLoaderStyle: (s) => set({ loaderStyle: s }),
+      setLoaderStyle: (s) => set({ loaderStyle: s === 'classic' ? 'material' : s === 'off' ? 'minimal' : s }),
       setBrandIcon: (icon) => set((state) => ({
         brandIcon: icon,
         recentBrandIcons: [icon, ...state.recentBrandIcons.filter((i) => i !== icon)].slice(0, 5),
@@ -90,7 +92,7 @@ export const useKiteSettings = create<KiteSettingsState>()(
         const legacy = persisted?.loaderStyle;
         if (legacy === 'classic') return { ...persisted, loaderStyle: 'material' };
         if (legacy === 'off') return { ...persisted, loaderStyle: 'minimal' };
-        if (legacy === 'mac') return persisted;
+        if (legacy === 'mac' || legacy === 'ubuntu' || legacy === 'material' || legacy === 'windows' || legacy === 'gnome' || legacy === 'kde' || legacy === 'minimal') return persisted;
         return { ...persisted, loaderStyle: 'ubuntu' };
       },
     },
