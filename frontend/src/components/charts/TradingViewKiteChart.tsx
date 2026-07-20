@@ -22,8 +22,16 @@ type LegacyProps = React.ComponentProps<typeof LegacyTradingViewKiteChart>;
 type TradingViewKiteChartProps = LegacyProps & { onIsDarkChange?: (dark: boolean) => void };
 
 type ChartType = 'candles' | 'bars' | 'line' | 'area';
+type ChartStyle = 'regular' | 'heikin-ashi' | 'bars' | 'line' | 'area';
 
 const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1H', '2H', '4H', 'D', 'W', 'M'];
+const CHART_STYLES: Array<{ value: ChartStyle; label: string; description: string; chartType: ChartType; heikinAshi: boolean }> = [
+  { value: 'regular', label: 'Regular candles', description: 'Standard OHLC candlesticks', chartType: 'candles', heikinAshi: false },
+  { value: 'heikin-ashi', label: 'Heikin Ashi', description: 'Smoothed trend candles', chartType: 'candles', heikinAshi: true },
+  { value: 'bars', label: 'Bars', description: 'Traditional OHLC bars', chartType: 'bars', heikinAshi: false },
+  { value: 'line', label: 'Line', description: 'Close-price line', chartType: 'line', heikinAshi: false },
+  { value: 'area', label: 'Area', description: 'Filled close-price line', chartType: 'area', heikinAshi: false },
+];
 const INDICATORS = [
   ['vol', 'Volume'],
   ['st-fast', 'SuperTrend 21 1'],
@@ -49,7 +57,7 @@ function formatCompact(value: number | null | undefined) {
   return Intl.NumberFormat('en-IN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
 }
 
-function Icon({ name }: { name: 'search' | 'plus' | 'candle' | 'indicator' | 'layout' | 'draw' | 'undo' | 'redo' | 'save' | 'theme' | 'settings' | 'camera' | 'more' | 'calendar' }) {
+function Icon({ name }: { name: 'search' | 'plus' | 'candle' | 'indicator' | 'layout' | 'draw' | 'undo' | 'redo' | 'save' | 'theme' | 'settings' | 'camera' | 'more' | 'calendar' | 'chevron' }) {
   const common = { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   if (name === 'search') return <svg {...common}><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>;
   if (name === 'plus') return <svg {...common}><path d="M12 5v14M5 12h14"/></svg>;
@@ -64,6 +72,7 @@ function Icon({ name }: { name: 'search' | 'plus' | 'candle' | 'indicator' | 'la
   if (name === 'settings') return <svg {...common}><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.4 6A7 7 0 0 0 8 7.1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.4 18l.3 2.6h4L15 18a7 7 0 0 0 1.5-1.1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"/></svg>;
   if (name === 'camera') return <svg {...common}><path d="M4 7h4l2-2h4l2 2h4v12H4z"/><circle cx="12" cy="13" r="4"/></svg>;
   if (name === 'calendar') return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>;
+  if (name === 'chevron') return <svg {...common} width="12" height="12"><path d="m7 9 5 5 5-5"/></svg>;
   return <svg {...common}><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg>;
 }
 
@@ -85,6 +94,7 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
   const [range, setRange] = useState<ChartRangeKey>('ALL');
   const [hoveredBar, setHoveredBar] = useState<any>(null);
   const [timeMenu, setTimeMenu] = useState(false);
+  const [chartStyleMenu, setChartStyleMenu] = useState(false);
   const [indicatorMenu, setIndicatorMenu] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [chartType, setChartType] = useState<ChartType>('candles');
@@ -92,6 +102,8 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
   const [localDark, setLocalDark] = useState(!!props.isDark);
   const [clock, setClock] = useState(() => Date.now());
   const effectiveDark = props.onIsDarkChange ? !!props.isDark : localDark;
+  const selectedChartStyle: ChartStyle = props.isHA ? 'heikin-ashi' : chartType === 'candles' ? 'regular' : chartType;
+  const selectedChartStyleMeta = CHART_STYLES.find((option) => option.value === selectedChartStyle) || CHART_STYLES[0];
 
   const candles = useMemo(() => normalizeChartCandles(props.rawCandles), [props.rawCandles]);
   const activeKey = useMemo(() => Array.from(props.activeIndicators).sort().join(','), [props.activeIndicators]);
@@ -177,13 +189,17 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
   }, [props.symbol]);
 
   useEffect(() => {
-    if (!timeMenu && !indicatorMenu) return;
+    if (!timeMenu && !chartStyleMenu && !indicatorMenu) return;
     const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setTimeMenu(false); setIndicatorMenu(false); }
+      if (event.key === 'Escape') {
+        setTimeMenu(false);
+        setChartStyleMenu(false);
+        setIndicatorMenu(false);
+      }
     };
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
-  }, [timeMenu, indicatorMenu]);
+  }, [timeMenu, chartStyleMenu, indicatorMenu]);
 
   const selectRange = (nextRange: ChartRangeKey) => {
     setRange(nextRange);
@@ -200,13 +216,18 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
     button?.click();
   };
 
-  const changeChartType = (next: ChartType) => {
-    setChartType(next);
+  const changeChartStyle = (next: ChartStyle) => {
+    const option = CHART_STYLES.find((candidate) => candidate.value === next);
+    if (!option) return;
+    setChartType(option.chartType);
+    props.onIsHAChange?.(option.heikinAshi);
     const selects = Array.from(sectionRef.current?.querySelectorAll<HTMLSelectElement>('.sterling-zerodha-chart__legacy select') || []);
-    const select = selects.find((candidate) => Array.from(candidate.options).some((option) => option.value === 'candles'));
-    if (!select) return;
-    select.value = next;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const select = selects.find((candidate) => Array.from(candidate.options).some((entry) => entry.value === 'candles'));
+    if (select) {
+      select.value = option.chartType;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    setChartStyleMenu(false);
   };
 
   const changeLayout = () => {
@@ -249,14 +270,29 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
         </ToolButton>
         <ToolButton title="Compare symbol" onClick={() => clickLegacy('compare')}><Icon name="plus"/></ToolButton>
         <div className="zk-menu-host">
-          <ToolButton title="Timeframe" active={timeMenu} onClick={() => { setTimeMenu((open) => !open); setIndicatorMenu(false); }}><span className="zk-tf">{props.tf}</span></ToolButton>
+          <ToolButton title="Timeframe" active={timeMenu} onClick={() => { setTimeMenu((open) => !open); setChartStyleMenu(false); setIndicatorMenu(false); }}><span className="zk-tf">{props.tf}</span></ToolButton>
           {timeMenu && <div className="zk-popover zk-timeframes">{TIMEFRAMES.map((tf) => <button key={tf} type="button" className={props.tf === tf ? 'is-selected' : undefined} onClick={() => { props.onTfChange?.(tf); setTimeMenu(false); }}>{tf}</button>)}</div>}
         </div>
         <div className="zk-menu-host zk-optional-small">
-          <ToolButton title="Chart type" onClick={() => changeChartType(chartType === 'candles' ? 'bars' : chartType === 'bars' ? 'line' : chartType === 'line' ? 'area' : 'candles')}><Icon name="candle"/><span className="zk-tool-label">{chartType}</span></ToolButton>
+          <ToolButton title="Chart type" active={chartStyleMenu} onClick={() => { setChartStyleMenu((open) => !open); setTimeMenu(false); setIndicatorMenu(false); }}>
+            <Icon name="candle"/><span className="zk-tool-label">{selectedChartStyleMeta.label}</span><span className="zk-tool-chevron"><Icon name="chevron"/></span>
+          </ToolButton>
+          {chartStyleMenu && (
+            <div className="zk-popover zk-chart-types" role="menu" aria-label="Chart type">
+              {CHART_STYLES.map((option) => {
+                const selected = selectedChartStyle === option.value;
+                return (
+                  <button key={option.value} type="button" role="menuitemradio" aria-checked={selected} className={selected ? 'is-selected' : undefined} onClick={() => changeChartStyle(option.value)}>
+                    <span className="zk-check">{selected ? '✓' : ''}</span>
+                    <span className="zk-chart-type-copy"><strong>{option.label}</strong><small>{option.description}</small></span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="zk-menu-host">
-          <ToolButton title="Indicators" active={indicatorMenu} onClick={() => { setIndicatorMenu((open) => !open); setTimeMenu(false); }}><Icon name="indicator"/><span className="zk-tool-label">Indicators</span></ToolButton>
+          <ToolButton title="Indicators" active={indicatorMenu} onClick={() => { setIndicatorMenu((open) => !open); setTimeMenu(false); setChartStyleMenu(false); }}><Icon name="indicator"/><span className="zk-tool-label">Indicators</span></ToolButton>
           {indicatorMenu && <div className="zk-popover zk-indicators">{INDICATORS.map(([key, label]) => <button key={key} type="button" className={props.activeIndicators.has(key) ? 'is-selected' : undefined} onClick={() => toggleIndicator(key)}><span className="zk-check">{props.activeIndicators.has(key) ? '✓' : ''}</span>{label}</button>)}</div>}
         </div>
         <ToolButton title="Chart layout" className="zk-optional" onClick={changeLayout}><Icon name="layout"/><span className="zk-tool-label">{layout}</span></ToolButton>
