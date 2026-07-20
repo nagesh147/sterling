@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useKitePositions } from '../../hooks/useKite';
+import { useKitePositions, useSyncKiteWatchlist } from '../../hooks/useKite';
 import type { WatchItem } from '../../types/kite';
 import { k as t } from '../../styles/kiteUI';
 import { SterlingWatchList } from './SterlingWatchList';
@@ -17,13 +17,13 @@ function readWatchlist(): WatchItem[] {
   }
 }
 
-function watchSignature(items: WatchItem[]): string {
-  return items.map((item) => `${item.symbol}:${item.token}:${item.lot_size ?? ''}:${item.expiry ?? ''}`).join('|');
-}
-
 function writeWatchlist(items: WatchItem[]) {
   localStorage.setItem(WATCH_KEY, JSON.stringify(items));
   window.dispatchEvent(new Event('kite-watchlist-storage-sync'));
+}
+
+function watchSignature(items: WatchItem[]): string {
+  return items.map((item) => `${item.symbol}:${item.token}:${item.lot_size ?? ''}:${item.expiry ?? ''}`).join('|');
 }
 
 function positionToWatchItem(position: any): WatchItem | null {
@@ -42,6 +42,23 @@ function positionToWatchItem(position: any): WatchItem | null {
   };
 }
 
+function syncItemToPositionWatchItem(item: any): WatchItem | null {
+  const source = String(item?.source || item?.sub || '').toLowerCase();
+  if (!source.includes('position')) return null;
+  const symbol = String(item?.symbol || '').trim();
+  if (!symbol) return null;
+  const [, fallbackName = symbol] = symbol.split(':');
+  const token = Number(item?.token || item?.instrument_token || 0);
+  return {
+    symbol,
+    token: Number.isFinite(token) ? token : 0,
+    name: String(item?.name || fallbackName),
+    sub: String(item?.sub || 'open position'),
+    lot_size: item?.lot_size,
+    expiry: item?.expiry,
+  };
+}
+
 function dedupeItems(items: WatchItem[]): WatchItem[] {
   const seen = new Set<string>();
   const out: WatchItem[] = [];
@@ -55,8 +72,14 @@ function dedupeItems(items: WatchItem[]): WatchItem[] {
 }
 
 function positionsToWatchItems(positions: { net?: any[]; day?: any[] } | undefined): WatchItem[] {
-  const rows = [...(positions?.net || []), ...(positions?.day || [])];
-  return dedupeItems(rows.map(positionToWatchItem).filter(Boolean) as WatchItem[]);
+  // Only net positions represent still-open positions. `day` also contains
+  // closed/intraday-touched symbols, which is why ICICI was being added even
+  // after its net quantity was zero.
+  return dedupeItems((positions?.net || []).map(positionToWatchItem).filter(Boolean) as WatchItem[]);
+}
+
+function syncItemsToPositionWatchItems(items: any[] | undefined): WatchItem[] {
+  return dedupeItems((items || []).map(syncItemToPositionWatchItem).filter(Boolean) as WatchItem[]);
 }
 
 function SyncPositionsIcon() {
@@ -81,11 +104,13 @@ export function SterlingWatchListWithHoldingsSync({
   const [childKey, setChildKey] = useState(0);
   const [autoAttempted, setAutoAttempted] = useState(() => hadWatchStorageOnMount || localStorage.getItem(MANUAL_EMPTY_KEY) === '1');
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [searchActive, setSearchActive] = useState(false);
   const previousCountRef = useRef(watchSnapshot.length);
   const watchSignatureRef = useRef(watchSignature(watchSnapshot));
   const autoSeededRef = useRef(false);
 
   const positions = useKitePositions(true);
+  const watchlistSync = useSyncKiteWatchlist();
   const positionItems = useMemo(() => positionsToWatchItems(positions.data), [positions.data]);
 
   const refreshSnapshot = useCallback(() => {
@@ -100,9 +125,6 @@ export function SterlingWatchListWithHoldingsSync({
   }, []);
 
   useEffect(() => {
-    // Same-tab writes dispatch kite-watchlist-storage-sync; cross-tab writes emit
-    // storage. Polling localStorage every 500ms created a new array and rerendered
-    // the entire watchlist continuously, even while the user was only hovering.
     window.addEventListener('storage', refreshSnapshot);
     window.addEventListener('focus', refreshSnapshot);
     window.addEventListener('kite-watchlist-storage-sync', refreshSnapshot);
@@ -152,19 +174,30 @@ export function SterlingWatchListWithHoldingsSync({
     setManualRefreshing(true);
     try {
       const result = await positions.refetch();
-      addMissingPositions(positionsToWatchItems(result.data));
+      let items = positionsToWatchItems(result.data);
+      if (items.length === 0) {
+        const synced = await watchlistSync.mutateAsync();
+        items = syncItemsToPositionWatchItems(synced.items as any[]);
+      }
+      addMissingPositions(items);
     } finally {
       setManualRefreshing(false);
     }
-  }, [addMissingPositions, positions]);
+  }, [addMissingPositions, positions, watchlistSync]);
+
+  const handleShellInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLInputElement | null;
+    if (target?.tagName === 'INPUT' && target.placeholder === 'Search') {
+      setSearchActive(target.value.trim().length > 0);
+    }
+  }, []);
 
   const freshEmptyBoot = !hadWatchStorageOnMount && !manualEmpty;
   useEffect(() => {
-    if (!freshEmptyBoot || autoSeededRef.current || positions.isLoading || positions.isFetching) return;
+    if (!freshEmptyBoot || autoSeededRef.current || positions.isLoading || positions.isFetching || watchlistSync.isPending) return;
     autoSeededRef.current = true;
-    if (positionItems.length > 0) addMissingPositions();
-    setAutoAttempted(true);
-  }, [addMissingPositions, freshEmptyBoot, positionItems.length, positions.isFetching, positions.isLoading]);
+    void refreshAndSyncPositions().finally(() => setAutoAttempted(true));
+  }, [freshEmptyBoot, positions.isFetching, positions.isLoading, refreshAndSyncPositions, watchlistSync.isPending]);
 
   const watchedSymbols = useMemo(() => new Set(watchSnapshot.map((item) => item.symbol)), [watchSnapshot]);
   const missingPositions = useMemo(
@@ -172,17 +205,19 @@ export function SterlingWatchListWithHoldingsSync({
     [positionItems, watchedSymbols],
   );
 
-  const refreshing = manualRefreshing || positions.isLoading || positions.isFetching;
+  const refreshing = manualRefreshing || positions.isLoading || positions.isFetching || watchlistSync.isPending;
+  const hasSyncError = positions.isError || watchlistSync.isError;
   const syncTitle = refreshing
     ? 'Refreshing Kite open positions…'
     : missingPositions.length > 0
       ? `Refresh and sync ${missingPositions.length} missing open position${missingPositions.length === 1 ? '' : 's'}`
-      : positions.isError
-        ? 'Retry Kite positions refresh'
+      : hasSyncError
+        ? 'Retry Kite open positions refresh'
         : 'Refresh Kite open positions';
-  const hideDefaultEmptyPrompt = watchSnapshot.length === 0 && !manualEmpty;
+  const showEmptyPrompt = watchSnapshot.length === 0 && !searchActive && (manualEmpty || autoAttempted || hasSyncError);
+  const hideDefaultEmptyPrompt = watchSnapshot.length === 0 && !searchActive;
 
-  if (freshEmptyBoot && !autoAttempted && !positions.isError) {
+  if (freshEmptyBoot && !autoAttempted && !hasSyncError) {
     return (
       <div style={{ height: '100%', background: t.bg, color: t.dim, fontFamily: t.fontFamily, display: 'flex', flexDirection: 'column' }}>
         <div style={{ height: 50, borderBottom: `1px solid ${t.border}` }} />
@@ -192,7 +227,12 @@ export function SterlingWatchListWithHoldingsSync({
   }
 
   return (
-    <div className="kite-watchlist-sync-shell" style={{ position: 'relative', height: '100%' }}>
+    <div
+      className="kite-watchlist-sync-shell"
+      style={{ position: 'relative', height: '100%' }}
+      onInputCapture={handleShellInput}
+      onChangeCapture={handleShellInput}
+    >
       <style>{`
         .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child { margin-right: 36px; }
         @keyframes kitePositionsRefreshSpin { to { transform: rotate(360deg); } }
@@ -200,6 +240,20 @@ export function SterlingWatchListWithHoldingsSync({
       <SterlingWatchList key={childKey} onOpenInstrument={onOpenInstrument} />
       {hideDefaultEmptyPrompt && (
         <div aria-hidden style={{ position: 'absolute', top: 50, left: 0, right: 0, bottom: 0, zIndex: 15, background: t.bg, pointerEvents: 'none' }} />
+      )}
+      {showEmptyPrompt && (
+        <div style={{ position: 'absolute', top: 50, left: 0, right: 0, bottom: 0, zIndex: 20, padding: 32, textAlign: 'center', color: t.dim, fontSize: 13, background: t.bg }}>
+          <p style={{ marginBottom: 16 }}>Nothing here.</p>
+          <p>Use the search bar to add instruments.</p>
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => void refreshAndSyncPositions()}
+            style={{ marginTop: 24, padding: '8px 16px', background: t.surface, border: `1px solid ${t.border}`, borderRadius: 4, color: t.blue, cursor: refreshing ? 'wait' : 'pointer', fontSize: 13 }}
+          >
+            {refreshing ? 'Syncing…' : 'Sync open positions from Kite'}
+          </button>
+        </div>
       )}
       <div style={{ position: 'absolute', top: 13, right: 10, zIndex: 25, display: 'inline-flex', alignItems: 'center' }}>
         <button
