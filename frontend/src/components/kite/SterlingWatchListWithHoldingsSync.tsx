@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useKiteHoldings } from '../../hooks/useKite';
+import { useKitePositions } from '../../hooks/useKite';
 import type { WatchItem } from '../../types/kite';
 import { k as t } from '../../styles/kiteUI';
 import { SterlingWatchList } from './SterlingWatchList';
@@ -26,16 +26,19 @@ function writeWatchlist(items: WatchItem[]) {
   window.dispatchEvent(new Event('kite-watchlist-storage-sync'));
 }
 
-function holdingToWatchItem(holding: any): WatchItem | null {
-  const tradingsymbol = String(holding?.tradingsymbol || holding?.trading_symbol || holding?.symbol || '').trim();
+function positionToWatchItem(position: any): WatchItem | null {
+  const qty = Number(position?.quantity ?? position?.qty ?? position?.net_quantity ?? 0);
+  if (!Number.isFinite(qty) || qty === 0) return null;
+  const tradingsymbol = String(position?.tradingsymbol || position?.trading_symbol || position?.symbol || '').trim();
   if (!tradingsymbol) return null;
-  const exchange = String(holding?.exchange || 'NSE').trim() || 'NSE';
-  const token = Number(holding?.instrument_token || holding?.token || 0);
+  const exchange = String(position?.exchange || 'NFO').trim() || 'NFO';
+  const token = Number(position?.instrument_token || position?.token || 0);
+  const product = String(position?.product || '').trim();
   return {
     symbol: `${exchange}:${tradingsymbol}`,
     token: Number.isFinite(token) ? token : 0,
     name: tradingsymbol,
-    sub: `${exchange} · holding`,
+    sub: product ? `${exchange} · ${product} position` : `${exchange} · open position`,
   };
 }
 
@@ -51,11 +54,12 @@ function dedupeItems(items: WatchItem[]): WatchItem[] {
   return out;
 }
 
-function holdingsToWatchItems(holdings: any[]): WatchItem[] {
-  return dedupeItems(holdings.map(holdingToWatchItem).filter(Boolean) as WatchItem[]);
+function positionsToWatchItems(positions: { net?: any[]; day?: any[] } | undefined): WatchItem[] {
+  const rows = [...(positions?.net || []), ...(positions?.day || [])];
+  return dedupeItems(rows.map(positionToWatchItem).filter(Boolean) as WatchItem[]);
 }
 
-function SyncHoldingsIcon() {
+function SyncPositionsIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
@@ -81,8 +85,8 @@ export function SterlingWatchListWithHoldingsSync({
   const watchSignatureRef = useRef(watchSignature(watchSnapshot));
   const autoSeededRef = useRef(false);
 
-  const holdings = useKiteHoldings(true);
-  const holdingItems = useMemo(() => holdingsToWatchItems(holdings.data || []), [holdings.data]);
+  const positions = useKitePositions(true);
+  const positionItems = useMemo(() => positionsToWatchItems(positions.data), [positions.data]);
 
   const refreshSnapshot = useCallback(() => {
     const next = readWatchlist();
@@ -122,7 +126,7 @@ export function SterlingWatchListWithHoldingsSync({
     previousCountRef.current = currentCount;
   }, [watchSnapshot.length]);
 
-  const addMissingHoldings = useCallback((items: WatchItem[] = holdingItems) => {
+  const addMissingPositions = useCallback((items: WatchItem[] = positionItems) => {
     const current = readWatchlist();
     const existing = new Set(current.map((item) => item.symbol));
     const missing = items.filter((item) => !existing.has(item.symbol));
@@ -142,47 +146,47 @@ export function SterlingWatchListWithHoldingsSync({
     setWatchSnapshot(next);
     setChildKey((key) => key + 1);
     return true;
-  }, [holdingItems]);
+  }, [positionItems]);
 
-  const refreshAndSyncHoldings = useCallback(async () => {
+  const refreshAndSyncPositions = useCallback(async () => {
     setManualRefreshing(true);
     try {
-      const result = await holdings.refetch();
-      addMissingHoldings(holdingsToWatchItems(result.data || []));
+      const result = await positions.refetch();
+      addMissingPositions(positionsToWatchItems(result.data));
     } finally {
       setManualRefreshing(false);
     }
-  }, [addMissingHoldings, holdings]);
+  }, [addMissingPositions, positions]);
 
   const freshEmptyBoot = !hadWatchStorageOnMount && !manualEmpty;
   useEffect(() => {
-    if (!freshEmptyBoot || autoSeededRef.current || holdings.isLoading || holdings.isFetching) return;
+    if (!freshEmptyBoot || autoSeededRef.current || positions.isLoading || positions.isFetching) return;
     autoSeededRef.current = true;
-    if (holdingItems.length > 0) addMissingHoldings();
+    if (positionItems.length > 0) addMissingPositions();
     setAutoAttempted(true);
-  }, [addMissingHoldings, freshEmptyBoot, holdingItems.length, holdings.isFetching, holdings.isLoading]);
+  }, [addMissingPositions, freshEmptyBoot, positionItems.length, positions.isFetching, positions.isLoading]);
 
   const watchedSymbols = useMemo(() => new Set(watchSnapshot.map((item) => item.symbol)), [watchSnapshot]);
-  const missingHoldings = useMemo(
-    () => holdingItems.filter((item) => !watchedSymbols.has(item.symbol)),
-    [holdingItems, watchedSymbols],
+  const missingPositions = useMemo(
+    () => positionItems.filter((item) => !watchedSymbols.has(item.symbol)),
+    [positionItems, watchedSymbols],
   );
 
-  const refreshing = manualRefreshing || holdings.isLoading || holdings.isFetching;
+  const refreshing = manualRefreshing || positions.isLoading || positions.isFetching;
   const syncTitle = refreshing
-    ? 'Refreshing Kite holdings…'
-    : missingHoldings.length > 0
-      ? `Refresh and sync ${missingHoldings.length} missing Kite holding${missingHoldings.length === 1 ? '' : 's'}`
-      : holdings.isError
-        ? 'Retry Kite holdings refresh'
-        : 'Refresh Kite holdings';
+    ? 'Refreshing Kite open positions…'
+    : missingPositions.length > 0
+      ? `Refresh and sync ${missingPositions.length} missing open position${missingPositions.length === 1 ? '' : 's'}`
+      : positions.isError
+        ? 'Retry Kite positions refresh'
+        : 'Refresh Kite open positions';
   const hideDefaultEmptyPrompt = watchSnapshot.length === 0 && !manualEmpty;
 
-  if (freshEmptyBoot && !autoAttempted && !holdings.isError) {
+  if (freshEmptyBoot && !autoAttempted && !positions.isError) {
     return (
       <div style={{ height: '100%', background: t.bg, color: t.dim, fontFamily: t.fontFamily, display: 'flex', flexDirection: 'column' }}>
         <div style={{ height: 50, borderBottom: `1px solid ${t.border}` }} />
-        <div style={{ padding: 24, fontSize: 12 }}>Syncing Kite holdings…</div>
+        <div style={{ padding: 24, fontSize: 12 }}>Syncing Kite open positions…</div>
       </div>
     );
   }
@@ -191,7 +195,7 @@ export function SterlingWatchListWithHoldingsSync({
     <div className="kite-watchlist-sync-shell" style={{ position: 'relative', height: '100%' }}>
       <style>{`
         .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child { margin-right: 36px; }
-        @keyframes kiteHoldingsRefreshSpin { to { transform: rotate(360deg); } }
+        @keyframes kitePositionsRefreshSpin { to { transform: rotate(360deg); } }
       `}</style>
       <SterlingWatchList key={childKey} onOpenInstrument={onOpenInstrument} />
       {hideDefaultEmptyPrompt && (
@@ -201,13 +205,13 @@ export function SterlingWatchListWithHoldingsSync({
         <button
           type="button"
           title={syncTitle}
-          aria-label="Refresh holdings from Kite"
+          aria-label="Refresh open positions from Kite"
           aria-busy={refreshing}
-          onClick={(event) => { event.stopPropagation(); void refreshAndSyncHoldings(); }}
+          onClick={(event) => { event.stopPropagation(); void refreshAndSyncPositions(); }}
           style={{ width: 24, height: 24, padding: 0, borderRadius: 4, border: 'none', background: 'transparent', color: t.blue, opacity: 1, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
         >
-          <span style={{ display: 'inline-flex', animation: refreshing ? 'kiteHoldingsRefreshSpin 0.8s linear infinite' : undefined }}>
-            <SyncHoldingsIcon />
+          <span style={{ display: 'inline-flex', animation: refreshing ? 'kitePositionsRefreshSpin 0.8s linear infinite' : undefined }}>
+            <SyncPositionsIcon />
           </span>
         </button>
       </div>
