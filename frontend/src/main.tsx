@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles/globals.css';
 import './styles/performanceOverrides.css';
@@ -15,7 +15,29 @@ installKiteChartTimezone(); // exchange candles and crosshair labels always rend
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element not found');
 
-createRoot(root).render(<App />);
+function SterlingRoot() {
+  useEffect(() => {
+    const boot = document.getElementById('sterling-preboot');
+    if (!boot) return;
+
+    // Keep the static shell through the first committed React frame, then crossfade it.
+    const frame = window.requestAnimationFrame(() => {
+      boot.classList.add('sterling-preboot-leaving');
+      const timer = window.setTimeout(() => boot.remove(), 180);
+      boot.setAttribute('data-remove-timer', String(timer));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      const timer = Number(boot.getAttribute('data-remove-timer'));
+      if (Number.isFinite(timer)) window.clearTimeout(timer);
+    };
+  }, []);
+
+  return <App />;
+}
+
+createRoot(root).render(<SterlingRoot />);
 
 // Dev-only visual feedback overlay (agentation): click UI elements, annotate, and copy
 // structured selector context to hand to the coding agent. Lazy dynamic import + the
