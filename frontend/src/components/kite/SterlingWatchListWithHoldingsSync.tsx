@@ -73,8 +73,8 @@ function dedupeItems(items: WatchItem[]): WatchItem[] {
 
 function positionsToWatchItems(positions: { net?: any[]; day?: any[] } | undefined): WatchItem[] {
   // Only net positions represent still-open positions. `day` also contains
-  // closed/intraday-touched symbols, which is why ICICI was being added even
-  // after its net quantity was zero.
+  // closed/intraday-touched symbols, which is why closed symbols can otherwise
+  // be re-added after their net quantity is zero.
   return dedupeItems((positions?.net || []).map(positionToWatchItem).filter(Boolean) as WatchItem[]);
 }
 
@@ -198,6 +198,8 @@ export function SterlingWatchListWithHoldingsSync({
     root.querySelectorAll('button').forEach((button) => {
       if (button.textContent?.trim() === 'Sync holdings from Kite') {
         button.textContent = 'Sync open positions from Kite';
+        button.setAttribute('title', 'Sync open positions from Kite');
+        button.setAttribute('aria-label', 'Sync open positions from Kite');
       }
     });
   }, []);
@@ -243,7 +245,7 @@ export function SterlingWatchListWithHoldingsSync({
       : hasSyncError
         ? 'Retry Kite open positions refresh'
         : 'Refresh Kite open positions';
-  const showEmptyPrompt = watchSnapshot.length === 0 && !searchActive && (manualEmpty || autoAttempted || hasSyncError);
+  const showEmptyPrompt = watchSnapshot.length === 0 && !searchActive;
   const hideDefaultEmptyPrompt = watchSnapshot.length === 0 && !searchActive;
 
   if (freshEmptyBoot && !autoAttempted && !hasSyncError) {
