@@ -10,6 +10,7 @@ import { heikinAshi, supertrend, type Candle, type STPoint } from '../../utils/i
 export type ChartRangeKey = '1D' | '5D' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'ALL';
 
 export interface ChartParityContext {
+  id: string;
   symbol: string;
   tf: string;
   rawCandles: any[];
@@ -30,8 +31,7 @@ interface RuntimeChartState {
   chart: any;
   firstSeries: any | null;
   mainSeries: any | null;
-  isMainChart: boolean;
-  context: ChartParityContext | null;
+  contextId: string | null;
   markerApi: any | null;
   queued: boolean;
 }
@@ -39,7 +39,8 @@ interface RuntimeChartState {
 const PATCH_FLAG = Symbol.for('sterling.chartParityPatched');
 const chartStates = new WeakMap<any, RuntimeChartState>();
 const liveChartStates = new Set<RuntimeChartState>();
-let currentContext: ChartParityContext | null = null;
+const contexts = new Map<string, ChartParityContext>();
+let pendingContextId: string | null = null;
 let installed = false;
 
 const DAY_SECONDS = 86_400;
@@ -76,10 +77,13 @@ export function directionFlipMarkers(
   const markers: SupertrendFlipMarker[] = [];
   const count = Math.min(points.length, times.length);
   for (let index = 1; index < count; index += 1) {
-    if (points[index].direction === points[index - 1].direction) continue;
-    const up = points[index].direction === 'up';
+    const previous = points[index - 1]?.direction;
+    const current = points[index]?.direction;
+    const time = times[index];
+    if (!previous || !current || previous === current || !Number.isFinite(time)) continue;
+    const up = current === 'up';
     markers.push({
-      time: times[index],
+      time,
       position: up ? 'belowBar' : 'aboveBar',
       color: up ? green : red,
       shape: up ? 'arrowUp' : 'arrowDown',
@@ -120,8 +124,6 @@ export function buildSupertrendFlipMarkers(context: ChartParityContext): Supertr
   for (const config of activeSupertrendConfigs(context)) {
     const points = supertrend(highs, lows, closes, Math.max(1, config.period), Math.max(0.1, config.multiplier));
     for (const marker of directionFlipMarkers(points, times, green, red)) {
-      // Multiple SuperTrends often flip on the same candle. One clean arrow per
-      // direction matches Kite better than three perfectly overlapping glyphs.
       const key = `${marker.time}:${marker.shape}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -151,9 +153,26 @@ export function chartRangeStart(candles: Pick<Candle, 'time'>[], range: ChartRan
   return lastTime - days[range] * DAY_SECONDS;
 }
 
+export function resolvedChartRange(
+  candles: Pick<Candle, 'time'>[],
+  range: ChartRangeKey,
+): { from: number; to: number } | null {
+  if (!candles.length || range === 'ALL') return null;
+  const first = candles[0].time;
+  const to = candles[candles.length - 1].time;
+  const requested = chartRangeStart(candles, range);
+  if (requested == null || requested <= first) return null;
+  return { from: requested, to };
+}
+
+function stateContext(state: RuntimeChartState) {
+  return state.contextId ? contexts.get(state.contextId) || null : null;
+}
+
 function updateMarkers(state: RuntimeChartState) {
-  if (!state.isMainChart || !state.mainSeries || !state.context) return;
-  const markers = buildSupertrendFlipMarkers(state.context);
+  const context = stateContext(state);
+  if (!state.mainSeries || !context) return;
+  const markers = buildSupertrendFlipMarkers(context);
   try {
     if (!state.markerApi) state.markerApi = createSeriesMarkers(state.mainSeries, markers as any);
     else state.markerApi.setMarkers(markers as any);
@@ -172,28 +191,36 @@ function scheduleMarkerUpdate(state: RuntimeChartState) {
 }
 
 export function setChartParityContext(context: ChartParityContext) {
-  currentContext = context;
+  contexts.set(context.id, context);
+  pendingContextId = context.id;
   for (const state of liveChartStates) {
-    if (!state.isMainChart) continue;
-    state.context = context;
+    if (state.contextId !== context.id) continue;
     scheduleMarkerUpdate(state);
   }
 }
 
-export function setChartVisibleRange(range: ChartRangeKey) {
+export function removeChartParityContext(contextId: string) {
+  contexts.delete(contextId);
+  if (pendingContextId === contextId) pendingContextId = null;
   for (const state of liveChartStates) {
-    if (!state.isMainChart || !state.context) continue;
+    if (state.contextId !== contextId) continue;
+    state.contextId = null;
+    try { state.markerApi?.setMarkers([]); } catch {}
+  }
+}
+
+export function setChartVisibleRange(contextId: string, range: ChartRangeKey) {
+  const context = contexts.get(contextId);
+  if (!context) return;
+  const candles = normalizeChartCandles(context.rawCandles);
+  const visibleRange = resolvedChartRange(candles, range);
+
+  for (const state of liveChartStates) {
+    if (state.contextId !== contextId) continue;
     try {
       const timeScale = state.chart.timeScale();
-      if (range === 'ALL') {
-        timeScale.fitContent();
-        continue;
-      }
-      const candles = normalizeChartCandles(state.context.rawCandles);
-      if (!candles.length) continue;
-      const from = chartRangeStart(candles, range);
-      const to = candles[candles.length - 1].time;
-      if (from != null) timeScale.setVisibleRange({ from: from as any, to: to as any });
+      if (!visibleRange) timeScale.fitContent();
+      else timeScale.setVisibleRange({ from: visibleRange.from as any, to: visibleRange.to as any });
     } catch {
       // Ignore a chart that is concurrently rebuilding.
     }
@@ -201,9 +228,9 @@ export function setChartVisibleRange(range: ChartRangeKey) {
 }
 
 /**
- * Adds the missing SuperTrend flip markers without forcing the chart component
- * to rebuild on every candle poll. We patch the public chart API prototype once,
- * then keep a separate marker primitive updated from the wrapper's fresh props.
+ * Tracks the main lightweight-charts instance created by the existing advanced
+ * component, then attaches one marker primitive to its primary price series.
+ * The patch is installed once and all user data stays scoped by wrapper id.
  */
 export function installChartParityRuntime() {
   if (installed || typeof document === 'undefined' || import.meta.env.MODE === 'test') return;
@@ -240,8 +267,7 @@ export function installChartParityRuntime() {
           chart: this,
           firstSeries: null,
           mainSeries: null,
-          isMainChart: false,
-          context: currentContext,
+          contextId: pendingContextId,
           markerApi: null,
           queued: false,
         };
@@ -256,30 +282,22 @@ export function installChartParityRuntime() {
         seriesDefinition === AreaSeries
       )) {
         state.mainSeries = series;
-        state.isMainChart = true;
       }
 
       const title = String(options?.title || '');
-      if (/^(ST\s|SuperTrend)/i.test(title)) {
-        state.isMainChart = true;
-        state.mainSeries ||= state.firstSeries;
-      }
+      if (/^(ST\s|SuperTrend)/i.test(title)) state.mainSeries ||= state.firstSeries;
 
       try {
         const originalSetData = series.setData.bind(series);
         series.setData = (data: any[]) => {
           originalSetData(data);
-          if (series === state!.mainSeries || /^(ST\s|SuperTrend)/i.test(title)) {
-            state!.context = currentContext || state!.context;
-            scheduleMarkerUpdate(state!);
-          }
+          if (series === state!.mainSeries || /^(ST\s|SuperTrend)/i.test(title)) scheduleMarkerUpdate(state!);
         };
       } catch {
-        // The library currently exposes writable methods; retain normal behavior
-        // should a future release make the series API non-writable.
+        // Keep normal chart behavior if a future library release seals methods.
       }
 
-      if (state.isMainChart) scheduleMarkerUpdate(state);
+      if (state.mainSeries) scheduleMarkerUpdate(state);
       return series;
     };
 
