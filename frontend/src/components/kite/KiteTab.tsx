@@ -21,13 +21,14 @@ import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
 import { EngineTerminal } from './EngineTerminal';
 import { KiteTicker } from './KiteTicker';
-import { useKiteAutoSession } from '../../hooks/useKite';
+import { useKiteAutoSession, useKiteStatus } from '../../hooks/useKite';
 import { OrderWindow } from './OrderWindow';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { BasketPane } from './BasketPane';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { MacMotionProvider } from './mac/MacMotionProvider';
 import { MacSectionFade } from './mac/MacSectionFade';
+import { MacBootOverlay } from './MacLoadingSurface';
 import { k } from '../../styles/kiteUI';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
@@ -83,6 +84,7 @@ export function KiteTab() {
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
   const [basketOpen, setBasketOpen] = useState(false);
   const basketCount = useKiteBasketStore((s) => s.entries.length);
+  const { data: kiteStatus, isLoading: kiteStatusLoading } = useKiteStatus();
   useKiteAutoSession();
 
   // Listen for nav clicks dispatched from the Sterling top row.
@@ -160,6 +162,7 @@ export function KiteTab() {
 
   return (
     <MacMotionProvider>
+      <MacBootOverlay active={kiteStatusLoading && !kiteStatus} />
       <KiteLayout
         activeNav={nav}
         onNavClick={handleNavClick}
