@@ -1,70 +1,135 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  useConvertKitePosition, useKiteHoldings, useKitePositions,
-  useKiteAuctions, useInitiateHoldingsAuth, useKiteLtp, usePlaceKiteOrder
+  useConvertKitePosition,
+  useInitiateHoldingsAuth,
+  useKiteAuctions,
+  useKiteHoldings,
+  useKiteLtp,
+  useKitePositions,
+  usePlaceKiteOrder,
 } from '../../hooks/useKite';
-
-import { InstrumentLabel } from './InstrumentLabel';
-import { KiteActionButtons } from './KiteActionButtons';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
-import { EnginePositionsPane } from './EnginePositionsPane';
-import { toCsv, downloadCsv } from '../../utils/csvExport';
-import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
-import { KiteSettingsPopover } from './KiteSettingsPopover';
 import { useKiteBasketStore } from '../../store/useKiteBasketStore';
 import { notifyOrder } from '../../store/useKiteNotifications';
+import { downloadCsv, toCsv } from '../../utils/csvExport';
+import { InstrumentLabel } from './InstrumentLabel';
+import { KiteActionButtons } from './KiteActionButtons';
+import { EnginePositionsPane } from './EnginePositionsPane';
+import { KitePortfolioAnalyticsModal } from './KitePortfolioAnalyticsModal';
+import { KiteSettingsPopover } from './KiteSettingsPopover';
 
-const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: `1px solid #f1f1f1`, borderRadius: 10, padding: 14, marginBottom: 14 },
-  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 2, marginBottom: 10, fontWeight: 700 },
-  th: { textAlign: 'left' as const, color: '#9b9b9b', fontSize: 12, fontWeight: 400, padding: '12px 16px', borderBottom: `1px solid #f1f1f1` },
-  td: { padding: '12px 16px', fontSize: 13, color: '#444', borderBottom: `1px solid #f1f1f1`, verticalAlign: 'middle' },
-  hint: { color: '#9b9b9b', fontSize: 13 },
-  inSm: { background: '#fff', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 6, padding: '3px 6px', fontFamily: 'inherit', fontSize: 11 },
-  pill: { padding: '2px 6px', borderRadius: 2, fontSize: 10, fontWeight: 500, background: '#f1f1f1', color: '#9b9b9b', letterSpacing: 0.3 },
+const COLORS = {
+  text: '#444',
+  muted: '#9b9b9b',
+  border: '#ededed',
+  rowHover: '#fafafa',
+  pnlBg: '#fbfbfb',
+  blue: '#387ed1',
+  green: '#4caf50',
+  red: '#df514c',
 };
 
-const num = (v: any) => Number(v ?? 0);
-const pnlColor = (v: number) => (v > 0 ? '#4caf50' : v < 0 ? '#df514c' : '#9b9b9b');
+const S: Record<string, React.CSSProperties> = {
+  th: {
+    textAlign: 'left', color: COLORS.muted, fontSize: 12, fontWeight: 400,
+    padding: '11px 12px', borderBottom: `1px solid ${COLORS.border}`,
+    whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums',
+  },
+  td: {
+    padding: '10px 12px', fontSize: 13, color: COLORS.text,
+    borderBottom: `1px solid ${COLORS.border}`, verticalAlign: 'middle',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  hint: { color: COLORS.muted, fontSize: 13, padding: '14px 0' },
+  inSm: {
+    background: '#fff', color: COLORS.text, border: `1px solid #dedede`, borderRadius: 3,
+    padding: '4px 6px', fontFamily: 'inherit', fontSize: 11, outline: 'none',
+  },
+  pill: {
+    padding: '2px 7px', borderRadius: 2, fontSize: 10, fontWeight: 500,
+    background: '#f1f1f1', color: COLORS.muted, letterSpacing: 0.2,
+  },
+};
 
-// Exported so it can be unit-tested directly (also reachable from a
-// PortfolioPane-level render test): wired into the Positions row via the
-// "Convert" toggle in the hover-actions area, which swaps the Chg% cell for
-// this control when `expandedConvertId` matches the row (see below).
+const num = (value: unknown) => Number(value ?? 0);
+const pnlColor = (value: number) => value > 0 ? COLORS.green : value < 0 ? COLORS.red : COLORS.muted;
+const positionKey = (p: any) => `${p.exchange}:${p.tradingsymbol}:${p.product || ''}`;
+const formatMoney = (value: number, withPlus = true) =>
+  `${withPlus && value > 0 ? '+' : ''}${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function SearchIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function ToolbarLink({ children, onClick, muted = false }: { children: React.ReactNode; onClick: () => void; muted?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        border: 0, background: 'transparent', padding: 0, color: muted ? COLORS.muted : COLORS.blue,
+        cursor: 'pointer', font: 'inherit', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function ConvertControl({ p }: { p: any }) {
   const convert = useConvertKitePosition();
-  const products = ['MIS', 'CNC', 'NRML'].filter((x) => x !== p.product);
-  const [target, setTarget] = useState(products[0]);
+  const products = ['MIS', 'CNC', 'NRML'].filter((product) => product !== p.product);
+  const [target, setTarget] = useState(products[0] || 'NRML');
   const fullQty = Math.abs(num(p.quantity));
   const [qty, setQty] = useState(fullQty);
-  if (!num(p.quantity)) return null;
-  const invalidQty = !(qty > 0) || qty > fullQty;
+
+  useEffect(() => {
+    setQty(fullQty);
+  }, [fullQty]);
+
+  if (!num(p.quantity) || products.length === 0) return null;
+  const invalidQty = !Number.isFinite(qty) || qty < 1 || qty > fullQty;
+
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+    <div style={{ display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'flex-end' }}>
       <input
-        type="number" min={1} max={fullQty} value={qty}
-        onChange={(e) => setQty(Number(e.target.value))}
-        style={{ ...S.inSm, width: 56, textAlign: 'right' }}
+        aria-label="Convert quantity"
+        type="number"
+        min={1}
+        max={fullQty}
+        value={Number.isFinite(qty) ? qty : ''}
+        onChange={(event) => setQty(Number(event.target.value))}
+        style={{ ...S.inSm, width: 52, textAlign: 'right' }}
         title={`Max: ${fullQty}`}
       />
-      <select style={S.inSm} value={target} onChange={(e) => setTarget(e.target.value)}>
-        {products.map((x) => <option key={x} value={x}>{x}</option>)}
+      <select aria-label="Convert target product" style={S.inSm} value={target} onChange={(event) => setTarget(event.target.value)}>
+        {products.map((product) => <option key={product} value={product}>{product}</option>)}
       </select>
-      <span
-        style={{ cursor: invalidQty ? 'not-allowed' : 'pointer', color: invalidQty ? '#bdbdbd' : convert.isError ? '#df514c' : '#387ed1', fontSize: 11 }}
-        title={invalidQty ? `Enter a quantity between 1 and ${fullQty}` : convert.isError ? (convert.error as Error).message : `Convert ${qty} of ${fullQty} ${p.product} → ${target}`}
+      <button
+        type="button"
+        disabled={invalidQty || convert.isPending}
+        title={invalidQty ? `Enter a quantity between 1 and ${fullQty}` : convert.isError ? (convert.error as Error).message : `Convert ${qty} of ${fullQty} ${p.product} to ${target}`}
         onClick={() => {
           if (invalidQty) return;
           convert.mutate({
-            tradingsymbol: p.tradingsymbol, exchange: p.exchange,
-            transaction_type: num(p.quantity) >= 0 ? 'BUY' : 'SELL', position_type: 'day',
-            quantity: qty, old_product: p.product, new_product: target,
+            tradingsymbol: p.tradingsymbol,
+            exchange: p.exchange,
+            transaction_type: num(p.quantity) >= 0 ? 'BUY' : 'SELL',
+            position_type: 'day',
+            quantity: qty,
+            old_product: p.product,
+            new_product: target,
           });
         }}
+        style={{ border: 0, background: 'transparent', padding: 0, font: 'inherit', fontSize: 11, color: invalidQty ? '#bdbdbd' : convert.isError ? COLORS.red : COLORS.blue, cursor: invalidQty ? 'not-allowed' : 'pointer' }}
       >
         {convert.isPending ? '…' : convert.isSuccess ? '✓' : 'convert'}
-      </span>
+      </button>
     </div>
   );
 }
@@ -73,167 +138,258 @@ function AuthoriseHoldingsButton() {
   const authorise = useInitiateHoldingsAuth();
   return (
     <button
-      style={{ background: '#387ed1', color: '#fff', border: `1px solid #387ed1`, borderRadius: 3, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}
-      title="Authorise holdings via CDSL TPIN (eDIS) — required to sell delivery holdings through the API"
+      type="button"
       disabled={authorise.isPending}
-      onClick={() => authorise.mutate({}, {
-        onSuccess: (res) => { if (res.authorise_url) window.open(res.authorise_url, '_blank', 'noopener'); },
-      })}
+      onClick={() => authorise.mutate({}, { onSuccess: (result) => { if (result.authorise_url) window.open(result.authorise_url, '_blank', 'noopener'); } })}
+      title="Authorise holdings via CDSL TPIN (eDIS)"
+      style={{ background: COLORS.blue, color: '#fff', border: `1px solid ${COLORS.blue}`, borderRadius: 3, padding: '5px 11px', fontSize: 11, fontWeight: 500, cursor: authorise.isPending ? 'wait' : 'pointer', fontFamily: 'inherit' }}
     >
-      {authorise.isPending ? 'Authorising…' : 'Authorise holdings (eDIS)'}
+      {authorise.isPending ? 'Authorising…' : 'Authorise holdings'}
     </button>
   );
 }
 
 function AuctionsSection() {
   const { data: auctions } = useKiteAuctions(true);
-  if (!auctions || auctions.length === 0) return null;
-  // Read-only by design this pass: real Kite lets you place an auction bid
-  // from this tab, but there's no backend endpoint for it yet (no POST route
-  // exists for auction participation) — explicit backlog item, see
-  // docs/superpowers/specs/2026-07-11-kite-order-management-parity-design.md.
+  if (!auctions?.length) return null;
   return (
-    <div style={{ marginTop: 48 }}>
-      <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', marginBottom: 24 }}>
-        Auctions <span style={{ color: '#9b9b9b', fontSize: 18 }}>({auctions.length})</span>
+    <section style={{ marginTop: 36 }}>
+      <h2 style={{ fontSize: 17, fontWeight: 400, color: COLORS.text, margin: '0 0 16px' }}>
+        Auctions <span style={{ color: COLORS.muted }}>({auctions.length})</span>
       </h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-        <thead><tr>
-          <th style={S.th}>Instrument</th>
-          <th style={S.th}>Auction #</th>
-          <th style={{ ...S.th, textAlign: 'right' }}>Qty.</th>
-          <th style={{ ...S.th, textAlign: 'right' }}>Last price</th>
-        </tr></thead>
-        <tbody>
-          {auctions.map((a: any, i: number) => (
-            <tr key={`${a.tradingsymbol}-${i}`}>
-              <td style={S.td}>
-                <span style={{ color: '#444', marginRight: 8 }}>{a.tradingsymbol}</span>
-                <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{a.exchange}</span>
-              </td>
-              <td style={{ ...S.td, color: '#444' }}>{a.auction_number}</td>
-              <td style={{ ...S.td, textAlign: 'right' }}>{num(a.quantity)}</td>
-              <td style={{ ...S.td, textAlign: 'right' }}>{num(a.last_price).toFixed(2)}</td>
+      <div className="portfolio-table-scroll">
+        <table className="portfolio-table" style={{ minWidth: 620 }}>
+          <thead><tr><th style={S.th}>Instrument</th><th style={S.th}>Auction #</th><th style={{ ...S.th, textAlign: 'right' }}>Qty.</th><th style={{ ...S.th, textAlign: 'right' }}>Last price</th></tr></thead>
+          <tbody>{auctions.map((auction: any, index: number) => (
+            <tr key={`${auction.tradingsymbol}-${index}`}>
+              <td style={S.td}>{auction.tradingsymbol} <span className="exchange-tag">{auction.exchange}</span></td>
+              <td style={S.td}>{auction.auction_number}</td>
+              <td style={{ ...S.td, textAlign: 'right' }}>{num(auction.quantity)}</td>
+              <td style={{ ...S.td, textAlign: 'right' }}>{num(auction.last_price).toFixed(2)}</td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ ...S.hint, marginTop: 8 }}>Shares from settlement shortfalls that are eligible for the exchange auction window.</div>
-    </div>
+          ))}</tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ProductPill({ product }: { product: string }) {
+  const style = product === 'NRML'
+    ? { background: 'rgba(200,86,162,.10)', color: '#c856a2' }
+    : product === 'MIS'
+      ? { background: 'rgba(56,126,209,.10)', color: COLORS.blue }
+      : {};
+  return <span style={{ ...S.pill, ...style }}>{product}</span>;
+}
+
+function SortHeader({ label, sortKey, currentSort, onSort, style }: any) {
+  const active = currentSort.key === sortKey && currentSort.dir;
+  return (
+    <th style={{ ...style, cursor: sortKey ? 'pointer' : 'default', userSelect: 'none' }} onClick={() => sortKey && onSort(sortKey)} className={sortKey ? 'sort-header' : undefined}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: style.textAlign === 'right' ? 'flex-end' : 'flex-start' }}>
+        {label}
+        {sortKey && <span className={`sort-icon ${active ? 'active' : ''}`} aria-hidden>{active ? (currentSort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>}
+      </div>
+    </th>
+  );
+}
+
+function PositionBreakdown({ positions }: { positions: any[] }) {
+  const rows = useMemo(
+    () => positions.filter((p) => num(p.pnl) !== 0).slice().sort((a, b) => num(a.pnl) - num(b.pnl)),
+    [positions],
+  );
+  if (!rows.length) return null;
+  const maxAbs = Math.max(...rows.map((row) => Math.abs(num(row.pnl))), 1);
+
+  return (
+    <section className="breakdown-section">
+      <h3>Breakdown</h3>
+      <div className="breakdown-list">
+        {rows.map((p) => {
+          const pnl = num(p.pnl);
+          const width = `${Math.max(1.5, Math.abs(pnl) / maxAbs * 100)}%`;
+          return (
+            <div key={`breakdown:${positionKey(p)}`} className="breakdown-row" title={`${p.tradingsymbol}: ${formatMoney(pnl)}`}>
+              <div className="breakdown-label"><InstrumentLabel symbol={p.tradingsymbol} /> ({p.product})</div>
+              <div className="breakdown-axis">
+                <div className="breakdown-half negative">{pnl < 0 && <div className="breakdown-bar negative" style={{ width }} />}</div>
+                <div className="breakdown-zero" />
+                <div className="breakdown-half positive">{pnl > 0 && <div className="breakdown-bar positive" style={{ width }} />}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
 export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
   const { data: holdings } = useKiteHoldings(true);
-  const { data: pos } = useKitePositions(true);
-  const rawPositions = (pos?.net ?? []).filter((p: any) => num(p.quantity) !== 0 || num(p.pnl) !== 0);
-
-  // Kite's /portfolio/positions last_price/pnl lag the live tick (Kite web overlays
-  // its ticker). Overlay the same live LTP the marketwatch uses and recompute P&L by
-  // the price delta — pnl = snapshot_pnl + (liveLtp - snapshot_ltp) * qty * multiplier —
-  // so LTP/P&L/Chg/Total track Kite web instead of showing a stale snapshot.
-  const posSymbols = rawPositions.map((p: any) => `${p.exchange}:${p.tradingsymbol}`);
+  const { data: positionResponse } = useKitePositions(true);
+  const rawPositions = (positionResponse?.net ?? []).filter((p: any) => num(p.quantity) !== 0 || num(p.pnl) !== 0);
+  const posSymbols = useMemo(() => Array.from(new Set(rawPositions.map((p: any) => `${p.exchange}:${p.tradingsymbol}`))), [rawPositions]);
   const { data: liveLtp } = useKiteLtp(posSymbols, posSymbols.length > 0);
-  const positions = rawPositions.map((p: any) => {
+
+  const positions = useMemo(() => rawPositions.map((p: any) => {
     const live = num(liveLtp?.[`${p.exchange}:${p.tradingsymbol}`]?.last_price);
-    if (live <= 0) return p;  // no live tick yet → keep the broker snapshot
-    const pnl = num(p.pnl) + (live - num(p.last_price)) * num(p.quantity) * (num(p.multiplier) || 1);
-    return { ...p, last_price: live, pnl };
-  });
+    if (live <= 0) return p;
+    const snapshotLtp = num(p.last_price);
+    const multiplier = num(p.multiplier) || 1;
+    return { ...p, last_price: live, pnl: num(p.pnl) + (live - snapshotLtp) * num(p.quantity) * multiplier };
+  }), [rawPositions, liveLtp]);
 
   const { openOrderWindow } = useOrderWindowStore();
-  const addToBasket = useKiteBasketStore((s) => s.add);
-
-  const handleOpenOrder = (symbol: string, initialSide: 'BUY' | 'SELL', initialQty: number, product: string, lastPx: number | null = null) => {
-    const [exchange, tradingsymbol] = symbol.split(':');
-    openOrderWindow({
-      symbol: tradingsymbol || symbol,
-      exchange: exchange || 'NSE',
-      initialSide,
-      initialQty,
-      lastPrice: lastPx || 0,
-      product: product as 'MIS' | 'CNC' | 'NRML',   // square off / add to the position in its own product
-    });
-  };
-
-  const qc = useQueryClient();
+  const addToBasket = useKiteBasketStore((state) => state.add);
+  const queryClient = useQueryClient();
   const placeOrder = usePlaceKiteOrder();
-  const [exitingSelected, setExitingSelected] = useState(false);
 
-  // Sequential, not Promise.all: a live market order that already filled
-  // can't be un-placed, so each leg must resolve before the next fires
-  // (mirrors placeAll() in BasketPane.tsx). Per-leg failures are swallowed
-  // here since usePlaceKiteOrder's own onError already surfaces a toast —
-  // one failed leg must not stop the remaining selected positions.
-  //
-  // useKitePositions polls every 5s (hooks/useKite.ts), and this loop can
-  // easily span more than one poll tick across several legs — a GTT, the
-  // auto-exec engine, or another device can close/shrink a leg mid-loop.
-  // So unlike the initial `targets` snapshot (used only for the confirm
-  // count/preview), each leg re-reads the LIVE broker snapshot straight out
-  // of the query cache immediately before firing: a leg that's since gone
-  // flat is skipped outright, and a leg that's shrunk fires sized to its
-  // current live quantity — never the possibly-stale click-time size, which
-  // could otherwise cross through zero into a brand-new, unintended position.
-  const exitSelected = async () => {
-    const targets = positions.filter((p: any) => selectedPos.has(`${p.exchange}:${p.tradingsymbol}`) && num(p.quantity) !== 0);
-    if (targets.length === 0) return;
-    const preview = targets.length <= 3
-      ? targets.map((p: any) => p.tradingsymbol).join(', ')
-      : `${targets.slice(0, 3).map((p: any) => p.tradingsymbol).join(', ')} +${targets.length - 3} more`;
-    if (!window.confirm(`Exit ${targets.length} selected position${targets.length !== 1 ? 's' : ''} (${preview}) at market price?`)) return;
-    setExitingSelected(true);
-    let skipped = 0;
-    for (const p of targets) {
-      const liveNet = qc.getQueryData<{ net: any[] }>(['kite-positions'])?.net ?? [];
-      const live = liveNet.find((x: any) => x.exchange === p.exchange && x.tradingsymbol === p.tradingsymbol && x.product === p.product);
-      const liveQty = live ? num(live.quantity) : 0;
-      if (liveQty === 0) { skipped++; continue; }  // gone flat OR converted to a different product since selection — either way, nothing left to exit under this (exchange, tradingsymbol, product) key
-      try {
-        await placeOrder.mutateAsync({
-          tradingsymbol: p.tradingsymbol, exchange: p.exchange,
-          transaction_type: liveQty >= 0 ? 'SELL' : 'BUY', quantity: Math.abs(liveQty),
-          order_type: 'MARKET', product: p.product, variety: 'regular', validity: 'DAY',
-        });
-      } catch {
-        // swallowed — see comment above
-      }
-    }
-    setExitingSelected(false);
-    setSelectedPos(new Set());
-    // Per-leg failures already get their own toast from usePlaceKiteOrder's
-    // onError, but a skip (leg vanished from the live snapshot — closed OR
-    // converted to a different product) never calls placeOrder at all, so it
-    // would otherwise be totally silent: the button just reverts and the
-    // selection clears with no indication anything was left unexited.
-    if (skipped > 0) {
-      notifyOrder({
-        kind: 'info',
-        title: 'Some positions were skipped',
-        message: `Exited ${targets.length - skipped} of ${targets.length} selected position${targets.length !== 1 ? 's' : ''} — ${skipped} ${skipped === 1 ? 'was' : 'were'} already closed or changed.`,
-      });
-    }
-  };
+  const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
+  const [expandedConvertId, setExpandedConvertId] = useState<string | null>(null);
+  const [posQuery, setPosQuery] = useState('');
+  const [holdQuery, setHoldQuery] = useState('');
+  const [posSort, setPosSort] = useState<{ key: string; dir: 'asc' | 'desc' | '' }>({ key: '', dir: '' });
+  const [holdSort, setHoldSort] = useState<{ key: string; dir: 'asc' | 'desc' | '' }>({ key: '', dir: '' });
+  const [analyticsView, setAnalyticsView] = useState<'positions' | 'holdings' | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [engineOpen, setEngineOpen] = useState(false);
+  const [exitingSelected, setExitingSelected] = useState(false);
 
   const showHoldings = view === 'holdings' || !view;
   const showPositions = view === 'positions' || !view;
 
-  const [selectedPos, setSelectedPos] = useState<Set<string>>(new Set());
-  // Which position row (by `${exchange}:${tradingsymbol}` id) has its Chg%
-  // cell swapped for the inline ConvertControl. Only one row at a time —
-  // mirrors the single-`expandedId` idiom used for Alerts/Orders history rows.
-  const [expandedConvertId, setExpandedConvertId] = useState<string | null>(null);
-  const [posQuery, setPosQuery] = useState('');
-  const [holdQuery, setHoldQuery] = useState('');
-  const [analyticsView, setAnalyticsView] = useState<'positions' | 'holdings' | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    const liveKeys = new Set(positions.filter((p: any) => num(p.quantity) !== 0).map(positionKey));
+    setSelectedPos((current) => {
+      const next = new Set([...current].filter((key) => liveKeys.has(key)));
+      return next.size === current.size ? current : next;
+    });
+    if (expandedConvertId && !liveKeys.has(expandedConvertId)) setExpandedConvertId(null);
+  }, [positions, expandedConvertId]);
 
-  // Sorting state
-  const [posSort, setPosSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
-  const [holdSort, setHoldSort] = useState<{key: string, dir: 'asc' | 'desc' | ''}>({key: '', dir: ''});
+  const handleOpenOrder = (p: any, initialSide: 'BUY' | 'SELL', initialQty: number) => {
+    openOrderWindow({
+      symbol: p.tradingsymbol,
+      exchange: p.exchange || 'NSE',
+      initialSide,
+      initialQty,
+      lastPrice: num(p.last_price),
+      product: (p.product || 'MIS') as 'MIS' | 'CNC' | 'NRML',
+    });
+  };
 
-  const handlePosSort = (k: string) => setPosSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
-  const handleHoldSort = (k: string) => setHoldSort(prev => prev.key === k ? {key: k, dir: prev.dir === 'asc' ? 'desc' : prev.dir === 'desc' ? '' : 'asc'} : {key: k, dir: 'asc'});
+  const filteredPositions = useMemo(() => {
+    const query = posQuery.trim().toLowerCase();
+    return query ? positions.filter((p: any) => `${p.tradingsymbol} ${p.exchange} ${p.product}`.toLowerCase().includes(query)) : positions;
+  }, [positions, posQuery]);
+
+  const sortedPositions = useMemo(() => {
+    const rows = [...filteredPositions];
+    if (!posSort.key || !posSort.dir) return rows;
+    return rows.sort((a: any, b: any) => {
+      const value = (p: any) => {
+        if (posSort.key === 'chg') return num(p.quantity) === 0 || num(p.average_price) <= 0 ? 0 : (num(p.last_price) - num(p.average_price)) / num(p.average_price) * 100;
+        return p[posSort.key];
+      };
+      const av = value(a); const bv = value(b);
+      const result = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : num(av) - num(bv);
+      return posSort.dir === 'asc' ? result : -result;
+    });
+  }, [filteredPositions, posSort]);
+
+  const filteredHoldings = useMemo(() => {
+    const query = holdQuery.trim().toLowerCase();
+    const rows = holdings || [];
+    return query ? rows.filter((h: any) => `${h.tradingsymbol} ${h.exchange}`.toLowerCase().includes(query)) : rows;
+  }, [holdings, holdQuery]);
+
+  const sortedHoldings = useMemo(() => {
+    const rows = [...filteredHoldings];
+    if (!holdSort.key || !holdSort.dir) return rows;
+    return rows.sort((a: any, b: any) => {
+      const value = (h: any) => {
+        if (holdSort.key === 'curVal') return num(h.quantity) * num(h.last_price);
+        if (holdSort.key === 'netChg') return num(h.average_price) ? (num(h.last_price) - num(h.average_price)) / num(h.average_price) * 100 : 0;
+        if (holdSort.key === 'dayChg') return num(h.day_change_percentage);
+        return h[holdSort.key];
+      };
+      const av = value(a); const bv = value(b);
+      const result = typeof av === 'string' && typeof bv === 'string' ? av.localeCompare(bv) : num(av) - num(bv);
+      return holdSort.dir === 'asc' ? result : -result;
+    });
+  }, [filteredHoldings, holdSort]);
+
+  const toggleSort = (setter: React.Dispatch<React.SetStateAction<{ key: string; dir: 'asc' | 'desc' | '' }>>, key: string) => {
+    setter((previous) => previous.key === key
+      ? { key, dir: previous.dir === 'asc' ? 'desc' : previous.dir === 'desc' ? '' : 'asc' }
+      : { key, dir: 'asc' });
+  };
+
+  const selectablePosIds = sortedPositions.filter((p: any) => num(p.quantity) !== 0).map(positionKey);
+  const allVisibleSelected = selectablePosIds.length > 0 && selectablePosIds.every((key) => selectedPos.has(key));
+  const togglePos = (key: string) => setSelectedPos((current) => {
+    const next = new Set(current);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+  const toggleAllPos = () => setSelectedPos((current) => {
+    const next = new Set(current);
+    if (allVisibleSelected) selectablePosIds.forEach((key) => next.delete(key));
+    else selectablePosIds.forEach((key) => next.add(key));
+    return next;
+  });
+
+  const exitSelected = async () => {
+    const targets = positions.filter((p: any) => selectedPos.has(positionKey(p)) && num(p.quantity) !== 0);
+    if (!targets.length) return;
+    const preview = targets.length <= 3 ? targets.map((p: any) => p.tradingsymbol).join(', ') : `${targets.slice(0, 3).map((p: any) => p.tradingsymbol).join(', ')} +${targets.length - 3} more`;
+    if (!window.confirm(`Exit ${targets.length} selected position${targets.length === 1 ? '' : 's'} (${preview}) at market price?`)) return;
+
+    setExitingSelected(true);
+    let skipped = 0;
+    try {
+      for (const target of targets) {
+        const liveNet = queryClient.getQueryData<{ net: any[] }>(['kite-positions'])?.net ?? [];
+        const live = liveNet.find((p: any) => positionKey(p) === positionKey(target));
+        const liveQty = live ? num(live.quantity) : 0;
+        if (!liveQty) { skipped += 1; continue; }
+        try {
+          await placeOrder.mutateAsync({
+            tradingsymbol: target.tradingsymbol,
+            exchange: target.exchange,
+            transaction_type: liveQty > 0 ? 'SELL' : 'BUY',
+            quantity: Math.abs(liveQty),
+            order_type: 'MARKET',
+            product: target.product,
+            variety: 'regular',
+            validity: 'DAY',
+          });
+        } catch {
+          // usePlaceKiteOrder already reports the per-leg failure.
+        }
+      }
+    } finally {
+      setExitingSelected(false);
+      setSelectedPos(new Set());
+    }
+
+    if (skipped) {
+      notifyOrder({
+        kind: 'info',
+        title: 'Some positions were skipped',
+        message: `Exited ${targets.length - skipped} of ${targets.length} selected position${targets.length === 1 ? '' : 's'} — ${skipped} ${skipped === 1 ? 'was' : 'were'} already closed or changed.`,
+      });
+    }
+  };
+
+  const totalPosPnl = positions.reduce((total: number, p: any) => total + num(p.pnl), 0);
+  const totalHoldingsPnl = (holdings || []).reduce((total: number, h: any) => total + num(h.pnl), 0);
+  const totalHoldingsDayPnl = (holdings || []).reduce((total: number, h: any) => total + num(h.day_change) * num(h.quantity), 0);
+  const totalHoldingsVal = (holdings || []).reduce((total: number, h: any) => total + num(h.quantity) * num(h.last_price), 0);
+  const totalHoldingsInvestment = (holdings || []).reduce((total: number, h: any) => total + num(h.quantity) * num(h.average_price), 0);
 
   const downloadPositions = () => downloadCsv('positions.csv', toCsv(sortedPositions, [
     { header: 'Instrument', value: (p: any) => p.tradingsymbol },
@@ -251,387 +407,203 @@ export function PortfolioPane({ view }: { view?: 'holdings' | 'positions' }) {
     { header: 'Qty', value: (h: any) => num(h.quantity) },
     { header: 'Avg Cost', value: (h: any) => num(h.average_price).toFixed(2) },
     { header: 'LTP', value: (h: any) => num(h.last_price).toFixed(2) },
-    { header: 'Cur. Value', value: (h: any) => (num(h.quantity) * num(h.last_price)).toFixed(2) },
+    { header: 'Current Value', value: (h: any) => (num(h.quantity) * num(h.last_price)).toFixed(2) },
     { header: 'P&L', value: (h: any) => num(h.pnl).toFixed(2) },
   ]));
 
-  const filteredPositions = posQuery.trim()
-    ? positions.filter((p: any) => `${p.tradingsymbol} ${p.exchange}`.toLowerCase().includes(posQuery.trim().toLowerCase()))
-    : positions;
-  let sortedPositions = [...filteredPositions];
-  if (posSort.key && posSort.dir) {
-    sortedPositions.sort((a: any, b: any) => {
-      let va = a[posSort.key];
-      let vb = b[posSort.key];
-      if (posSort.key === 'chg') {
-        va = num(a.close_price) > 0 ? ((num(a.last_price) - num(a.close_price)) / num(a.close_price)) * 100 : 0;
-        vb = num(b.close_price) > 0 ? ((num(b.last_price) - num(b.close_price)) / num(b.close_price)) * 100 : 0;
-      } else if (posSort.key === 'quantity' || posSort.key === 'average_price' || posSort.key === 'last_price' || posSort.key === 'pnl') {
-        va = num(va);
-        vb = num(vb);
-      }
-      if (typeof va === 'string' && typeof vb === 'string') return posSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-      return posSort.dir === 'asc' ? num(va) - num(vb) : num(vb) - num(va);
-    });
-  }
-
-  const filteredHoldings = holdQuery.trim()
-    ? (holdings || []).filter((h: any) => `${h.tradingsymbol} ${h.exchange}`.toLowerCase().includes(holdQuery.trim().toLowerCase()))
-    : (holdings || []);
-  let sortedHoldings = [...filteredHoldings];
-  if (holdSort.key && holdSort.dir) {
-    sortedHoldings.sort((a: any, b: any) => {
-      let va = a[holdSort.key];
-      let vb = b[holdSort.key];
-      if (holdSort.key === 'curVal') {
-        va = num(a.quantity) * num(a.last_price);
-        vb = num(b.quantity) * num(b.last_price);
-      } else if (holdSort.key === 'netChg') {
-        va = ((num(a.last_price) - num(a.average_price)) / (num(a.average_price) || 1)) * 100;
-        vb = ((num(b.last_price) - num(b.average_price)) / (num(b.average_price) || 1)) * 100;
-      } else if (holdSort.key === 'dayChg') {
-        va = num(a.day_change_percentage);
-        vb = num(b.day_change_percentage);
-      } else if (holdSort.key === 'quantity' || holdSort.key === 'average_price' || holdSort.key === 'last_price' || holdSort.key === 'pnl') {
-        va = num(va);
-        vb = num(vb);
-      }
-      if (typeof va === 'string' && typeof vb === 'string') return holdSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-      return holdSort.dir === 'asc' ? num(va) - num(vb) : num(vb) - num(va);
-    });
-  }
-
-  const togglePos = (id: string) => {
-    const next = new Set(selectedPos);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedPos(next);
-  };
-
-  // Only positions with a live (non-zero) quantity are exit-able — a qty=0 row
-  // (kept visible only to show its day's realized P&L) has nothing left to
-  // close, so it's excluded from "select all" the same way its own checkbox
-  // is disabled below. Keeps the "Exit Selected (N)" button count always
-  // equal to the number of orders the confirm dialog/loop will actually fire.
-  const selectablePosIds = positions.filter((p: any) => num(p.quantity) !== 0).map((p: any) => `${p.exchange}:${p.tradingsymbol}`);
-
-  const toggleAllPos = () => {
-    if (selectedPos.size === selectablePosIds.length && selectablePosIds.length > 0) setSelectedPos(new Set());
-    else setSelectedPos(new Set(selectablePosIds));
-  };
-
-  const totalPosPnl = positions.reduce((acc: number, p: any) => acc + num(p.pnl), 0);
-  const totalHoldingsPnl = (holdings || []).reduce((acc: number, h: any) => acc + num(h.pnl), 0);
-  const totalHoldingsDayPnl = (holdings || []).reduce((acc: number, h: any) => acc + (num(h.day_change) * num(h.quantity)), 0);
-  const totalHoldingsVal = (holdings || []).reduce((acc: number, h: any) => acc + (num(h.quantity) * num(h.last_price)), 0);
-
-  const SortHeader = ({ label, sortKey, currentSort, onSort, style }: any) => {
-    const isActive = currentSort.key === sortKey && currentSort.dir !== '';
-    return (
-      <th 
-        style={{ ...style, cursor: sortKey ? 'pointer' : 'default', userSelect: 'none' }} 
-        onClick={() => sortKey && onSort(sortKey)}
-        className={sortKey ? "sort-header" : ""}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: style.textAlign === 'right' ? 'flex-end' : 'flex-start' }}>
-          {label}
-          {sortKey && (
-            <span className={`sort-icon ${isActive ? 'active' : ''}`}>
-              <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && currentSort.dir === 'asc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || currentSort.dir === 'asc') ? 1 : 0.2 }}><path d="M4 0L8 4H0L4 0Z"/></svg>
-              <svg width="8" height="4" viewBox="0 0 8 4" fill={isActive && currentSort.dir === 'desc' ? '#387ed1' : 'currentColor'} style={{ opacity: (!isActive || currentSort.dir === 'desc') ? 1 : 0.2 }}><path d="M4 4L8 0H0L4 4Z"/></svg>
-            </span>
-          )}
-        </div>
-      </th>
-    );
-  };
-
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '24px 32px' }}>
+    <div className="portfolio-pane">
       <style>{`
-        .portfolio-row:hover { background-color: #f9f9f9 !important; }
-        .portfolio-row:hover .portfolio-content { visibility: hidden; }
-        .portfolio-row:hover .portfolio-actions { display: flex !important; }
-        .sort-header:hover { color: #444 !important; }
-        .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
-        .sort-header:hover .sort-icon { opacity: 0.5; }
-        .sort-icon.active { opacity: 1 !important; color: #444; }
+        .portfolio-pane { width:100%; min-height:100%; box-sizing:border-box; padding:18px 24px 34px; color:${COLORS.text}; }
+        .portfolio-pane * { box-sizing:border-box; }
+        .portfolio-section { width:100%; max-width:1120px; margin:0 auto 34px; }
+        .portfolio-toolbar { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:14px; min-height:30px; }
+        .portfolio-title { margin:0; font-size:17px; line-height:1.4; font-weight:400; color:${COLORS.text}; white-space:nowrap; }
+        .portfolio-title span { color:${COLORS.muted}; }
+        .portfolio-tools { display:flex; align-items:center; justify-content:flex-end; gap:13px; flex-wrap:wrap; }
+        .portfolio-search { position:relative; }
+        .portfolio-search svg { position:absolute; left:8px; top:50%; transform:translateY(-50%); color:${COLORS.muted}; pointer-events:none; }
+        .portfolio-search input { width:128px; height:27px; padding:5px 8px 5px 27px; border:1px solid #dedede; border-radius:3px; color:${COLORS.text}; background:#fff; outline:none; font:inherit; font-size:11px; }
+        .portfolio-search input:focus { border-color:#bdbdbd; }
+        .portfolio-table-scroll { width:100%; overflow-x:auto; scrollbar-gutter:stable; }
+        .portfolio-table { width:100%; border-collapse:collapse; text-align:left; table-layout:fixed; }
+        .portfolio-table tbody tr:hover { background:${COLORS.rowHover}; }
+        .portfolio-table .pnl-column { background:${COLORS.pnlBg}; }
+        .portfolio-row:hover .portfolio-content { visibility:hidden; }
+        .portfolio-row:hover .portfolio-actions { display:flex !important; }
+        .sort-header:hover { color:${COLORS.text} !important; }
+        .sort-icon { opacity:0; color:${COLORS.muted}; font-size:9px; width:10px; text-align:center; }
+        .sort-header:hover .sort-icon, .sort-icon.active { opacity:1; }
+        .exchange-tag { margin-left:6px; font-size:9px; color:${COLORS.muted}; background:#f1f1f1; padding:1px 4px; border-radius:2px; }
+        .portfolio-total-row td { border-bottom:0 !important; border-top:1px solid ${COLORS.border}; padding-top:11px !important; padding-bottom:11px !important; }
+        .day-history { border-top:1px solid ${COLORS.border}; margin-top:18px; }
+        .day-history button { width:100%; border:0; background:transparent; padding:14px 0; color:${COLORS.text}; font:inherit; font-size:13px; text-align:left; cursor:pointer; display:flex; align-items:center; gap:6px; }
+        .day-history-content { padding:0 0 14px; color:${COLORS.muted}; font-size:12px; }
+        .breakdown-section { border-top:1px solid ${COLORS.border}; padding-top:18px; margin-top:0; }
+        .breakdown-section h3 { margin:0 0 22px; font-size:13px; font-weight:400; color:${COLORS.text}; }
+        .breakdown-list { display:flex; flex-direction:column; gap:10px; }
+        .breakdown-row { display:grid; grid-template-columns:minmax(150px,230px) minmax(260px,1fr); align-items:center; min-height:12px; }
+        .breakdown-label { padding-right:14px; text-align:right; color:#777; font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .breakdown-axis { position:relative; display:grid; grid-template-columns:1fr 1fr; height:8px; }
+        .breakdown-zero { position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:#d8d8d8; transform:translateX(-.5px); }
+        .breakdown-half { display:flex; align-items:center; }
+        .breakdown-half.negative { justify-content:flex-end; }
+        .breakdown-half.positive { justify-content:flex-start; }
+        .breakdown-bar { height:6px; min-width:2px; }
+        .breakdown-bar.negative { background:${COLORS.red}; }
+        .breakdown-bar.positive { background:${COLORS.blue}; }
+        .engine-details { max-width:1120px; margin:28px auto 0; border-top:1px solid ${COLORS.border}; padding-top:12px; }
+        .engine-details summary { cursor:pointer; color:${COLORS.text}; font-size:13px; list-style:none; padding:6px 0; }
+        .engine-details summary::-webkit-details-marker { display:none; }
+        @media (max-width:900px) {
+          .portfolio-pane { padding:14px 14px 28px; }
+          .portfolio-toolbar { align-items:flex-start; }
+          .portfolio-tools { gap:9px; }
+          .breakdown-row { grid-template-columns:145px minmax(220px,1fr); }
+        }
+        @media (max-width:680px) {
+          .portfolio-toolbar { flex-direction:column; align-items:stretch; }
+          .portfolio-tools { justify-content:flex-start; }
+          .portfolio-search input { width:150px; }
+          .breakdown-row { grid-template-columns:110px minmax(190px,1fr); }
+          .breakdown-label { font-size:8px; }
+        }
       `}</style>
+
       {showPositions && (
-        <div style={{ marginBottom: 48 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', margin: 0 }}>
-              Positions <span style={{ color: '#9b9b9b', fontSize: 18 }}>({positions.length})</span>
-            </h2>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <section className="portfolio-section">
+          <div className="portfolio-toolbar">
+            <h2 className="portfolio-title">Positions <span>({positions.length})</span></h2>
+            <div className="portfolio-tools">
               {selectedPos.size > 0 && (
-                <button onClick={exitSelected} disabled={exitingSelected} style={{ background: '#df514c', color: '#fff', border: 'none', borderRadius: 3, padding: '6px 14px', fontSize: 12, fontWeight: 500, cursor: exitingSelected ? 'not-allowed' : 'pointer', opacity: exitingSelected ? 0.6 : 1 }}>
+                <button type="button" onClick={exitSelected} disabled={exitingSelected} style={{ background: COLORS.red, color: '#fff', border: 0, borderRadius: 3, padding: '5px 11px', fontSize: 11, cursor: exitingSelected ? 'wait' : 'pointer', opacity: exitingSelected ? .65 : 1 }}>
                   {exitingSelected ? 'Exiting…' : `Exit Selected (${selectedPos.size})`}
                 </button>
               )}
-              <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                </span>
-                <input type="text" placeholder="Search" value={posQuery} onChange={(e) => setPosQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 160, outline: 'none' }} />
-              </div>
-              <a href="#" onClick={(e) => { e.preventDefault(); setAnalyticsView('positions'); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10h-10z"></path></svg> Analytics
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); setSettingsOpen(true); }} style={{ color: '#9b9b9b', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Settings
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); downloadPositions(); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
-              </a>
+              <div className="portfolio-search"><SearchIcon /><input aria-label="Search positions" placeholder="Search" value={posQuery} onChange={(event) => setPosQuery(event.target.value)} /></div>
+              <ToolbarLink onClick={() => setAnalyticsView('positions')}>◉ Analyze</ToolbarLink>
+              <ToolbarLink muted onClick={() => setSettingsOpen(true)}>⚙ Settings</ToolbarLink>
+              <ToolbarLink onClick={downloadPositions}>⇩ Download</ToolbarLink>
             </div>
           </div>
-          {positions.length === 0 && <div style={S.hint}>No open positions.</div>}
-          {positions.length > 0 && (
-            <div style={{ position: 'relative' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                <thead><tr>
-                  <th style={{ ...S.th, width: 40, textAlign: 'center' }}>
-                    <input type="checkbox" checked={selectedPos.size === selectablePosIds.length && selectablePosIds.length > 0} onChange={toggleAllPos} style={{ cursor: 'pointer' }} />
-                  </th>
-                  <SortHeader label="Product" sortKey="product" currentSort={posSort} onSort={handlePosSort} style={S.th} />
-                  <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={posSort} onSort={handlePosSort} style={S.th} />
-                  <SortHeader label="Qty." sortKey="quantity" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="Avg." sortKey="average_price" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="LTP" sortKey="last_price" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="P&L" sortKey="pnl" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right', background: '#f9f9f9'}} />
-                  <SortHeader label="Chg." sortKey="chg" currentSort={posSort} onSort={handlePosSort} style={{...S.th, textAlign: 'right'}} />
-                </tr></thead>
-                <tbody>
-                  {sortedPositions.map((p: any, idx: number) => {
+
+          {!positions.length ? <div style={S.hint}>No open positions.</div> : (
+            <>
+              <div className="portfolio-table-scroll">
+                <table className="portfolio-table" style={{ minWidth: 780 }}>
+                  <colgroup><col style={{ width: 42 }} /><col style={{ width: 84 }} /><col style={{ width: '31%' }} /><col style={{ width: 82 }} /><col style={{ width: 94 }} /><col style={{ width: 94 }} /><col style={{ width: 118 }} /><col style={{ width: 88 }} /></colgroup>
+                  <thead><tr>
+                    <th style={{ ...S.th, textAlign: 'center', paddingLeft: 6, paddingRight: 6 }}><input aria-label="Select all visible positions" type="checkbox" checked={allVisibleSelected} onChange={toggleAllPos} disabled={!selectablePosIds.length} /></th>
+                    <SortHeader label="Product" sortKey="product" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={S.th} />
+                    <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={S.th} />
+                    <SortHeader label="Qty." sortKey="quantity" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                    <SortHeader label="Avg." sortKey="average_price" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                    <SortHeader label="LTP" sortKey="last_price" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                    <SortHeader label="P&L" sortKey="pnl" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                    <SortHeader label="Chg." sortKey="chg" currentSort={posSort} onSort={(key: string) => toggleSort(setPosSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  </tr></thead>
+                  <tbody>{sortedPositions.map((p: any) => {
                     const qty = num(p.quantity);
-                    const id = `${p.exchange}:${p.tradingsymbol}`;
-                    const isSelected = selectedPos.has(id);
-                    const chg = num(p.average_price) > 0 ? ((num(p.last_price) - num(p.average_price)) / num(p.average_price)) * 100 : 0;
+                    const key = positionKey(p);
+                    const selected = selectedPos.has(key);
+                    const chg = qty === 0 || num(p.average_price) <= 0 ? 0 : (num(p.last_price) - num(p.average_price)) / num(p.average_price) * 100;
                     return (
-                      <tr key={`${id}-${idx}`} className="portfolio-row" style={{ background: isSelected ? 'rgba(56, 126, 209, 0.05)' : 'transparent', transition: 'background 0.2s' }}>
-                        <td style={{ ...S.td, textAlign: 'center' }}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={qty === 0}
-                            title={qty === 0 ? "Already flat — nothing left to exit" : undefined}
-                            onChange={() => togglePos(id)}
-                            style={{ cursor: qty === 0 ? 'not-allowed' : 'pointer' }}
-                          />
-                        </td>
-                        <td style={S.td}>
-                          {p.product === 'NRML' ? (
-                            <span style={{ ...S.pill, background: 'rgba(200, 86, 162, 0.1)', color: '#c856a2' }}>{p.product}</span>
-                          ) : p.product === 'MIS' ? (
-                            <span style={{ ...S.pill, background: 'rgba(56, 126, 209, 0.1)', color: '#387ed1' }}>{p.product}</span>
-                          ) : (
-                            <span style={{ ...S.pill }}>{p.product}</span>
-                          )}
-                        </td>
-                        <td style={{...S.td, whiteSpace: 'nowrap'}}>
-                          <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={p.tradingsymbol} /></span>
-                          <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 4px', borderRadius: 2 }}>{p.exchange}</span>
-                        </td>
-                        <td style={{ ...S.td, textAlign: 'right', color: qty >= 0 ? '#387ed1' : '#df514c' }}>{qty}</td>
+                      <tr key={key} className="portfolio-row" style={{ background: selected ? 'rgba(56,126,209,.05)' : undefined }}>
+                        <td style={{ ...S.td, textAlign: 'center', paddingLeft: 6, paddingRight: 6 }}><input aria-label={`Select ${p.tradingsymbol} ${p.product}`} type="checkbox" checked={selected} disabled={!qty} onChange={() => togglePos(key)} title={!qty ? 'Already flat — nothing left to exit' : undefined} /></td>
+                        <td style={S.td}><ProductPill product={p.product} /></td>
+                        <td style={{ ...S.td, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={p.tradingsymbol} /><span className="exchange-tag">{p.exchange}</span></td>
+                        <td style={{ ...S.td, textAlign: 'right', color: qty > 0 ? COLORS.blue : qty < 0 ? COLORS.red : COLORS.muted }}>{qty}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(p.average_price).toFixed(2)}</td>
                         <td style={{ ...S.td, textAlign: 'right' }}>{num(p.last_price).toFixed(2)}</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(num(p.pnl)), background: '#f9f9f9' }}>
-                          {num(p.pnl) > 0 ? '+' : ''}{num(p.pnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
+                        <td className="pnl-column" style={{ ...S.td, textAlign: 'right', color: pnlColor(num(p.pnl)) }}>{formatMoney(num(p.pnl))}</td>
                         <td style={{ ...S.td, textAlign: 'right', color: pnlColor(chg), position: 'relative' }}>
-                          {expandedConvertId === id ? (
-                            <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
-                              <ConvertControl p={p} />
-                              <span
-                                style={{ cursor: 'pointer', color: '#9b9b9b', fontSize: 14, lineHeight: 1 }}
-                                title="Close"
-                                onClick={() => setExpandedConvertId(null)}
-                              >
-                                ×
-                              </span>
-                            </div>
+                          {expandedConvertId === key ? (
+                            <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}><ConvertControl p={p} /><button type="button" title="Close" onClick={() => setExpandedConvertId(null)} style={{ border: 0, background: 'transparent', padding: 0, color: COLORS.muted, cursor: 'pointer', fontSize: 15 }}>×</button></div>
                           ) : (
-                            <>
-                              <span className="portfolio-content">{chg.toFixed(2)}%</span>
-                              <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8, alignItems: 'center' }}>
-                                <KiteActionButtons
-                                  onBuy={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty), p.product, num(p.last_price)); }}
-                                  buyLabel="Add"
-                                  onSell={(e) => { e.stopPropagation(); handleOpenOrder(id, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty), p.product, num(p.last_price)); }}
-                                  sellLabel="Exit"
-                                  onBasket={(e) => { e.stopPropagation(); if (Math.abs(qty) === 0) return; addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
-                                />
-                                {qty !== 0 && (
-                                  <span
-                                    style={{ cursor: 'pointer', color: '#9b9b9b', fontSize: 11, marginLeft: 8, whiteSpace: 'nowrap' }}
-                                    title={`Convert this ${p.product} position to another product type`}
-                                    onClick={(e) => { e.stopPropagation(); setExpandedConvertId(id); }}
-                                  >
-                                    Convert
-                                  </span>
-                                )}
-                              </div>
-                            </>
+                            <><span className="portfolio-content">{chg.toFixed(2)}%</span><div className="portfolio-actions" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'none', background: COLORS.rowHover, paddingLeft: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+                              <KiteActionButtons
+                                onBuy={(event) => { event.stopPropagation(); handleOpenOrder(p, qty >= 0 ? 'BUY' : 'SELL', Math.abs(qty)); }} buyLabel="Add"
+                                onSell={(event) => { event.stopPropagation(); handleOpenOrder(p, qty >= 0 ? 'SELL' : 'BUY', Math.abs(qty)); }} sellLabel="Exit"
+                                onBasket={(event) => { event.stopPropagation(); if (!qty) return; addToBasket({ symbol: p.tradingsymbol, exchange: p.exchange, side: qty >= 0 ? 'SELL' : 'BUY', qty: Math.abs(qty), product: p.product, orderType: 'MARKET', price: 0, trigger: 0 }); }}
+                              />
+                              {!!qty && <button type="button" title={`Convert this ${p.product} position`} onClick={(event) => { event.stopPropagation(); setExpandedConvertId(key); }} style={{ border: 0, background: 'transparent', color: COLORS.muted, font: 'inherit', fontSize: 10, cursor: 'pointer', marginLeft: 5, padding: 0 }}>Convert</button>}
+                            </div></>
                           )}
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '12px 16px', borderTop: `1px solid #f1f1f1` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <span style={{ color: '#444', fontSize: 13 }}>Total P&L</span>
-                  <span style={{ color: pnlColor(totalPosPnl), fontSize: 16, textAlign: 'right', padding: '0 8px', background: '#f9f9f9' }}>
-                    {totalPosPnl > 0 ? '+' : ''}{totalPosPnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
+                  })}</tbody>
+                  <tfoot><tr className="portfolio-total-row"><td colSpan={5} /><td style={{ ...S.td, textAlign: 'right', fontSize: 12 }}>Total P&amp;L</td><td className="pnl-column" style={{ ...S.td, textAlign: 'right', color: pnlColor(totalPosPnl), fontSize: 14 }}>{formatMoney(totalPosPnl)}</td><td /></tr></tfoot>
+                </table>
               </div>
 
-              <div style={{ marginTop: 40, borderTop: `1px solid #f1f1f1`, paddingTop: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 400, color: '#444', marginBottom: 24 }}>Breakdown</h3>
-                {sortedPositions.filter((p: any) => num(p.pnl) !== 0).map((p: any, idx: number) => {
-                  const pnl = num(p.pnl);
-                  const maxPnl = Math.max(...positions.map((x: any) => Math.abs(num(x.pnl))), 1);
-                  const width = `${(Math.abs(pnl) / maxPnl) * 100}%`;
-                  return (
-                    <div key={`breakdown-${idx}`} style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-                      <div style={{ width: 250, fontSize: 10, color: '#9b9b9b', textAlign: 'right', paddingRight: 16 }}>
-                        <InstrumentLabel symbol={p.tradingsymbol} /> ({p.product})
-                      </div>
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', background: '#f1f1f1', height: 6 }}>
-                         <div style={{ height: 6, background: '#387ed1', width }} />
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="day-history">
+                <button type="button" onClick={() => setHistoryOpen((open) => !open)}>Day&apos;s history <span style={{ color: COLORS.muted, transform: historyOpen ? 'rotate(180deg)' : undefined }}>⌄</span></button>
+                {historyOpen && <div className="day-history-content">The table already includes open and closed intraday legs returned by Kite, including realised P&amp;L rows with zero quantity.</div>}
               </div>
-            </div>
+              <PositionBreakdown positions={positions} />
+              <details className="engine-details" open={engineOpen} onToggle={(event) => setEngineOpen((event.currentTarget as HTMLDetailsElement).open)}><summary>Engine Positions <span style={{ color: COLORS.muted }}>{engineOpen ? '⌃' : '⌄'}</span></summary><EnginePositionsPane /></details>
+            </>
           )}
-        </div>
-      )}
-
-      {showPositions && (
-        <div style={{ marginBottom: 32 }}>
-          <EnginePositionsPane />
-        </div>
+        </section>
       )}
 
       {showHoldings && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 400, color: '#444', margin: 0 }}>
-              Holdings <span style={{ color: '#9b9b9b', fontSize: 18 }}>({holdings?.length || 0})</span>
-            </h2>
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <div style={{ position: 'relative' }}>
-                <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: '#9b9b9b', fontSize: 12 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                </span>
-                <input type="text" placeholder="Search" value={holdQuery} onChange={(e) => setHoldQuery(e.target.value)} style={{ padding: '6px 8px 6px 28px', border: `1px solid #e0e0e0`, borderRadius: 3, background: 'transparent', color: '#444', fontSize: 12, width: 150, outline: 'none' }} />
-              </div>
-              <a href="#" onClick={(e) => { e.preventDefault(); setAnalyticsView('holdings'); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg> Analytics
-              </a>
-              <a href="#" onClick={(e) => { e.preventDefault(); downloadHoldings(); }} style={{ color: '#387ed1', textDecoration: 'none', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Download
-              </a>
+        <section className="portfolio-section">
+          <div className="portfolio-toolbar">
+            <h2 className="portfolio-title">Holdings <span>({holdings?.length || 0})</span></h2>
+            <div className="portfolio-tools">
+              <div className="portfolio-search"><SearchIcon /><input aria-label="Search holdings" placeholder="Search" value={holdQuery} onChange={(event) => setHoldQuery(event.target.value)} /></div>
+              <ToolbarLink onClick={() => setAnalyticsView('holdings')}>◉ Analyze</ToolbarLink>
+              <ToolbarLink onClick={downloadHoldings}>⇩ Download</ToolbarLink>
               <AuthoriseHoldingsButton />
             </div>
           </div>
-          {(!holdings || holdings.length === 0) && <div style={S.hint}>No equity holdings.</div>}
-          {holdings && holdings.length > 0 && (
-            <div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          {!holdings?.length ? <div style={S.hint}>No equity holdings.</div> : (
+            <div className="portfolio-table-scroll">
+              <table className="portfolio-table" style={{ minWidth: 820 }}>
                 <thead><tr>
-                  <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={holdSort} onSort={handleHoldSort} style={S.th} />
-                  <SortHeader label="Qty." sortKey="quantity" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="Avg. cost" sortKey="average_price" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="LTP" sortKey="last_price" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="Cur. val" sortKey="curVal" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="P&L" sortKey="pnl" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right', background: '#f9f9f9'}} />
-                  <SortHeader label="Net chg." sortKey="netChg" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
-                  <SortHeader label="Day chg." sortKey="dayChg" currentSort={holdSort} onSort={handleHoldSort} style={{...S.th, textAlign: 'right'}} />
+                  <SortHeader label="Instrument" sortKey="tradingsymbol" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={S.th} />
+                  <SortHeader label="Qty." sortKey="quantity" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  <SortHeader label="Avg. cost" sortKey="average_price" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  <SortHeader label="LTP" sortKey="last_price" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  <SortHeader label="Cur. val" sortKey="curVal" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  <SortHeader label="P&L" sortKey="pnl" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  <SortHeader label="Net chg." sortKey="netChg" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
+                  <SortHeader label="Day chg." sortKey="dayChg" currentSort={holdSort} onSort={(key: string) => toggleSort(setHoldSort, key)} style={{ ...S.th, textAlign: 'right' }} />
                 </tr></thead>
-                <tbody>
-                  {sortedHoldings.map((h: any, idx: number) => {
-                    const pnl = num(h.pnl);
-                    const curVal = num(h.quantity) * num(h.last_price);
-                    const netChg = ((num(h.last_price) - num(h.average_price)) / (num(h.average_price) || 1)) * 100;
-                    const dayChg = num(h.day_change);
-                    const dayChgPct = num(h.day_change_percentage);
-                    return (
-                      <tr key={`${h.tradingsymbol}-${idx}`} className="portfolio-row" style={{ transition: 'background 0.2s' }}>
-                        <td style={{...S.td, whiteSpace: 'nowrap'}}>
-                          <span style={{ color: '#444', marginRight: 8 }}><InstrumentLabel symbol={h.tradingsymbol} /></span>
-                          <span style={{ fontSize: 9, color: '#9b9b9b', background: '#f1f1f1', padding: '1px 3px', borderRadius: 2 }}>{h.exchange}</span>
-                          {num(h.t1_quantity) > 0 && (
-                            <span style={{ marginLeft: 6, fontSize: 9, color: '#ff9800', background: 'rgba(255, 152, 0, 0.1)', padding: '1px 4px', borderRadius: 2, fontWeight: 600 }} title={`${num(h.t1_quantity)} of ${num(h.quantity)} shares not yet settled — not sellable today`}>
-                              T1: {num(h.t1_quantity)}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{num(h.quantity)}</td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{num(h.average_price).toFixed(2)}</td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{num(h.last_price).toFixed(2)}</td>
-                        <td style={{ ...S.td, textAlign: 'right' }}>{curVal.toFixed(2)}</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(pnl), background: '#f9f9f9' }}>
-                          {pnl > 0 ? '+' : ''}{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(netChg) }}>{netChg.toFixed(2)}%</td>
-                        <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChgPct), position: 'relative' }}>
-                          <span className="portfolio-content">{dayChg !== 0 ? `${dayChg > 0 ? '+' : ''}${dayChgPct.toFixed(2)}%` : '0.00%'}</span>
-                          <div className="portfolio-actions" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', display: 'none', background: '#f9f9f9', paddingLeft: 8 }}>
-                            <KiteActionButtons
-                              onBuy={(e) => { e.stopPropagation(); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'BUY', num(h.quantity), h.product || 'CNC', num(h.last_price)); }}
-                              buyLabel="Add"
-                              onSell={(e) => { e.stopPropagation(); const sellable = num(h.quantity) - num(h.t1_quantity); handleOpenOrder(`${h.exchange}:${h.tradingsymbol}`, 'SELL', Math.max(sellable, 0), h.product || 'CNC', num(h.last_price)); }}
-                              sellLabel="Exit"
-                              onBasket={(e) => { e.stopPropagation(); if (num(h.quantity) === 0) return; addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty: Math.max(num(h.quantity) - num(h.t1_quantity), 0), product: (h.product || 'CNC'), orderType: 'MARKET', price: 0, trigger: 0 }); }}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+                <tbody>{sortedHoldings.map((h: any, index: number) => {
+                  const pnl = num(h.pnl);
+                  const currentValue = num(h.quantity) * num(h.last_price);
+                  const netChange = num(h.average_price) ? (num(h.last_price) - num(h.average_price)) / num(h.average_price) * 100 : 0;
+                  const dayChangePct = num(h.day_change_percentage);
+                  return (
+                    <tr key={`${h.exchange}:${h.tradingsymbol}:${index}`} className="portfolio-row">
+                      <td style={{ ...S.td, whiteSpace: 'nowrap' }}><InstrumentLabel symbol={h.tradingsymbol} /><span className="exchange-tag">{h.exchange}</span>{num(h.t1_quantity) > 0 && <span title={`${num(h.t1_quantity)} shares are not settled`} style={{ marginLeft: 6, fontSize: 9, color: '#f57c00', background: 'rgba(245,124,0,.09)', padding: '1px 4px', borderRadius: 2 }}>T1: {num(h.t1_quantity)}</span>}</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>{num(h.quantity)}</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>{num(h.average_price).toFixed(2)}</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>{num(h.last_price).toFixed(2)}</td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>{currentValue.toFixed(2)}</td>
+                      <td className="pnl-column" style={{ ...S.td, textAlign: 'right', color: pnlColor(pnl) }}>{formatMoney(pnl)}</td>
+                      <td style={{ ...S.td, textAlign: 'right', color: pnlColor(netChange) }}>{netChange.toFixed(2)}%</td>
+                      <td style={{ ...S.td, textAlign: 'right', color: pnlColor(dayChangePct), position: 'relative' }}><span className="portfolio-content">{dayChangePct.toFixed(2)}%</span><div className="portfolio-actions" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'none', background: COLORS.rowHover, paddingLeft: 6 }}><KiteActionButtons onBuy={(event) => { event.stopPropagation(); handleOpenOrder(h, 'BUY', num(h.quantity)); }} buyLabel="Add" onSell={(event) => { event.stopPropagation(); handleOpenOrder(h, 'SELL', Math.max(0, num(h.quantity) - num(h.t1_quantity))); }} sellLabel="Exit" onBasket={(event) => { event.stopPropagation(); const qty = Math.max(0, num(h.quantity) - num(h.t1_quantity)); if (!qty) return; addToBasket({ symbol: h.tradingsymbol, exchange: h.exchange, side: 'SELL', qty, product: h.product || 'CNC', orderType: 'MARKET', price: 0, trigger: 0 }); }} /></div></td>
+                    </tr>
+                  );
+                })}</tbody>
               </table>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '16px 8px', borderTop: `1px solid #f1f1f1` }}>
-                <div style={{ display: 'flex', gap: 32, fontSize: 13 }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Total investment</span>
-                    <span style={{ color: '#444' }}>{(totalHoldingsVal - totalHoldingsPnl).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Current value</span>
-                    <span style={{ color: '#444' }}>{totalHoldingsVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Day's P&L</span>
-                    <span style={{ color: pnlColor(totalHoldingsDayPnl) }}>{totalHoldingsDayPnl > 0 ? '+' : ''}{totalHoldingsDayPnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ color: '#9b9b9b', marginRight: 8 }}>Total P&L</span>
-                    <span style={{ color: pnlColor(totalHoldingsPnl) }}>{totalHoldingsPnl > 0 ? '+' : ''}{totalHoldingsPnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 24, padding: '13px 12px', borderTop: `1px solid ${COLORS.border}`, fontSize: 12 }}>
+                <span><span style={{ color: COLORS.muted, marginRight: 7 }}>Total investment</span>{formatMoney(totalHoldingsInvestment, false)}</span>
+                <span><span style={{ color: COLORS.muted, marginRight: 7 }}>Current value</span>{formatMoney(totalHoldingsVal, false)}</span>
+                <span style={{ color: pnlColor(totalHoldingsDayPnl) }}><span style={{ color: COLORS.muted, marginRight: 7 }}>Day&apos;s P&amp;L</span>{formatMoney(totalHoldingsDayPnl)}</span>
+                <span style={{ color: pnlColor(totalHoldingsPnl) }}><span style={{ color: COLORS.muted, marginRight: 7 }}>Total P&amp;L</span>{formatMoney(totalHoldingsPnl)}</span>
               </div>
             </div>
           )}
           <AuctionsSection />
-        </div>
+        </section>
       )}
 
-      {analyticsView && (
-        <KitePortfolioAnalyticsModal
-          view={analyticsView}
-          positions={sortedPositions}
-          holdings={sortedHoldings}
-          onClose={() => setAnalyticsView(null)}
-        />
-      )}
-
+      {analyticsView && <KitePortfolioAnalyticsModal view={analyticsView} positions={sortedPositions} holdings={sortedHoldings} onClose={() => setAnalyticsView(null)} />}
       {settingsOpen && <KiteSettingsPopover onClose={() => setSettingsOpen(false)} />}
     </div>
   );
