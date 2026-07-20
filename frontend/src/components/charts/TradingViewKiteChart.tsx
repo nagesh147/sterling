@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { TradingViewKiteChart as LegacyTradingViewKiteChart } from './TradingViewKiteChartLegacy';
 import {
   CHART_RANGE_KEYS,
@@ -29,6 +29,7 @@ function supertrendLabels(active: Set<string>, params: Record<string, any>) {
 }
 
 export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
+  const sectionRef = useRef<HTMLElement>(null);
   const reactId = useId();
   const contextId = useMemo(() => `kite-chart-${reactId.replace(/:/g, '')}`, [reactId]);
   const [range, setRange] = useState<ChartRangeKey>('ALL');
@@ -67,6 +68,18 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
 
   useEffect(() => () => removeChartParityContext(contextId), [contextId]);
 
+  useLayoutEffect(() => {
+    const chartHost = sectionRef.current?.parentElement;
+    const candidate = chartHost?.previousElementSibling as HTMLElement | null;
+    if (!candidate) return;
+    const instrument = props.symbol.split(':').pop() || props.symbol;
+    const text = candidate.textContent || '';
+    if (!text.includes(instrument) || !/\bbars?\b/i.test(text)) return;
+    const previousDisplay = candidate.style.display;
+    candidate.style.display = 'none';
+    return () => { candidate.style.display = previousDisplay; };
+  }, [props.symbol]);
+
   const selectRange = (nextRange: ChartRangeKey) => {
     setRange(nextRange);
     setChartVisibleRange(contextId, nextRange);
@@ -74,12 +87,17 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
 
   return (
     <section
+      ref={sectionRef}
       className={`sterling-zerodha-chart${props.isDark ? ' is-dark' : ''}`}
       style={{ height: props.height ?? '100%' }}
       aria-label={`${props.symbol} chart workspace`}
     >
       {last && (
         <div className="sterling-zerodha-chart__market-strip">
+          <div className="sterling-zerodha-chart__instrument">
+            <strong>{props.symbol.split(':').pop() || props.symbol}</strong>
+            <span>{props.symbol.includes(':') ? props.symbol.split(':')[0] : 'NSE'} · {props.tf}</span>
+          </div>
           <div className="sterling-zerodha-chart__ohlc" aria-label="Latest candle values">
             <span><b>O</b>{formatPrice(last.open)}</span>
             <span><b>H</b>{formatPrice(last.high)}</span>
