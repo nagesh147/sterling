@@ -158,7 +158,15 @@ export function SterlingWatchListWithHoldingsSync({
   }
 
   return (
-    <div style={{ position: 'relative', height: '100%' }}>
+    <div className="kite-watchlist-sync-shell" style={{ position: 'relative', height: '100%' }}>
+      <style>{`
+        /* Reserve a real header slot for the holdings-sync action. The wrapped
+           watchlist owns the search bar, so move its trailing count/filter group
+           left instead of placing the sync control on top of it. */
+        .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child {
+          margin-right: 36px;
+        }
+      `}</style>
       <SterlingWatchList key={childKey} onOpenInstrument={onOpenInstrument} />
       {hideDefaultEmptyPrompt && (
         <div
@@ -175,7 +183,7 @@ export function SterlingWatchListWithHoldingsSync({
           }}
         />
       )}
-      <div style={{ position: 'absolute', top: 12, right: 52, zIndex: 25, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <div style={{ position: 'absolute', top: 13, right: 10, zIndex: 25, display: 'inline-flex', alignItems: 'center' }}>
         <button
           type="button"
           disabled={syncDisabled}
@@ -202,25 +210,6 @@ export function SterlingWatchListWithHoldingsSync({
         >
           <SyncHoldingsIcon />
         </button>
-        {syncDisabled && holdingItems.length > 0 && (
-          <span
-            title={syncTitle}
-            style={{
-              width: 13,
-              height: 13,
-              borderRadius: '50%',
-              border: `1px solid ${t.border}`,
-              color: t.dim,
-              fontSize: 9,
-              lineHeight: '12px',
-              textAlign: 'center',
-              background: t.bg,
-              userSelect: 'none',
-            }}
-          >
-            i
-          </span>
-        )}
       </div>
     </div>
   );
