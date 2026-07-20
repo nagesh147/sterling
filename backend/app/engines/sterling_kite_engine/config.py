@@ -1,4 +1,4 @@
-"""Knobs for the 1H Heikin-Ashi Sterling Kite Engine."""
+"""Knobs for the 1H Sterling Kite Engine."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +7,7 @@ from typing import Literal, Tuple
 from app.engines.common.exit_counter import ExitMode  # shared for unification with directional
 
 TrailTarget = Literal["fast", "mid", "slow"]
+CandleBasis = Literal["raw", "heikin_ashi"]
 
 # How many red SuperTrend lines trigger an auto-exit.
 # Entry = all three lines green + green arrow (fresh full alignment).
@@ -30,6 +31,11 @@ class SterlingKiteEngineConfig:
     fast: Tuple[int, float] = (21, 1.0)
     mid: Tuple[int, float] = (14, 2.0)
     slow: Tuple[int, float] = (7, 3.0)
+    # Zerodha's chart indicators run on the displayed regular OHLC candles. Keep
+    # the engine on that same basis by default so a visible three-green + arrow
+    # confirmation is the same event the scanner emits. HA remains available for
+    # research/backtests through an explicit config override.
+    candle_basis: CandleBasis = "raw"
     # Which ST line trails the stop / triggers the exit flip. ``fast`` (the tightest
     # band, mult 1.0) is the most robust choice in the 7.5y IS/OOS sweep: stripped of
     # the options wrapper it is OOS-positive on 4/4 indices, vs 3/4 for ``mid`` and
