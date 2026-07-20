@@ -1,6 +1,6 @@
 """Pure Sterling Kite Engine regime core — no I/O, no broker types.
 
-Heikin-Ashi conversion -> three SuperTrends -> per-bar bull/bear/flat regime,
+Configured candle basis -> three SuperTrends -> per-bar bull/bear/flat regime,
 fresh full-alignment entry transitions, and the trail line/trend selected by the
 configured ``trail_target``.
 """
@@ -52,15 +52,9 @@ class RegimeSeries:
         return count
 
     def green_lines(self, direction: str, i: int) -> list:
-        """Return the names of ST lines that are still green (aligned with position) at bar ``i``.
-
-        For a long: green = trend == +1. Returns in priority order: slow (widest), mid, fast (tightest).
-        The widest still-green line provides the best trailing stop.
-        """
+        """Return the names of ST lines still aligned with the position at bar ``i``."""
         want = 1 if direction == "long" else -1
         lines = []
-        # Order: slow (widest/loosest), mid, fast (tightest) — so we can trail
-        # the widest available green line for maximum protection without premature exit.
         if int(self.t_slow[i]) == want:
             lines.append("slow")
         if int(self.t_mid[i]) == want:
@@ -70,43 +64,16 @@ class RegimeSeries:
         return lines
 
     def trail_value_for_threshold(self, i: int, threshold: int) -> float:
-        """Return the ST-line level whose flip is the ``threshold``-th red.
-
-        The three lines, ordered by tightness (multiplier), are fast (tightest) →
-        mid → slow (widest). As price turns against a position it crosses them in
-        that order, so the k-th red = the k-th-tightest line flipping. Anchoring the
-        price stop to the ``threshold``-th line makes a breach of the stop coincide
-        with the ``exit_mode`` red count (one_red→fast, two_red→mid, three_red→slow),
-        instead of always the tightest line pre-empting the counter. Used only when
-        ``exit_aligned_trail`` is enabled; the default path keeps the tightest-green
-        trail (``best_trail_line_value``). Unknown thresholds fail safe to ``fast``.
-        """
+        """Return the ST line whose flip is the ``threshold``-th red."""
         name = {1: "fast", 2: "mid", 3: "slow"}.get(int(threshold), "fast")
         return float(self.line(name)[i])
 
     def best_trail_line_value(self, direction: str, i: int) -> float:
-        """Return the trail value from the tightest still-green ST line at bar ``i``.
-
-        While all three are green the stop rides the tightest band (``fast``). As the
-        tighter lines flip red, the trail steps OUT to the next still-green, WIDER
-        line (``fast``→``mid``→``slow``) — i.e. it LOOSENS, to give the trade room to
-        run to a multi-line (``two_red``/``three_red``) exit. If no line is green,
-        returns 0.0 (all red — an exit should already have fired).
-
-        CAVEAT: the live stop is ratcheted monotonically (``positions.update_stop``
-        take-max for a long), which REJECTS this loosening — so in production the
-        premium stop stays pinned near the peak ``fast`` level and the red-count exit
-        is largely pre-empted (effective exit ≈ ``one_red``). Reconcile the ratchet
-        with this stepping-out before relying on ``two_red``+.
-        """
+        """Return the tightest still-aligned ST line value at bar ``i``."""
         green = self.green_lines(direction, i)
         if not green:
             return 0.0
-        # Use the TIGHTEST (innermost) green line as the trail. For a long,
-        # tighter = higher stop. "fast" is tightest, then "mid", then "slow".
-        # green_lines returns slow→mid→fast, so the last element is the tightest.
-        tightest = green[-1]
-        return float(self.line(tightest)[i])
+        return float(self.line(green[-1])[i])
 
 
 def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) -> RegimeSeries:
@@ -115,14 +82,22 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
     l = np.asarray(lows, dtype=float)
     c = np.asarray(closes, dtype=float)
 
-    _, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
+    # Zerodha applies indicators to the candle series currently displayed. The
+    # production scanner defaults to regular OHLC so the three visible green
+    # lines and confirmation arrow correspond to the exact same input bars. HA is
+    # retained as an explicit research/backtest mode instead of being silently
+    # forced for every live scan.
+    if cfg.candle_basis == "heikin_ashi":
+        _, basis_h, basis_l, basis_c = compute_heikin_ashi(o, h, l, c)
+    else:
+        basis_h, basis_l, basis_c = h, l, c
 
-    l_fast, t_fast = compute_supertrend(ha_h, ha_l, ha_c, cfg.fast[0], cfg.fast[1])
-    l_mid, t_mid = compute_supertrend(ha_h, ha_l, ha_c, cfg.mid[0], cfg.mid[1])
-    l_slow, t_slow = compute_supertrend(ha_h, ha_l, ha_c, cfg.slow[0], cfg.slow[1])
+    l_fast, t_fast = compute_supertrend(basis_h, basis_l, basis_c, cfg.fast[0], cfg.fast[1])
+    l_mid, t_mid = compute_supertrend(basis_h, basis_l, basis_c, cfg.mid[0], cfg.mid[1])
+    l_slow, t_slow = compute_supertrend(basis_h, basis_l, basis_c, cfg.slow[0], cfg.slow[1])
 
     valid = np.zeros(len(c), dtype=bool)
-    valid[cfg.warmup:] = True  # all three trends seeded by the largest period
+    valid[cfg.warmup:] = True
 
     bull = valid & (t_fast == 1) & (t_mid == 1) & (t_slow == 1)
     bear = valid & (t_fast == -1) & (t_mid == -1) & (t_slow == -1)
@@ -136,12 +111,11 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
 
 
 def entry_transitions(r: RegimeSeries) -> Tuple[NDArray[np.bool_], NDArray[np.bool_]]:
-    """Masks of bars that FRESHLY enter full alignment (not aligned at i-1)."""
+    """Masks of bars that freshly enter full alignment (not aligned at i-1)."""
     prev_bull = np.concatenate([[False], r.bull[:-1]])
     prev_bear = np.concatenate([[False], r.bear[:-1]])
     longs = r.bull & ~prev_bull
     shorts = r.bear & ~prev_bear
-    # need a fully-valid prior bar (avoid the SuperTrend warmup seed flip)
     longs[: r.warmup + 1] = False
     shorts[: r.warmup + 1] = False
     return longs, shorts
