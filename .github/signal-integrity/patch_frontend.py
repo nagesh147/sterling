@@ -1,22 +1,32 @@
 from pathlib import Path
 
 
-def replace(path, old, new):
+def replace_once(path: str, old: str, new: str) -> None:
     p = Path(path)
     text = p.read_text()
-    if text.count(old) != 1:
-        raise RuntimeError(f'{path}: expected one match, got {text.count(old)}')
+    if new in text:
+        return
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{path}: expected one anchor, found {count}: {old[:120]!r}")
     p.write_text(text.replace(old, new, 1))
 
 
-def write(path, content):
+def write(path: str, content: str) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content)
 
 
-replace(
-    'frontend/src/types/kiteEngine.ts',
+TYPES = 'frontend/src/types/kiteEngine.ts'
+LEGACY = 'frontend/src/components/charts/TradingViewKiteChartLegacy.tsx'
+WRAPPER = 'frontend/src/components/charts/TradingViewKiteChart.tsx'
+INSTRUMENT = 'frontend/src/components/kite/InstrumentPane.tsx'
+TAB = 'frontend/src/components/kite/KiteTab.tsx'
+PANE = 'frontend/src/components/kite/SterlingKiteEnginePane.tsx'
+
+replace_once(
+    TYPES,
     '''  token?: number;
   is_active?: boolean; // this contract's SuperTrend still aligned on the latest bar
 }
@@ -49,7 +59,7 @@ write(
     '''export type TrendDirection = 'up' | 'down';
 export type TrendPoint = { direction: TrendDirection };
 
-export function nearestCandleIndex(times: number[], targetSec: number, tolerance: number): number {
+export function nearestTimeIndex(times: number[], targetSec: number, tolerance: number): number {
   if (!times.length || !Number.isFinite(targetSec)) return -1;
   let best = -1;
   let bestDiff = Infinity;
@@ -79,31 +89,31 @@ export function freshTripleAlignmentIndex(
 ''',
 )
 
-replace(
-    'frontend/src/components/charts/TradingViewKiteChartLegacy.tsx',
+replace_once(
+    LEGACY,
     '''import { MiniGridPane } from './MiniGridPane';
 ''',
     '''import { MiniGridPane } from './MiniGridPane';
-import { freshTripleAlignmentIndex, nearestCandleIndex } from './signalMarkerLogic';
+import { freshTripleAlignmentIndex, nearestTimeIndex } from './signalMarkerLogic';
 import type { SignalChartData } from '../../types/kiteEngine';
 ''',
 )
-replace(
-    'frontend/src/components/charts/TradingViewKiteChartLegacy.tsx',
+replace_once(
+    LEGACY,
     '''  signalData?: { timestamp_ms: number; direction: string; regime: string };
 ''',
     '''  signalData?: SignalChartData;
 ''',
 )
 
-p = Path('frontend/src/components/charts/TradingViewKiteChartLegacy.tsx')
+p = Path(LEGACY)
 text = p.read_text()
 start = text.index('    // Signal-entry marker (native chart marker only')
 end = text.index('\n    mainChartRef.current = chart;', start)
-new_block = '''    // Source-aware entry marker. A PE derivative signal is still a BUY/long-
-    // premium event, so the premium chart must show a fresh THREE-GREEN transition.
-    // Never substitute the nearest opposite transition because the semantic regime
-    // is BEAR.
+new_block = '''    // Source-aware signal marker. CE and PE derivative entries are both
+    // long-premium BUYs, therefore both require a fresh THREE-GREEN transition
+    // on the selected contract's own premium chart. A bearish underlying regime
+    // must never turn a nearby three-red premium transition into an Entry marker.
     if (signalData && signalData.timestamp_ms != null && times.length && candleS) {
       try {
         const entryTargetSec = signalData.timestamp_ms / 1000;
@@ -120,12 +130,10 @@ new_block = '''    // Source-aware entry marker. A PE derivative signal is still
           const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
           if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Entry' });
         } else if (source === 'confluence') {
-          const confirmIdx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
-          if (confirmIdx >= 0) markers.push({ time: times[confirmIdx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Premium confirm' });
-          const entryIdx = nearestCandleIndex(times, entryTargetSec, tolerance);
-          if (entryIdx >= 0) markers.push({ time: times[entryIdx] as any, position: 'aboveBar', color: tv.blue, shape: 'circle', text: 'Confluence entry' });
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
+          if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Confluence' });
         } else if (signalData.marker_basis === 'external') {
-          const idx = nearestCandleIndex(times, entryTargetSec, tolerance);
+          const idx = nearestTimeIndex(times, entryTargetSec, tolerance);
           if (idx >= 0) markers.push({ time: times[idx] as any, position: 'aboveBar', color: tv.blue, shape: 'circle', text: 'Underlying entry' });
         } else {
           const dir = (signalData.direction || '').toLowerCase();
@@ -135,63 +143,56 @@ new_block = '''    // Source-aware entry marker. A PE derivative signal is still
             time: times[idx] as any,
             position: wanted === 'up' ? 'belowBar' : 'aboveBar',
             color: wanted === 'up' ? tv.green : tv.red,
-            shape: wanted === 'up' ? 'arrowUp' : 'arrowDown', text: 'Entry',
+            shape: wanted === 'up' ? 'arrowUp' : 'arrowDown',
+            text: 'Entry',
           });
         }
         if (markers.length) createSeriesMarkers?.(candleS, markers);
-      } catch { /* invalid metadata must never break chart rendering */ }
+      } catch { /* invalid signal metadata must never break chart rendering */ }
     }
 '''
 p.write_text(text[:start] + new_block + text[end:])
 
-replace(
-    'frontend/src/components/kite/InstrumentPane.tsx',
+replace_once(
+    INSTRUMENT,
     '''import { KiteLoader } from './KiteLoader';
 ''',
     '''import { KiteLoader } from './KiteLoader';
 import type { SignalChartData } from '../../types/kiteEngine';
 ''',
 )
-replace(
-    'frontend/src/components/kite/InstrumentPane.tsx',
-    '''  signalData?: { timestamp_ms: number; direction: string; regime: string };
-''',
-    '''  signalData?: SignalChartData;
-''',
-)
-replace(
-    'frontend/src/components/kite/InstrumentPane.tsx',
+replace_once(INSTRUMENT, '''  signalData?: { timestamp_ms: number; direction: string; regime: string };
+''', '''  signalData?: SignalChartData;
+''')
+replace_once(
+    INSTRUMENT,
     '''function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } }) {
 ''',
     '''function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData }) {
 ''',
 )
 
-replace(
-    'frontend/src/components/kite/KiteTab.tsx',
-    '''import { k } from '../../styles/kiteUI';
-''',
-    '''import { k } from '../../styles/kiteUI';
+replace_once(TAB, '''import { k } from '../../styles/kiteUI';
+''', '''import { k } from '../../styles/kiteUI';
 import type { SignalChartData } from '../../types/kiteEngine';
-''',
-)
-replace(
-    'frontend/src/components/kite/KiteTab.tsx',
+''')
+replace_once(
+    TAB,
     '''  const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } } | null>(null);
 ''',
     '''  const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData } | null>(null);
 ''',
 )
-replace(
-    'frontend/src/components/kite/KiteTab.tsx',
+replace_once(
+    TAB,
     '''  const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => {
 ''',
     '''  const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => {
 ''',
 )
 
-replace(
-    'frontend/src/components/kite/SterlingKiteEnginePane.tsx',
+replace_once(
+    PANE,
     '''  ExitMode,
 } from '../../types/kiteEngine';
 ''',
@@ -199,22 +200,14 @@ replace(
 } from '../../types/kiteEngine';
 ''',
 )
-replace(
-    'frontend/src/components/kite/SterlingKiteEnginePane.tsx',
-    '''  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
-''',
-    '''  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
-''',
-)
-replace(
-    'frontend/src/components/kite/SterlingKiteEnginePane.tsx',
-    '''  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
-''',
-    '''  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
-''',
-)
-replace(
-    'frontend/src/components/kite/SterlingKiteEnginePane.tsx',
+replace_once(PANE, '''  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
+''', '''  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
+''')
+replace_once(PANE, '''  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
+''', '''  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
+''')
+replace_once(
+    PANE,
     '''          const exitReds = row.exit_state ? (parseInt(row.exit_state, 10) || 0) : 0;
           const exitThr = row.exit_state ? (parseInt(row.exit_state.split('/')[1] || '1', 10) || 1) : 1;
           const exitColor = !row.exit_state ? k.dim : exitReds <= 0 ? k.dim : exitReds >= exitThr ? k.red : k.orange;
@@ -225,15 +218,11 @@ replace(
           const exitColor = !legExitState ? k.dim : exitReds <= 0 ? k.dim : exitReds >= exitThr ? k.red : k.orange;
 ''',
 )
-replace(
-    'frontend/src/components/kite/SterlingKiteEnginePane.tsx',
-    '''                                {row.exit_state ?? '—'}
-''',
-    '''                                {legExitState ?? '—'}
-''',
-)
-replace(
-    'frontend/src/components/kite/SterlingKiteEnginePane.tsx',
+replace_once(PANE, '''                                {row.exit_state ?? '—'}
+''', '''                                {legExitState ?? '—'}
+''')
+replace_once(
+    PANE,
     '''                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, { timestamp_ms: row.timestamp_ms, direction: row.direction, regime: row.regime }); }}
 ''',
     '''                      onChart={(e) => {
@@ -242,11 +231,54 @@ replace(
                         onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, {
                           timestamp_ms: Number(leg.entry_timestamp_ms || row.timestamp_ms),
                           premium_signal_ms: leg.signal_timestamp_ms ?? null,
-                          direction: row.direction, regime: row.regime, source,
+                          direction: row.direction,
+                          regime: row.regime,
+                          source,
                           marker_basis: source === 'spot' ? 'external' : 'premium',
                         });
                       }}
 ''',
 )
 
+# The parity shell's legend/study values must use the same HA basis as the
+# legacy renderer, otherwise the visible lines and top legend disagree.
+replace_once(WRAPPER, '''import { supertrend } from '../../utils/indicators';
+''', '''import { heikinAshi, supertrend } from '../../utils/indicators';
+''')
+replace_once(
+    WRAPPER,
+    '''  const candles = useMemo(() => normalizeChartCandles(props.rawCandles), [props.rawCandles]);
+  const activeKey = useMemo(() => Array.from(props.activeIndicators).sort().join(','), [props.activeIndicators]);
+''',
+    '''  const candles = useMemo(() => normalizeChartCandles(props.rawCandles), [props.rawCandles]);
+  const studyCandles = useMemo(() => props.isHA ? heikinAshi(candles) : candles, [candles, props.isHA]);
+  const activeKey = useMemo(() => Array.from(props.activeIndicators).sort().join(','), [props.activeIndicators]);
+''',
+)
+replace_once(
+    WRAPPER,
+    '''    if (!candles.length) return [] as Array<{ key: string; label: string; values?: any[] }>;
+    const highs = candles.map((bar) => bar.high);
+    const lows = candles.map((bar) => bar.low);
+    const closes = candles.map((bar) => bar.close);
+''',
+    '''    if (!studyCandles.length) return [] as Array<{ key: string; label: string; values?: any[] }>;
+    const highs = studyCandles.map((bar) => bar.high);
+    const lows = studyCandles.map((bar) => bar.low);
+    const closes = studyCandles.map((bar) => bar.close);
+''',
+)
+replace_once(WRAPPER, '''  }, [candles, activeKey, props.activeIndicators, props.params]);
+''', '''  }, [studyCandles, activeKey, props.activeIndicators, props.params]);
+''')
+
+for path, required in {
+    TYPES: 'export interface SignalChartData',
+    LEGACY: "source === 'derivatives'",
+    INSTRUMENT: 'signalData?: SignalChartData',
+    TAB: 'signalData?: SignalChartData',
+    PANE: 'leg.entry_timestamp_ms || row.timestamp_ms',
+    WRAPPER: 'props.isHA ? heikinAshi(candles) : candles',
+}.items():
+    assert required in Path(path).read_text(), f'{path}: {required}'
 print('frontend signal-integrity patch applied')
