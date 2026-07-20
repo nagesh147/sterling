@@ -3,6 +3,7 @@ import {
   chartRangeStart,
   directionFlipMarkers,
   normalizeChartCandles,
+  resolvedChartRange,
 } from '../chartParityRuntime';
 
 describe('chart parity runtime', () => {
@@ -33,6 +34,13 @@ describe('chart parity runtime', () => {
     )).toEqual([]);
   });
 
+  it('ignores invalid timestamps and incomplete direction points', () => {
+    expect(directionFlipMarkers(
+      [{ direction: 'up' }, { direction: undefined }, { direction: 'down' }],
+      [10, Number.NaN, 30],
+    )).toEqual([]);
+  });
+
   it('sorts candles, drops invalid rows, and keeps the newest duplicate', () => {
     expect(normalizeChartCandles([
       { time: 20, open: 2, high: 4, low: 1, close: 3, volume: 10 },
@@ -52,5 +60,20 @@ describe('chart parity runtime', () => {
     expect(chartRangeStart(candles, '5D')).toBe(last - 5 * 86_400);
     expect(chartRangeStart(candles, 'YTD')).toBe(Math.floor(Date.UTC(2026, 0, 1) / 1000));
     expect(chartRangeStart(candles, 'ALL')).toBeNull();
+  });
+
+  it('falls back to fit-content when the requested range predates loaded candles', () => {
+    const last = 2_000_000;
+    const candles = [{ time: last - 3_600 }, { time: last }];
+    expect(resolvedChartRange(candles, '5D')).toBeNull();
+  });
+
+  it('returns a visible range when loaded candles cover the request', () => {
+    const last = 2_000_000;
+    const candles = [{ time: last - 10 * 86_400 }, { time: last }];
+    expect(resolvedChartRange(candles, '5D')).toEqual({
+      from: last - 5 * 86_400,
+      to: last,
+    });
   });
 });
