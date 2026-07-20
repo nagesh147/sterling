@@ -165,13 +165,6 @@ export function KiteTab() {
     : nav === 'more' ? `more:${moreTab}`
     : `nav:${nav}`;
 
-  // Portfolio pages intentionally use the same two-column frame as Zerodha Kite:
-  // marketwatch on the left and the portfolio in the remaining width. The large
-  // ticker cards and Sterling signal pane are useful on trading/chart screens,
-  // but they were stealing vertical and horizontal space from Positions/Holdings
-  // and made those tabs materially diverge from Kite's layout.
-  const portfolioNav = !instrumentView && !setupView && !detailView && (nav === 'positions' || nav === 'holdings');
-
   return (
     <KiteInteractionMotion>
       <MacMotionProvider>
@@ -184,13 +177,13 @@ export function KiteTab() {
               <SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />
             </WatchlistStartupBoundary>
           )}
-          rightSidebar={portfolioNav ? undefined : (
+          rightSidebar={(
             <EngineStartupBoundary>
               <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
             </EngineStartupBoundary>
           )}
           bottomBar={<EngineTerminal />}
-          centerTopBar={portfolioNav ? undefined : (
+          centerTopBar={(
             <TickerStartupBoundary>
               <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />
             </TickerStartupBoundary>
