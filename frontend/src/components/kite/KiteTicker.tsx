@@ -20,7 +20,7 @@ const DIM = '#777777';
 const HIST = new Map<string, number[]>();
 const HIST_CAP = 48;
 
-function pushHist(sym: string, seed: number | undefined, px: number | undefined): number[] {
+export function pushTickerHistory(sym: string, seed: number | undefined, px: number | undefined): number[] {
   let arr = HIST.get(sym);
   if (!arr) {
     arr = seed != null && seed > 0 ? [seed] : [];
@@ -28,9 +28,20 @@ function pushHist(sym: string, seed: number | undefined, px: number | undefined)
   }
   if (px != null && px > 0 && (arr.length === 0 || arr[arr.length - 1] !== px)) {
     arr.push(px);
-    if (arr.length > HIST_CAP) arr.shift();
+    if (arr.length > HIST_CAP) arr.splice(0, arr.length - HIST_CAP);
   }
-  return arr;
+  return [...arr];
+}
+
+export function mergeTickerSeries(
+  candlePoints: number[],
+  livePoints: number[],
+  cap = HIST_CAP,
+): number[] {
+  const merged = [...candlePoints.filter((v) => v > 0), ...livePoints.filter((v) => v > 0)];
+  if (merged.length === 0) return [];
+  const deduped = merged.filter((value, index) => index === 0 || value !== merged[index - 1]);
+  return deduped.slice(-cap);
 }
 
 function isIndexSymbol(symbol: string, exchange: string): boolean {
@@ -108,23 +119,20 @@ function KiteCard({ sym, q, tileScale, onOpenChart }: { sym: string; q: any; til
   const movementColor = isFlat ? DIM : isUp ? UP : DOWN;
 
   const { data: candles } = useCandles(sym, '5m', 90);
+  const liveSeries = useMemo(() => pushTickerHistory(sym, close ?? open, last), [sym, close, open, last]);
   const series = useMemo(() => {
     const toMs = (t: number) => (t < 1e12 ? t * 1000 : t);
+    let candleSeries: number[] = [];
     if (candles && candles.length > 1) {
       const lastDay = new Date(toMs(candles[candles.length - 1].time)).toDateString();
       const dayBars = candles.filter((c) => new Date(toMs(c.time)).toDateString() === lastDay);
-      const pts = (dayBars.length > 1 ? dayBars : candles).map((c) => c.close).filter((v) => v > 0);
-      if (last != null && last > 0 && pts.length && pts[pts.length - 1] !== last) pts.push(last);
-      if (pts.length > 1) return pts;
+      candleSeries = (dayBars.length > 1 ? dayBars : candles).map((c) => c.close).filter((v) => v > 0);
     }
-    let s = pushHist(sym, close ?? open, last);
-    if (s.length < 2) {
-      const base = close ?? open;
-      if (base != null && base > 0 && last != null && last > 0) s = [base, last];
-      else if (last != null && last > 0) s = [last, last];
-    }
-    return s;
-  }, [candles, last, close, open, sym]);
+    const merged = mergeTickerSeries(candleSeries, liveSeries);
+    if (merged.length > 1) return merged;
+    const base = close ?? open ?? last;
+    return base != null && base > 0 ? [base, last ?? base] : [];
+  }, [candles, liveSeries, close, open, last]);
 
   useEffect(() => {
     const prev = prevRef.current;
