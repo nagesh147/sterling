@@ -10,10 +10,15 @@ export interface ParsedParts {
   isWeekly?: boolean;
 }
 
+const MONTHS = 'JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC';
+const UNDERLYING = '[A-Z&-]+';
+
 export function parseInstrument(ts: string): ParsedParts | null {
-  // Monthly NFO options: APLAPOLLO26JUN1820CE
-  const nfoRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d+)(CE|PE)(BFO|NFO)?$/;
-  const nfoM = ts.match(nfoRe);
+  const normalized = (ts || '').trim().toUpperCase();
+
+  // Monthly NFO options: APLAPOLLO26JUN1820CE, BAJAJ-AUTO26JUL10500CE
+  const nfoRe = new RegExp(`^(${UNDERLYING})(\\d{2})(${MONTHS})(\\d+)(CE|PE)(BFO|NFO)?$`);
+  const nfoM = normalized.match(nfoRe);
   if (nfoM) {
     return {
       underlying: nfoM[1],
@@ -25,8 +30,8 @@ export function parseInstrument(ts: string): ParsedParts | null {
     };
   }
 
-  // Weekly NFO options: NIFTY2461324500CE
-  const weeklyMatch = ts.match(/^([A-Z]+)(\d{2})(1|2|3|4|5|6|7|8|9|O|N|D)(\d{2})(\d+)(CE|PE)(BFO|NFO)?$/);
+  // Weekly NFO options: NIFTY2461324500CE. Underlyings may contain - or &.
+  const weeklyMatch = normalized.match(new RegExp(`^(${UNDERLYING})(\\d{2})(1|2|3|4|5|6|7|8|9|O|N|D)(\\d{2})(\\d+)(CE|PE)(BFO|NFO)?$`));
   if (weeklyMatch) {
     const mMap: Record<string, string> = {'1':'JAN','2':'FEB','3':'MAR','4':'APR','5':'MAY','6':'JUN','7':'JUL','8':'AUG','9':'SEP','O':'OCT','N':'NOV','D':'DEC'};
     return {
@@ -40,9 +45,9 @@ export function parseInstrument(ts: string): ParsedParts | null {
     };
   }
 
-  // NFO Futures: NIFTY24JUNFUT
-  const futRe = /^([A-Z]+)(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)FUT(BFO|NFO)?$/;
-  const futM = ts.match(futRe);
+  // NFO Futures: NIFTY24JUNFUT, BAJAJ-AUTO26JULFUT
+  const futRe = new RegExp(`^(${UNDERLYING})(\\d{2})(${MONTHS})FUT(BFO|NFO)?$`);
+  const futM = normalized.match(futRe);
   if (futM) {
     return {
       underlying: futM[1],
@@ -54,8 +59,8 @@ export function parseInstrument(ts: string): ParsedParts | null {
   }
 
   // BSE options: SENSEX2461875500CE
-  const bseRe = /^([A-Z]+)(\d{2})([1-9A-COND])(\d{2})(\d+)(CE|PE)$/;
-  const bseM = ts.match(bseRe);
+  const bseRe = new RegExp(`^(${UNDERLYING})(\\d{2})([1-9A-COND])(\\d{2})(\\d+)(CE|PE)$`);
+  const bseM = normalized.match(bseRe);
   if (bseM) {
     let mon = parseInt(bseM[3], 10);
     if (bseM[3] === 'O' || bseM[3] === 'A') mon = 10;
@@ -80,7 +85,7 @@ export function parseInstrument(ts: string): ParsedParts | null {
 }
 
 export function getOrdinal(n: number) {
-  const s = ["th", "st", "nd", "rd"];
+  const s = ['th', 'st', 'nd', 'rd'];
   const v = n % 100;
   return s[(v - 20) % 10] || s[v] || s[0];
 }
@@ -97,7 +102,7 @@ export function InstrumentLabel({ symbol, fallback, onColor }: { symbol: string;
     color: wkColor, backgroundColor: wkBg, textAlign: 'center', borderRadius: '100%',
     width: 11, height: 11, fontSize: '0.62em', lineHeight: '11px', display: 'inline-block', fontWeight: 700,
   };
-  
+
   if (rawTs === 'NIFTY 50' || rawTs === 'NIFTY BANK' || rawTs === 'SENSEX' || rawTs === 'BANKEX' || rawTs === 'NIFTY 100' || rawTs === 'NIFTY COMMODITIES' || rawTs === 'NIFTY FIN SERVICE' || rawTs.includes('INDEX')) {
     exchange = 'INDEX';
   }
@@ -105,15 +110,18 @@ export function InstrumentLabel({ symbol, fallback, onColor }: { symbol: string;
   const parsed = parseInstrument(rawTs);
 
   if (!parsed) {
+    // Never let the generic instrument `name` (for example BAJAJ-AUTO) hide a more
+    // specific tradingsymbol. Search/watch rows must retain expiry, strike and side.
+    const display = rawTs || fallback || '';
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
-        <span>{fallback || rawTs.replace(/(CE|PE)(BFO|NFO)?$/, ' $1')}</span>
+        <span>{display.replace(/(CE|PE)(BFO|NFO)?$/, ' $1')}</span>
         {exchange && <span style={{ fontSize: 9, color: '#9b9b9b', marginLeft: 4 }}>{exchange}</span>}
       </span>
     );
   }
 
-  const { underlying, day, month, strike, type, isWeekly, year } = parsed;
+  const { underlying, day, month, strike, type, isWeekly } = parsed;
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
