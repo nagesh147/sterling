@@ -12,8 +12,14 @@ export const KITE_SETTINGS_STORAGE_KEY = 'kite-settings';
 export const STERLING_SHOW_CRYPTO_TAB_KEY = 'sterling_show_crypto_tab';
 export const KITE_DEFAULT_PREFERENCES_MIGRATION_KEY = 'kite_default_preferences_migration';
 export const KITE_DEFAULT_PREFERENCES_VERSION = 'list-layout-light-terminal-v1';
+export const KITE_CHART_WORKSPACE_KEY = 'sterling:kite-chart-workspace:v1';
+export const KITE_CHART_TEMPLATES_KEY = 'sterling:kite-chart-templates:v1';
+export const TRADINGVIEW_DOWN_RED = '#f23645';
+
+const LEGACY_CHART_DOWN_REDS = new Set(['#e05260', '#df514c']);
 
 type PreferenceStorage = Pick<Storage, 'getItem' | 'setItem'>;
+type JsonRecord = Record<string, any>;
 
 function getBrowserStorage(): PreferenceStorage | null {
   if (typeof window === 'undefined') return null;
@@ -22,6 +28,10 @@ function getBrowserStorage(): PreferenceStorage | null {
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function readStoredKiteSettings(storage: PreferenceStorage): any {
@@ -51,6 +61,59 @@ function seedStableDefaults(storage: PreferenceStorage): void {
   }
 }
 
+function shouldUseTradingViewDownRed(value: unknown): boolean {
+  return typeof value !== 'string' || LEGACY_CHART_DOWN_REDS.has(value.trim().toLowerCase());
+}
+
+function migrateWorkspaceAppearance(workspace: JsonRecord): boolean {
+  const appearance = isRecord(workspace.appearance) ? workspace.appearance : {};
+  if (!isRecord(workspace.appearance)) workspace.appearance = appearance;
+  if (!shouldUseTradingViewDownRed(appearance.candleDown)) return false;
+  appearance.candleDown = TRADINGVIEW_DOWN_RED;
+  return true;
+}
+
+/**
+ * Move the legacy Sterling/Kite down-candle reds to TradingView's canonical red.
+ * Custom user-selected colours are preserved. Saved templates are migrated too,
+ * otherwise loading an older template would silently restore the previous shade.
+ */
+export function migrateTradingViewChartPalette(storage: PreferenceStorage): void {
+  try {
+    const rawWorkspace = storage.getItem(KITE_CHART_WORKSPACE_KEY);
+    if (rawWorkspace === null) {
+      storage.setItem(KITE_CHART_WORKSPACE_KEY, JSON.stringify({
+        appearance: { candleDown: TRADINGVIEW_DOWN_RED },
+      }));
+    } else {
+      const workspace = JSON.parse(rawWorkspace);
+      if (isRecord(workspace) && migrateWorkspaceAppearance(workspace)) {
+        storage.setItem(KITE_CHART_WORKSPACE_KEY, JSON.stringify(workspace));
+      }
+    }
+  } catch {
+    // A malformed legacy workspace should not block app startup.
+  }
+
+  try {
+    const rawTemplates = storage.getItem(KITE_CHART_TEMPLATES_KEY);
+    if (!rawTemplates) return;
+    const templates = JSON.parse(rawTemplates);
+    if (!Array.isArray(templates)) return;
+
+    let changed = false;
+    for (const template of templates) {
+      if (!isRecord(template) || !isRecord(template.snapshot)) continue;
+      const workspace = isRecord(template.snapshot.workspace) ? template.snapshot.workspace : {};
+      if (!isRecord(template.snapshot.workspace)) template.snapshot.workspace = workspace;
+      changed = migrateWorkspaceAppearance(workspace) || changed;
+    }
+    if (changed) storage.setItem(KITE_CHART_TEMPLATES_KEY, JSON.stringify(templates));
+  } catch {
+    // Ignore malformed template data and keep boot non-fatal.
+  }
+}
+
 /**
  * Seed and migrate Kite UI defaults without fighting the user forever.
  *
@@ -68,6 +131,10 @@ export function installKiteDefaultPreferences(storage: PreferenceStorage | null 
     const theme = storage.getItem(KITE_TERMINAL_THEME_KEY);
 
     seedStableDefaults(storage);
+    migrateTradingViewChartPalette(storage);
+    if (typeof document !== 'undefined') {
+      document.documentElement.style.setProperty('--tradingview-down-red', TRADINGVIEW_DOWN_RED);
+    }
 
     if (!migrated) {
       if (layout === null || layout === 'grid') storage.setItem(KITE_SIGNAL_TABLE_LAYOUT_KEY, 'list');
