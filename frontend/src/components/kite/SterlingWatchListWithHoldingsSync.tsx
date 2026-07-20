@@ -57,11 +57,11 @@ function holdingsToWatchItems(holdings: any[]): WatchItem[] {
 
 function SyncHoldingsIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M4 7h10a5 5 0 0 1 5 5v1" />
-      <path d="M14 3l4 4-4 4" />
-      <path d="M20 17H10a5 5 0 0 1-5-5v-1" />
-      <path d="M10 21l-4-4 4-4" />
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M16 8h5V3" />
     </svg>
   );
 }
