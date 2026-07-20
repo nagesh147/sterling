@@ -1,9 +1,10 @@
-import React, { useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useMemo, useState } from 'react';
 import { TradingViewKiteChart as LegacyTradingViewKiteChart } from './TradingViewKiteChartLegacy';
 import {
   CHART_RANGE_KEYS,
   installChartParityRuntime,
   normalizeChartCandles,
+  removeChartParityContext,
   setChartParityContext,
   setChartVisibleRange,
   type ChartRangeKey,
@@ -27,13 +28,9 @@ function supertrendLabels(active: Set<string>, params: Record<string, any>) {
   ].filter((label): label is string => !!label);
 }
 
-/**
- * Zerodha-style presentation shell around the existing advanced chart. The
- * underlying chart remains the single source of truth for drawings, templates,
- * replay, indicators and persistence; this shell adds the missing market strip,
- * range controls and the SuperTrend marker runtime without duplicating them.
- */
 export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
+  const reactId = useId();
+  const contextId = useMemo(() => `kite-chart-${reactId.replace(/:/g, '')}`, [reactId]);
   const [range, setRange] = useState<ChartRangeKey>('ALL');
   const candles = useMemo(() => normalizeChartCandles(props.rawCandles), [props.rawCandles]);
   const last = candles[candles.length - 1];
@@ -48,6 +45,7 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
 
   useLayoutEffect(() => {
     setChartParityContext({
+      id: contextId,
       symbol: props.symbol,
       tf: props.tf,
       rawCandles: props.rawCandles,
@@ -57,6 +55,7 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
       theme: props.theme || {},
     });
   }, [
+    contextId,
     props.symbol,
     props.tf,
     props.rawCandles,
@@ -66,14 +65,16 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
     props.theme,
   ]);
 
+  useEffect(() => () => removeChartParityContext(contextId), [contextId]);
+
   const selectRange = (nextRange: ChartRangeKey) => {
     setRange(nextRange);
-    setChartVisibleRange(nextRange);
+    setChartVisibleRange(contextId, nextRange);
   };
 
   return (
     <section
-      className="sterling-zerodha-chart"
+      className={`sterling-zerodha-chart${props.isDark ? ' is-dark' : ''}`}
       style={{ height: props.height ?? '100%' }}
       aria-label={`${props.symbol} chart workspace`}
     >
