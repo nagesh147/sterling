@@ -87,7 +87,6 @@ export function KiteTab() {
   const { data: kiteStatus, isLoading: kiteStatusLoading } = useKiteStatus();
   useKiteAutoSession();
 
-  // Listen for nav clicks dispatched from the Sterling top row.
   useEffect(() => {
     const cb = (e: Event) => handleNavClick((e as CustomEvent<NavItem>).detail);
     window.addEventListener('kite-nav-click', cb);
@@ -160,6 +159,13 @@ export function KiteTab() {
     : nav === 'more' ? `more:${moreTab}`
     : `nav:${nav}`;
 
+  // Portfolio pages intentionally use the same two-column frame as Zerodha Kite:
+  // marketwatch on the left and the portfolio in the remaining width. The large
+  // ticker cards and Sterling signal pane are useful on trading/chart screens,
+  // but they were stealing vertical and horizontal space from Positions/Holdings
+  // and made those tabs materially diverge from Kite's layout.
+  const portfolioNav = !instrumentView && !setupView && !detailView && (nav === 'positions' || nav === 'holdings');
+
   return (
     <MacMotionProvider>
       <MacBootOverlay active={kiteStatusLoading && !kiteStatus} />
@@ -167,9 +173,9 @@ export function KiteTab() {
         activeNav={nav}
         onNavClick={handleNavClick}
         sidebar={<SterlingWatchListWithHoldingsSync onOpenInstrument={handleOpenInstrument} />}
-        rightSidebar={<SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />}
+        rightSidebar={portfolioNav ? undefined : <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />}
         bottomBar={<EngineTerminal />}
-        centerTopBar={<KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />}
+        centerTopBar={portfolioNav ? undefined : <KiteTicker onOpenChart={(symbol) => handleOpenInstrument(symbol, 'chart')} />}
         content={<MacSectionFade sectionKey={contentKey}>{content}</MacSectionFade>}
         onBasketClick={() => setBasketOpen(true)}
         basketCount={basketCount}
@@ -178,9 +184,7 @@ export function KiteTab() {
       <PendingGttProtectionWatcher />
       <KiteSessionGuard />
       <KiteAuthOverlay />
-      {isOpen && options && (
-        <OrderWindow options={options} onClose={closeOrderWindow} />
-      )}
+      {isOpen && options && <OrderWindow options={options} onClose={closeOrderWindow} />}
       {basketOpen && <BasketPane onClose={() => setBasketOpen(false)} />}
     </MacMotionProvider>
   );
