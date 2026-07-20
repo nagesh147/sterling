@@ -47,70 +47,14 @@ textarea,
   will-change: auto !important;
 }
 
-/* Positions parity: closed rows should read as historical, not merely translucent. */
+/* Zerodha Kite positions parity: closed positions remain on the same clean table
+ * surface, but the complete row is deliberately faded as historical data. */
 .pos-row:has(input[type="checkbox"]:disabled) {
-  background: #f7f7f8 !important;
-  opacity: 1 !important;
+  background: #fafafa !important;
+  opacity: 0.58 !important;
 }
 
 .pos-row:has(input[type="checkbox"]:disabled):hover {
-  background: #f3f3f4 !important;
-}
-
-.pos-row:has(input[type="checkbox"]:disabled) td,
-.pos-row:has(input[type="checkbox"]:disabled) td * {
-  color: #a5a7aa !important;
-}
-
-.pos-row:has(input[type="checkbox"]:disabled) td:nth-child(7) {
-  background: #f4f4f5 !important;
-}
-
-.pos-row:has(input[type="checkbox"]:disabled) td:nth-child(2) span,
-.pos-row:has(input[type="checkbox"]:disabled) td:nth-child(3) span:last-child {
-  background: #ececee !important;
-  color: #a0a2a5 !important;
-}
-
-/* Align the Breakdown bars around the zero axis like Kite: labels finish at zero,
- * losses extend left and gains extend right, with the chart centered and compact. */
-div:has(> h3):has(> div[style*="grid-template-columns: 210px 1fr"]) {
-  max-width: 980px;
-  margin-left: auto;
-  margin-right: auto;
-  overflow: hidden;
-}
-
-div:has(> h3):has(> div[style*="grid-template-columns: 210px 1fr"]) > h3 {
-  margin-bottom: 16px !important;
-}
-
-div[style*="grid-template-columns: 210px 1fr"] {
-  grid-template-columns: 42% 58% !important;
-  gap: 0 !important;
-  min-height: 18px;
-  margin-bottom: 0 !important;
-  overflow: visible;
-}
-
-div[style*="grid-template-columns: 210px 1fr"] > div:first-child {
-  position: relative;
-  z-index: 2;
-  padding-right: 10px;
-  font-size: 10px !important;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-div[style*="grid-template-columns: 210px 1fr"] > div:nth-child(2) {
-  width: 200% !important;
-  transform: translateX(-50%);
-  height: 8px !important;
-  align-self: center;
-  overflow: visible;
-}
-
-div[style*="grid-template-columns: 210px 1fr"] > div:nth-child(2) span {
-  min-width: 2px;
-  height: 8px !important;
+  background: #f7f7f7 !important;
+  opacity: 0.68 !important;
 }
