@@ -46,15 +46,3 @@ textarea,
 .mac-kite .mac-gpu:not(:active) {
   will-change: auto !important;
 }
-
-/* Zerodha Kite positions parity: closed positions remain on the same clean table
- * surface, but the complete row is deliberately faded as historical data. */
-.pos-row:has(input[type="checkbox"]:disabled) {
-  background: #fafafa !important;
-  opacity: 0.58 !important;
-}
-
-.pos-row:has(input[type="checkbox"]:disabled):hover {
-  background: #f7f7f7 !important;
-  opacity: 0.68 !important;
-}
