@@ -48,12 +48,34 @@
   display: none;
 }
 
+.sterling-zerodha-chart__instrument,
 .sterling-zerodha-chart__ohlc,
 .sterling-zerodha-chart__study-legend,
 .sterling-zerodha-chart__status,
 .sterling-zerodha-chart__ranges {
   display: flex;
   align-items: center;
+}
+
+.sterling-zerodha-chart__instrument {
+  min-width: 104px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding-right: 12px;
+  border-right: 1px solid var(--chart-border);
+}
+
+.sterling-zerodha-chart__instrument strong {
+  color: var(--chart-text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.sterling-zerodha-chart__instrument span {
+  color: var(--chart-faint);
+  font-size: 9px;
 }
 
 .sterling-zerodha-chart__ohlc {
