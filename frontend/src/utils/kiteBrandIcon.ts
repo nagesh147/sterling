@@ -112,7 +112,7 @@ const EMOJI_BRAND_ICONS = [
   { value: 'robot', label: 'Robot', emoji: '🤖', category: 'Tools' },
 ] as const;
 
-export type KiteBrandIcon = typeof EMOJI_BRAND_ICONS[number]['value'] | 'terminal';
+export type KiteBrandIcon = typeof EMOJI_BRAND_ICONS[number]['value'] | 'phoenix-emblem' | 'terminal';
 export type KiteBrandIconCategory = typeof EMOJI_BRAND_ICONS[number]['category'] | 'Sterling';
 
 export type KiteBrandIconOption = {
@@ -136,6 +136,12 @@ function emojiIconDataUri(emoji: string, size: KiteBrandIconSize = 'medium'): st
 }
 
 export const KITE_BRAND_ICON_OPTIONS: KiteBrandIconOption[] = [
+  {
+    value: 'phoenix-emblem',
+    label: 'Phoenix Emblem',
+    href: '/favicon-phoenix-emblem.svg?v=1',
+    category: 'Sterling',
+  },
   ...EMOJI_BRAND_ICONS.map((icon) => ({
     ...icon,
     href: emojiIconDataUri(icon.emoji, 'medium'),
