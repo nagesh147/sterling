@@ -6,9 +6,11 @@ import './styles/kiteSignalTypography.css';
 import { App } from './App';
 import { installKiteDefaultPreferences } from './utils/kiteDefaultPreferences';
 import { installScrollAutohide } from './utils/scrollAutohide';
+import { installKiteChartTimezone } from './utils/kiteChartTimezone';
 
 installKiteDefaultPreferences();
 installScrollAutohide();   // macOS-style: reveal scrollbars while scrolling, fade when idle
+installKiteChartTimezone(); // exchange candles and crosshair labels always render in IST
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root element not found');
