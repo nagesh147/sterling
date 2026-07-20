@@ -35,11 +35,35 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Apply reviewed patches
+      - name: Apply backend patch
+        id: backend_patch
+        continue-on-error: true
+        run: python .github/signal-integrity/patch_backend.py > backend-patch.log 2>&1
+
+      - name: Apply frontend patch
+        id: frontend_patch
+        continue-on-error: true
+        run: python .github/signal-integrity/patch_frontend.py > frontend-patch.log 2>&1
+
+      - name: Apply tests patch
+        id: tests_patch
+        continue-on-error: true
+        run: python .github/signal-integrity/patch_tests.py > tests-patch.log 2>&1
+
+      - name: Print patch diagnostics
+        if: always()
         run: |
-          python .github/signal-integrity/patch_backend.py
-          python .github/signal-integrity/patch_frontend.py
-          python .github/signal-integrity/patch_tests.py
+          echo '=== backend ==='; cat backend-patch.log || true
+          echo '=== frontend ==='; cat frontend-patch.log || true
+          echo '=== tests ==='; cat tests-patch.log || true
+          echo "backend=${{ steps.backend_patch.outcome }} frontend=${{ steps.frontend_patch.outcome }} tests=${{ steps.tests_patch.outcome }}"
+
+      - name: Require all patches
+        if: always()
+        run: |
+          test '${{ steps.backend_patch.outcome }}' = success
+          test '${{ steps.frontend_patch.outcome }}' = success
+          test '${{ steps.tests_patch.outcome }}' = success
 
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
