@@ -34,12 +34,14 @@ interface RuntimeChartState {
   contextId: string | null;
   markerApi: any | null;
   queued: boolean;
+  primary: boolean;
 }
 
 const PATCH_FLAG = Symbol.for('sterling.chartParityPatched');
 const chartStates = new WeakMap<any, RuntimeChartState>();
 const liveChartStates = new Set<RuntimeChartState>();
 const contexts = new Map<string, ChartParityContext>();
+const primaryStates = new Map<string, RuntimeChartState>();
 let pendingContextId: string | null = null;
 let installed = false;
 
@@ -73,10 +75,11 @@ export function directionFlipMarkers(
   times: number[],
   green = '#26a69a',
   red = '#ef5350',
+  startIndex = 1,
 ): SupertrendFlipMarker[] {
   const markers: SupertrendFlipMarker[] = [];
   const count = Math.min(points.length, times.length);
-  for (let index = 1; index < count; index += 1) {
+  for (let index = Math.max(1, startIndex); index < count; index += 1) {
     const previous = points[index - 1]?.direction;
     const current = points[index]?.direction;
     const time = times[index];
@@ -123,7 +126,7 @@ export function buildSupertrendFlipMarkers(context: ChartParityContext): Supertr
 
   for (const config of activeSupertrendConfigs(context)) {
     const points = supertrend(highs, lows, closes, Math.max(1, config.period), Math.max(0.1, config.multiplier));
-    for (const marker of directionFlipMarkers(points, times, green, red)) {
+    for (const marker of directionFlipMarkers(points, times, green, red, config.period + 1)) {
       const key = `${marker.time}:${marker.shape}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -171,7 +174,7 @@ function stateContext(state: RuntimeChartState) {
 
 function updateMarkers(state: RuntimeChartState) {
   const context = stateContext(state);
-  if (!state.mainSeries || !context) return;
+  if (!state.primary || !state.mainSeries || !context) return;
   const markers = buildSupertrendFlipMarkers(context);
   try {
     if (!state.markerApi) state.markerApi = createSeriesMarkers(state.mainSeries, markers as any);
@@ -194,7 +197,7 @@ export function setChartParityContext(context: ChartParityContext) {
   contexts.set(context.id, context);
   pendingContextId = context.id;
   for (const state of liveChartStates) {
-    if (state.contextId !== context.id) continue;
+    if (!state.primary || state.contextId !== context.id) continue;
     scheduleMarkerUpdate(state);
   }
 }
@@ -204,6 +207,7 @@ export function removeChartParityContext(contextId: string) {
   if (pendingContextId === contextId) pendingContextId = null;
   for (const state of liveChartStates) {
     if (state.contextId !== contextId) continue;
+    if (state.primary && primaryStates.get(contextId) === state) primaryStates.delete(contextId);
     state.contextId = null;
     try { state.markerApi?.setMarkers([]); } catch {}
   }
@@ -216,7 +220,7 @@ export function setChartVisibleRange(contextId: string, range: ChartRangeKey) {
   const visibleRange = resolvedChartRange(candles, range);
 
   for (const state of liveChartStates) {
-    if (state.contextId !== contextId) continue;
+    if (!state.primary || state.contextId !== contextId) continue;
     try {
       const timeScale = state.chart.timeScale();
       if (!visibleRange) timeScale.fitContent();
@@ -270,13 +274,18 @@ export function installChartParityRuntime() {
           contextId: pendingContextId,
           markerApi: null,
           queued: false,
+          primary: false,
         };
+        if (state.contextId && !primaryStates.has(state.contextId)) {
+          state.primary = true;
+          primaryStates.set(state.contextId, state);
+        }
         chartStates.set(this, state);
         liveChartStates.add(state);
       }
 
       if (!state.firstSeries) state.firstSeries = series;
-      if (!state.mainSeries && (
+      if (state.primary && !state.mainSeries && (
         seriesDefinition === CandlestickSeries ||
         seriesDefinition === BarSeries ||
         seriesDefinition === AreaSeries
@@ -285,25 +294,30 @@ export function installChartParityRuntime() {
       }
 
       const title = String(options?.title || '');
-      if (/^(ST\s|SuperTrend)/i.test(title)) state.mainSeries ||= state.firstSeries;
+      if (state.primary && /^(ST\s|SuperTrend)/i.test(title)) state.mainSeries ||= state.firstSeries;
 
       try {
         const originalSetData = series.setData.bind(series);
         series.setData = (data: any[]) => {
           originalSetData(data);
-          if (series === state!.mainSeries || /^(ST\s|SuperTrend)/i.test(title)) scheduleMarkerUpdate(state!);
+          if (state!.primary && (series === state!.mainSeries || /^(ST\s|SuperTrend)/i.test(title))) {
+            scheduleMarkerUpdate(state!);
+          }
         };
       } catch {
         // Keep normal chart behavior if a future library release seals methods.
       }
 
-      if (state.mainSeries) scheduleMarkerUpdate(state);
+      if (state.primary && state.mainSeries) scheduleMarkerUpdate(state);
       return series;
     };
 
     chartPrototype.remove = function patchedRemove(...args: any[]) {
       const state = chartStates.get(this);
       if (state) {
+        if (state.primary && state.contextId && primaryStates.get(state.contextId) === state) {
+          primaryStates.delete(state.contextId);
+        }
         liveChartStates.delete(state);
         chartStates.delete(this);
       }
