@@ -18,17 +18,18 @@ def _ohlc():
     return open_, high, low, close
 
 
-def test_default_regime_matches_regular_zerodha_candles():
+def test_default_regime_matches_displayed_heikin_ashi_candles():
     o, h, l, c = _ohlc()
     cfg = SterlingKiteEngineConfig()
+    _, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
 
     regime = compute_regime(o, h, l, c, cfg)
     expected = [
-        compute_supertrend(h, l, c, period, multiplier)
+        compute_supertrend(ha_h, ha_l, ha_c, period, multiplier)
         for period, multiplier in (cfg.fast, cfg.mid, cfg.slow)
     ]
 
-    assert cfg.candle_basis == "raw"
+    assert cfg.candle_basis == "heikin_ashi"
     assert np.array_equal(regime.l_fast, expected[0][0])
     assert np.array_equal(regime.t_fast, expected[0][1])
     assert np.array_equal(regime.l_mid, expected[1][0])
@@ -37,13 +38,12 @@ def test_default_regime_matches_regular_zerodha_candles():
     assert np.array_equal(regime.t_slow, expected[2][1])
 
 
-def test_heikin_ashi_remains_explicitly_available():
+def test_raw_ohlc_remains_explicitly_available():
     o, h, l, c = _ohlc()
-    cfg = SterlingKiteEngineConfig(candle_basis="heikin_ashi")
+    cfg = SterlingKiteEngineConfig(candle_basis="raw")
 
     regime = compute_regime(o, h, l, c, cfg)
-    _, ha_h, ha_l, ha_c = compute_heikin_ashi(o, h, l, c)
-    expected_fast = compute_supertrend(ha_h, ha_l, ha_c, *cfg.fast)
+    expected_fast = compute_supertrend(h, l, c, *cfg.fast)
 
     assert np.array_equal(regime.l_fast, expected_fast[0])
     assert np.array_equal(regime.t_fast, expected_fast[1])
