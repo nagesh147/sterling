@@ -53,6 +53,15 @@ export function isKiteExchangeEnabled(exchange: unknown, selected = readKiteExch
   return selected.includes(normalized as KiteExchange);
 }
 
+function signalExchange(row: any): string {
+  const explicit = String(row?.exchange || '').toUpperCase();
+  if (explicit) return explicit;
+  const prefixed = exchangeFromSymbol(row?.symbol || row?.option_symbol);
+  if (prefixed) return prefixed;
+  const underlying = String(row?.underlying || '').toUpperCase();
+  return underlying === 'SENSEX' || underlying === 'BANKEX' ? 'BFO' : 'NFO';
+}
+
 export function filterKitePayload<T>(path: string, payload: T): T {
   if (!payload || typeof payload !== 'object') return payload;
   const selected = readKiteExchanges();
@@ -69,8 +78,18 @@ export function filterKitePayload<T>(path: string, payload: T): T {
   }
 
   if (path.includes('/api/v1/kite/engine/signals') && Array.isArray(value.rows)) {
-    const rows = value.rows.filter((row: any) => isKiteExchangeEnabled(row?.exchange, selected));
+    const rows = value.rows.filter((row: any) => isKiteExchangeEnabled(signalExchange(row), selected));
     return { ...value, rows } as T;
+  }
+
+  if (path.includes('/api/v1/kite/engine/scan-report') && Array.isArray(value.entries)) {
+    const entries = value.entries.filter((row: any) => isKiteExchangeEnabled(signalExchange(row), selected));
+    return { ...value, entries } as T;
+  }
+
+  if (path.includes('/api/v1/kite/engine/open-positions') && Array.isArray(value.positions)) {
+    const positions = value.positions.filter((row: any) => isKiteExchangeEnabled(signalExchange(row), selected));
+    return { ...value, positions } as T;
   }
 
   return payload;
