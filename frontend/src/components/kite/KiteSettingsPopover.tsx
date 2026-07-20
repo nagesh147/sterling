@@ -2,9 +2,12 @@ import React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { k } from '../../styles/kiteUI';
 import { useKiteSettings } from '../../store/useKiteSettings';
+import { useTickerPins } from '../../store/useTickerPins';
 import {
   DEFAULT_KITE_EXCHANGES,
   KITE_EXCHANGES,
+  exchangeFromSymbol,
+  isKiteExchangeEnabled,
   readKiteExchanges,
   writeKiteExchanges,
   type KiteExchange,
@@ -26,9 +29,13 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
   const applyExchanges = (next: readonly string[]) => {
     const saved = writeKiteExchanges(next);
     setExchanges(saved);
+    useTickerPins.setState((state) => ({
+      pins: state.pins.filter((symbol) => isKiteExchangeEnabled(exchangeFromSymbol(symbol), saved)),
+    }));
     void queryClient.invalidateQueries({ queryKey: ['kite-instruments'] });
     void queryClient.invalidateQueries({ queryKey: ['kite-engine-signals'] });
     void queryClient.invalidateQueries({ queryKey: ['kite-engine-scan-report'] });
+    void queryClient.invalidateQueries({ queryKey: ['kite-engine-open-positions'] });
   };
 
   const toggleExchange = (exchange: KiteExchange) => {
@@ -51,7 +58,7 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
             <div>
               <div style={{ fontSize: 12.5, color: '#444', fontWeight: 500 }}>Exchanges</div>
-              <div style={{ fontSize: 10.5, color: k.dim, marginTop: 2 }}>Controls instrument searches and Sterling signals.</div>
+              <div style={{ fontSize: 10.5, color: k.dim, marginTop: 2 }}>Controls instrument searches, ticker tiles, and Sterling signals.</div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <button type="button" onClick={() => applyExchanges(DEFAULT_KITE_EXCHANGES)} style={{ border: `1px solid ${k.border}`, background: k.bg, color: k.blue, borderRadius: 3, padding: '3px 6px', fontSize: 10, cursor: 'pointer' }}>NSE market</button>
