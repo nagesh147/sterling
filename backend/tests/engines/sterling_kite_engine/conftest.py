@@ -1,6 +1,3 @@
-from pathlib import Path
-import subprocess
-
 import numpy as np
 import pytest
 
@@ -26,31 +23,3 @@ def down_then_up():
     fall = list(np.linspace(300, 150, 60))
     rise = list(np.linspace(150, 450, 60))
     return series(fall + rise)
-
-
-# Temporary diagnostic hook for this focused repair branch. It persists concise
-# failure details because the connected Actions log viewer truncates before the
-# pytest tail. Removed once the gate is green.
-_FAILURES: list[str] = []
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    outcome = yield
-    report = outcome.get_result()
-    if report.when == 'call' and report.failed:
-        _FAILURES.append(f'{report.nodeid}\n{report.longrepr}\n')
-
-
-def pytest_sessionfinish(session, exitstatus):
-    if not _FAILURES:
-        return
-    root = Path(__file__).resolve().parents[4]
-    target = root / '.github/signal-integrity/pytest-failures.txt'
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text('\n\n'.join(_FAILURES))
-    subprocess.run(['git', 'config', 'user.name', 'OpenAI'], cwd=root)
-    subprocess.run(['git', 'config', 'user.email', 'noreply@openai.com'], cwd=root)
-    subprocess.run(['git', 'add', str(target.relative_to(root))], cwd=root)
-    subprocess.run(['git', 'commit', '-m', 'test(kite): capture integrity regression failure'], cwd=root)
-    subprocess.run(['git', 'push', 'origin', 'HEAD:fix/kite-signal-integrity-audit'], cwd=root)
