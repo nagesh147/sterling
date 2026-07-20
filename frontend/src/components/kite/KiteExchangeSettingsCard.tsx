@@ -99,7 +99,26 @@ export function KiteExchangeSettingsCard() {
       document.querySelectorAll('[data-kite-exchange-settings-host]').forEach((node) => node.remove());
     };
 
+    const hideRedundantLoaderPicker = () => {
+      const label = Array.from(document.querySelectorAll<HTMLElement>('label')).find(
+        (node) => node.textContent?.trim() === 'LOADER & ANIMATION STYLE',
+      );
+      const wrapper = label?.parentElement?.parentElement;
+      if (wrapper) {
+        wrapper.dataset.kiteRedundantLoaderPicker = 'true';
+        wrapper.style.display = 'none';
+      }
+    };
+
+    const restoreRedundantLoaderPicker = () => {
+      document.querySelectorAll<HTMLElement>('[data-kite-redundant-loader-picker]').forEach((node) => {
+        node.style.removeProperty('display');
+        delete node.dataset.kiteRedundantLoaderPicker;
+      });
+    };
+
     const locate = () => {
+      hideRedundantLoaderPicker();
       const title = Array.from(document.querySelectorAll<HTMLElement>('div')).find(
         (node) => node.textContent?.trim() === 'KITE SETTINGS',
       );
@@ -125,6 +144,7 @@ export function KiteExchangeSettingsCard() {
     return () => {
       observer.disconnect();
       removeHosts();
+      restoreRedundantLoaderPicker();
     };
   }, []);
 
