@@ -36,9 +36,26 @@ describe('chart parity runtime', () => {
 
   it('ignores invalid timestamps and incomplete direction points', () => {
     expect(directionFlipMarkers(
-      [{ direction: 'up' }, { direction: undefined }, { direction: 'down' }],
+      [{ direction: 'up' }, {} as any, { direction: 'down' }],
       [10, Number.NaN, 30],
     )).toEqual([]);
+  });
+
+  it('skips direction changes inside the SuperTrend warm-up window', () => {
+    expect(directionFlipMarkers(
+      [
+        { direction: 'up' },
+        { direction: 'down' },
+        { direction: 'up' },
+        { direction: 'down' },
+      ],
+      [10, 20, 30, 40],
+      '#00aa00',
+      '#cc0000',
+      3,
+    )).toEqual([
+      { time: 40, position: 'aboveBar', color: '#cc0000', shape: 'arrowDown' },
+    ]);
   });
 
   it('sorts candles, drops invalid rows, and keeps the newest duplicate', () => {
