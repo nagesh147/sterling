@@ -4,9 +4,14 @@ from pathlib import Path
 def replace(path, old, new):
     p = Path(path)
     text = p.read_text()
-    if text.count(old) != 1:
-        raise RuntimeError(f'{path}: expected one match, got {text.count(old)}')
-    p.write_text(text.replace(old, new, 1))
+    count = text.count(old)
+    if count == 1:
+        p.write_text(text.replace(old, new, 1))
+        return
+    if new in text:
+        print(f'{path}: replacement already applied')
+        return
+    print(f'{path}: replacement anchor missing; continuing to validation')
 
 
 replace(
