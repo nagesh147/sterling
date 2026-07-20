@@ -1,14 +1,18 @@
 .sterling-zerodha-chart {
   --chart-bg: #fff;
   --chart-surface: #fff;
-  --chart-border: #eceff1;
-  --chart-text: #444;
-  --chart-muted: #757575;
-  --chart-faint: #9e9e9e;
-  --chart-hover: #f1f3f5;
-  --chart-active: #eef4ff;
-  --chart-blue: #4184f3;
+  --chart-border: #e8ebee;
+  --chart-text: #30343b;
+  --chart-muted: #6f7680;
+  --chart-faint: #949aa3;
+  --chart-hover: #f4f6f8;
+  --chart-active: #edf3ff;
+  --chart-blue: #387ed1;
+  --chart-green: #26a69a;
+  --chart-red: #ef5350;
+  position: relative;
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
@@ -27,107 +31,108 @@
   --chart-hover: #2a2e39;
   --chart-active: #263752;
   --chart-blue: #6ea8fe;
+  --chart-green: #089981;
+  --chart-red: #f23645;
 }
 
-.sterling-zerodha-chart__market-strip {
-  min-height: 32px;
+.zk-toolbar {
+  z-index: 30;
+  height: 40px;
+  min-height: 40px;
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 0 10px;
+  gap: 3px;
+  padding: 0 7px;
   border-bottom: 1px solid var(--chart-border);
   background: var(--chart-surface);
   white-space: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: visible;
   flex-shrink: 0;
 }
 
-.sterling-zerodha-chart__market-strip::-webkit-scrollbar,
-.sterling-zerodha-chart .sterling-zerodha-chart__legacy > div > div:first-of-type::-webkit-scrollbar {
-  display: none;
-}
+.zk-toolbar-spacer { flex: 1 1 auto; min-width: 4px; }
 
-.sterling-zerodha-chart__instrument,
-.sterling-zerodha-chart__ohlc,
-.sterling-zerodha-chart__study-legend,
-.sterling-zerodha-chart__status,
-.sterling-zerodha-chart__ranges {
-  display: flex;
-  align-items: center;
-}
-
-.sterling-zerodha-chart__instrument {
-  min-width: 104px;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  padding-right: 12px;
-  border-right: 1px solid var(--chart-border);
-}
-
-.sterling-zerodha-chart__instrument strong {
-  color: var(--chart-text);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.sterling-zerodha-chart__instrument span {
-  color: var(--chart-faint);
-  font-size: 9px;
-}
-
-.sterling-zerodha-chart__ohlc {
-  gap: 11px;
-  font-size: 11px;
-  color: var(--chart-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.sterling-zerodha-chart__ohlc b {
-  margin-right: 3px;
-  color: var(--chart-faint);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.sterling-zerodha-chart .is-positive { color: #2e9d63; }
-.sterling-zerodha-chart .is-negative { color: #e05260; }
-
-.sterling-zerodha-chart__study-legend {
-  gap: 12px;
-  margin-left: auto;
-}
-
-.sterling-zerodha-chart__study {
+.zk-tool {
+  height: 30px;
+  min-width: 30px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
   color: var(--chart-muted);
-  font-size: 10px;
+  font: 500 11px/1 inherit;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background-color 90ms ease, color 90ms ease;
 }
 
-.sterling-zerodha-chart__study-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #26a69a 0 50%, #ef5350 50% 100%);
-  box-shadow: 0 0 0 1px rgba(127, 127, 127, 0.16);
+.zk-tool:hover { background: var(--chart-hover); color: var(--chart-text); }
+.zk-tool:active { background: var(--chart-border); }
+.zk-tool.is-active { background: var(--chart-active); color: var(--chart-blue); }
+.zk-tool:focus-visible { outline: 2px solid rgba(56,126,209,.32); outline-offset: 1px; }
+.zk-tool svg { display: block; flex: 0 0 auto; }
+.zk-symbol { max-width: 176px; justify-content: flex-start; font-weight: 600; color: var(--chart-text); }
+.zk-symbol span { overflow: hidden; text-overflow: ellipsis; }
+.zk-tf { min-width: 22px; text-align: center; color: var(--chart-text); }
+.zk-tool-label { text-transform: capitalize; }
+
+.zk-menu-host { position: relative; display: inline-flex; }
+.zk-popover {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  z-index: 80;
+  min-width: 126px;
+  padding: 5px;
+  border: 1px solid var(--chart-border);
+  border-radius: 4px;
+  background: var(--chart-surface);
+  box-shadow: 0 8px 24px rgba(0,0,0,.16);
+  color: var(--chart-text);
 }
 
-.sterling-zerodha-chart__study-dot.study-2 { opacity: 0.82; }
-.sterling-zerodha-chart__study-dot.study-3 { opacity: 0.64; }
+.zk-popover button {
+  width: 100%;
+  min-height: 29px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--chart-muted);
+  font: 500 11px/1 inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.zk-popover button:hover { background: var(--chart-hover); color: var(--chart-text); }
+.zk-popover button.is-selected { color: var(--chart-blue); background: var(--chart-active); }
+.zk-timeframes { display: grid; grid-template-columns: repeat(3, minmax(38px, 1fr)); min-width: 150px; }
+.zk-timeframes button { justify-content: center; }
+.zk-indicators { width: 218px; max-height: 330px; overflow-y: auto; }
+.zk-check { width: 13px; color: var(--chart-blue); }
 
 .sterling-zerodha-chart__legacy {
-  flex: 1;
+  position: relative;
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
 
+/* The wrapper owns the primary toolbar. Keep the full legacy workspace available
+   behind More, but do not render two competing toolbars in the normal view. */
 .sterling-zerodha-chart .sterling-zerodha-chart__legacy > div > div:first-of-type {
-  min-height: 38px !important;
-  padding: 4px 8px !important;
+  display: none !important;
+}
+.sterling-zerodha-chart.show-advanced .sterling-zerodha-chart__legacy > div > div:first-of-type {
+  min-height: 36px !important;
+  display: flex !important;
+  padding: 3px 7px !important;
   gap: 3px !important;
   flex-wrap: nowrap !important;
   overflow-x: auto !important;
@@ -135,83 +140,130 @@
   background: var(--chart-surface) !important;
   border-bottom: 1px solid var(--chart-border) !important;
 }
+.sterling-zerodha-chart.show-advanced .sterling-zerodha-chart__legacy > div > div:first-of-type::-webkit-scrollbar { display: none; }
 
+/* Neutralise the old text-heavy resting controls when the advanced strip is open. */
 .sterling-zerodha-chart .tv-ctrl {
-  border-radius: 4px !important;
+  border-radius: 3px !important;
   box-shadow: none !important;
   font-family: inherit !important;
-  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease !important;
+  transition: background-color 90ms ease, color 90ms ease !important;
+}
+.sterling-zerodha-chart .tv-ctrl:hover { filter: none !important; background-color: var(--chart-hover) !important; }
+.sterling-zerodha-chart .tv-ctrl:active { filter: none !important; transform: none !important; }
+.sterling-zerodha-chart .tv-ctrl:focus-visible { outline: 2px solid rgba(56,126,209,.32) !important; outline-offset: 1px; box-shadow: none !important; }
+
+.zk-overlay {
+  position: absolute;
+  z-index: 12;
+  top: 48px;
+  left: 38px;
+  max-width: min(620px, calc(100% - 112px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+  color: var(--chart-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 var(--chart-bg);
 }
 
-.sterling-zerodha-chart .tv-ctrl:hover {
-  filter: none !important;
-  background-color: var(--chart-hover) !important;
+.zk-instrument-line, .zk-ohlc, .zk-quotes, .zk-study-row {
+  display: flex;
+  align-items: center;
 }
+.zk-instrument-line { gap: 6px; }
+.zk-instrument-line strong { color: var(--chart-text); font-size: 12px; font-weight: 600; }
+.zk-instrument-line span { color: var(--chart-faint); font-size: 9px; }
+.zk-ohlc { gap: 9px; flex-wrap: wrap; }
+.zk-ohlc span { white-space: nowrap; }
+.zk-ohlc b { margin-right: 3px; color: var(--chart-faint); font-weight: 600; }
+.sterling-zerodha-chart .is-positive { color: var(--chart-green) !important; }
+.sterling-zerodha-chart .is-negative { color: var(--chart-red) !important; }
 
-.sterling-zerodha-chart .tv-ctrl:active {
-  filter: none !important;
-  transform: none !important;
-  background-color: var(--chart-border) !important;
+.zk-quotes { gap: 5px; margin-top: 2px; }
+.zk-quote {
+  min-width: 68px;
+  height: 31px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 7px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: color-mix(in srgb, currentColor 5%, var(--chart-bg));
+  line-height: 1.05;
 }
+.zk-quote small { font-size: 8px; font-weight: 700; letter-spacing: .35px; opacity: .82; }
+.zk-quote strong { font-size: 11px; font-weight: 600; }
+.zk-quote.is-sell { color: #e05260; }
+.zk-quote.is-buy { color: #4184f3; }
+.zk-spread { min-width: 31px; color: var(--chart-faint); font-size: 9px; text-align: center; }
 
-.sterling-zerodha-chart .tv-ctrl:focus-visible {
-  outline: 2px solid rgba(65, 132, 243, 0.35) !important;
-  outline-offset: 1px;
-  box-shadow: none !important;
-}
+.zk-study-list { display: flex; flex-direction: column; gap: 2px; margin-top: 1px; }
+.zk-study-row { min-height: 14px; gap: 5px; white-space: nowrap; }
+.zk-study-row span { color: var(--chart-muted); }
+.zk-study-row b { margin-left: 2px; color: var(--chart-text); font-weight: 500; }
+.zk-study-dot { width: 6px; height: 6px; border-radius: 50%; background: linear-gradient(135deg, var(--chart-green) 0 50%, var(--chart-red) 50% 100%); }
+.zk-study-dot.study-1 { opacity: .78; }
+.zk-study-dot.study-2 { opacity: .58; }
 
 .sterling-zerodha-chart__range-bar {
-  min-height: 29px;
+  height: 27px;
+  min-height: 27px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 8px;
+  gap: 8px;
+  padding: 0 7px;
   border-top: 1px solid var(--chart-border);
   background: var(--chart-surface);
   flex-shrink: 0;
 }
-
-.sterling-zerodha-chart__ranges { gap: 1px; }
-
-.sterling-zerodha-chart__ranges button {
-  min-width: 31px;
-  height: 23px;
-  padding: 0 6px;
+.sterling-zerodha-chart__ranges, .sterling-zerodha-chart__status { display: flex; align-items: center; }
+.sterling-zerodha-chart__ranges { gap: 1px; min-width: 0; }
+.sterling-zerodha-chart__ranges button, .sterling-zerodha-chart__status button {
+  height: 22px;
+  min-width: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
   border: 0;
-  border-radius: 3px;
+  border-radius: 2px;
   background: transparent;
   color: var(--chart-muted);
   font: 500 10px/1 inherit;
   cursor: pointer;
 }
+.sterling-zerodha-chart__ranges button:hover, .sterling-zerodha-chart__status button:hover { background: var(--chart-hover); color: var(--chart-text); }
+.sterling-zerodha-chart__ranges button.is-active, .sterling-zerodha-chart__status button.is-active { background: var(--chart-active); color: var(--chart-blue); }
+.sterling-zerodha-chart__ranges svg, .sterling-zerodha-chart__status svg { width: 13px; height: 13px; }
+.sterling-zerodha-chart__status { gap: 1px; color: var(--chart-faint); font-size: 10px; white-space: nowrap; }
+.sterling-zerodha-chart__status > span { padding: 0 6px; }
 
-.sterling-zerodha-chart__ranges button:hover {
-  background: var(--chart-hover);
-  color: var(--chart-text);
+@media (max-width: 1120px) {
+  .zk-optional { display: none; }
+  .zk-symbol { max-width: 130px; }
 }
 
-.sterling-zerodha-chart__ranges button.is-active {
-  background: var(--chart-active);
-  color: var(--chart-blue);
+@media (max-width: 820px) {
+  .zk-optional-small, .zk-tool-label { display: none; }
+  .zk-tool { padding: 0 6px; }
+  .zk-symbol { max-width: 112px; }
+  .zk-overlay { left: 34px; max-width: calc(100% - 84px); }
+  .zk-study-list { display: none; }
+  .sterling-zerodha-chart__status > span { display: none; }
 }
 
-.sterling-zerodha-chart__status {
-  gap: 10px;
-  color: var(--chart-faint);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.sterling-zerodha-chart__status span + span::before {
-  content: "·";
-  margin-right: 10px;
-  color: var(--chart-faint);
-}
-
-@media (max-width: 900px) {
-  .sterling-zerodha-chart__market-strip { gap: 10px; }
-  .sterling-zerodha-chart__study-legend { display: none; }
-  .sterling-zerodha-chart__ranges button { min-width: 27px; padding: 0 4px; }
-  .sterling-zerodha-chart__status span:first-child { display: none; }
+@media (max-width: 560px) {
+  .zk-toolbar { gap: 1px; padding: 0 3px; }
+  .zk-symbol { max-width: 92px; }
+  .zk-overlay { top: 46px; }
+  .zk-ohlc span:nth-child(2), .zk-ohlc span:nth-child(3) { display: none; }
+  .zk-quotes { display: none; }
+  .sterling-zerodha-chart__ranges button { min-width: 24px; padding: 0 3px; }
+  .sterling-zerodha-chart__status button:first-of-type { display: none; }
 }
