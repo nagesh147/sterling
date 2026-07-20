@@ -1,0 +1,4 @@
+src/components/charts/__tests__/TradingViewKiteChart.parity.test.tsx(49,20): error TS2322: Type 'VitestUtils' is not assignable to type 'Awaitable<HookCleanupCallback>'.
+src/components/charts/__tests__/TradingViewKiteChart.workspace.test.tsx(239,38): error TS2322: Type '{ time: number; open: number; high: number; low: number; close: number; volume: number; }[]' is not assignable to type 'never[]'.
+  Type '{ time: number; open: number; high: number; low: number; close: number; volume: number; }' is not assignable to type 'never'.
+src/components/kite/__tests__/KiteTicker.liveSparkline.test.ts(27,20): error TS2550: Property 'at' does not exist on type 'number[]'. Do you need to change your target library? Try changing the 'lib' compiler option to 'es2022' or later.
