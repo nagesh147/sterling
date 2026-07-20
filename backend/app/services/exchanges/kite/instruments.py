@@ -18,6 +18,10 @@ import time
 from typing import Awaitable, Callable, Dict, List, Optional, Tuple
 
 
+_MONTHS = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"}
+_DERIVATIVE_TYPES = {"CE", "PE", "FUT"}
+
+
 def parse_instruments_csv(text: str) -> List[dict]:
     """Parse a Kite instruments CSV dump into a list of row dicts.
 
@@ -73,7 +77,7 @@ class InstrumentCache:
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
             now = time.monotonic()
-            if self._fresh(key, now):           # filled while we waited for the lock
+            if self._fresh(key, now):
                 return self._cache[key]
             text = await self._fetch(key)
             rows = await asyncio.to_thread(parse_instruments_csv, text)
@@ -94,17 +98,11 @@ class InstrumentCache:
     async def search(self, query: str, exchange: str = "", limit: int = 50) -> List[dict]:
         """Kite-style universal instrument search.
 
-        ``exchange=""`` searches the full dump (all segments — equities, futures,
-        options, indices, currencies, commodities). The query is whitespace-tokenized
-        and ALL tokens must appear in the instrument's searchable text
-        (tradingsymbol + name + strike + exchange + segment), so
-        ``"nifty 24000 ce"`` matches ``NFO:NIFTY24D2624000CE``. Results are ranked
-        the way the Kite search dropdown orders them:
-        exact tradingsymbol → prefix match → equities/indices above the option flood
-        → grouped by underlying → CE before PE → **nearest expiry first** → ascending
-        strike. The chronological-by-expiry ordering is what stops the option flood
-        from collapsing into a confusing alphabetical-by-symbol list
-        (``…26AUG…26DEC…26JUL…26JUN…``).
+        All whitespace-separated query tokens must appear in the searchable text.
+        Ranking is intent-aware: a derivative-specific query containing a month,
+        strike, or CE/PE/FUT puts exact derivative matches before the cash-equity
+        row. A broad underlying-only query keeps equities/indices above the option
+        flood, matching Kite's normal search behaviour.
         """
         q = (query or "").strip().upper()
         rows = await self.load(exchange)
@@ -112,6 +110,13 @@ class InstrumentCache:
             return rows[:limit]
         tokens = q.split()
         first = tokens[0]
+        requested_type = next((tok for tok in tokens if tok in _DERIVATIVE_TYPES), "")
+        requested_month = next((tok for tok in tokens if tok in _MONTHS), "")
+        requested_strike = next(
+            (tok for tok in tokens if tok.replace(".", "", 1).isdigit() and len(tok.split(".", 1)[0]) >= 3),
+            "",
+        )
+        derivative_intent = bool(requested_type or requested_month or requested_strike)
         type_order = {"CE": 0, "PE": 1, "FUT": 2}
         scored = []
         for r in rows:
@@ -119,26 +124,40 @@ class InstrumentCache:
             nm = str(r.get("name", "")).upper()
             seg = str(r.get("segment", "")).upper()
             exch = str(r.get("exchange", "")).upper()
-            hay = f"{ts} {nm} {self._strike_str(r.get('strike'))} {exch} {seg}"
+            strike_s = self._strike_str(r.get("strike"))
+            hay = f"{ts} {nm} {strike_s} {exch} {seg}"
             if all(tok in hay for tok in tokens):
                 itype = str(r.get("instrument_type", "")).upper()
-                is_option = 1 if itype in ("CE", "PE", "FUT") else 0
-                # ISO expiry strings sort lexicographically == chronologically;
-                # blank expiry (equities) gets a sentinel so it never jumps ahead.
+                is_derivative = itype in _DERIVATIVE_TYPES
                 expiry = str(r.get("expiry") or "9999-99-99")
                 try:
                     strike_v = float(r.get("strike") or 0)
                 except (TypeError, ValueError):
                     strike_v = 0.0
+
+                # These dimensions are no-ops for broad searches, but for a query
+                # such as "BAJAJ-AUTO JUL 10500 CE" they force the exact month,
+                # strike and side to the top rather than returning BAJAJ-AUTO EQ.
+                type_miss = 0 if not requested_type or itype == requested_type else 1
+                month_miss = 0 if not requested_month or requested_month in ts else 1
+                strike_miss = 0 if not requested_strike or strike_s == requested_strike else 1
+                asset_rank = (
+                    0 if is_derivative else 1
+                    if derivative_intent
+                    else 1 if is_derivative else 0
+                )
                 rank = (
-                    0 if ts == q else 1,                                          # exact symbol
-                    0 if (ts.startswith(first) or nm.startswith(first)) else 1,   # prefix match
-                    is_option,                                                    # equities/indices float up
-                    nm,                                                           # group by underlying
-                    type_order.get(itype, 9),                                     # CE → PE → FUT
-                    expiry,                                                        # nearest expiry first
-                    strike_v,                                                      # ascending strike
-                    ts,                                                            # stable tiebreak
+                    0 if ts == q else 1,
+                    type_miss,
+                    month_miss,
+                    strike_miss,
+                    0 if (ts.startswith(first) or nm.startswith(first)) else 1,
+                    asset_rank,
+                    nm,
+                    type_order.get(itype, 9),
+                    expiry,
+                    strike_v,
+                    ts,
                 )
                 scored.append((rank, r))
         scored.sort(key=lambda x: x[0])
@@ -160,12 +179,7 @@ class InstrumentCache:
         raise KeyError(f"Instrument not found: {exchange}:{tradingsymbol}")
 
     async def lot_sizes(self, symbols: List[str]) -> Dict[str, int]:
-        """Bulk ``EXCHANGE:TRADINGSYMBOL`` → ``lot_size`` lookup.
-
-        Only instruments actually found are returned (callers keep their own
-        fallback for anything unresolved). Each exchange dump is loaded at most
-        once, then resolved in-memory — cheap for a whole watchlist.
-        """
+        """Bulk ``EXCHANGE:TRADINGSYMBOL`` → ``lot_size`` lookup."""
         by_ex: Dict[str, List[Tuple[str, str]]] = {}
         for sym in symbols:
             ex, sep, ts = sym.partition(":")
@@ -185,12 +199,7 @@ class InstrumentCache:
         return out
 
     async def expiries(self, symbols: List[str]) -> Dict[str, str]:
-        """Bulk ``EXCHANGE:TRADINGSYMBOL`` → ``expiry`` (``YYYY-MM-DD``) lookup.
-
-        Only F&O instruments that are actually found AND carry an expiry are
-        returned (equities have none). Mirrors :meth:`lot_sizes` so the market
-        watch can backfill the expiry it shows on an expanded option row.
-        """
+        """Bulk ``EXCHANGE:TRADINGSYMBOL`` → ``expiry`` (``YYYY-MM-DD``) lookup."""
         by_ex: Dict[str, List[Tuple[str, str]]] = {}
         for sym in symbols:
             ex, sep, ts = sym.partition(":")
