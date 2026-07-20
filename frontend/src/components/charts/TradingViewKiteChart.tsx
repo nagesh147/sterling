@@ -25,12 +25,12 @@ type ChartType = 'candles' | 'bars' | 'line' | 'area';
 type ChartStyle = 'regular' | 'heikin-ashi' | 'bars' | 'line' | 'area';
 
 const TIMEFRAMES = ['1m', '3m', '5m', '15m', '30m', '1H', '2H', '4H', 'D', 'W', 'M'];
-const CHART_STYLES: Array<{ value: ChartStyle; label: string; description: string; chartType: ChartType; heikinAshi: boolean }> = [
-  { value: 'regular', label: 'Regular candles', description: 'Standard OHLC candlesticks', chartType: 'candles', heikinAshi: false },
-  { value: 'heikin-ashi', label: 'Heikin Ashi', description: 'Smoothed trend candles', chartType: 'candles', heikinAshi: true },
-  { value: 'bars', label: 'Bars', description: 'Traditional OHLC bars', chartType: 'bars', heikinAshi: false },
-  { value: 'line', label: 'Line', description: 'Close-price line', chartType: 'line', heikinAshi: false },
-  { value: 'area', label: 'Area', description: 'Filled close-price line', chartType: 'area', heikinAshi: false },
+const CHART_STYLES: Array<{ value: ChartStyle; label: string; chartType: ChartType; heikinAshi: boolean }> = [
+  { value: 'regular', label: 'Regular candles', chartType: 'candles', heikinAshi: false },
+  { value: 'heikin-ashi', label: 'Heikin Ashi', chartType: 'candles', heikinAshi: true },
+  { value: 'bars', label: 'Bars', chartType: 'bars', heikinAshi: false },
+  { value: 'line', label: 'Line', chartType: 'line', heikinAshi: false },
+  { value: 'area', label: 'Area', chartType: 'area', heikinAshi: false },
 ];
 const INDICATORS = [
   ['vol', 'Volume'],
@@ -190,15 +190,27 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
 
   useEffect(() => {
     if (!timeMenu && !chartStyleMenu && !indicatorMenu) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setTimeMenu(false);
-        setChartStyleMenu(false);
-        setIndicatorMenu(false);
-      }
+
+    const closeMenus = () => {
+      setTimeMenu(false);
+      setChartStyleMenu(false);
+      setIndicatorMenu(false);
     };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenus();
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.zk-menu-host')) return;
+      closeMenus();
+    };
+
+    window.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
+    };
   }, [timeMenu, chartStyleMenu, indicatorMenu]);
 
   const selectRange = (nextRange: ChartRangeKey) => {
@@ -284,7 +296,7 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
                 return (
                   <button key={option.value} type="button" role="menuitemradio" aria-checked={selected} className={selected ? 'is-selected' : undefined} onClick={() => changeChartStyle(option.value)}>
                     <span className="zk-check">{selected ? '✓' : ''}</span>
-                    <span className="zk-chart-type-copy"><strong>{option.label}</strong><small>{option.description}</small></span>
+                    <span className="zk-chart-type-copy"><strong>{option.label}</strong></span>
                   </button>
                 );
               })}
