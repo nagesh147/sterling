@@ -6,6 +6,7 @@ import { MarketDataPane } from './MarketDataPane';
 import { ConnectPane } from './ConnectPane';
 import { MutualFundsPane } from './MutualFundsPane';
 import { PortfolioPane } from './PortfolioPane';
+import { PositionsPane } from './PositionsPane';
 import { OrdersPane } from './OrdersPane';
 import { FundsPane } from './FundsPane';
 import { BidsPane } from './BidsPane';
@@ -154,7 +155,7 @@ export function KiteTab() {
     if (nav === 'dashboard') content = <KiteDashboard />;
     else if (nav === 'orders') content = <OrdersPane onOpenBasket={() => setBasketOpen(true)} />;
     else if (nav === 'holdings') content = <PortfolioPane view="holdings" />;
-    else if (nav === 'positions') content = <PortfolioPane view="positions" />;
+    else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;
     else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
     else if (nav === 'connect') content = <ConnectPane />;
   }
