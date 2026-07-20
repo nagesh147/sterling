@@ -15,10 +15,8 @@ const STREAM_WS_PATH = '/api/v1/stream/ws';
 const BASE_DELAY = 2_000;
 const MAX_DELAY = 30_000;
 const RECONCILE_DEBOUNCE = 250;
-// The visible product requirement is one price refresh per second. Flushing the
-// entire React subscriber graph five times per second made hover and click work
-// compete with background price renders across the watchlist, ticker and engine.
 const UI_NOTIFY_MS = 1_000;
+const INTERACTION_GRACE_MS = 180;
 
 type BrowserLocation = Pick<Location, 'protocol' | 'host'>;
 
@@ -57,6 +55,25 @@ const _tickByToken = new Map<number, KiteTick>();
 let _version = 0;
 const _storeListeners = new Set<() => void>();
 let _notifyScheduled = false;
+let _lastInteractionAt = 0;
+let _interactionListenersInstalled = false;
+
+function markInteraction() {
+  _lastInteractionAt = Date.now();
+}
+
+function installInteractionListeners() {
+  if (_interactionListenersInstalled || typeof window === 'undefined') return;
+  _interactionListenersInstalled = true;
+  const opts: AddEventListenerOptions = { passive: true, capture: true };
+  window.addEventListener('pointerdown', markInteraction, opts);
+  window.addEventListener('pointermove', markInteraction, opts);
+  window.addEventListener('wheel', markInteraction, opts);
+  window.addEventListener('scroll', markInteraction, opts);
+  window.addEventListener('keydown', markInteraction, { capture: true });
+}
+
+installInteractionListeners();
 
 function sameOhlc(a?: KiteTick['ohlc'], b?: KiteTick['ohlc']): boolean {
   return a?.open === b?.open && a?.high === b?.high && a?.low === b?.low && a?.close === b?.close;
@@ -71,14 +88,21 @@ function sameVisibleTick(previous: KiteTick | undefined, next: KiteTick): boolea
     && previous.depth === next.depth;
 }
 
+function flushStore() {
+  const interactionAge = Date.now() - _lastInteractionAt;
+  if (interactionAge < INTERACTION_GRACE_MS) {
+    window.setTimeout(flushStore, INTERACTION_GRACE_MS - interactionAge);
+    return;
+  }
+  _notifyScheduled = false;
+  _version += 1;
+  _storeListeners.forEach((listener) => listener());
+}
+
 function _notify() {
   if (_notifyScheduled) return;
   _notifyScheduled = true;
-  setTimeout(() => {
-    _notifyScheduled = false;
-    _version += 1;
-    _storeListeners.forEach((fn) => fn());
-  }, UI_NOTIFY_MS);
+  window.setTimeout(flushStore, UI_NOTIFY_MS);
 }
 
 export function getTick(token: number): KiteTick | undefined {
@@ -90,8 +114,8 @@ const _desiredFull = new Map<number, number>();
 const _subscribed = new Map<number, 'quote' | 'full'>();
 let _reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 
-function _wantMode(tok: number): 'quote' | 'full' {
-  return (_desiredFull.get(tok) ?? 0) > 0 ? 'full' : 'quote';
+function _wantMode(token: number): 'quote' | 'full' {
+  return (_desiredFull.get(token) ?? 0) > 0 ? 'full' : 'quote';
 }
 
 function _scheduleReconcile() {
@@ -103,25 +127,33 @@ function _scheduleReconcile() {
 }
 
 async function _reconcile() {
-  const want = new Set<number>();
-  for (const [tok, count] of _desired) if (count > 0) want.add(tok);
-  const toSub: number[] = [];
-  for (const token of want) {
-    if (_subscribed.get(token) !== _wantMode(token)) toSub.push(token);
+  const wanted = new Set<number>();
+  for (const [token, count] of _desired) if (count > 0) wanted.add(token);
+
+  const toSubscribe: number[] = [];
+  for (const token of wanted) {
+    if (_subscribed.get(token) !== _wantMode(token)) toSubscribe.push(token);
   }
-  const toRemove = [..._subscribed.keys()].filter((token) => !want.has(token));
-  if (!toSub.length && !toRemove.length) return;
+  const toRemove = [..._subscribed.keys()].filter((token) => !wanted.has(token));
+  if (!toSubscribe.length && !toRemove.length) return;
 
   const previous = new Map(_subscribed);
-  toSub.forEach((token) => _subscribed.set(token, _wantMode(token)));
+  toSubscribe.forEach((token) => _subscribed.set(token, _wantMode(token)));
   toRemove.forEach((token) => _subscribed.delete(token));
+
   const byMode: Record<'quote' | 'full', number[]> = { quote: [], full: [] };
-  for (const token of toSub) byMode[_wantMode(token)].push(token);
+  for (const token of toSubscribe) byMode[_wantMode(token)].push(token);
 
   try {
-    if (byMode.full.length) await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.full, mode: 'full' });
-    if (byMode.quote.length) await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.quote, mode: 'quote' });
-    if (toRemove.length) await api.post(`${K}/ticker/unsubscribe`, { instrument_tokens: toRemove });
+    if (byMode.full.length) {
+      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.full, mode: 'full' });
+    }
+    if (byMode.quote.length) {
+      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.quote, mode: 'quote' });
+    }
+    if (toRemove.length) {
+      await api.post(`${K}/ticker/unsubscribe`, { instrument_tokens: toRemove });
+    }
   } catch {
     _subscribed.clear();
     for (const [token, mode] of previous) _subscribed.set(token, mode);
@@ -136,11 +168,13 @@ export function registerTokens(tokens: number[], mode: 'quote' | 'full' = 'quote
   }
   _refConnect();
   _scheduleReconcile();
+
   return () => {
     for (const token of tokens) {
       const count = (_desired.get(token) ?? 0) - 1;
       if (count <= 0) _desired.delete(token);
       else _desired.set(token, count);
+
       if (mode === 'full') {
         const fullCount = (_desiredFull.get(token) ?? 0) - 1;
         if (fullCount <= 0) _desiredFull.delete(token);
@@ -168,21 +202,23 @@ function _scheduleReconnect() {
 
 function _connect() {
   if (_ws) return;
-  let ws: WebSocket;
+  let socket: WebSocket;
   try {
-    ws = new WebSocket(resolveKiteStreamWsUrl());
+    socket = new WebSocket(resolveKiteStreamWsUrl());
   } catch {
     _scheduleReconnect();
     return;
   }
-  _ws = ws;
-  ws.onopen = () => {
+
+  _ws = socket;
+  socket.onopen = () => {
     _reconnectDelay = BASE_DELAY;
-    ws.send(JSON.stringify({ action: 'subscribe', channel: `kite_ticks:${USER_ID}` }));
+    socket.send(JSON.stringify({ action: 'subscribe', channel: `kite_ticks:${USER_ID}` }));
     _subscribed.clear();
     _scheduleReconcile();
   };
-  ws.onmessage = (event) => {
+
+  socket.onmessage = (event) => {
     try {
       const message = JSON.parse(event.data);
       if (message.type !== 'kite_ticks' || !Array.isArray(message.ticks)) return;
@@ -199,11 +235,12 @@ function _connect() {
       // Ignore unrelated or malformed stream frames.
     }
   };
-  ws.onclose = () => {
+
+  socket.onclose = () => {
     _ws = null;
     _scheduleReconnect();
   };
-  ws.onerror = () => ws.close();
+  socket.onerror = () => socket.close();
 }
 
 function _disconnect() {
@@ -236,7 +273,7 @@ function _getVersion(): number {
   return _version;
 }
 
-/** Re-render the caller on the coalesced live-price UI cadence. */
+/** Re-render callers on the coalesced cadence, after active interaction settles. */
 export function useTickVersion(): number {
   return useSyncExternalStore(_subscribeStore, _getVersion, _getVersion);
 }
