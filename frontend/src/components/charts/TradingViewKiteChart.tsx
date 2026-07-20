@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { TradingViewKiteChart as LegacyTradingViewKiteChart } from './TradingViewKiteChartLegacy';
 import { useKiteQuote } from '../../hooks/useKite';
-import { supertrend } from '../../utils/indicators';
+import { heikinAshi, supertrend } from '../../utils/indicators';
 import {
   CHART_CROSSHAIR_EVENT,
   CHART_RANGE_KEYS,
@@ -106,6 +106,7 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
   const selectedChartStyleMeta = CHART_STYLES.find((option) => option.value === selectedChartStyle) || CHART_STYLES[0];
 
   const candles = useMemo(() => normalizeChartCandles(props.rawCandles), [props.rawCandles]);
+  const studyCandles = useMemo(() => props.isHA ? heikinAshi(candles) : candles, [candles, props.isHA]);
   const activeKey = useMemo(() => Array.from(props.activeIndicators).sort().join(','), [props.activeIndicators]);
   const barIndex = useMemo(() => {
     if (!candles.length) return -1;
@@ -120,10 +121,10 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
   const positive = change >= 0;
 
   const studies = useMemo(() => {
-    if (!candles.length) return [] as Array<{ key: string; label: string; values?: any[] }>;
-    const highs = candles.map((bar) => bar.high);
-    const lows = candles.map((bar) => bar.low);
-    const closes = candles.map((bar) => bar.close);
+    if (!studyCandles.length) return [] as Array<{ key: string; label: string; values?: any[] }>;
+    const highs = studyCandles.map((bar) => bar.high);
+    const lows = studyCandles.map((bar) => bar.low);
+    const closes = studyCandles.map((bar) => bar.close);
     const out: Array<{ key: string; label: string; values?: any[] }> = [];
     for (const key of Array.from(props.activeIndicators)) {
       let values: any[] | undefined;
@@ -133,7 +134,7 @@ export function TradingViewKiteChart(props: TradingViewKiteChartProps) {
       out.push({ key, label: studyLabel(key, props.params || {}), values });
     }
     return out;
-  }, [candles, activeKey, props.activeIndicators, props.params]);
+  }, [studyCandles, activeKey, props.activeIndicators, props.params]);
 
   const quoteSymbols = useMemo(() => [props.symbol], [props.symbol]);
   const { data: quotes } = useKiteQuote(quoteSymbols, !!props.symbol, 30_000, 'quote');
