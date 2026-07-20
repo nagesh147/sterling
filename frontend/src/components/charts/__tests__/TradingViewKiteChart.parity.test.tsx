@@ -13,10 +13,11 @@ vi.mock('../TradingViewKiteChartLegacy', () => ({
   TradingViewKiteChart: () => <div data-testid="legacy-chart" />,
 }));
 
-vi.mock('../chartParityRuntime', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../chartParityRuntime')>();
-  return { ...actual, ...runtime };
-});
+vi.mock('../chartParityRuntime', () => ({
+  CHART_RANGE_KEYS: ['1D', '5D', 'ALL'],
+  normalizeChartCandles: (candles: any[]) => candles,
+  ...runtime,
+}));
 
 import { TradingViewKiteChart } from '../TradingViewKiteChart';
 
@@ -59,7 +60,19 @@ describe('TradingViewKiteChart parity shell', () => {
   it('applies a scoped chart range from the bottom toolbar', () => {
     renderChart();
     fireEvent.click(screen.getByRole('button', { name: '5D' }));
-    expect(runtime.setChartVisibleRange).toHaveBeenCalledWith(expect.any(String), '5D');
+    expect(runtime.setChartVisibleRange).toHaveBeenCalledTimes(1);
+    expect(runtime.setChartVisibleRange.mock.calls[0][0]).toMatch(/^kite-chart-/);
+    expect(runtime.setChartVisibleRange.mock.calls[0][1]).toBe('5D');
+  });
+
+  it('registers fresh candle context and removes it on unmount', () => {
+    const { unmount } = renderChart();
+    expect(runtime.setChartParityContext).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'NSE:RELIANCE', tf: '15m', rawCandles: candles,
+    }));
+    const id = runtime.setChartParityContext.mock.calls[0][0].id;
+    unmount();
+    expect(runtime.removeChartParityContext).toHaveBeenCalledWith(id);
   });
 
   it('hides the recognized duplicate InstrumentPane header', () => {
