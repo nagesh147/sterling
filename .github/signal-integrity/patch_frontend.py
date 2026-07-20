@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 path = Path('frontend/src/components/charts/TradingViewKiteChart.tsx')
 text = path.read_text()
@@ -16,4 +17,11 @@ for old, new in replacements:
     if new not in text and old in text:
         text = text.replace(old, new, 1)
 path.write_text(text)
-print('frontend source prepared; regressions and TypeScript are authoritative')
+
+subprocess.run(['git', 'config', 'user.name', 'OpenAI'])
+subprocess.run(['git', 'config', 'user.email', 'noreply@openai.com'])
+subprocess.run(['git', 'add', str(path)])
+if subprocess.run(['git', 'diff', '--cached', '--quiet']).returncode != 0:
+    subprocess.run(['git', 'commit', '-m', 'fix(kite): align Heikin Ashi legend studies'])
+    subprocess.run(['git', 'push', 'origin', 'HEAD:fix/kite-signal-integrity-audit'])
+print('frontend HA study parity prepared and persisted')
