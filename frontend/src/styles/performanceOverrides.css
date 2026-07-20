@@ -1,0 +1,48 @@
+/* Performance-first overrides for the trading workspace.
+ *
+ * The decorative Gemini aurora continuously blurred and transformed a viewport-sized
+ * layer behind every pane. That forces permanent GPU compositing and competes with
+ * pointer, scroll and chart work. A trading terminal should use static, low-overdraw
+ * surfaces like Kite, so the effect is disabled globally.
+ */
+body::before {
+  display: none !important;
+  animation: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Global transform and shadow transitions make clicks and hovers feel delayed and can
+ * promote many controls to compositor layers. Keep only very short colour feedback.
+ */
+button,
+a,
+input,
+select,
+textarea,
+[role="tab"],
+[role="button"] {
+  transition-property: background-color, border-color, color !important;
+  transition-duration: 60ms !important;
+  transition-timing-function: linear !important;
+}
+
+/* The signal engine can render a large history. Let Chromium skip layout/paint for
+ * rows outside the scroll viewport while preserving an estimated row footprint.
+ */
+.st-parent-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 110px;
+  contain: layout paint style;
+}
+
+/* Isolate dense watchlist/search rows so hover repaint stays local to the row. */
+.mw-item,
+.sr-item {
+  contain: layout paint style;
+}
+
+/* Avoid permanent layer promotion outside an active animation/drag. */
+.mac-kite .mac-gpu:not(:active) {
+  will-change: auto !important;
+}
