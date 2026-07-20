@@ -95,12 +95,17 @@ export function KiteExchangeSettingsCard() {
   const [host, setHost] = React.useState<HTMLElement | null>(null);
 
   React.useEffect(() => {
+    const removeHosts = () => {
+      document.querySelectorAll('[data-kite-exchange-settings-host]').forEach((node) => node.remove());
+    };
+
     const locate = () => {
       const title = Array.from(document.querySelectorAll<HTMLElement>('div')).find(
         (node) => node.textContent?.trim() === 'KITE SETTINGS',
       );
       const card = title?.parentElement;
       if (!card?.parentElement) {
+        removeHosts();
         setHost(null);
         return;
       }
@@ -119,7 +124,7 @@ export function KiteExchangeSettingsCard() {
     observer.observe(document.body, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
-      document.querySelectorAll('[data-kite-exchange-settings-host]').forEach((node) => node.remove());
+      removeHosts();
     };
   }, []);
 
