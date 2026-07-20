@@ -21,14 +21,47 @@ const K = '/api/v1/kite';
 
 // Same channel user-id the order-update consumer uses (single-tenant local).
 const USER_ID = 'default';
-
-const STREAM_WS_URL =
-  ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000')
-    .replace(/^http/, 'ws') + '/api/v1/stream/ws';
+const STREAM_WS_PATH = '/api/v1/stream/ws';
 
 const BASE_DELAY = 2_000;
 const MAX_DELAY = 30_000;
 const RECONCILE_DEBOUNCE = 250;
+
+type BrowserLocation = Pick<Location, 'protocol' | 'host'>;
+
+/**
+ * Resolve the shared stream endpoint into the absolute ws:// or wss:// URL that
+ * the browser WebSocket constructor requires.
+ *
+ * Production intentionally builds with VITE_API_BASE_URL="" so HTTP requests are
+ * relative and nginx proxies `/api`. A relative string is valid for fetch, but it
+ * is NOT valid for `new WebSocket()`. Derive the socket origin from the current
+ * page in that case; keep explicit API hosts and relative proxy prefixes working.
+ */
+export function resolveKiteStreamWsUrl(
+  apiBase: string | undefined = import.meta.env.VITE_API_BASE_URL as string | undefined,
+  locationLike: BrowserLocation | undefined = typeof window !== 'undefined' ? window.location : undefined,
+): string {
+  const base = (apiBase ?? '').trim().replace(/\/+$/, '');
+  const target = `${base}${STREAM_WS_PATH}`;
+
+  if (/^wss?:\/\//i.test(target)) return target;
+
+  if (/^https?:\/\//i.test(target)) {
+    const url = new URL(target);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return url.toString();
+  }
+
+  if (locationLike) {
+    const protocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
+    const path = target.startsWith('/') ? target : `/${target}`;
+    return `${protocol}//${locationLike.host}${path}`;
+  }
+
+  const path = target.startsWith('/') ? target : `/${target}`;
+  return `ws://localhost:8000${path}`;
+}
 
 export interface KiteTick {
   instrument_token: number;
@@ -160,9 +193,27 @@ let _refCount = 0;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _reconnectDelay = BASE_DELAY;
 
+function _scheduleReconnect() {
+  if (_refCount <= 0 || _reconnectTimer) return;
+  _reconnectTimer = setTimeout(() => {
+    _reconnectTimer = null;
+    _reconnectDelay = Math.min(_reconnectDelay * 2, MAX_DELAY);
+    _connect();
+  }, _reconnectDelay);
+}
+
 function _connect() {
   if (_ws) return;
-  const ws = new WebSocket(STREAM_WS_URL);
+
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket(resolveKiteStreamWsUrl());
+  } catch {
+    // Never let an invalid/misconfigured URL throw out of a React effect. Keep the
+    // REST heartbeat alive and retry after the normal reconnect backoff.
+    _scheduleReconnect();
+    return;
+  }
   _ws = ws;
 
   ws.onopen = () => {
@@ -189,12 +240,7 @@ function _connect() {
 
   ws.onclose = () => {
     _ws = null;
-    if (_refCount > 0) {
-      _reconnectTimer = setTimeout(() => {
-        _reconnectDelay = Math.min(_reconnectDelay * 2, MAX_DELAY);
-        _connect();
-      }, _reconnectDelay);
-    }
+    _scheduleReconnect();
   };
 
   ws.onerror = () => ws.close();
