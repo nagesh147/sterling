@@ -1,28 +1,30 @@
 from pathlib import Path
 
 
-def replace(path, old, new):
+def replace_once(path: str, old: str, new: str) -> None:
     p = Path(path)
     text = p.read_text()
-    count = text.count(old)
-    if count == 1:
-        p.write_text(text.replace(old, new, 1))
-        return
     if new in text:
-        print(f'{path}: replacement already applied')
         return
-    print(f'{path}: replacement anchor missing; continuing to validation')
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{path}: expected one anchor, found {count}: {old[:120]!r}")
+    p.write_text(text.replace(old, new, 1))
 
 
-replace(
-    'backend/app/engines/sterling_kite_engine/schemas.py',
+SCHEMAS = 'backend/app/engines/sterling_kite_engine/schemas.py'
+SCANNER = 'backend/app/services/kite_engine/scanner.py'
+SERVICE = 'backend/app/services/kite_engine/service.py'
+
+replace_once(
+    SCHEMAS,
     '''    token: Optional[int] = None
     is_active: bool = False   # this contract's SuperTrend is still aligned on the latest bar
 ''',
     '''    token: Optional[int] = None
     is_active: bool = False   # this contract's SuperTrend is still aligned on the latest bar
-    # Per-contract provenance. Grouped derivative rows must not borrow another
-    # strike's timestamp/alignment/exit state from their shared parent row.
+    # Contract-local evidence. A grouped derivative parent is only a display/sort
+    # summary; opening or executing one strike must use that strike's own values.
     signal_timestamp_ms: Optional[int] = None
     entry_timestamp_ms: Optional[int] = None
     alignment: Optional[AlignmentChip] = None
@@ -30,8 +32,8 @@ replace(
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''        leg.premium_spot = r.spot
         leg.premium_sl = r.stop_loss
         leg.token = r.token
@@ -40,8 +42,6 @@ replace(
     '''        leg.premium_spot = r.spot
         leg.premium_sl = r.stop_loss
         leg.token = r.token
-        # Keep the selected contract's own evidence. The grouped row timestamp is
-        # only a summary and must never be reused as the leg's chart entry time.
         leg.signal_timestamp_ms = int(leg.signal_timestamp_ms or r.timestamp_ms)
         leg.entry_timestamp_ms = int(leg.entry_timestamp_ms or r.timestamp_ms)
         leg.alignment = leg.alignment or r.alignment
@@ -50,8 +50,8 @@ replace(
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''            legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
                             option_symbol=pick.option_symbol, strike=pick.strike,
                             expiry=pick.expiry, lot_size=pick.lot_size or None,
@@ -67,8 +67,8 @@ replace(
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''        OptionLeg(moneyness=m, option_type=p.option_type, option_symbol=p.option_symbol,
                   strike=p.strike, expiry=p.expiry, lot_size=p.lot_size or None)
 ''',
@@ -78,8 +78,8 @@ replace(
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''    if leg is None and row.legs:
         leg = min(row.legs, key=lambda l: abs(l.strike - row.spot))
     if leg is None:
@@ -87,8 +87,8 @@ replace(
     return {
 ''',
     '''    if leg is None and row.legs:
-        # Grouped derivative rows zero row.spot; select ATM against underlying_spot,
-        # not against zero (which previously picked the lowest strike).
+        # Grouped derivative rows intentionally zero row.spot. Resolve ATM against
+        # the underlying spot, never against zero (which selected the lowest strike).
         reference_spot = float(row.underlying_spot or row.spot or 0.0)
         leg = min(row.legs, key=lambda l: abs(l.strike - reference_spot))
     if leg is None:
@@ -97,16 +97,16 @@ replace(
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''        "stop_loss": float(row.stop_loss),
 ''',
-    '''        "stop_loss": float(leg.premium_sl or row.stop_loss),
+    '''        "stop_loss": float(leg.premium_sl if leg.premium_sl is not None else row.stop_loss),
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''        if timestamp_ms > 0 and r is not None and r.timestamp_ms != timestamp_ms:
             # token reused across snapshots at different timestamps — exact-match scan
             return next((x for x in self.rows
@@ -123,7 +123,6 @@ replace(
                     getattr(l, "token", None) == token and timestamp_ms in {
                         int(getattr(l, "entry_timestamp_ms", 0) or 0),
                         int(getattr(l, "signal_timestamp_ms", 0) or 0),
-                        int(x.timestamp_ms),
                     }
                     for l in x.legs
                 )
@@ -133,38 +132,46 @@ replace(
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
-    '''                for row in _retain_signals(eval_rows, now_ms):
+replace_once(
+    SCANNER,
+    '''                ordered = sorted(moneyness, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
+                latest_ts = candles[-1].timestamp_ms
+
+                for row in _retain_signals(eval_rows, now_ms):
                     # Candidate strikes for this signal's direction — the SAME picks
 ''',
-    '''                for row in eval_rows:
-                    # Confluence is a same-bar event. Joining an old underlying entry
-                    # to a premium that is green today fabricates a signal that never
-                    # existed at one point in time.
+    '''                ordered = sorted(moneyness, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
+                latest_ts = candles[-1].timestamp_ms
+
+                # Confluence is an event, not a retrospective join. Only a fresh
+                # underlying transition on the latest closed bar may start a trade.
+                for row in eval_rows:
                     if not row.is_fresh or int(row.timestamp_ms) != int(latest_ts):
                         continue
                     # Candidate strikes for this signal's direction — the SAME picks
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''                        if len(oc) <= 1:
                             continue
                         diag.deriv_charts += 1
+                        bars = len(oc)
 ''',
     '''                        if len(oc) <= 1:
                             continue
-                        # Never confirm a fresh underlying bar using a stale premium feed.
+                        # Do not confirm today's underlying signal with a stale option
+                        # feed. Both legs must refer to the same latest closed 1H bar.
                         if int(oc[-1].timestamp_ms) != int(latest_ts):
                             continue
                         diag.deriv_charts += 1
+                        bars = len(oc)
 ''',
 )
 
-replace(
-    'backend/app/services/kite_engine/scanner.py',
+replace_once(
+    SCANNER,
     '''                        leg.premium_spot = float(oc[-1].close)
                         leg.premium_sl = d.stop_loss
                         leg.entry_sl = d.entry_sl
@@ -174,15 +181,45 @@ replace(
 ''',
     '''                        leg.premium_spot = float(oc[-1].close)
                         leg.premium_sl = d.stop_loss
-                        # Confluence enters now; its initial stop is the current premium
-                        # trail, not the premium's potentially older standalone entry stop.
+                        # The confluence position starts now. Its static initial stop
+                        # must be rebased to the current premium trail, not an older
+                        # standalone premium-entry candle.
                         leg.entry_sl = d.stop_loss
                         leg.token = pick.token
                         leg.is_active = d.is_active
                         leg.entry_timestamp_ms = int(row.timestamp_ms)
-                        # signal_timestamp/alignment/exit_state stay premium-specific.
                         confirmed.append(leg)
 ''',
 )
 
+replace_once(
+    SERVICE,
+    '''            leg = min(row.legs, key=lambda l: abs(l.strike - row.spot)) if row.legs else None
+            if leg is not None:
+''',
+    '''            # Keep execution metadata aligned with the exact contract selected
+            # by option_order_args. Grouped derivative parents have row.spot == 0,
+            # so independently choosing nearest-to-row.spot could pick another strike.
+            leg = next((l for l in row.legs if l.option_symbol == trade_symbol), None)
+            if leg is None and row.legs:
+                reference_spot = float(row.underlying_spot or row.spot or 0.0)
+                leg = min(row.legs, key=lambda l: abs(l.strike - reference_spot))
+            if leg is not None:
+''',
+)
+
+# Fail closed: the workflow must never report success after silently skipping a
+# critical mutation.
+assert 'signal_timestamp_ms: Optional[int] = None' in Path(SCHEMAS).read_text()
+scanner = Path(SCANNER).read_text()
+for required in (
+    'leg.signal_timestamp_ms = int(leg.signal_timestamp_ms or r.timestamp_ms)',
+    'reference_spot = float(row.underlying_spot or row.spot or 0.0)',
+    'leg.premium_sl if leg.premium_sl is not None else row.stop_loss',
+    'if not row.is_fresh or int(row.timestamp_ms) != int(latest_ts):',
+    'if int(oc[-1].timestamp_ms) != int(latest_ts):',
+    'leg.entry_timestamp_ms = int(row.timestamp_ms)',
+):
+    assert required in scanner, required
+assert 'l.option_symbol == trade_symbol' in Path(SERVICE).read_text()
 print('backend signal-integrity patch applied')
