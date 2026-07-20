@@ -47,6 +47,10 @@ function dedupeItems(items: WatchItem[]): WatchItem[] {
   return out;
 }
 
+function holdingsToWatchItems(holdings: any[]): WatchItem[] {
+  return dedupeItems(holdings.map(holdingToWatchItem).filter(Boolean) as WatchItem[]);
+}
+
 function SyncHoldingsIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -68,14 +72,12 @@ export function SterlingWatchListWithHoldingsSync({
   const [manualEmpty, setManualEmpty] = useState(() => localStorage.getItem(MANUAL_EMPTY_KEY) === '1');
   const [childKey, setChildKey] = useState(0);
   const [autoAttempted, setAutoAttempted] = useState(() => hadWatchStorageOnMount || localStorage.getItem(MANUAL_EMPTY_KEY) === '1');
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const previousCountRef = useRef(watchSnapshot.length);
   const autoSeededRef = useRef(false);
 
   const holdings = useKiteHoldings(true);
-  const holdingItems = useMemo(
-    () => dedupeItems((holdings.data || []).map(holdingToWatchItem).filter(Boolean) as WatchItem[]),
-    [holdings.data],
-  );
+  const holdingItems = useMemo(() => holdingsToWatchItems(holdings.data || []), [holdings.data]);
 
   const refreshSnapshot = useCallback(() => {
     setWatchSnapshot(readWatchlist());
@@ -108,11 +110,14 @@ export function SterlingWatchListWithHoldingsSync({
     previousCountRef.current = currentCount;
   }, [watchSnapshot.length]);
 
-  const addMissingHoldings = useCallback(() => {
+  const addMissingHoldings = useCallback((items: WatchItem[] = holdingItems) => {
     const current = readWatchlist();
     const existing = new Set(current.map((item) => item.symbol));
-    const missing = holdingItems.filter((item) => !existing.has(item.symbol));
-    if (missing.length === 0) return false;
+    const missing = items.filter((item) => !existing.has(item.symbol));
+    if (missing.length === 0) {
+      setWatchSnapshot(current);
+      return false;
+    }
     const next = dedupeItems([...current, ...missing]);
     writeWatchlist(next);
     localStorage.removeItem(MANUAL_EMPTY_KEY);
@@ -121,6 +126,17 @@ export function SterlingWatchListWithHoldingsSync({
     setChildKey((key) => key + 1);
     return true;
   }, [holdingItems]);
+
+  const refreshAndSyncHoldings = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      const result = await holdings.refetch();
+      const freshItems = holdingsToWatchItems(result.data || []);
+      addMissingHoldings(freshItems);
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [addMissingHoldings, holdings]);
 
   const freshEmptyBoot = !hadWatchStorageOnMount && !manualEmpty;
   useEffect(() => {
@@ -136,16 +152,14 @@ export function SterlingWatchListWithHoldingsSync({
     [holdingItems, watchedSymbols],
   );
 
-  const syncDisabled = missingHoldings.length === 0 || holdings.isLoading || holdings.isFetching;
-  const syncTitle = holdings.isLoading || holdings.isFetching
-    ? 'Checking Kite holdings…'
+  const refreshing = manualRefreshing || holdings.isLoading || holdings.isFetching;
+  const syncTitle = refreshing
+    ? 'Refreshing Kite holdings…'
     : missingHoldings.length > 0
-      ? `Sync ${missingHoldings.length} missing Kite holding${missingHoldings.length === 1 ? '' : 's'} into watchlist`
-      : holdingItems.length > 0
-        ? 'All Kite holdings are already in the watchlist'
-        : holdings.isError
-          ? 'Unable to check Kite holdings'
-          : 'No Kite holdings found';
+      ? `Refresh and sync ${missingHoldings.length} missing Kite holding${missingHoldings.length === 1 ? '' : 's'}`
+      : holdings.isError
+        ? 'Retry Kite holdings refresh'
+        : 'Refresh Kite holdings';
   const hideDefaultEmptyPrompt = watchSnapshot.length === 0 && !manualEmpty;
 
   if (freshEmptyBoot && !autoAttempted && !holdings.isError) {
@@ -160,11 +174,11 @@ export function SterlingWatchListWithHoldingsSync({
   return (
     <div className="kite-watchlist-sync-shell" style={{ position: 'relative', height: '100%' }}>
       <style>{`
-        /* Reserve a real header slot for the holdings-sync action. The wrapped
-           watchlist owns the search bar, so move its trailing count/filter group
-           left instead of placing the sync control on top of it. */
         .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child {
           margin-right: 36px;
+        }
+        @keyframes kiteHoldingsRefreshSpin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
       <SterlingWatchList key={childKey} onOpenInstrument={onOpenInstrument} />
@@ -186,12 +200,12 @@ export function SterlingWatchListWithHoldingsSync({
       <div style={{ position: 'absolute', top: 13, right: 10, zIndex: 25, display: 'inline-flex', alignItems: 'center' }}>
         <button
           type="button"
-          disabled={syncDisabled}
           title={syncTitle}
-          aria-label="Sync holdings from Kite"
+          aria-label="Refresh holdings from Kite"
+          aria-busy={refreshing}
           onClick={(event) => {
             event.stopPropagation();
-            if (!syncDisabled) addMissingHoldings();
+            void refreshAndSyncHoldings();
           }}
           style={{
             width: 24,
@@ -200,15 +214,17 @@ export function SterlingWatchListWithHoldingsSync({
             borderRadius: 4,
             border: 'none',
             background: 'transparent',
-            color: syncDisabled ? t.dim : t.blue,
-            opacity: syncDisabled ? 0.45 : 1,
-            cursor: syncDisabled ? 'not-allowed' : 'pointer',
+            color: t.blue,
+            opacity: 1,
+            cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <SyncHoldingsIcon />
+          <span style={{ display: 'inline-flex', animation: refreshing ? 'kiteHoldingsRefreshSpin 0.8s linear infinite' : undefined }}>
+            <SyncHoldingsIcon />
+          </span>
         </button>
       </div>
     </div>
