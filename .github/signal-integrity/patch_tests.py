@@ -23,17 +23,31 @@ p = Path('backend/tests/engines/sterling_kite_engine/test_scanner.py')
 text = p.read_text()
 text += r'''
 
-# ── signal provenance / PE semantics regressions ─────────────────────────────
-def test_derivative_pe_is_long_premium_and_stamps_three_green_leg_provenance():
+# ── signal provenance / CE+PE premium semantics regressions ──────────────────
+@pytest.mark.parametrize(
+    ("option_type", "expected_regime", "symbol"),
+    [
+        ("CE", "BULL", "HDFCBANK26JUL825CE"),
+        ("PE", "BEAR", "HDFCBANK26JUL825PE"),
+    ],
+)
+def test_derivative_option_is_long_premium_and_stamps_three_green_leg_provenance(
+    option_type, expected_regime, symbol,
+):
+    """Both CE and PE derivative entries BUY a rising option premium.
+
+    CE/PE only changes the underlying view (BULL/BEAR); it must never change the
+    premium entry requirement from a fresh three-green alignment to three-red.
+    """
     cfg = SterlingKiteEngineConfig()
     item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")
-    pick = OptionPick(option_symbol="HDFCBANK26JUL825PE", strike=825.0, option_type="PE",
+    pick = OptionPick(option_symbol=symbol, strike=825.0, option_type=option_type,
                       expiry="2026-07-30", dte=9, lot_size=550, token=12345)
     candles = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
     row = evaluate_derivative_contract(item, "ITM3", pick, candles, cfg)[-1]
     leg = row.legs[0]
-    assert row.regime == "BEAR"       # bearish underlying view
-    assert row.direction == "long"    # BUY/long the PE premium
+    assert row.regime == expected_regime
+    assert row.direction == "long"
     assert (leg.alignment.fast, leg.alignment.mid, leg.alignment.slow) == (1, 1, 1)
     assert leg.signal_timestamp_ms == row.timestamp_ms
     assert leg.entry_timestamp_ms == row.timestamp_ms
@@ -98,7 +112,7 @@ import { freshTripleAlignmentIndex, nearestCandleIndex } from './signalMarkerLog
 const p = (direction: 'up' | 'down') => ({ direction });
 
 describe('signal marker integrity', () => {
-  it('never substitutes a nearby three-red transition for a long-premium entry', () => {
+  it.each(['CE', 'PE'])('never substitutes a nearby three-red transition for a %s long-premium entry', () => {
     const times = [100, 200, 300, 400];
     const fast = [p('up'), p('down'), p('down'), p('up')];
     const mid = [p('up'), p('down'), p('down'), p('up')];
@@ -107,7 +121,7 @@ describe('signal marker integrity', () => {
     expect(freshTripleAlignmentIndex(fast, mid, slow, times, 200, 'down', 150)).toBe(1);
   });
 
-  it('finds the intended fresh three-green premium transition', () => {
+  it.each(['CE', 'PE'])('finds the intended fresh three-green %s premium transition', () => {
     const times = [100, 200, 300];
     const fast = [p('down'), p('up'), p('up')];
     const mid = [p('down'), p('up'), p('up')];
