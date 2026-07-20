@@ -215,6 +215,10 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
         leg.premium_spot = r.spot
         leg.premium_sl = r.stop_loss
         leg.token = r.token
+        leg.signal_timestamp_ms = int(leg.signal_timestamp_ms or r.timestamp_ms)
+        leg.entry_timestamp_ms = int(leg.entry_timestamp_ms or r.timestamp_ms)
+        leg.alignment = leg.alignment or r.alignment
+        leg.exit_state = leg.exit_state or r.exit_state
         sym_key = (*key, leg.option_symbol)
         if key not in grouped_derivs:
             r.spot = 0
@@ -304,7 +308,10 @@ def evaluate_derivative_contract(
             legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
                             option_symbol=pick.option_symbol, strike=pick.strike,
                             expiry=pick.expiry, lot_size=pick.lot_size or None,
-                            entry_sl=entry_sl, is_active=active)],
+                            entry_sl=entry_sl, is_active=active,
+                            signal_timestamp_ms=ts, entry_timestamp_ms=ts,
+                            alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
+                            exit_state=_exit_state_str(r, "long", last_idx, cfg))],
             spot=float(c[i]), stop_loss=stop_loss, entry_sl=entry_sl,
             exit_state=_exit_state_str(r, "long", last_idx, cfg),
             score=85.0, timestamp_ms=ts, source="derivatives",
@@ -331,7 +338,8 @@ def attach_strikes(
                          moneynesses=ordered, expiry_types=expiry_types, today=today)
     row.legs = [
         OptionLeg(moneyness=m, option_type=p.option_type, option_symbol=p.option_symbol,
-                  strike=p.strike, expiry=p.expiry, lot_size=p.lot_size or None)
+                  strike=p.strike, expiry=p.expiry, lot_size=p.lot_size or None,
+                  entry_timestamp_ms=row.timestamp_ms)
         for m, p in picks
     ]
     return row
@@ -346,7 +354,8 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
     first. The advisory ST trailing stop rides along as the SL trigger.
     """
     if leg is None and row.legs:
-        leg = min(row.legs, key=lambda l: abs(l.strike - row.spot))
+        reference_spot = float(row.underlying_spot or row.spot or 0.0)
+        leg = min(row.legs, key=lambda l: abs(l.strike - reference_spot))
     if leg is None:
         return None
     return {
@@ -356,7 +365,7 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
         "lot_size": int(leg.lot_size or 0),
         "token": int(leg.token or 0),
         "exchange": row.exchange,
-        "stop_loss": float(row.stop_loss),
+        "stop_loss": float(leg.premium_sl if leg.premium_sl is not None else row.stop_loss),
         # Premium basis for risk sizing (workstream F). Derivatives legs carry the
         # option's own premium (premium_spot) + its ST trail (premium_sl); for spot
         # signals these may be None → risk-sizing degrades to a single lot.
@@ -437,12 +446,19 @@ class UserScan:
             self._row_by_token = idx
             self._idx_key = key
         r = self._row_by_token.get(token)
-        if timestamp_ms > 0 and r is not None and r.timestamp_ms != timestamp_ms:
-            # token reused across snapshots at different timestamps — exact-match scan
-            return next((x for x in self.rows
-                         if (getattr(x, "token", None) == token
-                             or any(getattr(l, "token", None) == token for l in x.legs))
-                         and x.timestamp_ms == timestamp_ms), None)
+        if timestamp_ms > 0 and r is not None:
+            def _matches(x):
+                if getattr(x, "token", None) == token and x.timestamp_ms == timestamp_ms:
+                    return True
+                return any(
+                    getattr(l, "token", None) == token and timestamp_ms in {
+                        int(getattr(l, "entry_timestamp_ms", 0) or 0),
+                        int(getattr(l, "signal_timestamp_ms", 0) or 0),
+                    }
+                    for l in x.legs
+                )
+            if not _matches(r):
+                return next((x for x in self.rows if _matches(x)), None)
         return r
 
 
@@ -788,7 +804,11 @@ class KiteEngineScanner:
                 ordered = sorted(moneyness, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
                 latest_ts = candles[-1].timestamp_ms
 
-                for row in _retain_signals(eval_rows, now_ms):
+                # Confluence must exist on one bar; never join an old underlying
+                # trigger to a premium trend observed later.
+                for row in eval_rows:
+                    if not row.is_fresh or int(row.timestamp_ms) != int(latest_ts):
+                        continue
                     # Candidate strikes for this signal's direction — the SAME picks
                     # attach_strikes resolves — then confirm each on its own premium.
                     picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
@@ -808,6 +828,8 @@ class KiteEngineScanner:
                                             pick.option_symbol, exc)
                                 continue
                         if len(oc) <= 1:
+                            continue
+                        if int(oc[-1].timestamp_ms) != int(latest_ts):
                             continue
                         diag.deriv_charts += 1
                         bars = len(oc)
@@ -832,9 +854,12 @@ class KiteEngineScanner:
                         # INR daily-loss breaker. (For a fresh leg oc[-1].close == d.spot.)
                         leg.premium_spot = float(oc[-1].close)
                         leg.premium_sl = d.stop_loss
-                        leg.entry_sl = d.entry_sl
+                        # This trade starts on the confluence bar, so do not inherit
+                        # the static stop from an older standalone premium entry.
+                        leg.entry_sl = d.stop_loss
                         leg.token = pick.token
                         leg.is_active = d.is_active
+                        leg.entry_timestamp_ms = int(row.timestamp_ms)
                         confirmed.append(leg)
                     if not confirmed:
                         continue

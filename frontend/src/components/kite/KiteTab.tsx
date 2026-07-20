@@ -39,6 +39,7 @@ import {
 } from './KiteStartupSurfaces';
 import { KiteInteractionMotion } from './KiteInteractionMotion';
 import { k } from '../../styles/kiteUI';
+import type { SignalChartData } from '../../types/kiteEngine';
 
 const MORE_TABS: { id: MoreTab; label: string }[] = [
   { id: 'bids', label: 'Bids' },
@@ -87,7 +88,7 @@ function MorePane({ activeTab, onTabChange }: { activeTab: MoreTab; onTabChange:
 export function KiteTab() {
   const [nav, setNav] = useState<NavItem>('dashboard');
   const [moreTab, setMoreTab] = useState<MoreTab>('bids');
-  const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } } | null>(null);
+  const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
   const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
@@ -112,7 +113,7 @@ export function KiteTab() {
     setDetailView(null);
   };
 
-  const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => {
+  const handleOpenInstrument = (symbol: string, defaultTab: InstrumentTab | 'chart' | 'option-chain', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => {
     if (!instrumentView) {
       const cur = localStorage.getItem('kite_terminal_mode');
       setSavedTerminalMode(cur === 'minimized' || cur === 'partial' || cur === 'full' ? cur : 'normal');

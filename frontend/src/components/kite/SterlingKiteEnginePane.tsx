@@ -8,7 +8,7 @@ import {
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
-  ExitMode,
+  ExitMode, SignalChartData,
 } from '../../types/kiteEngine';
 import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
@@ -28,7 +28,7 @@ import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
 
 interface Props {
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
-  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
+  onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
 }
 
 // Plain-language labels (users were confused by fast/mid/slow + "early lock").
@@ -351,7 +351,7 @@ const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, A
 function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
-  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: { timestamp_ms: number; direction: string; regime: string }) => void;
+  onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
   sort: { key: string; dir: string };
@@ -814,9 +814,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           // Exit column — red-counter progress ("<reds>/<threshold> red") toward the
           // auto-exit rule. Row-level (the underlying/premium regime), coloured by how
           // close it is to firing: green→safe, amber→approaching, red→at/over threshold.
-          const exitReds = row.exit_state ? (parseInt(row.exit_state, 10) || 0) : 0;
-          const exitThr = row.exit_state ? (parseInt(row.exit_state.split('/')[1] || '1', 10) || 1) : 1;
-          const exitColor = !row.exit_state ? k.dim : exitReds <= 0 ? k.dim : exitReds >= exitThr ? k.red : k.orange;
+          const legExitState = leg.exit_state ?? row.exit_state;
+          const exitReds = legExitState ? (parseInt(legExitState, 10) || 0) : 0;
+          const exitThr = legExitState ? (parseInt(legExitState.split('/')[1] || '1', 10) || 1) : 1;
+          const exitColor = !legExitState ? k.dim : exitReds <= 0 ? k.dim : exitReds >= exitThr ? k.red : k.orange;
           const ended = legIsExited(leg);
           const legActive = !ended;
           // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the

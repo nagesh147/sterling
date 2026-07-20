@@ -10,6 +10,7 @@ import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import { TradingViewKiteChart } from '../charts/TradingViewKiteChart';
 import { OIView } from './OIView';
 import { KiteLoader } from './KiteLoader';
+import type { SignalChartData } from '../../types/kiteEngine';
 
 export type InstrumentTab = 'chart' | 'option-chain' | 'fundamentals' | 'oi-change' | 'open-interest';
 
@@ -73,7 +74,7 @@ interface InstrumentPaneProps {
   initialTab?: InstrumentTab;
   onSymbolChange?: (symbol: string) => void;
   trailTarget?: 'fast' | 'mid' | 'slow';
-  signalData?: { timestamp_ms: number; direction: string; regime: string };
+  signalData?: SignalChartData;
 }
 
 const TABS: { id: InstrumentTab; label: string; badge?: string }[] = [
@@ -157,7 +158,7 @@ const INDICATOR_LABELS: Record<IndicatorKey, string> = {
   stoch: 'Stochastic',
 };
 
-function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: { timestamp_ms: number; direction: string; regime: string } }) {
+function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol: string; onSymbolChange?: (symbol: string) => void; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData }) {
   if (!signalData && !globalChartStateCache) {
     globalChartStateCache = readLocalChartStateCache();
   }
