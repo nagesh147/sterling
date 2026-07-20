@@ -192,6 +192,35 @@ export function SterlingWatchListWithHoldingsSync({
     }
   }, []);
 
+  const rewriteLegacyHoldingsButton = useCallback(() => {
+    const root = document.querySelector('.kite-watchlist-sync-shell');
+    if (!root) return;
+    root.querySelectorAll('button').forEach((button) => {
+      if (button.textContent?.trim() === 'Sync holdings from Kite') {
+        button.textContent = 'Sync open positions from Kite';
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    rewriteLegacyHoldingsButton();
+    const root = document.querySelector('.kite-watchlist-sync-shell');
+    if (!root || typeof MutationObserver === 'undefined') return;
+    const observer = new MutationObserver(rewriteLegacyHoldingsButton);
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [childKey, rewriteLegacyHoldingsButton, watchSnapshot.length]);
+
+  const handleShellClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    const button = target?.closest('button');
+    if (button?.textContent?.trim() === 'Sync holdings from Kite') {
+      event.preventDefault();
+      event.stopPropagation();
+      void refreshAndSyncPositions();
+    }
+  }, [refreshAndSyncPositions]);
+
   const freshEmptyBoot = !hadWatchStorageOnMount && !manualEmpty;
   useEffect(() => {
     if (!freshEmptyBoot || autoSeededRef.current || positions.isLoading || positions.isFetching || watchlistSync.isPending) return;
@@ -232,6 +261,7 @@ export function SterlingWatchListWithHoldingsSync({
       style={{ position: 'relative', height: '100%' }}
       onInputCapture={handleShellInput}
       onChangeCapture={handleShellInput}
+      onClickCapture={handleShellClick}
     >
       <style>{`
         .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child { margin-right: 36px; }
