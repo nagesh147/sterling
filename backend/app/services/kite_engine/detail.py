@@ -38,9 +38,16 @@ def _levels(side: list) -> List[DepthLevel]:
 
 
 async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> Optional[EngineDetailResponse]:
-    """Build the detail for the currently-displayed signal row matching ``token``.
-    Returns None if no such ready signal is in the latest scan snapshot."""
-    row = scanner.snapshot(uid).row_for_token(token, timestamp_ms)
+    """Build detail for the selected signal row.
+
+    Prefer the exact timestamp supplied by the UI. A background scan may replace or
+    regroup that row between the click and this request, so fall back to the current
+    row for the same token instead of returning a misleading 404.
+    """
+    snapshot = scanner.snapshot(uid)
+    row = snapshot.row_for_token(token, timestamp_ms)
+    if row is None and timestamp_ms > 0:
+        row = snapshot.row_for_token(token)
     if row is None:
         return None
 
