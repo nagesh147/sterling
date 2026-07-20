@@ -2,63 +2,43 @@
  * useKiteLiveTicks — module-level singleton consuming the Kite tick WebSocket.
  *
  * The backend already runs one KiteTicker per user and fans decoded ticks out to
- * the `kite_ticks:{userId}` channel over the shared `/api/v1/stream/ws` socket
- * (see services/exchanges/kite/ticker_manager.py). This module:
- *
- *   1. Opens ONE WebSocket and subscribes that channel.
- *   2. Keeps a `token → tick` map, notifying React subscribers on each frame.
- *   3. Reconciles a ref-counted union of "tokens someone wants" against the
- *      server-side subscription via POST /ticker/{subscribe,unsubscribe}.
- *
- * Price hooks (useKiteLtp / useKiteQuote) read from here and overlay live ticks
- * on a slow REST heartbeat — replacing the old 5s/15s polling loops. Mirrors the
- * connection/reconnect pattern of useAppStream + useKiteOrderUpdates.
+ * the `kite_ticks:{userId}` channel over the shared `/api/v1/stream/ws` socket.
+ * This module opens one socket, stores token-indexed ticks, and reconciles the
+ * ref-counted token union requested by mounted consumers.
  */
 import { useSyncExternalStore } from 'react';
 import { api } from '../utils/api';
 
 const K = '/api/v1/kite';
-
-// Same channel user-id the order-update consumer uses (single-tenant local).
 const USER_ID = 'default';
 const STREAM_WS_PATH = '/api/v1/stream/ws';
-
 const BASE_DELAY = 2_000;
 const MAX_DELAY = 30_000;
 const RECONCILE_DEBOUNCE = 250;
+// The visible product requirement is one price refresh per second. Flushing the
+// entire React subscriber graph five times per second made hover and click work
+// compete with background price renders across the watchlist, ticker and engine.
+const UI_NOTIFY_MS = 1_000;
 
 type BrowserLocation = Pick<Location, 'protocol' | 'host'>;
 
-/**
- * Resolve the shared stream endpoint into the absolute ws:// or wss:// URL that
- * the browser WebSocket constructor requires.
- *
- * Production intentionally builds with VITE_API_BASE_URL="" so HTTP requests are
- * relative and nginx proxies `/api`. A relative string is valid for fetch, but it
- * is NOT valid for `new WebSocket()`. Derive the socket origin from the current
- * page in that case; keep explicit API hosts and relative proxy prefixes working.
- */
 export function resolveKiteStreamWsUrl(
   apiBase: string | undefined = import.meta.env.VITE_API_BASE_URL as string | undefined,
   locationLike: BrowserLocation | undefined = typeof window !== 'undefined' ? window.location : undefined,
 ): string {
   const base = (apiBase ?? '').trim().replace(/\/+$/, '');
   const target = `${base}${STREAM_WS_PATH}`;
-
   if (/^wss?:\/\//i.test(target)) return target;
-
   if (/^https?:\/\//i.test(target)) {
     const url = new URL(target);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     return url.toString();
   }
-
   if (locationLike) {
     const protocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
     const path = target.startsWith('/') ? target : `/${target}`;
     return `${protocol}//${locationLike.host}${path}`;
   }
-
   const path = target.startsWith('/') ? target : `/${target}`;
   return `ws://localhost:8000${path}`;
 }
@@ -69,43 +49,47 @@ export interface KiteTick {
   change?: number;
   ohlc?: { open?: number; high?: number; low?: number; close?: number };
   oi?: number;
-  // full mode only — quote-mode ticks omit these; REST fallback supplies them
   depth?: unknown;
   [k: string]: unknown;
 }
 
-// ── tick store ──────────────────────────────────────────────────────────────
 const _tickByToken = new Map<number, KiteTick>();
-let _version = 0;                                   // bumps on every tick batch
+let _version = 0;
 const _storeListeners = new Set<() => void>();
 let _notifyScheduled = false;
 
-// Coalesce re-renders: the tick map updates immediately (getTick is always
-// current), but listeners are flushed at most ~5×/sec so a burst of frames from
-// Kite can't trigger a render storm across every consumer pane.
+function sameOhlc(a?: KiteTick['ohlc'], b?: KiteTick['ohlc']): boolean {
+  return a?.open === b?.open && a?.high === b?.high && a?.low === b?.low && a?.close === b?.close;
+}
+
+function sameVisibleTick(previous: KiteTick | undefined, next: KiteTick): boolean {
+  if (!previous) return false;
+  return previous.last_price === next.last_price
+    && previous.change === next.change
+    && previous.oi === next.oi
+    && sameOhlc(previous.ohlc, next.ohlc)
+    && previous.depth === next.depth;
+}
+
 function _notify() {
-  _version += 1;
   if (_notifyScheduled) return;
   _notifyScheduled = true;
   setTimeout(() => {
     _notifyScheduled = false;
+    _version += 1;
     _storeListeners.forEach((fn) => fn());
-  }, 200);
+  }, UI_NOTIFY_MS);
 }
 
 export function getTick(token: number): KiteTick | undefined {
   return _tickByToken.get(token);
 }
 
-// ── subscription reconciler (ref-counted union) ───────────────────────────────
-const _desired = new Map<number, number>();         // token → refcount (any mode)
-const _desiredFull = new Map<number, number>();     // token → refcount of FULL-mode (depth) interest
-const _subscribed = new Map<number, 'quote' | 'full'>(); // token → mode currently on the server
+const _desired = new Map<number, number>();
+const _desiredFull = new Map<number, number>();
+const _subscribed = new Map<number, 'quote' | 'full'>();
 let _reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 
-// A token streams in "full" mode (5-level depth) if ANY consumer asked for depth,
-// else the lighter "quote" mode. Depth views (expanded watch row, market-data card)
-// register full; everything else stays quote.
 function _wantMode(tok: number): 'quote' | 'full' {
   return (_desiredFull.get(tok) ?? 0) > 0 ? 'full' : 'quote';
 }
@@ -120,66 +104,47 @@ function _scheduleReconcile() {
 
 async function _reconcile() {
   const want = new Set<number>();
-  for (const [tok, n] of _desired) if (n > 0) want.add(tok);
-
-  // (Re)subscribe brand-new tokens, or ones whose desired mode changed — e.g. a depth
-  // view opened (upgrade quote→full) or closed (downgrade full→quote).
+  for (const [tok, count] of _desired) if (count > 0) want.add(tok);
   const toSub: number[] = [];
-  for (const t of want) {
-    if (_subscribed.get(t) !== _wantMode(t)) toSub.push(t);
+  for (const token of want) {
+    if (_subscribed.get(token) !== _wantMode(token)) toSub.push(token);
   }
-  const toRemove = [..._subscribed.keys()].filter((t) => !want.has(t));
-  if (toSub.length === 0 && toRemove.length === 0) return;
+  const toRemove = [..._subscribed.keys()].filter((token) => !want.has(token));
+  if (!toSub.length && !toRemove.length) return;
 
-  // Optimistically record intent so concurrent reconciles don't double-fire.
-  const prev = new Map(_subscribed);
-  toSub.forEach((t) => _subscribed.set(t, _wantMode(t)));
-  toRemove.forEach((t) => _subscribed.delete(t));
-
-  // Group by mode so each subscribe call carries a single, correct mode.
+  const previous = new Map(_subscribed);
+  toSub.forEach((token) => _subscribed.set(token, _wantMode(token)));
+  toRemove.forEach((token) => _subscribed.delete(token));
   const byMode: Record<'quote' | 'full', number[]> = { quote: [], full: [] };
-  for (const t of toSub) byMode[_wantMode(t)].push(t);
+  for (const token of toSub) byMode[_wantMode(token)].push(token);
 
   try {
-    // subscribe auto-starts the ticker server-side via ensure()
-    if (byMode.full.length) {
-      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.full, mode: 'full' });
-    }
-    if (byMode.quote.length) {
-      await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.quote, mode: 'quote' });
-    }
-    if (toRemove.length) {
-      await api.post(`${K}/ticker/unsubscribe`, { instrument_tokens: toRemove });
-    }
+    if (byMode.full.length) await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.full, mode: 'full' });
+    if (byMode.quote.length) await api.post(`${K}/ticker/subscribe`, { instrument_tokens: byMode.quote, mode: 'quote' });
+    if (toRemove.length) await api.post(`${K}/ticker/unsubscribe`, { instrument_tokens: toRemove });
   } catch {
-    // Roll back so the next reconcile retries (e.g. account not connected yet).
     _subscribed.clear();
-    for (const [t, m] of prev) _subscribed.set(t, m);
+    for (const [token, mode] of previous) _subscribed.set(token, mode);
   }
 }
 
-/**
- * Register interest in a set of instrument tokens. Returns a cleanup that
- * releases them. Tokens are ref-counted across all callers so the server sees
- * exactly the displayed union, and rapid mount/unmount churn is debounced.
- */
 export function registerTokens(tokens: number[], mode: 'quote' | 'full' = 'quote'): () => void {
-  if (tokens.length === 0) return () => {};
-  for (const t of tokens) {
-    _desired.set(t, (_desired.get(t) ?? 0) + 1);
-    if (mode === 'full') _desiredFull.set(t, (_desiredFull.get(t) ?? 0) + 1);
+  if (!tokens.length) return () => {};
+  for (const token of tokens) {
+    _desired.set(token, (_desired.get(token) ?? 0) + 1);
+    if (mode === 'full') _desiredFull.set(token, (_desiredFull.get(token) ?? 0) + 1);
   }
   _refConnect();
   _scheduleReconcile();
   return () => {
-    for (const t of tokens) {
-      const n = (_desired.get(t) ?? 0) - 1;
-      if (n <= 0) _desired.delete(t);
-      else _desired.set(t, n);
+    for (const token of tokens) {
+      const count = (_desired.get(token) ?? 0) - 1;
+      if (count <= 0) _desired.delete(token);
+      else _desired.set(token, count);
       if (mode === 'full') {
-        const f = (_desiredFull.get(t) ?? 0) - 1;
-        if (f <= 0) _desiredFull.delete(t);
-        else _desiredFull.set(t, f);
+        const fullCount = (_desiredFull.get(token) ?? 0) - 1;
+        if (fullCount <= 0) _desiredFull.delete(token);
+        else _desiredFull.set(token, fullCount);
       }
     }
     _refDisconnect();
@@ -187,7 +152,6 @@ export function registerTokens(tokens: number[], mode: 'quote' | 'full' = 'quote
   };
 }
 
-// ── WebSocket lifecycle (connect while any tokens are registered) ─────────────
 let _ws: WebSocket | null = null;
 let _refCount = 0;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -204,51 +168,53 @@ function _scheduleReconnect() {
 
 function _connect() {
   if (_ws) return;
-
   let ws: WebSocket;
   try {
     ws = new WebSocket(resolveKiteStreamWsUrl());
   } catch {
-    // Never let an invalid/misconfigured URL throw out of a React effect. Keep the
-    // REST heartbeat alive and retry after the normal reconnect backoff.
     _scheduleReconnect();
     return;
   }
   _ws = ws;
-
   ws.onopen = () => {
     _reconnectDelay = BASE_DELAY;
     ws.send(JSON.stringify({ action: 'subscribe', channel: `kite_ticks:${USER_ID}` }));
-    // The server ticker may have restarted while we were away — re-assert the
-    // full desired set (subscribe is idempotent).
     _subscribed.clear();
     _scheduleReconcile();
   };
-
-  ws.onmessage = (ev) => {
+  ws.onmessage = (event) => {
     try {
-      const msg = JSON.parse(ev.data);
-      if (msg.type !== 'kite_ticks' || !Array.isArray(msg.ticks)) return;
-      for (const t of msg.ticks as KiteTick[]) {
-        if (typeof t?.instrument_token === 'number') _tickByToken.set(t.instrument_token, t);
+      const message = JSON.parse(event.data);
+      if (message.type !== 'kite_ticks' || !Array.isArray(message.ticks)) return;
+      let changed = false;
+      for (const tick of message.ticks as KiteTick[]) {
+        if (typeof tick?.instrument_token !== 'number') continue;
+        const previous = _tickByToken.get(tick.instrument_token);
+        if (sameVisibleTick(previous, tick)) continue;
+        _tickByToken.set(tick.instrument_token, tick);
+        changed = true;
       }
-      _notify();
+      if (changed) _notify();
     } catch {
-      /* ignore non-JSON / unrelated frames */
+      // Ignore unrelated or malformed stream frames.
     }
   };
-
   ws.onclose = () => {
     _ws = null;
     _scheduleReconnect();
   };
-
   ws.onerror = () => ws.close();
 }
 
 function _disconnect() {
-  if (_reconnectTimer) { clearTimeout(_reconnectTimer); _reconnectTimer = null; }
-  if (_ws) { _ws.close(); _ws = null; }
+  if (_reconnectTimer) {
+    clearTimeout(_reconnectTimer);
+    _reconnectTimer = null;
+  }
+  if (_ws) {
+    _ws.close();
+    _ws = null;
+  }
 }
 
 function _refConnect() {
@@ -261,16 +227,16 @@ function _refDisconnect() {
   if (_refCount === 0) _disconnect();
 }
 
-// ── React read hook ───────────────────────────────────────────────────────────
-function _subscribeStore(cb: () => void): () => void {
-  _storeListeners.add(cb);
-  return () => { _storeListeners.delete(cb); };
+function _subscribeStore(callback: () => void): () => void {
+  _storeListeners.add(callback);
+  return () => { _storeListeners.delete(callback); };
 }
+
 function _getVersion(): number {
   return _version;
 }
 
-/** Re-renders the caller on every tick batch. Read values via getTick(token). */
+/** Re-render the caller on the coalesced live-price UI cadence. */
 export function useTickVersion(): number {
   return useSyncExternalStore(_subscribeStore, _getVersion, _getVersion);
 }

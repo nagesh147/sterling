@@ -17,6 +17,10 @@ function readWatchlist(): WatchItem[] {
   }
 }
 
+function watchSignature(items: WatchItem[]): string {
+  return items.map((item) => `${item.symbol}:${item.token}:${item.lot_size ?? ''}:${item.expiry ?? ''}`).join('|');
+}
+
 function writeWatchlist(items: WatchItem[]) {
   localStorage.setItem(WATCH_KEY, JSON.stringify(items));
   window.dispatchEvent(new Event('kite-watchlist-storage-sync'));
@@ -74,23 +78,31 @@ export function SterlingWatchListWithHoldingsSync({
   const [autoAttempted, setAutoAttempted] = useState(() => hadWatchStorageOnMount || localStorage.getItem(MANUAL_EMPTY_KEY) === '1');
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const previousCountRef = useRef(watchSnapshot.length);
+  const watchSignatureRef = useRef(watchSignature(watchSnapshot));
   const autoSeededRef = useRef(false);
 
   const holdings = useKiteHoldings(true);
   const holdingItems = useMemo(() => holdingsToWatchItems(holdings.data || []), [holdings.data]);
 
   const refreshSnapshot = useCallback(() => {
-    setWatchSnapshot(readWatchlist());
-    setManualEmpty(localStorage.getItem(MANUAL_EMPTY_KEY) === '1');
+    const next = readWatchlist();
+    const signature = watchSignature(next);
+    if (signature !== watchSignatureRef.current) {
+      watchSignatureRef.current = signature;
+      setWatchSnapshot(next);
+    }
+    const nextManualEmpty = localStorage.getItem(MANUAL_EMPTY_KEY) === '1';
+    setManualEmpty((current) => current === nextManualEmpty ? current : nextManualEmpty);
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(refreshSnapshot, 500);
+    // Same-tab writes dispatch kite-watchlist-storage-sync; cross-tab writes emit
+    // storage. Polling localStorage every 500ms created a new array and rerendered
+    // the entire watchlist continuously, even while the user was only hovering.
     window.addEventListener('storage', refreshSnapshot);
     window.addEventListener('focus', refreshSnapshot);
     window.addEventListener('kite-watchlist-storage-sync', refreshSnapshot);
     return () => {
-      window.clearInterval(timer);
       window.removeEventListener('storage', refreshSnapshot);
       window.removeEventListener('focus', refreshSnapshot);
       window.removeEventListener('kite-watchlist-storage-sync', refreshSnapshot);
@@ -115,10 +127,15 @@ export function SterlingWatchListWithHoldingsSync({
     const existing = new Set(current.map((item) => item.symbol));
     const missing = items.filter((item) => !existing.has(item.symbol));
     if (missing.length === 0) {
-      setWatchSnapshot(current);
+      const signature = watchSignature(current);
+      if (signature !== watchSignatureRef.current) {
+        watchSignatureRef.current = signature;
+        setWatchSnapshot(current);
+      }
       return false;
     }
     const next = dedupeItems([...current, ...missing]);
+    watchSignatureRef.current = watchSignature(next);
     writeWatchlist(next);
     localStorage.removeItem(MANUAL_EMPTY_KEY);
     setManualEmpty(false);
@@ -131,8 +148,7 @@ export function SterlingWatchListWithHoldingsSync({
     setManualRefreshing(true);
     try {
       const result = await holdings.refetch();
-      const freshItems = holdingsToWatchItems(result.data || []);
-      addMissingHoldings(freshItems);
+      addMissingHoldings(holdingsToWatchItems(result.data || []));
     } finally {
       setManualRefreshing(false);
     }
@@ -174,28 +190,12 @@ export function SterlingWatchListWithHoldingsSync({
   return (
     <div className="kite-watchlist-sync-shell" style={{ position: 'relative', height: '100%' }}>
       <style>{`
-        .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child {
-          margin-right: 36px;
-        }
-        @keyframes kiteHoldingsRefreshSpin {
-          to { transform: rotate(360deg); }
-        }
+        .kite-watchlist-sync-shell div:has(> input[placeholder="Search"]) > div:last-child { margin-right: 36px; }
+        @keyframes kiteHoldingsRefreshSpin { to { transform: rotate(360deg); } }
       `}</style>
       <SterlingWatchList key={childKey} onOpenInstrument={onOpenInstrument} />
       {hideDefaultEmptyPrompt && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            top: 50,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 15,
-            background: t.bg,
-            pointerEvents: 'none',
-          }}
-        />
+        <div aria-hidden style={{ position: 'absolute', top: 50, left: 0, right: 0, bottom: 0, zIndex: 15, background: t.bg, pointerEvents: 'none' }} />
       )}
       <div style={{ position: 'absolute', top: 13, right: 10, zIndex: 25, display: 'inline-flex', alignItems: 'center' }}>
         <button
@@ -203,24 +203,8 @@ export function SterlingWatchListWithHoldingsSync({
           title={syncTitle}
           aria-label="Refresh holdings from Kite"
           aria-busy={refreshing}
-          onClick={(event) => {
-            event.stopPropagation();
-            void refreshAndSyncHoldings();
-          }}
-          style={{
-            width: 24,
-            height: 24,
-            padding: 0,
-            borderRadius: 4,
-            border: 'none',
-            background: 'transparent',
-            color: t.blue,
-            opacity: 1,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          onClick={(event) => { event.stopPropagation(); void refreshAndSyncHoldings(); }}
+          style={{ width: 24, height: 24, padding: 0, borderRadius: 4, border: 'none', background: 'transparent', color: t.blue, opacity: 1, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
         >
           <span style={{ display: 'inline-flex', animation: refreshing ? 'kiteHoldingsRefreshSpin 0.8s linear infinite' : undefined }}>
             <SyncHoldingsIcon />
