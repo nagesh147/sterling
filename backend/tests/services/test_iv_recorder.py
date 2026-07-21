@@ -7,12 +7,10 @@ from app.services import db
 from app.services.delta_iv_socket import IVTick
 from app.services.delta_iv_recorder import _flush_ticks, start_recorder, stop_recorder
 
-# Use an in-memory db for testing
-pytestmark = pytest.mark.asyncio
-
 
 import os
 import tempfile
+
 
 @pytest.fixture(autouse=True)
 def setup_db():
@@ -76,6 +74,7 @@ def test_recorder_downsamples_and_flushes(mock_iv_manager):
     assert iv_row["ivr"] == 0.65
 
 
+@pytest.mark.asyncio
 @patch("app.services.delta_iv_recorder.iv_manager")
 async def test_atm_iv_bridge(mock_iv_manager):
     """Verify atm_iv bridge handles None values safely."""
@@ -86,7 +85,6 @@ async def test_atm_iv_bridge(mock_iv_manager):
 
     with db._conn() as c:
         iv_row = c.execute("SELECT * FROM iv_history WHERE underlying='ETH'").fetchone()
-    
+
     # If atm_iv is None, it shouldn't record to iv_history
     assert iv_row is None
-
