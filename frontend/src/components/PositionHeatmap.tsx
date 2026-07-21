@@ -11,6 +11,15 @@ function pnlColor(pnlPct: number): string {
   return `rgba(204,68,68,${Math.min(0.9, 0.2 + Math.abs(pnlPct) * 4)})`;
 }
 
+function directionLabel(raw: unknown): string {
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  if (raw && typeof raw === 'object') {
+    const value = (raw as { value?: unknown }).value;
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return 'long';
+}
+
 export function PositionHeatmap({ positions, onSelect }: PositionHeatmapProps) {
   const open = positions.filter((p) => p.status === 'open' || p.status === 'partially_closed');
 
@@ -24,7 +33,7 @@ export function PositionHeatmap({ positions, onSelect }: PositionHeatmapProps) {
         const risk = p.sized_trade?.max_risk_usd ?? 1;
         const pnlRaw = (p as any).estimated_pnl_usd ?? 0;
         const pnlPct = risk > 0 ? pnlRaw / risk : 0;
-        const dir = p.sized_trade?.structure?.direction ?? 'long';
+        const dir = directionLabel(p.sized_trade?.structure?.direction);
         return (
           <div
             key={p.id}
