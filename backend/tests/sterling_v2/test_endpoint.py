@@ -76,13 +76,15 @@ def test_v2_signals_shape_and_paper_only(client, monkeypatch):
 
 
 def test_v2_backtest_returns_finite_metrics(client):
+    """The research dataset is optional; validate both populated and empty responses."""
     r = client.get("/api/v1/sterling-v2/backtest")
     assert r.status_code == 200
     body = r.json()
     assert body["paper_only"] is True
-    assert body["per_symbol"]  # at least one symbol
-    for sym, m in body["per_symbol"].items():
+    assert isinstance(body["per_symbol"], dict)
+    for _sym, metrics in body["per_symbol"].items():
         for key in ("win", "pf", "sharpe", "net", "max_dd", "trades"):
-            assert key in m and math.isfinite(m[key])
+            assert key in metrics and math.isfinite(metrics[key])
     for key in ("net", "max_dd", "sharpe"):
         assert math.isfinite(body["portfolio"][key])
+    assert isinstance(body["portfolio"].get("weights", {}), dict)
