@@ -42,7 +42,14 @@ export function PositionHeatmap({ positions, onSelect }: PositionHeatmapProps) {
             <span style={{ fontWeight: 700 }}>{p.underlying}</span>
             <span style={{ fontSize: 9, color: '#ccc' }}>{dir.toUpperCase()}</span>
             {p.exit_mode && p.current_red_count != null && p.exit_threshold != null && p.exit_threshold > 0 && (
-              <div style={{ width: '90%', height: 3, background: '#222', marginTop: 2, borderRadius: 2 }}>
+              <div
+                role="progressbar"
+                aria-label={`${p.underlying} exit confirmation progress`}
+                aria-valuemin={0}
+                aria-valuemax={p.exit_threshold}
+                aria-valuenow={Math.min(p.current_red_count, p.exit_threshold)}
+                style={{ width: '90%', height: 3, background: '#222', marginTop: 2, borderRadius: 2 }}
+              >
                 <div style={{
                   width: `${Math.min(100, (p.current_red_count / p.exit_threshold) * 100)}%`,
                   height: '100%',
