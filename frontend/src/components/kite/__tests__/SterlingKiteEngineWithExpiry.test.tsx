@@ -53,7 +53,9 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
 }));
 
 describe('SterlingKiteEngineWithExpiry', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   afterEach(cleanup);
 
   it('shows only selected instruments with exact Kite-listed contract dates', () => {
