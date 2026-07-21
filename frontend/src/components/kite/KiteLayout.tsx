@@ -70,7 +70,7 @@ const SLOT_LABEL: Record<WorkspaceSlotId, string> = {
 
 const PRESET_META: Array<{ id: WorkspacePresetId; label: string; detail: string }> = [
   { id: 'classic', label: 'Classic', detail: 'Wide signals with docked terminal' },
-  { id: 'chart', label: 'Chart focus', detail: 'More room for the dashboard' },
+  { id: 'chart', label: 'Chart focus', detail: 'Chart + watchlist left, signals right' },
   { id: 'execution', label: 'Execution', detail: 'Signals and terminal forward' },
 ];
 
@@ -223,9 +223,18 @@ function PaneWindow({ pane, slot, locked, focus, compact = false, onMinimize, on
 }
 
 function PresetDiagram({ preset }: { preset: WorkspacePresetId }) {
-  const right = preset === 'execution' ? '38%' : preset === 'chart' ? '23%' : '29%';
-  const left = preset === 'chart' ? '18%' : '23%';
-  const bottom = preset === 'execution' ? '35%' : preset === 'chart' ? '20%' : '27%';
+  if (preset === 'chart') {
+    return (
+      <span style={{ width: 42, height: 27, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 24%', gap: 1, padding: 2, border: '1px solid #ddd', borderRadius: 4, background: '#fff', flexShrink: 0 }}>
+        <i style={{ gridColumn: 1, gridRow: 1, background: '#f06428', opacity: .72, borderRadius: 1 }} />
+        <i style={{ gridColumn: 1, gridRow: 2, background: '#d7d7d7', borderRadius: 1 }} />
+        <i style={{ gridColumn: 2, gridRow: '1 / 3', background: '#bdbdbd', borderRadius: 1 }} />
+      </span>
+    );
+  }
+  const right = preset === 'execution' ? '38%' : '29%';
+  const left = '23%';
+  const bottom = preset === 'execution' ? '35%' : '27%';
   return (
     <span style={{ width: 42, height: 27, display: 'grid', gridTemplateColumns: `${left} 1fr ${right}`, gridTemplateRows: `1fr ${bottom}`, gap: 1, padding: 2, border: '1px solid #ddd', borderRadius: 4, background: '#fff', flexShrink: 0 }}>
       <i style={{ gridColumn: 1, gridRow: '1 / 3', background: '#d7d7d7', borderRadius: 1 }} />
@@ -467,19 +476,28 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
 
   const applyPreset = useCallback((preset: WorkspacePresetId) => {
     setLayout((current) => {
-      const next = applyWorkspacePreset(current, preset);
       const rect = workspaceRef.current?.getBoundingClientRect();
+      const viewport = rect && rect.width > 0 && rect.height > 0
+        ? { width: rect.width, height: rect.height }
+        : undefined;
+      const next = applyWorkspacePreset(current, preset, viewport);
       if (!rect || rect.width <= 0 || rect.height <= 0) return next;
+      const visible = (slot: WorkspaceSlotId) => (
+        available.includes(next.slots[slot]) && !next.minimized.includes(next.slots[slot])
+      );
       return {
         ...next,
-        sizes: clampWorkspaceSizes(next.sizes, rect),
+        sizes: clampWorkspaceSizes(next.sizes, rect, {
+          left: visible('left'), right: visible('right'), bottom: visible('bottom'),
+        }),
       };
     });
-    syncTerminalStorage('terminal', 'normal');
-    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'normal' }));
+    const terminalMode = preset === 'chart' ? 'minimized' : 'normal';
+    syncTerminalStorage('terminal', terminalMode);
+    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: terminalMode }));
     setFocus(null);
     setMenuOpen(false);
-  }, [syncTerminalStorage]);
+  }, [available, syncTerminalStorage]);
 
   const restoreAll = useCallback(() => {
     setLayout((current) => restoreAllPanes(current));
