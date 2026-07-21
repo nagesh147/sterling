@@ -15,6 +15,7 @@ vi.mock('../TradingViewKiteChartLegacy', () => ({
 }));
 
 vi.mock('../chartParityRuntime', () => ({
+  CHART_CROSSHAIR_EVENT: 'sterling:kite-chart-crosshair',
   CHART_RANGE_KEYS: ['1D', '5D', 'ALL'],
   normalizeChartCandles: (candles: any[]) => candles,
   ...runtime,
