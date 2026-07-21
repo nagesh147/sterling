@@ -1,8 +1,8 @@
 """Kite-only ATM/ITM/OTM option strike and expiry-series resolver.
 
 Expiry classification is derived from the dates actually listed in the instrument
-chain. This deliberately avoids weekday assumptions because exchange expiry days
-and holiday adjustments can change.
+chain. This avoids weekday assumptions because exchange expiry days and holiday
+adjustments can change.
 """
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ Moneyness = Literal[
 ]
 ExpiryType = Literal["weekly", "monthly"]
 
-_ITM_OFFSET = {
+_DEPTH = {
     "ATM": 0,
     "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5": 5,
     "ITM10": 10, "ITM15": 15, "ITM20": 20,
-    "OTM1": -1, "OTM2": -2, "OTM3": -3, "OTM4": -4, "OTM5": -5,
+    "OTM1": 1, "OTM2": 2, "OTM3": 3, "OTM4": 4, "OTM5": 5,
 }
 
 
@@ -33,37 +33,34 @@ def _parse_expiry(raw: object) -> Optional[date]:
 
 
 def _expiry_date_set(chain: Sequence[dict], today: date) -> dict[str, set[str]]:
-    """Return labels for each listed future expiry.
+    """Classify actual listed future dates as weekly or monthly.
 
-    For every calendar month represented by the chain, the latest listed expiry is
-    the monthly contract. Any earlier listed expiries in that month are weekly
-    contracts. A chain containing only one expiry per month is therefore monthly-
-    only, which correctly models stock options and monthly-only indices.
+    The latest listed expiry in each represented calendar month is monthly. Earlier
+    listed expiries in that month are weekly. A chain with one expiry per month is
+    therefore monthly-only; holiday-shifted dates need no special weekday rule.
     """
     future = sorted({
-        d for r in chain
-        if (d := _parse_expiry(r.get("expiry_date") or r.get("expiry"))) is not None
+        d for row in chain
+        if (d := _parse_expiry(row.get("expiry_date") or row.get("expiry"))) is not None
         and d >= today
     })
     by_month: dict[tuple[int, int], list[date]] = {}
-    for d in future:
-        by_month.setdefault((d.year, d.month), []).append(d)
+    for expiry in future:
+        by_month.setdefault((expiry.year, expiry.month), []).append(expiry)
 
-    out: dict[str, set[str]] = {}
+    classified: dict[str, set[str]] = {}
     for dates in by_month.values():
         monthly = max(dates)
-        for d in dates:
-            out[d.isoformat()] = {"monthly"} if d == monthly else {"weekly"}
-    return out
+        for expiry in dates:
+            classified[expiry.isoformat()] = {"monthly"} if expiry == monthly else {"weekly"}
+    return classified
 
 
-def _series_dates(
-    chain: Sequence[dict], expiry_type: ExpiryType, today: date
-) -> list[date]:
+def _series_dates(chain: Sequence[dict], expiry_type: ExpiryType, today: date) -> list[date]:
     labels = _expiry_date_set(chain, today)
     return sorted(
-        d for key, kinds in labels.items()
-        if expiry_type in kinds and (d := _parse_expiry(key)) is not None
+        expiry for raw, kinds in labels.items()
+        if expiry_type in kinds and (expiry := _parse_expiry(raw)) is not None
     )
 
 
@@ -75,8 +72,10 @@ def _filter_chain_by_expiry(
     labels = _expiry_date_set(chain, today)
     wanted = set(expiry_types)
     return [
-        r for r in chain
-        if wanted & labels.get(str(r.get("expiry_date") or r.get("expiry") or "")[:10], set())
+        row for row in chain
+        if wanted & labels.get(
+            str(row.get("expiry_date") or row.get("expiry") or "")[:10], set()
+        )
     ]
 
 
@@ -88,43 +87,47 @@ def _filter_chain_by_series(
         return []
     selected = dates[expiry_rank].isoformat()
     return [
-        r for r in chain
-        if str(r.get("expiry_date") or r.get("expiry") or "")[:10] == selected
+        row for row in chain
+        if str(row.get("expiry_date") or row.get("expiry") or "")[:10] == selected
     ]
 
 
 def chain_rows_for(option_instruments: Sequence[dict], name: str, today: date) -> List[dict]:
     """Extract strike-picker rows for an underlying from an NFO/BFO dump."""
-    want = name.upper()
-    alias = {"SENSEX": "BSX", "BANKEX": "BKX"}.get(want)
-    out: List[dict] = []
-    for r in option_instruments:
-        n = str(r.get("name", "")).upper()
-        tsym = str(r.get("tradingsymbol", "")).upper()
-        prefix_hit = tsym.startswith(want) and len(tsym) > len(want) and tsym[len(want)].isdigit()
-        if n != want and not (alias and n == alias) and not prefix_hit:
+    wanted_name = name.upper()
+    alias = {"SENSEX": "BSX", "BANKEX": "BKX"}.get(wanted_name)
+    rows: List[dict] = []
+    for instrument in option_instruments:
+        instrument_name = str(instrument.get("name", "")).upper()
+        symbol = str(instrument.get("tradingsymbol", "")).upper()
+        prefix_hit = (
+            symbol.startswith(wanted_name)
+            and len(symbol) > len(wanted_name)
+            and symbol[len(wanted_name)].isdigit()
+        )
+        if instrument_name != wanted_name and not (alias and instrument_name == alias) and not prefix_hit:
             continue
-        it = r.get("instrument_type")
-        if it not in ("CE", "PE"):
+        instrument_type = instrument.get("instrument_type")
+        if instrument_type not in ("CE", "PE"):
             continue
-        exp = str(r.get("expiry", ""))[:10]
+        raw_expiry = str(instrument.get("expiry", ""))[:10]
         try:
-            ed = datetime.strptime(exp, "%Y-%m-%d").date()
-            strike = float(r.get("strike") or 0.0)
+            expiry = datetime.strptime(raw_expiry, "%Y-%m-%d").date()
+            strike = float(instrument.get("strike") or 0.0)
         except (ValueError, TypeError):
             continue
-        if strike <= 0 or ed < today:
+        if strike <= 0 or expiry < today:
             continue
-        out.append({
+        rows.append({
             "strike": strike,
-            "option_type": "call" if it == "CE" else "put",
-            "expiry_date": exp,
-            "dte": (ed - today).days,
-            "instrument_name": str(r.get("tradingsymbol", "")),
-            "lot_size": int(r.get("lot_size") or 0),
-            "token": int(r.get("instrument_token") or 0),
+            "option_type": "call" if instrument_type == "CE" else "put",
+            "expiry_date": raw_expiry,
+            "dte": (expiry - today).days,
+            "instrument_name": str(instrument.get("tradingsymbol", "")),
+            "lot_size": int(instrument.get("lot_size") or 0),
+            "token": int(instrument.get("instrument_token") or 0),
         })
-    return out
+    return rows
 
 
 @dataclass(frozen=True)
@@ -138,6 +141,26 @@ class OptionPick:
     token: int = 0
 
 
+def _select_row(rows: Sequence[dict], *, spot: float, want_call: bool, moneyness: Moneyness) -> Optional[dict]:
+    ordered = sorted(rows, key=lambda row: float(row["strike"]))
+    if not ordered:
+        return None
+    if moneyness == "ATM":
+        return min(ordered, key=lambda row: abs(float(row["strike"]) - spot))
+
+    is_itm = moneyness.startswith("ITM")
+    if want_call:
+        valid = [row for row in ordered if float(row["strike"]) < spot] if is_itm else [row for row in ordered if float(row["strike"]) > spot]
+        valid = sorted(valid, key=lambda row: float(row["strike"]), reverse=is_itm)
+    else:
+        valid = [row for row in ordered if float(row["strike"]) > spot] if is_itm else [row for row in ordered if float(row["strike"]) < spot]
+        valid = sorted(valid, key=lambda row: float(row["strike"]), reverse=not is_itm)
+    if not valid:
+        return None
+    requested_depth = _DEPTH[moneyness]
+    return valid[min(requested_depth, len(valid)) - 1]
+
+
 def pick_strike(
     chain: Sequence[dict], *, spot: float, direction: str,
     moneyness: Moneyness = "ATM", min_dte: int = 0,
@@ -146,48 +169,49 @@ def pick_strike(
 ) -> Optional[OptionPick]:
     """Resolve one CE/PE contract for a requested expiry series and moneyness.
 
-    When the requested depth exceeds the listed strike ladder, the deepest listed
-    strike on the same ITM/OTM side is selected instead of returning no contract.
+    If a requested depth exceeds the available ladder, the deepest valid strike on
+    that same ITM/OTM side is returned. The resolver never crosses to the wrong side.
     """
     want_call = direction == "long"
-    want_type = "call" if want_call else "put"
+    wanted_type = "call" if want_call else "put"
     rows = [
-        r for r in chain
-        if str(r.get("option_type", "")).lower() == want_type
-        and int(r.get("dte", 0)) >= min_dte
+        row for row in chain
+        if str(row.get("option_type", "")).lower() == wanted_type
+        and int(row.get("dte", 0)) >= min_dte
     ]
     current = today or date.today()
     if expiry_type is not None:
-        rows = _filter_chain_by_series(rows, expiry_type=expiry_type, expiry_rank=expiry_rank, today=current)
+        rows = _filter_chain_by_series(
+            rows, expiry_type=expiry_type, expiry_rank=expiry_rank, today=current
+        )
     elif expiry_types:
         rows = _filter_chain_by_expiry(rows, expiry_types, current)
         if rows:
-            nearest = min(int(r.get("dte", 0)) for r in rows)
-            rows = [r for r in rows if int(r.get("dte", 0)) == nearest]
-    else:
-        if rows:
-            nearest = min(int(r.get("dte", 0)) for r in rows)
-            rows = [r for r in rows if int(r.get("dte", 0)) == nearest]
-    if not rows:
+            nearest_dte = min(int(row.get("dte", 0)) for row in rows)
+            rows = [row for row in rows if int(row.get("dte", 0)) == nearest_dte]
+    elif rows:
+        nearest_dte = min(int(row.get("dte", 0)) for row in rows)
+        rows = [row for row in rows if int(row.get("dte", 0)) == nearest_dte]
+    selected = _select_row(rows, spot=spot, want_call=want_call, moneyness=moneyness)
+    if selected is None:
         return None
-
-    rows = sorted(rows, key=lambda r: float(r["strike"]))
-    strikes = [float(r["strike"]) for r in rows]
-    atm = min(range(len(strikes)), key=lambda i: abs(strikes[i] - spot))
-    off = _ITM_OFFSET[moneyness]
-    requested_idx = atm - off if want_call else atm + off
-    idx = min(max(requested_idx, 0), len(strikes) - 1)
-
-    r = rows[idx]
     return OptionPick(
-        option_symbol=str(r.get("instrument_name", "")),
-        strike=float(r["strike"]),
+        option_symbol=str(selected.get("instrument_name", "")),
+        strike=float(selected["strike"]),
         option_type="CE" if want_call else "PE",
-        expiry=str(r.get("expiry_date", "")),
-        dte=int(r.get("dte", 0)),
-        lot_size=int(r.get("lot_size", 0) or 0),
-        token=int(r.get("token", 0) or 0),
+        expiry=str(selected.get("expiry_date", "")),
+        dte=int(selected.get("dte", 0)),
+        lot_size=int(selected.get("lot_size", 0) or 0),
+        token=int(selected.get("token", 0) or 0),
     )
+
+
+def _default_series(expiry_types: Sequence[ExpiryType]) -> dict[ExpiryType, Sequence[int]]:
+    """Legacy callers get all supported user-facing series without extra wiring."""
+    return {
+        kind: ([0, 1, 2, 3] if kind == "weekly" else [0, 1])
+        for kind in expiry_types
+    }
 
 
 def pick_strikes(
@@ -198,23 +222,23 @@ def pick_strikes(
     today: Optional[date] = None,
 ) -> List[tuple]:
     """Resolve requested strikes across independently selected weekly/monthly ranks."""
-    out: List[tuple] = []
+    output: List[tuple] = []
     seen: set[str] = set()
-    series = expiry_ranks_by_type or {kind: [0] for kind in expiry_types}
+    series = expiry_ranks_by_type if expiry_ranks_by_type is not None else _default_series(expiry_types)
     if not series:
         series = {None: [0]}  # type: ignore[dict-item]
     for kind, ranks in series.items():
         for rank in ranks:
-            for m in moneynesses:
+            for moneyness in moneynesses:
                 pick = pick_strike(
-                    chain, spot=spot, direction=direction, moneyness=m,
+                    chain, spot=spot, direction=direction, moneyness=moneyness,
                     min_dte=min_dte, expiry_types=expiry_types,
                     expiry_type=kind, expiry_rank=int(rank), today=today,
                 )
                 if pick and pick.option_symbol not in seen:
                     seen.add(pick.option_symbol)
-                    out.append((m, pick))
-    return out
+                    output.append((moneyness, pick))
+    return output
 
 
 def pick_contracts(
@@ -225,24 +249,24 @@ def pick_contracts(
     today: Optional[date] = None,
 ) -> List[tuple]:
     """Resolve both CE and PE across selected strike and expiry series."""
-    out: List[tuple] = []
+    output: List[tuple] = []
     seen: set[str] = set()
-    series = expiry_ranks_by_type or {kind: [0] for kind in expiry_types}
+    series = expiry_ranks_by_type if expiry_ranks_by_type is not None else _default_series(expiry_types)
     if not series:
         series = {None: [0]}  # type: ignore[dict-item]
     for kind, ranks in series.items():
         for rank in ranks:
-            for m in moneynesses:
+            for moneyness in moneynesses:
                 for direction in ("long", "short"):
                     pick = pick_strike(
-                        chain, spot=spot, direction=direction, moneyness=m,
+                        chain, spot=spot, direction=direction, moneyness=moneyness,
                         min_dte=min_dte, expiry_types=expiry_types,
                         expiry_type=kind, expiry_rank=int(rank), today=today,
                     )
                     if pick and pick.option_symbol not in seen:
                         seen.add(pick.option_symbol)
-                        out.append((m, pick))
-    return out
+                        output.append((moneyness, pick))
+    return output
 
 
 def pick_by_delta(
@@ -255,29 +279,38 @@ def pick_by_delta(
     from app.services.kite_engine.greeks import black_scholes_greeks
 
     want_call = direction == "long"
-    want_type = "call" if want_call else "put"
-    rows = [r for r in chain if str(r.get("option_type", "")).lower() == want_type and int(r.get("dte", 0)) >= min_dte]
+    wanted_type = "call" if want_call else "put"
+    rows = [
+        row for row in chain
+        if str(row.get("option_type", "")).lower() == wanted_type
+        and int(row.get("dte", 0)) >= min_dte
+    ]
     current = today or date.today()
     if expiry_type is not None:
-        rows = _filter_chain_by_series(rows, expiry_type=expiry_type, expiry_rank=expiry_rank, today=current)
+        rows = _filter_chain_by_series(
+            rows, expiry_type=expiry_type, expiry_rank=expiry_rank, today=current
+        )
     elif expiry_types:
         rows = _filter_chain_by_expiry(rows, expiry_types, current)
     if not rows:
         return None
-    nearest = min(int(r.get("dte", 0)) for r in rows)
-    rows = [r for r in rows if int(r.get("dte", 0)) == nearest]
+    nearest_dte = min(int(row.get("dte", 0)) for row in rows)
+    rows = [row for row in rows if int(row.get("dte", 0)) == nearest_dte]
 
-    abs_target = abs(target_delta)
+    absolute_target = abs(target_delta)
     best_row = None
-    best_dist = float("inf")
-    for r in rows:
-        strike = float(r.get("strike", 0))
-        dte_d = max(1.0, float(r.get("dte", 1)))
-        g = black_scholes_greeks(spot=spot, strike=strike, dte_days=dte_d, iv=iv, option_type="CE" if want_call else "PE")
-        dist = abs(abs(g.delta) - abs_target)
-        if dist < best_dist:
-            best_dist = dist
-            best_row = r
+    best_distance = float("inf")
+    for row in rows:
+        strike = float(row.get("strike", 0))
+        dte_days = max(1.0, float(row.get("dte", 1)))
+        greeks = black_scholes_greeks(
+            spot=spot, strike=strike, dte_days=dte_days, iv=iv,
+            option_type="CE" if want_call else "PE",
+        )
+        distance = abs(abs(greeks.delta) - absolute_target)
+        if distance < best_distance:
+            best_distance = distance
+            best_row = row
     if best_row is None:
         return None
     return OptionPick(
