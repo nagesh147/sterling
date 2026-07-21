@@ -45,10 +45,11 @@ jobs:
             echo '=== VITEST FIRST FAILURE ==='
             npx vitest run --coverage=false --bail=1
             echo "vitest_exit=$?"
-          } > ../diagnostics.txt 2>&1
+          } > "$GITHUB_WORKSPACE/diagnostics.txt" 2>&1
           exit 0
       - uses: actions/upload-artifact@v4
         with:
           name: expiry-series-diagnostics
           path: diagnostics.txt
+          if-no-files-found: error
           retention-days: 1
