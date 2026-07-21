@@ -158,7 +158,6 @@ async def _append_held_contract_signals(
 
     # Local import avoids a scanner<->extension import cycle during package startup.
     from app.services.kite_engine.scanner import (
-        ContractScanDiag,
         _compile_rows,
         _retain_signals,
         drop_forming,
@@ -172,7 +171,7 @@ async def _append_held_contract_signals(
         for leg in getattr(row, "legs", [])
         if getattr(leg, "option_symbol", "")
     }
-    existing.update(c.symbol for c in us.diag.contracts if c.symbol)
+    existing.update(us.scanned_contract_symbols)
     pending = [spec for spec in specs if spec.pick.option_symbol not in existing]
     if not pending:
         return
@@ -188,72 +187,28 @@ async def _append_held_contract_signals(
             us.scanning_label = f"Held: {pick.option_symbol}"
             if log_cb:
                 log_cb(f"Scanning held derivative: {pick.option_symbol}")
+            us.scanned_contract_symbols.add(pick.option_symbol)
             us.diag.deriv_resolved += 1
             try:
                 candles = drop_forming(await scanner_obj._fetch_candles(
                     client, us, pick.token, pick.option_symbol))
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 us.diag.deriv_no_data += 1
-                us.diag.contracts.append(ContractScanDiag(
-                    underlying=spec.item.name,
-                    symbol=pick.option_symbol,
-                    strike=pick.strike,
-                    option_type=pick.option_type,
-                    expiry=pick.expiry,
-                    moneyness=spec.moneyness,
-                    reason=f"held contract candle fetch failed: {exc}",
-                ))
+                continue
+
+            if not candles:
+                us.diag.deriv_no_data += 1
                 continue
 
             bars = len(candles)
-            premium_close = float(candles[-1].close) if candles else 0.0
-            if not candles:
-                us.diag.deriv_no_data += 1
-                us.diag.contracts.append(ContractScanDiag(
-                    underlying=spec.item.name,
-                    symbol=pick.option_symbol,
-                    strike=pick.strike,
-                    option_type=pick.option_type,
-                    expiry=pick.expiry,
-                    moneyness=spec.moneyness,
-                    bars=0,
-                    premium_close=0.0,
-                    reason="held contract returned no candle data",
-                ))
-                continue
-
             us.diag.deriv_charts += 1
             us.diag.deriv_min_bars = bars if us.diag.deriv_min_bars == 0 else min(us.diag.deriv_min_bars, bars)
             us.diag.deriv_max_bars = max(us.diag.deriv_max_bars, bars)
             rows = evaluate_derivative_contract(spec.item, spec.moneyness, pick, candles, cfg)
             latest_ts = int(candles[-1].timestamp_ms)
             fired = any(int(row.timestamp_ms) == latest_ts for row in rows)
-            fired_at = next((int(row.timestamp_ms) for row in rows if int(row.timestamp_ms) == latest_ts), 0)
             if fired:
                 us.diag.deriv_fired += 1
-            if not rows:
-                reason = (
-                    f"no up-transition ({bars} bars, warmup={cfg.warmup})"
-                    if bars > cfg.warmup
-                    else f"too few bars ({bars} < {cfg.warmup + 1} warmup)"
-                )
-            elif fired:
-                reason = "fresh BUY signal on held contract"
-            else:
-                reason = "running/historical held-contract signal"
-            us.diag.contracts.append(ContractScanDiag(
-                underlying=spec.item.name,
-                symbol=pick.option_symbol,
-                strike=pick.strike,
-                option_type=pick.option_type,
-                expiry=pick.expiry,
-                moneyness=spec.moneyness,
-                bars=bars,
-                premium_close=premium_close,
-                fired=fired,
-                fired_at_ms=fired_at,
-                reason=reason,
-            ))
             appended.extend(_retain_signals(rows, now_ms))
 
         if appended:

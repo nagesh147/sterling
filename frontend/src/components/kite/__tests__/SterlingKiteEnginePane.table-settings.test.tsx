@@ -49,7 +49,6 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
   useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
   useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
-  useScanReport: () => ({ data: undefined }),
 }));
 
 function renderPane() {
@@ -73,6 +72,7 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     renderPane();
 
     expect(screen.queryByText('Signal table settings')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Scan report' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Signal table settings' }));
 
     expect(screen.getByText('Signal table settings')).toBeInTheDocument();

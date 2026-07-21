@@ -4,7 +4,7 @@ import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   ActivityResponse, BacktestRequest, BacktestResponse, EngineConfigModel,
   EngineDetailResponse, EngineOrderRequest, EngineOrderResponse, ExpiryCalendarResponse, LiquidityGroup,
-  OpenPositionsResponse, ScanReportResponse, SetupChart, SignalsResponse,
+  OpenPositionsResponse, SetupChart, SignalsResponse,
 } from '../types/kiteEngine';
 
 const E = '/api/v1/kite/engine';
@@ -31,15 +31,6 @@ export function useStockRegistry() {
     queryKey: ['kite-engine-stock-registry'],
     queryFn: () => api.get<LiquidityGroup[]>(`${E}/stock-registry`),
     staleTime: 300_000,
-  });
-}
-
-// ─── Per-contract scan report ───────────────────────────────────────────────
-export function useScanReport() {
-  return useQuery<ScanReportResponse>({
-    queryKey: ['kite-engine-scan-report'],
-    queryFn: () => api.get<ScanReportResponse>(`${E}/scan-report`),
-    staleTime: 120_000,
   });
 }
 

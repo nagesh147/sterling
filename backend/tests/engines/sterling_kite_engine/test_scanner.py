@@ -625,10 +625,9 @@ async def test_deriv_grouping_dedupes_legs_for_repeated_transitions():
 
 
 @pytest.mark.asyncio
-async def test_scan_drops_stopped_out_historical_entries_but_keeps_diag():
-    """A contract whose only entry fired days ago and has since been stopped out is
-    NOT surfaced as a signal row (it's neither fresh nor running) — but the scan still
-    records it in the per-contract diagnostics as 'historical entry only' for the log."""
+async def test_scan_drops_stopped_out_historical_entries_without_report_payload():
+    """Dead historical entries stay off the board without retaining an obsolete
+    per-contract report payload. Symbol-only de-duplication remains internal."""
     cfg = SterlingKiteEngineConfig()
     # fired (proven long path) then collapsed hard → trend broke before the last bar:
     # an entry exists in history but is_active=False and not fresh.
@@ -653,10 +652,12 @@ async def test_scan_drops_stopped_out_historical_entries_but_keeps_diag():
     await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
                   cfg=cfg, moneyness=["ATM"], deriv_universe=deriv)
     snap = sc.snapshot("u1")
-    assert snap.rows == []                          # dead historical entry not surfaced
-    # but the contract trace still records it so the activity log isn't silent
-    ce = [c for c in snap.diag.contracts if c.symbol == "NIFTY25JUN100CE"]
-    assert ce and ce[0].fired is False and "historical entry only" in ce[0].reason
+    assert snap.rows == []  # dead historical entry not surfaced
+    assert not hasattr(snap.diag, "contracts")
+    assert snap.scanned_contract_symbols == {
+        "NIFTY25JUN100CE",
+        "NIFTY25JUN100PE",
+    }
 
 
 @pytest.mark.asyncio

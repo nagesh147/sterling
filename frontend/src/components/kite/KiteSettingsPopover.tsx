@@ -34,7 +34,6 @@ export function KiteSettingsPopover({ onClose }: { onClose: () => void }) {
     }));
     void queryClient.invalidateQueries({ queryKey: ['kite-instruments'] });
     void queryClient.invalidateQueries({ queryKey: ['kite-engine-signals'] });
-    void queryClient.invalidateQueries({ queryKey: ['kite-engine-scan-report'] });
     void queryClient.invalidateQueries({ queryKey: ['kite-engine-open-positions'] });
   };
 

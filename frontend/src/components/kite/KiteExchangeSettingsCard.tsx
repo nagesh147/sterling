@@ -19,7 +19,6 @@ export function KiteExchangeSettingsCard() {
     setSelected(saved);
     void queryClient.invalidateQueries({ queryKey: ['kite-instruments'] });
     void queryClient.invalidateQueries({ queryKey: ['kite-engine-signals'] });
-    void queryClient.invalidateQueries({ queryKey: ['kite-engine-scan-report'] });
     void queryClient.invalidateQueries({ queryKey: ['kite-engine-open-positions'] });
     window.dispatchEvent(new CustomEvent('kite-exchanges-changed', { detail: saved }));
   };
@@ -37,7 +36,7 @@ export function KiteExchangeSettingsCard() {
         EXCHANGE FILTERS
       </div>
       <div style={{ color: '#777', fontSize: 11.5, lineHeight: 1.5, marginBottom: 12 }}>
-        Controls instruments shown in search, synced watchlists, ticker tiles, scan reports and Sterling signals.
+        Controls instruments shown in search, synced watchlists, ticker tiles and Sterling signals.
       </div>
 
       <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap' }}>

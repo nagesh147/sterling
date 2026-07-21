@@ -69,11 +69,15 @@ def _calendar_entry(
     option_name: str,
     option_rows: Sequence[dict],
     today: date,
+    allow_weekly: bool = True,
 ) -> dict:
+    series = listed_expiry_series(option_rows, option_name, today=today)
+    if not allow_weekly:
+        series["weekly"] = []
     return {
         "name": option_name,
         "display_name": name,
-        **listed_expiry_series(option_rows, option_name, today=today),
+        **series,
     }
 
 
@@ -115,6 +119,7 @@ def build_expiry_calendar(
             option_name=name,
             option_rows=rows_by_stock[name],
             today=today,
+            allow_weekly=False,
         )
         for name in wanted_stocks
     ]

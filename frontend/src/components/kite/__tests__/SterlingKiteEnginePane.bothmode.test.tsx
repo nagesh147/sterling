@@ -49,7 +49,6 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
   useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
   useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
-  useScanReport: () => ({ data: undefined }),
   useStockRegistry: () => ({ data: [] }),
 }));
 
