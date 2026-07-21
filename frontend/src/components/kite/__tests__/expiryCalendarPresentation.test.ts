@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ExpiryCalendarEntry } from '../../../types/kiteEngine';
 import {
+  expiryContractsForRank,
   expiryLabelsForRank,
   formatExpiryDate,
   ordinalDay,
@@ -44,17 +45,45 @@ describe('expiry calendar presentation', () => {
     expect([...weekly, ...monthly].join(' ')).not.toMatch(/\b[WM][1-4]\b/);
   });
 
+  it('provides structured symbol, month and date fields for the responsive cards', () => {
+    expect(expiryContractsForRank(indices, 'monthly', 1, '2026-07-21')).toEqual([
+      {
+        expiry: '2026-08-25',
+        owner: 'NIFTY',
+        month: 'AUG',
+        date: '25th Aug',
+        label: 'NIFTY AUG · 25th Aug',
+        instrumentCount: 1,
+      },
+      {
+        expiry: '2026-08-27',
+        owner: 'SENSEX',
+        month: 'AUG',
+        date: '27th Aug',
+        label: 'SENSEX AUG · 27th Aug',
+        instrumentCount: 1,
+      },
+    ]);
+  });
+
   it('collapses stocks sharing the same concrete expiry date', () => {
     const stocks: ExpiryCalendarEntry[] = [
       { name: 'RELIANCE', display_name: 'RELIANCE', weekly: [], monthly: ['2026-07-28'] },
       { name: 'TCS', display_name: 'TCS', weekly: [], monthly: ['2026-07-28'] },
     ];
-    expect(expiryLabelsForRank(stocks, 'monthly', 0, '2026-07-21', true)).toEqual([
-      '2 STOCKS JUL · 28th Jul',
+    expect(expiryContractsForRank(stocks, 'monthly', 0, '2026-07-21', true)).toEqual([
+      {
+        expiry: '2026-07-28',
+        owner: '2 STOCKS',
+        month: 'JUL',
+        date: '28th Jul',
+        label: '2 STOCKS JUL · 28th Jul',
+        instrumentCount: 2,
+      },
     ]);
   });
 
   it('omits a private rank when Kite lists no contract for it', () => {
-    expect(expiryLabelsForRank(indices, 'weekly', 3, '2026-07-21')).toEqual([]);
+    expect(expiryContractsForRank(indices, 'weekly', 3, '2026-07-21')).toEqual([]);
   });
 });

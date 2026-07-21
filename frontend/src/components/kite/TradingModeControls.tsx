@@ -21,12 +21,12 @@ function vehicleOrderLabel(cfg?: EngineConfigModel | null): string {
 // per-account row toggles and the engine sidebar's Auto-execute switch.
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 4, padding: 16, marginBottom: 14 },
-  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 1, marginBottom: 12, fontWeight: 700 },
-  hint: { color: '#9b9b9b', fontSize: 11, lineHeight: 1.5 },
+  card: { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
+  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 14, fontWeight: 750 },
+  hint: { color: '#888', fontSize: 11.5, lineHeight: 1.5 },
   row: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
-  modeLabel: { fontSize: 10, letterSpacing: 1, color: '#9b9b9b', fontWeight: 700, marginBottom: 2 },
-  modeDesc: { fontSize: 11, color: '#666' },
+  modeLabel: { fontSize: 10, letterSpacing: .75, color: '#777', fontWeight: 750, marginBottom: 3 },
+  modeDesc: { fontSize: 11.5, color: '#666', lineHeight: 1.45 },
   divider: { height: 1, background: '#eee', margin: '2px 0' },
 };
 
@@ -122,7 +122,7 @@ export function TradingModeControls() {
 
       {/* Combined-state callouts */}
       {isLive && auto && (
-        <div style={{ marginTop: 12, padding: '8px 11px', borderRadius: 4, background: '#fff3e0', border: '1px solid #ff980055', fontSize: 11, color: '#e65100', lineHeight: 1.5 }}>
+        <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 7, background: '#fff7f0', border: '1px solid #edd6c6', fontSize: 11.5, color: '#9a4b16', lineHeight: 1.5 }}>
           ⚠ <strong>LIVE + AUTO</strong> — the engine will place <strong>real option orders automatically</strong> on ready signals. Funds are at risk without per-order confirmation.
         </div>
       )}
@@ -163,16 +163,16 @@ function ConfirmModal({ title, accent, body, confirmLabel, busy, onConfirm, onCa
       onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <div style={{ width: 380, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, padding: '22px 24px' }}>
+      <div style={{ width: 380, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 10, padding: '22px 24px', boxShadow: '0 16px 40px rgba(0,0,0,.16)' }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: accent, marginBottom: 8 }}>{title}</div>
         <div style={{ fontSize: 12, color: '#444', lineHeight: 1.6, marginBottom: 18 }}>{body}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} disabled={busy}
-            style={{ background: '#fff', color: '#666', border: '1px solid #e0e0e0', padding: '7px 14px', borderRadius: 4, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12 }}>
+            style={{ minHeight: 36, background: '#fff', color: '#555', border: '1px solid #dcdcdc', padding: '0 14px', borderRadius: 7, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
             Cancel
           </button>
           <button onClick={onConfirm} disabled={busy}
-            style={{ background: accent, color: '#fff', border: `1px solid ${accent}`, padding: '7px 16px', borderRadius: 4, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>
+            style={{ minHeight: 36, background: accent, color: '#fff', border: `1px solid ${accent}`, padding: '0 16px', borderRadius: 7, cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>
             {confirmLabel}
           </button>
         </div>

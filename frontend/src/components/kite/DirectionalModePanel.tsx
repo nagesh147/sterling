@@ -147,28 +147,27 @@ function DefaultNote({ changed, defaultText }: { changed: boolean; defaultText: 
   if (!changed) return null;
   return (
     <span style={{
-      fontSize: 9, fontWeight: 700, color: '#e65100', background: '#fff3e0',
-      border: '1px solid #ffcc80', borderRadius: 3, padding: '1px 6px',
-      marginLeft: 6, whiteSpace: 'nowrap',
+      fontSize: 9.5, fontWeight: 650, color: '#a65525',
+      marginLeft: 7, whiteSpace: 'nowrap',
     }}>
-      ● CHANGED · default {defaultText}
+      Changed · default {defaultText}
     </span>
   );
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
-  card:        { background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, padding: 16, marginBottom: 14 },
-  section:     { fontSize: 10, fontWeight: 700, letterSpacing: 1.2, color: '#9b9b9b', textTransform: 'uppercase' as const, marginBottom: 10 },
-  hint:        { fontSize: 11, color: '#9b9b9b', lineHeight: 1.5 },
+  card:        { background: '#fff', padding: '16px 2px 2px' },
+  section:     { fontSize: 10, fontWeight: 750, letterSpacing: .75, color: '#777', textTransform: 'uppercase' as const, marginBottom: 10 },
+  hint:        { fontSize: 11.5, color: '#888', lineHeight: 1.5 },
   divider:     { height: 1, background: '#f0f0f0', margin: '14px 0' },
   row:         { display: 'flex', alignItems: 'center', gap: 8 },
   filterRow:   { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
   filterLabel: { fontSize: 11, color: '#444', lineHeight: 1.5 },
-  numInput:    { width: 64, fontSize: 11, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, textAlign: 'right' as const, fontFamily: 'inherit' },
-  select:      { fontSize: 11, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', fontFamily: 'inherit' },
-  toggle:      { width: 36, height: 18, borderRadius: 9, cursor: 'pointer', border: 'none', position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0 },
-  toggleDot:   { width: 14, height: 14, borderRadius: 7, background: '#fff', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
+  numInput:    { width: 72, height: 36, boxSizing: 'border-box' as const, fontSize: 11.5, padding: '0 9px', border: '1px solid #ddd', borderRadius: 7, textAlign: 'right' as const, fontFamily: 'inherit' },
+  select:      { minHeight: 36, fontSize: 11.5, padding: '0 9px', border: '1px solid #ddd', borderRadius: 7, background: '#fff', fontFamily: 'inherit' },
+  toggle:      { width: 40, height: 22, borderRadius: 11, cursor: 'pointer', border: 'none', position: 'relative' as const, transition: 'background 0.2s', flexShrink: 0 },
+  toggleDot:   { width: 18, height: 18, borderRadius: 9, background: '#fff', position: 'absolute' as const, top: 2, transition: 'left 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,.2)' },
 };
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -254,7 +253,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap' as const }}>
+      <div style={{ display: 'flex', gap: 2, padding: 3, marginBottom: 14, flexWrap: 'wrap' as const, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
         {PROFILES.map(p => {
           const active = p.id === activeId;
           return (
@@ -263,15 +262,16 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
               disabled={busy}
               onClick={() => { setCustomDelta(''); onUpdate(profilePatch(p, cfg)); }}
               style={{
-                flex: '1 1 56px', padding: '8px 4px', borderRadius: 6,
-                border: `2px solid ${active ? p.color : '#e0e0e0'}`,
-                background: active ? p.color + '14' : '#fafafa',
+                minHeight: 44, flex: '1 1 88px', padding: '5px 7px', borderRadius: 6,
+                border: 'none',
+                background: active ? '#fff' : 'transparent',
+                boxShadow: active ? 'inset 0 -2px #f06428, 0 1px 2px rgba(0,0,0,.08)' : 'none',
                 cursor: busy ? 'default' : 'pointer',
                 textAlign: 'center' as const, transition: 'all 0.15s',
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, color: active ? p.color : '#555' }}>{p.label}</div>
-              <div style={{ fontSize: 9, color: active ? p.color : '#bbb', marginTop: 2 }}>{p.deltaLabel}</div>
+              <div style={{ fontSize: 11.5, fontWeight: active ? 700 : 600, color: active ? '#444' : '#666' }}>{p.label}</div>
+              <div style={{ fontSize: 9, color: '#999', marginTop: 2 }}>{p.deltaLabel}</div>
             </button>
           );
         })}
@@ -279,13 +279,13 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       {/* Active profile description card */}
       <div style={{
-        padding: '10px 12px', borderRadius: 5, marginBottom: 10,
-        background: activeProfile.color + '0d', border: `1px solid ${activeProfile.color}33`,
+        padding: '11px 12px', borderRadius: 7, marginBottom: 12,
+        background: '#fff8f4', border: '1px solid #ecd1c4', borderLeft: '3px solid #f06428',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: activeProfile.color }}>{activeProfile.sublabel}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>{activeProfile.sublabel}</span>
           {activeProfile.isExperimental && (
-            <span style={{ fontSize: 9, fontWeight: 700, background: activeProfile.color, color: '#fff', padding: '1px 5px', borderRadius: 3 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#a65525' }}>
               EXPERIMENTAL
             </span>
           )}
@@ -293,7 +293,7 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
         <div style={{ fontSize: 11, color: '#444', lineHeight: 1.55, marginBottom: 5 }}>{activeProfile.desc}</div>
         <div style={{ fontSize: 10, color: '#777', lineHeight: 1.4, marginBottom: isFutures ? 0 : 5 }}>⚡ {activeProfile.risk}</div>
         {!isFutures && (
-          <div style={{ fontSize: 10, color: activeProfile.color, lineHeight: 1.4, fontWeight: 600 }}>
+          <div style={{ fontSize: 10, color: '#a65525', lineHeight: 1.4, fontWeight: 600 }}>
             🎯 δ {effectiveDelta.toFixed(2)} ≈ {probItm}% chance of finishing in-the-money at expiry.
             {probItm < 40 && ' Most OTM buys expire worthless — you win big occasionally, lose small often.'}
             {probItm >= 40 && probItm < 60 && ' Roughly coin-flip odds at expiry, but you only need a quick move, not expiry.'}
@@ -624,13 +624,13 @@ export function DirectionalModePanel({ cfg, onUpdate, busy, liveLotSize, livePre
 
       <div style={{ ...S.row, marginBottom: 8 }}>
         <button
-          style={{ ...S.toggle, background: cfg.wire_risk_infra ? '#ff9800' : '#ccc' }}
+          style={{ ...S.toggle, background: cfg.wire_risk_infra ? '#f06428' : '#ccc' }}
           onClick={() => onUpdate({ wire_risk_infra: !cfg.wire_risk_infra })}
           disabled={busy}
         >
           <span style={{ ...S.toggleDot, left: cfg.wire_risk_infra ? 20 : 2 }} />
         </button>
-        <span style={{ fontSize: 12, fontWeight: 600, color: cfg.wire_risk_infra ? '#ff9800' : '#999' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: cfg.wire_risk_infra ? '#a65525' : '#999' }}>
           {cfg.wire_risk_infra ? 'ON' : 'OFF'}
         </span>
       </div>

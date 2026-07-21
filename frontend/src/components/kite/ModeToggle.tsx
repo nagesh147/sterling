@@ -34,15 +34,17 @@ export function ModeToggle({
   busy = false, size = 'md',
 }: ModeToggleProps) {
   const isLeft = value === 'left';
-  const pad = size === 'sm' ? '3px 10px' : '4px 13px';
-  const fs = size === 'sm' ? 9.5 : 10;
+  const height = size === 'sm' ? 28 : 32;
+  const pad = size === 'sm' ? '0 10px' : '0 13px';
+  const fs = size === 'sm' ? 10 : 10.5;
 
   const seg = (active: boolean, color: string, clickable: boolean): React.CSSProperties => ({
     padding: pad,
+    minHeight: height,
     border: 'none',
-    borderRadius: 4,
+    borderRadius: 6,
     background: active ? '#fff' : 'transparent',
-    color: active ? color : '#9b9b9b',
+    color: active ? '#444' : '#888',
     fontFamily: 'inherit',
     fontSize: fs,
     fontWeight: active ? 700 : 500,
@@ -50,7 +52,7 @@ export function ModeToggle({
     lineHeight: 1,
     whiteSpace: 'nowrap',
     cursor: busy ? 'wait' : clickable ? 'pointer' : 'default',
-    boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+    boxShadow: active ? `inset 0 -2px ${color}, 0 1px 2px rgba(0,0,0,0.08)` : 'none',
     transition: 'background .15s, color .15s',
   });
 
@@ -59,10 +61,10 @@ export function ModeToggle({
       display: 'inline-flex',
       alignItems: 'center',
       gap: 2,
-      padding: 2,
-      background: '#f1f1f1',
-      border: `1px solid ${isLeft ? '#e0e0e0' : `${rightColor}66`}`,
-      borderRadius: 5,
+      padding: 3,
+      background: '#f6f6f7',
+      border: '1px solid #e0e0e0',
+      borderRadius: 8,
       opacity: busy ? 0.6 : 1,
     }}>
       <button
