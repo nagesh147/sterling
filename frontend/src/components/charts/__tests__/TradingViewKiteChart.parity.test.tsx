@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtime = vi.hoisted(() => ({
@@ -31,8 +32,13 @@ const candles = [
   { time: 20, open: 102, high: 108, low: 101, close: 106, volume: 1_100 },
 ];
 
+function withQueryClient(node: React.ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+}
+
 function renderChart(overrides: Record<string, unknown> = {}) {
-  return render(
+  return render(withQueryClient(
     <TradingViewKiteChart
       symbol="NSE:RELIANCE"
       rawCandles={candles}
@@ -42,7 +48,7 @@ function renderChart(overrides: Record<string, unknown> = {}) {
       params={{ stMidPeriod: 14, stMidMult: 2 }}
       {...overrides}
     />,
-  );
+  ));
 }
 
 describe('TradingViewKiteChart parity shell', () => {
@@ -78,7 +84,7 @@ describe('TradingViewKiteChart parity shell', () => {
   });
 
   it('hides the recognized duplicate InstrumentPane header', () => {
-    render(
+    render(withQueryClient(
       <div>
         <div data-testid="legacy-header">RELIANCE 2 bars</div>
         <div>
@@ -92,7 +98,7 @@ describe('TradingViewKiteChart parity shell', () => {
           />
         </div>
       </div>,
-    );
+    ));
     expect(screen.getByTestId('legacy-header').style.display).toBe('none');
   });
 
