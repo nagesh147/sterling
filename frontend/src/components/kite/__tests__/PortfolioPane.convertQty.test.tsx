@@ -127,7 +127,7 @@ function rowFor(symbol: string) {
   return screen.getAllByText(symbol).map((el) => el.closest('tr')).find(Boolean)!;
 }
 
-const TOGGLE_TITLE = 'Convert this MIS position to another product type';
+const TOGGLE_TITLE = 'Convert this MIS position';
 
 describe('PortfolioPane Positions row → ConvertControl wiring', () => {
   it('is reachable from the real Positions row: clicking the Convert toggle reveals the qty input', () => {
