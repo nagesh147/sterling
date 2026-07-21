@@ -29,9 +29,28 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Write production changes directly
+        id: direct_fix
+        continue-on-error: true
         run: |
-          base64 -d .github/expiry-series/direct_fix.py.gz.b64 | gzip -d > /tmp/direct_fix.py
-          python /tmp/direct_fix.py
+          set -o pipefail
+          {
+            base64 -d .github/expiry-series/direct_fix.py.gz.b64 | gzip -d > /tmp/direct_fix.py
+            python /tmp/direct_fix.py
+          } > /tmp/direct-fix.log 2>&1
+          status=$?
+          cat /tmp/direct-fix.log
+          exit "$status"
+      - name: Upload direct-fix diagnostics
+        if: steps.direct_fix.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: direct-fix-error
+          path: /tmp/direct-fix.log
+      - name: Stop after direct-fix failure
+        if: steps.direct_fix.outcome == 'failure'
+        run: exit 1
+      - name: Remove temporary delivery machinery
+        run: |
           rm -rf .github/expiry-series
           rm -f .github/workflows/verify-kite-expiry-series.yml
       - name: Install backend dependencies
