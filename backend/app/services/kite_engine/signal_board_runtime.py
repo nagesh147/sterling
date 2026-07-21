@@ -11,6 +11,8 @@ currently-confirming option premium. Two integration boundaries still need prote
 
 No timestamp or expiry is manufactured here. Existing broker candle timestamps are
 only trimmed to the latest closed underlying timestamp already present in that scan.
+The most recent option close is retained separately as the current execution/display
+premium; it is never used to prove the earlier same-bar signal.
 """
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from app.engines.sterling_kite_engine.schemas import EngineSignalRow
 from app.services.kite_engine import scanner as scanner_mod
@@ -32,6 +34,7 @@ _RETENTION_MS = scanner_mod._SIGNAL_RETENTION_MS
 class _SignalScanContext:
     uid: str
     latest_underlying_bar: Dict[str, int] = field(default_factory=dict)
+    latest_option_close: Dict[str, float] = field(default_factory=dict)
 
 
 _SCAN_CONTEXT: ContextVar[Optional[_SignalScanContext]] = ContextVar(
@@ -122,6 +125,17 @@ def merge_retained_confluence(
     return merged
 
 
+def _apply_current_premiums(rows: Sequence[EngineSignalRow], closes: Dict[str, float]) -> None:
+    """Stamp current option close after shared-bar confirmation has completed."""
+    for row in rows:
+        if row.source != "confluence":
+            continue
+        for leg in row.legs:
+            current = closes.get(_normalise_key(leg.option_symbol))
+            if current is not None and current > 0:
+                leg.premium_spot = float(current)
+
+
 def _install() -> None:
     scanner_cls = scanner_mod.KiteEngineScanner
     if getattr(scanner_cls, _INSTALLED_ATTR, False):
@@ -151,6 +165,7 @@ def _install() -> None:
         anchor = _option_anchor(name, ctx.latest_underlying_bar)
         if anchor is None:
             return candles
+        ctx.latest_option_close[_normalise_key(name)] = float(candles[-1].close)
         return _trim_to_anchor(candles, anchor)
 
     @wraps(original_scan)
@@ -158,11 +173,13 @@ def _install() -> None:
         uid = str(kwargs.get("uid") or "")
         previous = list(self.snapshot(uid).rows) if uid else []
         confluence_mode = kwargs.get("confluence_universe") is not None
-        token = _SCAN_CONTEXT.set(_SignalScanContext(uid=uid))
+        ctx = _SignalScanContext(uid=uid)
+        token = _SCAN_CONTEXT.set(ctx)
         try:
             result = await original_scan(self, *args, **kwargs)
             if confluence_mode and uid:
                 snapshot = self.snapshot(uid)
+                _apply_current_premiums(snapshot.rows, ctx.latest_option_close)
                 snapshot.rows = merge_retained_confluence(snapshot.rows, previous)
                 state.save_signal_cache(
                     uid,
