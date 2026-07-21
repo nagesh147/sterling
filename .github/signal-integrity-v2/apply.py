@@ -24,7 +24,26 @@ replace_once(
     "import type { EngineSignalRow, OptionLeg, SignalChartData } from '../../types/kiteEngine';\n\nexport type TrendDirection = 'up' | 'down';\n",
 )
 
-marker_helper = '''\n\n/** Build chart metadata from the selected option contract, never from its grouped parent.\n * CE and PE are both long-premium BUY signals, so premium markers always seek a\n * fresh three-green transition regardless of the underlying BULL/BEAR regime. */\nexport function signalChartDataForPremiumLeg(\n  row: EngineSignalRow, leg: OptionLeg,\n): SignalChartData {\n  const entryTs = leg.entry_timestamp_ms ?? leg.signal_timestamp_ms ?? row.timestamp_ms;\n  const premiumTs = leg.signal_timestamp_ms ?? leg.entry_timestamp_ms ?? row.timestamp_ms;\n  return {\n    timestamp_ms: entryTs,\n    direction: 'long',\n    regime: row.regime,\n    source: row.source === 'confluence' ? 'confluence' : 'derivatives',\n    premium_signal_ms: premiumTs,\n    marker_basis: 'premium',\n  };\n}\n'''
+marker_helper = '''
+
+/** Build chart metadata from the selected option contract, never from its grouped parent.
+ * CE and PE are both long-premium BUY signals, so premium markers always seek a
+ * fresh three-green transition regardless of the underlying BULL/BEAR regime. */
+export function signalChartDataForPremiumLeg(
+  row: EngineSignalRow, leg: OptionLeg,
+): SignalChartData {
+  const entryTs = leg.entry_timestamp_ms ?? leg.signal_timestamp_ms ?? row.timestamp_ms;
+  const premiumTs = leg.signal_timestamp_ms ?? leg.entry_timestamp_ms ?? row.timestamp_ms;
+  return {
+    timestamp_ms: entryTs,
+    direction: 'long',
+    regime: row.regime,
+    source: row.source === 'confluence' ? 'confluence' : 'derivatives',
+    premium_signal_ms: premiumTs,
+    marker_basis: 'premium',
+  };
+}
+'''
 marker_text = Path(MARKER).read_text()
 if 'export function signalChartDataForPremiumLeg' not in marker_text:
     Path(MARKER).write_text(marker_text.rstrip() + marker_helper)
@@ -98,7 +117,35 @@ new_marker_block = '''        const avgSpacing = times.length > 1 ? Math.abs(tim
 '''
 replace_once(CHART, old_marker_block, new_marker_block)
 
-frontend_tests = '''\n\n  it.each([\n    ['CE', 'BULL'],\n    ['PE', 'BEAR'],\n  ] as const)('builds contract-local %s chart metadata that always represents a long premium entry', (optionType, regime) => {\n    const row: any = {\n      timestamp_ms: 999_000, direction: optionType === 'PE' ? 'short' : 'long',\n      regime, source: 'derivatives',\n    };\n    const leg: any = {\n      option_type: optionType, entry_timestamp_ms: 222_000, signal_timestamp_ms: 221_000,\n    };\n    const data = signalChartDataForPremiumLeg(row, leg);\n    expect(data.timestamp_ms).toBe(222_000);\n    expect(data.premium_signal_ms).toBe(221_000);\n    expect(data.direction).toBe('long');\n    expect(data.marker_basis).toBe('premium');\n    expect(data.source).toBe('derivatives');\n  });\n\n  it('does not match a premium transition one hour away under strict tolerance', () => {\n    const times = [100, 3700];\n    const fast = [p('down'), p('up')];\n    const mid = [p('down'), p('up')];\n    const slow = [p('down'), p('up')];\n    expect(freshTripleAlignmentIndex(fast, mid, slow, times, 100, 'up', 60)).toBe(-1);\n  });\n'''
+frontend_tests = '''
+
+  it.each([
+    ['CE', 'BULL'],
+    ['PE', 'BEAR'],
+  ] as const)('builds contract-local %s chart metadata that always represents a long premium entry', (optionType, regime) => {
+    const row: any = {
+      timestamp_ms: 999_000, direction: optionType === 'PE' ? 'short' : 'long',
+      regime, source: 'derivatives',
+    };
+    const leg: any = {
+      option_type: optionType, entry_timestamp_ms: 222_000, signal_timestamp_ms: 221_000,
+    };
+    const data = signalChartDataForPremiumLeg(row, leg);
+    expect(data.timestamp_ms).toBe(222_000);
+    expect(data.premium_signal_ms).toBe(221_000);
+    expect(data.direction).toBe('long');
+    expect(data.marker_basis).toBe('premium');
+    expect(data.source).toBe('derivatives');
+  });
+
+  it('does not match a premium transition one hour away under strict tolerance', () => {
+    const times = [100, 3700];
+    const fast = [p('down'), p('up')];
+    const mid = [p('down'), p('up')];
+    const slow = [p('down'), p('up')];
+    expect(freshTripleAlignmentIndex(fast, mid, slow, times, 100, 'up', 60)).toBe(-1);
+  });
+'''
 marker_test_text = Path(MARKER_TEST).read_text()
 if 'builds contract-local %s chart metadata' not in marker_test_text:
     marker_test_text = marker_test_text.replace(
@@ -111,16 +158,24 @@ if 'builds contract-local %s chart metadata' not in marker_test_text:
     marker_test_text = marker_test_text[:-3] + frontend_tests + '\n});\n'
     Path(MARKER_TEST).write_text(marker_test_text)
 
-backend_test = '''\n\n@pytest.mark.parametrize("option_type", ["CE", "PE"])
+backend_test = '''
+
+@pytest.mark.parametrize("option_type", ["CE", "PE"])
 def test_derivative_contract_never_treats_three_red_as_an_entry(option_type):
-    """A premium down-transition is an exit state, never a CE/PE BUY entry."""
+    """The final three-red bar is never emitted as a CE/PE long-premium entry."""
     cfg = SterlingKiteEngineConfig()
     item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")
     pick = OptionPick(option_symbol=f"HDFCBANK26JUL825{option_type}", strike=825.0,
                       option_type=option_type, expiry="2026-07-30", dte=9,
                       lot_size=550, token=12345)
     candles = _trim_to_transition(_candles(_fresh_short_path()), cfg, "short")
-    assert evaluate_derivative_contract(item, "ITM3", pick, candles, cfg) == []
+    rows = evaluate_derivative_contract(item, "ITM3", pick, candles, cfg)
+    final_ts = candles[-1].timestamp_ms
+    assert all(row.timestamp_ms != final_ts for row in rows)
+    assert all(row.direction == "long" for row in rows)
+    assert all((row.legs[0].alignment.fast,
+                row.legs[0].alignment.mid,
+                row.legs[0].alignment.slow) == (1, 1, 1) for row in rows)
 '''
 backend_text = Path(BACKEND_TEST).read_text()
 if 'test_derivative_contract_never_treats_three_red_as_an_entry' not in backend_text:
