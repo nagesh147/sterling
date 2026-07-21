@@ -8,15 +8,25 @@ vi.mock('../../../hooks/useKite', () => ({
   useKiteOrderTrades: () => ({ data: [{ quantity: 10, average_price: 1500.5, fill_timestamp: '2026-07-11 09:15:03' }] }),
 }));
 
+function renderRow() {
+  return render(
+    <table>
+      <tbody>
+        <OrderHistoryRow orderId="o1" colSpan={8} />
+      </tbody>
+    </table>,
+  );
+}
+
 describe('OrderHistoryRow', () => {
   it('renders each history status transition', () => {
-    render(<OrderHistoryRow orderId="o1" colSpan={8} />);
+    renderRow();
     expect(screen.getByText('OPEN')).toBeInTheDocument();
     expect(screen.getByText('COMPLETE')).toBeInTheDocument();
   });
 
   it('renders fill trades', () => {
-    render(<OrderHistoryRow orderId="o1" colSpan={8} />);
+    renderRow();
     expect(screen.getByText(/1500.50/)).toBeInTheDocument();
   });
 });
