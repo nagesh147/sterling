@@ -49,7 +49,9 @@ def test_runtime_config_defaults_are_category_specific():
     assert cfg.scan_monthly_series_indices == [0, 1]
     assert cfg.scan_weekly_series_stocks == []
     assert cfg.scan_monthly_series_stocks == [0, 1]
-    assert {"ITM5", "ATM", "OTM5"} <= set(cfg.strike_moneyness)
+    # The expiry integration must not silently broaden an existing user's strike
+    # selection. Deep ITM through far OTM remain available in the schema/UI.
+    assert cfg.strike_moneyness == ["ITM1", "ATM", "OTM1"]
 
 
 def test_runtime_rejects_weekly_stock_configuration():
