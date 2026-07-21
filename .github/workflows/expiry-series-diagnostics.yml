@@ -3,6 +3,8 @@ name: Expiry Series Diagnostics
 on:
   push:
     branches: [fix/kite-expiry-series-production]
+  pull_request:
+    branches: [main]
 
 jobs:
   diagnose:
