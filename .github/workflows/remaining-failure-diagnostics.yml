@@ -3,6 +3,8 @@ name: Remaining Failure Diagnostics
 on:
   push:
     branches: [fix/kite-expiry-series-production]
+  pull_request:
+    branches: [main]
 
 jobs:
   diagnose:
