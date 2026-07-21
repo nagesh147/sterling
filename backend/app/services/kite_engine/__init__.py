@@ -10,7 +10,9 @@ strategy/signal/options/derivative logic from any other engine.
 # scanner. The held-contract wrapper then remains the outermost layer and continues
 # evaluating exact broker-held symbols after the configured scan completes.
 from app.services.kite_engine.expiry_series_runtime import install as _install_expiry_series
+from app.services.kite_engine.expiry_series_compat import install as _install_expiry_compat
 from app.services.kite_engine.held_contract_scan import install as _install_held_contract_scan
 
 _install_expiry_series()
+_install_expiry_compat()
 _install_held_contract_scan()
