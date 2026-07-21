@@ -164,7 +164,6 @@ function readTerminalMode(): TerminalMode {
   const value = localStorage.getItem(TERMINAL_MODE_KEY);
   return value === 'minimized' || value === 'partial' || value === 'full' || value === 'normal' ? value : 'normal';
 }
-let lastTerminalMode: TerminalMode = readTerminalMode();
 
 export function EngineTerminal() {
   const { data } = useEngineActivity();
@@ -174,14 +173,16 @@ export function EngineTerminal() {
   const { data: serverLogs } = useEngineServerLogs(showServerLogs);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('kite_terminal_theme') as Theme) || 'dark');
-  const [mode, setModeState] = useState<TerminalMode>(lastTerminalMode);
+  // Read storage on every mount. The dock removes a minimized terminal from the
+  // React tree, so a module-level snapshot can otherwise resurrect stale state
+  // after a preset or Restore all has already switched it back to normal.
+  const [mode, setModeState] = useState<TerminalMode>(readTerminalMode);
   const [spin, setSpin] = useState(0);
   // Client-side clear: hide every event up to this timestamp. New events still
   // stream in (server is the source of truth) — this just clears the view.
   const [clearedBefore, setClearedBefore] = useState(0);
 
   const setMode = (next: TerminalMode) => {
-    lastTerminalMode = next;
     localStorage.setItem(TERMINAL_MODE_KEY, next);
     setModeState(next);
     window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: next }));
@@ -191,7 +192,6 @@ export function EngineTerminal() {
     const syncMode = (event: Event) => {
       const next = (event as CustomEvent<TerminalMode>).detail;
       if (!['minimized', 'normal', 'partial', 'full'].includes(next)) return;
-      lastTerminalMode = next;
       localStorage.setItem(TERMINAL_MODE_KEY, next);
       setModeState(next);
     };
