@@ -2,13 +2,17 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import { EngineTerminal, TERMINAL_MODE_KEY } from '../EngineTerminal';
 import { KiteLayout } from '../KiteLayout';
 import { WORKSPACE_LAYOUT_KEY } from '../workspaceLayout';
 
 const macState = vi.hoisted(() => ({ on: false }));
-vi.mock('../../../hooks/useSterlingKiteEngine', () => ({ useEngineActivity: () => ({ data: undefined }) }));
+vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
+  useEngineActivity: () => ({ data: undefined }),
+  useEngineServerLogs: () => ({ data: undefined }),
+}));
 vi.mock('../../../store/useLiveSignalCount', () => ({
-  useLiveSignalCount: (selector: (state: { count: number }) => unknown) => selector({ count: 0 }),
+  useLiveSignalCount: (selector: (state: { count: number }) => unknown) => selector({ count: 27 }),
 }));
 vi.mock('../../../hooks/useMacKite', () => ({ useMacKite: () => macState }));
 vi.mock('../mac/MacKiteToggle', () => ({ MacKiteToggle: () => <button type="button">MAC</button> }));
@@ -115,8 +119,16 @@ describe('KiteLayout advanced workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
 
     expect(screen.getByRole('dialog', { name: 'Workspace layout menu' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Chart focus/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Classic/ }));
     let saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
+    expect(saved.sizes).toEqual({ left: 420, right: 1290, bottom: 220 });
+    expect(saved.minimized).toEqual([]);
+    expect(localStorage.getItem(TERMINAL_MODE_KEY)).toBe('normal');
+    expect(screen.getByLabelText('Terminal pane')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
+    fireEvent.click(screen.getByRole('button', { name: /Chart focus/ }));
+    saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
     expect(saved.sizes).toEqual({ left: 280, right: 420, bottom: 160 });
     expect(saved.minimized).toEqual([]);
 
@@ -125,6 +137,17 @@ describe('KiteLayout advanced workspace', () => {
     saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
     expect(saved.locked).toBe(true);
     expect(within(screen.getByLabelText('Watchlist pane')).getByTitle('Layout locked')).toBeInTheDocument();
+  });
+
+  it('places Layout immediately before the live engine status group', () => {
+    render(<KiteLayout {...props} />);
+
+    const status = screen.getByLabelText('Workspace and engine status');
+    const layoutButton = within(status).getByRole('button', { name: 'Layout' });
+    const live = within(status).getByText('27 live');
+
+    expect(status.firstElementChild).toContainElement(layoutButton);
+    expect(layoutButton.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the legacy terminal event contract for chart-open auto minimization', () => {
@@ -150,5 +173,19 @@ describe('KiteLayout advanced workspace', () => {
     expect(screen.queryByLabelText('Watchlist pane')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Layout' })).not.toBeInTheDocument();
     expect(screen.getByText('Mac stage active')).toBeInTheDocument();
+  });
+});
+
+describe('EngineTerminal workspace synchronization', () => {
+  it('re-reads normal mode after a minimized terminal is restored while unmounted', () => {
+    const first = render(<EngineTerminal />);
+    fireEvent.click(screen.getByTitle('Minimize terminal'));
+    first.unmount();
+
+    localStorage.setItem(TERMINAL_MODE_KEY, 'normal');
+    render(<EngineTerminal />);
+
+    expect(screen.getByText(/Waiting for background scan/)).toBeInTheDocument();
+    expect(screen.getByTitle('Minimize terminal')).toBeInTheDocument();
   });
 });
