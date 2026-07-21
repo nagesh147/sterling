@@ -1,0 +1,154 @@
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { KiteLayout } from '../KiteLayout';
+import { WORKSPACE_LAYOUT_KEY } from '../workspaceLayout';
+
+const macState = vi.hoisted(() => ({ on: false }));
+vi.mock('../../../hooks/useSterlingKiteEngine', () => ({ useEngineActivity: () => ({ data: undefined }) }));
+vi.mock('../../../store/useLiveSignalCount', () => ({
+  useLiveSignalCount: (selector: (state: { count: number }) => unknown) => selector({ count: 0 }),
+}));
+vi.mock('../../../hooks/useMacKite', () => ({ useMacKite: () => macState }));
+vi.mock('../mac/MacKiteToggle', () => ({ MacKiteToggle: () => <button type="button">MAC</button> }));
+vi.mock('../mac/MacStageLayout', () => ({ MacStageLayout: () => <div data-testid="mac-stage">Mac stage</div> }));
+
+const props = {
+  activeNav: 'dashboard' as const,
+  onNavClick: vi.fn(),
+  sidebar: <div>watchlist body</div>,
+  rightSidebar: <div>signals body</div>,
+  bottomBar: <div>terminal body</div>,
+  centerTopBar: <div>ticker strip</div>,
+  content: <div>dashboard body</div>,
+};
+
+beforeEach(() => {
+  macState.on = false;
+  localStorage.clear();
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe('KiteLayout advanced workspace', () => {
+  it('gives all four panes independent window controls', () => {
+    render(<KiteLayout {...props} />);
+
+    for (const title of ['Watchlist', 'Dashboard', 'Signals', 'Terminal']) {
+      expect(screen.getByLabelText(`${title} pane`)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `Minimize ${title}` })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `Half screen ${title}` })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `Maximize ${title}` })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `Full screen ${title}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByTitle('Show / hide left sidebar')).not.toBeInTheDocument();
+    expect(screen.getByText('All panes active')).toBeInTheDocument();
+  });
+
+  it('minimizes into the dock and restores without changing the pane slot', () => {
+    render(<KiteLayout {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize Watchlist' }));
+
+    expect(screen.queryByLabelText('Watchlist pane')).not.toBeInTheDocument();
+    const restore = screen.getByTitle('Restore Watchlist');
+    expect(restore).toBeInTheDocument();
+    fireEvent.click(restore);
+
+    expect(screen.getByLabelText('Watchlist pane')).toBeInTheDocument();
+    const saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
+    expect(saved.slots.left).toBe('watchlist');
+    expect(saved.minimized).toEqual([]);
+  });
+
+  it('supports half, maximize, fullscreen, restore, and Escape focus flows', () => {
+    render(<KiteLayout {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Half screen Dashboard' }));
+    expect(screen.getByRole('button', { name: 'Restore Dashboard' })).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/pane$/)).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize Dashboard' }));
+    expect(screen.getAllByLabelText(/pane$/)).toHaveLength(1);
+    expect(screen.getByLabelText('Dashboard pane')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Full screen Dashboard' }));
+    expect(screen.getByLabelText('Dashboard pane').parentElement).toHaveStyle({ position: 'fixed' });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getAllByLabelText(/pane$/)).toHaveLength(4);
+  });
+
+  it('repositions by swapping panes through visible dock targets', () => {
+    render(<KiteLayout {...props} />);
+    const pane = screen.getByLabelText('Signals pane');
+    const handle = within(pane).getByTitle(/Drag to reposition/);
+    const values: Record<string, string> = {};
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: (type: string, value: string) => { values[type] = value; },
+      getData: (type: string) => values[type] ?? '',
+    };
+
+    fireEvent.dragStart(handle, { dataTransfer });
+    expect(screen.getByLabelText('Pane drop targets')).toBeInTheDocument();
+    fireEvent.drop(screen.getByRole('button', { name: 'Left dock' }), { dataTransfer });
+
+    const saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
+    expect(saved.slots.left).toBe('signals');
+    expect(saved.slots.right).toBe('watchlist');
+    expect(screen.queryByLabelText('Pane drop targets')).not.toBeInTheDocument();
+  });
+
+  it('consolidates presets, reset, restore-all, and locking in one menu', () => {
+    render(<KiteLayout {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize Terminal' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
+
+    expect(screen.getByRole('dialog', { name: 'Workspace layout menu' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Chart focus/ }));
+    let saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
+    expect(saved.sizes).toEqual({ left: 280, right: 420, bottom: 160 });
+    expect(saved.minimized).toEqual([]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lock pane movement' }));
+    saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
+    expect(saved.locked).toBe(true);
+    expect(within(screen.getByLabelText('Watchlist pane')).getByTitle('Layout locked')).toBeInTheDocument();
+  });
+
+  it('keeps the legacy terminal event contract for chart-open auto minimization', () => {
+    render(<KiteLayout {...props} />);
+
+    act(() => window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'minimized' })));
+    expect(screen.queryByLabelText('Terminal pane')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Restore Terminal')).toBeInTheDocument();
+
+    act(() => window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'full' })));
+    expect(screen.getByLabelText('Terminal pane').parentElement).toHaveStyle({ position: 'fixed' });
+
+    act(() => window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'normal' })));
+    expect(screen.getAllByLabelText(/pane$/)).toHaveLength(4);
+  });
+
+  it('keeps the existing Mac stage as an independent workspace mode', () => {
+    const view = render(<KiteLayout {...props} />);
+    macState.on = true;
+    view.rerender(<KiteLayout {...props} />);
+
+    expect(screen.getByTestId('mac-stage')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Watchlist pane')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Layout' })).not.toBeInTheDocument();
+    expect(screen.getByText('Mac stage active')).toBeInTheDocument();
+  });
+});
