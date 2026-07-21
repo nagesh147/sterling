@@ -46,7 +46,9 @@ function renderChart(overrides: Record<string, unknown> = {}) {
 }
 
 describe('TradingViewKiteChart parity shell', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('shows the instrument, OHLC change and active SuperTrend legend', () => {
     renderChart();
