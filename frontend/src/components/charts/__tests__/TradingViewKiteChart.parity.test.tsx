@@ -68,7 +68,7 @@ describe('TradingViewKiteChart parity shell', () => {
 
   it('applies a scoped chart range from the bottom toolbar', () => {
     renderChart();
-    fireEvent.click(screen.getByRole('button', { name: '5D' }));
+    fireEvent.click(screen.getByRole('button', { name: '5d' }));
     expect(runtime.setChartVisibleRange).toHaveBeenCalledTimes(1);
     expect(runtime.setChartVisibleRange.mock.calls[0][0]).toMatch(/^kite-chart-/);
     expect(runtime.setChartVisibleRange.mock.calls[0][1]).toBe('5D');
