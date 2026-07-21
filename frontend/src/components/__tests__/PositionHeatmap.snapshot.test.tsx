@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { PositionHeatmap } from '../PositionHeatmap';
 import type { PaperPosition } from '../../types';
@@ -31,22 +31,22 @@ describe('PositionHeatmap red progress bars', () => {
       current_red_count: 1,
       exit_threshold: 2,
     }];
-    const { container } = render(<PositionHeatmap positions={positions} />);
-    const progress = container.querySelector('[style*="width: 50%"]') as HTMLElement | null;
-    expect(progress).not.toBeNull();
-    expect(progress?.style.height).toBe('100%');
+    render(<PositionHeatmap positions={positions} />);
+    const progress = screen.getByRole('progressbar', { name: 'TEST exit confirmation progress' });
+    expect(progress).toHaveAttribute('aria-valuenow', '1');
+    expect(progress).toHaveAttribute('aria-valuemax', '2');
   });
 
-  it('caps progress at 100% when the red threshold is reached', () => {
+  it('caps accessible progress at the red threshold', () => {
     const positions: PaperPosition[] = [{
       ...basePos,
       exit_mode: 'one_red',
-      current_red_count: 1,
+      current_red_count: 2,
       exit_threshold: 1,
     }];
-    const { container } = render(<PositionHeatmap positions={positions} />);
-    const progress = container.querySelector('[style*="width: 100%"]') as HTMLElement | null;
-    expect(progress).not.toBeNull();
-    expect(progress?.style.height).toBe('100%');
+    render(<PositionHeatmap positions={positions} />);
+    const progress = screen.getByRole('progressbar', { name: 'TEST exit confirmation progress' });
+    expect(progress).toHaveAttribute('aria-valuenow', '1');
+    expect(progress).toHaveAttribute('aria-valuemax', '1');
   });
 });
