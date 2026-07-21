@@ -60,7 +60,7 @@ describe('TradingViewKiteChart parity shell', () => {
   it('shows the instrument, OHLC change and active SuperTrend legend', () => {
     renderChart();
     expect(screen.getAllByText('RELIANCE').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('NSE · 15m')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Timeframe' })).toHaveTextContent('15m');
     expect(screen.getByText('SuperTrend 14 2')).toBeTruthy();
     expect(screen.getByText(/\+4\.00 \(\+3\.92%\)/)).toBeTruthy();
     expect(screen.getByTestId('legacy-chart')).toBeTruthy();
