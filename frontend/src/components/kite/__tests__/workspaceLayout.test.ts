@@ -26,7 +26,7 @@ describe('workspace layout state', () => {
 
     expect(second).toEqual(DEFAULT_WORKSPACE_LAYOUT);
     expect(second.minimized).toEqual([]);
-    expect(second.sizes.left).toBe(360);
+    expect(second.sizes.left).toBe(420);
   });
 
   it('repairs duplicate, missing, and unknown pane assignments', () => {
@@ -39,7 +39,7 @@ describe('workspace layout state', () => {
     expect(new Set(Object.values(next.slots))).toEqual(new Set(['watchlist', 'dashboard', 'signals', 'terminal']));
     expect(next.slots.left).toBe('dashboard');
     expect(next.minimized).toEqual(['signals']);
-    expect(next.sizes).toEqual({ left: 360, right: 612, bottom: 220 });
+    expect(next.sizes).toEqual({ left: 420, right: 612, bottom: 220 });
   });
 
   it('swaps pane positions without losing the displaced pane', () => {
@@ -111,9 +111,12 @@ describe('workspace layout state', () => {
 
   it('applies ergonomic presets, restores every pane, and preserves locking', () => {
     const current = { ...DEFAULT_WORKSPACE_LAYOUT, minimized: ['terminal' as const], locked: true };
+    const classic = applyWorkspacePreset(current, 'classic');
     const chart = applyWorkspacePreset(current, 'chart');
     const execution = applyWorkspacePreset(current, 'execution');
 
+    expect(classic.sizes).toEqual({ left: 420, right: 1290, bottom: 220 });
+    expect(classic.minimized).toEqual([]);
     expect(chart.sizes).toEqual({ left: 280, right: 420, bottom: 160 });
     expect(execution.sizes).toEqual({ left: 260, right: 700, bottom: 280 });
     expect(chart.minimized).toEqual([]);
