@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { SterlingKiteEnginePane } from '../SterlingKiteEnginePane';
+import { EngineConfigurationPanel } from '../EngineConfigurationPanel';
 
 // Full EngineConfigModel fixture including the exit / auto-exec guard knobs. The
 // component reads these with `?? default` fallbacks, but the fixture carries the real
@@ -68,18 +68,18 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useStockRegistry: () => ({ data: [] }),
 }));
 
-function renderPane() {
+function renderPanel(section: 'exit' | 'risk') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <SterlingKiteEnginePane onSelectSignal={vi.fn()} />
+      <EngineConfigurationPanel />
     </QueryClientProvider>,
   );
-  // Guard knobs live under the "Execution" tab (tabs layout is the default).
-  fireEvent.click(screen.getByRole('button', { name: 'Execution' }));
+  fireEvent.click(screen.getByText(section === 'exit' ? 'Exit & protection' : 'Risk & safeguards'));
+  if (section === 'risk') fireEvent.click(screen.getByText(/Advanced auto-execution guards/));
 }
 
-describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
+describe('EngineConfigurationPanel — exit / auto-exec guard controls', () => {
   beforeEach(() => {
     cfgData = { ...baseCfg };
     setCfgMutate.mockClear();
@@ -87,7 +87,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
   });
 
   it('exposes the exit-aligned-trail toggle and rescans when it flips (changes the computed stop)', () => {
-    renderPane();
+    renderPanel('exit');
     const sw = screen.getByRole('switch', { name: /anchor stop to exit counter/i });
     fireEvent.click(sw);
 
@@ -101,7 +101,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
   });
 
   it('exposes the expiry square-off input and patches it WITHOUT a rescan (auto-exec-only)', () => {
-    renderPane();
+    renderPanel('risk');
     const input = screen.getByTestId('expiry-squareoff-input') as HTMLInputElement;
     expect(input.value).toBe('1');
     fireEvent.change(input, { target: { value: '2' } });
@@ -114,7 +114,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
   });
 
   it('exposes the time-stop input (opt-in, default 0) and patches without a rescan', () => {
-    renderPane();
+    renderPanel('risk');
     const input = screen.getByTestId('time-stop-input') as HTMLInputElement;
     expect(input.value).toBe('0');
     fireEvent.change(input, { target: { value: '48' } });
@@ -127,7 +127,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
   });
 
   it('exposes the session no-entry-before-close guard and patches without a rescan', () => {
-    renderPane();
+    renderPanel('risk');
     const input = screen.getByTestId('block-entry-input') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '15' } });
 
@@ -139,7 +139,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
   });
 
   it('sets the liquidity guards (max spread %, min OI) from empty, without a rescan', () => {
-    renderPane();
+    renderPanel('risk');
     const spread = screen.getByTestId('max-spread-input') as HTMLInputElement;
     fireEvent.change(spread, { target: { value: '5' } });
     expect(setCfgMutate).toHaveBeenCalledWith(
@@ -158,7 +158,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
 
   it('clears the liquidity guards to null (off) when the field is emptied', () => {
     cfgData = { ...baseCfg, max_spread_pct: 5, min_oi: 100 };
-    renderPane();
+    renderPanel('risk');
     const spread = screen.getByTestId('max-spread-input') as HTMLInputElement;
     expect(spread.value).toBe('5');
     fireEvent.change(spread, { target: { value: '' } });
@@ -169,7 +169,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
   });
 
   it('sets the INR daily-loss breaker from empty, without a rescan', () => {
-    renderPane();
+    renderPanel('risk');
     const input = screen.getByTestId('daily-loss-input') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '2' } });
     expect(setCfgMutate).toHaveBeenCalledWith(
@@ -181,7 +181,7 @@ describe('SterlingKiteEnginePane — exit / auto-exec guard controls', () => {
 
   it('clears the INR daily-loss breaker to null (off) when emptied', () => {
     cfgData = { ...baseCfg, max_daily_loss_pct: 2 };
-    renderPane();
+    renderPanel('risk');
     const input = screen.getByTestId('daily-loss-input') as HTMLInputElement;
     expect(input.value).toBe('2');
     fireEvent.change(input, { target: { value: '' } });

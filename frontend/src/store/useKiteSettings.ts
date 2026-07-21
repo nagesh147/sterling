@@ -38,6 +38,7 @@ export interface KiteSettingsState {
   setSortBy: (s: string) => void;
   setLegSort: (sort: { key: string; dir: string }) => void;
   reorderSignalColumn: (group: 'left' | 'right', fromKey: string, toKey: string) => void;
+  resetSignalTableSettings: () => void;
 }
 
 export const useKiteSettings = create<KiteSettingsState>()(
@@ -84,10 +85,20 @@ export const useKiteSettings = create<KiteSettingsState>()(
         order.splice(toIdx, 0, fromKey);
         return { [field]: order } as Partial<KiteSettingsState>;
       }),
+      resetSignalTableSettings: () => set({
+        showPriceChange: true,
+        showPriceChangePct: true,
+        showPriceDirection: true,
+        showExchange: true,
+        showLeg: true,
+        legSort: { key: '', dir: '' },
+        signalLeftColumnOrder: ['exc', 'leg', 'entry', 'sl', 'tsl', 'exit', 'target'],
+        signalRightColumnOrder: ['chg', 'chgPct', 'dir', 'ltp'],
+      }),
     }),
     {
       name: 'kite-settings',
-      version: 2,
+      version: 3,
       migrate: (persisted: any) => {
         const legacy = persisted?.loaderStyle;
         if (legacy === 'classic') return { ...persisted, loaderStyle: 'material' };

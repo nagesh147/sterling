@@ -2,15 +2,15 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import {
-  useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig, useResetEngineConfig,
-  useScanReport, useStockRegistry,
+  useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig,
+  useScanReport,
 } from '../../hooks/useSterlingKiteEngine';
 import type {
   AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
   ExitMode, SignalChartData,
 } from '../../types/kiteEngine';
-import { useKiteQuote, useKiteAccounts, useUpdateKiteAccount } from '../../hooks/useKite';
+import { useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
 import { KiteLoader } from './KiteLoader';
 import { Icons } from '../../styles/kiteUI';
@@ -1466,6 +1466,114 @@ function EndedToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
   );
 }
 
+function SignalTableSettingsPanel({
+  viewLayout,
+  onLayoutChange,
+  bestOnly,
+  onBestOnlyChange,
+  showEnded,
+  onShowEndedChange,
+}: {
+  viewLayout: 'grid' | 'list';
+  onLayoutChange: (layout: 'grid' | 'list') => void;
+  bestOnly: boolean;
+  onBestOnlyChange: (next: boolean) => void;
+  showEnded: boolean;
+  onShowEndedChange: (next: boolean) => void;
+}) {
+  const settings = useKiteSettings();
+  const columns: Array<{ key: 'showExchange' | 'showLeg' | 'showPriceChange' | 'showPriceChangePct' | 'showPriceDirection'; label: string; hint: string }> = [
+    { key: 'showExchange', label: 'Exchange', hint: 'NSE, NFO or BFO badge' },
+    { key: 'showLeg', label: 'Leg', hint: 'ATM, ITM or OTM label' },
+    { key: 'showPriceChange', label: 'Change', hint: 'Absolute price change' },
+    { key: 'showPriceChangePct', label: 'Change %', hint: 'Percentage price change' },
+    { key: 'showPriceDirection', label: 'Direction', hint: 'Up/down direction indicator' },
+  ];
+
+  const reset = () => {
+    settings.resetSignalTableSettings();
+    onLayoutChange('list');
+    onBestOnlyChange(false);
+    onShowEndedChange(true);
+  };
+
+  const openEngine = () => {
+    localStorage.setItem('kite_connect_section', 'engine');
+    window.dispatchEvent(new CustomEvent('kite-nav-click', { detail: 'connect' }));
+  };
+
+  return (
+    <div style={{ padding: '14px 16px 16px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 13 }}>
+        <div>
+          <div style={{ color: k.text, fontSize: 12.5, fontWeight: 750 }}>Signal table settings</div>
+          <div style={{ color: k.dim, fontSize: 10, lineHeight: 1.45, marginTop: 2 }}>
+            These choices change only this table. Scanner, entry, exit and risk rules live under Connect → Engine.
+          </div>
+        </div>
+        <button type="button" onClick={openEngine} style={{ flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 5, background: k.bg, color: k.blue, padding: '5px 8px', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer' }}>
+          Configure engine ↗
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 9 }}>
+        <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, padding: 11 }}>
+          <div style={{ color: k.dim, fontSize: 9, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 8 }}>Layout</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {([
+              { value: 'list' as const, label: 'List', icon: <ListIcon /> },
+              { value: 'grid' as const, label: 'Grid', icon: <GridIcon /> },
+            ]).map((option) => {
+              const selected = viewLayout === option.value;
+              return (
+                <button key={option.value} type="button" title={`${option.label} layout`} aria-pressed={selected} onClick={() => onLayoutChange(option.value)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  border: `1px solid ${selected ? k.orange : k.border}`, borderRadius: 5,
+                  background: selected ? tint(k.orange, 8) : k.bg, color: selected ? k.orange : k.text,
+                  padding: '7px 8px', fontSize: 10.5, fontWeight: selected ? 700 : 500, fontFamily: 'inherit', cursor: 'pointer',
+                }}>
+                  {option.icon}{option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, padding: 11 }}>
+          <div style={{ color: k.dim, fontSize: 9, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 6 }}>Rows</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 0', cursor: 'pointer' }}>
+            <input type="checkbox" checked={bestOnly} onChange={(event) => onBestOnlyChange(event.target.checked)} style={{ accentColor: k.orange }} />
+            Best signal per instrument
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 0', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showEnded} onChange={(event) => onShowEndedChange(event.target.checked)} style={{ accentColor: k.orange }} />
+            Show ended setups
+          </label>
+        </div>
+
+        <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, padding: 11 }}>
+          <div style={{ color: k.dim, fontSize: 9, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 6 }}>Visible columns</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '2px 8px' }}>
+            {columns.map((column) => (
+              <label key={column.key} title={column.hint} style={{ display: 'flex', alignItems: 'center', gap: 6, color: k.text, fontSize: 10, padding: '3px 0', cursor: 'pointer' }}>
+                <input type="checkbox" checked={settings[column.key]} onChange={() => settings.toggleShow(column.key)} style={{ accentColor: k.orange }} />
+                {column.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10 }}>
+        <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
+        <button type="button" onClick={reset} style={{ border: 'none', background: 'transparent', color: k.blue, padding: '4px 0', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer' }}>
+          Reset table view
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Quick-access 3-way cycle across Spot / Derivatives / Both scan source, for the
 // table toolbar — same pill chrome as Best/Ended so it reads as a matched control, but
 // it drives the REAL cfg.scan_source field via the same changeScanSource()/patch()
@@ -1700,7 +1808,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
-  const { data: stockReg } = useStockRegistry();
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
   const cancelScan = useCancelScan();
@@ -1712,185 +1819,47 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     scanLock.current = true;
     scan.mutate(undefined, { onSettled: () => { scanLock.current = false; } });
   };
-  // Kite-only paper/live, scoped to the active Kite account. Independent of the
-  // global top-bar PAPER/LIVE toggle, which is crypto (Delta) only.
-  const { data: kiteAccts } = useKiteAccounts();
-  const updateAcct = useUpdateKiteAccount();
-  const activeAcct = kiteAccts?.accounts.find((a) => a.is_active);
-  const kiteLive = !!activeAcct && !activeAcct.is_paper;
+
   const [query, setQuery] = React.useState('');
   const [searchSettingsOpen, setSearchSettingsOpen] = React.useState(false);
   const [sortBy, setSortBy] = React.useState('Custom');
-  // Always start collapsed on a fresh load/refresh (not restored from storage).
-  const [settingsOpen, setSettingsOpen] = React.useState<boolean>(false);
-  const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(() => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'grid');
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(
+    () => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'list',
+  );
   const legSort = s.legSort;
   const setLegSort = s.setLegSort;
   const handleLegSort = (key: string) => {
-    setLegSort(legSort.key === key ? { key, dir: legSort.dir === 'asc' ? 'desc' : legSort.dir === 'desc' ? '' : 'asc' } : { key, dir: 'asc' });
+    setLegSort(legSort.key === key
+      ? { key, dir: legSort.dir === 'asc' ? 'desc' : legSort.dir === 'desc' ? '' : 'asc' }
+      : { key, dir: 'asc' });
   };
 
-  // Settings-drawer layout (chosen on the Connect tab) + per-layout persisted UI state.
-  const layout = useKiteSettings((st) => st.engineSettingsLayout);
-  const [settingsTab, setSettingsTab] = React.useState<'scan' | 'universe' | 'execution'>(
-    () => (localStorage.getItem('kite_settings_tab') as 'scan' | 'universe' | 'execution') || 'scan'
-  );
-  const [cardOpen, setCardOpen] = React.useState<{ scan: boolean; universe: boolean; execution: boolean }>(() => {
-    try {
-      const raw = localStorage.getItem('kite_settings_cards');
-      if (raw) return { scan: true, universe: false, execution: true, ...JSON.parse(raw) };
-    } catch { /* ignore */ }
-    return { scan: true, universe: false, execution: true };
-  });
-  const toggleCard = (key: 'scan' | 'universe' | 'execution') =>
-    setCardOpen((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  // Close the settings drawer when clicking outside the drawer or its toggle.
-  // The toggle button and the drawer are marked with [data-st-settings]; a click
-  // outside any such element collapses the drawer (the toggle still toggles).
   React.useEffect(() => {
     if (!settingsOpen) return;
-    const onDown = (e: MouseEvent) => {
-      const el = e.target as Element | null;
-      if (el && el.closest('[data-st-settings]')) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest('[data-signal-table-settings]')) return;
       setSettingsOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [settingsOpen]);
-  React.useEffect(() => { localStorage.setItem('kite_st_view_layout', viewLayout); }, [viewLayout]);
-  React.useEffect(() => { localStorage.setItem('kite_settings_tab', settingsTab); }, [settingsTab]);
-  React.useEffect(() => { localStorage.setItem('kite_settings_cards', JSON.stringify(cardOpen)); }, [cardOpen]);
+  React.useEffect(() => {
+    localStorage.setItem('kite_st_view_layout', viewLayout);
+  }, [viewLayout]);
 
-  const resetCfg = useResetEngineConfig();
-
-  // `rescan=true` for any setting that changes what the scanner computes (universe,
-  // strikes, expiries, trailing/exit logic) — otherwise the signal list keeps showing
-  // pre-change results until the 5-min auto-scan loop catches up (same staleness
-  // changeScanSource already guards against for scan_source, below). Sizing/execution
-  // -only settings (auto_execute, stop_mode, risk_sizing, risk_pct) default to false —
-  // they can't change which signals appear, so forcing a rescan there just wastes a
-  // Kite historical-data sweep.
-  const patch = (p: Partial<EngineConfigModel>, msg?: string, rescan = false) => {
-    if (cfg) {
-      setCfg.mutate({ ...cfg, ...p }, {
-        onSuccess: () => {
-          if (msg) notifyOrder({ kind: 'info', title: 'Settings updated', message: msg });
-          if (rescan) doScan();
-        }
-      });
-    }
-  };
-
-  const toggleMoneyness = (m: Moneyness) => {
+  // The signal table can still turn the engine back on from its dedicated off state.
+  // All other engine configuration now lives under Connect → Engine.
+  const patch = (values: Partial<EngineConfigModel>, message?: string, rescan = false) => {
     if (!cfg) return;
-    const has = cfg.strike_moneyness.includes(m);
-    const next = has ? cfg.strike_moneyness.filter((x) => x !== m) : [...cfg.strike_moneyness, m];
-    const finalNext = next.length ? next : ['ATM', 'ITM1', 'ITM2', 'ITM3', 'OTM1', 'OTM2', 'OTM3'];
-    patch({ strike_moneyness: finalNext as Moneyness[] }, `Strikes updated to ${finalNext.join(', ')}`, true);
+    setCfg.mutate({ ...cfg, ...values }, {
+      onSuccess: () => {
+        if (message) notifyOrder({ kind: 'info', title: 'Settings updated', message });
+        if (rescan) doScan();
+      },
+    });
   };
-
-  // Toggle a whole delta bucket: if every member is already selected, remove them
-  // all; otherwise add the missing ones. Never lets the selection go empty.
-  const toggleBucket = (members: Moneyness[]) => {
-    if (!cfg) return;
-    const cur = cfg.strike_moneyness;
-    const allIn = members.every((m) => cur.includes(m));
-    let next = allIn
-      ? cur.filter((m) => !members.includes(m))
-      : [...new Set([...cur, ...members])];
-    if (!next.length) next = ['ATM'];
-    patch({ strike_moneyness: next as Moneyness[] }, `Strikes updated to ${next.join(', ')}`, true);
-  };
-
-  const toggleExpiry = (e: ScanExpiry) => {
-    if (!cfg) return;
-    const has = cfg.scan_expiries.includes(e);
-    const next = has ? cfg.scan_expiries.filter((x) => x !== e) : [...cfg.scan_expiries, e];
-    const finalNext = next.length ? next : ['weekly', 'monthly'];
-    patch({ scan_expiries: finalNext as ScanExpiry[] }, `Expiries updated to ${finalNext.join(', ')}`, true);
-  };
-
-  const toggleExpiryIndices = (e: ScanExpiry) => {
-    if (!cfg) return;
-    const cur = cfg.scan_expiries_indices ?? cfg.scan_expiries;
-    const has = cur.includes(e);
-    const next = has ? cur.filter((x) => x !== e) : [...cur, e];
-    const finalNext = next.length ? next : ['weekly', 'monthly'];
-    patch({ scan_expiries_indices: finalNext as ScanExpiry[] }, `Indices expiries updated to ${finalNext.join(', ')}`, true);
-  };
-
-  const toggleExpiryStocks = (e: ScanExpiry) => {
-    if (!cfg) return;
-    const cur = cfg.scan_expiries_stocks ?? ['monthly'];
-    const has = cur.includes(e);
-    const next = has ? cur.filter((x) => x !== e) : [...cur, e];
-    const finalNext = next.length ? next : ['weekly', 'monthly'];
-    patch({ scan_expiries_stocks: finalNext as ScanExpiry[] }, `Stocks expiries updated to ${finalNext.join(', ')}`, true);
-  };
-
-  // Changing the scan source must re-scan immediately — otherwise the list keeps
-  // showing the previous scan's rows (e.g. spot signals) until the 5-min auto-loop
-  // runs, which reads as "I switched to derivatives but nothing changed". This is
-  // exactly the `rescan` path patch() now covers, so route through it.
-  const changeScanSource = (v: ScanSource) => {
-    if (!cfg || cfg.scan_source === v) return;
-    patch({ scan_source: v }, `Scan source changed to ${v}`, true);
-  };
-
-  const toggleIndex = (name: string) => {
-    if (!cfg) return;
-    const has = cfg.scan_indices.includes(name);
-    const next = has ? cfg.scan_indices.filter((x) => x !== name) : [...cfg.scan_indices, name];
-    patch({ scan_indices: next }, `Indices updated: ${has ? `Removed ${name}` : `Added ${name}`}`, true);
-  };
-
-  const toggleStock = (name: string) => {
-    if (!cfg) return;
-    const has = cfg.scan_stocks.includes(name);
-    const next = has ? cfg.scan_stocks.filter((x) => x !== name) : [...cfg.scan_stocks, name];
-    patch({ scan_stocks: next }, `Stocks updated: ${has ? `Removed ${name}` : `Added ${name}`}`, true);
-  };
-
-  const addCustomStock = (name: string) => {
-    if (!cfg || !name.trim()) return;
-    const upper = name.trim().toUpperCase();
-    if (cfg.scan_stocks.includes(upper)) return;
-    patch({ scan_stocks: [...cfg.scan_stocks, upper] }, `Added ${upper} to scan`, true);
-  };
-
-  const removeCustomStock = (name: string) => {
-    if (!cfg) return;
-    patch({ scan_stocks: cfg.scan_stocks.filter(x => x !== name) }, `Removed ${name} from scan`, true);
-  };
-
-  const toggleAuto = () => {
-    if (!cfg) return;
-    patch({ auto_execute: !cfg.auto_execute }, `Auto-execute turned ${!cfg.auto_execute ? 'ON' : 'OFF'}`);
-  };
-
-  // Kite paper↔live. Arming (→LIVE) confirms — it routes real orders to Zerodha;
-  // de-arming (→PAPER) is immediate. Crypto/Delta is untouched (separate toggle).
-  const toggleKiteLive = () => {
-    if (!activeAcct) {
-      notifyOrder({ kind: 'rejected', title: 'Action blocked', message: 'No active Kite account. Add one on the Connect page first.' });
-      return;
-    }
-    if (activeAcct.is_paper) {
-      if (!activeAcct.has_credentials) {
-        notifyOrder({ kind: 'rejected', title: 'Action blocked', message: 'Add your Kite API key & secret on the Connect page before trading live.' });
-        return;
-      }
-      updateAcct.mutate({ id: activeAcct.id, is_paper: false }, {
-        onSuccess: () => notifyOrder({ kind: 'info', title: 'Trading mode updated', message: 'Kite is now LIVE' })
-      });
-    } else {
-      updateAcct.mutate({ id: activeAcct.id, is_paper: true }, {
-        onSuccess: () => notifyOrder({ kind: 'info', title: 'Trading mode updated', message: 'Kite is now PAPER' })
-      });
-    }
-  };
-
   // While a scan is in progress the backend flushes results progressively, so a
   // raw poll can momentarily return fewer rows than before — making rows blink out
   // and reappear. To keep the table stable, we remember the last completed-scan row
@@ -1961,6 +1930,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   );
   const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
   const [bestOnly, setBestOnly] = React.useState<boolean>(() => localStorage.getItem('kite_st_best_only') === 'true');
+  const changeShowEnded = (next: boolean) => {
+    setShowEnded(next);
+    localStorage.setItem('kite_st_show_ended', String(next));
+  };
+  const changeBestOnly = (next: boolean) => {
+    setBestOnly(next);
+    localStorage.setItem('kite_st_best_only', String(next));
+  };
   const toggleGroup = (label: string) => {
     setCollapsedGroups(prev => {
       const next = new Set(prev);
@@ -2088,13 +2065,18 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
           {cfg && (
+            <span title="Signal source — configure under Connect → Engine" style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tint(k.orange, 7), color: k.orange }}>
+              {SCAN_SOURCE_OPTS.find((option) => option.value === cfg.scan_source)?.label ?? cfg.scan_source}
+            </span>
+          )}
+          {cfg && (
             <span title="Current auto-exit rule (counter to the 3-green entry)" style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tint(k.blue, 8), color: k.blue }}>
               {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.short ?? '1R'} EXIT
             </span>
           )}
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
-          {/* Actions: rescan / scan report / grid·list */}
+          {/* Actions: rescan / scan report / table preferences */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
               <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
@@ -2113,20 +2095,9 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
             </HeaderIconBtn>
-            {/* Grid / List toggle as a single compact segmented control */}
-            <div style={{ display: 'inline-flex', border: `1px solid ${k.border}`, borderRadius: 6, overflow: 'hidden', background: k.bg, marginLeft: 2 }}>
-              <button title="Grid layout" aria-pressed={viewLayout === 'grid'} onClick={() => setViewLayout('grid')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, border: 'none', cursor: 'pointer', background: viewLayout === 'grid' ? tint(k.orange, 15) : 'transparent', color: viewLayout === 'grid' ? k.orange : k.dim, transition: 'all .15s' }}>
-                <GridIcon />
-              </button>
-              <button title="List layout" aria-pressed={viewLayout === 'list'} onClick={() => setViewLayout('list')}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, border: 'none', borderLeft: `1px solid ${k.border}`, cursor: 'pointer', background: viewLayout === 'list' ? tint(k.orange, 15) : 'transparent', color: viewLayout === 'list' ? k.orange : k.dim, transition: 'all .15s' }}>
-                <ListIcon />
-              </button>
-            </div>
           </div>
-          <span data-st-settings style={{ display: 'inline-flex' }}>
-            <HeaderIconBtn title="Engine settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
+          <span data-signal-table-settings style={{ display: 'inline-flex' }}>
+            <HeaderIconBtn title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
               <Icons.Settings />
             </HeaderIconBtn>
           </span>
@@ -2155,11 +2126,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 height={35}
               />
             </div>
-            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-              {cfg && <ScanSourceQuickToggle source={cfg.scan_source} onChange={changeScanSource} />}
-              <BestOnlyToggle on={bestOnly} onChange={() => { setBestOnly(v => { const n = !v; localStorage.setItem('kite_st_best_only', String(n)); return n; }); }} />
-              <EndedToggle on={showEnded} onChange={() => { setShowEnded(v => { const n = !v; localStorage.setItem('kite_st_show_ended', String(n)); return n; }); }} />
-            </div>
+            {(bestOnly || !showEnded) && (
+              <span title="Active table filters — change them in Signal table settings" style={{ flexShrink: 0, color: k.orange, background: tint(k.orange, 8), border: `1px solid ${tint(k.orange, 25)}`, borderRadius: 999, padding: '3px 7px', fontSize: 9.5, fontWeight: 700 }}>
+                {[bestOnly ? 'Best only' : '', !showEnded ? 'Active only' : ''].filter(Boolean).join(' · ')}
+              </span>
+            )}
           </div>
           {viewLayout === 'list' && (
             <div className="st-header-row" onScroll={syncHscroll} style={{
@@ -2273,310 +2244,21 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       `}</style>
 
 
-      {/* ── Settings drawer (collapsible) ── */}
-      {(() => {
-        if (!cfg) {
-          return (
-            <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
-              <div style={{ overflow: 'hidden' }} />
-            </div>
-          );
-        }
-
-        // ── Group bodies (same controls, reused across both layouts) ──────────
-        const numInput: React.CSSProperties = {
-          width: 60, padding: '3px 5px', fontSize: 11, border: `1px solid ${k.border}`,
-          borderRadius: 4, background: k.surface, color: k.text, textAlign: 'right', outline: 'none',
-        };
-        const scanGroup = (
-          <>
-            <SettingRow label="Source" hint="Spot: SuperTrend on underlying chart. Derivatives: on each contract's premium chart. Both: run both.">
-              <Segmented
-                options={SCAN_SOURCE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => cfg.scan_source === v}
-                onSelect={(v) => changeScanSource(v as ScanSource)}
-              />
-            </SettingRow>
-            <SettingRow label="Strikes" align="top" full hint="VIEW filter — which strikes appear as rows in the signal table. Does not affect what auto-execute buys.">
-              <StrikeBuckets selected={cfg.strike_moneyness} onToggle={toggleBucket} />
-              <details>
-                <summary style={{ fontSize: 9.5, color: k.dim, cursor: 'pointer', userSelect: 'none', marginTop: 3 }}>Fine-tune individual strikes</summary>
-                <div style={{ marginTop: 6 }}>
-                  <Segmented
-                    options={MONEY_OPTS.map((o) => ({ value: o.value, label: o.value, hint: o.hint }))}
-                    isActive={(v) => cfg.strike_moneyness.includes(v as Moneyness)}
-                    onSelect={(v) => toggleMoneyness(v as Moneyness)}
-                  />
-                </div>
-              </details>
-            </SettingRow>
-            <SettingRow label="Idx exp." hint="Index option expiries to scan.">
-              <Segmented
-                options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg.scan_expiries_indices ?? cfg.scan_expiries ?? ['weekly', 'monthly']).includes(v as ScanExpiry)}
-                onSelect={(v) => toggleExpiryIndices(v as ScanExpiry)}
-              />
-            </SettingRow>
-            <SettingRow label="Stk exp." hint="Stock option expiries — stocks default to monthly only.">
-              <Segmented
-                options={EXPIRY_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg.scan_expiries_stocks ?? ['monthly']).includes(v as ScanExpiry)}
-                onSelect={(v) => toggleExpiryStocks(v as ScanExpiry)}
-              />
-            </SettingRow>
-            <div style={{ padding: '11px 16px', fontSize: 10, color: k.dim, display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <span style={{ opacity: 0.6 }}>ℹ</span> {scanCost(cfg)}
-            </div>
-          </>
-        );
-
-        const universeGroup = (
-          <>
-            <SettingRow label="Indices" align="top" full hint="Which indices to scan.">
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {INDEX_OPTS.map((o) => (
-                  <Chip key={o.name} label={o.label} active={cfg.scan_indices.includes(o.name)} onClick={() => toggleIndex(o.name)} />
-                ))}
-              </div>
-            </SettingRow>
-            <SettingRow label="Stocks" align="top" full hint="Pick stocks by liquidity tier, or add any symbol.">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-                {stockReg && stockReg.map((group: LiquidityGroup) => (
-                  <div key={group.liquidity}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{ fontSize: 9, fontWeight: 600, color: k.dim, letterSpacing: 0.3, minWidth: 52 }}>{group.liquidity.toUpperCase()}</span>
-                      <button onClick={() => {
-                        const names = group.stocks.map(s => s.name);
-                        const allIn = names.every(n => cfg.scan_stocks.includes(n));
-                        if (allIn) { patch({ scan_stocks: cfg.scan_stocks.filter(n => !names.includes(n)) }, `Removed ${group.liquidity} stocks`, true); }
-                        else { patch({ scan_stocks: [...new Set([...cfg.scan_stocks, ...names])] }, `Added ${group.liquidity} stocks`, true); }
-                      }} style={{ fontSize: 9, color: k.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                        {group.stocks.every(s => cfg.scan_stocks.includes(s.name)) ? '− all' : '+ all'}
-                      </button>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {group.stocks.map((st: StockEntry) => (
-                        <Chip key={st.name} label={st.label || st.name} active={cfg.scan_stocks.includes(st.name)} onClick={() => toggleStock(st.name)} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <CustomStockSearch stockReg={stockReg} selected={cfg.scan_stocks} onAdd={addCustomStock} />
-                {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {cfg.scan_stocks.filter(n => !stockReg?.some(g => g.stocks.some(s => s.name === n))).map(n => (
-                      <Chip key={n} label={n} active={true} onClick={() => removeCustomStock(n)} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </SettingRow>
-          </>
-        );
-
-        const executionGroup = (
-          <>
-            <div style={{ padding: '6px 16px 8px', fontSize: 10, color: k.dim, background: tint(k.amber, 3), borderBottom: `1px solid ${k.border}` }}>
-              Entry: <b>all 3 green lines + fresh green arrow</b>. Exit counter (your choice): 1/2/3 red lines (or + red arrow). Trail ratchets tighter as lines flip red.
-            </div>
-            <SettingRow label="Trail" hint="How tightly the position is trailed before exit.">
-              <Segmented
-                options={TRAIL_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg.trail_target ?? 'fast') === v}
-                onSelect={(v) => patch({ trail_target: v as TrailTarget }, `Trailing changed to ${v}`, true)}
-              />
-            </SettingRow>
-            <SettingRow label="Hybrid Weight" hint="Weight for ST vs ATR in hybrid trail (0-1). Only for hybrid mode.">
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={cfg.hybrid_st_weight ?? 0.5}
-                onChange={e => patch({ hybrid_st_weight: parseFloat(e.target.value) }, `Hybrid weight → ${e.target.value}`, true)}
-                aria-label="Hybrid Weight"
-                data-testid="hybrid-weight-input"
-                style={{ width: 80, padding: 4, background: k.surface, color: k.text, border: `1px solid ${k.border}` }}
-              />
-            </SettingRow>
-            <SettingRow label="Exit Counter" hint="Entry = all 3 green lines + fresh green arrow. Choose how many red (counter) lines + optional red arrow trigger auto-exit + ratcheting trail.">
-              <Segmented
-                options={EXIT_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: `${o.short}: ${o.hint}` }))}
-                isActive={(v) => (cfg.exit_mode ?? 'one_red') === v}
-                onSelect={(v) => patch({ exit_mode: v as 'one_red'|'two_red'|'three_red'|'three_red_signal' }, `Exit mode → ${EXIT_MODE_OPTS.find(x=>x.value===v)?.short || v}`, true)}
-              />
-              <div style={{ fontSize: 10, color: k.dim, marginTop: 4, lineHeight: 1.3 }}>
-                {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.hint}
-              </div>
-            </SettingRow>
-            <SettingRow label="Stop anchor" hint="Where the trailing price stop sits. Tightest (default) trails the fast SuperTrend — the OOS-validated exit in the 7.5y sweep. Aligned instead pins the stop to the exit-counter line (1→fast, 2→mid, 3→slow) so the stop breach coincides with the red count; the sweep found looser exits lose, so leave off unless you specifically want that.">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Switch on={cfg.exit_aligned_trail ?? false} color={k.blue} label="Anchor stop to exit counter"
-                  onChange={() => patch(
-                    { exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) },
-                    `Stop anchor → ${!(cfg.exit_aligned_trail ?? false) ? 'aligned to counter' : 'tightest (fast)'}`,
-                    true,
-                  )} />
-                <span style={{ fontSize: 10, color: k.dim }}>
-                  {(cfg.exit_aligned_trail ?? false) ? 'Aligned to exit-counter line' : 'Tightest (fast) — validated'}
-                </span>
-              </div>
-            </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, background: cfg.auto_execute ? tint(k.orange, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
-              onClick={toggleAuto}>
-              <Switch on={cfg.auto_execute ?? false} color={k.orange} label="Auto-execute" onChange={() => {}} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: cfg.auto_execute ? k.orange : k.text, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <ZapIcon /> Auto-execute {cfg.auto_execute ? 'ON' : 'OFF'}
-                </span>
-                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Places option BUY orders on ready signals (live-safety gated).</span>
-              </div>
-            </div>
-            <details data-testid="autoexec-guards">
-              <summary style={{ listStyle: 'none', display: 'flex', alignItems: 'baseline', gap: 8, padding: '11px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer', userSelect: 'none', background: tint(k.blue, 3) }}>
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.dim }}>Auto-exec guards</span>
-                <span style={{ fontSize: 10, color: k.dim }}>expiry · time-stop · session · liquidity · daily loss — all optional</span>
-              </summary>
-              <SettingRow label="Expiry" hint="Square off an option position this many calendar days before its expiry, so a weekly can't ride into expiry unmanaged (median signal hold ≈ 3.7d). 0 = off. Options only — futures roll instead.">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
-                  <input type="number" min={0} max={10} step={1} aria-label="Expiry square-off days" data-testid="expiry-squareoff-input"
-                    value={cfg.expiry_square_off_days ?? 1}
-                    onChange={(e) => patch({ expiry_square_off_days: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, `Expiry square-off → ${e.target.value} day(s)`)}
-                    style={numInput} />
-                  days before expiry (0 = off)
-                </label>
-              </SettingRow>
-              <SettingRow label="Time stop" hint="Square off a held position after this many 1H bars, capping theta bleed on long options. A ~48-bar cap was the one robust, cross-lens improvement in the 7.5y exit sweep — but its benefit concentrates on the long-OTM vehicle, so it ships opt-in. 0 = off.">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
-                  <input type="number" min={0} max={500} step={1} aria-label="Time stop bars" data-testid="time-stop-input"
-                    value={cfg.time_stop_bars ?? 0}
-                    onChange={(e) => patch({ time_stop_bars: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, `Time stop → ${e.target.value} bars`)}
-                    style={numInput} />
-                  1H bars (0 = off)
-                </label>
-              </SettingRow>
-              <SettingRow label="Session" hint="Block NEW auto-exec entries in the last N minutes before the 15:30 close, so a fresh late-session signal doesn't enter straight into an overnight index gap. 0 = off.">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
-                  <input type="number" min={0} max={375} step={5} aria-label="Block entry minutes before close" data-testid="block-entry-input"
-                    value={cfg.block_entry_minutes_before_close ?? 0}
-                    onChange={(e) => patch({ block_entry_minutes_before_close: Math.max(0, Math.floor(Number(e.target.value) || 0)) }, `Block entry ${e.target.value} min before close`)}
-                    style={numInput} />
-                  min before close (0 = off)
-                </label>
-              </SettingRow>
-              <SettingRow label="Liquidity" align="top" full hint="Skip an auto-exec entry whose chosen option leg is too illiquid to trade well: quoted spread wider than max %, or open interest below the floor. Empty = off (adds one quote call at entry).">
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
-                    Max spread %
-                    <input type="number" min={0} step={0.5} placeholder="off" aria-label="Max spread percent" data-testid="max-spread-input"
-                      value={cfg.max_spread_pct ?? ''}
-                      onChange={(e) => { const r = e.target.value; patch({ max_spread_pct: r === '' ? null : Math.max(0, Number(r)) }, r === '' ? 'Spread guard off' : `Max spread → ${r}%`); }}
-                      style={numInput} />
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
-                    Min OI
-                    <input type="number" min={0} step={50} placeholder="off" aria-label="Minimum open interest" data-testid="min-oi-input"
-                      value={cfg.min_oi ?? ''}
-                      onChange={(e) => { const r = e.target.value; patch({ min_oi: r === '' ? null : Math.max(0, Math.floor(Number(r))) }, r === '' ? 'OI guard off' : `Min OI → ${r}`); }}
-                      style={numInput} />
-                  </label>
-                </div>
-              </SettingRow>
-              <SettingRow label="Daily loss" hint="Halt NEW auto-exec entries once realized losses for the IST day reach this % of available F&O capital (fills the gap left by the crypto-only USD breaker). Never force-closes open positions. Empty = off.">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: k.dim }}>
-                  <input type="number" min={0} max={100} step={0.5} placeholder="off" aria-label="Max daily loss percent" data-testid="daily-loss-input"
-                    value={cfg.max_daily_loss_pct ?? ''}
-                    onChange={(e) => { const r = e.target.value; patch({ max_daily_loss_pct: r === '' ? null : Math.max(0, Number(r)) }, r === '' ? 'Daily-loss breaker off' : `Daily-loss cap → ${r}%`); }}
-                    style={numInput} />
-                  % of capital (empty = off)
-                </label>
-              </SettingRow>
-            </details>
-            <SettingRow label="Stop" hint="GTT broker stop survives disconnects; tick monitor exits intrabar. Both = recommended for real money.">
-              <Segmented
-                options={STOP_MODE_OPTS.map((o) => ({ value: o.value, label: o.label, hint: o.hint }))}
-                isActive={(v) => (cfg.stop_mode ?? 'both') === v}
-                onSelect={(v) => patch({ stop_mode: v as 'broker' | 'monitor' | 'both' }, `Stop mode: ${v}`)}
-              />
-            </SettingRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderBottom: `1px solid ${k.border}`, cursor: 'pointer' }}
-              onClick={() => patch({ risk_sizing: !(cfg.risk_sizing ?? true) }, `Risk sizing ${!(cfg.risk_sizing ?? true) ? 'ON' : 'OFF'}`)}>
-              <Switch on={cfg.risk_sizing ?? true} color={k.blue} label="Risk-based sizing" onChange={() => {}} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, color: k.text, fontWeight: 500 }}>Risk-based sizing</span>
-                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>Lots sized so premium risk stays within % of capital.</span>
-              </div>
-              {(cfg.risk_sizing ?? true) && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: k.dim, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                  Risk %
-                  <input type="number" min={0.1} max={25} step={0.5} value={cfg.risk_pct ?? 1}
-                    onChange={(e) => patch({ risk_pct: Number(e.target.value) }, `Risk % → ${e.target.value}`)}
-                    style={{ width: 48, padding: '3px 5px', fontSize: 11, border: `1px solid ${k.border}`, borderRadius: 4, background: k.surface, color: k.text, textAlign: 'right', outline: 'none' }} />
-                </label>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', background: kiteLive ? tint(k.green, 5) : 'transparent', cursor: 'pointer', transition: 'background .18s' }}
-              onClick={toggleKiteLive}>
-              <Switch on={kiteLive} color={k.green} label="Kite live" onChange={() => {}} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: kiteLive ? k.green : k.text, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: kiteLive ? k.green : k.amber, flexShrink: 0 }} />
-                  Kite {kiteLive ? 'LIVE' : 'PAPER'}
-                </span>
-                <span style={{ fontSize: 10, color: k.dim, display: 'block', marginTop: 1 }}>
-                  {kiteLive ? 'Orders go to real Zerodha account.' : 'Simulated — no real money.'}
-                </span>
-              </div>
-            </div>
-          </>
-        );
-
-        return (
-          <div data-st-settings className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
-            <div style={{ overflow: 'hidden' }}>
-              <div style={{ background: k.bg, borderBottom: `1px solid ${k.border}` }}>
-                {layout === 'cards' ? (
-                  <div style={{ padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: k.text }}>Engine settings</span>
-                    </div>
-                    <Collapsible label="Scan" open={cardOpen.scan} onToggle={() => toggleCard('scan')}
-                      summary={`${(SCAN_SOURCE_OPTS.find(o => o.value === cfg.scan_source)?.label) ?? 'Derivatives'} · ${Math.max(1, cfg.strike_moneyness.length)} strikes`}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>{scanGroup}</div>
-                    </Collapsible>
-                    <Collapsible label="Universe" open={cardOpen.universe} onToggle={() => toggleCard('universe')} summary={universeSummary(cfg)}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>{universeGroup}</div>
-                    </Collapsible>
-                    <Collapsible label="Execution" open={cardOpen.execution} onToggle={() => toggleCard('execution')}
-                      summary={`${TRAIL_OPTS.find(o => o.value === (cfg.trail_target ?? 'fast'))?.label ?? 'Tight'} trail · ${ (EXIT_MODE_OPTS.find(o=>o.value===(cfg.exit_mode??'one_red'))?.short || '1R') } exit${cfg.auto_execute ? ' · auto' : ''} · ${kiteLive ? 'LIVE' : 'paper'}`}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>{executionGroup}</div>
-                    </Collapsible>
-                  </div>
-                ) : (
-                  <>
-                    {/* Unified toolbar: pill tabs left, summary center, reset right */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', borderBottom: `1px solid ${k.border}`, background: k.surface }}>
-                      <PillTabs
-                        active={settingsTab}
-                        onSelect={(v) => setSettingsTab(v as 'scan' | 'universe' | 'execution')}
-                        tabs={[{ value: 'scan', label: 'Scan' }, { value: 'universe', label: 'Universe' }, { value: 'execution', label: 'Execution' }]}
-                      />
-                      <div style={{ flex: 1 }} />
-                    </div>
-                    {/* Scrollable content — capped so it never takes >40% of the panel */}
-                    <div style={{ maxHeight: 360, overflowY: 'auto', paddingBottom: 4 }}>
-                      {settingsTab === 'scan' && scanGroup}
-                      {settingsTab === 'universe' && universeGroup}
-                      {settingsTab === 'execution' && executionGroup}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
+      {/* Table-only preferences. Trading logic is configured in Connect → Engine. */}
+      <div data-signal-table-settings className="st-drawer" style={{ display: 'grid', gridTemplateRows: settingsOpen ? '1fr' : '0fr' }}>
+        <div style={{ overflow: 'hidden' }}>
+          {settingsOpen && (
+            <SignalTableSettingsPanel
+              viewLayout={viewLayout}
+              onLayoutChange={setViewLayout}
+              bestOnly={bestOnly}
+              onBestOnlyChange={changeBestOnly}
+              showEnded={showEnded}
+              onShowEndedChange={changeShowEnded}
+            />
+          )}
+        </div>
+      </div>
       {/* Signal list */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {groupedRows.length === 0 ? (

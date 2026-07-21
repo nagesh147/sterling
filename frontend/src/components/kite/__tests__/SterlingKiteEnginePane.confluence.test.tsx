@@ -58,18 +58,16 @@ function renderPane() {
       <SterlingKiteEnginePane onSelectSignal={vi.fn()} />
     </QueryClientProvider>,
   );
-  // The full column header only renders in list layout (default is grid).
-  fireEvent.click(screen.getByTitle('List layout'));
+  // List is the product default; layout controls now live inside table settings.
 }
 
 describe('SterlingKiteEnginePane — confluence source + signal-table columns', () => {
   beforeEach(() => { localStorage.clear(); });
 
-  it('shows the Confluence quick-toggle label and the full column header (Entry/SL/TSL/Exit/Target)', () => {
+  it('shows the Confluence source status and the full column header (Entry/SL/TSL/Exit/Target)', () => {
     renderPane();
-    // Quick toggle renders the confluence style label ("Conf") — proves the 4th mode
-    // is wired through SCAN_SOURCE_QUICK_STYLE.
-    expect(screen.getByText('Conf')).toBeInTheDocument();
+    // The table is read-only about engine configuration and shows its active source.
+    expect(screen.getByText('Confluence')).toBeInTheDocument();
     // Column header carries all seven columns (Entry/SL/TSL/Exit/Target new-or-relabelled;
     // Chg./LTP existing).
     expect(screen.getByText('Entry (Δpts)')).toBeInTheDocument();
