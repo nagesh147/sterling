@@ -32,10 +32,11 @@ def test_atm_call_for_bull():
 def test_call_and_put_moneyness_directions():
     calls = _chain([80, 90, 100, 110, 120], "call")
     puts = _chain([80, 90, 100, 110, 120], "put")
-    assert pick_strike(calls, spot=102, direction="long", moneyness="ITM1").strike == 90
+    # Rank 1 is the nearest listed strike on the requested side of spot.
+    assert pick_strike(calls, spot=102, direction="long", moneyness="ITM1").strike == 100
     assert pick_strike(calls, spot=102, direction="long", moneyness="OTM1").strike == 110
     assert pick_strike(puts, spot=102, direction="short", moneyness="ITM1").strike == 110
-    assert pick_strike(puts, spot=102, direction="short", moneyness="OTM1").strike == 90
+    assert pick_strike(puts, spot=102, direction="short", moneyness="OTM1").strike == 100
 
 
 def test_requested_depth_clamps_to_same_side_of_listed_ladder():
@@ -56,8 +57,8 @@ def test_nearest_expiry_and_min_dte_filter():
 
 
 def test_expiry_classification_uses_actual_listed_dates_not_weekday():
-    # June monthly is Tuesday 30th; June 23rd is weekly. The 29th models a
-    # holiday-shifted listed expiry and must still classify from chain order.
+    # Synthetic dates prove classification follows the dump exactly; they do not
+    # assert a historical exchange holiday or a derived weekday rule.
     chain = (
         _chain([100], "call", "2026-06-02", 1)
         + _chain([100], "call", "2026-06-09", 8)
