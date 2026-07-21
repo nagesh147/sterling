@@ -37,7 +37,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Apply expiry-series changes
-        run: python .github/expiry-series/apply.py
+        run: |
+          python .github/expiry-series/apply.py
+          python .github/expiry-series/finalize.py
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
       - name: Verify strike and scanner behavior
@@ -66,5 +68,5 @@ jobs:
           git config user.name 'OpenAI'
           git config user.email 'noreply@openai.com'
           git add -A
-          git commit -m 'feat(kite): add selectable upcoming option expiry series'
+          git commit -m 'feat(kite): resolve selected weekly and monthly option series'
           git push origin HEAD:${TARGET_BRANCH}
