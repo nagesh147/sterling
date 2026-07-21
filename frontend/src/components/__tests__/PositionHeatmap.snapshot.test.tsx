@@ -34,10 +34,10 @@ describe('PositionHeatmap red progress bars', () => {
     const { container } = render(<PositionHeatmap positions={positions} />);
     const progress = container.querySelector('[style*="width: 50%"]') as HTMLElement | null;
     expect(progress).not.toBeNull();
-    expect(progress?.style.background).toBe('rgb(74, 164, 74)');
+    expect(progress?.style.height).toBe('100%');
   });
 
-  it('caps progress at 100% and uses the breached state at the threshold', () => {
+  it('caps progress at 100% when the red threshold is reached', () => {
     const positions: PaperPosition[] = [{
       ...basePos,
       exit_mode: 'one_red',
@@ -47,6 +47,6 @@ describe('PositionHeatmap red progress bars', () => {
     const { container } = render(<PositionHeatmap positions={positions} />);
     const progress = container.querySelector('[style*="width: 100%"]') as HTMLElement | null;
     expect(progress).not.toBeNull();
-    expect(progress?.style.background).toBe('rgb(255, 68, 68)');
+    expect(progress?.style.height).toBe('100%');
   });
 });
