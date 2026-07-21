@@ -636,12 +636,22 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
         <div aria-label={macOn ? 'Mac workspace status' : 'Minimized panes'} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 6, maxWidth: '48%', overflow: 'hidden' }}>
           {macOn ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#aaa', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f4a67f' }} />Mac stage active</span>
-          ) : minimizedAvailable.length > 0 ? minimizedAvailable.map((id) => (
-            <button key={id} type="button" className="kw-dock-chip" onClick={() => restore(id)} title={`Restore ${panes[id].title}`}>
-              <span style={{ color: panes[id].accent, display: 'inline-flex' }}><PaneGlyph pane={id} size={13} /></span>
-              {panes[id].shortTitle}
-            </button>
-          )) : (
+          ) : minimizedAvailable.length > 0 ? (
+            <>
+              {minimizedAvailable.length > 1 && (
+                <button type="button" className="kw-dock-chip" onClick={restoreAll} title="Restore all panes" aria-label="Restore all panes" style={{ color: '#555', fontWeight: 700 }}>
+                  <ControlIcon kind="restore" />
+                  Restore all
+                </button>
+              )}
+              {minimizedAvailable.map((id) => (
+                <button key={id} type="button" className="kw-dock-chip" onClick={() => restore(id)} title={`Restore ${panes[id].title}`}>
+                  <span style={{ color: panes[id].accent, display: 'inline-flex' }}><PaneGlyph pane={id} size={13} /></span>
+                  {panes[id].shortTitle}
+                </button>
+              ))}
+            </>
+          ) : (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#aaa', fontSize: 10.5, whiteSpace: 'nowrap' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9bc7b2' }} />All panes active</span>
           )}
         </div>
