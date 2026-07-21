@@ -24,7 +24,7 @@ describe('ticker live sparkline history', () => {
     const history = pushTickerHistory(symbol, 1, 60);
     expect(history).toHaveLength(48);
     expect(history[0]).toBe(13);
-    expect(history.at(-1)).toBe(60);
+    expect(history[history.length - 1]).toBe(60);
   });
 
   it('merges candle context with the live tick tail and respects the cap', () => {

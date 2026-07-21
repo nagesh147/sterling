@@ -95,28 +95,20 @@ describe('ConvertControl partial-quantity conversion (isolated)', () => {
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ quantity: 50 }));
   });
 
-  // Regression guard: fullQty/invalidQty must be recomputed fresh from
-  // `p.quantity` on every render (not cached/memoized off a stale
-  // dependency), so a live position that shrinks out from under an
-  // already-open, still-full-qty convert row correctly disables the action
-  // rather than firing a mutate() sized larger than the position that now
-  // actually exists. Task 12 (bulk Exit Selected, same file) had a real bug
-  // in exactly this class — stale position data reaching a live mutation.
-  it('disables convert if the live position shrinks while the row is open and the qty input still holds the old, now-too-large value', () => {
+  // A broker refresh can shrink a live position while the control is open. The
+  // input intentionally resynchronizes to the new full quantity, preventing a
+  // stale oversized mutation while keeping the valid conversion action usable.
+  it('resynchronizes conversion quantity when the live position shrinks', () => {
     const { rerender } = render(<ConvertControl p={{ ...POSITION, quantity: 75 }} />);
-    // Capture the input node itself — its `title` (Max: N) changes with
-    // fullQty on rerender, so it can't be re-queried by that title afterward.
-    const qtyInput = getQtyInput();
-    expect(qtyInput.value).toBe('75');
+    expect(getQtyInput().value).toBe('75');
 
-    // Position shrinks elsewhere (partial exit / poll refresh) while this
-    // row is still expanded; the typed qty state does not auto-resync.
     rerender(<ConvertControl p={{ ...POSITION, quantity: 30 }} />);
-    expect(qtyInput.value).toBe('75'); // stale input value, unchanged
+    const resizedInput = screen.getByTitle('Max: 30') as HTMLInputElement;
+    expect(resizedInput.value).toBe('30');
 
     fireEvent.click(getConvertLink());
-    expect(mutate).not.toHaveBeenCalled();
-    expect(getConvertLink()).toHaveStyle({ cursor: 'not-allowed' });
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ quantity: 30 }));
+    expect(getConvertLink()).toHaveStyle({ cursor: 'pointer' });
   });
 });
 
@@ -135,7 +127,7 @@ function rowFor(symbol: string) {
   return screen.getAllByText(symbol).map((el) => el.closest('tr')).find(Boolean)!;
 }
 
-const TOGGLE_TITLE = 'Convert this MIS position to another product type';
+const TOGGLE_TITLE = 'Convert this MIS position';
 
 describe('PortfolioPane Positions row → ConvertControl wiring', () => {
   it('is reachable from the real Positions row: clicking the Convert toggle reveals the qty input', () => {

@@ -19,7 +19,7 @@ import { KiteNotifications } from './KiteNotifications';
 import { PendingGttProtectionWatcher } from './PendingGttProtectionWatcher';
 import { KiteSessionGuard } from './KiteSessionGuard';
 import { KiteAuthOverlay } from './KiteLoader';
-import { SterlingKiteEnginePane } from './SterlingKiteEnginePane';
+import { SterlingKiteEngineWithExpiry } from './SterlingKiteEngineWithExpiry';
 import { SetupChart } from './SetupChart';
 import { SignalDetailPane } from './SignalDetailPane';
 import { EngineTerminal } from './EngineTerminal';
@@ -190,7 +190,7 @@ export function KiteTab() {
           )}
           rightSidebar={(
             <EngineStartupBoundary>
-              <SterlingKiteEnginePane onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
+              <SterlingKiteEngineWithExpiry onSelectSignal={(sel) => { setInstrumentView(null); setSetupView(null); setDetailView(sel); }} onOpenChart={handleOpenInstrument} />
             </EngineStartupBoundary>
           )}
           bottomBar={<EngineTerminal />}

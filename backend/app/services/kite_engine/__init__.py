@@ -6,8 +6,15 @@ cache live here. This package may touch Kite types; the engine package
 strategy/signal/options/derivative logic from any other engine.
 """
 
-# Install once at package import so both manual and background scans evaluate exact
-# broker-held option contracts in addition to the current moneyness ladder.
+# Install exact listed-expiry handling first, then the signal-board boundary fix.
+# The held-contract wrapper remains outermost and continues evaluating exact
+# broker-held symbols after the configured scan completes.
+from app.services.kite_engine.expiry_series_runtime import install as _install_expiry_series
+from app.services.kite_engine.expiry_series_compat import install as _install_expiry_compat
+from app.services.kite_engine.signal_board_runtime import install as _install_signal_board
 from app.services.kite_engine.held_contract_scan import install as _install_held_contract_scan
 
+_install_expiry_series()
+_install_expiry_compat()
+_install_signal_board()
 _install_held_contract_scan()

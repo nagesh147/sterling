@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtime = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ vi.mock('../TradingViewKiteChartLegacy', () => ({
 }));
 
 vi.mock('../chartParityRuntime', () => ({
+  CHART_CROSSHAIR_EVENT: 'sterling:kite-chart-crosshair',
   CHART_RANGE_KEYS: ['1D', '5D', 'ALL'],
   normalizeChartCandles: (candles: any[]) => candles,
   ...runtime,
@@ -31,8 +33,13 @@ const candles = [
   { time: 20, open: 102, high: 108, low: 101, close: 106, volume: 1_100 },
 ];
 
+function withQueryClient(node: React.ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+}
+
 function renderChart(overrides: Record<string, unknown> = {}) {
-  return render(
+  return render(withQueryClient(
     <TradingViewKiteChart
       symbol="NSE:RELIANCE"
       rawCandles={candles}
@@ -42,16 +49,18 @@ function renderChart(overrides: Record<string, unknown> = {}) {
       params={{ stMidPeriod: 14, stMidMult: 2 }}
       {...overrides}
     />,
-  );
+  ));
 }
 
 describe('TradingViewKiteChart parity shell', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('shows the instrument, OHLC change and active SuperTrend legend', () => {
     renderChart();
-    expect(screen.getByText('RELIANCE')).toBeTruthy();
-    expect(screen.getByText('NSE · 15m')).toBeTruthy();
+    expect(screen.getAllByText('RELIANCE').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('button', { name: 'Timeframe' })).toHaveTextContent('15m');
     expect(screen.getByText('SuperTrend 14 2')).toBeTruthy();
     expect(screen.getByText(/\+4\.00 \(\+3\.92%\)/)).toBeTruthy();
     expect(screen.getByTestId('legacy-chart')).toBeTruthy();
@@ -59,7 +68,7 @@ describe('TradingViewKiteChart parity shell', () => {
 
   it('applies a scoped chart range from the bottom toolbar', () => {
     renderChart();
-    fireEvent.click(screen.getByRole('button', { name: '5D' }));
+    fireEvent.click(screen.getByRole('button', { name: '5d' }));
     expect(runtime.setChartVisibleRange).toHaveBeenCalledTimes(1);
     expect(runtime.setChartVisibleRange.mock.calls[0][0]).toMatch(/^kite-chart-/);
     expect(runtime.setChartVisibleRange.mock.calls[0][1]).toBe('5D');
@@ -76,7 +85,7 @@ describe('TradingViewKiteChart parity shell', () => {
   });
 
   it('hides the recognized duplicate InstrumentPane header', () => {
-    render(
+    render(withQueryClient(
       <div>
         <div data-testid="legacy-header">RELIANCE 2 bars</div>
         <div>
@@ -90,7 +99,7 @@ describe('TradingViewKiteChart parity shell', () => {
           />
         </div>
       </div>,
-    );
+    ));
     expect(screen.getByTestId('legacy-header').style.display).toBe('none');
   });
 

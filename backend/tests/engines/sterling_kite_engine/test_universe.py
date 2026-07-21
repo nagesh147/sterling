@@ -1,32 +1,35 @@
 from app.services.kite_engine.universe import (
-    UniverseItem, build_universe, select_scan_universe,
+    UniverseItem,
+    build_universe,
+    select_scan_universe,
 )
 
 
-def test_select_scan_universe_granular():
+def test_select_scan_universe_granular_and_high_liquidity_only():
     ix1 = UniverseItem("NIFTY 50", "NIFTY", 1, "INDICES", "NFO", is_index=True)
     ix2 = UniverseItem("SENSEX", "SENSEX", 2, "INDICES", "BFO", is_index=True)
     s1 = UniverseItem("RELIANCE", "RELIANCE", 3, "NSE", "NFO")
     s2 = UniverseItem("INFY", "INFY", 4, "NSE", "NFO")
-    uni = [ix1, ix2, s1, s2]
+    thin = UniverseItem("GHOSTCO", "GHOSTCO", 5, "NSE", "NFO")
+    universe = [ix1, ix2, s1, s2, thin]
 
-    # granular: only the NIFTY index + RELIANCE stock
-    assert select_scan_universe(uni, indices=["NIFTY 50"], stocks=["RELIANCE"],
-                                all_stocks=False) == [ix1, s1]
-    # all_stocks overrides the stock list (still respects the index selection)
-    assert select_scan_universe(uni, indices=["NIFTY 50", "SENSEX"], stocks=[],
-                                all_stocks=True) == [ix1, ix2, s1, s2]
-    # no indices selected → stocks only
-    assert select_scan_universe(uni, indices=[], stocks=["INFY"], all_stocks=False) == [s2]
+    assert select_scan_universe(
+        universe, indices=["NIFTY 50"], stocks=["RELIANCE"], all_stocks=False
+    ) == [ix1, s1]
+    assert select_scan_universe(
+        universe, indices=["NIFTY 50", "SENSEX"], stocks=[], all_stocks=True
+    ) == [ix1, ix2, s1, s2]
+    assert select_scan_universe(
+        universe, indices=[], stocks=["INFY", "GHOSTCO"], all_stocks=False
+    ) == [s2]
 
 
 def test_build_universe_from_instruments_dump():
-    # NFO option instruments → their underlyings become the equity universe
     nfo = [
-        {"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUN3000CE", "instrument_type": "CE"},
-        {"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUN3000PE", "instrument_type": "PE"},
-        {"name": "INFY", "tradingsymbol": "INFY25JUN1500CE", "instrument_type": "CE"},
-        {"name": "NIFTY", "tradingsymbol": "NIFTY25JUN22000CE", "instrument_type": "CE"},
+        {"name": "RELIANCE", "tradingsymbol": "RELIANCE26JUN3000CE", "instrument_type": "CE"},
+        {"name": "RELIANCE", "tradingsymbol": "RELIANCE26JUN3000PE", "instrument_type": "PE"},
+        {"name": "INFY", "tradingsymbol": "INFY26JUN1500CE", "instrument_type": "CE"},
+        {"name": "NIFTY", "tradingsymbol": "NIFTY26JUN22000CE", "instrument_type": "CE"},
     ]
     equities = [
         {"tradingsymbol": "RELIANCE", "instrument_token": 111, "exchange": "NSE"},
@@ -34,62 +37,73 @@ def test_build_universe_from_instruments_dump():
         {"tradingsymbol": "NIFTY 50", "instrument_token": 256265, "exchange": "NSE"},
         {"tradingsymbol": "SENSEX", "instrument_token": 265, "exchange": "BSE"},
     ]
-    uni = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
-    names = {u.name for u in uni}
-    assert "RELIANCE" in names and "INFY" in names
-    # indices always present
-    assert "NIFTY 50" in names
+    universe = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
+    names = {item.name for item in universe}
+    assert {"RELIANCE", "INFY", "NIFTY 50"} <= names
 
-    r = next(u for u in uni if u.name == "RELIANCE")
-    assert isinstance(r, UniverseItem)
-    assert r.token == 111 and r.option_exchange == "NFO" and r.tradingsymbol == "RELIANCE"
+    reliance = next(item for item in universe if item.name == "RELIANCE")
+    assert reliance.token == 111
+    assert reliance.option_exchange == "NFO"
+    assert reliance.tradingsymbol == "RELIANCE"
 
-    nifty = next(u for u in uni if u.name == "NIFTY 50")
-    # index: spot token resolved from spot_symbol, option chain filters by option_name
-    assert nifty.is_index and nifty.token == 256265 and nifty.tradingsymbol == "NIFTY"
+    nifty = next(item for item in universe if item.name == "NIFTY 50")
+    assert nifty.is_index
+    assert nifty.token == 256265
+    assert nifty.tradingsymbol == "NIFTY"
+
+
+def test_build_universe_rejects_non_high_liquidity_fno_names():
+    nfo = [
+        {"name": "RELIANCE", "tradingsymbol": "RELIANCE26JUN3000CE", "instrument_type": "CE"},
+        {"name": "TATASTEEL", "tradingsymbol": "TATASTEEL26JUN200CE", "instrument_type": "CE"},
+        {"name": "GHOSTCO", "tradingsymbol": "GHOSTCO26JUN100CE", "instrument_type": "CE"},
+    ]
+    equities = [
+        {"tradingsymbol": "RELIANCE", "instrument_token": 1, "exchange": "NSE"},
+        {"tradingsymbol": "TATASTEEL", "instrument_token": 2, "exchange": "NSE"},
+        {"tradingsymbol": "GHOSTCO", "instrument_token": 3, "exchange": "NSE"},
+    ]
+    universe = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
+    stock_names = {item.name for item in universe if not item.is_index}
+    assert stock_names == {"RELIANCE"}
 
 
 def test_indices_resolve_from_spot_token_without_dump():
-    # the bug: indices were dropped when their spot row wasn't in the equities dump.
-    # With spot_token in config, every index keeps a candle-fetch token.
-    uni = build_universe(nfo_instruments=[], bfo_instruments=[], equities=[])
-    idx = {u.name: u for u in uni if u.is_index}
-    assert idx["NIFTY 50"].token == 256265
-    assert idx["NIFTY BANK"].token == 260105
-    assert idx["NIFTY FIN SERVICE"].token == 257801
-    assert idx["SENSEX"].token == 265 and idx["SENSEX"].option_exchange == "BFO"
-    # all four indices present with non-zero tokens (none skipped downstream)
-    assert all(u.token > 0 for u in idx.values()) and len(idx) == 4
+    universe = build_universe(nfo_instruments=[], bfo_instruments=[], equities=[])
+    indices = {item.name: item for item in universe if item.is_index}
+    assert indices["NIFTY 50"].token == 256265
+    assert indices["NIFTY BANK"].token == 260105
+    assert indices["NIFTY FIN SERVICE"].token == 257801
+    assert indices["SENSEX"].token == 265
+    assert indices["SENSEX"].option_exchange == "BFO"
+    assert all(item.token > 0 for item in indices.values())
+    assert len(indices) == 4
 
 
 def test_equity_without_spot_listing_is_skipped():
-    # an option underlying with no resolvable spot token is dropped (can't fetch candles)
-    nfo = [{"name": "GHOSTCO", "tradingsymbol": "GHOSTCO25JUN100CE", "instrument_type": "CE"}]
-    uni = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=[])
-    assert all(u.name != "GHOSTCO" for u in uni)
+    nfo = [{"name": "RELIANCE", "tradingsymbol": "RELIANCE26JUN3000CE", "instrument_type": "CE"}]
+    universe = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=[])
+    assert all(item.name != "RELIANCE" for item in universe)
 
 
 def test_dual_listed_fno_stock_prefers_nse_spot_token():
-    """RELIANCE lists on BOTH NSE and BSE. The spot token/exchange must resolve to
-    NSE (where the options trade and 1H history is deepest), not be overwritten by a
-    later BSE row."""
-    nfo = [{"name": "RELIANCE", "tradingsymbol": "RELIANCE25JUN3000CE", "instrument_type": "CE"}]
-    # NSE first, BSE second (the order service.py passes: nse + bse)
+    nfo = [{"name": "RELIANCE", "tradingsymbol": "RELIANCE26JUN3000CE", "instrument_type": "CE"}]
     equities = [
         {"tradingsymbol": "RELIANCE", "instrument_token": 738561, "exchange": "NSE"},
         {"tradingsymbol": "RELIANCE", "instrument_token": 128083204, "exchange": "BSE"},
     ]
-    uni = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
-    r = next(u for u in uni if u.name == "RELIANCE")
-    assert r.exchange == "NSE" and r.token == 738561
+    universe = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
+    reliance = next(item for item in universe if item.name == "RELIANCE")
+    assert reliance.exchange == "NSE"
+    assert reliance.token == 738561
 
 
 def test_option_rows_deduped_per_underlying():
     nfo = [
-        {"name": "TCS", "tradingsymbol": "TCS25JUN3900CE", "instrument_type": "CE"},
-        {"name": "TCS", "tradingsymbol": "TCS25JUN3900PE", "instrument_type": "PE"},
-        {"name": "TCS", "tradingsymbol": "TCS25JUL3900CE", "instrument_type": "CE"},
+        {"name": "TCS", "tradingsymbol": "TCS26JUN3900CE", "instrument_type": "CE"},
+        {"name": "TCS", "tradingsymbol": "TCS26JUN3900PE", "instrument_type": "PE"},
+        {"name": "TCS", "tradingsymbol": "TCS26JUL3900CE", "instrument_type": "CE"},
     ]
     equities = [{"tradingsymbol": "TCS", "instrument_token": 999, "exchange": "NSE"}]
-    uni = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
-    assert sum(1 for u in uni if u.name == "TCS") == 1
+    universe = build_universe(nfo_instruments=nfo, bfo_instruments=[], equities=equities)
+    assert sum(1 for item in universe if item.name == "TCS") == 1

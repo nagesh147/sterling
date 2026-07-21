@@ -1,8 +1,9 @@
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const useCandlesMock = vi.hoisted(() => vi.fn((..._args: any[]) => ({ data: [] })));
+const useCandlesMock = vi.hoisted(() => vi.fn((..._args: any[]): { data: any[] } => ({ data: [] })));
 const createChartMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../hooks/useCandles', () => ({ useCandles: (...args: any[]) => useCandlesMock(...args) }));
@@ -33,16 +34,21 @@ const theme = {
 };
 
 function renderChart(overrides: Record<string, unknown> = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   return render(
-    <TradingViewKiteChart
-      symbol="NSE:RELIANCE"
-      rawCandles={[]}
-      tf="15m"
-      theme={theme}
-      activeIndicators={new Set(['vol'])}
-      params={{}}
-      {...overrides}
-    />,
+    <QueryClientProvider client={queryClient}>
+      <TradingViewKiteChart
+        symbol="NSE:RELIANCE"
+        rawCandles={[]}
+        tf="15m"
+        theme={theme}
+        activeIndicators={new Set(['vol'])}
+        params={{}}
+        {...overrides}
+      />
+    </QueryClientProvider>,
   );
 }
 
@@ -139,29 +145,33 @@ describe('TradingViewKiteChart workspace controls', () => {
     expect(onChartReady).toHaveBeenLastCalledWith('NSE:RELIANCE|15m|3|1|3');
 
     rerender(
-      <TradingViewKiteChart
-        symbol="NSE:RELIANCE"
-        rawCandles={[]}
-        tf="1H"
-        theme={theme}
-        activeIndicators={new Set(['vol'])}
-        params={{}}
-        onChartReady={onChartReady}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <TradingViewKiteChart
+          symbol="NSE:RELIANCE"
+          rawCandles={[]}
+          tf="1H"
+          theme={theme}
+          activeIndicators={new Set(['vol'])}
+          params={{}}
+          onChartReady={onChartReady}
+        />
+      </QueryClientProvider>,
     );
     expect(chartInstances[0].remove).toHaveBeenCalledTimes(1);
     expect(createChartMock).toHaveBeenCalledTimes(1);
 
     rerender(
-      <TradingViewKiteChart
-        symbol="NSE:RELIANCE"
-        rawCandles={bars1h}
-        tf="1H"
-        theme={theme}
-        activeIndicators={new Set(['vol'])}
-        params={{}}
-        onChartReady={onChartReady}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <TradingViewKiteChart
+          symbol="NSE:RELIANCE"
+          rawCandles={bars1h}
+          tf="1H"
+          theme={theme}
+          activeIndicators={new Set(['vol'])}
+          params={{}}
+          onChartReady={onChartReady}
+        />
+      </QueryClientProvider>,
     );
     await act(async () => { vi.runOnlyPendingTimers(); });
     expect(createChartMock).toHaveBeenCalledTimes(2);

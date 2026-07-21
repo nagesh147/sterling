@@ -9,7 +9,7 @@ def make_candles(n: int = 100, base: float = 30000.0, trend: float = 10.0) -> Li
     candles = []
     price = base
     for i in range(n):
-        price += trend + np.random.normal(0, base * 0.002)  # noise 2x smaller than before
+        price += trend + np.random.normal(0, base * 0.002)
         o = price - abs(np.random.normal(0, base * 0.001))
         c = price + abs(np.random.normal(0, base * 0.001))
         h = max(o, c) + abs(np.random.normal(0, base * 0.0005))
@@ -26,7 +26,6 @@ def make_candles(n: int = 100, base: float = 30000.0, trend: float = 10.0) -> Li
 
 
 def make_bearish_candles(n: int = 100, base: float = 30000.0) -> List[Candle]:
-    # trend=-50 dominates noise σ≈base*0.002=60 at base=30000
     return make_candles(n, base, trend=-50.0)
 
 
@@ -40,13 +39,24 @@ def _default_risk():
     )
 
 
+def _reset_exchange_store(eas) -> None:
+    """Reset both exchange-account memory and its SQLite write-through table."""
+    from app.services import db
+
+    try:
+        if db._available:
+            with db._conn() as connection:
+                connection.execute("DELETE FROM exchange_configs")
+    except Exception:
+        pass
+    eas._configs.clear()
+    eas._loaded = False
+    eas.bootstrap()
+
+
 @pytest.fixture(autouse=True)
 def reset_global_stores():
-    """
-    Reset ALL module-level mutable state between every test.
-    Covers: paper positions, eval history, arrow store, risk config.
-    Sets _loaded=True to bypass SQLite in all tests.
-    """
+    """Reset every module-level and persisted mutable test store."""
     from app.services import paper_store, eval_history, arrow_store
     from app.services import alert_store, pnl_history, webhook_store
     from app.services import exchange_account_store as eas
@@ -66,8 +76,7 @@ def reset_global_stores():
     pnl_history._loaded = True
     webhook_store.clear()
     webhook_store._loaded = True
-    eas._configs.clear()
-    eas._loaded = False
+    _reset_exchange_store(eas)
     kite_accounts.clear()
     config_ep._risk = _default_risk()
     _REGIME_CACHE.clear()
@@ -82,8 +91,7 @@ def reset_global_stores():
     alert_store.clear()
     pnl_history.clear()
     webhook_store.clear()
-    eas._configs.clear()
-    eas._loaded = False
+    _reset_exchange_store(eas)
     kite_accounts.clear()
     config_ep._risk = _default_risk()
     _REGIME_CACHE.clear()
