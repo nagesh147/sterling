@@ -4,8 +4,9 @@ import React from 'react';
 import { PositionHeatmap } from '../PositionHeatmap';
 import type { PaperPosition } from '../../types';
 
+
 describe('PositionHeatmap red progress bars', () => {
-  const basePos: import('../../types').PaperPosition = {
+  const basePos: PaperPosition = {
     id: '1',
     underlying: 'TEST',
     status: 'open',
@@ -14,10 +15,16 @@ describe('PositionHeatmap red progress bars', () => {
     entry_spot_price: 100,
     notes: '',
     run_once_state: 'ENTERED' as const,
-    sized_trade: { contracts: 1, max_risk_usd: 100, capital_at_risk_pct: 0.01, position_value: 1000, structure: { direction: { value: 'long' }, score: 80, legs: [] } } as any,
+    sized_trade: {
+      contracts: 1,
+      max_risk_usd: 100,
+      capital_at_risk_pct: 0.01,
+      position_value: 1000,
+      structure: { direction: { value: 'long' }, score: 80, legs: [] },
+    } as any,
   } as any;
 
-  it('matches snapshot with red count bar', () => {
+  it('shows proportional progress before the red threshold is reached', () => {
     const positions: PaperPosition[] = [{
       ...basePos,
       exit_mode: 'two_red',
@@ -25,10 +32,12 @@ describe('PositionHeatmap red progress bars', () => {
       exit_threshold: 2,
     }];
     const { container } = render(<PositionHeatmap positions={positions} />);
-    expect(container.innerHTML).toMatchSnapshot();
+    const progress = container.querySelector('[style*="width: 50%"]') as HTMLElement | null;
+    expect(progress).not.toBeNull();
+    expect(progress?.style.background).toBe('rgb(74, 164, 74)');
   });
 
-  it('matches snapshot with breached red', () => {
+  it('caps progress at 100% and uses the breached state at the threshold', () => {
     const positions: PaperPosition[] = [{
       ...basePos,
       exit_mode: 'one_red',
@@ -36,6 +45,8 @@ describe('PositionHeatmap red progress bars', () => {
       exit_threshold: 1,
     }];
     const { container } = render(<PositionHeatmap positions={positions} />);
-    expect(container.innerHTML).toMatchSnapshot();
+    const progress = container.querySelector('[style*="width: 100%"]') as HTMLElement | null;
+    expect(progress).not.toBeNull();
+    expect(progress?.style.background).toBe('rgb(255, 68, 68)');
   });
 });
