@@ -60,7 +60,7 @@ function renderPane() {
       <SterlingKiteEnginePane onSelectSignal={vi.fn()} />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByTitle('List layout'));
+  // List is the product default; layout controls now live inside table settings.
 }
 
 describe('SterlingKiteEnginePane — both-mode spot row keeps its columns aligned', () => {

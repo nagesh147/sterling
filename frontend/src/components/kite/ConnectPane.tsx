@@ -12,8 +12,10 @@ import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
 import { DirectionalModePanel } from './DirectionalModePanel';
 import { KiteTelegramPanel } from './KiteTelegramPanel';
-import { useKiteSettings, type LoaderStyle } from '../../store/useKiteSettings';
-import { KiteLoader, ButtonLoader } from './KiteLoader';
+import { ButtonLoader } from './KiteLoader';
+import { MotionStyleSettings } from './MotionStyleSettings';
+import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
+import { EngineConfigurationPanel } from './EngineConfigurationPanel';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 16, marginBottom: 14 },
@@ -534,100 +536,6 @@ function TickerControl() {
   );
 }
 
-function KiteSettings() {
-  const layout = useKiteSettings((s) => s.engineSettingsLayout);
-  const setLayout = useKiteSettings((s) => s.setEngineSettingsLayout);
-  const opts: Array<{ value: 'tabs' | 'cards'; label: string }> = [
-    { value: 'tabs', label: 'Tabs' },
-    { value: 'cards', label: 'Expand-collapse' },
-  ];
-  return (
-    <div style={S.card}>
-      <div style={S.title}>KITE SETTINGS</div>
-
-      <div style={{ marginBottom: 18 }}>
-        <label style={{ ...S.label, marginBottom: 6 }}>SUPERTREND SETTINGS LAYOUT</label>
-        <div style={{ display: 'inline-flex', border: `1px solid #e0e0e0`, borderRadius: 4, overflow: 'hidden' }}>
-          {opts.map((o) => {
-            const sel = layout === o.value;
-            return (
-              <button
-                key={o.value}
-                onClick={() => setLayout(o.value)}
-                style={{
-                  background: sel ? '#f06428' : '#fff',
-                  color: sel ? '#fff' : '#444',
-                  border: 'none',
-                  padding: '6px 16px',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  fontSize: 11,
-                  fontWeight: sel ? 700 : 400,
-                }}
-              >
-                {o.label}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ ...S.hint, marginTop: 6 }}>Choose how the Sterling Kite Engine settings drawer is laid out.</div>
-      </div>
-
-      <div style={{ marginBottom: 18, paddingTop: 16, borderTop: `1px solid #e0e0e0` }}>
-        <LoaderStylePicker />
-      </div>
-
-      <div style={{ paddingTop: 16, borderTop: `1px solid #e0e0e0` }}>
-        <KiteTelegramPanel />
-      </div>
-    </div>
-  );
-}
-
-/** Loader / animation style selector with a live preview of each option. */
-function LoaderStylePicker() {
-  const style = useKiteSettings((s) => s.loaderStyle);
-  const setStyle = useKiteSettings((s) => s.setLoaderStyle);
-  const opts: Array<{ value: LoaderStyle; label: string; desc: string }> = [
-    { value: 'mac', label: 'Mac', desc: 'Apple-grade spinner, smooth overlay & checkmark' },
-    { value: 'classic', label: 'Classic', desc: 'Simple rotating ring' },
-    { value: 'off', label: 'Minimal', desc: 'Static dots — no animation' },
-  ];
-  return (
-    <div>
-      <label style={{ ...S.label, marginBottom: 8 }}>LOADER & ANIMATION STYLE</label>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {opts.map((o) => {
-          const sel = style === o.value;
-          return (
-            <button
-              key={o.value}
-              onClick={() => setStyle(o.value)}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                width: 120, padding: '14px 10px', cursor: 'pointer',
-                background: sel ? 'rgba(240,100,40,0.06)' : '#fff',
-                border: `1.5px solid ${sel ? '#f06428' : '#e0e0e0'}`,
-                borderRadius: 8, fontFamily: 'inherit', transition: 'all .15s',
-              }}
-            >
-              {/* Force a remount per style so the preview reflects the option, not
-                  the currently-saved one, by keying on the option value. */}
-              <div style={{ height: 32, display: 'flex', alignItems: 'center' }}>
-                <KiteLoader size={26} styleOverride={o.value} />
-              </div>
-              <div style={{ fontSize: 12, fontWeight: sel ? 700 : 500, color: sel ? '#f06428' : '#444' }}>{o.label}</div>
-            </button>
-          );
-        })}
-      </div>
-      <div style={{ ...S.hint, marginTop: 8 }}>
-        {opts.find((o) => o.value === style)?.desc} · applies to login overlays, buttons and pending states.
-      </div>
-    </div>
-  );
-}
-
 function DirectionalModePanelWrapper() {
   const { data: cfgData } = useEngineConfig();
   const { data: signals } = useEngineSignals();
@@ -691,95 +599,193 @@ function EngineMasterToggle() {
   );
 }
 
-// ── Tabbed Connect page ────────────────────────────────────────────────────────
-type ConnectTab = 'account' | 'strategy' | 'tools' | 'settings';
+// ── Settings hub ─────────────────────────────────────────────────────────────
+// Connect used to contain another horizontal tab bar, while display, exchange,
+// Telegram and engine controls were injected above/between those tabs. A stable
+// category rail gives every setting one predictable home and keeps each page calm.
+type ConnectSection = 'account' | 'engine' | 'markets' | 'notifications' | 'experience';
 
-const TAB_DEFS: { id: ConnectTab; label: string; icon: string }[] = [
-  { id: 'account',  label: 'Account',  icon: '👤' },
-  { id: 'strategy', label: 'Strategy', icon: '🎯' },
-  { id: 'tools',    label: 'Tools',    icon: '🧰' },
-  { id: 'settings', label: 'Settings', icon: '⚙️' },
+const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string; glyph: string }> = [
+  { id: 'account', label: 'Account & login', eyebrow: 'Zerodha connection', glyph: 'A' },
+  { id: 'engine', label: 'Engine', eyebrow: 'Signals, orders & risk', glyph: 'E' },
+  { id: 'markets', label: 'Markets & tools', eyebrow: 'Exchanges, funds & data', glyph: 'M' },
+  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', glyph: 'N' },
+  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', glyph: 'X' },
 ];
+
+function readInitialSection(): ConnectSection {
+  const current = localStorage.getItem('kite_connect_section');
+  if (SECTION_DEFS.some((item) => item.id === current)) return current as ConnectSection;
+
+  // Seamlessly map the previous nested tabs to their new permanent homes.
+  const legacy = localStorage.getItem('kite_connect_tab');
+  if (legacy === 'strategy') return 'engine';
+  if (legacy === 'tools') return 'markets';
+  if (legacy === 'settings') return 'experience';
+  return 'account';
+}
+
+function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; children: React.ReactNode }) {
+  const color = tone === 'good' ? '#2e7d32' : tone === 'warn' ? '#e65100' : '#777';
+  const bg = tone === 'good' ? '#edf7ee' : tone === 'warn' ? '#fff5e8' : '#f5f5f5';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color, background: bg, border: `1px solid ${color}22`, borderRadius: 999, padding: '5px 9px', fontSize: 10.5, fontWeight: 700 }}>
+      <span style={{ width: 6, height: 6, borderRadius: 3, background: color }} />{children}
+    </span>
+  );
+}
+
+function SectionHeading({ title, description }: { title: string; description: string }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <h2 style={{ margin: 0, color: '#333', fontSize: 18, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
+      <p style={{ margin: '5px 0 0', color: '#777', fontSize: 11.5, lineHeight: 1.55 }}>{description}</p>
+    </div>
+  );
+}
 
 export function ConnectPane() {
   const { data, isLoading } = useKiteAccounts();
-  const active = data?.accounts.find((a) => a.is_active);
-  const liveTools = active?.connected && !active.is_paper;
-  const [tab, setTab] = useState<ConnectTab>(() =>
-    (localStorage.getItem('kite_connect_tab') as ConnectTab) || 'account');
-  const select = (t: ConnectTab) => { setTab(t); localStorage.setItem('kite_connect_tab', t); };
+  const { data: engineCfg } = useEngineConfig();
+  const active = data?.accounts.find((account) => account.is_active);
+  const connected = !!active?.connected;
+  const liveTools = connected && !active?.is_paper;
+  const [section, setSection] = useState<ConnectSection>(readInitialSection);
+
+  const select = (next: ConnectSection) => {
+    setSection(next);
+    localStorage.setItem('kite_connect_section', next);
+  };
+
+  React.useEffect(() => {
+    const onOpen = (event: Event) => {
+      const next = (event as CustomEvent<ConnectSection>).detail;
+      if (SECTION_DEFS.some((item) => item.id === next)) select(next);
+    };
+    window.addEventListener('kite-connect-section', onOpen);
+    return () => window.removeEventListener('kite-connect-section', onOpen);
+  }, []);
 
   return (
-    <div style={{ padding: '20px 32px 40px', width: '100%', boxSizing: 'border-box' }}>
-      {/* Tab bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid #e0e0e0' }}>
-        {TAB_DEFS.map((t) => {
-          const sel = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => select(t.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px',
-                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: 12.5, fontWeight: sel ? 700 : 500, color: sel ? '#f06428' : '#888',
-                borderBottom: `2px solid ${sel ? '#f06428' : 'transparent'}`, marginBottom: -1,
-                transition: 'all .15s',
-              }}
-            >
-              <span style={{ fontSize: 13 }}>{t.icon}</span>{t.label}
-            </button>
-          );
-        })}
+    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '24px 28px 44px', background: '#fafafa', minHeight: '100%' }}>
+      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, marginBottom: 22 }}>
+        <div>
+          <div style={{ color: '#f06428', fontSize: 10, fontWeight: 800, letterSpacing: 1.1, textTransform: 'uppercase' }}>Kite control center</div>
+          <h1 style={{ margin: '4px 0 0', color: '#2f2f2f', fontSize: 23, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & settings</h1>
+          <p style={{ margin: '7px 0 0', color: '#777', fontSize: 12, lineHeight: 1.55, maxWidth: 580 }}>
+            One place for the Zerodha connection, engine behaviour, markets, alerts and app experience.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <StatusPill tone={connected ? 'good' : active ? 'warn' : 'quiet'}>
+            {connected ? `${active?.label ?? 'Kite'} connected` : active ? 'Login required' : 'No account'}
+          </StatusPill>
+          <StatusPill tone={engineCfg?.engine_enabled ? 'good' : 'quiet'}>
+            Engine {engineCfg?.engine_enabled ? 'on' : 'off'}
+          </StatusPill>
+          {active && <StatusPill tone={active.is_paper ? 'quiet' : 'warn'}>{active.is_paper ? 'Paper' : 'Live'}</StatusPill>}
+        </div>
+      </header>
+
+      <div className="kite-settings-layout" style={{ display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 22, alignItems: 'start' }}>
+        <nav aria-label="Kite settings sections" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 7, position: 'sticky', top: 14 }}>
+          {SECTION_DEFS.map((item) => {
+            const selected = item.id === section;
+            return (
+              <button key={item.id} type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
+                width: '100%', border: 'none', borderRadius: 6, background: selected ? 'rgba(240,100,40,.075)' : 'transparent',
+                display: 'grid', gridTemplateColumns: '30px minmax(0, 1fr)', gap: 9, alignItems: 'center',
+                padding: '9px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
+              }}>
+                <span aria-hidden style={{ width: 26, height: 26, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: selected ? '#f06428' : '#f1f1f1', color: selected ? '#fff' : '#777', fontSize: 10, fontWeight: 800 }}>{item.glyph}</span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', color: selected ? '#d35400' : '#444', fontSize: 11.5, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
+                  <span style={{ display: 'block', color: '#9b9b9b', fontSize: 9.5, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <main style={{ minWidth: 0 }}>
+          {section === 'account' && (
+            <>
+              <SectionHeading title="Account & login" description="Manage API credentials and the daily Zerodha session. Trading behaviour is configured separately under Engine." />
+              {isLoading && <div style={S.hint}>Loading accounts…</div>}
+              {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
+              {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
+              <AddAccount />
+              <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 14 }}>
+                Create the API key and secret at kite.trade. Sessions normally reset around 6 AM IST; credentials stay encrypted at rest.
+              </div>
+            </>
+          )}
+
+          {section === 'engine' && (
+            <>
+              <SectionHeading title="Engine" description="Control whether Sterling scans, how signals are discovered, and how orders and risk are handled." />
+              <EngineMasterToggle />
+              <TradingModeControls />
+              <EngineConfigurationPanel />
+              <details style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 7, marginBottom: 14, overflow: 'hidden' }}>
+                <summary style={{ cursor: 'pointer', listStyle: 'none', padding: '15px 17px', color: '#444', fontSize: 12.5, fontWeight: 750 }}>
+                  Order selection & entry quality
+                  <span style={{ display: 'block', marginTop: 3, color: '#888', fontSize: 10.5, fontWeight: 400 }}>Vehicle profile, directional filters and trade-impact preview.</span>
+                </summary>
+                <div style={{ padding: '0 14px 2px' }}><DirectionalModePanelWrapper /></div>
+              </details>
+            </>
+          )}
+
+          {section === 'markets' && (
+            <>
+              <SectionHeading title="Markets & tools" description="Choose the exchanges Sterling can use, then inspect funds, charges and live ticker subscriptions." />
+              <KiteExchangeSettingsCard />
+              {liveTools ? (
+                <><Funds /><MarginCalc /><TickerControl /></>
+              ) : (
+                <div style={S.card}>
+                  <div style={S.title}>LIVE ACCOUNT TOOLS</div>
+                  <div style={S.hint}>Funds, margin/charges and manual ticker subscriptions become available after the active account is connected and switched to Live.</div>
+                </div>
+              )}
+            </>
+          )}
+
+          {section === 'notifications' && (
+            <>
+              <SectionHeading title="Notifications" description="Manage only Kite signal destinations here. Crypto/global alerts remain separate." />
+              <KiteTelegramPanel />
+            </>
+          )}
+
+          {section === 'experience' && (
+            <>
+              <SectionHeading title="Experience" description="Choose how loading, dialogs and transitions feel throughout Kite." />
+              <MotionStyleSettings />
+              <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span aria-hidden style={{ color: '#387ed1', fontSize: 16 }}>ⓘ</span>
+                <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
+                  Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
+                </div>
+              </div>
+            </>
+          )}
+        </main>
       </div>
 
-      {/* Tab content */}
-      {tab === 'account' && (
-        <>
-          {isLoading && <div style={S.hint}>Loading…</div>}
-          {data?.accounts.map((a) => <AccountCard key={a.id} acc={a} />)}
-          {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key & secret to begin.</div>}
-          <AddAccount />
-          <div style={{ ...S.hint, lineHeight: 1.7, marginTop: 16 }}>
-            A Kite Connect app (kite.trade) gives you an <strong>API key + secret</strong>. Each session needs a daily login
-            (token expires ~6 AM IST). Credentials are encrypted at rest and scoped to your user.
-          </div>
-        </>
-      )}
-
-      {tab === 'strategy' && (
-        <>
-          <TradingModeControls />
-          <DirectionalModePanelWrapper />
-        </>
-      )}
-
-      {tab === 'tools' && (
-        <>
-          {liveTools ? (
-            <>
-              <Funds />
-              <MarginCalc />
-              <TickerControl />
-            </>
-          ) : (
-            <div style={{ ...S.card }}>
-              <div style={S.title}>TOOLS</div>
-              <div style={S.hint}>
-                Funds, the margin/charges calculator and the WebSocket ticker appear here once an
-                account is <strong>connected and in LIVE mode</strong>.
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {tab === 'settings' && (
-        <>
-          <KiteSettings />
-          <EngineMasterToggle />
-        </>
-      )}
+      <style>{`
+        @media (max-width: 820px) {
+          .kite-settings-hub { padding: 18px 14px 36px !important; }
+          .kite-settings-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .kite-settings-layout > nav { position: static !important; display: flex; overflow-x: auto; gap: 4px; }
+          .kite-settings-layout > nav > button { min-width: 170px; margin-bottom: 0 !important; }
+        }
+        @media (max-width: 560px) {
+          .kite-settings-hub > header { flex-direction: column; }
+          .kite-settings-hub > header > div:last-child { justify-content: flex-start !important; }
+        }
+      `}</style>
     </div>
   );
 }

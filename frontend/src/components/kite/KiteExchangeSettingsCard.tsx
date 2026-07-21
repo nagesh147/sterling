@@ -1,5 +1,4 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_KITE_EXCHANGES,
@@ -11,7 +10,7 @@ import {
 
 const ORANGE = '#f06428';
 
-function ExchangeCard() {
+export function KiteExchangeSettingsCard() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = React.useState<KiteExchange[]>(() => readKiteExchanges());
 
@@ -89,66 +88,6 @@ function ExchangeCard() {
       </div>
     </div>
   );
-}
-
-export function KiteExchangeSettingsCard() {
-  const [host, setHost] = React.useState<HTMLElement | null>(null);
-
-  React.useEffect(() => {
-    const removeHosts = () => {
-      document.querySelectorAll('[data-kite-exchange-settings-host]').forEach((node) => node.remove());
-    };
-
-    const hideRedundantLoaderPicker = () => {
-      const label = Array.from(document.querySelectorAll<HTMLElement>('label')).find(
-        (node) => node.textContent?.trim() === 'LOADER & ANIMATION STYLE',
-      );
-      const wrapper = label?.parentElement?.parentElement;
-      if (wrapper) {
-        wrapper.dataset.kiteRedundantLoaderPicker = 'true';
-        wrapper.style.display = 'none';
-      }
-    };
-
-    const restoreRedundantLoaderPicker = () => {
-      document.querySelectorAll<HTMLElement>('[data-kite-redundant-loader-picker]').forEach((node) => {
-        node.style.removeProperty('display');
-        delete node.dataset.kiteRedundantLoaderPicker;
-      });
-    };
-
-    const locate = () => {
-      hideRedundantLoaderPicker();
-      const title = Array.from(document.querySelectorAll<HTMLElement>('div')).find(
-        (node) => node.textContent?.trim() === 'KITE SETTINGS',
-      );
-      const card = title?.parentElement;
-      if (!card?.parentElement) {
-        removeHosts();
-        setHost(null);
-        return;
-      }
-
-      let target = card.parentElement.querySelector<HTMLElement>('[data-kite-exchange-settings-host]');
-      if (!target) {
-        target = document.createElement('div');
-        target.dataset.kiteExchangeSettingsHost = 'true';
-        card.parentElement.insertBefore(target, card);
-      }
-      setHost(target);
-    };
-
-    locate();
-    const observer = new MutationObserver(locate);
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => {
-      observer.disconnect();
-      removeHosts();
-      restoreRedundantLoaderPicker();
-    };
-  }, []);
-
-  return host ? createPortal(<ExchangeCard />, host) : null;
 }
 
 export default KiteExchangeSettingsCard;

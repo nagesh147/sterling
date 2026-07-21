@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { SterlingKiteEnginePane } from '../SterlingKiteEnginePane';
+import { EngineConfigurationPanel } from '../EngineConfigurationPanel';
 
 // Full EngineConfigModel fixture — every field the component reads must be present,
 // since patch() spreads `{ ...cfg, ...p }` and several sections destructure cfg
@@ -58,26 +58,24 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   useStockRegistry: () => ({ data: [] }),
 }));
 
-function renderPane() {
+function renderPanel(section: 'exit' | 'risk' = 'exit') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <SterlingKiteEnginePane onSelectSignal={vi.fn()} />
+      <EngineConfigurationPanel />
     </QueryClientProvider>,
   );
-  // Settings default to the "tabs" layout, "Scan" tab active — the Hybrid/Exit Mode/
-  // Auto-execute controls live under "Execution" and aren't mounted until selected.
-  fireEvent.click(screen.getByRole('button', { name: 'Execution' }));
+  fireEvent.click(screen.getByText(section === 'exit' ? 'Exit & protection' : 'Risk & safeguards'));
 }
 
-describe('SterlingKiteEnginePane — settings → rescan wiring', () => {
+describe('EngineConfigurationPanel — settings → rescan wiring', () => {
   beforeEach(() => {
     setCfgMutate.mockClear();
     runScanMutate.mockClear();
   });
 
   it('renders the hybrid weight picker and forces a rescan when it changes', () => {
-    renderPane();
+    renderPanel();
     const input = screen.getByTestId('hybrid-weight-input') as HTMLInputElement;
     expect(input).toBeInTheDocument();
 
@@ -93,7 +91,7 @@ describe('SterlingKiteEnginePane — settings → rescan wiring', () => {
   });
 
   it('forces a rescan when the exit mode changes (the reported bug)', () => {
-    renderPane();
+    renderPanel();
     fireEvent.click(screen.getByRole('button', { name: '3R + Signal' }));
 
     expect(setCfgMutate).toHaveBeenCalledWith(
@@ -103,16 +101,15 @@ describe('SterlingKiteEnginePane — settings → rescan wiring', () => {
     expect(runScanMutate).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT force a rescan for execution-only settings (auto-execute)', () => {
-    renderPane();
-    fireEvent.click(screen.getByText(/Auto-execute (ON|OFF)/));
+  it('does NOT force a rescan for execution-only protection mode', () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Broker' }));
 
     expect(setCfgMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ auto_execute: true }),
+      expect.objectContaining({ stop_mode: 'broker' }),
       expect.anything(),
     );
-    // auto_execute can't change which signals appear — forcing a rescan here would
-    // just waste a Kite historical-data sweep for no visible effect.
+    // Protection mode cannot change which signals appear, so it must not waste a scan.
     expect(runScanMutate).not.toHaveBeenCalled();
   });
 });
