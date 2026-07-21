@@ -69,7 +69,7 @@ const SLOT_LABEL: Record<WorkspaceSlotId, string> = {
 };
 
 const PRESET_META: Array<{ id: WorkspacePresetId; label: string; detail: string }> = [
-  { id: 'classic', label: 'Classic', detail: 'Balanced four-pane desk' },
+  { id: 'classic', label: 'Classic', detail: 'Wide signals with docked terminal' },
   { id: 'chart', label: 'Chart focus', detail: 'More room for the dashboard' },
   { id: 'execution', label: 'Execution', detail: 'Signals and terminal forward' },
 ];
@@ -466,10 +466,28 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
   }, []);
 
   const applyPreset = useCallback((preset: WorkspacePresetId) => {
-    setLayout((current) => applyWorkspacePreset(current, preset));
+    setLayout((current) => {
+      const next = applyWorkspacePreset(current, preset);
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return next;
+      return {
+        ...next,
+        sizes: clampWorkspaceSizes(next.sizes, rect),
+      };
+    });
+    syncTerminalStorage('terminal', 'normal');
+    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'normal' }));
     setFocus(null);
     setMenuOpen(false);
-  }, []);
+  }, [syncTerminalStorage]);
+
+  const restoreAll = useCallback(() => {
+    setLayout((current) => restoreAllPanes(current));
+    syncTerminalStorage('terminal', 'normal');
+    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'normal' }));
+    setFocus(null);
+    setMenuOpen(false);
+  }, [syncTerminalStorage]);
 
   const resetArrangement = useCallback(() => {
     setLayout((current) => ({ ...current, slots: { ...cloneDefaultWorkspaceLayout().slots } }));
@@ -605,42 +623,13 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
       </div>
 
       <footer style={{ position: 'relative', height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 12px', gap: 9, borderTop: '1px solid #dedede', background: 'rgba(255,255,255,.98)', zIndex: 150 }}>
-        <div ref={menuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <MacKiteToggle />
-          {!macOn && <span aria-hidden="true" style={{ width: 1, height: 18, background: '#e2e2e2' }} />}
-          {!macOn && (
-            <button type="button" className="kw-dock-chip" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} title="Open workspace layouts">
-              <PaneGlyph pane="dashboard" size={13} />
-              Layout
-              <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 6l4 4 4-4"/></svg>
-            </button>
-          )}
           {onBasketClick && (
             <button type="button" className="kw-pane-control" onClick={onBasketClick} title="Basket" aria-label="Open basket" style={{ position: 'relative' }}>
               <Icons.Basket />
               {basketCount > 0 && <span style={{ position: 'absolute', top: -3, right: -4, minWidth: 14, height: 14, padding: '0 2px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: '#f06428', color: '#fff', fontSize: 8, fontWeight: 750 }}>{basketCount}</span>}
             </button>
-          )}
-
-          {!macOn && menuOpen && (
-            <div role="dialog" aria-label="Workspace layout menu" style={{ position: 'absolute', left: 0, bottom: 33, width: 294, padding: 9, border: '1px solid #ddd', borderRadius: 10, background: '#fff', boxShadow: '0 14px 44px rgba(0,0,0,.16)', zIndex: 300 }}>
-              <div style={{ padding: '3px 5px 7px', fontSize: 10, fontWeight: 750, color: '#999', letterSpacing: '.08em', textTransform: 'uppercase' }}>Workspace presets</div>
-              {PRESET_META.map((preset) => (
-                <button key={preset.id} type="button" className="kw-menu-button" onClick={() => applyPreset(preset.id)}>
-                  <PresetDiagram preset={preset.id} />
-                  <span><strong style={{ display: 'block', fontSize: 11.5 }}>{preset.label}</strong><small style={{ color: '#999', fontSize: 10 }}>{preset.detail}</small></span>
-                </button>
-              ))}
-              <div style={{ height: 1, background: '#ececec', margin: '7px 3px' }} />
-              <button type="button" className="kw-menu-button" onClick={resetArrangement}><ControlIcon kind="restore" /><span style={{ fontSize: 11.5 }}>Reset pane positions</span></button>
-              <button type="button" className="kw-menu-button" onClick={() => setLayout((current) => restoreAllPanes(current))}><PaneGlyph pane="dashboard" /><span style={{ fontSize: 11.5 }}>Restore all panes</span></button>
-              <button type="button" className="kw-menu-button" aria-pressed={layout.locked} onClick={() => setLayout((current) => ({ ...current, locked: !current.locked }))}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d={layout.locked ? 'M8 10V7a4 4 0 018 0v3' : 'M8 10V7a4 4 0 017.5-2'} /></svg>
-                <span style={{ fontSize: 11.5 }}>{layout.locked ? 'Unlock pane movement' : 'Lock pane movement'}</span>
-                <span style={{ marginLeft: 'auto', width: 28, height: 16, padding: 2, borderRadius: 10, background: layout.locked ? '#f06428' : '#ddd', display: 'flex', justifyContent: layout.locked ? 'flex-end' : 'flex-start' }}><i style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff' }} /></span>
-              </button>
-              <div style={{ padding: '8px 6px 3px', fontSize: 9.5, lineHeight: 1.45, color: '#aaa' }}>Drag any pane title to dock it elsewhere. Double-click a title to maximize. Press Esc to leave focus mode.</div>
-            </div>
           )}
         </div>
 
@@ -657,7 +646,37 @@ export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightS
           )}
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#777', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+        <div aria-label="Workspace and engine status" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#777', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          {!macOn && (
+            <div ref={menuRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: 2 }}>
+              <button type="button" className="kw-dock-chip" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)} title="Open workspace layouts">
+                <PaneGlyph pane="dashboard" size={13} />
+                Layout
+                <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 6l4 4 4-4"/></svg>
+              </button>
+
+              {menuOpen && (
+                <div role="dialog" aria-label="Workspace layout menu" style={{ position: 'absolute', right: 0, bottom: 33, width: 294, padding: 9, border: '1px solid #ddd', borderRadius: 10, background: '#fff', boxShadow: '0 14px 44px rgba(0,0,0,.16)', zIndex: 300 }}>
+                  <div style={{ padding: '3px 5px 7px', fontSize: 10, fontWeight: 750, color: '#999', letterSpacing: '.08em', textTransform: 'uppercase' }}>Workspace presets</div>
+                  {PRESET_META.map((preset) => (
+                    <button key={preset.id} type="button" className="kw-menu-button" onClick={() => applyPreset(preset.id)}>
+                      <PresetDiagram preset={preset.id} />
+                      <span><strong style={{ display: 'block', fontSize: 11.5 }}>{preset.label}</strong><small style={{ color: '#999', fontSize: 10 }}>{preset.detail}</small></span>
+                    </button>
+                  ))}
+                  <div style={{ height: 1, background: '#ececec', margin: '7px 3px' }} />
+                  <button type="button" className="kw-menu-button" onClick={resetArrangement}><ControlIcon kind="restore" /><span style={{ fontSize: 11.5 }}>Reset pane positions</span></button>
+                  <button type="button" className="kw-menu-button" onClick={restoreAll}><PaneGlyph pane="dashboard" /><span style={{ fontSize: 11.5 }}>Restore all panes</span></button>
+                  <button type="button" className="kw-menu-button" aria-pressed={layout.locked} onClick={() => setLayout((current) => ({ ...current, locked: !current.locked }))}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d={layout.locked ? 'M8 10V7a4 4 0 018 0v3' : 'M8 10V7a4 4 0 017.5-2'} /></svg>
+                    <span style={{ fontSize: 11.5 }}>{layout.locked ? 'Unlock pane movement' : 'Lock pane movement'}</span>
+                    <span style={{ marginLeft: 'auto', width: 28, height: 16, padding: 2, borderRadius: 10, background: layout.locked ? '#f06428' : '#ddd', display: 'flex', justifyContent: layout.locked ? 'flex-end' : 'flex-start' }}><i style={{ width: 12, height: 12, borderRadius: '50%', background: '#fff' }} /></span>
+                  </button>
+                  <div style={{ padding: '8px 6px 3px', fontSize: 9.5, lineHeight: 1.45, color: '#aaa' }}>Drag any pane title to dock it elsewhere. Double-click a title to maximize. Press Esc to leave focus mode.</div>
+                </div>
+              )}
+            </div>
+          )}
           {liveCount > 0 && <><span title={`${liveCount} signal${liveCount === 1 ? '' : 's'} currently running`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 650, color: k.green }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: k.green }} />{liveCount} live</span><span style={{ width: 1, height: 14, background: '#e0e0e0' }} /></>}
           <span className={scanning ? 'kl-scan-dot' : undefined} style={{ width: 6, height: 6, borderRadius: '50%', background: scanning ? k.orange : marketClosed ? '#bbb' : autoScan ? k.orange : '#bbb' }} />
           <span className={scanning ? 'kl-scan-text' : undefined} style={{ color: scanning ? undefined : '#777', fontWeight: scanning ? 650 : 400, textTransform: 'capitalize' }}>{scanning ? activity?.scanning_label || 'scanning…' : autoScan ? 'AUTO' : 'MANUAL'}</span>
