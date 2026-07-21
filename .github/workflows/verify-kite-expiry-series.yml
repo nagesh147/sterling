@@ -35,6 +35,32 @@ jobs:
           set -o pipefail
           {
             base64 -d .github/expiry-series/direct_fix.py.gz.b64 | gzip -d > /tmp/direct_fix.py
+            python - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/direct_fix.py')
+          text = p.read_text()
+          old = '''replace_once(
+              SCHEMAS,
+              \'''    exit_state: Optional[str] = None
+          \''',
+              \'''    exit_state: Optional[str] = None
+              resolution_note: Optional[str] = None
+          \''',
+          )'''
+          new = '''replace_once(
+              SCHEMAS,
+              \'''    alignment: Optional[AlignmentChip] = None
+              exit_state: Optional[str] = None
+          \''',
+              \'''    alignment: Optional[AlignmentChip] = None
+              exit_state: Optional[str] = None
+              resolution_note: Optional[str] = None
+          \''',
+          )'''
+          if old not in text:
+              raise RuntimeError('resolution-note patch block missing')
+          p.write_text(text.replace(old, new, 1))
+          PY
             python /tmp/direct_fix.py
           } > /tmp/direct-fix.log 2>&1
           status=$?
