@@ -9,6 +9,11 @@ export interface WorkspaceSizes {
   bottom: number;
 }
 
+export interface WorkspaceViewport {
+  width: number;
+  height: number;
+}
+
 export interface WorkspaceFocus {
   pane: WorkspacePaneId;
   mode: WorkspaceFocusMode;
@@ -46,8 +51,18 @@ export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutState = {
 
 const PRESET_SIZES: Record<WorkspacePresetId, WorkspaceSizes> = {
   classic: DEFAULT_WORKSPACE_LAYOUT.sizes,
-  chart: { left: 280, right: 420, bottom: 160 },
+  chart: { left: 280, right: 720, bottom: 220 },
   execution: { left: 260, right: 700, bottom: 280 },
+};
+
+const CHART_FOCUS_SLOTS: Record<WorkspaceSlotId, WorkspacePaneId> = {
+  // The terminal keeps a real slot so restoring it remains predictable, but the
+  // preset docks it in the footer. That leaves a true two-column workspace:
+  // chart + watchlist on the left and an uninterrupted signal board on the right.
+  left: 'terminal',
+  center: 'dashboard',
+  right: 'signals',
+  bottom: 'watchlist',
 };
 
 const isPane = (value: unknown): value is WorkspacePaneId =>
@@ -200,10 +215,28 @@ export function clampWorkspaceSizes(
 export function applyWorkspacePreset(
   state: WorkspaceLayoutState,
   preset: WorkspacePresetId,
+  viewport?: WorkspaceViewport,
 ): WorkspaceLayoutState {
+  const next = cloneDefaultWorkspaceLayout();
+  if (preset === 'chart') {
+    next.slots = { ...CHART_FOCUS_SLOTS };
+    next.minimized = ['terminal'];
+    if (viewport) {
+      const width = Math.max(320, finite(viewport.width, 1440));
+      const height = Math.max(240, finite(viewport.height, 920));
+      next.sizes = {
+        left: PRESET_SIZES.chart.left,
+        right: Math.round(width * 0.5),
+        bottom: Math.round(Math.min(260, Math.max(180, height * 0.24))),
+      };
+    } else {
+      next.sizes = { ...PRESET_SIZES.chart };
+    }
+  } else {
+    next.sizes = { ...PRESET_SIZES[preset] };
+  }
   return {
-    ...cloneDefaultWorkspaceLayout(),
-    sizes: { ...PRESET_SIZES[preset] },
+    ...next,
     locked: state.locked,
   };
 }

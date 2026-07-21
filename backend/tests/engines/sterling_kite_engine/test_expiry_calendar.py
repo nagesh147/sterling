@@ -36,6 +36,7 @@ def test_calendar_returns_concrete_index_and_stock_dates_without_rank_labels():
             "2026-07-21", "2026-07-28", "2026-08-04", "2026-08-11",
             "2026-08-18", "2026-08-25",
         )],
+        _row("RELIANCE", "2026-07-21"),  # invalid weekly-like stock row must be ignored
         _row("RELIANCE", "2026-07-28"),
         _row("RELIANCE", "2026-08-25"),
         _row("TCS", "2026-07-28"),
@@ -64,6 +65,7 @@ def test_calendar_returns_concrete_index_and_stock_dates_without_rank_labels():
     assert {tuple(stock["monthly"]) for stock in calendar["stocks"]} == {
         ("2026-07-28", "2026-08-25"),
     }
+    assert all(stock["weekly"] == [] for stock in calendar["stocks"])
     assert not any(code in json.dumps(calendar) for code in ("W1", "W2", "M1", "M2"))
 
 

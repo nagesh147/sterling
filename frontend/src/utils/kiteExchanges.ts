@@ -82,11 +82,6 @@ export function filterKitePayload<T>(path: string, payload: T): T {
     return { ...value, rows } as T;
   }
 
-  if (path.includes('/api/v1/kite/engine/scan-report') && Array.isArray(value.entries)) {
-    const entries = value.entries.filter((row: any) => isKiteExchangeEnabled(signalExchange(row), selected));
-    return { ...value, entries } as T;
-  }
-
   if (path.includes('/api/v1/kite/engine/open-positions') && Array.isArray(value.positions)) {
     const positions = value.positions.filter((row: any) => isKiteExchangeEnabled(signalExchange(row), selected));
     return { ...value, positions } as T;

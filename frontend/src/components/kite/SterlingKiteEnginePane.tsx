@@ -3,11 +3,10 @@ import { createPortal } from 'react-dom';
 import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig,
-  useScanReport,
 } from '../../hooks/useSterlingKiteEngine';
 import type {
-  AlignmentChip, ContractScanEntry, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
-  ScanExpiry, ScanSource, ScanReportResponse, SignalsResponse, StockEntry, TrailTarget,
+  AlignmentChip, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
+  ScanSource, SignalsResponse, StockEntry, TrailTarget,
   ExitMode, SignalChartData,
 } from '../../types/kiteEngine';
 import { useKiteQuote } from '../../hooks/useKite';
@@ -76,11 +75,6 @@ const STRIKE_BUCKETS: { id: string; label: string; sub: string; members: Moneyne
   { id: 'otm',      label: 'OTM',      sub: 'δ ≈ 0.30–0.45', members: ['OTM1', 'OTM2'] },
   { id: 'far_otm',  label: 'Far OTM',  sub: 'δ ≲ 0.25',       members: ['OTM3', 'OTM4', 'OTM5'] },
 ];
-const EXPIRY_OPTS: { value: ScanExpiry; label: string; hint: string }[] = [
-  { value: 'weekly', label: 'Weekly', hint: 'Weekly contracts expiring every Thursday (including current week).' },
-  { value: 'monthly', label: 'Monthly', hint: 'Monthly contracts expiring on the last Thursday of the month.' },
-];
-
 const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'spot', label: 'Spot', hint: "SuperTrend on the underlying's chart; option strikes are attached as candidates to buy." },
   { value: 'derivatives', label: 'Derivatives', hint: "SuperTrend on each selected contract's OWN premium chart — BUY when the premium turns up. (Default)" },
@@ -1667,143 +1661,6 @@ function ScanProgressBar({ signals }: { signals?: SignalsResponse }) {
   );
 }
 
-// ─── Scan Report View ─────────────────────────────────────────────────────
-type ReportSortKey = 'symbol' | 'strike' | 'type' | 'expiry' | 'bars' | 'premium' | 'status' | 'reason';
-
-function ScanReportView({ data }: { data?: ScanReportResponse }) {
-  const [sortKey, setSortKey] = React.useState<ReportSortKey>('strike');
-  const [sortDir, setSortDir] = React.useState<'asc'|'desc'>('asc');
-  const [collapsed, setCollapsed] = React.useState<Set<string>>(new Set());
-
-  // Grouped by underlying — MUST be before early return (hook count consistency)
-  const grouped = React.useMemo(() => {
-    if (!data || !data.entries.length) return [];
-    const map = new Map<string, ContractScanEntry[]>();
-    for (const e of data.entries) {
-      const arr = map.get(e.underlying) || [];
-      arr.push(e);
-      map.set(e.underlying, arr);
-    }
-    const out: { symbol: string; entries: ContractScanEntry[]; firedCount: number }[] = [];
-    for (const [symbol, entries] of map) {
-      const firedCount = entries.filter(e => e.fired).length;
-      const sorted = [...entries].sort((a, b) => {
-        let va: any, vb: any;
-        switch (sortKey) {
-          case 'symbol': va = a.underlying + a.moneyness; vb = b.underlying + b.moneyness; break;
-          case 'strike': va = a.strike; vb = b.strike; break;
-          case 'type': va = a.option_type; vb = b.option_type; break;
-          case 'expiry': va = a.expiry; vb = b.expiry; break;
-          case 'bars': va = a.bars; vb = b.bars; break;
-          case 'premium': va = a.premium_close; vb = b.premium_close; break;
-          case 'status': va = a.fired ? 1 : 0; vb = b.fired ? 1 : 0; break;
-          case 'reason': va = a.reason; vb = b.reason; break;
-          default: return 0;
-        }
-        if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-        return sortDir === 'asc' ? va - vb : vb - va;
-      });
-      out.push({ symbol, entries: sorted, firedCount });
-    }
-    out.sort((a, b) => a.symbol.localeCompare(b.symbol));
-    return out;
-  }, [data, sortKey, sortDir]);
-
-  const handleSort = (key: ReportSortKey) => {
-    if (sortKey === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
-    else { setSortKey(key); setSortDir('asc'); }
-  };
-
-  if (!data || !data.entries.length) {
-    return (
-      <div style={{ padding: '16px 20px', fontSize: 11, color: k.dim, borderBottom: `1px solid ${k.border}` }}>
-        No scan report available — run a scan first.
-      </div>
-    );
-  }
-  const s = data.summary;
-  const fmtPx = (v: number) => v > 0 ? v.toFixed(1) : '—';
-
-  const toggleGroup = (sym: string) => setCollapsed(prev => { const n = new Set(prev); n.has(sym) ? n.delete(sym) : n.add(sym); return n; });
-
-  return (
-    <div style={{ borderBottom: `1px solid ${k.border}`, maxHeight: 420, overflow: 'auto' }}>
-      {/* Summary bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px', padding: '10px 16px', fontSize: 10.5, color: k.dim, background: k.surfaceHover }}>
-        <span>CE <b style={{ color: k.green }}>{s.fired_ce}</b>/<span style={{ color: k.text }}>{s.total_ce}</span></span>
-        <span>PE <b style={{ color: k.red }}>{s.fired_pe}</b>/<span style={{ color: k.text }}>{s.total_pe}</span></span>
-        <span>charted <b style={{ color: k.text }}>{s.charted}</b></span>
-        <span>no-data <b style={{ color: k.amber }}>{s.no_data}</b></span>
-        <span>bars <b style={{ color: k.text }}>{s.min_bars}–{s.max_bars}</b></span>
-        <span style={{ marginLeft: 'auto', color: k.dim }}>{new Date(s.generated_ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
-      </div>
-
-      {/* Table header — sticky */}
-      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10.5 }}>
-        <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
-          <tr style={{ color: k.dim, fontSize: 9, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-            {([
-              ['Symbol', 'symbol'], ['Strike', 'strike'], ['Type', 'type'], ['Expiry', 'expiry'],
-              ['Bars', 'bars'], ['Premium', 'premium'], ['Status', 'status'], ['Reason', 'reason'],
-            ] as [string, ReportSortKey][]).map(([label, key]) => (
-              <th key={key} style={{ padding: '6px 10px', textAlign: key === 'symbol' || key === 'type' ? 'left' : key === 'reason' ? 'left' : 'right', borderBottom: `1px solid ${k.border}`, background: k.bg, whiteSpace: 'nowrap' }}>
-                <SortHeaderDiv label={label} sortKey={key} sort={{ key: sortKey, dir: sortDir }} handleSort={handleSort} align={key === 'symbol' || key === 'type' || key === 'reason' ? 'left' : 'right'} />
-              </th>
-            ))}
-          </tr>
-        </thead>
-      </table>
-
-      {/* Grouped rows */}
-      {grouped.map(g => {
-        const isCollapsed = collapsed.has(g.symbol);
-        const dot = g.firedCount > 0 ? 'var(--t-green)' : 'var(--t-dim)';
-        return (
-          <div key={g.symbol}>
-            <div onClick={() => toggleGroup(g.symbol)}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 16px', background: k.surfaceHover, borderBottom: `1px solid ${k.border}`, cursor: 'pointer', userSelect: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: k.text }}>
-                <span style={{ width: 7, height: 7, borderRadius: 4, background: dot, flexShrink: 0 }} />
-                {g.symbol}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, color: k.dim }}>{g.entries.length} contracts · {g.firedCount} fired</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', color: k.dim }}>
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </div>
-            </div>
-            {!isCollapsed && (
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10.5 }}>
-                <tbody>
-                  {g.entries.map((e, i) => {
-                    const firedColor = e.fired ? k.green : k.dim;
-                    const typeColor = e.option_type === 'CE' ? k.green : k.red;
-                    return (
-                      <tr key={i} style={{ borderBottom: `1px solid ${k.border}` }}>
-                        <td style={{ padding: '5px 10px', color: k.text, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                          {e.moneyness}
-                        </td>
-                        <td style={{ padding: '5px 10px', color: k.text, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{e.strike.toFixed(0)}</td>
-                        <td style={{ padding: '5px 10px', fontWeight: 700, color: typeColor }}>{e.option_type}</td>
-                        <td style={{ padding: '5px 10px', color: k.dim, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{e.expiry.slice(5)}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'right', color: e.bars > 0 ? k.text : k.dim, fontVariantNumeric: 'tabular-nums' }}>{e.bars || '—'}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'right', color: k.text, fontVariantNumeric: 'tabular-nums' }}>{fmtPx(e.premium_close)}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: firedColor }}>{e.fired ? 'FIRED' : '—'}</td>
-                        <td style={{ padding: '5px 10px', fontSize: 9.5, color: e.fired ? k.green : k.dim, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.reason}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const s = useKiteSettings();
   const { data: signals } = useEngineSignals();
@@ -1811,8 +1668,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
   const cancelScan = useCancelScan();
-  const { data: scanReport } = useScanReport();
-  const [reportOpen, setReportOpen] = React.useState(false);
   const scanLock = React.useRef(false);
   const doScan = () => {
     if (scanLock.current || scan.isPending) return;
@@ -2076,7 +1931,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           )}
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
-          {/* Actions: rescan / scan report / table preferences */}
+          {/* Actions: rescan / table preferences */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
               <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
@@ -2087,14 +1942,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 <RefreshIcon spinning={scan.isPending} />
               </HeaderIconBtn>
             )}
-            <HeaderIconBtn title="Scan report" active={reportOpen} onClick={() => setReportOpen((v) => !v)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-            </HeaderIconBtn>
           </div>
           <span data-signal-table-settings style={{ display: 'inline-flex' }}>
             <HeaderIconBtn title="Signal table settings" active={settingsOpen} onClick={() => setSettingsOpen((v) => !v)}>
@@ -2105,13 +1952,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
         {/* Progress bar — scan countdown */}
         <ScanProgressBar signals={signals} />
-      </div>
-
-      {/* ── Scan report drawer ── */}
-      <div className="st-drawer" style={{ display: 'grid', gridTemplateRows: reportOpen ? '1fr' : '0fr' }}>
-        <div style={{ overflow: 'hidden' }}>
-          <ScanReportView data={scanReport} />
-        </div>
       </div>
 
       {rows.length > 0 && !settingsOpen && (

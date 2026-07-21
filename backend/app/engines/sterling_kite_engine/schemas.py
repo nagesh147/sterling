@@ -276,9 +276,10 @@ class EngineConfigModel(BaseModel):
     scan_source: Literal["spot", "derivatives", "both", "confluence"] = "spot"
     # Option expiries to scan — weekly, monthly, or both. Defaults to all.
     scan_expiries: List[Literal["weekly", "monthly"]] = ["weekly", "monthly"]
-    # Per-category override: indices (default both), stocks (default monthly only).
+    # Per-category override: indices may be weekly/monthly; single-stock
+    # derivatives are exchange-listed monthly contracts only.
     scan_expiries_indices: Optional[List[Literal["weekly", "monthly"]]] = None
-    scan_expiries_stocks: Optional[List[Literal["weekly", "monthly"]]] = None
+    scan_expiries_stocks: Optional[List[Literal["monthly"]]] = ["monthly"]
     # Granular universe selection — applied to BOTH the spot and derivatives scans.
     # Indices are kept by display name; stocks by name, unless scan_all_stocks is set.
     scan_indices: List[str] = ["NIFTY 50", "NIFTY BANK", "NIFTY FIN SERVICE", "SENSEX"]
@@ -375,6 +376,13 @@ class EngineConfigModel(BaseModel):
     @classmethod
     def _at_least_one_expiry(cls, v):
         return v or ["weekly", "monthly"]
+
+    @field_validator("scan_expiries_stocks", mode="before")
+    @classmethod
+    def _stocks_are_monthly_only(cls, v):
+        # Accept stale clients/saved configs but never preserve an invented weekly
+        # single-stock series in the validated API model.
+        return ["monthly"]
 
     @field_validator("target_delta")
     @classmethod
@@ -485,39 +493,3 @@ class BacktestResponse(BaseModel):
     # premium (a calibration sanity check on the synthetic assumption).
     bs_vs_real_drift_pct: Optional[float] = None
     notes: List[str] = []
-
-
-# ── Per-contract scan report ─────────────────────────────────────────────────
-class ContractScanEntry(BaseModel):
-    underlying: str
-    symbol: str          # option tradingsymbol
-    strike: float
-    option_type: Literal["CE", "PE"]
-    expiry: str          # YYYY-MM-DD
-    moneyness: str       # ATM/ITM1-5/OTM1-5
-    bars: int            # premium bars available
-    premium_close: float # last premium close (0 if no candles)
-    fired: bool          # produced a BUY signal on the latest bar
-    fired_at_ms: int = 0 # timestamp of the fired entry (0 if not fired)
-    reason: str          # "fresh BUY signal" | "no up-transition" (bars>warmup) | "too few bars" | "no data" | "expired"
-
-
-class ScanReportSummary(BaseModel):
-    generated_ms: int
-    scan_source: str
-    indices: List[str]
-    total_contracts: int
-    charted: int         # contracts with premium candle data
-    fired: int           # contracts that produced a fresh BUY signal
-    no_data: int         # contracts skipped (no token/empty fetch)
-    min_bars: int
-    max_bars: int
-    total_ce: int
-    total_pe: int
-    fired_ce: int
-    fired_pe: int
-
-
-class ScanReportResponse(BaseModel):
-    summary: ScanReportSummary
-    entries: List[ContractScanEntry]

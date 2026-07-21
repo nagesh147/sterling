@@ -112,15 +112,20 @@ describe('workspace layout state', () => {
   it('applies ergonomic presets, restores every pane, and preserves locking', () => {
     const current = { ...DEFAULT_WORKSPACE_LAYOUT, minimized: ['terminal' as const], locked: true };
     const classic = applyWorkspacePreset(current, 'classic');
-    const chart = applyWorkspacePreset(current, 'chart');
+    const chart = applyWorkspacePreset(current, 'chart', { width: 1920, height: 900 });
     const execution = applyWorkspacePreset(current, 'execution');
 
     expect(classic.sizes).toEqual({ left: 420, right: 1290, bottom: 220 });
     expect(classic.minimized).toEqual([]);
-    expect(chart.sizes).toEqual({ left: 280, right: 420, bottom: 160 });
+    expect(chart.sizes).toEqual({ left: 280, right: 960, bottom: 216 });
     expect(execution.sizes).toEqual({ left: 260, right: 700, bottom: 280 });
-    expect(chart.minimized).toEqual([]);
+    expect(chart.minimized).toEqual(['terminal']);
     expect(chart.locked).toBe(true);
-    expect(chart.slots).toEqual(DEFAULT_WORKSPACE_LAYOUT.slots);
+    expect(chart.slots).toEqual({
+      left: 'terminal',
+      center: 'dashboard',
+      right: 'signals',
+      bottom: 'watchlist',
+    });
   });
 });

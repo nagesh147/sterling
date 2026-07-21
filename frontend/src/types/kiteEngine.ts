@@ -168,12 +168,11 @@ export interface EngineConfigModel {
   scan_source: ScanSource;
   scan_expiries: ScanExpiry[];
   scan_expiries_indices?: ScanExpiry[] | null;
-  scan_expiries_stocks?: ScanExpiry[] | null;
+  scan_expiries_stocks?: Array<'monthly'> | null;
   // The API persists zero-based series ranks for compatibility. The UI resolves
   // these private values to exact Kite-listed contract dates before displaying them.
   scan_weekly_series_indices?: number[];
   scan_monthly_series_indices?: number[];
-  scan_weekly_series_stocks?: number[];
   scan_monthly_series_stocks?: number[];
   scan_indices: string[];
   scan_stocks: string[];
@@ -324,42 +323,6 @@ export interface StockEntry {
 export interface LiquidityGroup {
   liquidity: string;
   stocks: StockEntry[];
-}
-
-// ─── Per-contract scan report ──────────────────────────────────────────────
-export interface ContractScanEntry {
-  underlying: string;
-  symbol: string;
-  strike: number;
-  option_type: 'CE' | 'PE';
-  expiry: string;
-  moneyness: string;
-  bars: number;
-  premium_close: number;
-  fired: boolean;
-  fired_at_ms: number;
-  reason: string;
-}
-
-export interface ScanReportSummary {
-  generated_ms: number;
-  scan_source: string;
-  indices: string[];
-  total_contracts: number;
-  charted: number;
-  fired: number;
-  no_data: number;
-  min_bars: number;
-  max_bars: number;
-  total_ce: number;
-  total_pe: number;
-  fired_ce: number;
-  fired_pe: number;
-}
-
-export interface ScanReportResponse {
-  summary: ScanReportSummary;
-  entries: ContractScanEntry[];
 }
 
 // ─── Engine open positions ────────────────────────────────────────────────────

@@ -234,3 +234,7 @@ def test_status_session_expired_when_token_invalid(client, monkeypatch):
     s = client.get("/api/v1/kite/status").json()
     assert s["connected"] is False
     assert "expired" in s["message"].lower()
+
+def test_obsolete_engine_scan_report_route_is_not_registered(client):
+    response = client.get("/api/v1/kite/engine/scan-report")
+    assert response.status_code == 404

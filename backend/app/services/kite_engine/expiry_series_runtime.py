@@ -78,7 +78,6 @@ def _ensure_model_field(model_cls, name: str, annotation, default) -> None:
 def _install_model_fields() -> None:
     _ensure_model_field(EngineConfigModel, "scan_weekly_series_indices", List[int], [0, 1, 2, 3])
     _ensure_model_field(EngineConfigModel, "scan_monthly_series_indices", List[int], [0, 1])
-    _ensure_model_field(EngineConfigModel, "scan_weekly_series_stocks", List[int], [])
     _ensure_model_field(EngineConfigModel, "scan_monthly_series_stocks", List[int], [0, 1])
     _ensure_model_field(OptionLeg, "resolution_note", Optional[str], None)
     _ensure_model_field(EngineSignalRow, "resolution_reason", Optional[str], None)
@@ -132,9 +131,6 @@ def _normalise_engine_config(cfg: EngineConfigModel) -> EngineConfigModel:
             maximum=1,
             default=[0, 1],
         ),
-        # Individual-stock options remain monthly-only. Keep the field for API
-        # compatibility, but never request an invented weekly stock contract.
-        "scan_weekly_series_stocks": [],
         "scan_monthly_series_stocks": _clean_ranks(
             getattr(cfg, "scan_monthly_series_stocks", None),
             maximum=1,

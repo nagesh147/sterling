@@ -150,8 +150,15 @@ describe('KiteLayout advanced workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
     fireEvent.click(screen.getByRole('button', { name: /Chart focus/ }));
     saved = JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!);
-    expect(saved.sizes).toEqual({ left: 280, right: 420, bottom: 160 });
-    expect(saved.minimized).toEqual([]);
+    expect(saved.sizes).toEqual({ left: 280, right: 720, bottom: 220 });
+    expect(saved.slots).toEqual({ left: 'terminal', center: 'dashboard', right: 'signals', bottom: 'watchlist' });
+    expect(saved.minimized).toEqual(['terminal']);
+    expect(localStorage.getItem(TERMINAL_MODE_KEY)).toBe('minimized');
+    expect(screen.getByLabelText('Dashboard pane').parentElement).toHaveAttribute('data-workspace-slot', 'center');
+    expect(screen.getByLabelText('Watchlist pane').parentElement).toHaveAttribute('data-workspace-slot', 'bottom');
+    expect(screen.getByLabelText('Signals pane').parentElement).toHaveAttribute('data-workspace-slot', 'right');
+    expect(screen.queryByLabelText('Terminal pane')).not.toBeInTheDocument();
+    expect(screen.getByTitle('Restore Terminal')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
     fireEvent.click(screen.getByRole('button', { name: 'Lock pane movement' }));

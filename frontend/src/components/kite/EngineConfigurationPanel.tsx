@@ -217,7 +217,6 @@ export function EngineConfigurationPanel() {
   };
 
   const indexExpiries = cfg.scan_expiries_indices ?? cfg.scan_expiries;
-  const stockExpiries = cfg.scan_expiries_stocks ?? ['monthly'];
   const enabledGuards = [
     (cfg.expiry_square_off_days ?? 0) > 0,
     (cfg.time_stop_bars ?? 0) > 0,
@@ -278,14 +277,6 @@ export function EngineConfigurationPanel() {
             {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
               <ToggleChip key={expiry} label={expiry === 'weekly' ? 'Weekly' : 'Monthly'} active={indexExpiries.includes(expiry)}
                 onClick={() => patch({ scan_expiries_indices: toggleListValue(indexExpiries, expiry, ['weekly', 'monthly']) }, 'Index expiries updated', true)} />
-            ))}
-          </div>
-        </Field>
-        <Field label="Stock expiries" hint="Contract cycles scanned for stocks.">
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
-              <ToggleChip key={expiry} label={expiry === 'weekly' ? 'Weekly' : 'Monthly'} active={stockExpiries.includes(expiry)}
-                onClick={() => patch({ scan_expiries_stocks: toggleListValue(stockExpiries, expiry, ['monthly']) }, 'Stock expiries updated', true)} />
             ))}
           </div>
         </Field>

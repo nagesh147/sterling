@@ -376,22 +376,6 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
 
 # ── per-user scan state ─────────────────────────────────────────────────────
 @dataclass
-class ContractScanDiag:
-    """Per-contract trace: one entry for every option contract the scan attempted."""
-    underlying: str = ""
-    symbol: str = ""       # option tradingsymbol
-    strike: float = 0.0
-    option_type: str = ""  # "CE" | "PE"
-    expiry: str = ""
-    moneyness: str = ""
-    bars: int = 0
-    premium_close: float = 0.0
-    fired: bool = False
-    fired_at_ms: int = 0
-    reason: str = ""
-
-
-@dataclass
 class ScanDiag:
     """Per-scan breakdown — surfaced to the activity log so a silently-empty index
     candle fetch (the classic 'no index signals' symptom) is visible, not guessed."""
@@ -410,7 +394,6 @@ class ScanDiag:
     deriv_min_bars: int = 0    # premium-chart bar depth of charted contracts (history)
     deriv_max_bars: int = 0
     confluence_fired: int = 0  # merged rows where the underlying AND a leg's premium both fired
-    contracts: List[ContractScanDiag] = field(default_factory=list)
 
 
 @dataclass
@@ -423,6 +406,9 @@ class UserScan:
     scanning_label: str = ""
     cancelled: bool = False
     diag: ScanDiag = field(default_factory=ScanDiag)
+    # Internal de-duplication for the held-contract extension. Unlike the removed
+    # per-contract report, this retains symbols only—no trace payload or API surface.
+    scanned_contract_symbols: set[str] = field(default_factory=set)
     # token → row index, lazily built and invalidated when a new scan lands
     # (keyed by generated_ms + row count). Turns detail lookup O(n)→O(1).
     _idx_key: tuple = (-1, -1)
@@ -546,6 +532,7 @@ class KiteEngineScanner:
         us.scanning = True
         us.cancelled = False
         us.scanning_label = "Loading instruments…"
+        us.scanned_contract_symbols.clear()
         try:
             sem = asyncio.Semaphore(_CONCURRENCY)
             today = datetime.now(_IST).date()
@@ -671,14 +658,9 @@ class KiteEngineScanner:
                 async def _contract(m: str, pick) -> None:
                     if us.cancelled:
                         return
+                    us.scanned_contract_symbols.add(pick.option_symbol)
                     if not pick.token:
                         diag.deriv_no_data += 1
-                        diag.contracts.append(ContractScanDiag(
-                            underlying=item.name, symbol=pick.option_symbol,
-                            strike=pick.strike, option_type=pick.option_type,
-                            expiry=pick.expiry[:10], moneyness=m,
-                            bars=0, premium_close=0.0, fired=False,
-                            reason="no instrument token"))
                         return
                     if log_cb:
                         try:
@@ -695,49 +677,20 @@ class KiteEngineScanner:
                         except Exception as exc:  # noqa: BLE001
                             log.warning("kite-engine deriv chart fail %s: %s", pick.option_symbol, exc)
                             diag.deriv_no_data += 1
-                            diag.contracts.append(ContractScanDiag(
-                                underlying=item.name, symbol=pick.option_symbol,
-                                strike=pick.strike, option_type=pick.option_type,
-                                expiry=pick.expiry[:10], moneyness=m,
-                                bars=0, premium_close=0.0, fired=False,
-                                reason=f"candle fetch failed: {exc}"))
                             return
                     if not oc:
-                        diag.deriv_no_data += 1  # nothing returned (a short-but-present
-                        diag.contracts.append(ContractScanDiag(     # weekly is still charted below, never skipped)
-                            underlying=item.name, symbol=pick.option_symbol,
-                            strike=pick.strike, option_type=pick.option_type,
-                            expiry=pick.expiry[:10], moneyness=m,
-                            bars=0, premium_close=0.0, fired=False,
-                            reason="no candle data returned"))
+                        # Nothing returned. A short-but-present weekly is still
+                        # charted below and is never treated as no-data.
+                        diag.deriv_no_data += 1
                         return
                     diag.deriv_charts += 1
                     bars = len(oc)               # premium-history depth, to expose short weeklies
                     diag.deriv_min_bars = bars if diag.deriv_min_bars == 0 else min(diag.deriv_min_bars, bars)
                     diag.deriv_max_bars = max(diag.deriv_max_bars, bars)
-                    premium_close = float(oc[-1].close) if oc else 0.0
                     drows = evaluate_derivative_contract(item, m, pick, oc, cfg)
                     latest_ts = oc[-1].timestamp_ms
-                    fired = any(drow.timestamp_ms == latest_ts for drow in drows)
-                    fired_at = next((drow.timestamp_ms for drow in drows if drow.timestamp_ms == latest_ts), 0)
-                    
-                    if not drows:
-                        reason = f"no fresh up-transition ({bars} bars, warmup={cfg.warmup})" if bars > cfg.warmup else f"too few bars ({bars} < {cfg.warmup+1} warmup)"
-                    elif fired:
-                        reason = "fresh BUY signal"
-                    else:
-                        reason = "historical entry only (not fresh)"
-                    
-                    diag.contracts.append(ContractScanDiag(
-                        underlying=item.name, symbol=pick.option_symbol,
-                        strike=pick.strike, option_type=pick.option_type,
-                        expiry=pick.expiry[:10], moneyness=m,
-                        bars=bars, premium_close=premium_close, fired=fired,
-                        fired_at_ms=fired_at, reason=reason))
-                    
-                    latest_ts = oc[-1].timestamp_ms
                     # Keep running/just-fired entries plus the most-recent recently-ended
-                    # one (the diag trace above still records every historical entry).
+                    # one.
                     for drow in _retain_signals(drows, now_ms):
                         # Stamp the underlying spot at this signal's trigger bar (1H bars
                         # of premium and underlying share timestamps; fall back to the

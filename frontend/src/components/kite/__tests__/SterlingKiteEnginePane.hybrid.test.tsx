@@ -54,7 +54,6 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
   useRunScan: () => ({ mutate: runScanMutate, isPending: false }),
   useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
-  useScanReport: () => ({ data: undefined }),
   useStockRegistry: () => ({ data: [] }),
 }));
 
@@ -72,6 +71,12 @@ describe('EngineConfigurationPanel — settings → rescan wiring', () => {
   beforeEach(() => {
     setCfgMutate.mockClear();
     runScanMutate.mockClear();
+  });
+
+  it('does not expose a weekly stock-expiry setting', () => {
+    renderPanel();
+    expect(screen.getByText('Index expiries')).toBeInTheDocument();
+    expect(screen.queryByText('Stock expiries')).not.toBeInTheDocument();
   });
 
   it('renders the hybrid weight picker and forces a rescan when it changes', () => {

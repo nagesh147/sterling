@@ -15,10 +15,9 @@ from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.schemas import (
-    ActivityResponse, BacktestRequest, BacktestResponse, ContractScanEntry,
+    ActivityResponse, BacktestRequest, BacktestResponse,
     EngineConfigModel, EngineDetailResponse, EngineOrderRequest, EngineOrderResponse,
-    OpenPositionRecord, OpenPositionsResponse,
-    ScanReportResponse, ScanReportSummary, SetupChart, SignalsResponse,
+    OpenPositionRecord, OpenPositionsResponse, SetupChart, SignalsResponse,
 )
 from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite.errors import KiteError
@@ -204,44 +203,6 @@ async def detail(token: int, timestamp_ms: int = 0, user: UserContext = Depends(
     if d is None:
         raise HTTPException(404, "No ready signal for that instrument in the latest scan.")
     return d
-
-
-@router.get("/scan-report")
-async def scan_report(user: UserContext = Depends(get_current_user)) -> ScanReportResponse:
-    """Per-contract scan trace — every option contract evaluated, with bars, premium,
-    and reason. Shows exactly which contracts fired and why others didn't."""
-    uid = user.user_id
-    snap = scanner.snapshot(uid)
-    diag = snap.diag
-    entries = [
-        ContractScanEntry(
-            underlying=c.underlying, symbol=c.symbol, strike=c.strike,
-            option_type=c.option_type, expiry=c.expiry, moneyness=c.moneyness,
-            bars=c.bars, premium_close=c.premium_close, fired=c.fired,
-            fired_at_ms=c.fired_at_ms, reason=c.reason,
-        )
-        for c in diag.contracts
-    ]
-    total_ce = sum(1 for c in diag.contracts if c.option_type == "CE")
-    total_pe = sum(1 for c in diag.contracts if c.option_type == "PE")
-    fired_ce = sum(1 for c in diag.contracts if c.option_type == "CE" and c.fired)
-    fired_pe = sum(1 for c in diag.contracts if c.option_type == "PE" and c.fired)
-    summary = ScanReportSummary(
-        generated_ms=snap.generated_ms,
-        scan_source="derivatives",  # contracts = derivatives only
-        indices=[],  # TODO: pull from config if needed
-        total_contracts=len(entries),
-        charted=diag.deriv_charts,
-        fired=diag.deriv_fired,
-        no_data=diag.deriv_no_data,
-        min_bars=diag.deriv_min_bars,
-        max_bars=diag.deriv_max_bars,
-        total_ce=total_ce,
-        total_pe=total_pe,
-        fired_ce=fired_ce,
-        fired_pe=fired_pe,
-    )
-    return ScanReportResponse(summary=summary, entries=entries)
 
 
 @router.get("/open-positions")
