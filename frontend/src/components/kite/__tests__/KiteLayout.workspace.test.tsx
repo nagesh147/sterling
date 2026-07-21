@@ -73,6 +73,27 @@ describe('KiteLayout advanced workspace', () => {
     expect(saved.minimized).toEqual([]);
   });
 
+  it('restores every minimized pane in one click while keeping individual restore controls', () => {
+    render(<KiteLayout {...props} />);
+
+    for (const title of ['Watchlist', 'Dashboard', 'Signals', 'Terminal']) {
+      fireEvent.click(screen.getByRole('button', { name: `Minimize ${title}` }));
+    }
+
+    expect(screen.getByRole('button', { name: 'Restore all panes' })).toBeInTheDocument();
+    for (const title of ['Watchlist', 'Dashboard', 'Signals', 'Terminal']) {
+      expect(screen.getByTitle(`Restore ${title}`)).toBeInTheDocument();
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore all panes' }));
+
+    expect(screen.getAllByLabelText(/pane$/)).toHaveLength(4);
+    expect(screen.getByText('All panes active')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restore all panes' })).not.toBeInTheDocument();
+    expect(localStorage.getItem(TERMINAL_MODE_KEY)).toBe('normal');
+    expect(JSON.parse(localStorage.getItem(WORKSPACE_LAYOUT_KEY)!).minimized).toEqual([]);
+  });
+
   it('supports half, maximize, fullscreen, restore, and Escape focus flows', () => {
     render(<KiteLayout {...props} />);
 
