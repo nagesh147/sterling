@@ -155,20 +155,15 @@ function ProgressBar({ label, t }: { label?: string; t: typeof THEME.dark }) {
   );
 }
 
-// Mode is persisted module-side because the layout swaps EngineTerminal between
-// structurally different wrappers (e.g. minimized vs normal), which REMOUNTS this
-// component. Without this, a remount would reset mode to 'normal' and the terminal
-// would render full-height inside the minimized slot — looking like it went full
-// screen right after the user clicked minimize.
-// It is ALSO mirrored to localStorage (key below) so the minimize/maximize state
-// survives a full page reload, not just remounts. KiteLayout reads the same key.
+// Retain the terminal's legacy window controls for Mac Stage mode. The standard
+// docked workspace hides this header via `.kite-terminal-window-header` because
+// its shared pane chrome owns minimize/maximize/fullscreen there.
 export const TERMINAL_MODE_KEY = 'kite_terminal_mode';
 type TerminalMode = 'minimized' | 'normal' | 'partial' | 'full';
 function readTerminalMode(): TerminalMode {
-  const v = localStorage.getItem(TERMINAL_MODE_KEY);
-  return v === 'minimized' || v === 'partial' || v === 'full' || v === 'normal' ? v : 'normal';
+  const value = localStorage.getItem(TERMINAL_MODE_KEY);
+  return value === 'minimized' || value === 'partial' || value === 'full' || value === 'normal' ? value : 'normal';
 }
-let lastTerminalMode: TerminalMode = readTerminalMode();
 
 export function EngineTerminal() {
   const { data } = useEngineActivity();
@@ -178,23 +173,30 @@ export function EngineTerminal() {
   const { data: serverLogs } = useEngineServerLogs(showServerLogs);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('kite_terminal_theme') as Theme) || 'dark');
-  const [mode, setModeState] = useState<'minimized' | 'normal' | 'partial' | 'full'>(lastTerminalMode);
+  // Read storage on every mount. The dock removes a minimized terminal from the
+  // React tree, so a module-level snapshot can otherwise resurrect stale state
+  // after a preset or Restore all has already switched it back to normal.
+  const [mode, setModeState] = useState<TerminalMode>(readTerminalMode);
   const [spin, setSpin] = useState(0);
   // Client-side clear: hide every event up to this timestamp. New events still
   // stream in (server is the source of truth) — this just clears the view.
   const [clearedBefore, setClearedBefore] = useState(0);
 
-  const setMode = (m: 'minimized' | 'normal' | 'partial' | 'full') => {
-    lastTerminalMode = m;
-    localStorage.setItem(TERMINAL_MODE_KEY, m);
-    setModeState(m);
-    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: m }));
+  const setMode = (next: TerminalMode) => {
+    localStorage.setItem(TERMINAL_MODE_KEY, next);
+    setModeState(next);
+    window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: next }));
   };
 
   useEffect(() => {
-    const cb = (e: any) => { lastTerminalMode = e.detail; localStorage.setItem(TERMINAL_MODE_KEY, e.detail); setModeState(e.detail); };
-    window.addEventListener('kite-terminal-mode', cb);
-    return () => window.removeEventListener('kite-terminal-mode', cb);
+    const syncMode = (event: Event) => {
+      const next = (event as CustomEvent<TerminalMode>).detail;
+      if (!['minimized', 'normal', 'partial', 'full'].includes(next)) return;
+      localStorage.setItem(TERMINAL_MODE_KEY, next);
+      setModeState(next);
+    };
+    window.addEventListener('kite-terminal-mode', syncMode);
+    return () => window.removeEventListener('kite-terminal-mode', syncMode);
   }, []);
 
   const t = THEME[theme];
@@ -231,58 +233,41 @@ export function EngineTerminal() {
 
   const dot = scanning ? k.green : data?.auto_scan ? k.blue : t.dim;
   const spinner = SPINNER[spin];
-
   const btnStyle = { background: 'none', border: 'none', color: t.headDim, cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
-      // When minimized, collapse to just the footer bar (auto height) so the
-      // terminal can never balloon to fill a tall container — that bug made
-      // "minimize" look like it went full screen. Otherwise fill the pane.
       height: mode === 'minimized' ? 'auto' : '100%',
       flexShrink: 0,
       background: t.bg, fontFamily: MONO,
     }}>
       <style>{KT_CSS}</style>
-      {/* HEADER */}
       {mode !== 'minimized' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim, flexShrink: 0 }}>
-          <span style={{ fontWeight: 600, color: t.headTxt, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span>🖥️</span> STERLING KITE TERMINAL
-          </span>
-
+        <div className="kite-terminal-window-header" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '6px 14px', borderBottom: `1px solid ${t.border}`, background: t.headerBg, fontSize: 11, color: t.headDim, flexShrink: 0 }}>
+          <span style={{ fontWeight: 600, color: t.headTxt, display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>🖥️</span> STERLING KITE TERMINAL</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-            <button onClick={() => setMode('minimized')} title="Minimize" style={btnStyle}>
-              <svg width="12" height="12" viewBox="0 0 24 24"><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-            </button>
-            <button onClick={() => setMode(mode === 'partial' ? 'normal' : 'partial')} title="Partial Full Screen" style={btnStyle}>
-              <svg width="12" height="12" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" rx="2"/></svg>
-            </button>
-            <button onClick={() => setMode(mode === 'full' ? 'normal' : 'full')} title="Full Screen" style={btnStyle}>
-              <svg width="12" height="12" viewBox="0 0 24 24"><path d="M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
+            <button onClick={() => setMode('minimized')} title="Minimize" style={btnStyle}><svg width="12" height="12" viewBox="0 0 24 24"><line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></button>
+            <button onClick={() => setMode(mode === 'partial' ? 'normal' : 'partial')} title="Partial Full Screen" style={btnStyle}><svg width="12" height="12" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" rx="2"/></svg></button>
+            <button onClick={() => setMode(mode === 'full' ? 'normal' : 'full')} title="Full Screen" style={btnStyle}><svg width="12" height="12" viewBox="0 0 24 24"><path d="M4 8V4h4m8 0h4v4m0 8v4h-4m-8 0H4v-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
           </div>
         </div>
       )}
-
       {/* PROGRESS BAR — visible only while scanning */}
       {mode !== 'minimized' && scanning && <ProgressBar label={data?.scanning_label} t={t} />}
 
       {/* LOG AREA */}
-      {mode !== 'minimized' && (
-        <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '8px 14px', fontSize: 12, lineHeight: 1.55, color: t.text, fontFamily: MONO }}>
-          {events.length === 0 ? (
-            <div style={{ color: t.dim, fontFamily: MONO }}>⏳ Waiting for background scan… the engine scans every ~5 min automatically.</div>
-          ) : (
-            events.map((ev, i) =>
-              KIND_META[ev.kind]?.banner
-                ? <Banner key={`${ev.ts_ms}:${i}`} ev={ev} t={t} />
-                : <Line key={`${ev.ts_ms}:${i}`} ev={ev} t={t} />
-            )
-          )}
-        </div>
-      )}
+      {mode !== 'minimized' && <div ref={scrollRef} style={{ flex: 1, overflow: 'auto', padding: '8px 14px', fontSize: 12, lineHeight: 1.55, color: t.text, fontFamily: MONO }}>
+        {events.length === 0 ? (
+          <div style={{ color: t.dim, fontFamily: MONO }}>⏳ Waiting for background scan… the engine scans every ~5 min automatically.</div>
+        ) : (
+          events.map((ev, i) =>
+            KIND_META[ev.kind]?.banner
+              ? <Banner key={`${ev.ts_ms}:${i}`} ev={ev} t={t} />
+              : <Line key={`${ev.ts_ms}:${i}`} ev={ev} t={t} />
+          )
+        )}
+      </div>}
 
       {/* FOOTER */}
       <div
