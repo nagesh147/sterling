@@ -2,6 +2,15 @@ import type { ExpiryCalendarEntry } from '../../types/kiteEngine';
 
 export type ExpirySeriesKind = 'weekly' | 'monthly';
 
+export interface ExpiryContractPresentation {
+  expiry: string;
+  owner: string;
+  month: string;
+  date: string;
+  label: string;
+  instrumentCount: number;
+}
+
 const MONTHS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -50,14 +59,14 @@ function monthCode(value: string): string {
   return parsed ? MONTHS[parsed.month - 1].toUpperCase() : '';
 }
 
-/** Build the concrete labels for one private series rank. */
-export function expiryLabelsForRank(
+/** Build structured, exact contract labels for one private series rank. */
+export function expiryContractsForRank(
   entries: ExpiryCalendarEntry[],
   kind: ExpirySeriesKind,
   rank: number,
   asOf: string,
   collapseStocks = false,
-): string[] {
+): ExpiryContractPresentation[] {
   const dated = entries.flatMap((entry) => {
     const expiry = entry[kind][rank];
     return expiry ? [{ entry, expiry }] : [];
@@ -65,8 +74,17 @@ export function expiryLabelsForRank(
 
   if (!collapseStocks) {
     return dated.map(({ entry, expiry }) => {
-      const seriesMonth = kind === 'monthly' ? ` ${monthCode(expiry)}` : '';
-      return `${entry.name}${seriesMonth} · ${formatExpiryDate(expiry, asOf)}`;
+      const month = kind === 'monthly' ? monthCode(expiry) : '';
+      const date = formatExpiryDate(expiry, asOf);
+      const owner = entry.name;
+      return {
+        expiry,
+        owner,
+        month,
+        date,
+        label: `${owner}${month ? ` ${month}` : ''} · ${date}`,
+        instrumentCount: 1,
+      };
     });
   }
 
@@ -76,10 +94,32 @@ export function expiryLabelsForRank(
     names.push(entry.name);
     namesByDate.set(expiry, names);
   });
+
   return [...namesByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([expiry, names]) => {
       const owner = names.length === 1 ? names[0] : `${names.length} STOCKS`;
-      return `${owner} ${monthCode(expiry)} · ${formatExpiryDate(expiry, asOf)}`;
+      const month = monthCode(expiry);
+      const date = formatExpiryDate(expiry, asOf);
+      return {
+        expiry,
+        owner,
+        month,
+        date,
+        label: `${owner} ${month} · ${date}`,
+        instrumentCount: names.length,
+      };
     });
+}
+
+/** Compatibility helper for accessible names and text-only consumers. */
+export function expiryLabelsForRank(
+  entries: ExpiryCalendarEntry[],
+  kind: ExpirySeriesKind,
+  rank: number,
+  asOf: string,
+  collapseStocks = false,
+): string[] {
+  return expiryContractsForRank(entries, kind, rank, asOf, collapseStocks)
+    .map((contract) => contract.label);
 }

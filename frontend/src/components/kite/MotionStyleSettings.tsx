@@ -17,45 +17,43 @@ export function MotionStyleSettings() {
   const setStyle = useKiteSettings((s) => s.setLoaderStyle);
 
   return (
-    <section style={{ margin: '0 0 14px', padding: 16, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6 }}>
-      <div style={{ color: '#9b9b9b', fontSize: 11, letterSpacing: 1, marginBottom: 6, fontWeight: 700 }}>
+    <section style={{ margin: '0 0 16px', padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <div style={{ color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 6, fontWeight: 750 }}>
         INTERACTION & LOADER STYLE
       </div>
-      <div style={{ color: '#777', fontSize: 11.5, lineHeight: 1.5, marginBottom: 12 }}>
+      <div style={{ color: '#777', fontSize: 11.5, lineHeight: 1.5, marginBottom: 14 }}>
         Controls loaders, startup surfaces, menus, dialogs, buttons and transition timing. Table rows remain stationary for accurate scrolling and pointer targeting.
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(176px, 1fr))', gap: 8 }}>
         {OPTIONS.map((option) => {
           const selected = option.value === style;
           return (
-            <button
+            <label
               key={option.value}
-              type="button"
-              aria-pressed={selected}
-              onClick={() => setStyle(option.value)}
               style={{
-                minHeight: 92,
-                padding: '11px 9px',
-                display: 'flex',
-                flexDirection: 'column',
+                minHeight: 62,
+                padding: '8px 10px',
+                display: 'grid',
+                gridTemplateColumns: '32px minmax(0, 1fr) 16px',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: 7,
+                gap: 10,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
-                borderRadius: 6,
-                border: `1px solid ${selected ? '#f06428' : '#e0e0e0'}`,
-                background: selected ? 'rgba(240,100,40,.055)' : '#fff',
-                color: selected ? '#d35400' : '#444',
-                boxShadow: selected ? '0 0 0 1px rgba(240,100,40,.08)' : 'none',
+                borderRadius: 7,
+                border: `1px solid ${selected ? '#e2b6a4' : '#e0e0e0'}`,
+                background: selected ? '#fff5f0' : '#fff',
+                color: '#444',
               }}
             >
-              <span style={{ height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <KiteLoader size={24} styleOverride={option.value} />
               </span>
-              <span style={{ fontSize: 12, fontWeight: selected ? 700 : 600 }}>{option.label}</span>
-              <span style={{ fontSize: 9.5, color: '#999', lineHeight: 1.25 }}>{option.desc}</span>
-            </button>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: selected ? 700 : 600 }}>{option.label}</span>
+                <span style={{ display: 'block', marginTop: 2, fontSize: 9.5, color: '#888', lineHeight: 1.25 }}>{option.desc}</span>
+              </span>
+              <input type="radio" name="motion-style" checked={selected} onChange={() => setStyle(option.value)} style={{ width: 15, height: 15, margin: 0, accentColor: '#f06428' }} />
+            </label>
           );
         })}
       </div>

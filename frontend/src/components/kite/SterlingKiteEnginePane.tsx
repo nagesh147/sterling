@@ -1497,23 +1497,23 @@ function SignalTableSettingsPanel({
   };
 
   return (
-    <div style={{ padding: '14px 16px 16px', background: k.surface, borderBottom: `1px solid ${k.border}` }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 13 }}>
+    <div style={{ padding: '16px 18px 18px', background: k.bg, borderBottom: `1px solid ${k.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, marginBottom: 15 }}>
         <div>
-          <div style={{ color: k.text, fontSize: 12.5, fontWeight: 750 }}>Signal table settings</div>
-          <div style={{ color: k.dim, fontSize: 10, lineHeight: 1.45, marginTop: 2 }}>
+          <div style={{ color: k.text, fontSize: 13.5, fontWeight: 750 }}>Signal table settings</div>
+          <div style={{ color: '#777', fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
             These choices change only this table. Scanner, entry, exit and risk rules live under Connect → Engine.
           </div>
         </div>
-        <button type="button" onClick={openEngine} style={{ flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 5, background: k.bg, color: k.blue, padding: '5px 8px', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer' }}>
+        <button type="button" onClick={openEngine} style={{ minHeight: 34, flexShrink: 0, border: `1px solid ${k.border}`, borderRadius: 7, background: k.bg, color: k.text, padding: '0 11px', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
           Configure engine ↗
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 9 }}>
-        <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, padding: 11 }}>
-          <div style={{ color: k.dim, fontSize: 9, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 8 }}>Layout</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+      <div className="sk-table-settings-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, .8fr) minmax(190px, 1fr) minmax(250px, 1.25fr)', border: `1px solid ${k.border}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div className="sk-table-settings-group" style={{ padding: 13 }}>
+          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 9 }}>Layout</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 3, border: `1px solid ${k.border}`, borderRadius: 8, background: '#f6f6f7' }}>
             {([
               { value: 'list' as const, label: 'List', icon: <ListIcon /> },
               { value: 'grid' as const, label: 'Grid', icon: <GridIcon /> },
@@ -1521,10 +1521,11 @@ function SignalTableSettingsPanel({
               const selected = viewLayout === option.value;
               return (
                 <button key={option.value} type="button" title={`${option.label} layout`} aria-pressed={selected} onClick={() => onLayoutChange(option.value)} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  border: `1px solid ${selected ? k.orange : k.border}`, borderRadius: 5,
-                  background: selected ? tint(k.orange, 8) : k.bg, color: selected ? k.orange : k.text,
-                  padding: '7px 8px', fontSize: 10.5, fontWeight: selected ? 700 : 500, fontFamily: 'inherit', cursor: 'pointer',
+                  minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  border: 'none', borderRadius: 6,
+                  background: selected ? k.bg : 'transparent', color: selected ? k.text : '#777',
+                  boxShadow: selected ? `inset 0 -2px ${k.orange}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
+                  padding: '0 8px', fontSize: 10.5, fontWeight: selected ? 700 : 550, fontFamily: 'inherit', cursor: 'pointer',
                 }}>
                   {option.icon}{option.label}
                 </button>
@@ -1533,24 +1534,24 @@ function SignalTableSettingsPanel({
           </div>
         </div>
 
-        <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, padding: 11 }}>
-          <div style={{ color: k.dim, fontSize: 9, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 6 }}>Rows</div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 0', cursor: 'pointer' }}>
-            <input type="checkbox" checked={bestOnly} onChange={(event) => onBestOnlyChange(event.target.checked)} style={{ accentColor: k.orange }} />
+        <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
+          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Rows</div>
+          <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={bestOnly} onChange={(event) => onBestOnlyChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
             Best signal per instrument
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 0', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showEnded} onChange={(event) => onShowEndedChange(event.target.checked)} style={{ accentColor: k.orange }} />
+          <label style={{ minHeight: 32, display: 'flex', alignItems: 'center', gap: 8, color: k.text, fontSize: 10.5, padding: '4px 2px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showEnded} onChange={(event) => onShowEndedChange(event.target.checked)} style={{ width: 15, height: 15, margin: 0, accentColor: k.orange }} />
             Show ended setups
           </label>
         </div>
 
-        <div style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 6, padding: 11 }}>
-          <div style={{ color: k.dim, fontSize: 9, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 6 }}>Visible columns</div>
+        <div className="sk-table-settings-group" style={{ padding: 13, borderLeft: `1px solid ${k.border}` }}>
+          <div style={{ color: '#777', fontSize: 9.5, fontWeight: 750, letterSpacing: .55, textTransform: 'uppercase', marginBottom: 7 }}>Visible columns</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '2px 8px' }}>
             {columns.map((column) => (
-              <label key={column.key} title={column.hint} style={{ display: 'flex', alignItems: 'center', gap: 6, color: k.text, fontSize: 10, padding: '3px 0', cursor: 'pointer' }}>
-                <input type="checkbox" checked={settings[column.key]} onChange={() => settings.toggleShow(column.key)} style={{ accentColor: k.orange }} />
+              <label key={column.key} title={column.hint} style={{ minHeight: 28, display: 'flex', alignItems: 'center', gap: 7, color: k.text, fontSize: 10.5, padding: '3px 2px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={settings[column.key]} onChange={() => settings.toggleShow(column.key)} style={{ width: 14, height: 14, margin: 0, accentColor: k.orange }} />
                 {column.label}
               </label>
             ))}
@@ -1558,12 +1559,19 @@ function SignalTableSettingsPanel({
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 11 }}>
         <span style={{ color: k.dim, fontSize: 9.5 }}>In List view, drag column headers to reorder them.</span>
-        <button type="button" onClick={reset} style={{ border: 'none', background: 'transparent', color: k.blue, padding: '4px 0', fontSize: 10, fontFamily: 'inherit', cursor: 'pointer' }}>
+        <button type="button" onClick={reset} style={{ minHeight: 30, border: `1px solid ${k.border}`, borderRadius: 6, background: k.bg, color: '#666', padding: '0 10px', fontSize: 10, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
           Reset table view
         </button>
       </div>
+      <style>{`
+        @media (max-width: 720px) {
+          .sk-table-settings-grid { grid-template-columns: 1fr !important; }
+          .sk-table-settings-group { border-left: none !important; border-top: 1px solid ${k.border}; }
+          .sk-table-settings-group:first-child { border-top: none; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -18,17 +18,17 @@ import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { EngineConfigurationPanel } from './EngineConfigurationPanel';
 
 const S: Record<string, React.CSSProperties> = {
-  card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 16, marginBottom: 14 },
-  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 1, marginBottom: 12, fontWeight: 700 },
-  row: { background: '#f9f9f9', border: `1px solid #e0e0e0`, borderRadius: 4, padding: '10px 14px', marginBottom: 8 },
+  card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
+  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 12, fontWeight: 750 },
+  row: { background: '#f7f7f8', border: `1px solid #e0e0e0`, borderRadius: 7, padding: '11px 14px', marginBottom: 8 },
   name: { fontWeight: 700, color: '#444', fontSize: 13 },
-  actions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 },
-  btn: { background: '#fff', color: '#387ed1', border: `1px solid #e0e0e0`, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnGreen: { background: '#4caf50', color: '#fff', border: `1px solid #4caf50`, padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
-  btnRed: { background: '#fff', color: '#e53935', border: `1px solid #e53935`, padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  input: { background: '#fff', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 4, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
-  label: { color: '#9b9b9b', fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
-  hint: { color: '#9b9b9b', fontSize: 11 },
+  actions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 },
+  btn: { minHeight: 34, background: '#fff', color: '#444', border: `1px solid #dcdcdc`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  btnGreen: { minHeight: 34, background: '#f06428', color: '#fff', border: `1px solid #f06428`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
+  btnRed: { minHeight: 34, background: '#fff', color: '#c9433e', border: `1px solid #dcdcdc`, padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  input: { minHeight: 36, background: '#fff', color: '#444', border: `1px solid #dcdcdc`, borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const },
+  label: { color: '#777', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
+  hint: { color: '#888', fontSize: 11.5 },
   err: { color: '#e53935', fontSize: 11, marginTop: 6 },
   ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
 };
@@ -466,7 +466,7 @@ function MarginCalc() {
         )}
       </div>
       <textarea
-        style={{ background: '#fff', color: '#444', border: `1px solid #e0e0e0`, borderRadius: 4, padding: 10, fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const, minHeight: 100, resize: 'vertical' }}
+        style={{ background: '#fff', color: '#444', border: `1px solid #dcdcdc`, borderRadius: 7, padding: 10, fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' as const, minHeight: 100, resize: 'vertical' }}
         value={json}
         onChange={(e) => setJson(e.target.value)}
         rows={5}
@@ -568,24 +568,28 @@ function EngineMasterToggle() {
   if (!cfg) return null;
   const on = cfg.engine_enabled;
   return (
-    <div style={{ ...S.card, borderColor: on ? '#4caf50' : '#e0e0e0', borderWidth: 2 }}>
+    <div style={{ ...S.card, borderLeft: `3px solid ${on ? '#f06428' : '#c9c9c9'}` }}>
       <div style={S.title}>STERLING KITE ENGINE</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Sterling Kite engine"
           onClick={() => setCfg.mutate({ ...cfg, engine_enabled: !on })}
           disabled={setCfg.isPending}
           style={{
-            width: 52, height: 28, borderRadius: 14, border: 'none', position: 'relative',
-            cursor: 'pointer', background: on ? '#4caf50' : '#bbb', transition: 'background .2s', flexShrink: 0,
+            width: 40, height: 22, borderRadius: 11, border: 'none', position: 'relative',
+            cursor: 'pointer', background: on ? '#f06428' : '#c7c7c7', transition: 'background .2s', flexShrink: 0,
           }}
         >
           <span style={{
-            position: 'absolute', top: 3, left: on ? 27 : 3, width: 22, height: 22, borderRadius: 11,
-            background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)',
+            position: 'absolute', top: 2, left: on ? 20 : 2, width: 18, height: 18, borderRadius: 9,
+            background: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
           }} />
         </button>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: on ? '#2e7d32' : '#888' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
             {on ? 'Engine ON — scanning, signals & auto-execute active' : 'Engine OFF — normal manual Kite only'}
           </div>
           <div style={{ ...S.hint, marginTop: 2 }}>
@@ -605,12 +609,12 @@ function EngineMasterToggle() {
 // category rail gives every setting one predictable home and keeps each page calm.
 type ConnectSection = 'account' | 'engine' | 'markets' | 'notifications' | 'experience';
 
-const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string; glyph: string }> = [
-  { id: 'account', label: 'Account & login', eyebrow: 'Zerodha connection', glyph: 'A' },
-  { id: 'engine', label: 'Engine', eyebrow: 'Signals, orders & risk', glyph: 'E' },
-  { id: 'markets', label: 'Markets & tools', eyebrow: 'Exchanges, funds & data', glyph: 'M' },
-  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts', glyph: 'N' },
-  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback', glyph: 'X' },
+const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string }> = [
+  { id: 'account', label: 'Account & login', eyebrow: 'Zerodha connection' },
+  { id: 'engine', label: 'Engine', eyebrow: 'Signals, orders & risk' },
+  { id: 'markets', label: 'Markets & tools', eyebrow: 'Exchanges, funds & data' },
+  { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts' },
+  { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback' },
 ];
 
 function readInitialSection(): ConnectSection {
@@ -626,10 +630,9 @@ function readInitialSection(): ConnectSection {
 }
 
 function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; children: React.ReactNode }) {
-  const color = tone === 'good' ? '#2e7d32' : tone === 'warn' ? '#e65100' : '#777';
-  const bg = tone === 'good' ? '#edf7ee' : tone === 'warn' ? '#fff5e8' : '#f5f5f5';
+  const color = tone === 'good' ? '#2e7d32' : tone === 'warn' ? '#b85c00' : '#777';
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color, background: bg, border: `1px solid ${color}22`, borderRadius: 999, padding: '5px 9px', fontSize: 10.5, fontWeight: 700 }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#666', padding: '3px 0', fontSize: 10.5, fontWeight: 650, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: 3, background: color }} />{children}
     </span>
   );
@@ -637,9 +640,9 @@ function StatusPill({ tone, children }: { tone: 'good' | 'warn' | 'quiet'; child
 
 function SectionHeading({ title, description }: { title: string; description: string }) {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <h2 style={{ margin: 0, color: '#333', fontSize: 18, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
-      <p style={{ margin: '5px 0 0', color: '#777', fontSize: 11.5, lineHeight: 1.55 }}>{description}</p>
+    <div style={{ marginBottom: 18 }}>
+      <h2 style={{ margin: 0, color: '#333', fontSize: 19, fontWeight: 750, letterSpacing: '-.02em' }}>{title}</h2>
+      <p style={{ margin: '6px 0 0', color: '#777', fontSize: 12, lineHeight: 1.55, maxWidth: 720 }}>{description}</p>
     </div>
   );
 }
@@ -667,16 +670,18 @@ export function ConnectPane() {
   }, []);
 
   return (
-    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '24px 28px 44px', background: '#fafafa', minHeight: '100%' }}>
-      <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, marginBottom: 22 }}>
+    <div className="kite-settings-hub" style={{ width: '100%', boxSizing: 'border-box', padding: '28px 30px 48px', background: '#f7f7f8', minHeight: '100%' }}>
+      <header style={{ maxWidth: 1120, margin: '0 auto 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24 }}>
         <div>
-          <div style={{ color: '#f06428', fontSize: 10, fontWeight: 800, letterSpacing: 1.1, textTransform: 'uppercase' }}>Kite control center</div>
-          <h1 style={{ margin: '4px 0 0', color: '#2f2f2f', fontSize: 23, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & settings</h1>
-          <p style={{ margin: '7px 0 0', color: '#777', fontSize: 12, lineHeight: 1.55, maxWidth: 580 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#777', fontSize: 10, fontWeight: 750, letterSpacing: .9, textTransform: 'uppercase' }}>
+            <span aria-hidden style={{ width: 16, height: 2, borderRadius: 1, background: '#f06428' }} />Kite control center
+          </div>
+          <h1 style={{ margin: '6px 0 0', color: '#2f2f2f', fontSize: 24, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & settings</h1>
+          <p style={{ margin: '8px 0 0', color: '#777', fontSize: 12.5, lineHeight: 1.55, maxWidth: 600 }}>
             One place for the Zerodha connection, engine behaviour, markets, alerts and app experience.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="kite-settings-status" aria-label="Kite status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end', padding: '7px 10px', borderTop: '1px solid #dedede', borderBottom: '1px solid #dedede' }}>
           <StatusPill tone={connected ? 'good' : active ? 'warn' : 'quiet'}>
             {connected ? `${active?.label ?? 'Kite'} connected` : active ? 'Login required' : 'No account'}
           </StatusPill>
@@ -687,20 +692,20 @@ export function ConnectPane() {
         </div>
       </header>
 
-      <div className="kite-settings-layout" style={{ display: 'grid', gridTemplateColumns: '220px minmax(0, 1fr)', gap: 22, alignItems: 'start' }}>
-        <nav aria-label="Kite settings sections" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 7, position: 'sticky', top: 14 }}>
+      <div className="kite-settings-layout" style={{ maxWidth: 1120, margin: '0 auto', display: 'grid', gridTemplateColumns: '218px minmax(0, 1fr)', gap: 26, alignItems: 'start' }}>
+        <nav aria-label="Kite settings sections" style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, padding: 6, position: 'sticky', top: 14, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
           {SECTION_DEFS.map((item) => {
             const selected = item.id === section;
             return (
               <button key={item.id} type="button" aria-current={selected ? 'page' : undefined} onClick={() => select(item.id)} style={{
-                width: '100%', border: 'none', borderRadius: 6, background: selected ? 'rgba(240,100,40,.075)' : 'transparent',
-                display: 'grid', gridTemplateColumns: '30px minmax(0, 1fr)', gap: 9, alignItems: 'center',
-                padding: '9px 10px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
+                width: '100%', minHeight: 52, border: 'none', borderLeft: `3px solid ${selected ? '#f06428' : 'transparent'}`,
+                borderRadius: 6, background: selected ? '#fff5f0' : 'transparent',
+                display: 'flex', alignItems: 'center',
+                padding: '8px 11px', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 2,
               }}>
-                <span aria-hidden style={{ width: 26, height: 26, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: selected ? '#f06428' : '#f1f1f1', color: selected ? '#fff' : '#777', fontSize: 10, fontWeight: 800 }}>{item.glyph}</span>
                 <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', color: selected ? '#d35400' : '#444', fontSize: 11.5, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
-                  <span style={{ display: 'block', color: '#9b9b9b', fontSize: 9.5, lineHeight: 1.3, marginTop: 2 }}>{item.eyebrow}</span>
+                  <span style={{ display: 'block', color: '#444', fontSize: 12, lineHeight: 1.25, fontWeight: selected ? 750 : 600 }}>{item.label}</span>
+                  <span style={{ display: 'block', color: '#929292', fontSize: 10, lineHeight: 1.3, marginTop: 3 }}>{item.eyebrow}</span>
                 </span>
               </button>
             );
@@ -727,10 +732,10 @@ export function ConnectPane() {
               <EngineMasterToggle />
               <TradingModeControls />
               <EngineConfigurationPanel />
-              <details style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 7, marginBottom: 14, overflow: 'hidden' }}>
-                <summary style={{ cursor: 'pointer', listStyle: 'none', padding: '15px 17px', color: '#444', fontSize: 12.5, fontWeight: 750 }}>
+              <details style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+                <summary style={{ minHeight: 58, cursor: 'pointer', listStyle: 'none', padding: '14px 18px', color: '#444', fontSize: 13, fontWeight: 750, boxSizing: 'border-box' }}>
                   Order selection & entry quality
-                  <span style={{ display: 'block', marginTop: 3, color: '#888', fontSize: 10.5, fontWeight: 400 }}>Vehicle profile, directional filters and trade-impact preview.</span>
+                  <span style={{ display: 'block', marginTop: 4, color: '#888', fontSize: 11, fontWeight: 400 }}>Vehicle profile, directional filters and trade-impact preview.</span>
                 </summary>
                 <div style={{ padding: '0 14px 2px' }}><DirectionalModePanelWrapper /></div>
               </details>
@@ -764,7 +769,7 @@ export function ConnectPane() {
               <SectionHeading title="Experience" description="Choose how loading, dialogs and transitions feel throughout Kite." />
               <MotionStyleSettings />
               <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <span aria-hidden style={{ color: '#387ed1', fontSize: 16 }}>ⓘ</span>
+                <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
                 <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>
                   Signal-table layout, visible columns and history rows now live exclusively behind the settings button in the signal table itself.
                 </div>
@@ -779,11 +784,12 @@ export function ConnectPane() {
           .kite-settings-hub { padding: 18px 14px 36px !important; }
           .kite-settings-layout { grid-template-columns: 1fr !important; gap: 14px !important; }
           .kite-settings-layout > nav { position: static !important; display: flex; overflow-x: auto; gap: 4px; }
-          .kite-settings-layout > nav > button { min-width: 170px; margin-bottom: 0 !important; }
+          .kite-settings-layout > nav > button { min-width: 156px; margin-bottom: 0 !important; }
         }
         @media (max-width: 560px) {
           .kite-settings-hub > header { flex-direction: column; }
           .kite-settings-hub > header > div:last-child { justify-content: flex-start !important; }
+          .kite-settings-status { width: 100%; box-sizing: border-box; }
         }
       `}</style>
     </div>

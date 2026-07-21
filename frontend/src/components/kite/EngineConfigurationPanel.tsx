@@ -17,12 +17,13 @@ import type {
 } from '../../types/kiteEngine';
 
 const ORANGE = '#f06428';
-const BLUE = '#387ed1';
 const GREEN = '#4caf50';
 const BORDER = '#e0e0e0';
 const TEXT = '#444';
 const MUTED = '#777';
 const DIM = '#9b9b9b';
+const SOFT = '#f6f6f7';
+const ORANGE_SOFT = '#fff5f0';
 
 const SOURCE_OPTIONS: Array<{ value: ScanSource; label: string; description: string }> = [
   { value: 'spot', label: 'Spot', description: 'Signals from the underlying chart.' },
@@ -66,14 +67,16 @@ const STOP_OPTIONS: Array<{ value: EngineConfigModel['stop_mode']; label: string
 ];
 
 const inputStyle: React.CSSProperties = {
-  width: 86,
-  padding: '6px 8px',
+  width: 104,
+  height: 36,
+  padding: '0 10px',
   border: `1px solid ${BORDER}`,
-  borderRadius: 5,
+  borderRadius: 7,
   background: '#fff',
   color: TEXT,
   fontFamily: 'inherit',
-  fontSize: 12,
+  fontSize: 12.5,
+  boxSizing: 'border-box',
 };
 
 function Section({ title, description, summary, defaultOpen = false, children }: {
@@ -92,27 +95,27 @@ function Section({ title, description, summary, defaultOpen = false, children }:
       style={{ borderBottom: `1px solid ${BORDER}` }}
     >
       <summary style={{
-        listStyle: 'none', cursor: 'pointer', padding: '16px 18px', display: 'flex',
-        alignItems: 'center', gap: 14, userSelect: 'none',
+        listStyle: 'none', cursor: 'pointer', padding: '17px 18px', display: 'flex',
+        alignItems: 'center', gap: 11, userSelect: 'none', minHeight: 66, boxSizing: 'border-box',
       }}>
-        <span aria-hidden style={{ width: 26, height: 26, borderRadius: 13, background: 'rgba(240,100,40,.09)', color: ORANGE, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
+        <span aria-hidden style={{ width: 18, color: DIM, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
         <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{title}</span>
-          <span style={{ display: 'block', color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 2 }}>{description}</span>
+          <span style={{ display: 'block', color: TEXT, fontSize: 13.5, fontWeight: 700 }}>{title}</span>
+          <span style={{ display: 'block', color: MUTED, fontSize: 11.5, lineHeight: 1.45, marginTop: 3 }}>{description}</span>
         </span>
-        <span style={{ color: DIM, fontSize: 10.5, textAlign: 'right', maxWidth: 210 }}>{summary}</span>
+        <span className="sk-config-summary" style={{ color: DIM, fontSize: 11, textAlign: 'right', maxWidth: 230 }}>{summary}</span>
       </summary>
-      <div style={{ padding: '0 18px 18px 58px' }}>{children}</div>
+      <div className="sk-config-section-body" style={{ padding: '0 18px 20px 47px' }}>{children}</div>
     </details>
   );
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '132px minmax(0, 1fr)', gap: 14, padding: '12px 0', alignItems: 'start' }}>
+    <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '148px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
       <div>
-        <div style={{ color: TEXT, fontSize: 11.5, fontWeight: 700 }}>{label}</div>
-        {hint && <div style={{ color: DIM, fontSize: 10, lineHeight: 1.4, marginTop: 3 }}>{hint}</div>}
+        <div style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</div>
+        {hint && <div style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45, marginTop: 4 }}>{hint}</div>}
       </div>
       <div style={{ minWidth: 0 }}>{children}</div>
     </div>
@@ -125,15 +128,16 @@ function ChoiceRow<T extends string>({ value, options, onChange }: {
   onChange: (value: T) => void;
 }) {
   return (
-    <div style={{ display: 'inline-flex', maxWidth: '100%', border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', flexWrap: 'wrap' }}>
-      {options.map((option, index) => {
+    <div style={{ display: 'inline-flex', maxWidth: '100%', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 3, gap: 2, background: SOFT, flexWrap: 'wrap' }}>
+      {options.map((option) => {
         const selected = option.value === value;
         return (
           <button key={option.value} type="button" aria-pressed={selected} onClick={() => onChange(option.value)} style={{
-            border: 'none', borderLeft: index ? `1px solid ${BORDER}` : 'none',
-            background: selected ? ORANGE : '#fff', color: selected ? '#fff' : TEXT,
-            padding: '6px 12px', fontSize: 11, fontWeight: selected ? 700 : 500,
-            fontFamily: 'inherit', cursor: 'pointer',
+            border: 'none', minHeight: 32, borderRadius: 6,
+            background: selected ? '#fff' : 'transparent', color: selected ? TEXT : MUTED,
+            padding: '0 13px', fontSize: 11.5, fontWeight: selected ? 700 : 550,
+            boxShadow: selected ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
+            fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
           }}>
             {option.label}
           </button>
@@ -143,39 +147,58 @@ function ChoiceRow<T extends string>({ value, options, onChange }: {
   );
 }
 
-function Switch({ checked, label, onChange, color = ORANGE }: {
+function Switch({ checked, label, onChange }: {
   checked: boolean;
   label: string;
   onChange: () => void;
-  color?: string;
 }) {
   return (
     <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange} style={{
-      width: 38, height: 22, borderRadius: 11, border: 'none', padding: 0,
-      position: 'relative', cursor: 'pointer', background: checked ? color : '#c7c7c7',
+      width: 40, height: 22, borderRadius: 11, border: 'none', padding: 0,
+      position: 'relative', cursor: 'pointer', background: checked ? ORANGE : '#c7c7c7',
       transition: 'background .16s ease',
     }}>
-      <span style={{ position: 'absolute', width: 18, height: 18, borderRadius: 9, top: 2, left: checked ? 18 : 2, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .16s ease' }} />
+      <span style={{ position: 'absolute', width: 18, height: 18, borderRadius: 9, top: 2, left: checked ? 20 : 2, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .16s ease' }} />
     </button>
   );
 }
 
-function ToggleChip({ label, hint, active, onClick }: {
+function CheckOption({ label, hint, checked, indeterminate = false, onChange, compact = false, disabled = false }: {
   label: string;
   hint?: string;
-  active: boolean;
-  onClick: () => void;
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange?: () => void;
+  compact?: boolean;
+  disabled?: boolean;
 }) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (inputRef.current) inputRef.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
   return (
-    <button type="button" aria-pressed={active} onClick={onClick} title={hint} style={{
-      border: `1px solid ${active ? ORANGE : BORDER}`,
-      background: active ? 'rgba(240,100,40,.07)' : '#fff',
-      color: active ? '#d35400' : TEXT,
-      borderRadius: 999, padding: '5px 10px', fontFamily: 'inherit', cursor: 'pointer',
-      fontSize: 10.5, fontWeight: active ? 700 : 500,
+    <label title={hint} style={{
+      minHeight: compact ? 32 : 42,
+      display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)', alignItems: 'center', gap: 9,
+      border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#e7c5b7' : BORDER}`,
+      background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fff',
+      color: TEXT, borderRadius: 6, padding: compact ? '4px 7px' : '7px 10px',
+      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? .72 : 1, boxSizing: 'border-box',
     }}>
-      {label}{hint && <span style={{ marginLeft: 5, color: active ? ORANGE : DIM, fontSize: 9.5 }}>{hint}</span>}
-    </button>
+      <input
+        ref={inputRef}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={() => onChange?.()}
+        style={{ width: 15, height: 15, margin: 0, accentColor: ORANGE }}
+      />
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: compact ? 10.5 : 11.5, fontWeight: checked || indeterminate ? 700 : 550, lineHeight: 1.25 }}>{label}</span>
+        {hint && !compact && <span style={{ display: 'block', marginTop: 2, color: DIM, fontSize: 9.5, lineHeight: 1.3 }}>{hint}</span>}
+      </span>
+    </label>
   );
 }
 
@@ -227,15 +250,16 @@ export function EngineConfigurationPanel() {
   ].filter(Boolean).length;
 
   return (
-    <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 7, overflow: 'hidden', marginBottom: 14 }}>
+    <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ color: TEXT, fontSize: 14, fontWeight: 800 }}>Engine configuration</div>
-          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>
+          <div style={{ color: TEXT, fontSize: 14.5, fontWeight: 800 }}>Engine configuration</div>
+          <div style={{ color: MUTED, fontSize: 11.5, lineHeight: 1.5, marginTop: 3 }}>
             Signal discovery, market universe, exits and risk live here. Changes save automatically.
           </div>
         </div>
-        <span style={{ color: setCfg.isPending ? ORANGE : GREEN, fontSize: 10.5, fontWeight: 700 }}>
+        <span aria-live="polite" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: setCfg.isPending ? MUTED : GREEN, fontSize: 10.5, fontWeight: 700 }}>
+          <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: setCfg.isPending ? '#c2c2c2' : GREEN }} />
           {setCfg.isPending ? 'Saving…' : 'Saved'}
         </span>
       </div>
@@ -247,37 +271,55 @@ export function EngineConfigurationPanel() {
         defaultOpen
       >
         <Field label="Signal source" hint="Changes scanner behavior and runs a fresh scan.">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 7 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8 }}>
             {SOURCE_OPTIONS.map((option) => {
               const selected = cfg.scan_source === option.value;
               return (
-                <button key={option.value} type="button" aria-pressed={selected} onClick={() => patch({ scan_source: option.value }, `Signal source changed to ${option.label}`, true)} style={{
-                  textAlign: 'left', padding: '10px 11px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-                  border: `1px solid ${selected ? ORANGE : BORDER}`,
-                  background: selected ? 'rgba(240,100,40,.06)' : '#fff',
+                <label key={option.value} style={{
+                  minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)', alignItems: 'start', gap: 9,
+                  textAlign: 'left', padding: '10px 11px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+                  border: `1px solid ${selected ? '#e2b6a4' : BORDER}`,
+                  background: selected ? ORANGE_SOFT : '#fff', boxSizing: 'border-box',
                 }}>
-                  <span style={{ display: 'block', color: selected ? '#d35400' : TEXT, fontSize: 11.5, fontWeight: 700 }}>{option.label}</span>
-                  <span style={{ display: 'block', color: DIM, fontSize: 9.5, lineHeight: 1.35, marginTop: 3 }}>{option.description}</span>
-                </button>
+                  <input type="radio" name="signal-source" checked={selected}
+                    onChange={() => patch({ scan_source: option.value }, `Signal source changed to ${option.label}`, true)}
+                    style={{ width: 15, height: 15, margin: '1px 0 0', accentColor: ORANGE }} />
+                  <span>
+                    <span style={{ display: 'block', color: TEXT, fontSize: 11.5, fontWeight: 700 }}>{option.label}</span>
+                    <span style={{ display: 'block', color: DIM, fontSize: 9.5, lineHeight: 1.35, marginTop: 3 }}>{option.description}</span>
+                  </span>
+                </label>
               );
             })}
           </div>
         </Field>
         <Field label="Strike coverage" hint="View and scan coverage; at least ATM remains selected.">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {STRIKE_GROUPS.map((group) => (
-              <ToggleChip key={group.label} label={group.label} hint={group.hint}
-                active={group.values.some((value) => cfg.strike_moneyness.includes(value))}
-                onClick={() => toggleStrikeGroup(group.values)} />
-            ))}
+          <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
+            {STRIKE_GROUPS.map((group) => {
+              const count = group.values.filter((value) => cfg.strike_moneyness.includes(value)).length;
+              return (
+                <CheckOption key={group.label} label={group.label} hint={group.hint}
+                  checked={count === group.values.length} indeterminate={count > 0 && count < group.values.length}
+                  onChange={() => toggleStrikeGroup(group.values)} />
+              );
+            })}
           </div>
         </Field>
         <Field label="Index expiries" hint="Contract cycles scanned for indices.">
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(120px, 190px))', gap: 7 }}>
             {(['weekly', 'monthly'] as ScanExpiry[]).map((expiry) => (
-              <ToggleChip key={expiry} label={expiry === 'weekly' ? 'Weekly' : 'Monthly'} active={indexExpiries.includes(expiry)}
-                onClick={() => patch({ scan_expiries_indices: toggleListValue(indexExpiries, expiry, ['weekly', 'monthly']) }, 'Index expiries updated', true)} />
+              <CheckOption key={expiry} label={expiry === 'weekly' ? 'Weekly indices' : 'Monthly indices'} checked={indexExpiries.includes(expiry)}
+                onChange={() => patch({ scan_expiries_indices: toggleListValue(indexExpiries, expiry, ['weekly', 'monthly']) }, 'Index expiries updated', true)} />
             ))}
+          </div>
+        </Field>
+        <Field label="Stock expiries" hint="Individual-stock derivatives do not have a weekly contract cycle.">
+          <div style={{ minHeight: 42, maxWidth: 390, display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)', alignItems: 'center', gap: 9, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '7px 10px', background: SOFT, boxSizing: 'border-box' }}>
+            <span aria-hidden style={{ width: 15, height: 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, background: ORANGE, color: '#fff', fontSize: 10, fontWeight: 800 }}>✓</span>
+            <span>
+              <span style={{ display: 'block', color: TEXT, fontSize: 11.5, fontWeight: 700 }}>Monthly stock contracts</span>
+              <span style={{ display: 'block', color: DIM, fontSize: 9.5, marginTop: 2 }}>Applied automatically to the selected F&amp;O stocks.</span>
+            </span>
           </div>
         </Field>
       </Section>
@@ -288,18 +330,18 @@ export function EngineConfigurationPanel() {
         summary={cfg.scan_all_stocks ? `All F&O · ${cfg.scan_indices.length} indices` : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`}
       >
         <Field label="Indices">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
             {INDEX_OPTIONS.map((option) => (
-              <ToggleChip key={option.value} label={option.label} active={cfg.scan_indices.includes(option.value)}
-                onClick={() => patch({ scan_indices: toggleListValue(cfg.scan_indices, option.value, ['NIFTY 50']) }, 'Index universe updated', true)} />
+              <CheckOption key={option.value} label={option.label} checked={cfg.scan_indices.includes(option.value)}
+                onChange={() => patch({ scan_indices: toggleListValue(cfg.scan_indices, option.value, ['NIFTY 50']) }, 'Index universe updated', true)} />
             ))}
           </div>
         </Field>
         <Field label="F&O stocks" hint="Use the full eligible universe or curate a smaller list.">
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Switch checked={cfg.scan_all_stocks} label="Scan all F&O stocks" color={BLUE}
+            <Switch checked={cfg.scan_all_stocks} label="Scan all F&O stocks"
               onChange={() => patch({ scan_all_stocks: !cfg.scan_all_stocks }, `All F&O stocks ${!cfg.scan_all_stocks ? 'enabled' : 'disabled'}`, true)} />
-            <span style={{ color: TEXT, fontSize: 11.5 }}>Scan all eligible F&amp;O stocks</span>
+            <span style={{ color: TEXT, fontSize: 12 }}>Scan all eligible F&amp;O stocks</span>
           </div>
         </Field>
         {!cfg.scan_all_stocks && (
@@ -308,10 +350,10 @@ export function EngineConfigurationPanel() {
               {(stockRegistry ?? []).map((group) => (
                 <div key={group.liquidity} style={{ marginBottom: 10 }}>
                   <div style={{ color: DIM, fontSize: 9, fontWeight: 700, letterSpacing: .5, marginBottom: 5 }}>{group.liquidity.toUpperCase()}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 3 }}>
                     {group.stocks.map((stock) => (
-                      <ToggleChip key={stock.name} label={stock.label || stock.name} active={cfg.scan_stocks.includes(stock.name)}
-                        onClick={() => patch({ scan_stocks: toggleListValue(cfg.scan_stocks, stock.name, []) }, `${stock.name} ${cfg.scan_stocks.includes(stock.name) ? 'removed' : 'added'}`, true)} />
+                      <CheckOption key={stock.name} label={stock.label || stock.name} checked={cfg.scan_stocks.includes(stock.name)} compact
+                        onChange={() => patch({ scan_stocks: toggleListValue(cfg.scan_stocks, stock.name, []) }, `${stock.name} ${cfg.scan_stocks.includes(stock.name) ? 'removed' : 'added'}`, true)} />
                     ))}
                   </div>
                 </div>
@@ -337,7 +379,7 @@ export function EngineConfigurationPanel() {
         </Field>
         <Field label="Stop anchor" hint="Validated default follows the tight fast line.">
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Switch checked={cfg.exit_aligned_trail ?? false} label="Anchor stop to exit counter" color={BLUE}
+            <Switch checked={cfg.exit_aligned_trail ?? false} label="Anchor stop to exit counter"
               onChange={() => patch({ exit_aligned_trail: !(cfg.exit_aligned_trail ?? false) }, 'Stop anchor updated', true)} />
             <span style={{ color: TEXT, fontSize: 11.5 }}>{cfg.exit_aligned_trail ? 'Aligned to exit counter' : 'Tightest fast line'}</span>
           </div>
@@ -360,7 +402,7 @@ export function EngineConfigurationPanel() {
       >
         <Field label="Risk sizing">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <Switch checked={cfg.risk_sizing} label="Risk-based sizing" color={BLUE}
+            <Switch checked={cfg.risk_sizing} label="Risk-based sizing"
               onChange={() => patch({ risk_sizing: !cfg.risk_sizing }, `Risk sizing ${!cfg.risk_sizing ? 'enabled' : 'disabled'}`)} />
             <span style={{ color: TEXT, fontSize: 11.5 }}>Size positions from available capital</span>
             {cfg.risk_sizing && <><input aria-label="Risk percent" type="number" min={0.1} max={25} step={0.5} value={cfg.risk_pct} style={inputStyle}
@@ -371,8 +413,8 @@ export function EngineConfigurationPanel() {
           <input aria-label="Maximum lots" type="number" min={1} step={1} value={cfg.max_lots} style={inputStyle}
             onChange={(event) => patch({ max_lots: Math.max(1, Math.floor(Number(event.target.value) || 1)) }, 'Maximum lots updated')} />
         </Field>
-        <details style={{ border: `1px solid ${BORDER}`, borderRadius: 6, marginTop: 8 }}>
-          <summary style={{ padding: '10px 12px', cursor: 'pointer', color: TEXT, fontSize: 11.5, fontWeight: 700 }}>
+        <details style={{ border: `1px solid ${BORDER}`, borderRadius: 8, marginTop: 8, overflow: 'hidden' }}>
+          <summary style={{ minHeight: 40, display: 'flex', alignItems: 'center', padding: '0 12px', cursor: 'pointer', color: TEXT, background: SOFT, fontSize: 11.5, fontWeight: 700 }}>
             Advanced auto-execution guards <span style={{ color: DIM, fontWeight: 500 }}>· {enabledGuards} enabled</span>
           </summary>
           <div style={{ borderTop: `1px solid ${BORDER}`, padding: '4px 12px 12px' }}>
@@ -405,15 +447,23 @@ export function EngineConfigurationPanel() {
         </details>
       </Section>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 18px', background: '#fafafa' }}>
-        <span style={{ color: DIM, fontSize: 10.5 }}>Automatic/manual order placement is controlled once, in Trading mode above.</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px', background: SOFT }}>
+        <span style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45 }}>Automatic/manual order placement is controlled once, in Trading mode above.</span>
         <button type="button" disabled={resetCfg.isPending} onClick={() => {
           if (!window.confirm('Restore every engine setting to its default value?')) return;
           resetCfg.mutate(undefined, { onSuccess: () => runScan.mutate() });
-        }} style={{ border: `1px solid ${BORDER}`, borderRadius: 5, background: '#fff', color: '#e53935', padding: '6px 10px', fontSize: 10.5, fontFamily: 'inherit', cursor: 'pointer' }}>
+        }} style={{ minHeight: 34, flexShrink: 0, border: `1px solid ${BORDER}`, borderRadius: 7, background: '#fff', color: '#c9433e', padding: '0 12px', fontSize: 10.5, fontWeight: 650, fontFamily: 'inherit', cursor: 'pointer' }}>
           {resetCfg.isPending ? 'Restoring…' : 'Restore engine defaults'}
         </button>
       </div>
+      <style>{`
+        @media (max-width: 640px) {
+          .sk-config-summary { display: none; }
+          .sk-config-section-body { padding: 0 14px 18px !important; }
+          .sk-config-field { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .sk-config-check-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </section>
   );
 }

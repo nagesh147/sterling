@@ -73,12 +73,6 @@ describe('EngineConfigurationPanel — settings → rescan wiring', () => {
     runScanMutate.mockClear();
   });
 
-  it('does not expose a weekly stock-expiry setting', () => {
-    renderPanel();
-    expect(screen.getByText('Index expiries')).toBeInTheDocument();
-    expect(screen.queryByText('Stock expiries')).not.toBeInTheDocument();
-  });
-
   it('renders the hybrid weight picker and forces a rescan when it changes', () => {
     renderPanel();
     const input = screen.getByTestId('hybrid-weight-input') as HTMLInputElement;
@@ -93,6 +87,16 @@ describe('EngineConfigurationPanel — settings → rescan wiring', () => {
     // Regression coverage: a scan-affecting setting must force an immediate re-scan,
     // not sit unused until the 5-min background auto_scan_loop.
     expect(runScanMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses checklist controls for multi-select settings and exposes stocks as monthly-only', () => {
+    renderPanel();
+
+    expect(screen.getByRole('checkbox', { name: /Deep ITM/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Weekly indices/i })).toBeInTheDocument();
+    expect(screen.getByText('Monthly stock contracts')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /Weekly stocks/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Deep ITM/i })).not.toBeInTheDocument();
   });
 
   it('forces a rescan when the exit mode changes (the reported bug)', () => {

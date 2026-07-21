@@ -22,21 +22,21 @@ import {
 const ORANGE = '#f06428';
 
 const S: Record<string, React.CSSProperties> = {
-  title: { color: '#9b9b9b', fontSize: 11, letterSpacing: 1, marginBottom: 4, fontWeight: 700 },
-  sub: { color: '#9b9b9b', fontSize: 11, marginBottom: 12, lineHeight: 1.6 },
-  row: { background: '#f9f9f9', border: '1px solid #e0e0e0', borderRadius: 4, padding: '10px 12px', marginBottom: 8 },
+  title: { color: '#777', fontSize: 10.5, letterSpacing: .75, marginBottom: 5, fontWeight: 750 },
+  sub: { color: '#888', fontSize: 11.5, marginBottom: 14, lineHeight: 1.55 },
+  row: { background: '#f7f7f8', border: '1px solid #e0e0e0', borderRadius: 7, padding: '11px 12px', marginBottom: 8 },
   name: { fontWeight: 700, color: '#444', fontSize: 13 },
   meta: { color: '#9b9b9b', fontSize: 11 },
   actions: { display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' },
-  btn: { background: '#fff', color: '#387ed1', border: '1px solid #e0e0e0', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  btnOrange: { background: ORANGE, color: '#fff', border: `1px solid ${ORANGE}`, padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
-  btnRed: { background: '#fff', color: '#e53935', border: '1px solid #e53935', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11 },
-  input: { background: '#fff', color: '#444', border: '1px solid #e0e0e0', borderRadius: 4, padding: '7px 9px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' },
-  label: { color: '#9b9b9b', fontSize: 10, letterSpacing: 1, marginBottom: 3, display: 'block' },
-  hint: { color: '#9b9b9b', fontSize: 11 },
+  btn: { minHeight: 34, background: '#fff', color: '#444', border: '1px solid #dcdcdc', padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  btnOrange: { minHeight: 34, background: ORANGE, color: '#fff', border: `1px solid ${ORANGE}`, padding: '0 13px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700 },
+  btnRed: { minHeight: 34, background: '#fff', color: '#c9433e', border: '1px solid #dcdcdc', padding: '0 12px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 },
+  input: { minHeight: 36, background: '#fff', color: '#444', border: '1px solid #dcdcdc', borderRadius: 7, padding: '0 10px', fontFamily: 'inherit', fontSize: 12, width: '100%', boxSizing: 'border-box' },
+  label: { color: '#777', fontSize: 10, letterSpacing: .7, marginBottom: 4, display: 'block', fontWeight: 650 },
+  hint: { color: '#888', fontSize: 11.5 },
   err: { color: '#e53935', fontSize: 11, marginTop: 6 },
   ok: { color: '#4caf50', fontSize: 11, marginTop: 6 },
-  guide: { background: '#fff8f4', border: `1px solid ${ORANGE}`, borderRadius: 4, padding: '12px 14px', marginBottom: 12 },
+  guide: { background: '#fff8f4', border: '1px solid #ecd1c4', borderRadius: 8, padding: '12px 14px', marginBottom: 12 },
   step: { display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12, color: '#444', lineHeight: 1.6, marginBottom: 8 },
   stepNum: { flex: '0 0 18px', width: 18, height: 18, borderRadius: '50%', background: ORANGE, color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   handle: { display: 'inline-flex', alignItems: 'center', gap: 4, background: '#f1f1f1', border: '1px solid #e0e0e0', borderRadius: 3, padding: '0 4px 0 6px', fontFamily: 'monospace', fontSize: 12, color: ORANGE },
@@ -114,10 +114,10 @@ function IconChoice({ option, selected, size, onPick, compact = false }: {
       style={{
         display: 'flex', alignItems: 'center', gap: compact ? 6 : 8,
         minWidth: compact ? 106 : 132,
-        padding: compact ? '7px 9px' : '8px 10px', cursor: 'pointer',
-        background: selected ? 'rgba(240,100,40,0.06)' : '#fff',
-        border: `1.5px solid ${selected ? ORANGE : '#e0e0e0'}`,
-        borderRadius: 8, fontFamily: 'inherit', textAlign: 'left',
+        minHeight: 46, padding: compact ? '7px 9px' : '8px 10px', cursor: 'pointer',
+        background: selected ? '#fff5f0' : '#fff',
+        border: `1px solid ${selected ? '#e2b6a4' : '#e0e0e0'}`,
+        borderRadius: 7, fontFamily: 'inherit', textAlign: 'left',
       }}
     >
       <span style={{ width: compact ? 28 : 30, height: compact ? 28 : 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -154,7 +154,7 @@ function BrandIconPicker() {
     .slice(0, 5) as KiteBrandIconOption[];
 
   return (
-    <div style={{ marginBottom: 18 }}>
+    <div>
       <div style={S.title}>APP / TAB ICON</div>
       <div style={S.sub}>Choose the icon shown before Sterling.</div>
 
@@ -169,9 +169,9 @@ function BrandIconPicker() {
         </div>
       )}
 
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 14 }}>
         <div style={{ ...S.label, marginBottom: 7 }}>FAVICON SIZE</div>
-        <div style={{ display: 'inline-flex', border: '1px solid #e0e0e0', borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ display: 'inline-flex', gap: 2, padding: 3, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f6f6f7' }}>
           {KITE_BRAND_ICON_SIZES.map((size) => {
             const selected = brandIconSize === size.value;
             return (
@@ -180,10 +180,11 @@ function BrandIconPicker() {
                 type="button"
                 onClick={() => pickSize(size.value)}
                 style={{
-                  background: selected ? ORANGE : '#fff',
-                  color: selected ? '#fff' : '#444',
-                  border: 'none', borderRight: size.value === 'xlarge' ? 'none' : '1px solid #e0e0e0',
-                  padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
+                  minHeight: 32, background: selected ? '#fff' : 'transparent',
+                  color: selected ? '#444' : '#777',
+                  border: 'none', borderRadius: 6,
+                  boxShadow: selected ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
+                  padding: '0 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11,
                   fontWeight: selected ? 700 : 500,
                 }}
               >
@@ -371,9 +372,11 @@ export function KiteTelegramPanel() {
 
   return (
     <div>
-      <BrandIconPicker />
+      <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+        <BrandIconPicker />
+      </section>
 
-      <div style={{ paddingTop: 16, borderTop: '1px solid #e0e0e0' }}>
+      <section style={{ padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
         <div style={S.title}>KITE TELEGRAM ALERTS</div>
         <div style={S.sub}>
           Send Kite signal alerts to your own Telegram bot(s) — separate from the crypto dashboard’s Telegram.
@@ -398,7 +401,7 @@ export function KiteTelegramPanel() {
             <div style={{ marginTop: 4 }}><AddTarget /></div>
           </>
         )}
-      </div>
+      </section>
     </div>
   );
 }
