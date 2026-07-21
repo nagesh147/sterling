@@ -37,7 +37,20 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Apply base expiry-series changes
-        run: python .github/expiry-series/apply.py
+        run: |
+          set +e
+          python .github/expiry-series/apply.py > /tmp/apply.log 2>&1
+          status=$?
+          cat /tmp/apply.log
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/apply.log .github/expiry-series/apply-error.log
+            git config user.name 'OpenAI'
+            git config user.email 'noreply@openai.com'
+            git add .github/expiry-series/apply-error.log
+            git commit -m 'chore(kite): capture expiry patch failure'
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+            exit "$status"
+          fi
       - name: Apply final expiry-series changes
         run: python .github/expiry-series/finalize.py
       - name: Install backend dependencies
