@@ -44,7 +44,6 @@ jobs:
         run: |
           python .github/expiry-series/apply.py > /tmp/apply.log 2>&1
           status=$?
-          echo "status=$status" >> "$GITHUB_OUTPUT"
           cat /tmp/apply.log
           exit "$status"
       - name: Upload base patch diagnostics
@@ -57,7 +56,22 @@ jobs:
         if: steps.apply_base.outcome == 'failure'
         run: exit 1
       - name: Apply final expiry-series changes
-        run: python .github/expiry-series/finalize.py
+        id: apply_final
+        continue-on-error: true
+        run: |
+          python .github/expiry-series/finalize.py > /tmp/finalize.log 2>&1
+          status=$?
+          cat /tmp/finalize.log
+          exit "$status"
+      - name: Upload finalizer diagnostics
+        if: steps.apply_final.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: expiry-finalize-error
+          path: /tmp/finalize.log
+      - name: Stop after finalizer failure
+        if: steps.apply_final.outcome == 'failure'
+        run: exit 1
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
       - name: Verify strike and scanner behavior
