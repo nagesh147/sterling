@@ -453,7 +453,11 @@ def _install() -> None:
                     expiry_types=kwargs.get("expiry_types") or (),
                     expiry_types_indices=kwargs.get("expiry_types_indices"),
                     expiry_types_stocks=kwargs.get("expiry_types_stocks"),
-                    existing_rows=strict_rows + previous,
+                    # Only rows produced by this scan are authoritative coverage.
+                    # Cached rows must be revalidated: treating a warm-cache row as
+                    # covered skips reconstruction and then merge_retained_confluence()
+                    # downgrades a still-running setup to ended after every restart.
+                    existing_rows=strict_rows,
                 )
                 rebuilt_rows = [row for row, _item in rebuilt_pairs]
                 strict_keys = {
