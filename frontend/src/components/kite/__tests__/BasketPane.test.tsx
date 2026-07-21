@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { BasketPane } from '../BasketPane';
 import { useKiteBasketStore } from '../../../store/useKiteBasketStore';
@@ -69,7 +69,9 @@ describe('BasketPane', () => {
 
     await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
     // Remove the second (not-yet-placed) row while the first is still pending.
-    useKiteBasketStore.getState().remove(tcsId);
+    act(() => {
+      useKiteBasketStore.getState().remove(tcsId);
+    });
     resolveFirst({ order_id: 'o1' });
 
     await waitFor(() => {
