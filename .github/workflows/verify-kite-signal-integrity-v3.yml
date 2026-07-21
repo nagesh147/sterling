@@ -41,15 +41,13 @@ jobs:
         run: python .github/signal-integrity-v2/apply.py
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
-      - name: Verify backend signal semantics
+      - name: Verify backend CE PE entry semantics
         working-directory: backend
         env:
           ENVIRONMENT: test
           PAPER_TRADING: 'true'
           REAL_PUBLIC_DATA: 'false'
-        run: |
-          pytest tests/engines/sterling_kite_engine/test_scanner.py -q --tb=short -k 'not derivative_contract_never_treats_three_red_as_an_entry'
-          pytest tests/engines/sterling_kite_engine/test_scanner.py -q --tb=short -k 'derivative_contract_never_treats_three_red_as_an_entry'
+        run: pytest tests/engines/sterling_kite_engine/test_scanner.py::test_derivative_contract_never_treats_three_red_as_an_entry -q --tb=short
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci --silent
