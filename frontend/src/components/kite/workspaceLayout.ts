@@ -38,7 +38,9 @@ export const DEFAULT_WORKSPACE_LAYOUT: WorkspaceLayoutState = {
     bottom: 'terminal',
   },
   minimized: [],
-  sizes: { left: 360, right: 560, bottom: 220 },
+  // Classic mirrors Sterling's original signals-forward desktop workspace:
+  // a comfortable watchlist, a compact main pane, and a wide execution pane.
+  sizes: { left: 420, right: 1290, bottom: 220 },
   locked: false,
 };
 
