@@ -1,9 +1,8 @@
-"""Curated stock registry for the Sterling Kite Engine scan.
+"""Curated high-liquidity stock registry for the Sterling Kite Engine scan.
 
-Each entry maps a stock name (equity tradingsymbol) to its liquidity tier and
-metadata. Only these stocks are exposed in the UI's quick-pick chip selector.
-Users can still add arbitrary F&O stocks via the free-form input, or use "All
-F&O" to scan the full universe.
+Only Very High and High liquidity names are eligible for production scanning.
+Lower-liquidity names remain in ``OPTIONAL_STOCKS`` as reference metadata but are
+not exposed through the production scan universe.
 """
 from __future__ import annotations
 
@@ -85,12 +84,17 @@ STOCK_REGISTRY: List[StockEntry] = [
     StockEntry("ULTRACEMCO", "UltraTech Cement", "Good", "Moderate", "Nifty, Sensex", "Cement/infra plays"),
 ]
 
-# Back-compat: the flat list used by the old CURATED_STOCKS tuple.
-ALL_STOCK_NAMES: List[str] = [e.name for e in STOCK_REGISTRY] + [e.name for e in OPTIONAL_STOCKS]
-CURATED_STOCK_NAMES: List[str] = ALL_STOCK_NAMES  # back-compat alias
+HIGH_LIQUIDITY_STOCKS: List[StockEntry] = [
+    entry for entry in STOCK_REGISTRY + OPTIONAL_STOCKS
+    if entry.liquidity in ("Very High", "High")
+]
+HIGH_LIQUIDITY_STOCK_NAMES: List[str] = list(dict.fromkeys(entry.name for entry in HIGH_LIQUIDITY_STOCKS))
+
+# Back-compatible aliases now intentionally point to the production-safe universe.
+ALL_STOCK_NAMES: List[str] = HIGH_LIQUIDITY_STOCK_NAMES
+CURATED_STOCK_NAMES: List[str] = HIGH_LIQUIDITY_STOCK_NAMES
 
 LIQUIDITY_ORDER = {"Very High": 0, "High": 1, "Good": 2}
-
 STOCKS_BY_LIQUIDITY: dict[str, List[StockEntry]] = {}
-for e in STOCK_REGISTRY:
-    STOCKS_BY_LIQUIDITY.setdefault(e.liquidity, []).append(e)
+for entry in HIGH_LIQUIDITY_STOCKS:
+    STOCKS_BY_LIQUIDITY.setdefault(entry.liquidity, []).append(entry)
