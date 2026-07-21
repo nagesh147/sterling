@@ -55,6 +55,8 @@ jobs:
       - name: Stop after base patch failure
         if: steps.apply_base.outcome == 'failure'
         run: exit 1
+      - name: Repair finalizer anchors
+        run: python .github/expiry-series/patch_finalize.py
       - name: Apply final expiry-series changes
         id: apply_final
         continue-on-error: true
