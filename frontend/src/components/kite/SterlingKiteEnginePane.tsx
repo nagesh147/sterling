@@ -24,6 +24,7 @@ import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 import { useTickerPins } from '../../store/useTickerPins';
 import { useLiveSignalCount } from '../../store/useLiveSignalCount';
 import { useSignalMarkers, type Marker } from '../../store/useSignalMarkers';
+import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 
 
 interface Props {
@@ -905,7 +906,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // Red-counter progress toward the auto-exit rule (row-level).
                            return (
                              <span title="Red-counter progress toward the auto-exit rule (exit_mode)" style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
-                               {row.exit_state ?? '—'}
+                               {legExitState ?? '—'}
                              </span>
                            );
                          case 'target':
@@ -955,7 +956,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                           lastPrice: lastPx || 0,
                         });
                       }}
-                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, { timestamp_ms: row.timestamp_ms, direction: row.direction, regime: row.regime }); }}
+                      onChart={(e) => { e.stopPropagation(); onOpenChart?.(`${row.exchange}:${leg.option_symbol}`, 'chart', undefined, signalChartDataForPremiumLeg(row, leg)); }}
                     />
                     
                     <div className="st-prices" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

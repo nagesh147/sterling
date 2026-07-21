@@ -973,3 +973,21 @@ def test_option_order_args_grouped_derivative_uses_underlying_spot_and_leg_stop(
     assert args["option_symbol"] == "ATM"
     assert args["stop_loss"] == 22
     assert args["stop_premium"] == 22
+
+@pytest.mark.parametrize("option_type", ["CE", "PE"])
+def test_derivative_contract_never_treats_three_red_as_an_entry(option_type):
+    """The final three-red bar is never emitted as a CE/PE long-premium entry."""
+    cfg = SterlingKiteEngineConfig()
+    item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")
+    pick = OptionPick(option_symbol=f"HDFCBANK26JUL825{option_type}", strike=825.0,
+                      option_type=option_type, expiry="2026-07-30", dte=9,
+                      lot_size=550, token=12345)
+    candles = _trim_to_transition(_candles(_fresh_short_path()), cfg, "short")
+    rows = evaluate_derivative_contract(item, "ITM3", pick, candles, cfg)
+    final_ts = candles[-1].timestamp_ms
+    assert all(row.timestamp_ms != final_ts for row in rows)
+    assert all(row.direction == "long" for row in rows)
+    assert all((row.legs[0].alignment.fast,
+                row.legs[0].alignment.mid,
+                row.legs[0].alignment.slow) == (1, 1, 1) for row in rows)
+

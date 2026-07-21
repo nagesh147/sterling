@@ -1,3 +1,5 @@
+import type { EngineSignalRow, OptionLeg, SignalChartData } from '../../types/kiteEngine';
+
 export type TrendDirection = 'up' | 'down';
 export type TrendPoint = { direction: TrendDirection };
 
@@ -27,4 +29,22 @@ export function freshTripleAlignmentIndex(
     if (diff < bestDiff) { best = i; bestDiff = diff; }
   }
   return bestDiff <= tolerance ? best : -1;
+}
+
+/** Build chart metadata from the selected option contract, never from its grouped parent.
+ * CE and PE are both long-premium BUY signals, so premium markers always seek a
+ * fresh three-green transition regardless of the underlying BULL/BEAR regime. */
+export function signalChartDataForPremiumLeg(
+  row: EngineSignalRow, leg: OptionLeg,
+): SignalChartData {
+  const entryTs = leg.entry_timestamp_ms ?? leg.signal_timestamp_ms ?? row.timestamp_ms;
+  const premiumTs = leg.signal_timestamp_ms ?? leg.entry_timestamp_ms ?? row.timestamp_ms;
+  return {
+    timestamp_ms: entryTs,
+    direction: 'long',
+    regime: row.regime,
+    source: row.source === 'confluence' ? 'confluence' : 'derivatives',
+    premium_signal_ms: premiumTs,
+    marker_basis: 'premium',
+  };
 }

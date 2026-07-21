@@ -1194,26 +1194,31 @@ export function TradingViewKiteChart({
         const entryTargetSec = signalData.timestamp_ms / 1000;
         const premiumTargetSec = (signalData.premium_signal_ms ?? signalData.timestamp_ms) / 1000;
         const avgSpacing = times.length > 1 ? Math.abs(times[times.length - 1] - times[0]) / (times.length - 1) : Infinity;
-        const tolerance = Math.max(avgSpacing * 1.25, 3600);
+        const broadTolerance = Math.max(avgSpacing * 1.25, 3600);
+        // Premium timestamps are emitted from the exact option candle. Keep this
+        // strict so a grouped-parent timestamp cannot snap to a neighbouring bar.
+        const premiumTolerance = 60;
         const stF = supertrend(highs, lows, closes, params.stFastPeriod || 21, params.stFastMult || 1);
         const stM = supertrend(highs, lows, closes, params.stMidPeriod || 14, params.stMidMult || 2);
         const stS = supertrend(highs, lows, closes, params.stSlowPeriod || 7, params.stSlowMult || 3);
         const source = signalData.source || 'spot';
         const markers: any[] = [];
 
-        if (source === 'derivatives' || signalData.marker_basis === 'premium') {
-          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
-          if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Entry' });
-        } else if (source === 'confluence') {
-          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', tolerance);
+        // Confluence is checked before the generic premium-basis branch so its label
+        // remains reachable. Both CE and PE premium confirmations are three-green.
+        if (source === 'confluence') {
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', premiumTolerance);
           if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Confluence' });
+        } else if (source === 'derivatives' || signalData.marker_basis === 'premium') {
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, premiumTargetSec, 'up', premiumTolerance);
+          if (idx >= 0) markers.push({ time: times[idx] as any, position: 'belowBar', color: tv.green, shape: 'arrowUp', text: 'Entry' });
         } else if (signalData.marker_basis === 'external') {
-          const idx = nearestTimeIndex(times, entryTargetSec, tolerance);
+          const idx = nearestTimeIndex(times, entryTargetSec, broadTolerance);
           if (idx >= 0) markers.push({ time: times[idx] as any, position: 'aboveBar', color: tv.blue, shape: 'circle', text: 'Underlying entry' });
         } else {
           const dir = (signalData.direction || '').toLowerCase();
           const wanted = dir === 'short' || (signalData.regime || '').toUpperCase() === 'BEAR' ? 'down' : 'up';
-          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, entryTargetSec, wanted, tolerance);
+          const idx = freshTripleAlignmentIndex(stF, stM, stS, times, entryTargetSec, wanted, broadTolerance);
           if (idx >= 0) markers.push({
             time: times[idx] as any,
             position: wanted === 'up' ? 'belowBar' : 'aboveBar',
