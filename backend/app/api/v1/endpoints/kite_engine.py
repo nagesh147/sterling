@@ -6,6 +6,9 @@ orders. Imports no other engine's strategy/signal/derivative logic.
 """
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import UserContext, get_current_user
@@ -21,11 +24,15 @@ from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite.errors import KiteError
 from app.services.kite_engine import positions as kite_positions, service, state
 from app.services.kite_engine.detail import build_detail
+from app.services.kite_engine.expiry_calendar import build_expiry_calendar
 from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import build_setup_chart, scanner
+from app.services.kite_engine.stock_registry import CURATED_STOCK_NAMES
+from app.services.kite_engine.universe import load_cfg as load_universe_config
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/kite/engine", tags=["kite-engine"])
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
@@ -57,6 +64,33 @@ async def set_config(body: EngineConfigModel,
 @router.post("/config/reset")
 async def reset_config(user: UserContext = Depends(get_current_user)) -> EngineConfigModel:
     return state.set_config(user.user_id, EngineConfigModel())
+
+
+@router.get("/expiry-calendar")
+async def expiry_calendar(user: UserContext = Depends(get_current_user)) -> dict:
+    """Return exact option expiries listed by Kite for every supported underlying.
+
+    The response is display metadata for the expiry selector. Dates are copied from
+    the cached NFO/BFO instrument dumps and classified with the same month-end rule
+    as the production strike resolver; no weekday or holiday date is calculated.
+    """
+    client = await _client(user)
+    try:
+        nfo_rows, bfo_rows = await asyncio.gather(
+            client.search_instruments("", "NFO", limit=1_000_000),
+            client.search_instruments("", "BFO", limit=1_000_000),
+        )
+    except KiteError as exc:
+        raise HTTPException(502, f"Kite instrument fetch failed: {exc}") from exc
+
+    universe_config = load_universe_config()
+    return build_expiry_calendar(
+        nfo_rows=nfo_rows,
+        bfo_rows=bfo_rows,
+        index_definitions=universe_config.get("indices", []),
+        stock_names=CURATED_STOCK_NAMES,
+        today=datetime.now(_IST).date(),
+    )
 
 
 @router.post("/backtest")

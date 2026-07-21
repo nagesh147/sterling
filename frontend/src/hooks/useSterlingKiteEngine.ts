@@ -3,7 +3,7 @@ import { api } from '../utils/api';
 import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   ActivityResponse, BacktestRequest, BacktestResponse, EngineConfigModel,
-  EngineDetailResponse, EngineOrderRequest, EngineOrderResponse, LiquidityGroup,
+  EngineDetailResponse, EngineOrderRequest, EngineOrderResponse, ExpiryCalendarResponse, LiquidityGroup,
   OpenPositionsResponse, ScanReportResponse, SetupChart, SignalsResponse,
 } from '../types/kiteEngine';
 
@@ -49,6 +49,18 @@ export function useEngineConfig() {
     queryKey: ['kite-engine-config'],
     queryFn: () => api.get<EngineConfigModel>(`${E}/config`),
     staleTime: 30_000,
+  });
+}
+
+// Exact contract dates from Kite's NFO/BFO instrument dump. The backend cache is
+// hourly; a shorter query window lets an expiry-day rollover refresh automatically.
+export function useExpiryCalendar() {
+  return useQuery<ExpiryCalendarResponse>({
+    queryKey: ['kite-engine-expiry-calendar'],
+    queryFn: () => api.get<ExpiryCalendarResponse>(`${E}/expiry-calendar`),
+    staleTime: 15 * 60_000,
+    refetchInterval: 30 * 60_000,
+    retry: 1,
   });
 }
 

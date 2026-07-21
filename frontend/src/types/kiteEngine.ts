@@ -169,6 +169,12 @@ export interface EngineConfigModel {
   scan_expiries: ScanExpiry[];
   scan_expiries_indices?: ScanExpiry[] | null;
   scan_expiries_stocks?: ScanExpiry[] | null;
+  // The API persists zero-based series ranks for compatibility. The UI resolves
+  // these private values to exact Kite-listed contract dates before displaying them.
+  scan_weekly_series_indices?: number[];
+  scan_monthly_series_indices?: number[];
+  scan_weekly_series_stocks?: number[];
+  scan_monthly_series_stocks?: number[];
   scan_indices: string[];
   scan_stocks: string[];
   scan_all_stocks: boolean;
@@ -205,6 +211,20 @@ export interface EngineConfigModel {
   wire_risk_infra: boolean;
   // Hybrid ATR+ST trail weight (0-1)
   hybrid_st_weight?: number;
+}
+
+export interface ExpiryCalendarEntry {
+  name: string;
+  display_name: string;
+  weekly: string[];
+  monthly: string[];
+}
+
+export interface ExpiryCalendarResponse {
+  as_of: string;
+  source: 'kite_instruments';
+  indices: ExpiryCalendarEntry[];
+  stocks: ExpiryCalendarEntry[];
 }
 
 // ─── Options backtest (workstream H) ─────────────────────────────────────────
