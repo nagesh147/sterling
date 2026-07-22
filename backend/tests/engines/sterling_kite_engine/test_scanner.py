@@ -833,6 +833,80 @@ async def test_scan_confluence_emits_merged_row_when_both_fire():
 
 
 @pytest.mark.asyncio
+async def test_scan_with_empty_spot_universe_does_not_wipe_existing_rows():
+    """Regression: a scan_source other than spot/both (confluence here) passes an
+    EMPTY ``universe`` to scan() — the spot phase's asyncio.gather over zero items
+    must never stomp us.rows with the still-empty local accumulator before the
+    confluence/derivatives phases below get a chance to run. A second scan with
+    nothing new to find (empty universe AND empty confluence_universe) must leave
+    the board exactly as the first scan left it."""
+    cfg = SterlingKiteEngineConfig()
+    fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return fired
+            return _candles(_fresh_long_path())
+
+    base = int(round(fired[-1].close / 50) * 50)
+    nfo = _wide_ce_pe_chain(base)
+    conf = [UniverseItem("ACME", "ACME", 100, "NSE", "NFO")]
+    sc = KiteEngineScanner()
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], confluence_universe=conf)
+    populated = sc.snapshot("u1").rows
+    assert populated, "first scan should have found a confluence row"
+
+    await sc.scan(uid="u1", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                  cfg=cfg, moneyness=["ATM"], confluence_universe=[])
+    assert sc.snapshot("u1").rows == populated
+
+
+@pytest.mark.asyncio
+async def test_scan_hydrates_persisted_cache_on_first_touch_after_restart(monkeypatch):
+    """Regression: scan() claims the uid slot via _user(), not snapshot() — on a
+    fresh process (e.g. right after a backend restart) _user() used to create an
+    empty UserScan without loading the DB-persisted signal cache, so the very
+    first scan (typically the auto-loop, seconds after the process comes up)
+    would run with us.rows=[] for its whole duration. Any /signals poll landing
+    in that window saw a blanked board even though good signals were sitting in
+    the DB cache, unused, the entire time."""
+    from app.services.kite_engine import state
+
+    cfg = SterlingKiteEngineConfig()
+    fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return fired
+            return _candles(_fresh_long_path())
+
+    base = int(round(fired[-1].close / 50) * 50)
+    nfo = _wide_ce_pe_chain(base)
+    conf = [UniverseItem("ACME", "ACME", 100, "NSE", "NFO")]
+
+    # Populate a real cache payload once, on a throwaway scanner instance.
+    seed_sc = KiteEngineScanner()
+    await seed_sc.scan(uid="u2", client=FakeClient(), universe=[], nfo_rows=nfo, bfo_rows=[],
+                       cfg=cfg, moneyness=["ATM"], confluence_universe=conf)
+    persisted_rows = seed_sc.snapshot("u2").rows
+    assert persisted_rows
+
+    # A brand-new scanner (empty _users dict) simulates the post-restart state;
+    # monkeypatch load_signal_cache so the test doesn't depend on the DB backend
+    # actually being available in this environment.
+    cached_payload = ([r.model_dump() for r in persisted_rows], 12345)
+    monkeypatch.setattr(state, "load_signal_cache", lambda uid: cached_payload if uid == "u2" else None)
+
+    fresh_sc = KiteEngineScanner()
+    us = fresh_sc._user("u2", cfg)  # the exact path scan() takes internally
+    assert us.rows, "expected _user() to hydrate from the persisted cache like snapshot() does"
+    assert [r.underlying for r in us.rows] == [r.underlying for r in persisted_rows]
+
+
+@pytest.mark.asyncio
 async def test_scan_confluence_leg_premium_is_current_not_stale_entry():
     """Regression (scanner.py:826): when the underlying fires fresh but the chosen
     option's premium has been trending for several bars (is_active, NOT is_fresh),

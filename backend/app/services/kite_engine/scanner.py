@@ -463,18 +463,12 @@ class KiteEngineScanner:
     def __init__(self) -> None:
         self._users: Dict[str, UserScan] = {}
 
-    def _user(self, uid: str, cfg: SterlingKiteEngineConfig) -> UserScan:
-        us = self._users.get(uid)
-        if us is None:
-            us = UserScan(engine=SterlingKiteEngine(cfg))
-            self._users[uid] = us
-        return us
-
-    def snapshot(self, uid: str) -> UserScan:
-        us = self._users.get(uid)
-        if us is not None:
-            return us
-        us = UserScan(engine=SterlingKiteEngine())
+    def _hydrate_from_cache(self, us: UserScan, uid: str) -> None:
+        """Restore rows persisted by a prior scan (DB-backed, survives restarts).
+        Shared by _user() and snapshot() so neither creates a fresh empty
+        UserScan that shadows already-good signals — a scan started by the
+        auto-loop right after a restart used to do exactly that, wiping the
+        board back to zero the instant it claimed the uid slot."""
         cached = state.load_signal_cache(uid)
         if cached:
             rows_data, gen_ms = cached
@@ -483,6 +477,21 @@ class KiteEngineScanner:
                 us.generated_ms = gen_ms
             except Exception as _exc:
                 log.debug("suppressed: %s", _exc)
+
+    def _user(self, uid: str, cfg: SterlingKiteEngineConfig) -> UserScan:
+        us = self._users.get(uid)
+        if us is None:
+            us = UserScan(engine=SterlingKiteEngine(cfg))
+            self._hydrate_from_cache(us, uid)
+            self._users[uid] = us
+        return us
+
+    def snapshot(self, uid: str) -> UserScan:
+        us = self._users.get(uid)
+        if us is not None:
+            return us
+        us = UserScan(engine=SterlingKiteEngine())
+        self._hydrate_from_cache(us, uid)
         self._users[uid] = us
         return us
 
@@ -613,11 +622,13 @@ class KiteEngineScanner:
                 if new_rows:
                     _flush()
 
+            # Each _one() call already flushes us.rows itself the moment it finds a
+            # signal (see above) — nothing further to do once the spot phase drains.
+            # NOTE: an unconditional _flush() here is a trap when universe is empty
+            # (confluence/derivatives-only scan_source): it would stomp us.rows with
+            # the still-empty local `rows` list before the confluence/derivatives
+            # phases below get a chance to populate it, wiping the board mid-scan.
             await asyncio.gather(*[_one(i) for i in universe])
-            # Final flush in case the very last item(s) landed after the loop's own
-            # per-item flush (e.g. it produced no rows itself but earlier concurrent
-            # tasks did) — keeps us.rows authoritative before the derivatives phase.
-            _flush()
 
             # ── derivatives scan: triple-ST on each contract's OWN premium chart ──
             async def _deriv_one(item: UniverseItem) -> None:
