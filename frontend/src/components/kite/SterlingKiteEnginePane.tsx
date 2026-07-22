@@ -1697,7 +1697,7 @@ function ScanProgressBar({ signals }: { signals?: SignalsResponse }) {
 
 export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const s = useKiteSettings();
-  const { data: signals } = useEngineSignals();
+  const { data: signals, isLoading: signalsLoading } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
@@ -2134,8 +2134,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-scan-bar { position: absolute; top: 0; left: 0; height: 100%; width: 35%; background: linear-gradient(90deg, transparent, ${k.orange}, transparent); animation: st-scan 1.1s ease-in-out infinite; }
         @keyframes st-scan { 0% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
         .st-drawer { transition: grid-template-rows .22s ease; }
+        .st-signal-in { animation: st-signal-in .28s ease-out; }
+        @keyframes st-signal-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
-          .st-spin, .st-pulse, .st-scan-bar, .st-drawer { animation: none !important; transition: none !important; }
+          .st-spin, .st-pulse, .st-scan-bar, .st-drawer, .st-signal-in { animation: none !important; transition: none !important; }
         }
       `}</style>
 
@@ -2172,7 +2174,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           </div>
         ) : groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
-            {scanning ? (
+            {signalsLoading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <KiteLoader size={26} />
+                <span>Loading signal board…</span>
+              </div>
+            ) : scanning ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                 <KiteLoader size={26} />
                 <span>{`Scanning ${signals?.scanning_label || '…'}`}</span>
@@ -2207,11 +2214,13 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 {!isCollapsed && (
                   <div className="kv-rows">
                     {group.rows.map((row) => (
-                      <SignalCard key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} row={row} quotes={quotes} viewLayout={viewLayout}
-                        scanSource={cfg?.scan_source}
-                        onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
-                        onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
-                        onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />
+                      <div key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
+                        <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
+                          scanSource={cfg?.scan_source}
+                          onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
+                          onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
+                          onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />
+                      </div>
                     ))}
                   </div>
                 )}

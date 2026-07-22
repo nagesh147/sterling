@@ -546,6 +546,16 @@ class KiteEngineScanner:
                 if item.is_index:
                     diag.index_no_data += 1
 
+            # Flushes the rows accumulated so far into us.rows (+ DB cache) so the
+            # frontend's poll sees each symbol's signal the moment it's found,
+            # instead of waiting for the whole phase (spot / derivatives / confluence)
+            # to finish. Defined up front so every phase's per-item loop can call it.
+            def _flush() -> None:
+                us.rows = _compile_rows(rows)
+                us.generated_ms = int(time.time() * 1000)
+                model_rows = [r.model_dump() for r in us.rows]
+                state.save_signal_cache(uid, model_rows, us.generated_ms)
+
             async def _one(item: UniverseItem) -> None:
                 if us.cancelled:
                     return
@@ -582,7 +592,8 @@ class KiteEngineScanner:
                 # Surface running/just-fired setups PLUS the most-recent recently-ended
                 # one, so signals don't vanish the instant a trend breaks (they show as
                 # "ended" until they age out — see _retain_signals).
-                for row in _retain_signals(eval_rows, now_ms):
+                new_rows = _retain_signals(eval_rows, now_ms)
+                for row in new_rows:
                     attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                                    moneynesses=moneyness, today=today,
                                    expiry_types=_expiry)
@@ -597,16 +608,15 @@ class KiteEngineScanner:
                                 await place_cb(row, item)
                             except Exception as exc:  # noqa: BLE001
                                 log.warning("kite-engine auto-exec fail %s: %s", item.name, exc)
+                # Only worth a flush when this symbol actually produced a signal —
+                # the common case (no setup) has nothing new to show.
+                if new_rows:
+                    _flush()
 
             await asyncio.gather(*[_one(i) for i in universe])
-
-            # ── flush spot results immediately so the frontend shows them while
-            # derivatives are still scanning ──
-            def _flush() -> None:
-                us.rows = _compile_rows(rows)
-                us.generated_ms = int(time.time() * 1000)
-                model_rows = [r.model_dump() for r in us.rows]
-                state.save_signal_cache(uid, model_rows, us.generated_ms)
+            # Final flush in case the very last item(s) landed after the loop's own
+            # per-item flush (e.g. it produced no rows itself but earlier concurrent
+            # tasks did) — keeps us.rows authoritative before the derivatives phase.
             _flush()
 
             # ── derivatives scan: triple-ST on each contract's OWN premium chart ──

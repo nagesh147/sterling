@@ -17,11 +17,14 @@ export function useEngineBacktest() {
 }
 
 // ─── Signals (polled) ────────────────────────────────────────────────────────
+// The backend now flushes rows symbol-by-symbol while a scan is running (see
+// scanner.py), so poll fast during a scan to show setups landing on the go;
+// fall back to a slow idle poll once scanning finishes.
 export function useEngineSignals() {
   return useQuery<SignalsResponse>({
     queryKey: ['kite-engine-signals'],
     queryFn: () => api.get<SignalsResponse>(`${E}/signals`),
-    refetchInterval: 15_000,
+    refetchInterval: (query) => (query.state.data?.scanning ? 2_000 : 15_000),
   });
 }
 
