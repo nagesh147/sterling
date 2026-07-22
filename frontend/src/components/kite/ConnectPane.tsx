@@ -11,7 +11,7 @@ import type { KiteAccount } from '../../types/kite';
 import { ModeToggle } from './ModeToggle';
 import { TradingModeControls } from './TradingModeControls';
 import { DirectionalModePanel } from './DirectionalModePanel';
-import { KiteTelegramPanel } from './KiteTelegramPanel';
+import { KiteTelegramPanel, BrandIconPicker } from './KiteTelegramPanel';
 import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
@@ -607,12 +607,13 @@ function EngineMasterToggle() {
 // Connect used to contain another horizontal tab bar, while display, exchange,
 // Telegram and engine controls were injected above/between those tabs. A stable
 // category rail gives every setting one predictable home and keeps each page calm.
-type ConnectSection = 'account' | 'engine' | 'markets' | 'notifications' | 'experience';
+type ConnectSection = 'account' | 'engine' | 'orderSelection' | 'markets' | 'notifications' | 'experience';
 
 const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string }> = [
-  { id: 'account', label: 'Account & login', eyebrow: 'Zerodha connection' },
-  { id: 'engine', label: 'Engine', eyebrow: 'Signals, orders & risk' },
-  { id: 'markets', label: 'Markets & tools', eyebrow: 'Exchanges, funds & data' },
+  { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection' },
+  { id: 'engine', label: 'Engine Configuration', eyebrow: 'Signals, orders & risk' },
+  { id: 'orderSelection', label: 'Order Selection & Entry Quality', eyebrow: 'Vehicle profile & filters' },
+  { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts' },
   { id: 'experience', label: 'Experience', eyebrow: 'Motion & feedback' },
 ];
@@ -676,7 +677,7 @@ export function ConnectPane() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#777', fontSize: 10, fontWeight: 750, letterSpacing: .9, textTransform: 'uppercase' }}>
             <span aria-hidden style={{ width: 16, height: 2, borderRadius: 1, background: '#f06428' }} />Kite control center
           </div>
-          <h1 style={{ margin: '6px 0 0', color: '#2f2f2f', fontSize: 24, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & settings</h1>
+          <h1 style={{ margin: '6px 0 0', color: '#2f2f2f', fontSize: 24, lineHeight: 1.2, fontWeight: 760, letterSpacing: '-.025em' }}>Setup & Settings</h1>
           <p style={{ margin: '8px 0 0', color: '#777', fontSize: 12.5, lineHeight: 1.55, maxWidth: 600 }}>
             One place for the Zerodha connection, engine behaviour, markets, alerts and app experience.
           </p>
@@ -715,7 +716,7 @@ export function ConnectPane() {
         <main style={{ minWidth: 0 }}>
           {section === 'account' && (
             <>
-              <SectionHeading title="Account & login" description="Manage API credentials and the daily Zerodha session. Trading behaviour is configured separately under Engine." />
+              <SectionHeading title="Account & Login" description="Manage API credentials and the daily Zerodha session. Trading behaviour is configured separately under Engine Configuration." />
               {isLoading && <div style={S.hint}>Loading accounts…</div>}
               {data?.accounts.map((account) => <AccountCard key={account.id} acc={account} />)}
               {data && data.count === 0 && <div style={{ ...S.hint, marginBottom: 10 }}>No Kite accounts yet — add your API key and secret to begin.</div>}
@@ -728,23 +729,23 @@ export function ConnectPane() {
 
           {section === 'engine' && (
             <>
-              <SectionHeading title="Engine" description="Control whether Sterling scans, how signals are discovered, and how orders and risk are handled." />
+              <SectionHeading title="Engine Configuration" description="Control whether Sterling scans, how signals are discovered, and how orders and risk are handled." />
               <EngineMasterToggle />
               <TradingModeControls />
               <EngineConfigurationPanel />
-              <details style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, marginBottom: 16, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-                <summary style={{ minHeight: 58, cursor: 'pointer', listStyle: 'none', padding: '14px 18px', color: '#444', fontSize: 13, fontWeight: 750, boxSizing: 'border-box' }}>
-                  Order selection & entry quality
-                  <span style={{ display: 'block', marginTop: 4, color: '#888', fontSize: 11, fontWeight: 400 }}>Vehicle profile, directional filters and trade-impact preview.</span>
-                </summary>
-                <div style={{ padding: '0 14px 2px' }}><DirectionalModePanelWrapper /></div>
-              </details>
+            </>
+          )}
+
+          {section === 'orderSelection' && (
+            <>
+              <SectionHeading title="Order Selection & Entry Quality" description="Vehicle profile, directional filters and trade-impact preview." />
+              <DirectionalModePanelWrapper />
             </>
           )}
 
           {section === 'markets' && (
             <>
-              <SectionHeading title="Markets & tools" description="Choose the exchanges Sterling can use, then inspect funds, charges and live ticker subscriptions." />
+              <SectionHeading title="Markets & Tools" description="Choose the exchanges Sterling can use, then inspect funds, charges and live ticker subscriptions." />
               <KiteExchangeSettingsCard />
               {liveTools ? (
                 <><Funds /><MarginCalc /><TickerControl /></>
@@ -768,6 +769,9 @@ export function ConnectPane() {
             <>
               <SectionHeading title="Experience" description="Choose how loading, dialogs and transitions feel throughout Kite." />
               <MotionStyleSettings />
+              <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+                <BrandIconPicker />
+              </section>
               <div style={{ ...S.card, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <span aria-hidden style={{ color: '#777', fontSize: 16 }}>ⓘ</span>
                 <div style={{ color: '#777', fontSize: 11, lineHeight: 1.55 }}>

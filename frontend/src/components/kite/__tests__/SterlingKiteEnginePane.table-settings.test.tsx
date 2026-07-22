@@ -88,9 +88,9 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     expect(screen.getByRole('checkbox', { name: 'Show ended setups' })).toBeChecked();
 
     // Engine controls must never leak back into the table preferences drawer.
-    expect(screen.queryByText('Signal discovery')).not.toBeInTheDocument();
-    expect(screen.queryByText('Exit & protection')).not.toBeInTheDocument();
-    expect(screen.queryByText('Risk & safeguards')).not.toBeInTheDocument();
+    expect(screen.queryByText('Signal Discovery')).not.toBeInTheDocument();
+    expect(screen.queryByText('Exit & Protection')).not.toBeInTheDocument();
+    expect(screen.queryByText('Risk & Safeguards')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Exchange' }));
     expect(useKiteSettings.getState().showExchange).toBe(false);

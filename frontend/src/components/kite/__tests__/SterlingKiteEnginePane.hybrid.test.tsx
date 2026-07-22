@@ -64,7 +64,7 @@ function renderPanel(section: 'exit' | 'risk' = 'exit') {
       <EngineConfigurationPanel />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByText(section === 'exit' ? 'Exit & protection' : 'Risk & safeguards'));
+  fireEvent.click(screen.getByText(section === 'exit' ? 'Exit & Protection' : 'Risk & Safeguards'));
 }
 
 describe('EngineConfigurationPanel — settings → rescan wiring', () => {

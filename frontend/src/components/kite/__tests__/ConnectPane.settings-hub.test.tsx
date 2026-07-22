@@ -35,7 +35,10 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
 vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>Trading mode controls</div> }));
 vi.mock('../DirectionalModePanel', () => ({ DirectionalModePanel: () => <div>Order profile controls</div> }));
 vi.mock('../EngineConfigurationPanel', () => ({ EngineConfigurationPanel: () => <div>Engine configuration panel</div> }));
-vi.mock('../KiteTelegramPanel', () => ({ KiteTelegramPanel: () => <div>Kite alert destinations</div> }));
+vi.mock('../KiteTelegramPanel', () => ({
+  KiteTelegramPanel: () => <div>Kite alert destinations</div>,
+  BrandIconPicker: () => <div>Icon picker</div>,
+}));
 vi.mock('../MotionStyleSettings', () => ({ MotionStyleSettings: () => <div>Motion style choices</div> }));
 vi.mock('../KiteExchangeSettingsCard', () => ({ KiteExchangeSettingsCard: () => <div>Exchange choices</div> }));
 
@@ -48,22 +51,28 @@ describe('ConnectPane settings hub', () => {
   it('uses one category rail and gives each settings family one home', () => {
     render(<ConnectPane />);
 
-    expect(screen.getByRole('heading', { name: 'Setup & settings' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Setup & Settings' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Kite settings sections' })).toBeInTheDocument();
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
-    expect(screen.getByRole('heading', { name: 'Account & login' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Account & Login' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Engine Signals, orders & risk/i }));
-    expect(screen.getByRole('heading', { name: 'Engine' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Engine Configuration Signals, orders & risk/i }));
+    expect(screen.getByRole('heading', { name: 'Engine Configuration' })).toBeInTheDocument();
     expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
     expect(screen.getByText('Engine configuration panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Order Selection & Entry Quality Vehicle profile & filters/i }));
+    expect(screen.getByRole('heading', { name: 'Order Selection & Entry Quality' })).toBeInTheDocument();
+    expect(screen.getByText('Order profile controls')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Notifications Kite Telegram alerts/i }));
     expect(screen.getByRole('heading', { name: 'Notifications' })).toBeInTheDocument();
     expect(screen.getByText('Kite alert destinations')).toBeInTheDocument();
+    expect(screen.queryByText('Icon picker')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Experience Motion & feedback/i }));
     expect(screen.getByRole('heading', { name: 'Experience' })).toBeInTheDocument();
     expect(screen.getByText('Motion style choices')).toBeInTheDocument();
+    expect(screen.getByText('Icon picker')).toBeInTheDocument();
   });
 });

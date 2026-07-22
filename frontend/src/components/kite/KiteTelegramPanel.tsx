@@ -130,7 +130,7 @@ function IconChoice({ option, selected, size, onPick, compact = false }: {
   );
 }
 
-function BrandIconPicker() {
+export function BrandIconPicker() {
   const brandIcon = useKiteSettings((s) => s.brandIcon);
   const brandIconSize = useKiteSettings((s) => s.brandIconSize);
   const recentBrandIcons = useKiteSettings((s) => s.recentBrandIcons);
@@ -372,10 +372,6 @@ export function KiteTelegramPanel() {
 
   return (
     <div>
-      <section style={{ marginBottom: 16, padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
-        <BrandIconPicker />
-      </section>
-
       <section style={{ padding: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 9, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
         <div style={S.title}>KITE TELEGRAM ALERTS</div>
         <div style={S.sub}>

@@ -265,7 +265,7 @@ export function EngineConfigurationPanel() {
       </div>
 
       <Section
-        title="Signal discovery"
+        title="Signal Discovery"
         description="Choose how setups are found and which contracts are evaluated."
         summary={`${sourceLabel(cfg.scan_source)} · ${cfg.strike_moneyness.length} strikes`}
         defaultOpen
@@ -325,7 +325,7 @@ export function EngineConfigurationPanel() {
       </Section>
 
       <Section
-        title="Market universe"
+        title="Market Universe"
         description="Control the indices and F&O stocks included in every scan."
         summary={cfg.scan_all_stocks ? `All F&O · ${cfg.scan_indices.length} indices` : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`}
       >
@@ -365,7 +365,7 @@ export function EngineConfigurationPanel() {
       </Section>
 
       <Section
-        title="Exit & protection"
+        title="Exit & Protection"
         description="Tune exit confirmation and broker/server protection."
         summary={`${TRAIL_OPTIONS.find((item) => item.value === cfg.trail_target)?.label} trail · ${EXIT_OPTIONS.find((item) => item.value === cfg.exit_mode)?.label}`}
       >
@@ -385,7 +385,7 @@ export function EngineConfigurationPanel() {
           </div>
         </Field>
         <Field label="Hybrid weight" hint="SuperTrend weight from 0 to 1.">
-          <input data-testid="hybrid-weight-input" aria-label="Hybrid Weight" type="number" min={0} max={1} step={0.1}
+          <input data-testid="hybrid-weight-input" aria-label="Hybrid weight" type="number" min={0} max={1} step={0.1}
             value={cfg.hybrid_st_weight ?? 0.5} style={inputStyle}
             onChange={(event) => patch({ hybrid_st_weight: Number(event.target.value) }, 'Hybrid trail weight updated', true)} />
         </Field>
@@ -396,7 +396,7 @@ export function EngineConfigurationPanel() {
       </Section>
 
       <Section
-        title="Risk & safeguards"
+        title="Risk & Safeguards"
         description="Position sizing and optional guardrails for automatic execution."
         summary={`${cfg.risk_sizing ? `${cfg.risk_pct}% risk` : 'Fixed size'} · ${enabledGuards} guards`}
       >

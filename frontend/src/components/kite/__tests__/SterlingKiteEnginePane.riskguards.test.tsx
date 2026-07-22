@@ -74,7 +74,7 @@ function renderPanel(section: 'exit' | 'risk') {
       <EngineConfigurationPanel />
     </QueryClientProvider>,
   );
-  fireEvent.click(screen.getByText(section === 'exit' ? 'Exit & protection' : 'Risk & safeguards'));
+  fireEvent.click(screen.getByText(section === 'exit' ? 'Exit & Protection' : 'Risk & Safeguards'));
   if (section === 'risk') fireEvent.click(screen.getByText(/Advanced auto-execution guards/));
 }
 

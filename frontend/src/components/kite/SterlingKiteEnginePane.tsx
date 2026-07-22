@@ -1576,47 +1576,73 @@ function SignalTableSettingsPanel({
   );
 }
 
-// Quick-access 3-way cycle across Spot / Derivatives / Both scan source, for the
-// table toolbar — same pill chrome as Best/Ended so it reads as a matched control, but
-// it drives the REAL cfg.scan_source field via the same changeScanSource()/patch()
-// mutation the Universe & Execution panel's 3-way Segmented picker uses (single
-// source of truth — both controls always stay in sync, and the click order below is
-// derived from SCAN_SOURCE_OPTS so there's no second list to drift out of sync).
-// Each of the three modes gets its own label/color/knob position — "Both" is never
-// collapsed into or displayed as "Deriv" — and clicking always advances to the next
-// mode in SCAN_SOURCE_OPTS order, so every mode (including "Both") stays reachable
-// from this control alone. The full picker stays in the settings drawer for power users.
-// Four modes ⇒ a 40px track (knob 14px slides 1→27). Confluence is green — it is the
-// strongest-conviction mode (all-green entry on BOTH the underlying and the premium).
-const SCAN_SOURCE_QUICK_STYLE: Record<ScanSource, { label: string; color: string; knobLeft: number }> = {
-  spot: { label: 'Spot', color: k.dim, knobLeft: 1 },
-  derivatives: { label: 'Deriv', color: k.orange, knobLeft: 10 },
-  both: { label: 'Both', color: k.purple, knobLeft: 18 },
-  confluence: { label: 'Conf', color: k.green, knobLeft: 27 },
-};
+// Inline dropdown for changing a signal-source-tier setting (scan source, exit rule)
+// right from the table toolbar — same open/close/select interaction as the chart's
+// candle-type and indicator pickers (a button showing the current choice + chevron,
+// which opens a positioned popover list with a checkmark on the active option).
+function InlineDropdown<T extends string>({
+  value, options, onChange, tone, title,
+}: {
+  value: T;
+  options: { value: T; label: string; hint?: string }[];
+  onChange: (next: T) => void;
+  tone: string;
+  title: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
 
-function ScanSourceQuickToggle({ source, onChange }: { source: ScanSource; onChange: (v: ScanSource) => void }) {
-  const { label, color, knobLeft } = SCAN_SOURCE_QUICK_STYLE[source];
-  const advance = () => {
-    const i = SCAN_SOURCE_OPTS.findIndex((o) => o.value === source);
-    const next = SCAN_SOURCE_OPTS[(i + 1) % SCAN_SOURCE_OPTS.length].value;
-    onChange(next);
-  };
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const current = options.find((option) => option.value === value);
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-      title="Quick-cycle signal source (Spot -> Derivatives -> Both -> Spot): Deriv = SuperTrend on each option contract's own premium chart. Spot = SuperTrend on the underlying index/stock chart. Both = run both scans. (Full picker is in Universe & Execution settings.)">
-      <span style={{ fontSize: 10, color }}>{label}</span>
-      <button onClick={advance} aria-pressed={source !== 'spot'}
-        aria-label={`Scan source: ${label}. Click to cycle to the next scan source.`}
+    <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
+      <button type="button" title={title} aria-haspopup="listbox" aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
         style={{
-          position: 'relative', width: 40, height: 16, borderRadius: 999, border: 'none', padding: 0,
-          cursor: 'pointer', flexShrink: 0, background: color, transition: 'background .18s ease',
+          display: 'flex', alignItems: 'center', gap: 4, border: 'none', borderRadius: 999,
+          background: tint(tone, 7), color: tone, padding: '2px 6px 2px 8px', fontSize: 9, fontWeight: 700,
+          fontFamily: 'inherit', cursor: 'pointer',
         }}>
-        <span style={{
-          position: 'absolute', top: 1, left: knobLeft, width: 14, height: 14, borderRadius: '50%',
-          background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .18s ease',
-        }} />
+        {current?.label ?? value}
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .15s ease' }}>
+          <path d="M6 9l6 6 6-6" />
+        </svg>
       </button>
+      {open && (
+        <div role="listbox" aria-label={title} style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 30, minWidth: 210,
+          background: k.bg, border: `1px solid ${k.border}`, borderRadius: 8, boxShadow: '0 6px 18px rgba(0,0,0,.18)',
+          overflow: 'hidden', padding: 4,
+        }}>
+          {options.map((option) => {
+            const selected = option.value === value;
+            return (
+              <button key={option.value} type="button" role="option" aria-selected={selected}
+                onClick={() => { onChange(option.value); setOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', textAlign: 'left',
+                  border: 'none', borderRadius: 5, background: selected ? tint(tone, 8) : 'transparent',
+                  color: k.text, padding: '7px 8px', fontFamily: 'inherit', cursor: 'pointer',
+                }}>
+                <span style={{ width: 12, flexShrink: 0, color: tone, fontSize: 11, fontWeight: 700 }}>{selected ? '✓' : ''}</span>
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 11.5, fontWeight: selected ? 700 : 600 }}>{option.label}</span>
+                  {option.hint && <span style={{ display: 'block', marginTop: 1, fontSize: 9.5, color: k.dim, lineHeight: 1.35 }}>{option.hint}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1936,14 +1962,29 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           </span>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', flexShrink: 0 }}>1H</span>
           {cfg && (
-            <span title="Signal source — configure under Connect → Engine" style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tint(k.orange, 7), color: k.orange }}>
-              {SCAN_SOURCE_OPTS.find((option) => option.value === cfg.scan_source)?.label ?? cfg.scan_source}
-            </span>
+            <InlineDropdown
+              value={cfg.scan_source}
+              options={SCAN_SOURCE_OPTS}
+              tone={k.orange}
+              title="Signal source — change it right here, or from Connect → Engine Configuration"
+              onChange={(next) => patch(
+                { scan_source: next },
+                `Signal source changed to ${SCAN_SOURCE_OPTS.find((option) => option.value === next)?.label}`,
+                true,
+              )}
+            />
           )}
           {cfg && (
-            <span title="Current auto-exit rule (counter to the 3-green entry)" style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: tint(k.blue, 8), color: k.blue }}>
-              {EXIT_MODE_OPTS.find(o => o.value === (cfg.exit_mode ?? 'one_red'))?.short ?? '1R'} EXIT
-            </span>
+            <InlineDropdown
+              value={cfg.exit_mode ?? 'one_red'}
+              options={EXIT_MODE_OPTS}
+              tone={k.blue}
+              title="Auto-exit rule (counter to the 3-green entry) — change it right here, or from Connect → Engine Configuration"
+              onChange={(next) => patch(
+                { exit_mode: next },
+                `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
+              )}
+            />
           )}
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
@@ -1982,11 +2023,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                 height={35}
               />
             </div>
-            {(bestOnly || !showEnded) && (
-              <span title="Active table filters — change them in Signal table settings" style={{ flexShrink: 0, color: k.orange, background: tint(k.orange, 8), border: `1px solid ${tint(k.orange, 25)}`, borderRadius: 999, padding: '3px 7px', fontSize: 9.5, fontWeight: 700 }}>
-                {[bestOnly ? 'Best only' : '', !showEnded ? 'Active only' : ''].filter(Boolean).join(' · ')}
-              </span>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <BestOnlyToggle on={bestOnly} onChange={() => changeBestOnly(!bestOnly)} />
+              <EndedToggle on={showEnded} onChange={() => changeShowEnded(!showEnded)} />
+            </div>
           </div>
           {viewLayout === 'list' && (
             <div className="st-header-row" onScroll={syncHscroll} style={{
