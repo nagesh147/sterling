@@ -190,3 +190,31 @@ async def test_cold_cache_scan_rebuilds_active_confluence_without_replaying_orde
     assert row.legs[0].premium_spot > 0
     assert row.legs[0].premium_sl > 0
     assert placed == []
+
+    # A startup scan sees the persisted board as a warm cache. It must revalidate
+    # the same retained setup instead of treating the cached row as authoritative
+    # coverage and converting it to an ended row.
+    await scanner.scan(
+        uid="cold-cache-user",
+        client=FakeClient(),
+        universe=[],
+        nfo_rows=nfo,
+        bfo_rows=[],
+        cfg=cfg,
+        moneyness=["ATM"],
+        expiry_types=("monthly",),
+        expiry_types_stocks=("monthly",),
+        confluence_universe=[item],
+        place_cb=place_cb,
+    )
+
+    warm_rows = [
+        value
+        for value in scanner.snapshot("cold-cache-user").rows
+        if value.source == "confluence"
+    ]
+    assert len(warm_rows) == 1
+    assert warm_rows[0].is_active is True
+    assert warm_rows[0].is_fresh is False
+    assert warm_rows[0].legs and warm_rows[0].legs[0].is_active is True
+    assert placed == []

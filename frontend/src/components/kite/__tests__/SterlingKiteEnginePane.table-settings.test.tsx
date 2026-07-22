@@ -5,6 +5,8 @@ import React from 'react';
 import { useKiteSettings } from '../../../store/useKiteSettings';
 import { SterlingKiteEnginePane } from '../SterlingKiteEnginePane';
 
+const signalRows: any[] = [];
+
 const cfg = {
   engine_enabled: true,
   trail_target: 'fast',
@@ -41,7 +43,7 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
       generated_ms: 0,
       scanning: false,
       scanning_label: '',
-      rows: [],
+      rows: signalRows,
       next_scan_ms: 0,
       auto_scan: false,
       market_open: true,
@@ -49,6 +51,10 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
   }),
   useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
   useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock('../../../hooks/useKite', () => ({
+  useKiteQuote: () => ({ data: {} }),
 }));
 
 function renderPane() {
@@ -63,6 +69,7 @@ function renderPane() {
 describe('SterlingKiteEnginePane — table-only settings', () => {
   beforeEach(() => {
     localStorage.clear();
+    signalRows.length = 0;
     useKiteSettings.getState().resetSignalTableSettings();
   });
 
@@ -96,5 +103,36 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     expect(navListener).toHaveBeenCalled();
 
     window.removeEventListener('kite-nav-click', navListener);
+  });
+
+  it('reveals retained rows instead of reporting that no signals exist', () => {
+    localStorage.setItem('kite_st_show_ended', 'false');
+    signalRows.push({
+      underlying: 'NIFTY 50',
+      token: 256265,
+      exchange: 'NFO',
+      regime: 'BULL',
+      alignment: { fast: 1, mid: 1, slow: 1 },
+      direction: 'long',
+      option_type: 'CE',
+      legs: [],
+      spot: 25_000,
+      stop_loss: 24_900,
+      score: 85,
+      timestamp_ms: Date.now(),
+      source: 'spot',
+      is_active: false,
+      is_fresh: false,
+    });
+
+    renderPane();
+
+    expect(screen.getByText(/1 recent setup is hidden by the current table filters/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No active or recent setups/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show recent signals' }));
+
+    expect(localStorage.getItem('kite_st_show_ended')).toBe('true');
+    expect(screen.getByText('Today (ended)')).toBeInTheDocument();
   });
 });

@@ -1786,10 +1786,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
 
   const { data: quotes } = useKiteQuote(optionSymbols, optionSymbols.length > 0);
 
-  // Ended (history) date buckets start collapsed — only "Active now" needs to be
-  // visible on load. User can still expand any bucket manually (still toggleable).
+  // Recent ended setups are part of the signal board, so show their rows on load.
+  // Users can still collapse any date bucket manually for the current session.
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(
-    () => new Set(['Today (ended)', 'Yesterday (ended)', 'Last week (ended)', 'Last 15 days (ended)']),
+    () => new Set(),
   );
   const [showEnded, setShowEnded] = React.useState<boolean>(() => localStorage.getItem('kite_st_show_ended') !== 'false');
   const [bestOnly, setBestOnly] = React.useState<boolean>(() => localStorage.getItem('kite_st_best_only') === 'true');
@@ -1855,6 +1855,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     return buckets;
   }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
+  const hiddenRecentCount = !isScanning && rows.length > 0 && groupedRows.length === 0
+    ? rows.length
+    : 0;
+  const revealRecentSignals = () => {
+    setQuery('');
+    changeShowEnded(true);
+    setCollapsedGroups(new Set());
+  };
 
   const liveCount = rows.filter((r) => rowIsRunning(r, quotes)).length;
 
@@ -2109,7 +2117,20 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       </div>
       {/* Signal list */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {groupedRows.length === 0 ? (
+        {hiddenRecentCount > 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
+            <div>
+              {hiddenRecentCount} recent setup{hiddenRecentCount === 1 ? ' is' : 's are'} hidden by the current table filters.
+            </div>
+            <button
+              type="button"
+              onClick={revealRecentSignals}
+              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.orange, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Show recent signals
+            </button>
+          </div>
+        ) : groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
             {scanning ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
