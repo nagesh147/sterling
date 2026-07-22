@@ -86,6 +86,18 @@ export function useRunScan() {
   const qc = useQueryClient();
   return useMutation<SignalsResponse, Error, void>({
     mutationFn: () => api.post<SignalsResponse>(`${E}/scan`),
+    // /scan blocks server-side until the whole scan finishes, so the mutation's
+    // own promise can't show progress — that comes from the polling /signals
+    // query instead. Flip it into "scanning" the instant the button is clicked
+    // (rather than waiting for the query's own idle-interval timer to catch up,
+    // which can leave the board on a stale/empty view for the entire scan) and
+    // force an immediate refetch so real rows show up as soon as the backend
+    // starts flushing them.
+    onMutate: () => {
+      qc.setQueryData<SignalsResponse>(['kite-engine-signals'], (prev) =>
+        prev ? { ...prev, scanning: true } : prev);
+      qc.invalidateQueries({ queryKey: ['kite-engine-signals'] });
+    },
     onSuccess: (data) => qc.setQueryData(['kite-engine-signals'], data),
   });
 }

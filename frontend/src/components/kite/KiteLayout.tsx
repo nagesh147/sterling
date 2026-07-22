@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { k, Icons } from '../../styles/kiteUI';
 import { useMacKite } from '../../hooks/useMacKite';
 import { useEngineActivity } from '../../hooks/useSterlingKiteEngine';
@@ -248,6 +249,21 @@ function PresetDiagram({ preset }: { preset: WorkspacePresetId }) {
 export function KiteLayout({ activeNav, onNavClick: _onNavClick, sidebar, rightSidebar, bottomBar, centerTopBar, content, onBasketClick, basketCount = 0 }: KiteLayoutProps) {
   const { on: macOn } = useMacKite();
   const { data: activity } = useEngineActivity();
+  const queryClient = useQueryClient();
+  // The footer's activity poll (10s) and the signals dock's own poll run on
+  // independent timers — a scan can start right after the dock's last idle
+  // (15s) tick, so the dock would sit on stale "no signals" data for up to
+  // 15s after the footer already says "Scanning…". Force the signals query
+  // to refetch the instant activity's scanning flag flips either way, so the
+  // dock catches up as soon as the footer notices, not on its own schedule.
+  const prevActivityScanning = useRef<boolean | null>(null);
+  useEffect(() => {
+    const nowScanning = !!activity?.scanning;
+    if (prevActivityScanning.current !== null && prevActivityScanning.current !== nowScanning) {
+      queryClient.invalidateQueries({ queryKey: ['kite-engine-signals'] });
+    }
+    prevActivityScanning.current = nowScanning;
+  }, [activity?.scanning, queryClient]);
   const liveCount = useLiveSignalCount((state) => state.count);
   const [layout, setLayout] = useState(() => loadWorkspaceLayout(localStorage));
   const [focus, setFocus] = useState<WorkspaceFocus | null>(null);

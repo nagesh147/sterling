@@ -1,10 +1,19 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import { EngineTerminal, TERMINAL_MODE_KEY } from '../EngineTerminal';
 import { KiteLayout } from '../KiteLayout';
 import { WORKSPACE_LAYOUT_KEY } from '../workspaceLayout';
+
+// KiteLayout reads useQueryClient() directly (to invalidate the signals query
+// on scan-state edges), so it needs a real QueryClientProvider ancestor even
+// though useEngineActivity itself is mocked below.
+function renderLayout(componentProps: typeof props) {
+  const qc = new QueryClient();
+  return render(<QueryClientProvider client={qc}><KiteLayout {...componentProps} /></QueryClientProvider>);
+}
 
 const macState = vi.hoisted(() => ({ on: false }));
 vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
@@ -45,7 +54,7 @@ afterEach(() => {
 
 describe('KiteLayout advanced workspace', () => {
   it('gives all four panes independent window controls', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
 
     for (const title of ['Watchlist', 'Dashboard', 'Signals', 'Terminal']) {
       expect(screen.getByLabelText(`${title} pane`)).toBeInTheDocument();
@@ -59,7 +68,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('minimizes into the dock and restores without changing the pane slot', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
     fireEvent.click(screen.getByRole('button', { name: 'Minimize Watchlist' }));
 
     expect(screen.queryByLabelText('Watchlist pane')).not.toBeInTheDocument();
@@ -74,7 +83,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('restores every minimized pane in one click while keeping individual restore controls', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
 
     for (const title of ['Watchlist', 'Dashboard', 'Signals', 'Terminal']) {
       fireEvent.click(screen.getByRole('button', { name: `Minimize ${title}` }));
@@ -95,7 +104,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('supports half, maximize, fullscreen, restore, and Escape focus flows', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
 
     fireEvent.click(screen.getByRole('button', { name: 'Half screen Dashboard' }));
     expect(screen.getByRole('button', { name: 'Restore Dashboard' })).toBeInTheDocument();
@@ -113,7 +122,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('repositions by swapping panes through visible dock targets', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
     const pane = screen.getByLabelText('Signals pane');
     const handle = within(pane).getByTitle(/Drag to reposition/);
     const values: Record<string, string> = {};
@@ -135,7 +144,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('consolidates presets, reset, restore-all, and locking in one menu', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
     fireEvent.click(screen.getByRole('button', { name: 'Minimize Terminal' }));
     fireEvent.click(screen.getByRole('button', { name: 'Layout' }));
 
@@ -168,7 +177,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('places Layout immediately before the live engine status group', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
 
     const status = screen.getByLabelText('Workspace and engine status');
     const layoutButton = within(status).getByRole('button', { name: 'Layout' });
@@ -179,7 +188,7 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('keeps the legacy terminal event contract for chart-open auto minimization', () => {
-    render(<KiteLayout {...props} />);
+    renderLayout(props);
 
     act(() => window.dispatchEvent(new CustomEvent('kite-terminal-mode', { detail: 'minimized' })));
     expect(screen.queryByLabelText('Terminal pane')).not.toBeInTheDocument();
@@ -193,9 +202,10 @@ describe('KiteLayout advanced workspace', () => {
   });
 
   it('keeps the existing Mac stage as an independent workspace mode', () => {
-    const view = render(<KiteLayout {...props} />);
+    const qc = new QueryClient();
+    const view = render(<QueryClientProvider client={qc}><KiteLayout {...props} /></QueryClientProvider>);
     macState.on = true;
-    view.rerender(<KiteLayout {...props} />);
+    view.rerender(<QueryClientProvider client={qc}><KiteLayout {...props} /></QueryClientProvider>);
 
     expect(screen.getByTestId('mac-stage')).toBeInTheDocument();
     expect(screen.queryByLabelText('Watchlist pane')).not.toBeInTheDocument();
