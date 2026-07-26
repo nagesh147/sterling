@@ -621,7 +621,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                 padding: 0 16px;
                 cursor: pointer;
                 border-bottom: 1px solid ${t.border};
-                background: ${t.bg};
+                background: ${t.surface};
                 transition: background 0.1s;
                 height: 41px;
                 box-sizing: border-box;
