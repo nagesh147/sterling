@@ -836,7 +836,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 className="st-leg-row"
                 onScroll={syncHscroll}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
+                style={{ cursor: 'pointer', background: legActive ? 'transparent' : tint(k.amber, 5) }}
               >
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
