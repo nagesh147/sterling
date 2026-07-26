@@ -81,11 +81,26 @@ const MOTION_CSS = `
     filter: brightness(.985);
   }
 
-  .kite-motion-enabled .mw-item:hover,
+  .kite-motion-enabled .mw-item,
+  .kite-motion-enabled .st-parent-row,
+  .kite-motion-enabled .st-parent-header,
+  .kite-motion-enabled .st-leg-row,
+  .kite-motion-enabled .st-group-header,
+  .kite-motion-enabled .kv-rows > * {
+    background-color: #fff !important;
+  }
+
+  .kite-motion-enabled .mw-item:hover {
+    background-color: var(--km-list-surface) !important;
+    box-shadow: inset 2px 0 0 var(--km-accent);
+  }
+
+  .kite-motion-enabled .st-parent-header:hover,
+  .kite-motion-enabled .st-group-header:hover,
   .kite-motion-enabled .st-parent-row:hover,
   .kite-motion-enabled .st-leg-row:hover,
   .kite-motion-enabled .kv-rows > *:hover {
-    background-color: var(--km-list-surface);
+    background-color: var(--km-list-surface) !important;
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 
@@ -160,7 +175,12 @@ let styleInstalled = false;
 function ensureStyles() {
   if (styleInstalled || typeof document === 'undefined') return;
   const existing = document.getElementById('sterling-kite-interaction-motion');
-  if (existing) { styleInstalled = true; return; }
+  if (existing instanceof HTMLStyleElement) {
+    // Keep injected interaction CSS current across Vite hot reloads.
+    if (existing.textContent !== MOTION_CSS) existing.textContent = MOTION_CSS;
+    styleInstalled = true;
+    return;
+  }
   const style = document.createElement('style');
   style.id = 'sterling-kite-interaction-motion';
   style.textContent = MOTION_CSS;
