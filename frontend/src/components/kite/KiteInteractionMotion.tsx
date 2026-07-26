@@ -21,7 +21,6 @@ const MOTION_CSS = `
   --km-accent: #e95420;
   --km-hover: rgba(233,84,32,.055);
   --km-ring: rgba(233,84,32,.28);
-  --km-list-surface: #f9f9f9;
 }
 
 .kite-motion-enabled[data-motion-style='mac'] {
@@ -81,8 +80,10 @@ const MOTION_CSS = `
     filter: brightness(.985);
   }
 
+  /* Watchlist hover keeps only the vertical interaction strip. Component-level
+   * hover fills are intentionally suppressed so the row body stays clean. */
   .kite-motion-enabled .mw-item:hover {
-    background-color: var(--km-list-surface);
+    background-color: transparent !important;
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 
@@ -92,11 +93,12 @@ const MOTION_CSS = `
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 
-  /* Signal rows stay visually clean on hover; retain the directional strip. */
+  /* Signal hover also keeps only the vertical interaction strip. !important
+   * wins over inline/component hover fills without touching the inset shadow. */
   .kite-motion-enabled .st-parent-row:hover,
   .kite-motion-enabled .st-leg-row:hover,
   .kite-motion-enabled .kv-rows > *:hover {
-    background-color: var(--km-list-surface);
+    background-color: transparent !important;
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 }
