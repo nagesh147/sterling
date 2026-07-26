@@ -81,12 +81,17 @@ const MOTION_CSS = `
   }
 
   .kite-motion-enabled .mw-item:hover,
-  .kite-motion-enabled .st-parent-row:hover,
-  .kite-motion-enabled .st-leg-row:hover,
-  .kite-motion-enabled .kv-rows > *:hover,
   .kite-motion-enabled tbody > tr:hover,
   .kite-motion-enabled [data-motion-row]:hover {
     background-color: var(--km-hover);
+    box-shadow: inset 2px 0 0 var(--km-accent);
+  }
+
+  /* Signal rows stay visually clean on hover; retain the directional strip. */
+  .kite-motion-enabled .st-parent-row:hover,
+  .kite-motion-enabled .st-leg-row:hover,
+  .kite-motion-enabled .kv-rows > *:hover {
+    background-color: transparent;
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 }
