@@ -2082,6 +2082,12 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       <style>{`
         .st-parent-row {
           position: relative;
+          background: ${k.bg};
+        }
+        .st-parent-header:hover,
+        .st-leg-row:hover,
+        .st-group-header:hover {
+          background: ${k.surfaceHover} !important;
         }
 
         .col-drag-over {
@@ -2190,9 +2196,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               <div key={group.label}>
                 <div 
                   onClick={() => toggleGroup(group.label)}
+                  className="st-group-header"
                   style={{ 
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 16px', background: k.surfaceHover, borderBottom: `1px solid ${k.border}`,
+                    padding: '8px 16px', background: k.bg, borderBottom: `1px solid ${k.border}`,
                     cursor: 'pointer', userSelect: 'none'
                   }}
                 >

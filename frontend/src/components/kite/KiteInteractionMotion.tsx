@@ -21,6 +21,7 @@ const MOTION_CSS = `
   --km-accent: #e95420;
   --km-hover: rgba(233,84,32,.055);
   --km-ring: rgba(233,84,32,.28);
+  --km-list-surface: #f1f1f1;
 }
 
 .kite-motion-enabled[data-motion-style='mac'] {
@@ -83,7 +84,11 @@ const MOTION_CSS = `
   .kite-motion-enabled .mw-item:hover,
   .kite-motion-enabled .st-parent-row:hover,
   .kite-motion-enabled .st-leg-row:hover,
-  .kite-motion-enabled .kv-rows > *:hover,
+  .kite-motion-enabled .kv-rows > *:hover {
+    background-color: var(--km-list-surface);
+    box-shadow: inset 2px 0 0 var(--km-accent);
+  }
+
   .kite-motion-enabled tbody > tr:hover,
   .kite-motion-enabled [data-motion-row]:hover {
     background-color: var(--km-hover);

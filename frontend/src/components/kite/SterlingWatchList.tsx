@@ -558,7 +558,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                     right: 16px;
                     top: 50%;
                     transform: translateY(-50%);
-                    background: ${t.surface};
+                    background: ${t.bg};
                   }
                   .sr-item:hover .sr-actions { display: flex; }
                 `}</style>
@@ -665,7 +665,7 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                 right: 16px;
                 top: 50%;
                 transform: translateY(-50%);
-                background: ${t.surface};
+                background: ${t.bg};
               }
               .mw-item:hover .mw-actions {
                 display: flex;
