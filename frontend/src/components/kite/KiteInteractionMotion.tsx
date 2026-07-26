@@ -21,7 +21,7 @@ const MOTION_CSS = `
   --km-accent: #e95420;
   --km-hover: rgba(233,84,32,.055);
   --km-ring: rgba(233,84,32,.28);
-  --km-list-surface: #f9f9f9;
+  --km-list-surface: #f1f1f1;
 }
 
 .kite-motion-enabled[data-motion-style='mac'] {
