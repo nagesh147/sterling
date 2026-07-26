@@ -86,17 +86,16 @@ const MOTION_CSS = `
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 
-  .kite-motion-enabled tbody > tr:hover,
-  .kite-motion-enabled [data-motion-row]:hover {
-    background-color: var(--km-hover);
-    box-shadow: inset 2px 0 0 var(--km-accent);
-  }
-
-  /* Signal rows stay visually clean on hover; retain the directional strip. */
   .kite-motion-enabled .st-parent-row:hover,
   .kite-motion-enabled .st-leg-row:hover,
   .kite-motion-enabled .kv-rows > *:hover {
     background-color: var(--km-list-surface);
+    box-shadow: inset 2px 0 0 var(--km-accent);
+  }
+
+  .kite-motion-enabled tbody > tr:hover,
+  .kite-motion-enabled [data-motion-row]:hover {
+    background-color: var(--km-hover);
     box-shadow: inset 2px 0 0 var(--km-accent);
   }
 }
@@ -165,7 +164,12 @@ let styleInstalled = false;
 function ensureStyles() {
   if (styleInstalled || typeof document === 'undefined') return;
   const existing = document.getElementById('sterling-kite-interaction-motion');
-  if (existing) { styleInstalled = true; return; }
+  if (existing instanceof HTMLStyleElement) {
+    // Keep injected interaction CSS current across Vite hot reloads.
+    if (existing.textContent !== MOTION_CSS) existing.textContent = MOTION_CSS;
+    styleInstalled = true;
+    return;
+  }
   const style = document.createElement('style');
   style.id = 'sterling-kite-interaction-motion';
   style.textContent = MOTION_CSS;
