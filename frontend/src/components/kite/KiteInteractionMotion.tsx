@@ -167,7 +167,12 @@ let styleInstalled = false;
 function ensureStyles() {
   if (styleInstalled || typeof document === 'undefined') return;
   const existing = document.getElementById('sterling-kite-interaction-motion');
-  if (existing) { styleInstalled = true; return; }
+  if (existing instanceof HTMLStyleElement) {
+    // Keep injected interaction CSS current across Vite hot reloads.
+    if (existing.textContent !== MOTION_CSS) existing.textContent = MOTION_CSS;
+    styleInstalled = true;
+    return;
+  }
   const style = document.createElement('style');
   style.id = 'sterling-kite-interaction-motion';
   style.textContent = MOTION_CSS;
