@@ -520,8 +520,6 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
         className="st-parent-header" 
         onClick={onClick}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = k.surfaceHover)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = rowRunning ? 'transparent' : tint(k.amber, 5))}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           {isDeriv ? (
@@ -2106,7 +2104,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-leg-row::-webkit-scrollbar { display: none; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
-        .st-leg-row:hover { background-color: ${k.surfaceHover} !important; }
         .sort-header-div:hover { color: #444 !important; }
         .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
