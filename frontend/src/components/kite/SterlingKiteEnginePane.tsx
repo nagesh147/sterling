@@ -514,14 +514,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   return (
     <div
       className="st-parent-row"
-      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: rowRunning ? 'transparent' : tint(k.amber, 5) }}
+      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: 'transparent' }}
     >
       <div 
         className="st-parent-header" 
         onClick={onClick}
         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', position: 'relative', margin: '-10px -12px', padding: '10px 12px' }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = k.surfaceHover)}
-        onMouseLeave={(e) => (e.currentTarget.style.background = rowRunning ? 'transparent' : tint(k.amber, 5))}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', minWidth: 0 }}>
           {isDeriv ? (
@@ -643,12 +641,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 3,
                     padding: '6px 8px', borderRadius: 4,
-                    background: isExp ? k.surfaceHover : 'transparent',
+                    background: 'transparent',
                     border: `1px solid ${k.border}`,
                     cursor: 'pointer'
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = tint(k.orange, 5); }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = 'transparent'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -838,7 +836,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 className="st-leg-row"
                 onScroll={syncHscroll}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: isExp ? k.surfaceHover : (legActive ? 'transparent' : tint(k.amber, 5)) }}
+                style={{ cursor: 'pointer', background: 'transparent' }}
               >
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
@@ -2106,7 +2104,6 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         .st-leg-row::-webkit-scrollbar { display: none; }
         .st-header-row { scrollbar-width: none; }
         .st-header-row::-webkit-scrollbar { display: none; }
-        .st-leg-row:hover { background-color: ${k.surfaceHover} !important; }
         .sort-header-div:hover { color: #444 !important; }
         .sort-icon { opacity: 0; color: #9b9b9b; display: flex; flex-direction: column; gap: 2px; align-items: center; transition: opacity 0.2s; }
         .sort-header-div:hover .sort-icon { opacity: 0.5; }
