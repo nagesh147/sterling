@@ -621,13 +621,16 @@ export function SterlingWatchList({ onOpenInstrument }: { onOpenInstrument?: (sy
                 padding: 0 16px;
                 cursor: pointer;
                 border-bottom: 1px solid ${t.border};
-                background: ${t.surface};
+                background: ${t.bg};
                 transition: background 0.1s;
                 height: 41px;
                 box-sizing: border-box;
               }
-              .mw-item:hover, .mw-item.expanded {
+              .mw-item:hover {
                 background: ${t.surface};
+              }
+              .mw-item.expanded:not(:hover) {
+                background: ${t.bg};
               }
               .mw-drag-handle {
                 opacity: 0;
