@@ -514,7 +514,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   return (
     <div
       className="st-parent-row"
-      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: rowRunning ? 'transparent' : tint(k.amber, 5) }}
+      style={{ padding: '10px 12px', borderBottom: `1px solid ${k.border}`, display: 'flex', flexDirection: 'column', gap: 6, background: 'transparent' }}
     >
       <div 
         className="st-parent-header" 
@@ -641,12 +641,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 3,
                     padding: '6px 8px', borderRadius: 4,
-                    background: isExp ? k.surfaceHover : 'transparent',
+                    background: 'transparent',
                     border: `1px solid ${k.border}`,
                     cursor: 'pointer'
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = tint(k.orange, 5); }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = isExp ? k.surfaceHover : 'transparent'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = k.orange; e.currentTarget.style.background = 'transparent'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = k.border; e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -836,7 +836,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                 className="st-leg-row"
                 onScroll={syncHscroll}
                 onClick={(e) => toggleExpand(e, leg.option_symbol)}
-                style={{ cursor: 'pointer', background: legActive ? 'transparent' : tint(k.amber, 5) }}
+                style={{ cursor: 'pointer', background: 'transparent' }}
               >
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
