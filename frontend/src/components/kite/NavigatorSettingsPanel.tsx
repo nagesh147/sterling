@@ -9,11 +9,32 @@ import {
   HARDCODED_MANUAL_RULES, MANUAL_FIELDS, getManualFieldValue, resetManualField,
   type ManualFieldSpec,
 } from './navigatorManualDefaults';
+import {
+  AVWAP_DEFAULTS, FLOW_DEFAULTS, FUSION_DEFAULTS, GAMMA_DEFAULTS, RANGES_DEFAULTS, ROOT_DEFAULTS, VOLATILITY_DEFAULTS,
+} from './navigatorDefaults';
 
 const GREEN = '#4caf50';
 const RED = '#df514c';
 const AMBER = '#f5a623';
 const MANUAL_BLUE = '#1565c0';
+
+function DefaultBadge({ isDefault, displayDefault, onRevert }: { isDefault: boolean; displayDefault: string; onRevert: () => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+      <span style={{ fontSize: 9.5, fontWeight: 700, color: DIM, background: '#f2f2f3', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '1px 6px' }}>
+        Default: {displayDefault}
+      </span>
+      {!isDefault && (
+        <button
+          type="button" onClick={onRevert} title={`Revert to Sterling's default (${displayDefault})`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: AMBER, fontSize: 9.5, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+        >
+          <Icons.Reload /> changed — revert
+        </button>
+      )}
+    </div>
+  );
+}
 
 const ORIGINATION_EXPLAIN: Record<SignalOrigination, string> = {
   off: "Today's behaviour, unchanged: Navigator only ever evaluates a setup that the SuperTrend engine already triggered. It never adds a row to the signal table on its own.",
@@ -21,9 +42,9 @@ const ORIGINATION_EXPLAIN: Record<SignalOrigination, string> = {
   full: 'Same detection as Heads-up, but the row becomes a real, tradeable setup: an ATM strike is resolved and it can be manually executed like any other row. Auto-Execute (below) additionally requires this.',
 };
 
-function NumField({ label, hint, value, onChange, step = 1, min, max }: {
+function NumField({ label, hint, value, onChange, step = 1, min, max, defaultValue }: {
   label: string; hint?: string; value: number; onChange: (v: number) => void;
-  step?: number; min?: number; max?: number;
+  step?: number; min?: number; max?: number; defaultValue?: number;
 }) {
   return (
     <Field label={label} hint={hint}>
@@ -32,14 +53,20 @@ function NumField({ label, hint, value, onChange, step = 1, min, max }: {
         onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
         style={inputStyle} aria-label={label}
       />
+      {defaultValue !== undefined && (
+        <DefaultBadge isDefault={value === defaultValue} displayDefault={String(defaultValue)} onRevert={() => onChange(defaultValue)} />
+      )}
     </Field>
   );
 }
 
-function BoolField({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
+function BoolField({ label, hint, value, onChange, defaultValue }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void; defaultValue?: boolean }) {
   return (
     <Field label={label} hint={hint}>
       <Switch checked={value} label={label} onChange={() => onChange(!value)} />
+      {defaultValue !== undefined && (
+        <DefaultBadge isDefault={value === defaultValue} displayDefault={defaultValue ? 'On' : 'Off'} onRevert={() => onChange(defaultValue)} />
+      )}
     </Field>
   );
 }
@@ -293,10 +320,10 @@ export function NavigatorSettingsPanel() {
         <Field label="Price timeframe" hint="Read-only in v1 — must match the Kite base engine's 1H clock.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>60 minute</div>
         </Field>
-        <NumField label="Flow sample interval" hint="Seconds between option-chain samples (15–300)." value={draft.flow_sample_seconds} step={5} min={15} max={300} onChange={(v) => patch({ ...draft, flow_sample_seconds: v })} />
-        <NumField label="Max feature age" hint="Seconds before cached evidence is treated as stale." value={draft.max_feature_age_seconds} step={10} min={10} max={3600} onChange={(v) => patch({ ...draft, max_feature_age_seconds: v })} />
-        <NumField label="Event alignment window" hint="Bars of tolerance between a base-fresh and AVWAP-fresh trigger." value={draft.event_alignment_bars} step={1} min={0} max={20} onChange={(v) => patch({ ...draft, event_alignment_bars: v })} />
-        <NumField label="Entry delay after open" hint="Minutes after the official session open before entries are considered." value={draft.entry_delay_after_open_minutes} step={1} min={0} max={60} onChange={(v) => patch({ ...draft, entry_delay_after_open_minutes: v })} />
+        <NumField label="Flow sample interval" hint="Seconds between option-chain samples (15–300)." value={draft.flow_sample_seconds} step={5} min={15} max={300} onChange={(v) => patch({ ...draft, flow_sample_seconds: v })} defaultValue={ROOT_DEFAULTS.flow_sample_seconds} />
+        <NumField label="Max feature age" hint="Seconds before cached evidence is treated as stale." value={draft.max_feature_age_seconds} step={10} min={10} max={3600} onChange={(v) => patch({ ...draft, max_feature_age_seconds: v })} defaultValue={ROOT_DEFAULTS.max_feature_age_seconds} />
+        <NumField label="Event alignment window" hint="Bars of tolerance between a base-fresh and AVWAP-fresh trigger." value={draft.event_alignment_bars} step={1} min={0} max={20} onChange={(v) => patch({ ...draft, event_alignment_bars: v })} defaultValue={ROOT_DEFAULTS.event_alignment_bars} />
+        <NumField label="Entry delay after open" hint="Minutes after the official session open before entries are considered." value={draft.entry_delay_after_open_minutes} step={1} min={0} max={60} onChange={(v) => patch({ ...draft, entry_delay_after_open_minutes: v })} defaultValue={ROOT_DEFAULTS.entry_delay_after_open_minutes} />
       </Section>
 
       {/* ── 1.5 structure radar / signal origination / auto-execute ───────── */}
@@ -310,6 +337,7 @@ export function NavigatorSettingsPanel() {
           hint="Continuously computes AVWAP + volatility for every underlying above, both directions, whether or not SuperTrend has a live row there. Feeds the snapshot/series/status views only — never adds a signal-table row by itself."
           value={draft.structure_radar_enabled}
           onChange={(v) => patch({ ...draft, structure_radar_enabled: v })}
+          defaultValue={ROOT_DEFAULTS.structure_radar_enabled}
         />
         <Field label="Signal Origination" hint="Whether a Navigator-only setup (no SuperTrend trigger) gets surfaced as a row.">
           <ChoiceRow<SignalOrigination>
@@ -322,6 +350,7 @@ export function NavigatorSettingsPanel() {
             ]}
           />
           <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>{ORIGINATION_EXPLAIN[draft.signal_origination]}</div>
+          <DefaultBadge isDefault={draft.signal_origination === ROOT_DEFAULTS.signal_origination} displayDefault="Off" onRevert={() => patch({ ...draft, signal_origination: ROOT_DEFAULTS.signal_origination, auto_execute_originated: false })} />
         </Field>
         <BoolField
           label="Auto-Execute Originated"
@@ -337,67 +366,68 @@ export function NavigatorSettingsPanel() {
             if (draft.signal_origination !== 'full' || !gateReady) return;
             patch({ ...draft, auto_execute_originated: v });
           }}
+          defaultValue={ROOT_DEFAULTS.auto_execute_originated}
         />
       </Section>
 
       {/* ── 2. AVWAP ─────────────────────────────────────────────────────── */}
       <Section title="Anchored VWAP and signal grades" description="Structure, pullback/continuation signals, and grade thresholds." summary={draft.avwap.enabled ? 'Enabled' : 'Disabled'}>
-        <BoolField label="Enabled" hint="Required for gate mode." value={draft.avwap.enabled} onChange={(v) => patch(set(draft, 'avwap', { enabled: v }))} />
-        <NumField label="Pivot left bars" value={draft.avwap.pivot_left_bars} min={1} max={20} onChange={(v) => patch(set(draft, 'avwap', { pivot_left_bars: v }))} />
-        <NumField label="Pivot right bars" value={draft.avwap.pivot_right_bars} min={1} max={20} onChange={(v) => patch(set(draft, 'avwap', { pivot_right_bars: v }))} />
-        <NumField label="Slope lookback" value={draft.avwap.slope_lookback_bars} min={2} max={50} onChange={(v) => patch(set(draft, 'avwap', { slope_lookback_bars: v }))} />
-        <NumField label="Min slope (ATR/bar)" value={draft.avwap.min_slope_atr_per_bar} step={0.01} min={0} max={2} onChange={(v) => patch(set(draft, 'avwap', { min_slope_atr_per_bar: v }))} />
-        <NumField label="ATR period" value={draft.avwap.atr_period} min={5} max={100} onChange={(v) => patch(set(draft, 'avwap', { atr_period: v }))} />
-        <NumField label="Relative volume period" value={draft.avwap.relative_volume_period} min={5} max={200} onChange={(v) => patch(set(draft, 'avwap', { relative_volume_period: v }))} />
-        <NumField label="Touch tolerance (ATR)" value={draft.avwap.touch_tolerance_atr} step={0.01} min={0.01} max={1} onChange={(v) => patch(set(draft, 'avwap', { touch_tolerance_atr: v }))} />
-        <NumField label="Min body (ATR)" value={draft.avwap.min_body_atr} step={0.01} min={0} max={3} onChange={(v) => patch(set(draft, 'avwap', { min_body_atr: v }))} />
-        <NumField label="Min relative volume" value={draft.avwap.min_relative_volume} step={0.05} min={0} max={10} onChange={(v) => patch(set(draft, 'avwap', { min_relative_volume: v }))} />
-        <NumField label="Breakout buffer (ATR)" value={draft.avwap.breakout_buffer_atr} step={0.01} min={0} max={2} onChange={(v) => patch(set(draft, 'avwap', { breakout_buffer_atr: v }))} />
-        <NumField label="Max extension (ATR)" value={draft.avwap.max_extension_atr} step={0.05} min={0.25} max={10} onChange={(v) => patch(set(draft, 'avwap', { max_extension_atr: v }))} />
-        <NumField label="Cooldown bars" value={draft.avwap.cooldown_bars} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { cooldown_bars: v }))} />
-        <NumField label="Grade A+ min" value={draft.avwap.grade_a_plus_min} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { grade_a_plus_min: v }))} />
-        <NumField label="Grade A min" value={draft.avwap.grade_a_min} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { grade_a_min: v }))} />
-        <NumField label="Grade B min" value={draft.avwap.grade_b_min} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { grade_b_min: v }))} />
-        <NumField label="Stop buffer (ATR)" value={draft.avwap.stop_buffer_atr} step={0.01} min={0} max={3} onChange={(v) => patch(set(draft, 'avwap', { stop_buffer_atr: v }))} />
-        <NumField label="Max stop distance (ATR)" value={draft.avwap.max_stop_distance_atr} step={0.05} min={0.1} max={20} onChange={(v) => patch(set(draft, 'avwap', { max_stop_distance_atr: v }))} />
-        <NumField label="Target R multiple" value={draft.avwap.target_r} step={0.1} min={0.5} max={10} onChange={(v) => patch(set(draft, 'avwap', { target_r: v }))} />
-        <BoolField label="Show session VWAP" value={draft.avwap.show_session_vwap} onChange={(v) => patch(set(draft, 'avwap', { show_session_vwap: v }))} />
-        <BoolField label="Show daily range" value={draft.avwap.show_daily_range} onChange={(v) => patch(set(draft, 'avwap', { show_daily_range: v }))} />
-        <BoolField label="Show weekly range" value={draft.avwap.show_weekly_range} onChange={(v) => patch(set(draft, 'avwap', { show_weekly_range: v }))} />
+        <BoolField label="Enabled" hint="Required for gate mode." value={draft.avwap.enabled} onChange={(v) => patch(set(draft, 'avwap', { enabled: v }))} defaultValue={AVWAP_DEFAULTS.enabled} />
+        <NumField label="Pivot left bars" value={draft.avwap.pivot_left_bars} min={1} max={20} onChange={(v) => patch(set(draft, 'avwap', { pivot_left_bars: v }))} defaultValue={AVWAP_DEFAULTS.pivot_left_bars} />
+        <NumField label="Pivot right bars" value={draft.avwap.pivot_right_bars} min={1} max={20} onChange={(v) => patch(set(draft, 'avwap', { pivot_right_bars: v }))} defaultValue={AVWAP_DEFAULTS.pivot_right_bars} />
+        <NumField label="Slope lookback" value={draft.avwap.slope_lookback_bars} min={2} max={50} onChange={(v) => patch(set(draft, 'avwap', { slope_lookback_bars: v }))} defaultValue={AVWAP_DEFAULTS.slope_lookback_bars} />
+        <NumField label="Min slope (ATR/bar)" value={draft.avwap.min_slope_atr_per_bar} step={0.01} min={0} max={2} onChange={(v) => patch(set(draft, 'avwap', { min_slope_atr_per_bar: v }))} defaultValue={AVWAP_DEFAULTS.min_slope_atr_per_bar} />
+        <NumField label="ATR period" value={draft.avwap.atr_period} min={5} max={100} onChange={(v) => patch(set(draft, 'avwap', { atr_period: v }))} defaultValue={AVWAP_DEFAULTS.atr_period} />
+        <NumField label="Relative volume period" value={draft.avwap.relative_volume_period} min={5} max={200} onChange={(v) => patch(set(draft, 'avwap', { relative_volume_period: v }))} defaultValue={AVWAP_DEFAULTS.relative_volume_period} />
+        <NumField label="Touch tolerance (ATR)" value={draft.avwap.touch_tolerance_atr} step={0.01} min={0.01} max={1} onChange={(v) => patch(set(draft, 'avwap', { touch_tolerance_atr: v }))} defaultValue={AVWAP_DEFAULTS.touch_tolerance_atr} />
+        <NumField label="Min body (ATR)" value={draft.avwap.min_body_atr} step={0.01} min={0} max={3} onChange={(v) => patch(set(draft, 'avwap', { min_body_atr: v }))} defaultValue={AVWAP_DEFAULTS.min_body_atr} />
+        <NumField label="Min relative volume" value={draft.avwap.min_relative_volume} step={0.05} min={0} max={10} onChange={(v) => patch(set(draft, 'avwap', { min_relative_volume: v }))} defaultValue={AVWAP_DEFAULTS.min_relative_volume} />
+        <NumField label="Breakout buffer (ATR)" value={draft.avwap.breakout_buffer_atr} step={0.01} min={0} max={2} onChange={(v) => patch(set(draft, 'avwap', { breakout_buffer_atr: v }))} defaultValue={AVWAP_DEFAULTS.breakout_buffer_atr} />
+        <NumField label="Max extension (ATR)" value={draft.avwap.max_extension_atr} step={0.05} min={0.25} max={10} onChange={(v) => patch(set(draft, 'avwap', { max_extension_atr: v }))} defaultValue={AVWAP_DEFAULTS.max_extension_atr} />
+        <NumField label="Cooldown bars" value={draft.avwap.cooldown_bars} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { cooldown_bars: v }))} defaultValue={AVWAP_DEFAULTS.cooldown_bars} />
+        <NumField label="Grade A+ min" value={draft.avwap.grade_a_plus_min} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { grade_a_plus_min: v }))} defaultValue={AVWAP_DEFAULTS.grade_a_plus_min} />
+        <NumField label="Grade A min" value={draft.avwap.grade_a_min} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { grade_a_min: v }))} defaultValue={AVWAP_DEFAULTS.grade_a_min} />
+        <NumField label="Grade B min" value={draft.avwap.grade_b_min} min={0} max={100} onChange={(v) => patch(set(draft, 'avwap', { grade_b_min: v }))} defaultValue={AVWAP_DEFAULTS.grade_b_min} />
+        <NumField label="Stop buffer (ATR)" value={draft.avwap.stop_buffer_atr} step={0.01} min={0} max={3} onChange={(v) => patch(set(draft, 'avwap', { stop_buffer_atr: v }))} defaultValue={AVWAP_DEFAULTS.stop_buffer_atr} />
+        <NumField label="Max stop distance (ATR)" value={draft.avwap.max_stop_distance_atr} step={0.05} min={0.1} max={20} onChange={(v) => patch(set(draft, 'avwap', { max_stop_distance_atr: v }))} defaultValue={AVWAP_DEFAULTS.max_stop_distance_atr} />
+        <NumField label="Target R multiple" value={draft.avwap.target_r} step={0.1} min={0.5} max={10} onChange={(v) => patch(set(draft, 'avwap', { target_r: v }))} defaultValue={AVWAP_DEFAULTS.target_r} />
+        <BoolField label="Show session VWAP" value={draft.avwap.show_session_vwap} onChange={(v) => patch(set(draft, 'avwap', { show_session_vwap: v }))} defaultValue={AVWAP_DEFAULTS.show_session_vwap} />
+        <BoolField label="Show daily range" value={draft.avwap.show_daily_range} onChange={(v) => patch(set(draft, 'avwap', { show_daily_range: v }))} defaultValue={AVWAP_DEFAULTS.show_daily_range} />
+        <BoolField label="Show weekly range" value={draft.avwap.show_weekly_range} onChange={(v) => patch(set(draft, 'avwap', { show_weekly_range: v }))} defaultValue={AVWAP_DEFAULTS.show_weekly_range} />
       </Section>
 
       {/* ── 3. projected ranges ──────────────────────────────────────────── */}
       <Section title="Daily and weekly ranges" description="Frozen projected ranges via rolling weighted quantiles." summary={`${Math.round(draft.ranges.target_coverage * 100)}% target coverage`}>
         <Field label="Method" hint="Versioned model — not free-form text."><div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>rolling_empirical_quantile_v1</div></Field>
-        <NumField label="Target coverage" value={draft.ranges.target_coverage} step={0.01} min={0.01} max={0.99} onChange={(v) => patch(set(draft, 'ranges', { target_coverage: v }))} />
-        <NumField label="Daily lookback sessions" value={draft.ranges.daily_lookback_sessions} min={1} onChange={(v) => patch(set(draft, 'ranges', { daily_lookback_sessions: v }))} />
-        <NumField label="Daily min sessions" value={draft.ranges.daily_min_sessions} min={1} onChange={(v) => patch(set(draft, 'ranges', { daily_min_sessions: v }))} />
-        <NumField label="Weekly lookback periods" value={draft.ranges.weekly_lookback_periods} min={1} onChange={(v) => patch(set(draft, 'ranges', { weekly_lookback_periods: v }))} />
-        <NumField label="Weekly min periods" value={draft.ranges.weekly_min_periods} min={1} onChange={(v) => patch(set(draft, 'ranges', { weekly_min_periods: v }))} />
-        <BoolField label="Condition on volatility" value={draft.ranges.condition_on_volatility} onChange={(v) => patch(set(draft, 'ranges', { condition_on_volatility: v }))} />
-        <NumField label="Min condition bucket" value={draft.ranges.min_condition_bucket} min={1} onChange={(v) => patch(set(draft, 'ranges', { min_condition_bucket: v }))} />
-        <NumField label="Decay" value={draft.ranges.decay} step={0.01} min={0.9} max={1} onChange={(v) => patch(set(draft, 'ranges', { decay: v }))} />
-        <NumField label="Edge tolerance (ATR)" value={draft.ranges.edge_tolerance_atr} step={0.01} min={0.01} onChange={(v) => patch(set(draft, 'ranges', { edge_tolerance_atr: v }))} />
+        <NumField label="Target coverage" value={draft.ranges.target_coverage} step={0.01} min={0.01} max={0.99} onChange={(v) => patch(set(draft, 'ranges', { target_coverage: v }))} defaultValue={RANGES_DEFAULTS.target_coverage} />
+        <NumField label="Daily lookback sessions" value={draft.ranges.daily_lookback_sessions} min={1} onChange={(v) => patch(set(draft, 'ranges', { daily_lookback_sessions: v }))} defaultValue={RANGES_DEFAULTS.daily_lookback_sessions} />
+        <NumField label="Daily min sessions" value={draft.ranges.daily_min_sessions} min={1} onChange={(v) => patch(set(draft, 'ranges', { daily_min_sessions: v }))} defaultValue={RANGES_DEFAULTS.daily_min_sessions} />
+        <NumField label="Weekly lookback periods" value={draft.ranges.weekly_lookback_periods} min={1} onChange={(v) => patch(set(draft, 'ranges', { weekly_lookback_periods: v }))} defaultValue={RANGES_DEFAULTS.weekly_lookback_periods} />
+        <NumField label="Weekly min periods" value={draft.ranges.weekly_min_periods} min={1} onChange={(v) => patch(set(draft, 'ranges', { weekly_min_periods: v }))} defaultValue={RANGES_DEFAULTS.weekly_min_periods} />
+        <BoolField label="Condition on volatility" value={draft.ranges.condition_on_volatility} onChange={(v) => patch(set(draft, 'ranges', { condition_on_volatility: v }))} defaultValue={RANGES_DEFAULTS.condition_on_volatility} />
+        <NumField label="Min condition bucket" value={draft.ranges.min_condition_bucket} min={1} onChange={(v) => patch(set(draft, 'ranges', { min_condition_bucket: v }))} defaultValue={RANGES_DEFAULTS.min_condition_bucket} />
+        <NumField label="Decay" value={draft.ranges.decay} step={0.01} min={0.9} max={1} onChange={(v) => patch(set(draft, 'ranges', { decay: v }))} defaultValue={RANGES_DEFAULTS.decay} />
+        <NumField label="Edge tolerance (ATR)" value={draft.ranges.edge_tolerance_atr} step={0.01} min={0.01} onChange={(v) => patch(set(draft, 'ranges', { edge_tolerance_atr: v }))} defaultValue={RANGES_DEFAULTS.edge_tolerance_atr} />
       </Section>
 
       {/* ── 4. volatility ────────────────────────────────────────────────── */}
       <Section title="Volatility regime" description="Expansion/compression classification and directional read." summary={draft.volatility.enabled ? 'Enabled' : 'Disabled'}>
-        <BoolField label="Enabled" hint="Required for gate. Compression always forces WAIT." value={draft.volatility.enabled} onChange={(v) => patch(set(draft, 'volatility', { enabled: v }))} />
-        <NumField label="ATR period" value={draft.volatility.atr_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { atr_period: v }))} />
-        <NumField label="RV short bars" value={draft.volatility.rv_short_bars} min={2} onChange={(v) => patch(set(draft, 'volatility', { rv_short_bars: v }))} />
-        <NumField label="RV long bars" value={draft.volatility.rv_long_bars} min={2} onChange={(v) => patch(set(draft, 'volatility', { rv_long_bars: v }))} />
-        <NumField label="Bollinger band period" value={draft.volatility.band_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { band_period: v }))} />
-        <NumField label="Band std-dev" value={draft.volatility.band_stddev} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'volatility', { band_stddev: v }))} />
-        <NumField label="Percentile lookback" value={draft.volatility.percentile_lookback} min={60} onChange={(v) => patch(set(draft, 'volatility', { percentile_lookback: v }))} />
-        <NumField label="Gradient bars" value={draft.volatility.gradient_bars} min={2} max={50} onChange={(v) => patch(set(draft, 'volatility', { gradient_bars: v }))} />
-        <NumField label="Expansion min score" value={draft.volatility.expansion_min} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { expansion_min: v }))} />
-        <NumField label="Compression max score" value={draft.volatility.compression_max} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { compression_max: v }))} />
-        <NumField label="ADX period" value={draft.volatility.adx_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { adx_period: v }))} />
-        <NumField label="ADX min" value={draft.volatility.adx_min} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { adx_min: v }))} />
-        <NumField label="EMA fast period" value={draft.volatility.ema_fast_period} min={1} onChange={(v) => patch(set(draft, 'volatility', { ema_fast_period: v }))} />
-        <NumField label="EMA slow period" value={draft.volatility.ema_slow_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { ema_slow_period: v }))} />
-        <NumField label="Trend confirm bars" value={draft.volatility.trend_confirm_bars} min={1} onChange={(v) => patch(set(draft, 'volatility', { trend_confirm_bars: v }))} />
-        <NumField label="Max flip age (bars)" value={draft.volatility.max_flip_age_bars} min={1} onChange={(v) => patch(set(draft, 'volatility', { max_flip_age_bars: v }))} />
+        <BoolField label="Enabled" hint="Required for gate. Compression always forces WAIT." value={draft.volatility.enabled} onChange={(v) => patch(set(draft, 'volatility', { enabled: v }))} defaultValue={VOLATILITY_DEFAULTS.enabled} />
+        <NumField label="ATR period" value={draft.volatility.atr_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { atr_period: v }))} defaultValue={VOLATILITY_DEFAULTS.atr_period} />
+        <NumField label="RV short bars" value={draft.volatility.rv_short_bars} min={2} onChange={(v) => patch(set(draft, 'volatility', { rv_short_bars: v }))} defaultValue={VOLATILITY_DEFAULTS.rv_short_bars} />
+        <NumField label="RV long bars" value={draft.volatility.rv_long_bars} min={2} onChange={(v) => patch(set(draft, 'volatility', { rv_long_bars: v }))} defaultValue={VOLATILITY_DEFAULTS.rv_long_bars} />
+        <NumField label="Bollinger band period" value={draft.volatility.band_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { band_period: v }))} defaultValue={VOLATILITY_DEFAULTS.band_period} />
+        <NumField label="Band std-dev" value={draft.volatility.band_stddev} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'volatility', { band_stddev: v }))} defaultValue={VOLATILITY_DEFAULTS.band_stddev} />
+        <NumField label="Percentile lookback" value={draft.volatility.percentile_lookback} min={60} onChange={(v) => patch(set(draft, 'volatility', { percentile_lookback: v }))} defaultValue={VOLATILITY_DEFAULTS.percentile_lookback} />
+        <NumField label="Gradient bars" value={draft.volatility.gradient_bars} min={2} max={50} onChange={(v) => patch(set(draft, 'volatility', { gradient_bars: v }))} defaultValue={VOLATILITY_DEFAULTS.gradient_bars} />
+        <NumField label="Expansion min score" value={draft.volatility.expansion_min} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { expansion_min: v }))} defaultValue={VOLATILITY_DEFAULTS.expansion_min} />
+        <NumField label="Compression max score" value={draft.volatility.compression_max} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { compression_max: v }))} defaultValue={VOLATILITY_DEFAULTS.compression_max} />
+        <NumField label="ADX period" value={draft.volatility.adx_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { adx_period: v }))} defaultValue={VOLATILITY_DEFAULTS.adx_period} />
+        <NumField label="ADX min" value={draft.volatility.adx_min} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { adx_min: v }))} defaultValue={VOLATILITY_DEFAULTS.adx_min} />
+        <NumField label="EMA fast period" value={draft.volatility.ema_fast_period} min={1} onChange={(v) => patch(set(draft, 'volatility', { ema_fast_period: v }))} defaultValue={VOLATILITY_DEFAULTS.ema_fast_period} />
+        <NumField label="EMA slow period" value={draft.volatility.ema_slow_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { ema_slow_period: v }))} defaultValue={VOLATILITY_DEFAULTS.ema_slow_period} />
+        <NumField label="Trend confirm bars" value={draft.volatility.trend_confirm_bars} min={1} onChange={(v) => patch(set(draft, 'volatility', { trend_confirm_bars: v }))} defaultValue={VOLATILITY_DEFAULTS.trend_confirm_bars} />
+        <NumField label="Max flip age (bars)" value={draft.volatility.max_flip_age_bars} min={1} onChange={(v) => patch(set(draft, 'volatility', { max_flip_age_bars: v }))} defaultValue={VOLATILITY_DEFAULTS.max_flip_age_bars} />
         <Field label="Min direction confidence" hint="Moved to Strategy Definition (from the source manual), at the top of this panel — it's one of the six manual-anchored defaults.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.volatility.min_direction_confidence}</div>
         </Field>
@@ -405,76 +435,81 @@ export function NavigatorSettingsPanel() {
 
       {/* ── 5. option flow ───────────────────────────────────────────────── */}
       <Section title="Option-flow oscillator" description="Robust-normalized activity oscillator from narrow chain samples." summary={draft.flow.mode}>
-        <BoolField label="Enabled" value={draft.flow.enabled} onChange={(v) => patch(set(draft, 'flow', { enabled: v }))} />
+        <BoolField label="Enabled" value={draft.flow.enabled} onChange={(v) => patch(set(draft, 'flow', { enabled: v }))} defaultValue={FLOW_DEFAULTS.enabled} />
         <Field label="Mode" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto', textTransform: 'capitalize' }}>{draft.flow.mode}</div>
         </Field>
-        <NumField label="Dynamic strike radius" value={draft.flow.dynamic_strike_radius} min={1} max={20} onChange={(v) => patch(set(draft, 'flow', { dynamic_strike_radius: v }))} />
-        <NumField label="Broad strike radius" value={draft.flow.broad_strike_radius} min={1} max={50} onChange={(v) => patch(set(draft, 'flow', { broad_strike_radius: v }))} />
-        <NumField label="Max quote age (s)" value={draft.flow.max_quote_age_seconds} min={1} onChange={(v) => patch(set(draft, 'flow', { max_quote_age_seconds: v }))} />
-        <NumField label="Max sample gap (s)" value={draft.flow.max_sample_gap_seconds} min={1} onChange={(v) => patch(set(draft, 'flow', { max_sample_gap_seconds: v }))} />
-        <NumField label="Min chain completeness" value={draft.flow.min_chain_completeness} step={0.05} min={0.01} max={1} onChange={(v) => patch(set(draft, 'flow', { min_chain_completeness: v }))} />
-        <NumField label="Max spread %" value={draft.flow.max_spread_pct} step={0.01} min={0.01} max={1} onChange={(v) => patch(set(draft, 'flow', { max_spread_pct: v }))} />
-        <NumField label="Warmup samples" value={draft.flow.warmup_samples} min={1} onChange={(v) => patch(set(draft, 'flow', { warmup_samples: v }))} />
-        <NumField label="Robust window samples" value={draft.flow.robust_window_samples} min={1} onChange={(v) => patch(set(draft, 'flow', { robust_window_samples: v }))} />
-        <NumField label="OI intensity weight" value={draft.flow.oi_intensity_weight} step={0.05} min={0} max={1} onChange={(v) => patch(set(draft, 'flow', { oi_intensity_weight: v }))} />
-        <NumField label="Z-scale" value={draft.flow.z_scale} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'flow', { z_scale: v }))} />
-        <NumField label="Zero-line hysteresis" value={draft.flow.zero_hysteresis} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { zero_hysteresis: v }))} />
+        <NumField label="Dynamic strike radius" value={draft.flow.dynamic_strike_radius} min={1} max={20} onChange={(v) => patch(set(draft, 'flow', { dynamic_strike_radius: v }))} defaultValue={FLOW_DEFAULTS.dynamic_strike_radius} />
+        <NumField label="Broad strike radius" value={draft.flow.broad_strike_radius} min={1} max={50} onChange={(v) => patch(set(draft, 'flow', { broad_strike_radius: v }))} defaultValue={FLOW_DEFAULTS.broad_strike_radius} />
+        <NumField label="Max quote age (s)" value={draft.flow.max_quote_age_seconds} min={1} onChange={(v) => patch(set(draft, 'flow', { max_quote_age_seconds: v }))} defaultValue={FLOW_DEFAULTS.max_quote_age_seconds} />
+        <NumField label="Max sample gap (s)" value={draft.flow.max_sample_gap_seconds} min={1} onChange={(v) => patch(set(draft, 'flow', { max_sample_gap_seconds: v }))} defaultValue={FLOW_DEFAULTS.max_sample_gap_seconds} />
+        <NumField label="Min chain completeness" value={draft.flow.min_chain_completeness} step={0.05} min={0.01} max={1} onChange={(v) => patch(set(draft, 'flow', { min_chain_completeness: v }))} defaultValue={FLOW_DEFAULTS.min_chain_completeness} />
+        <NumField label="Max spread %" value={draft.flow.max_spread_pct} step={0.01} min={0.01} max={1} onChange={(v) => patch(set(draft, 'flow', { max_spread_pct: v }))} defaultValue={FLOW_DEFAULTS.max_spread_pct} />
+        <NumField label="Warmup samples" value={draft.flow.warmup_samples} min={1} onChange={(v) => patch(set(draft, 'flow', { warmup_samples: v }))} defaultValue={FLOW_DEFAULTS.warmup_samples} />
+        <NumField label="Robust window samples" value={draft.flow.robust_window_samples} min={1} onChange={(v) => patch(set(draft, 'flow', { robust_window_samples: v }))} defaultValue={FLOW_DEFAULTS.robust_window_samples} />
+        <NumField label="OI intensity weight" value={draft.flow.oi_intensity_weight} step={0.05} min={0} max={1} onChange={(v) => patch(set(draft, 'flow', { oi_intensity_weight: v }))} defaultValue={FLOW_DEFAULTS.oi_intensity_weight} />
+        <NumField label="Z-scale" value={draft.flow.z_scale} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'flow', { z_scale: v }))} defaultValue={FLOW_DEFAULTS.z_scale} />
+        <NumField label="Zero-line hysteresis" value={draft.flow.zero_hysteresis} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { zero_hysteresis: v }))} defaultValue={FLOW_DEFAULTS.zero_hysteresis} />
         <Field label="Strong / extreme zone (display)" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.flow.strong_zone} / {draft.flow.extreme_zone}</div>
         </Field>
-        <BoolField label="Require for index gate" hint="Missing index flow blocks gate eligibility." value={draft.flow.require_for_index_gate} onChange={(v) => patch(set(draft, 'flow', { require_for_index_gate: v }))} />
-        <BoolField label="Allow N/A for single stocks" value={draft.flow.allow_na_for_single_stocks} onChange={(v) => patch(set(draft, 'flow', { allow_na_for_single_stocks: v }))} />
+        <BoolField label="Require for index gate" hint="Missing index flow blocks gate eligibility." value={draft.flow.require_for_index_gate} onChange={(v) => patch(set(draft, 'flow', { require_for_index_gate: v }))} defaultValue={FLOW_DEFAULTS.require_for_index_gate} />
+        <BoolField label="Allow N/A for single stocks" value={draft.flow.allow_na_for_single_stocks} onChange={(v) => patch(set(draft, 'flow', { allow_na_for_single_stocks: v }))} defaultValue={FLOW_DEFAULTS.allow_na_for_single_stocks} />
       </Section>
 
       {/* ── 6. gamma ─────────────────────────────────────────────────────── */}
       <Section title="Gamma activity" description="Confirmation-only. Never determines direction by itself." summary={draft.gamma.enabled ? 'Enabled' : 'Disabled'}>
-        <BoolField label="Enabled" value={draft.gamma.enabled} onChange={(v) => patch(set(draft, 'gamma', { enabled: v }))} />
+        <BoolField label="Enabled" value={draft.gamma.enabled} onChange={(v) => patch(set(draft, 'gamma', { enabled: v }))} defaultValue={GAMMA_DEFAULTS.enabled} />
         <Field label="Risk-free rate" hint="Required for gamma availability — never invented. Leave blank until set.">
           <input type="number" step={0.001} value={draft.gamma.risk_free_rate ?? ''} placeholder="unset"
             onChange={(e) => patch(set(draft, 'gamma', { risk_free_rate: e.target.value === '' ? null : Number(e.target.value) }))}
             style={inputStyle} />
+          <DefaultBadge isDefault={draft.gamma.risk_free_rate == null} displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { risk_free_rate: null }))} />
         </Field>
         <Field label="Dividend yield" hint="Required for gamma availability — never invented. Leave blank until set.">
           <input type="number" step={0.001} value={draft.gamma.dividend_yield ?? ''} placeholder="unset"
             onChange={(e) => patch(set(draft, 'gamma', { dividend_yield: e.target.value === '' ? null : Number(e.target.value) }))}
             style={inputStyle} />
+          <DefaultBadge isDefault={draft.gamma.dividend_yield == null} displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { dividend_yield: null }))} />
         </Field>
-        <NumField label="Min IV" value={draft.gamma.min_iv} step={0.001} min={0.001} onChange={(v) => patch(set(draft, 'gamma', { min_iv: v }))} />
-        <NumField label="Max IV" value={draft.gamma.max_iv} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { max_iv: v }))} />
-        <NumField label="Robust window samples" value={draft.gamma.robust_window_samples} min={1} onChange={(v) => patch(set(draft, 'gamma', { robust_window_samples: v }))} />
-        <NumField label="Min samples" value={draft.gamma.min_samples} min={1} onChange={(v) => patch(set(draft, 'gamma', { min_samples: v }))} />
-        <NumField label="Blast Z min" value={draft.gamma.blast_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { blast_z_min: v }))} />
-        <NumField label="Acceleration Z min" value={draft.gamma.acceleration_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { acceleration_z_min: v }))} />
-        <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} />
-        <Field label="Expiry profile start (IST)"><input type="text" value={draft.gamma.expiry_profile_start_ist} onChange={(e) => patch(set(draft, 'gamma', { expiry_profile_start_ist: e.target.value }))} style={inputStyle} /></Field>
+        <NumField label="Min IV" value={draft.gamma.min_iv} step={0.001} min={0.001} onChange={(v) => patch(set(draft, 'gamma', { min_iv: v }))} defaultValue={GAMMA_DEFAULTS.min_iv} />
+        <NumField label="Max IV" value={draft.gamma.max_iv} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { max_iv: v }))} defaultValue={GAMMA_DEFAULTS.max_iv} />
+        <NumField label="Robust window samples" value={draft.gamma.robust_window_samples} min={1} onChange={(v) => patch(set(draft, 'gamma', { robust_window_samples: v }))} defaultValue={GAMMA_DEFAULTS.robust_window_samples} />
+        <NumField label="Min samples" value={draft.gamma.min_samples} min={1} onChange={(v) => patch(set(draft, 'gamma', { min_samples: v }))} defaultValue={GAMMA_DEFAULTS.min_samples} />
+        <NumField label="Blast Z min" value={draft.gamma.blast_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { blast_z_min: v }))} defaultValue={GAMMA_DEFAULTS.blast_z_min} />
+        <NumField label="Acceleration Z min" value={draft.gamma.acceleration_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { acceleration_z_min: v }))} defaultValue={GAMMA_DEFAULTS.acceleration_z_min} />
+        <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} defaultValue={GAMMA_DEFAULTS.expiry_profile_enabled} />
+        <Field label="Expiry profile start (IST)">
+          <input type="text" value={draft.gamma.expiry_profile_start_ist} onChange={(e) => patch(set(draft, 'gamma', { expiry_profile_start_ist: e.target.value }))} style={inputStyle} />
+          <DefaultBadge isDefault={draft.gamma.expiry_profile_start_ist === GAMMA_DEFAULTS.expiry_profile_start_ist} displayDefault={GAMMA_DEFAULTS.expiry_profile_start_ist} onRevert={() => patch(set(draft, 'gamma', { expiry_profile_start_ist: GAMMA_DEFAULTS.expiry_profile_start_ist }))} />
+        </Field>
         <Field label="Require flow alignment" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.gamma.require_flow_alignment ? 'On' : 'Off'}</div>
         </Field>
-        <BoolField label="Required for gate" hint="Off by default — missing gamma stays explicit and cannot boost score." value={draft.gamma.required_for_gate} onChange={(v) => patch(set(draft, 'gamma', { required_for_gate: v }))} />
+        <BoolField label="Required for gate" hint="Off by default — missing gamma stays explicit and cannot boost score." value={draft.gamma.required_for_gate} onChange={(v) => patch(set(draft, 'gamma', { required_for_gate: v }))} defaultValue={GAMMA_DEFAULTS.required_for_gate} />
       </Section>
 
       {/* ── 7. fusion ────────────────────────────────────────────────────── */}
       <Section title="Fusion and eligibility" description="Component weights and status thresholds. Weights must sum to 100." summary={`${draft.fusion.base_weight + draft.fusion.avwap_weight + draft.fusion.volatility_weight + draft.fusion.flow_weight + draft.fusion.gamma_weight}% total`}>
-        <NumField label="Base weight" value={draft.fusion.base_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { base_weight: v }))} />
-        <NumField label="AVWAP weight" value={draft.fusion.avwap_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { avwap_weight: v }))} />
-        <NumField label="Volatility weight" value={draft.fusion.volatility_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { volatility_weight: v }))} />
-        <NumField label="Flow weight" value={draft.fusion.flow_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { flow_weight: v }))} />
-        <NumField label="Gamma weight" value={draft.fusion.gamma_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { gamma_weight: v }))} />
+        <NumField label="Base weight" value={draft.fusion.base_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { base_weight: v }))} defaultValue={FUSION_DEFAULTS.base_weight} />
+        <NumField label="AVWAP weight" value={draft.fusion.avwap_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { avwap_weight: v }))} defaultValue={FUSION_DEFAULTS.avwap_weight} />
+        <NumField label="Volatility weight" value={draft.fusion.volatility_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { volatility_weight: v }))} defaultValue={FUSION_DEFAULTS.volatility_weight} />
+        <NumField label="Flow weight" value={draft.fusion.flow_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { flow_weight: v }))} defaultValue={FUSION_DEFAULTS.flow_weight} />
+        <NumField label="Gamma weight" value={draft.fusion.gamma_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { gamma_weight: v }))} defaultValue={FUSION_DEFAULTS.gamma_weight} />
         <Field label="Min AVWAP grade to confirm" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.fusion.min_avwap_grade}</div>
         </Field>
-        <NumField label="Strong conflict confidence" value={draft.fusion.strong_conflict_confidence} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { strong_conflict_confidence: v }))} />
-        <NumField label="Confirmed score min" value={draft.fusion.confirmed_score_min} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { confirmed_score_min: v }))} />
-        <NumField label="High-conviction score min" value={draft.fusion.high_conviction_score_min} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { high_conviction_score_min: v }))} />
-        <BoolField label="Require fresh trigger" value={draft.fusion.require_fresh_trigger} onChange={(v) => patch(set(draft, 'fusion', { require_fresh_trigger: v }))} />
-        <BoolField label="Require all gate components" hint="Expected unavailable evidence fails closed." value={draft.fusion.require_all_gate_components} onChange={(v) => patch(set(draft, 'fusion', { require_all_gate_components: v }))} />
+        <NumField label="Strong conflict confidence" value={draft.fusion.strong_conflict_confidence} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { strong_conflict_confidence: v }))} defaultValue={FUSION_DEFAULTS.strong_conflict_confidence} />
+        <NumField label="Confirmed score min" value={draft.fusion.confirmed_score_min} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { confirmed_score_min: v }))} defaultValue={FUSION_DEFAULTS.confirmed_score_min} />
+        <NumField label="High-conviction score min" value={draft.fusion.high_conviction_score_min} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { high_conviction_score_min: v }))} defaultValue={FUSION_DEFAULTS.high_conviction_score_min} />
+        <BoolField label="Require fresh trigger" value={draft.fusion.require_fresh_trigger} onChange={(v) => patch(set(draft, 'fusion', { require_fresh_trigger: v }))} defaultValue={FUSION_DEFAULTS.require_fresh_trigger} />
+        <BoolField label="Require all gate components" hint="Expected unavailable evidence fails closed." value={draft.fusion.require_all_gate_components} onChange={(v) => patch(set(draft, 'fusion', { require_all_gate_components: v }))} defaultValue={FUSION_DEFAULTS.require_all_gate_components} />
       </Section>
 
       {/* ── 8. retention/diagnostics ─────────────────────────────────────── */}
       <Section title="Data retention and diagnostics" description="Storage windows for raw samples and computed features/signals." summary={`${draft.retention_raw_days}d raw · ${draft.retention_features_days}d features`}>
-        <NumField label="Raw snapshot retention (days)" value={draft.retention_raw_days} min={1} max={365} onChange={(v) => patch({ ...draft, retention_raw_days: v })} />
-        <NumField label="Feature/signal retention (days)" value={draft.retention_features_days} min={1} max={3650} onChange={(v) => patch({ ...draft, retention_features_days: v })} />
+        <NumField label="Raw snapshot retention (days)" value={draft.retention_raw_days} min={1} max={365} onChange={(v) => patch({ ...draft, retention_raw_days: v })} defaultValue={ROOT_DEFAULTS.retention_raw_days} />
+        <NumField label="Feature/signal retention (days)" value={draft.retention_features_days} min={1} max={3650} onChange={(v) => patch({ ...draft, retention_features_days: v })} defaultValue={ROOT_DEFAULTS.retention_features_days} />
       </Section>
     </section>
   );

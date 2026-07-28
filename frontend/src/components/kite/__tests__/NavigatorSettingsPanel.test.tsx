@@ -247,6 +247,35 @@ describe('NavigatorSettingsPanel', () => {
     });
   });
 
+  describe('Default badges on every other (Sterling-calibration) field', () => {
+    it('every Sterling-designed field also shows a plain "Default: X" badge, distinct from "Manual default:"', () => {
+      render(<NavigatorSettingsPanel />);
+      // One deliberately-unique-valued field per section, so getByText can't collide with a sibling field.
+      expect(screen.getByText('Default: 0.02')).toBeInTheDocument(); // AVWAP min slope
+      expect(screen.getByText('Default: 0.98')).toBeInTheDocument(); // Ranges decay
+      expect(screen.getByText('Default: 32')).toBeInTheDocument(); // Volatility RV long bars
+      expect(screen.getByText('Default: 150')).toBeInTheDocument(); // Flow max sample gap
+      expect(screen.getByText('Default: 14:00')).toBeInTheDocument(); // Gamma expiry profile start (IST)
+      expect(screen.getByText('Default: 15')).toBeInTheDocument(); // Fusion flow weight
+      expect(screen.getByText('Default: 365')).toBeInTheDocument(); // Retention features days
+      expect(screen.queryAllByText(/^Manual default:/).length).toBe(6); // still only the 6 manual ones
+    });
+
+    it('changing a Sterling-calibration field shows its own revert button and reverting restores it', () => {
+      render(<NavigatorSettingsPanel />);
+      const pivotLeftInput = screen.getByLabelText('Pivot left bars') as HTMLInputElement;
+      fireEvent.change(pivotLeftInput, { target: { value: '7' } });
+      expect(screen.getByRole('button', { name: /changed — revert/i })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /changed — revert/i }));
+      expect(pivotLeftInput.value).toBe('3');
+    });
+
+    it('unset optional fields (risk-free rate, dividend yield) both show "Default: unset"', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getAllByText('Default: unset').length).toBe(2);
+    });
+  });
+
   it('shows raw and effective concepts distinctly via fusion weight fields', () => {
     render(<NavigatorSettingsPanel />);
     expect(screen.getByText('Base weight')).toBeInTheDocument();
