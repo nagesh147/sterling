@@ -18,7 +18,13 @@ const RED = '#df514c';
 const AMBER = '#f5a623';
 const MANUAL_BLUE = '#1565c0';
 
-function AdvancedGroup({ children }: { children: React.ReactNode }) {
+// Wraps the Strategy Definition section: the 6 values that define the
+// strategy itself (from the source manual). Collapsed by default and
+// visually set apart (amber, like every other "advanced/handle with care"
+// affordance in this app) so it can't be mistaken for one more ordinary
+// settings section, and can't be changed by an idle click while tuning
+// something else.
+function AdvancedGroup({ badgeText, children }: { badgeText: string; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
   return (
     <details
@@ -29,15 +35,15 @@ function AdvancedGroup({ children }: { children: React.ReactNode }) {
       <summary style={{ listStyle: 'none', cursor: 'pointer', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, userSelect: 'none' }}>
         <span aria-hidden style={{ width: 18, color: AMBER, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ color: '#8a5a00', fontSize: 12.5, fontWeight: 800 }}>Advanced Configuration — Sterling&apos;s own calibration</div>
+          <div style={{ color: '#8a5a00', fontSize: 12.5, fontWeight: 800 }}>Advanced — Strategy Definition (from the source manual)</div>
           <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
-            Not from the manual. Every number below is one Sterling had to invent to make the manual&apos;s
-            qualitative description computable — collapsed by default so it can&apos;t be confused with, or
-            accidentally change, the Strategy Definition above.
+            These are the values that define the strategy itself, straight from the AVWAP Navigator Suite
+            manual this build is built on — not ordinary tuning. Collapsed by default so they're never one
+            careless click away from changing what the strategy actually is.
           </div>
         </div>
         <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#fff3e0', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
-          9 sections
+          {badgeText}
         </span>
       </summary>
       <div style={{ background: '#fff' }}>{children}</div>
@@ -45,21 +51,29 @@ function AdvancedGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
-function DefaultBadge({ isDefault, displayDefault, onRevert }: { isDefault: boolean; displayDefault: string; onRevert: () => void }) {
+// At-default fields get a quiet highlight on the control itself — no
+// repeated text (the input already shows the value). Only once a field
+// deviates from its default does the actual default value become worth
+// showing, alongside a one-click revert.
+const AT_DEFAULT_BORDER = '#a8d5aa';
+const CHANGED_BORDER = AMBER;
+const CHANGED_BG = '#fff8ec';
+
+function fieldHighlightStyle(isDefault: boolean | null): React.CSSProperties {
+  if (isDefault === null) return {};
+  return isDefault
+    ? { borderColor: AT_DEFAULT_BORDER }
+    : { borderColor: CHANGED_BORDER, background: CHANGED_BG };
+}
+
+function RevertNote({ displayDefault, onRevert, sourceLabel = "Sterling's" }: { displayDefault: string; onRevert: () => void; sourceLabel?: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-      <span style={{ fontSize: 9.5, fontWeight: 700, color: DIM, background: '#f2f2f3', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '1px 6px' }}>
-        Default: {displayDefault}
-      </span>
-      {!isDefault && (
-        <button
-          type="button" onClick={onRevert} title={`Revert to Sterling's default (${displayDefault})`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: AMBER, fontSize: 9.5, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-        >
-          <Icons.Reload /> changed — revert
-        </button>
-      )}
-    </div>
+    <button
+      type="button" onClick={onRevert} title={`Revert to ${sourceLabel} default (${displayDefault})`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, border: 'none', background: 'none', color: AMBER, fontSize: 9.5, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+    >
+      <Icons.Reload /> was {displayDefault} — revert
+    </button>
   );
 }
 
@@ -73,26 +87,30 @@ function NumField({ label, hint, value, onChange, step = 1, min, max, defaultVal
   label: string; hint?: string; value: number; onChange: (v: number) => void;
   step?: number; min?: number; max?: number; defaultValue?: number;
 }) {
+  const isDefault = defaultValue === undefined ? null : value === defaultValue;
   return (
     <Field label={label} hint={hint}>
       <input
         type="number" value={Number.isFinite(value) ? value : 0} step={step} min={min} max={max}
         onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
-        style={inputStyle} aria-label={label}
+        style={{ ...inputStyle, ...fieldHighlightStyle(isDefault) }} aria-label={label}
       />
-      {defaultValue !== undefined && (
-        <DefaultBadge isDefault={value === defaultValue} displayDefault={String(defaultValue)} onRevert={() => onChange(defaultValue)} />
+      {isDefault === false && (
+        <RevertNote displayDefault={String(defaultValue)} onRevert={() => onChange(defaultValue as number)} />
       )}
     </Field>
   );
 }
 
 function BoolField({ label, hint, value, onChange, defaultValue }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void; defaultValue?: boolean }) {
+  const isDefault = defaultValue === undefined ? null : value === defaultValue;
   return (
     <Field label={label} hint={hint}>
-      <Switch checked={value} label={label} onChange={() => onChange(!value)} />
-      {defaultValue !== undefined && (
-        <DefaultBadge isDefault={value === defaultValue} displayDefault={defaultValue ? 'On' : 'Off'} onRevert={() => onChange(defaultValue)} />
+      <div style={{ display: 'inline-flex', borderRadius: 14, ...(isDefault === false ? { boxShadow: `0 0 0 2px ${CHANGED_BORDER}40` } : {}) }}>
+        <Switch checked={value} label={label} onChange={() => onChange(!value)} />
+      </div>
+      {isDefault === false && (
+        <RevertNote displayDefault={defaultValue ? 'On' : 'Off'} onRevert={() => onChange(defaultValue as boolean)} />
       )}
     </Field>
   );
@@ -105,24 +123,19 @@ function ManualControl({ spec, config, onReset, children }: {
   const isDefault = value === spec.defaultValue;
   return (
     <Field label={spec.label}>
-      {children}
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ ...(isDefault ? { boxShadow: `0 0 0 2px ${MANUAL_BLUE}30`, borderRadius: 8 } : { boxShadow: `0 0 0 2px ${CHANGED_BORDER}40`, borderRadius: 8 }) }}>
+          {children}
+        </div>
         <span
           title={spec.manualQuote}
-          style={{ fontSize: 9.5, fontWeight: 700, color: MANUAL_BLUE, background: `${MANUAL_BLUE}14`, border: `1px solid ${MANUAL_BLUE}40`, borderRadius: 4, padding: '1px 6px', cursor: 'help' }}
+          aria-label="From the source manual"
+          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: '#fff', background: MANUAL_BLUE, borderRadius: '50%', cursor: 'help' }}
         >
-          Manual default: {spec.displayDefault}
+          M
         </span>
-        {!isDefault && (
-          <button
-            type="button" onClick={onReset}
-            title={`Revert to the manual's default (${spec.displayDefault})`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: AMBER, fontSize: 9.5, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-          >
-            <Icons.Reload /> changed — revert
-          </button>
-        )}
       </div>
+      {!isDefault && <RevertNote displayDefault={spec.displayDefault} onRevert={onReset} sourceLabel="the manual's" />}
     </Field>
   );
 }
@@ -277,64 +290,58 @@ export function NavigatorSettingsPanel() {
         </div>
       </div>
 
-      {/* ── 0. strategy definition (from the source manual) ───────────────── */}
-      <div style={{ background: '#eef5fc' }}>
-      <Section
-        title="Strategy Definition (from the source manual)"
-        description="The handful of settings whose default value comes directly from the AVWAP Navigator Suite manual this strategy is built on — grouped separately and clearly marked so you don't change the strategy's own definition by mistake while tuning something else."
-        summary={`${MANUAL_FIELDS.filter((f) => getManualFieldValue(draft, f.path) === f.defaultValue).length}/${MANUAL_FIELDS.length} at manual default`}
-        defaultOpen
-      >
-        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.55, marginBottom: 4 }}>
-          Source: <i>AVWAP Navigator Suite — Official Trader&apos;s Manual</i> (QuantGym, v1.0, 2026). Every other
-          setting in this panel is Sterling&apos;s own calibration — the manual describes those behaviours in
-          words but discloses no formula or threshold, so Sterling had to pick a workable number. These six are
-          different: the manual states an actual value or preference, so that&apos;s what ships as the default.
-          Hover a badge below to see the exact source line.
-        </div>
-
-        <ManualControl spec={MANUAL_FIELDS[0]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[0].path))}>
-          <ChoiceRow value={draft.flow.mode} onChange={(mode) => patch(set(draft, 'flow', { mode }))} options={[{ value: 'dynamic', label: 'Dynamic' }, { value: 'broad', label: 'Broad' }]} />
-        </ManualControl>
-
-        <ManualControl spec={MANUAL_FIELDS[1]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[1].path))}>
-          <input type="number" value={draft.flow.strong_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { strong_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Strong flow zone" />
-        </ManualControl>
-
-        <ManualControl spec={MANUAL_FIELDS[2]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[2].path))}>
-          <input type="number" value={draft.flow.extreme_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { extreme_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Extreme flow zone" />
-        </ManualControl>
-
-        <ManualControl spec={MANUAL_FIELDS[3]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[3].path))}>
-          <Switch checked={draft.gamma.require_flow_alignment} label="Gamma requires flow alignment" onChange={() => patch(set(draft, 'gamma', { require_flow_alignment: !draft.gamma.require_flow_alignment }))} />
-        </ManualControl>
-
-        <ManualControl spec={MANUAL_FIELDS[4]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[4].path))}>
-          <ChoiceRow<AvwapGrade> value={draft.fusion.min_avwap_grade} onChange={(v) => patch(set(draft, 'fusion', { min_avwap_grade: v }))} options={[
-            { value: 'B', label: 'B' }, { value: 'A', label: 'A' }, { value: 'A+', label: 'A+' },
-          ]} />
-        </ManualControl>
-
-        <ManualControl spec={MANUAL_FIELDS[5]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[5].path))}>
-          <input type="number" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(e) => patch(set(draft, 'volatility', { min_direction_confidence: Number(e.target.value) }))} style={inputStyle} aria-label="Minimum directional confidence" />
-        </ManualControl>
-
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${BORDER}` }}>
-          <div style={{ color: DIM, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
-            Also from the manual — not settings, always on
+      {/* ── 0. strategy definition (from the source manual) — the "advanced", collapsed, protected group ── */}
+      <AdvancedGroup badgeText={`${MANUAL_FIELDS.filter((f) => getManualFieldValue(draft, f.path) === f.defaultValue).length}/${MANUAL_FIELDS.length} at manual default`}>
+        <div style={{ padding: '4px 18px 18px' }}>
+          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.55, marginBottom: 4 }}>
+            Source: <i>AVWAP Navigator Suite — Official Trader&apos;s Manual</i> (QuantGym, v1.0, 2026). Every other
+            setting in this panel is Sterling&apos;s own calibration — the manual describes those behaviours in
+            words but discloses no formula or threshold, so Sterling had to pick a workable number. These six are
+            different: the manual states an actual value or preference, so that&apos;s what ships as the default.
+            Hover the blue &ldquo;M&rdquo; badge next to a field to see the exact source line.
           </div>
-          {HARDCODED_MANUAL_RULES.map((rule) => (
-            <div key={rule.label} title={rule.note} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 11.5, color: TEXT, cursor: 'help' }}>
-              <span aria-hidden style={{ width: 6, height: 6, borderRadius: 3, background: MANUAL_BLUE, flexShrink: 0 }} />
-              {rule.label}
-            </div>
-          ))}
-        </div>
-      </Section>
-      </div>
 
-      <AdvancedGroup>
-      {/* ── 1. instruments and timing ───────────────────────────────────── */}
+          <ManualControl spec={MANUAL_FIELDS[0]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[0].path))}>
+            <ChoiceRow value={draft.flow.mode} onChange={(mode) => patch(set(draft, 'flow', { mode }))} options={[{ value: 'dynamic', label: 'Dynamic' }, { value: 'broad', label: 'Broad' }]} />
+          </ManualControl>
+
+          <ManualControl spec={MANUAL_FIELDS[1]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[1].path))}>
+            <input type="number" value={draft.flow.strong_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { strong_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Strong flow zone" />
+          </ManualControl>
+
+          <ManualControl spec={MANUAL_FIELDS[2]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[2].path))}>
+            <input type="number" value={draft.flow.extreme_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { extreme_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Extreme flow zone" />
+          </ManualControl>
+
+          <ManualControl spec={MANUAL_FIELDS[3]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[3].path))}>
+            <Switch checked={draft.gamma.require_flow_alignment} label="Gamma requires flow alignment" onChange={() => patch(set(draft, 'gamma', { require_flow_alignment: !draft.gamma.require_flow_alignment }))} />
+          </ManualControl>
+
+          <ManualControl spec={MANUAL_FIELDS[4]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[4].path))}>
+            <ChoiceRow<AvwapGrade> value={draft.fusion.min_avwap_grade} onChange={(v) => patch(set(draft, 'fusion', { min_avwap_grade: v }))} options={[
+              { value: 'B', label: 'B' }, { value: 'A', label: 'A' }, { value: 'A+', label: 'A+' },
+            ]} />
+          </ManualControl>
+
+          <ManualControl spec={MANUAL_FIELDS[5]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[5].path))}>
+            <input type="number" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(e) => patch(set(draft, 'volatility', { min_direction_confidence: Number(e.target.value) }))} style={inputStyle} aria-label="Minimum directional confidence" />
+          </ManualControl>
+
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${BORDER}` }}>
+            <div style={{ color: DIM, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
+              Also from the manual — not settings, always on
+            </div>
+            {HARDCODED_MANUAL_RULES.map((rule) => (
+              <div key={rule.label} title={rule.note} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 11.5, color: TEXT, cursor: 'help' }}>
+                <span aria-hidden style={{ width: 6, height: 6, borderRadius: 3, background: MANUAL_BLUE, flexShrink: 0 }} />
+                {rule.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </AdvancedGroup>
+
+      {/* ── 1. instruments and timing — Sterling's own settings, ungrouped, as before ── */}
       <Section title="Instruments and timing" description="What Navigator scans and the base clock it runs on." summary={`${draft.underlyings.length} underlyings · ${draft.price_timeframe}`}>
         <Field label="Engine source" hint="This build is Kite-only — no other engine can be selected.">
           <CheckOption label="Kite triple-SuperTrend" checked disabled compact />
@@ -380,7 +387,9 @@ export function NavigatorSettingsPanel() {
             ]}
           />
           <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>{ORIGINATION_EXPLAIN[draft.signal_origination]}</div>
-          <DefaultBadge isDefault={draft.signal_origination === ROOT_DEFAULTS.signal_origination} displayDefault="Off" onRevert={() => patch({ ...draft, signal_origination: ROOT_DEFAULTS.signal_origination, auto_execute_originated: false })} />
+          {draft.signal_origination !== ROOT_DEFAULTS.signal_origination && (
+            <RevertNote displayDefault="Off" onRevert={() => patch({ ...draft, signal_origination: ROOT_DEFAULTS.signal_origination, auto_execute_originated: false })} />
+          )}
         </Field>
         <BoolField
           label="Auto-Execute Originated"
@@ -493,14 +502,14 @@ export function NavigatorSettingsPanel() {
         <Field label="Risk-free rate" hint="Required for gamma availability — never invented. Leave blank until set.">
           <input type="number" step={0.001} value={draft.gamma.risk_free_rate ?? ''} placeholder="unset"
             onChange={(e) => patch(set(draft, 'gamma', { risk_free_rate: e.target.value === '' ? null : Number(e.target.value) }))}
-            style={inputStyle} />
-          <DefaultBadge isDefault={draft.gamma.risk_free_rate == null} displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { risk_free_rate: null }))} />
+            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.risk_free_rate == null) }} />
+          {draft.gamma.risk_free_rate != null && <RevertNote displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { risk_free_rate: null }))} />}
         </Field>
         <Field label="Dividend yield" hint="Required for gamma availability — never invented. Leave blank until set.">
           <input type="number" step={0.001} value={draft.gamma.dividend_yield ?? ''} placeholder="unset"
             onChange={(e) => patch(set(draft, 'gamma', { dividend_yield: e.target.value === '' ? null : Number(e.target.value) }))}
-            style={inputStyle} />
-          <DefaultBadge isDefault={draft.gamma.dividend_yield == null} displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { dividend_yield: null }))} />
+            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.dividend_yield == null) }} />
+          {draft.gamma.dividend_yield != null && <RevertNote displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { dividend_yield: null }))} />}
         </Field>
         <NumField label="Min IV" value={draft.gamma.min_iv} step={0.001} min={0.001} onChange={(v) => patch(set(draft, 'gamma', { min_iv: v }))} defaultValue={GAMMA_DEFAULTS.min_iv} />
         <NumField label="Max IV" value={draft.gamma.max_iv} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { max_iv: v }))} defaultValue={GAMMA_DEFAULTS.max_iv} />
@@ -510,8 +519,14 @@ export function NavigatorSettingsPanel() {
         <NumField label="Acceleration Z min" value={draft.gamma.acceleration_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { acceleration_z_min: v }))} defaultValue={GAMMA_DEFAULTS.acceleration_z_min} />
         <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} defaultValue={GAMMA_DEFAULTS.expiry_profile_enabled} />
         <Field label="Expiry profile start (IST)">
-          <input type="text" value={draft.gamma.expiry_profile_start_ist} onChange={(e) => patch(set(draft, 'gamma', { expiry_profile_start_ist: e.target.value }))} style={inputStyle} />
-          <DefaultBadge isDefault={draft.gamma.expiry_profile_start_ist === GAMMA_DEFAULTS.expiry_profile_start_ist} displayDefault={GAMMA_DEFAULTS.expiry_profile_start_ist} onRevert={() => patch(set(draft, 'gamma', { expiry_profile_start_ist: GAMMA_DEFAULTS.expiry_profile_start_ist }))} />
+          <input
+            type="text" value={draft.gamma.expiry_profile_start_ist}
+            onChange={(e) => patch(set(draft, 'gamma', { expiry_profile_start_ist: e.target.value }))}
+            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.expiry_profile_start_ist === GAMMA_DEFAULTS.expiry_profile_start_ist) }}
+          />
+          {draft.gamma.expiry_profile_start_ist !== GAMMA_DEFAULTS.expiry_profile_start_ist && (
+            <RevertNote displayDefault={GAMMA_DEFAULTS.expiry_profile_start_ist} onRevert={() => patch(set(draft, 'gamma', { expiry_profile_start_ist: GAMMA_DEFAULTS.expiry_profile_start_ist }))} />
+          )}
         </Field>
         <Field label="Require flow alignment" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.gamma.require_flow_alignment ? 'On' : 'Off'}</div>
@@ -541,7 +556,6 @@ export function NavigatorSettingsPanel() {
         <NumField label="Raw snapshot retention (days)" value={draft.retention_raw_days} min={1} max={365} onChange={(v) => patch({ ...draft, retention_raw_days: v })} defaultValue={ROOT_DEFAULTS.retention_raw_days} />
         <NumField label="Feature/signal retention (days)" value={draft.retention_features_days} min={1} max={3650} onChange={(v) => patch({ ...draft, retention_features_days: v })} defaultValue={ROOT_DEFAULTS.retention_features_days} />
       </Section>
-      </AdvancedGroup>
     </section>
   );
 }

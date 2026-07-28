@@ -196,13 +196,33 @@ describe('NavigatorSettingsPanel', () => {
     });
   });
 
-  describe('Strategy Definition (from the source manual)', () => {
-    it('renders the section with all six manual-anchored fields at their default, no revert buttons shown', () => {
+  describe('Strategy Definition is the "Advanced" (collapsed, protected) group', () => {
+    it('is collapsed by default, badged "6/6 at manual default", and shows no revert buttons', () => {
       render(<NavigatorSettingsPanel />);
-      expect(screen.getByText('Strategy Definition (from the source manual)')).toBeInTheDocument();
+      const heading = screen.getByText('Advanced — Strategy Definition (from the source manual)');
+      expect(heading).toBeInTheDocument();
       expect(screen.getByText('6/6 at manual default')).toBeInTheDocument();
-      expect(screen.getAllByText(/Manual default:/).length).toBe(6);
-      expect(screen.queryByRole('button', { name: /changed — revert/i })).not.toBeInTheDocument();
+      const advancedDetails = heading.closest('details') as HTMLDetailsElement;
+      expect(advancedDetails.open).toBe(false);
+      expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument();
+    });
+
+    it('every ordinary settings section is a sibling, NOT nested inside the Strategy Definition group', () => {
+      render(<NavigatorSettingsPanel />);
+      const advancedDetails = screen.getByText('Advanced — Strategy Definition (from the source manual)').closest('details') as HTMLDetailsElement;
+      for (const title of [
+        'Instruments and timing', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+        'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
+        'Fusion and eligibility', 'Data retention and diagnostics',
+      ]) {
+        expect(advancedDetails.contains(screen.getByText(title))).toBe(false);
+      }
+    });
+
+    it('each of the 6 manual fields carries a "From the source manual" indicator (hover reveals the quote), not a repeated number', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getAllByLabelText('From the source manual').length).toBe(6);
+      expect(screen.queryByText(/Manual default:/)).not.toBeInTheDocument();
     });
 
     it('shows the two always-on hardcoded manual rules', () => {
@@ -211,22 +231,22 @@ describe('NavigatorSettingsPanel', () => {
       expect(screen.getByText('Gamma never sets direction by itself')).toBeInTheDocument();
     });
 
-    it('changing a manual-anchored field shows a revert button and updates the at-default count', () => {
+    it('changing a manual-anchored field shows a "was X — revert" note and updates the at-default count', () => {
       render(<NavigatorSettingsPanel />);
       const strongZoneInput = screen.getByLabelText('Strong flow zone') as HTMLInputElement;
       fireEvent.change(strongZoneInput, { target: { value: '75' } });
       expect(screen.getByText('5/6 at manual default')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /changed — revert/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /was 68 — revert/i })).toBeInTheDocument();
     });
 
-    it('clicking revert restores that field to the manual default and clears the revert button', () => {
+    it('clicking revert restores that field to the manual default and clears the note', () => {
       render(<NavigatorSettingsPanel />);
       const strongZoneInput = screen.getByLabelText('Strong flow zone') as HTMLInputElement;
       fireEvent.change(strongZoneInput, { target: { value: '75' } });
-      fireEvent.click(screen.getByRole('button', { name: /changed — revert/i }));
+      fireEvent.click(screen.getByRole('button', { name: /revert/i }));
       expect(strongZoneInput.value).toBe('68');
       expect(screen.getByText('6/6 at manual default')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /changed — revert/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument();
     });
 
     it('reverting one field does not touch another changed field', () => {
@@ -236,7 +256,7 @@ describe('NavigatorSettingsPanel', () => {
       fireEvent.change(strongZoneInput, { target: { value: '75' } });
       fireEvent.change(extremeZoneInput, { target: { value: '99' } });
       expect(screen.getByText('4/6 at manual default')).toBeInTheDocument();
-      fireEvent.click(screen.getAllByRole('button', { name: /changed — revert/i })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: /revert/i })[0]);
       expect(extremeZoneInput.value).toBe('99'); // untouched
       expect(screen.getByText('5/6 at manual default')).toBeInTheDocument();
     });
@@ -247,56 +267,40 @@ describe('NavigatorSettingsPanel', () => {
     });
   });
 
-  describe('Default badges on every other (Sterling-calibration) field', () => {
-    it('every Sterling-designed field also shows a plain "Default: X" badge, distinct from "Manual default:"', () => {
+  describe('Sterling-calibration fields: highlighted quietly, no permanent text', () => {
+    it('never shows a redundant "Default: X" label for any field', () => {
       render(<NavigatorSettingsPanel />);
-      // One deliberately-unique-valued field per section, so getByText can't collide with a sibling field.
-      expect(screen.getByText('Default: 0.02')).toBeInTheDocument(); // AVWAP min slope
-      expect(screen.getByText('Default: 0.98')).toBeInTheDocument(); // Ranges decay
-      expect(screen.getByText('Default: 32')).toBeInTheDocument(); // Volatility RV long bars
-      expect(screen.getByText('Default: 150')).toBeInTheDocument(); // Flow max sample gap
-      expect(screen.getByText('Default: 14:00')).toBeInTheDocument(); // Gamma expiry profile start (IST)
-      expect(screen.getByText('Default: 15')).toBeInTheDocument(); // Fusion flow weight
-      expect(screen.getByText('Default: 365')).toBeInTheDocument(); // Retention features days
-      expect(screen.queryAllByText(/^Manual default:/).length).toBe(6); // still only the 6 manual ones
+      expect(screen.queryByText(/^Default:/)).not.toBeInTheDocument();
     });
 
-    it('changing a Sterling-calibration field shows its own revert button and reverting restores it', () => {
+    it('an at-default field shows no revert control at all', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument();
+    });
+
+    it('changing a Sterling-calibration field shows a "was X — revert" note; reverting restores it and removes the note', () => {
       render(<NavigatorSettingsPanel />);
       const pivotLeftInput = screen.getByLabelText('Pivot left bars') as HTMLInputElement;
       fireEvent.change(pivotLeftInput, { target: { value: '7' } });
-      expect(screen.getByRole('button', { name: /changed — revert/i })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: /changed — revert/i }));
+      expect(screen.getByRole('button', { name: /was 3 — revert/i })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /revert/i }));
       expect(pivotLeftInput.value).toBe('3');
+      expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument();
     });
 
-    it('unset optional fields (risk-free rate, dividend yield) both show "Default: unset"', () => {
+    it('an unset optional field (risk-free rate) is treated as its default — no revert shown until a real value is entered', () => {
       render(<NavigatorSettingsPanel />);
-      expect(screen.getAllByText('Default: unset').length).toBe(2);
-    });
-  });
-
-  describe('Advanced Configuration grouping', () => {
-    it('groups all non-manual sections under one collapsed "Advanced Configuration" banner, separate from Strategy Definition', () => {
-      render(<NavigatorSettingsPanel />);
-      expect(screen.getByText("Advanced Configuration — Sterling's own calibration")).toBeInTheDocument();
-      expect(screen.getByText('9 sections')).toBeInTheDocument();
-      const advancedDetails = screen.getByText("Advanced Configuration — Sterling's own calibration").closest('details') as HTMLDetailsElement;
-      expect(advancedDetails.open).toBe(false);
+      expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument();
+      const riskFreeRateInputs = screen.getAllByRole('spinbutton').filter((el) => (el as HTMLInputElement).placeholder === 'unset');
+      fireEvent.change(riskFreeRateInputs[0], { target: { value: '0.07' } });
+      expect(screen.getByRole('button', { name: /was unset — revert/i })).toBeInTheDocument();
     });
 
-    it('every previously-existing section (Instruments, AVWAP, Ranges, Volatility, Flow, Gamma, Fusion, Retention, Structure Radar) lives inside the Advanced group', () => {
+    it('toggling a boolean field away from its default shows a "was On/Off — revert" note', () => {
       render(<NavigatorSettingsPanel />);
-      const advancedDetails = screen.getByText("Advanced Configuration — Sterling's own calibration").closest('details') as HTMLDetailsElement;
-      for (const title of [
-        'Instruments and timing', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
-        'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
-        'Fusion and eligibility', 'Data retention and diagnostics',
-      ]) {
-        expect(advancedDetails.contains(screen.getByText(title))).toBe(true);
-      }
-      // Strategy Definition must NOT be nested inside the Advanced group.
-      expect(advancedDetails.contains(screen.getByText('Strategy Definition (from the source manual)'))).toBe(false);
+      const toggle = screen.getByRole('switch', { name: 'Require fresh trigger' });
+      fireEvent.click(toggle);
+      expect(screen.getByRole('button', { name: /was on — revert/i })).toBeInTheDocument();
     });
   });
 
