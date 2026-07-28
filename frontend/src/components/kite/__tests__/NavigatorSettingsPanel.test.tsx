@@ -141,13 +141,13 @@ describe('NavigatorSettingsPanel', () => {
     it('signal origination defaults to Off and explains today\'s unchanged behaviour', () => {
       render(<NavigatorSettingsPanel />);
       expect(screen.getByRole('button', { name: /^Off$/i })).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByText(/Navigator only ever evaluates a setup that the SuperTrend engine already triggered/)).toBeInTheDocument();
+      expect(screen.getByText(/Navigator only ever comments on a setup that SuperTrend already found/)).toBeInTheDocument();
     });
 
     it('switching to Full updates the explanation and unlocks Apply', () => {
       render(<NavigatorSettingsPanel />);
       fireEvent.click(screen.getByRole('button', { name: /^Full$/i }));
-      expect(screen.getByText(/becomes a real, tradeable setup/)).toBeInTheDocument();
+      expect(screen.getByText(/now you can actually trade it/)).toBeInTheDocument();
       expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
     });
 
@@ -219,16 +219,28 @@ describe('NavigatorSettingsPanel', () => {
       }
     });
 
-    it('each of the 6 manual fields carries a "From the source manual" indicator (hover reveals the quote), not a repeated number', () => {
+    it('each of the 6 manual fields carries a "From the source manual" indicator, not a repeated number', () => {
       render(<NavigatorSettingsPanel />);
       expect(screen.getAllByLabelText('From the source manual').length).toBe(6);
       expect(screen.queryByText(/Manual default:/)).not.toBeInTheDocument();
     });
 
-    it('shows the two always-on hardcoded manual rules', () => {
+    it('explains each of the 6 manual fields in plain text — visible without hovering, no help cursor', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getByText(/Dynamic watches only the strikes closest to the price/)).toBeInTheDocument();
+      expect(screen.getByText(/Below a confidence score of 60, Navigator isn't sure enough/)).toBeInTheDocument();
+      // No element in the Strategy Definition group relies on a hover-only "?" cursor.
+      const advancedDetails = screen.getByText('Advanced — Strategy Definition (from the source manual)').closest('details') as HTMLDetailsElement;
+      const helpCursorEls = Array.from(advancedDetails.querySelectorAll('*')).filter((el) => (el as HTMLElement).style.cursor === 'help');
+      expect(helpCursorEls.length).toBe(0);
+    });
+
+    it('shows the two always-on hardcoded manual rules with their plain-text explanation always visible', () => {
       render(<NavigatorSettingsPanel />);
       expect(screen.getByText('Compression always forces WAIT')).toBeInTheDocument();
+      expect(screen.getByText(/no setting can override this/)).toBeInTheDocument();
       expect(screen.getByText('Gamma never sets direction by itself')).toBeInTheDocument();
+      expect(screen.getByText(/it can never be the only reason one fires/)).toBeInTheDocument();
     });
 
     it('changing a manual-anchored field shows a "was X — revert" note and updates the at-default count', () => {
@@ -271,6 +283,15 @@ describe('NavigatorSettingsPanel', () => {
     it('never shows a redundant "Default: X" label for any field', () => {
       render(<NavigatorSettingsPanel />);
       expect(screen.queryByText(/^Default:/)).not.toBeInTheDocument();
+    });
+
+    it('every number field hides the native spinner and gets a consistent focus ring (nav-settings-input class)', () => {
+      render(<NavigatorSettingsPanel />);
+      const pivotLeftInput = screen.getByLabelText('Pivot left bars') as HTMLInputElement;
+      expect(pivotLeftInput.className).toContain('nav-settings-input');
+      const styleTag = document.querySelector('style');
+      expect(styleTag?.textContent).toContain('-webkit-appearance: none');
+      expect(styleTag?.textContent).toContain(':focus');
     });
 
     it('an at-default field shows no revert control at all', () => {

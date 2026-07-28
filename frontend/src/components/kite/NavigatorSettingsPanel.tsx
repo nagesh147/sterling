@@ -18,6 +18,19 @@ const RED = '#df514c';
 const AMBER = '#f5a623';
 const MANUAL_BLUE = '#1565c0';
 
+// Every number input in this panel gets a custom highlight border (default/
+// changed) — the browser's own focus ring and number spin buttons otherwise
+// fight that border and each other (a focused-but-unstyled spinner arrow
+// look, mismatched outline colors). Hiding the native spinner and replacing
+// focus with one consistent ring keeps every field looking the same whether
+// it's focused, hovered, or just sitting there.
+const NUM_INPUT_CSS = `
+.nav-settings-input::-webkit-outer-spin-button,
+.nav-settings-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.nav-settings-input { -moz-appearance: textfield; }
+.nav-settings-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(240,100,40,.25); }
+`;
+
 // Wraps the Strategy Definition section: the 6 values that define the
 // strategy itself (from the source manual). Collapsed by default and
 // visually set apart (amber, like every other "advanced/handle with care"
@@ -37,9 +50,8 @@ function AdvancedGroup({ badgeText, children }: { badgeText: string; children: R
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ color: '#8a5a00', fontSize: 12.5, fontWeight: 800 }}>Advanced — Strategy Definition (from the source manual)</div>
           <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
-            These are the values that define the strategy itself, straight from the AVWAP Navigator Suite
-            manual this build is built on — not ordinary tuning. Collapsed by default so they're never one
-            careless click away from changing what the strategy actually is.
+            These 6 settings ARE the strategy — they come straight from the manual this app is built on.
+            Tucked away here so you don&apos;t change them by accident while tweaking something else.
           </div>
         </div>
         <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#fff3e0', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
@@ -78,9 +90,9 @@ function RevertNote({ displayDefault, onRevert, sourceLabel = "Sterling's" }: { 
 }
 
 const ORIGINATION_EXPLAIN: Record<SignalOrigination, string> = {
-  off: "Today's behaviour, unchanged: Navigator only ever evaluates a setup that the SuperTrend engine already triggered. It never adds a row to the signal table on its own.",
-  heads_up: 'Navigator can surface its OWN setup — no SuperTrend trigger required — the moment its AVWAP + volatility evidence reaches Confirmed or High Conviction. Shown as a "Navigator idea" row, visible everywhere, but never executable (no manual or auto order).',
-  full: 'Same detection as Heads-up, but the row becomes a real, tradeable setup: an ATM strike is resolved and it can be manually executed like any other row. Auto-Execute (below) additionally requires this.',
+  off: "Unchanged: Navigator only ever comments on a setup that SuperTrend already found. It never adds a new row by itself.",
+  heads_up: 'Navigator can show its own idea, even when SuperTrend found nothing. You\'ll see it as a "Navigator idea" row — but you can\'t trade it, it\'s just there to look at.',
+  full: "Same as Heads-up, but now you can actually trade it — Navigator picks a real strike, and the row works like any other one.",
 };
 
 function NumField({ label, hint, value, onChange, step = 1, min, max, defaultValue }: {
@@ -91,6 +103,7 @@ function NumField({ label, hint, value, onChange, step = 1, min, max, defaultVal
   return (
     <Field label={label} hint={hint}>
       <input
+        className="nav-settings-input"
         type="number" value={Number.isFinite(value) ? value : 0} step={step} min={min} max={max}
         onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
         style={{ ...inputStyle, ...fieldHighlightStyle(isDefault) }} aria-label={label}
@@ -128,12 +141,14 @@ function ManualControl({ spec, config, onReset, children }: {
           {children}
         </div>
         <span
-          title={spec.manualQuote}
           aria-label="From the source manual"
-          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: '#fff', background: MANUAL_BLUE, borderRadius: '50%', cursor: 'help' }}
+          style={{ flexShrink: 0, width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9.5, fontWeight: 800, color: '#fff', background: MANUAL_BLUE, borderRadius: '50%' }}
         >
           M
         </span>
+      </div>
+      <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 6 }}>
+        {spec.plainExplain} <span style={{ color: DIM, fontSize: 9.5 }}>({spec.source})</span>
       </div>
       {!isDefault && <RevertNote displayDefault={spec.displayDefault} onRevert={onReset} sourceLabel="the manual's" />}
     </Field>
@@ -212,6 +227,7 @@ export function NavigatorSettingsPanel() {
 
   return (
     <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
+      <style>{NUM_INPUT_CSS}</style>
       {/* ── top band ─────────────────────────────────────────────────────── */}
       <div style={{ padding: '16px 18px', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -294,11 +310,8 @@ export function NavigatorSettingsPanel() {
       <AdvancedGroup badgeText={`${MANUAL_FIELDS.filter((f) => getManualFieldValue(draft, f.path) === f.defaultValue).length}/${MANUAL_FIELDS.length} at manual default`}>
         <div style={{ padding: '4px 18px 18px' }}>
           <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.55, marginBottom: 4 }}>
-            Source: <i>AVWAP Navigator Suite — Official Trader&apos;s Manual</i> (QuantGym, v1.0, 2026). Every other
-            setting in this panel is Sterling&apos;s own calibration — the manual describes those behaviours in
-            words but discloses no formula or threshold, so Sterling had to pick a workable number. These six are
-            different: the manual states an actual value or preference, so that&apos;s what ships as the default.
-            Hover the blue &ldquo;M&rdquo; badge next to a field to see the exact source line.
+            These 6 numbers come from the guide this strategy is based on, not from Sterling. Everything else
+            in this app is Sterling&apos;s own choice of number — these six are the manual&apos;s.
           </div>
 
           <ManualControl spec={MANUAL_FIELDS[0]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[0].path))}>
@@ -306,11 +319,11 @@ export function NavigatorSettingsPanel() {
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[1]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[1].path))}>
-            <input type="number" value={draft.flow.strong_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { strong_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Strong flow zone" />
+            <input className="nav-settings-input" type="number" value={draft.flow.strong_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { strong_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Strong flow zone" />
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[2]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[2].path))}>
-            <input type="number" value={draft.flow.extreme_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { extreme_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Extreme flow zone" />
+            <input className="nav-settings-input" type="number" value={draft.flow.extreme_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { extreme_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Extreme flow zone" />
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[3]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[3].path))}>
@@ -324,17 +337,20 @@ export function NavigatorSettingsPanel() {
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[5]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[5].path))}>
-            <input type="number" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(e) => patch(set(draft, 'volatility', { min_direction_confidence: Number(e.target.value) }))} style={inputStyle} aria-label="Minimum directional confidence" />
+            <input className="nav-settings-input" type="number" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(e) => patch(set(draft, 'volatility', { min_direction_confidence: Number(e.target.value) }))} style={inputStyle} aria-label="Minimum directional confidence" />
           </ManualControl>
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${BORDER}` }}>
             <div style={{ color: DIM, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
-              Also from the manual — not settings, always on
+              Also from the manual — always on, nothing to change
             </div>
             {HARDCODED_MANUAL_RULES.map((rule) => (
-              <div key={rule.label} title={rule.note} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 11.5, color: TEXT, cursor: 'help' }}>
-                <span aria-hidden style={{ width: 6, height: 6, borderRadius: 3, background: MANUAL_BLUE, flexShrink: 0 }} />
-                {rule.label}
+              <div key={rule.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0' }}>
+                <span aria-hidden style={{ width: 6, height: 6, borderRadius: 3, background: MANUAL_BLUE, flexShrink: 0, marginTop: 5 }} />
+                <div>
+                  <div style={{ fontSize: 11.5, color: TEXT, fontWeight: 650 }}>{rule.label}</div>
+                  <div style={{ fontSize: 10.5, color: MUTED, lineHeight: 1.45, marginTop: 2 }}>{rule.note}</div>
+                </div>
               </div>
             ))}
           </div>
@@ -366,17 +382,17 @@ export function NavigatorSettingsPanel() {
       {/* ── 1.5 structure radar / signal origination / auto-execute ───────── */}
       <Section
         title="Structure Radar and Signal Origination"
-        description="Let Navigator compute and (opt-in) surface its own setups, independent of SuperTrend. All off by default — orthogonal to Mode above."
+        description="Optional: let Navigator find and show its own setups, without waiting for SuperTrend. Off by default."
         summary={draft.signal_origination === 'off' ? (draft.structure_radar_enabled ? 'Radar only' : 'Off') : `Origination: ${draft.signal_origination === 'heads_up' ? 'Heads-up' : 'Full'}`}
       >
         <BoolField
           label="Structure Radar"
-          hint="Continuously computes AVWAP + volatility for every underlying above, both directions, whether or not SuperTrend has a live row there. Feeds the snapshot/series/status views only — never adds a signal-table row by itself."
+          hint="Keeps reading structure and volatility for every underlying above, even when SuperTrend has nothing live. Just for you to check in on — it never adds a new row by itself."
           value={draft.structure_radar_enabled}
           onChange={(v) => patch({ ...draft, structure_radar_enabled: v })}
           defaultValue={ROOT_DEFAULTS.structure_radar_enabled}
         />
-        <Field label="Signal Origination" hint="Whether a Navigator-only setup (no SuperTrend trigger) gets surfaced as a row.">
+        <Field label="Signal Origination" hint="Whether Navigator's own ideas (no SuperTrend needed) show up as a row.">
           <ChoiceRow<SignalOrigination>
             value={draft.signal_origination}
             onChange={(v) => patch({ ...draft, signal_origination: v, ...(v !== 'full' ? { auto_execute_originated: false } : {}) })}
@@ -395,10 +411,10 @@ export function NavigatorSettingsPanel() {
           label="Auto-Execute Originated"
           hint={
             draft.signal_origination !== 'full'
-              ? 'Requires Signal Origination = Full.'
+              ? 'Needs Signal Origination set to Full first.'
               : gateReady
-                ? 'Lets a Navigator-originated row fire through the same auto-exec path as every other row — still requires the Kite engine’s own Auto-Execute switch to be on too.'
-                : 'Requires Signal Origination = Full AND a promoted calibration report (not yet available in this build — see Gate mode above). Locked until then, exactly like Gate mode.'
+                ? "Lets Navigator's own ideas trade automatically, same as any other signal. Also needs the Kite engine's own Auto-Execute switched on."
+                : "Locked for now — needs a calibration check this app hasn't finished yet (same lock as Gate mode above)."
           }
           value={draft.auto_execute_originated}
           onChange={(v) => {
@@ -500,13 +516,13 @@ export function NavigatorSettingsPanel() {
       <Section title="Gamma activity" description="Confirmation-only. Never determines direction by itself." summary={draft.gamma.enabled ? 'Enabled' : 'Disabled'}>
         <BoolField label="Enabled" value={draft.gamma.enabled} onChange={(v) => patch(set(draft, 'gamma', { enabled: v }))} defaultValue={GAMMA_DEFAULTS.enabled} />
         <Field label="Risk-free rate" hint="Required for gamma availability — never invented. Leave blank until set.">
-          <input type="number" step={0.001} value={draft.gamma.risk_free_rate ?? ''} placeholder="unset"
+          <input className="nav-settings-input" type="number" step={0.001} value={draft.gamma.risk_free_rate ?? ''} placeholder="unset"
             onChange={(e) => patch(set(draft, 'gamma', { risk_free_rate: e.target.value === '' ? null : Number(e.target.value) }))}
             style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.risk_free_rate == null) }} />
           {draft.gamma.risk_free_rate != null && <RevertNote displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { risk_free_rate: null }))} />}
         </Field>
         <Field label="Dividend yield" hint="Required for gamma availability — never invented. Leave blank until set.">
-          <input type="number" step={0.001} value={draft.gamma.dividend_yield ?? ''} placeholder="unset"
+          <input className="nav-settings-input" type="number" step={0.001} value={draft.gamma.dividend_yield ?? ''} placeholder="unset"
             onChange={(e) => patch(set(draft, 'gamma', { dividend_yield: e.target.value === '' ? null : Number(e.target.value) }))}
             style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.dividend_yield == null) }} />
           {draft.gamma.dividend_yield != null && <RevertNote displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { dividend_yield: null }))} />}
@@ -520,6 +536,7 @@ export function NavigatorSettingsPanel() {
         <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} defaultValue={GAMMA_DEFAULTS.expiry_profile_enabled} />
         <Field label="Expiry profile start (IST)">
           <input
+            className="nav-settings-input"
             type="text" value={draft.gamma.expiry_profile_start_ist}
             onChange={(e) => patch(set(draft, 'gamma', { expiry_profile_start_ist: e.target.value }))}
             style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.expiry_profile_start_ist === GAMMA_DEFAULTS.expiry_profile_start_ist) }}

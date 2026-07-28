@@ -31,7 +31,10 @@ export interface ManualFieldSpec {
   label: string;
   defaultValue: string | number | boolean;
   displayDefault: string;
-  manualQuote: string;
+  /** One short, plain-English sentence — what this actually does, no jargon. Always shown. */
+  plainExplain: string;
+  /** The precise source line, for anyone who wants to check it. Shown smaller/secondary, never hidden. */
+  source: string;
   codeRef: string;
 }
 
@@ -41,7 +44,8 @@ export const MANUAL_FIELDS: ManualFieldSpec[] = [
     label: 'Oscillator mode',
     defaultValue: 'dynamic',
     displayDefault: 'Dynamic',
-    manualQuote: '"For most intraday traders, Dynamic Analysis is the preferred mode." — §3.2 Two Oscillator Modes',
+    plainExplain: 'Dynamic watches only the strikes closest to the price — best for day trading. Broad watches more strikes for a slower, big-picture read.',
+    source: 'Manual §3.2',
     codeRef: 'chain_sampler.py — picks the sampled strike radius',
   },
   {
@@ -49,7 +53,8 @@ export const MANUAL_FIELDS: ManualFieldSpec[] = [
     label: 'Strong flow zone',
     defaultValue: 68,
     displayDefault: '68',
-    manualQuote: '"+68 / −68 = Strong bullish/bearish flow" — §3.1 Reference Zones. Shown as a reference band for reading the oscillator, exactly as the manual presents it — not wired to any auto-gate today.',
+    plainExplain: 'Past 68 (or below −68), the option flow reading counts as strongly bullish (or bearish).',
+    source: 'Manual §3.1',
     codeRef: 'display reference only — not yet consumed by option_flow.py',
   },
   {
@@ -57,7 +62,8 @@ export const MANUAL_FIELDS: ManualFieldSpec[] = [
     label: 'Extreme flow zone',
     defaultValue: 96,
     displayDefault: '96',
-    manualQuote: '"+96 / −96 = Extreme bullish/bearish flow" — §3.1 Reference Zones. Same as Strong flow zone: a reference band, not an auto-gate.',
+    plainExplain: 'Past 96 (or below −96), the move looks very strong — but it\'s also riskier to chase from here.',
+    source: 'Manual §3.1',
     codeRef: 'display reference only — not yet consumed by option_flow.py',
   },
   {
@@ -65,7 +71,8 @@ export const MANUAL_FIELDS: ManualFieldSpec[] = [
     label: 'Gamma requires flow alignment',
     defaultValue: true,
     displayDefault: 'On',
-    manualQuote: '"Ordinary option-chain bullishness is not enough to trigger a signal. The engine demands flow plus gamma acceleration." — §3.3; a LONG/SHORT Gamma Blast signal requires option-flow AND gamma together — §3.4 Signal Logic. Gamma never determines direction alone.',
+    plainExplain: 'Gamma activity can never trigger a signal by itself — it only counts when the option flow already agrees with it.',
+    source: 'Manual §3.3–3.4',
     codeRef: 'gamma_activity.py:233',
   },
   {
@@ -73,7 +80,8 @@ export const MANUAL_FIELDS: ManualFieldSpec[] = [
     label: 'Minimum AVWAP grade to confirm',
     defaultValue: 'A',
     displayDefault: 'A',
-    manualQuote: '"grade A or A+" is the recurring bar in every "Best Conditions" row for P_Buy / P_Sell / Buy / Sell — §2.5 Step 3.',
+    plainExplain: 'Only A or A+ graded setups count as confirmed. B-grade setups still show up, but Navigator won\'t call them confirmed.',
+    source: 'Manual §2.5',
     codeRef: 'fusion.py — _grade_meets_min() gates CONFIRMED/HIGH_CONVICTION status',
   },
   {
@@ -81,7 +89,8 @@ export const MANUAL_FIELDS: ManualFieldSpec[] = [
     label: 'Minimum directional confidence',
     defaultValue: 60,
     displayDefault: '60',
-    manualQuote: '"60–80 = Tradable setup" — §4.2 Confidence Score at a Glance. 60 is the manual\'s own floor for a genuinely usable directional read (below it: "Moderate"/"Low conviction, avoid").',
+    plainExplain: 'Below a confidence score of 60, Navigator isn\'t sure enough of the direction to act on it.',
+    source: 'Manual §4.2',
     codeRef: 'volatility.py:360',
   },
 ];
@@ -96,11 +105,11 @@ export const MANUAL_FIELD_MAP: Map<ManualFieldPath, ManualFieldSpec> = new Map(
 export const HARDCODED_MANUAL_RULES: { label: string; note: string }[] = [
   {
     label: 'Compression always forces WAIT',
-    note: 'fusion.py — "Compression should force WAIT for trend trades" (§4.1). Not configurable: every decision hits this check before scoring, regardless of any other setting.',
+    note: 'When the market goes quiet (compression), Navigator always says wait — no setting can override this.',
   },
   {
     label: 'Gamma never sets direction by itself',
-    note: 'fusion.py — only AVWAP/volatility evidence can ever trigger a decision; gamma only ever contributes a weighted score. Matches the manual\'s framing of Gamma Blast as confirmation, never a standalone signal (§3.3).',
+    note: "Gamma activity can support a signal, but it can never be the only reason one fires.",
   },
 ];
 
