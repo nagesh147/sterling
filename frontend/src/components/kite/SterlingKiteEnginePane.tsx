@@ -87,9 +87,9 @@ const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
 type SignalMode = 'supertrend' | 'navigator' | 'combined' | 'common';
 const SIGNAL_MODE_OPTS: { value: SignalMode; label: string; hint: string }[] = [
   { value: 'supertrend', label: 'SuperTrend', hint: 'Default triple-SuperTrend (Heikin-Ashi) signal only — the Navigator badge is hidden even when Navigator has evidence.' },
-  { value: 'navigator', label: 'Navigator', hint: 'Only setups the Value-Flow Navigator has evidence for, viewed through its own status/effective score.' },
+  { value: 'navigator', label: 'Navigator', hint: "Only setups the Value-Flow Navigator has evidence for, viewed through its own status/effective score. Navigator never scans on its own — it only evaluates whatever the Signal source dropdown (Spot/Derivatives/Both/Confluence) is already producing." },
   { value: 'combined', label: 'Combined', hint: 'Every SuperTrend setup, with Navigator evidence shown alongside when available. (Default)' },
-  { value: 'common', label: 'Common', hint: 'Only setups where BOTH systems agree: SuperTrend is live AND Navigator status is Confirmed or High Conviction.' },
+  { value: 'common', label: 'Common', hint: "Only setups where BOTH systems agree: SuperTrend is live AND Navigator status is Confirmed or High Conviction. Same Signal-source scoping as Navigator above." },
 ];
 
 // Granular universe pickers. `name` is the value stored in config (matches the
@@ -2033,18 +2033,24 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               value={cfg.exit_mode ?? 'one_red'}
               options={EXIT_MODE_OPTS}
               tone={k.blue}
-              title="Auto-exit rule (counter to the 3-green entry) — change it right here, or from Connect → Engine Configuration"
+              title="Auto-exit rule (counter to the 3-green entry) — real engine setting, applies to every row regardless of the View lens. Change it right here, or from Connect → Engine Configuration"
               onChange={(next) => patch(
                 { exit_mode: next },
                 `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,
               )}
             />
           )}
+          {/* Divider: everything left is real engine config (server-persisted,
+              changes what's scanned/how trades exit); everything right is a
+              local-only display filter (localStorage, never patched to the
+              server, never changes what's scanned). */}
+          <div title="Left of here: engine settings (server-side). Right: local view filter only." style={{ width: 1, alignSelf: 'stretch', minHeight: 16, background: k.border, flexShrink: 0 }} />
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: k.dim, flexShrink: 0 }}>VIEW</span>
           <InlineDropdown
             value={signalMode}
             options={SIGNAL_MODE_OPTS}
             tone={k.purple}
-            title="Signal lens — how SuperTrend and Value-Flow Navigator evidence combine in this table"
+            title="Signal lens — a LOCAL view filter only (never changes what's scanned or traded). Navigator/Common are scoped to whatever the Signal source dropdown is currently scanning."
             onChange={changeSignalMode}
           />
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}

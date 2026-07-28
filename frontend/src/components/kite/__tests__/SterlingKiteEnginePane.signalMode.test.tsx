@@ -61,7 +61,7 @@ async function renderPane() {
 }
 
 function openSignalModeMenu() {
-  fireEvent.click(screen.getByTitle('Signal lens — how SuperTrend and Value-Flow Navigator evidence combine in this table'));
+  fireEvent.click(screen.getByTitle("Signal lens — a LOCAL view filter only (never changes what's scanned or traded). Navigator/Common are scoped to whatever the Signal source dropdown is currently scanning."));
 }
 
 describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator / Combined / Common)', () => {
