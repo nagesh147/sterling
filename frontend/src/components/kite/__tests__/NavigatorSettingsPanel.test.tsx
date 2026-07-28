@@ -7,7 +7,9 @@ import type { NavigatorConfigModel } from '../../../types/navigator';
 function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorConfigModel {
   return {
     schema_version: 1, enabled: false, operating_mode: 'advisory', engine_sources: ['kite_triple_supertrend'],
-    underlyings: ['NIFTY 50'], price_timeframe: '60minute', flow_sample_seconds: 60, max_feature_age_seconds: 120,
+    underlyings: ['NIFTY 50'],
+    structure_radar_enabled: false, signal_origination: 'off', auto_execute_originated: false,
+    price_timeframe: '60minute', flow_sample_seconds: 60, max_feature_age_seconds: 120,
     event_alignment_bars: 2, entry_delay_after_open_minutes: 5, retention_raw_days: 30, retention_features_days: 365,
     avwap: {
       enabled: true, pivot_left_bars: 3, pivot_right_bars: 3, slope_lookback_bars: 5, min_slope_atr_per_bar: 0.02,
@@ -127,12 +129,71 @@ describe('NavigatorSettingsPanel', () => {
   it('renders every settings section', () => {
     render(<NavigatorSettingsPanel />);
     for (const title of [
-      'Instruments and timing', 'Anchored VWAP and signal grades', 'Daily and weekly ranges',
-      'Volatility regime', 'Option-flow oscillator', 'Gamma activity', 'Fusion and eligibility',
-      'Data retention and diagnostics',
+      'Instruments and timing', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+      'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
+      'Fusion and eligibility', 'Data retention and diagnostics',
     ]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
+  });
+
+  describe('Structure Radar and Signal Origination', () => {
+    it('signal origination defaults to Off and explains today\'s unchanged behaviour', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getByRole('button', { name: /^Off$/i })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText(/Navigator only ever evaluates a setup that the SuperTrend engine already triggered/)).toBeInTheDocument();
+    });
+
+    it('switching to Full updates the explanation and unlocks Apply', () => {
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: /^Full$/i }));
+      expect(screen.getByText(/becomes a real, tradeable setup/)).toBeInTheDocument();
+      expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    });
+
+    it('auto-execute originated is locked until Full is selected', () => {
+      render(<NavigatorSettingsPanel />);
+      const toggle = screen.getByRole('switch', { name: 'Auto-Execute Originated' });
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-checked', 'false'); // still locked — Full not selected yet
+    });
+
+    it('auto-execute originated is locked until calibration is ready even when Full is selected', () => {
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: /^Full$/i }));
+      const toggle = screen.getByRole('switch', { name: 'Auto-Execute Originated' });
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-checked', 'false'); // calibration_readiness is 'not_ready' by default
+    });
+
+    it('auto-execute originated is togglable once Full is selected and calibration is ready', () => {
+      queryData = makeRecord({}, { calibration_readiness: 'ready' });
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: /^Full$/i }));
+      const toggle = screen.getByRole('switch', { name: 'Auto-Execute Originated' });
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('switching origination away from Full clears auto-execute originated', () => {
+      queryData = makeRecord({}, { calibration_readiness: 'ready' });
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: /^Full$/i }));
+      fireEvent.click(screen.getByRole('switch', { name: 'Auto-Execute Originated' }));
+      expect(screen.getByRole('switch', { name: 'Auto-Execute Originated' })).toHaveAttribute('aria-checked', 'true');
+      fireEvent.click(screen.getByRole('button', { name: /^Heads-up$/i }));
+      expect(screen.getByRole('switch', { name: 'Auto-Execute Originated' })).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('structure radar toggles independently of signal origination', () => {
+      render(<NavigatorSettingsPanel />);
+      const toggle = screen.getByRole('switch', { name: 'Structure Radar' });
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByRole('button', { name: /^Off$/i })).toHaveAttribute('aria-pressed', 'true');
+    });
   });
 
   it('shows raw and effective concepts distinctly via fusion weight fields', () => {

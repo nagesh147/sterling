@@ -36,6 +36,14 @@ function makeRow(underlying: string, token: number, navigatorStatus: string | nu
   };
 }
 
+function makeNavigatorRow(underlying: string, token: number, navigatorStatus: string) {
+  return {
+    ...makeRow(underlying, token, navigatorStatus),
+    source: 'navigator',
+    legs: [],
+  };
+}
+
 function mockRows(rows: ReturnType<typeof makeRow>[]) {
   vi.doMock('../../../hooks/useSterlingKiteEngine', () => ({
     useEngineConfig: () => ({ data: cfg }),
@@ -127,5 +135,41 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     openSignalModeMenu();
     fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
     expect(localStorage.getItem('kite_st_signal_mode')).toBe('navigator');
+  });
+
+  describe('Navigator-originated rows (source="navigator", no SuperTrend trigger)', () => {
+    it('SuperTrend lens excludes a Navigator-originated row entirely', async () => {
+      mockRows([makeRow('NIFTY 50', 1, null), makeNavigatorRow('NIFTY BANK', 2, 'CONFIRMED')]);
+      await renderPane();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^SuperTrend/ }));
+      expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
+      expect(screen.queryByText('NIFTY BANK')).not.toBeInTheDocument();
+    });
+
+    it('Common lens excludes a Navigator-originated row even when Confirmed/High Conviction', async () => {
+      mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED'), makeNavigatorRow('NIFTY BANK', 2, 'HIGH_CONVICTION')]);
+      await renderPane();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+      expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
+      expect(screen.queryByText('NIFTY BANK')).not.toBeInTheDocument();
+    });
+
+    it('Combined lens still shows a Navigator-originated row', async () => {
+      mockRows([makeNavigatorRow('NIFTY BANK', 2, 'CONFIRMED')]);
+      await renderPane();
+      // Combined is the default lens — no menu interaction needed.
+      expect(screen.getAllByText('NIFTY BANK').length).toBeGreaterThan(0);
+      expect(screen.getByText(/Navigator idea/)).toBeInTheDocument();
+    });
+
+    it('Navigator lens still shows a Navigator-originated row', async () => {
+      mockRows([makeNavigatorRow('NIFTY BANK', 2, 'CONFIRMED')]);
+      await renderPane();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
+      expect(screen.getAllByText('NIFTY BANK').length).toBeGreaterThan(0);
+    });
   });
 });

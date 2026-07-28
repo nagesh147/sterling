@@ -11,9 +11,12 @@ import pytest
 from app.engines.navigator.schemas import BaseSignalEvidence, canonical_json_hash
 from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow
 from app.services.navigator.adapters import (
+    ORIGINATION_NEUTRAL_SCORE,
     AdapterError,
     KiteTripleSupertrendAdapter,
+    is_origination_decision,
     kite_config_revision,
+    synthetic_origination_base,
 )
 
 _ALIGN = AlignmentChip(fast=1, mid=1, slow=1)
@@ -106,6 +109,53 @@ class TestScoreBounds:
     def test_negative_score_is_rejected(self):
         with pytest.raises(AdapterError):
             _adapt(_row(score=-1.0))
+
+
+class TestSyntheticOriginationBase:
+    """2026-07-28 structure-radar/origination design: the neutral stand-in
+    base signal used when there's no real SuperTrend row at all."""
+
+    def _base(self, **overrides):
+        base = dict(
+            underlying="NIFTY 50", token=256265, direction="long", bar_close_ms=_BAR_CLOSE_MS,
+            user_id="user-1", observed_at_ms=_BAR_CLOSE_MS + 5_000,
+            config_revision=kite_config_revision({"trail_target": "fast"}), state="fresh",
+        )
+        base.update(overrides)
+        return synthetic_origination_base(**base)
+
+    def test_score_is_neutral_not_a_fabricated_opinion(self):
+        ev = self._base()
+        assert ev.score_100 == ORIGINATION_NEUTRAL_SCORE
+
+    def test_signal_id_is_marked_as_origination(self):
+        ev = self._base()
+        assert is_origination_decision(ev.signal_id)
+
+    def test_real_signal_ids_are_never_mistaken_for_origination(self):
+        real = _adapt(_row())
+        assert not is_origination_decision(real.signal_id)
+
+    def test_engine_id_stays_kite_only(self):
+        ev = self._base()
+        assert ev.engine_id == "kite_triple_supertrend"
+
+    def test_source_is_navigator(self):
+        ev = self._base()
+        assert ev.source == "navigator"
+
+    def test_direction_and_state_pass_through(self):
+        ev = self._base(direction="short", state="active")
+        assert ev.direction == "short"
+        assert ev.state == "active"
+
+    def test_bar_close_after_observation_is_rejected(self):
+        with pytest.raises(AdapterError):
+            self._base(bar_close_ms=_BAR_CLOSE_MS, observed_at_ms=_BAR_CLOSE_MS - 1)
+
+    def test_bfo_exchange_accepted_for_bse_underlyings(self):
+        ev = self._base(underlying="SENSEX", exchange="BFO")
+        assert ev.exchange == "BFO"
 
 
 class TestHashAndRevisionDeterminism:

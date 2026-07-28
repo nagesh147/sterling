@@ -806,14 +806,49 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # explicitly enabled Navigator (disabled by default for everyone).
         try:
             from app.services.navigator import service as navigator_service
-            await navigator_service.run_navigator_pass(
+            snap.rows = await navigator_service.run_navigator_pass(
                 client, uid, snap.rows, engine_config_payload=cfg_model.model_dump(mode="json"),
                 default_underlyings=cfg_model.scan_indices,
                 underlying_tokens={u.name: u.token for u in selected},
+                universe=selected, nfo_rows=nfo, bfo_rows=bfo, moneyness=cfg_model.strike_moneyness,
+                expiry_types=cfg_model.scan_expiries, expiry_types_indices=cfg_model.scan_expiries_indices,
+                expiry_types_stocks=cfg_model.scan_expiries_stocks,
             )
             snap.rows = navigator_service.attach_to_rows(uid, snap.rows, default_underlyings=cfg_model.scan_indices)
         except Exception as exc:  # noqa: BLE001
             log.warning("Navigator row-attach failed (non-fatal) for %s: %s", uid, exc)
+
+        # Signal Origination auto-exec: a Navigator-originated row (no real
+        # SuperTrend trigger) never passes through scanner.py's own auto-exec
+        # hook, since it's appended here AFTER scanner.scan() has already run.
+        # Fires through the SAME place_cb every other row uses, gated by ALL
+        # of: the base engine's own auto_execute switch (place_cb is None
+        # otherwise), signal_origination=="full", auto_execute_originated,
+        # and calibration_readiness=="ready" — permanently "not_ready" in
+        # production today, so this is provably inert for real orders until a
+        # real calibration promotion path exists (mirrors the existing `gate`
+        # operating mode's own invariant).
+        if place_cb is not None:
+            try:
+                from app.services.navigator import config_store as navigator_config_store
+                nav_record = navigator_config_store.get(uid, default_underlyings=cfg_model.scan_indices)
+                nav_cfg = nav_record.config
+                if (nav_cfg.enabled and nav_cfg.signal_origination == "full" and nav_cfg.auto_execute_originated
+                        and nav_record.calibration_readiness == "ready"):
+                    for row in snap.rows:
+                        if row.source != "navigator" or not row.is_fresh or not row.legs:
+                            continue
+                        if row.navigator is None or not row.navigator.execution_eligible:
+                            continue
+                        item = next((u for u in selected if u.name == row.underlying), None)
+                        if item is None:
+                            continue
+                        try:
+                            await place_cb(row, item)
+                        except Exception as exc:  # noqa: BLE001
+                            log.warning("Navigator-originated auto-exec failed for %s/%s: %s", uid, row.underlying, exc)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Navigator origination auto-exec gate check failed (non-fatal) for %s: %s", uid, exc)
         # The board now retains recently-ended setups too, but the "ready" count, badge
         # and return value should reflect only live (running/just-fired) signals.
         live = sum(1 for r in snap.rows if r.is_active or r.is_fresh)

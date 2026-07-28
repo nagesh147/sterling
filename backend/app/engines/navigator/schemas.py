@@ -467,6 +467,32 @@ class NavigatorConfigModel(BaseModel):
         default_factory=lambda: ["kite_triple_supertrend"]
     )
     underlyings: list[str] = Field(default_factory=list)
+    # ── Structure Radar / Signal Origination (additive, all off by default) ──
+    # See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
+    # Orthogonal to `operating_mode` — none of these change how Navigator
+    # attaches to a real SuperTrend row; they only add a NEW, independent
+    # path where Navigator can compute/surface evidence with no SuperTrend
+    # trigger at all.
+    #
+    # Continuously compute AVWAP + Volatility for every configured underlying
+    # (both directions) every scan, whether or not SuperTrend has a live row
+    # there. Feeds /snapshot, /series, /status. Never adds a signal-table row
+    # by itself.
+    structure_radar_enabled: bool = False
+    # Off: today's behaviour, unchanged. Heads-up: a Navigator-only CONFIRMED/
+    # HIGH_CONVICTION decision with no accompanying real SuperTrend row is
+    # surfaced as a new signal-table row (source="navigator"), visible but
+    # never executable. Full: same, plus a real ATM leg is resolved and the
+    # row becomes tradeable like any other row (manual + eligible for
+    # auto-exec, subject to `auto_execute_originated` below).
+    signal_origination: Literal["off", "heads_up", "full"] = "off"
+    # Only takes effect when signal_origination == "full". Lets a
+    # Navigator-originated row fire through the SAME auto-exec path as every
+    # other row, gated by the base engine's own `auto_execute` switch,
+    # `calibration_readiness == "ready"`, and the decision's own
+    # `execution_eligible` — at least as conservative as the existing `gate`
+    # operating mode's own calibration gate.
+    auto_execute_originated: bool = False
     price_timeframe: Literal["60minute"] = "60minute"
     flow_sample_seconds: int = Field(60, ge=15, le=300)
     max_feature_age_seconds: int = Field(120, ge=10, le=3600)
@@ -492,6 +518,15 @@ class NavigatorConfigModel(BaseModel):
                 f"— got {v!r}"
             )
         return v
+
+    @model_validator(mode="after")
+    def _auto_execute_originated_requires_full(self) -> "NavigatorConfigModel":
+        if self.auto_execute_originated and self.signal_origination != "full":
+            raise ValueError(
+                "auto_execute_originated=True requires signal_origination='full' "
+                f"— got signal_origination={self.signal_origination!r}"
+            )
+        return self
 
     @classmethod
     def default_for(cls, underlyings: list[str]) -> "NavigatorConfigModel":

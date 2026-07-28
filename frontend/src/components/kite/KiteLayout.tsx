@@ -27,7 +27,7 @@ import {
   type WorkspaceSlotId,
 } from './workspaceLayout';
 
-export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect';
+export type NavItem = 'dashboard' | 'orders' | 'holdings' | 'positions' | 'more' | 'connect' | 'help';
 export type MoreTab = 'bids' | 'funds' | 'mf' | 'alerts' | 'backtest' | 'data';
 
 interface KiteLayoutProps {

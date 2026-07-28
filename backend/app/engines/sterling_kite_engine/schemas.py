@@ -68,8 +68,10 @@ class EngineSignalRow(BaseModel):
     is_fresh: bool = False
     # "spot" = SuperTrend on the underlying chart (legs are candidate strikes to BUY);
     # "derivatives" = SuperTrend on this contract's OWN premium chart (single leg, BUY-only);
-    # "confluence" = underlying fired AND the leg's own premium confirmed (merged row).
-    source: Literal["spot", "derivatives", "confluence"] = "spot"
+    # "confluence" = underlying fired AND the leg's own premium confirmed (merged row);
+    # "navigator" = Navigator Signal Origination — no SuperTrend trigger at all, surfaced
+    # purely from Navigator's own AVWAP+volatility evidence (see 2026-07-28 design doc).
+    source: Literal["spot", "derivatives", "confluence", "navigator"] = "spot"
     # Trend-quality readings at the entry bar (for the optional directional-mode
     # entry filters). None when not computed; never gates anything unless adx_min /
     # atr_pct_min are set in the engine config.

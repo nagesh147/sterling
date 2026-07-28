@@ -4,6 +4,7 @@
 // directional/crypto config surface here or on the server.
 
 export type NavigatorOperatingMode = 'shadow' | 'advisory' | 'gate';
+export type SignalOrigination = 'off' | 'heads_up' | 'full';
 export type NavigatorStatus = 'NO_DATA' | 'WAIT' | 'CONFLICT' | 'WATCH' | 'CONFIRMED' | 'HIGH_CONVICTION';
 export type NavigatorComponent = 'avwap' | 'volatility' | 'option_flow' | 'gamma';
 export type AvwapGrade = 'A+' | 'A' | 'B';
@@ -138,6 +139,11 @@ export interface NavigatorConfigModel {
   operating_mode: NavigatorOperatingMode;
   engine_sources: ['kite_triple_supertrend'];
   underlyings: string[];
+  // ── Structure Radar / Signal Origination (additive, all off by default) ──
+  // See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
+  structure_radar_enabled: boolean;
+  signal_origination: SignalOrigination;
+  auto_execute_originated: boolean;
   price_timeframe: '60minute';
   flow_sample_seconds: number;
   max_feature_age_seconds: number;

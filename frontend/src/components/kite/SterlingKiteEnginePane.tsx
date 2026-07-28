@@ -576,6 +576,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
         </div>
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {row.source === 'navigator' && (
+            <span
+              title="Navigator idea — no SuperTrend trigger at all, surfaced purely from Navigator's own AVWAP + volatility evidence. Not a triple-SuperTrend setup."
+              style={{ fontSize: 10, color: k.purple, background: `${k.purple}18`, border: `1px solid ${k.purple}40`, borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}
+            >
+              Navigator idea
+            </span>
+          )}
           {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
           {row.adx != null && (
             <span title={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}
@@ -1815,10 +1823,19 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     if (signalMode === 'navigator') {
       result = result.filter((r) => r.navigator != null);
     } else if (signalMode === 'common') {
-      result = result.filter((r) => r.navigator != null && (r.navigator.status === 'CONFIRMED' || r.navigator.status === 'HIGH_CONVICTION'));
+      // "Common" means both systems agree — a row Navigator originated on
+      // its own (no SuperTrend trigger at all) can't structurally satisfy
+      // that, regardless of its own status.
+      result = result.filter((r) => r.source !== 'navigator' && r.navigator != null && (r.navigator.status === 'CONFIRMED' || r.navigator.status === 'HIGH_CONVICTION'));
+    } else if (signalMode === 'supertrend') {
+      // "SuperTrend" means "what the board looks like with no Navigator at
+      // all" — a Navigator-originated row has no real triple-ST basis behind
+      // it, so it's excluded here rather than shown as a badge-less phantom.
+      result = result.filter((r) => r.source !== 'navigator');
     }
-    // 'supertrend' and 'combined' both keep every SuperTrend setup — they
-    // differ only in whether the Navigator badge renders (see SignalCard).
+    // 'combined' keeps every row (SuperTrend setups AND Navigator-originated
+    // ones) — it differs from the others only in whether/how badges render
+    // (see SignalCard).
     if (query.trim()) {
       const qLower = query.toLowerCase();
       result = result.filter(r => {

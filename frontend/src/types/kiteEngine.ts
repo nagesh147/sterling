@@ -59,7 +59,9 @@ export interface EngineSignalRow {
   exit_state?: string;     // red-counter progress "<reds>/<threshold> red" (Exit column)
   score: number;
   timestamp_ms: number;
-  source?: 'spot' | 'derivatives' | 'confluence';
+  // "navigator" = Navigator Signal Origination — no SuperTrend trigger at all,
+  // surfaced purely from Navigator's own AVWAP+volatility evidence.
+  source?: 'spot' | 'derivatives' | 'confluence' | 'navigator';
   is_active?: boolean; // SuperTrend still aligned on the latest bar (trade running)
   is_fresh?: boolean;  // entered on the latest closed bar (the live "ready now" trigger)
   adx?: number | null;      // ADX at signal time (trend strength, 0–100)

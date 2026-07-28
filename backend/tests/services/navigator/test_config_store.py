@@ -39,6 +39,35 @@ class TestDefaultCreation:
         assert rec.calibration_readiness == "not_ready"
         assert rec.activation_watermark_ms == 0
 
+    def test_structure_radar_and_origination_default_off(self):
+        rec = _get()
+        assert rec.config.structure_radar_enabled is False
+        assert rec.config.signal_origination == "off"
+        assert rec.config.auto_execute_originated is False
+
+
+class TestOriginationConfigValidation:
+    """2026-07-28 structure-radar/origination design: auto_execute_originated
+    only ever makes sense paired with signal_origination='full' — the config
+    layer rejects the inconsistent combination outright rather than silently
+    ignoring it (same "fail loud on config" ethos as the fusion-weights and
+    grade-ordering validators already on this model)."""
+
+    def test_auto_execute_without_full_origination_is_rejected(self):
+        with pytest.raises(Exception):
+            NavigatorConfigModel(auto_execute_originated=True, signal_origination="off")
+        with pytest.raises(Exception):
+            NavigatorConfigModel(auto_execute_originated=True, signal_origination="heads_up")
+
+    def test_auto_execute_with_full_origination_is_accepted(self):
+        cfg = NavigatorConfigModel(auto_execute_originated=True, signal_origination="full")
+        assert cfg.auto_execute_originated is True
+        assert cfg.signal_origination == "full"
+
+    def test_structure_radar_and_heads_up_do_not_require_auto_execute(self):
+        cfg = NavigatorConfigModel(structure_radar_enabled=True, signal_origination="heads_up")
+        assert cfg.auto_execute_originated is False
+
     def test_default_underlyings_mirror_caller_supplied_list(self):
         rec = _get()
         assert rec.config.underlyings == _UNDERLYINGS

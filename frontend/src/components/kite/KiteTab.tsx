@@ -4,6 +4,7 @@ import { KiteDashboard } from './KiteDashboard';
 import { SterlingWatchListWithHoldingsSync } from './SterlingWatchListWithHoldingsSync';
 import { MarketDataPane } from './MarketDataPane';
 import { ConnectPane } from './ConnectPane';
+import { HelpPane } from './HelpPane';
 import { MutualFundsPane } from './MutualFundsPane';
 import { PortfolioPane } from './PortfolioPane';
 import { PositionsPane } from './PositionsPane';
@@ -159,6 +160,7 @@ export function KiteTab() {
     else if (nav === 'positions') content = <PositionsPane onOpenInstrument={handleOpenInstrument} />;
     else if (nav === 'more') content = <MorePane activeTab={moreTab} onTabChange={setMoreTab} />;
     else if (nav === 'connect') content = <ConnectPane />;
+    else if (nav === 'help') content = <HelpPane />;
   }
 
   const contentKey = setupView ? `setup:${setupView.token}`

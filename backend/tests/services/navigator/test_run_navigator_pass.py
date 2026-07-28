@@ -13,6 +13,9 @@ from datetime import datetime
 import numpy as np
 import pytest
 
+from app.engines.navigator import avwap
+from app.engines.navigator.avwap import AvwapEvaluation, AvwapGradeResult, StopTargetProposal
+from app.engines.navigator.schemas import NavigatorDecision
 from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow
 from app.services import db
 from app.services.navigator import config_store, service as nav_service
@@ -227,3 +230,162 @@ class TestRunNavigatorPass:
         assert len(client.calls) == 2
         good_decision = nav_service.get_cached_decision("user-1", underlying="NIFTY BANK", token=260105, direction="long")
         assert good_decision is not None
+
+
+def _decision(status="CONFIRMED", direction="long", base_signal_id="navigator_origin_test:long") -> NavigatorDecision:
+    eligible = status in ("CONFIRMED", "HIGH_CONVICTION")
+    return NavigatorDecision(
+        decision_id=f"nav_test_{status}_{direction}", config_revision=1, model_versions={},
+        generated_at_ms=1_700_000_000_000, bar_close_ms=1_700_000_000_000, activation_watermark_ms=0,
+        base_signal_id=base_signal_id, trigger="avwap_fresh", direction=direction, status=status,
+        base_score=50.0, suite_score=90.0 if eligible else None, effective_score=90.0 if eligible else None,
+        execution_eligible=eligible, data_quality="ok", reason_codes=["OK"],
+    )
+
+
+def _accepted_avwap_eval(stop=24000.0, target=24800.0):
+    grade = AvwapGradeResult(grade="A", score=80.0, components={})
+    proposal = StopTargetProposal(accepted=True, stop=stop, target=target, risk_points=200.0)
+    return AvwapEvaluation(family="PULLBACK_LONG", direction=1, grade=grade, stop_target=proposal, warming_up=False)
+
+
+def _rejected_avwap_eval():
+    grade = AvwapGradeResult(grade="none", score=0.0, components={})
+    return AvwapEvaluation(family=None, direction=0, grade=grade, stop_target=None, warming_up=False)
+
+
+def _enable_with(rec, **updates):
+    return config_store.save(
+        "user-1", rec.config.model_copy(update={"enabled": True, **updates}),
+        expected_revision=rec.revision, default_underlyings=_UNDERLYINGS,
+    )
+
+
+def _fake_evaluate_and_cache(long_status: str, short_status: str = "WATCH"):
+    """Fake `evaluate_and_cache` that discriminates by `base.direction`, so a
+    test can assert exactly which direction's origination row (if any) got
+    appended, instead of both long AND short firing identically."""
+    def _fake(uid, row, *, base, **kw):
+        return _decision(long_status if base.direction == "long" else short_status, direction=base.direction)
+    return _fake
+
+
+class TestStructureRadarAndOrigination:
+    """2026-07-28 structure-radar/origination design: Navigator can compute
+    (and, opt-in, surface) evidence for an underlying+direction with NO real
+    SuperTrend row at all. All three settings default off — every test here
+    explicitly turns them on."""
+
+    @pytest.mark.asyncio
+    async def test_off_by_default_never_fetches_beyond_real_rows(self):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec)  # structure_radar_enabled/signal_origination stay default-off
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        assert client.calls == []
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_radar_computes_both_directions_with_no_real_row(self):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, structure_radar_enabled=True)
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        # one candle fetch per underlying, shared by both directions' evaluation
+        assert len(client.calls) == 1
+        assert nav_service.get_cached_decision("user-1", underlying="NIFTY 50", token=256265, direction="long") is not None
+        assert nav_service.get_cached_decision("user-1", underlying="NIFTY 50", token=256265, direction="short") is not None
+        # radar alone never adds a signal-table row
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_real_fresh_row_suppresses_radar_for_that_direction_only(self):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, structure_radar_enabled=True)
+        client = FakeKiteClient(_kite_candle_rows())
+        row = _row(direction="long")  # real, live long row for NIFTY 50
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [row], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        # 1 fetch for the real long row + 1 radar fetch for short — long is NOT double-fetched
+        assert len(client.calls) == 2
+        assert len(out) == 1  # no new row appended (radar-only)
+
+    @pytest.mark.asyncio
+    async def test_origination_off_never_appends_a_row_even_when_confirmed(self, monkeypatch):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, structure_radar_enabled=True, signal_origination="off")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_watch_status_never_appends_a_row(self, monkeypatch):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("WATCH", "WATCH"))
+        monkeypatch.setattr(avwap, "evaluate_avwap", lambda candles, config, **kw: (None, _accepted_avwap_eval()))
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_no_stop_target_proposal_suppresses_the_row_even_when_confirmed(self, monkeypatch):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        monkeypatch.setattr(avwap, "evaluate_avwap", lambda candles, config, **kw: (None, _rejected_avwap_eval()))
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        assert out == []
+
+    @pytest.mark.asyncio
+    async def test_heads_up_appends_a_row_with_no_legs(self, monkeypatch):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        monkeypatch.setattr(avwap, "evaluate_avwap", lambda candles, config, **kw: (None, _accepted_avwap_eval(stop=24000.0)))
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        origin_rows = [r for r in out if r.source == "navigator"]
+        assert len(origin_rows) == 1
+        assert origin_rows[0].legs == []
+        assert origin_rows[0].stop_loss == 24000.0
+        assert origin_rows[0].navigator is not None
+        assert origin_rows[0].navigator.status == "CONFIRMED"
+
+    @pytest.mark.asyncio
+    async def test_full_mode_without_universe_still_appends_a_row_with_no_legs(self, monkeypatch):
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="full")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("HIGH_CONVICTION"))
+        monkeypatch.setattr(avwap, "evaluate_avwap", lambda candles, config, **kw: (None, _accepted_avwap_eval()))
+        client = FakeKiteClient(_kite_candle_rows())
+        # universe/nfo_rows/bfo_rows all omitted — leg resolution degrades gracefully
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        origin_rows = [r for r in out if r.source == "navigator"]
+        assert len(origin_rows) == 1
+        assert origin_rows[0].legs == []

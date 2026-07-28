@@ -102,3 +102,73 @@ class KiteTripleSupertrendAdapter:
             )
         except ValueError as exc:
             raise AdapterError(str(exc)) from exc
+
+
+#: Prefix marking a `BaseSignalEvidence.signal_id` as Navigator-originated —
+#: the one thing that distinguishes an origination decision from a real
+#: SuperTrend-triggered one, since `NavigatorDecision` itself carries no
+#: separate field for it (see the 2026-07-28 structure-radar/origination
+#: design doc). Checking `base_signal_id.startswith(ORIGINATION_SIGNAL_PREFIX)`
+#: is the one place this is ever tested.
+ORIGINATION_SIGNAL_PREFIX = "navigator_origin_"
+ORIGINATION_STRATEGY_LABEL = "navigator_origination"
+#: Neutral — carries no independent opinion. AVWAP/volatility/flow/gamma
+#: entirely determine the fused score; this is deliberately NOT a fabricated
+#: "confidence" standing in for a real base trigger.
+ORIGINATION_NEUTRAL_SCORE = 50.0
+
+
+def synthetic_origination_base(
+    *,
+    underlying: str,
+    token: int,
+    direction: str,
+    bar_close_ms: int,
+    user_id: str,
+    observed_at_ms: int,
+    config_revision: str,
+    state: str,
+    exchange: str = "NSE",
+) -> BaseSignalEvidence:
+    """A neutral stand-in `BaseSignalEvidence` for Structure Radar / Signal
+    Origination — used when there is NO real SuperTrend row for this
+    underlying+direction at all. Feeding this through the exact same
+    `evaluate_signal`/`fuse()` pipeline real rows use means origination gets
+    the identical weighted-scoring/hard-gate/status machinery for free,
+    with AVWAP+volatility (+flow/gamma, when available) entirely carrying
+    the decision — `score_100` here is neutral, never an invented opinion.
+    """
+    bar_open_ms = bar_close_ms - BASE_TIMEFRAME_MS
+    if bar_close_ms > observed_at_ms:
+        raise AdapterError(
+            f"bar_close_ms {bar_close_ms} is after observed_at_ms "
+            f"{observed_at_ms} — refusing to synthesize a signal from the future"
+        )
+    signal_id = f"{ORIGINATION_SIGNAL_PREFIX}{underlying}:{token}:{direction}:{bar_close_ms}"
+    raw_payload = {"underlying": underlying, "token": token, "direction": direction, "bar_close_ms": bar_close_ms}
+    try:
+        return BaseSignalEvidence(
+            signal_id=signal_id,
+            engine_id=KiteTripleSupertrendAdapter.engine_id,
+            user_id=user_id,
+            underlying=underlying,
+            exchange=exchange,
+            instrument_token=token,
+            timeframe=BASE_TIMEFRAME,
+            bar_open_ms=bar_open_ms,
+            bar_close_ms=bar_close_ms,
+            observed_at_ms=observed_at_ms,
+            direction=direction,
+            state=state,
+            score_100=ORIGINATION_NEUTRAL_SCORE,
+            source="navigator",
+            strategy=ORIGINATION_STRATEGY_LABEL,
+            config_revision=config_revision,
+            raw_payload_hash=canonical_json_hash(raw_payload),
+        )
+    except ValueError as exc:
+        raise AdapterError(str(exc)) from exc
+
+
+def is_origination_decision(base_signal_id: str) -> bool:
+    return base_signal_id.startswith(ORIGINATION_SIGNAL_PREFIX)

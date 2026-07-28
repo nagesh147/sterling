@@ -35,11 +35,17 @@ from app.engines.navigator.schemas import (
     NavigatorConfigModel,
     NavigatorDecision,
 )
-from app.engines.sterling_kite_engine.schemas import EngineSignalRow
+from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow
 from app.schemas.market import Candle
 from app.services import db
 from app.services.navigator import config_store, repository
-from app.services.navigator.adapters import AdapterError, KiteTripleSupertrendAdapter, kite_config_revision
+from app.services.navigator.adapters import (
+    AdapterError,
+    KiteTripleSupertrendAdapter,
+    is_origination_decision,
+    kite_config_revision,
+    synthetic_origination_base,
+)
 from app.services.navigator.calendar import IST
 from app.services.navigator.status import ComponentStatus, NavigatorStatusSnapshot, build_status_snapshot
 
@@ -136,7 +142,14 @@ async def _fetch_candles_for_navigator(client, token: int, lookback_bars: int = 
 async def run_navigator_pass(
     client, uid: str, rows: list[EngineSignalRow], *, engine_config_payload: dict, default_underlyings: list[str],
     underlying_tokens: Optional[dict[str, int]] = None,
-) -> None:
+    universe: Optional[list] = None,
+    nfo_rows: Optional[list] = None,
+    bfo_rows: Optional[list] = None,
+    moneyness: Optional[list[str]] = None,
+    expiry_types: Optional[list[str]] = None,
+    expiry_types_indices: Optional[list[str]] = None,
+    expiry_types_stocks: Optional[list[str]] = None,
+) -> list[EngineSignalRow]:
     """Live per-scan Navigator evaluation glue — the price-only pipeline
     (spec §19.3 step 1) run against a fresh, independent candle fetch.
     Complete no-op (zero candle fetches, zero overhead) unless the calling
@@ -153,19 +166,33 @@ async def run_navigator_pass(
     token, which is only ever a few weeks old (a fresh weekly/monthly listing)
     and may never accumulate enough bars to leave warm-up. Falls back to
     `row.token` when the map is omitted or the underlying isn't in it, so
-    existing callers/tests are unaffected."""
+    existing callers/tests are unaffected.
+
+    `universe`/`nfo_rows`/`bfo_rows`/`moneyness`/`expiry_types*` are ONLY used
+    by Signal Origination's `"full"` mode, to resolve a real ATM leg for a
+    Navigator-originated row (see `_run_structure_and_origination`) — every
+    existing caller/test that omits them is unaffected (origination simply
+    can't resolve a leg without them, same as it can't run at all without
+    `structure_radar_enabled`/`signal_origination` turned on).
+
+    Returns `rows`, possibly extended with new Navigator-originated rows
+    (`source="navigator"`) appended in place — callers that only cared about
+    the previous `None` return are unaffected (the input list is still
+    mutated the same way for existing rows)."""
     record = config_store.get(uid, default_underlyings=default_underlyings)
     if not record.config.enabled:
-        return
+        return rows
     config_revision = kite_config_revision(engine_config_payload)
     underlying_tokens = underlying_tokens or {}
 
     seen: set[tuple] = set()
+    seen_directions: set[tuple[str, str]] = set()
     for row in rows:
         if not (row.is_fresh or row.is_active):
             continue
         if row.underlying not in record.config.underlyings:
             continue
+        seen_directions.add((row.underlying, row.direction))
         key = (row.underlying, row.token, row.direction)
         if key in seen:
             continue
@@ -189,6 +216,142 @@ async def run_navigator_pass(
             log.debug("navigator pass: candle validation skipped for %s/%s: %s", uid, row.underlying, exc)
         except Exception as exc:  # noqa: BLE001
             log.warning("navigator pass: evaluation failed for %s/%s: %s", uid, row.underlying, exc)
+
+    if record.config.structure_radar_enabled or record.config.signal_origination != "off":
+        try:
+            await _run_structure_and_origination(
+                client, uid, rows, config=record.config, config_revision=config_revision,
+                activation_watermark_ms=record.activation_watermark_ms, record_revision=record.revision,
+                default_underlyings=default_underlyings, underlying_tokens=underlying_tokens,
+                seen_directions=seen_directions, universe=universe, nfo_rows=nfo_rows, bfo_rows=bfo_rows,
+                moneyness=moneyness, expiry_types=expiry_types,
+                expiry_types_indices=expiry_types_indices, expiry_types_stocks=expiry_types_stocks,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("navigator structure radar / origination pass failed for %s: %s", uid, exc)
+    return rows
+
+
+def _option_exchange_for(underlying: str, universe: Optional[list]) -> str:
+    if universe:
+        for item in universe:
+            if getattr(item, "name", None) == underlying:
+                return getattr(item, "option_exchange", "NFO")
+    return "BFO" if underlying in ("SENSEX", "BANKEX") else "NFO"
+
+
+async def _run_structure_and_origination(
+    client, uid: str, rows: list[EngineSignalRow], *, config: NavigatorConfigModel, config_revision: str,
+    activation_watermark_ms: int, record_revision: int, default_underlyings: list[str],
+    underlying_tokens: dict[str, int], seen_directions: set[tuple[str, str]],
+    universe: Optional[list], nfo_rows: Optional[list], bfo_rows: Optional[list],
+    moneyness: Optional[list[str]], expiry_types: Optional[list[str]],
+    expiry_types_indices: Optional[list[str]], expiry_types_stocks: Optional[list[str]],
+) -> None:
+    """Structure Radar + Signal Origination (2026-07-28 design doc): for every
+    configured underlying+direction with NO live real SuperTrend row this
+    scan, independently compute AVWAP+Volatility via a neutral synthetic
+    base fed through the exact same `evaluate_signal`/`fuse()` pipeline real
+    rows use. `structure_radar_enabled` alone just keeps this cached for
+    `/snapshot`/`/series`/`/status`; `signal_origination != "off"` additionally
+    appends a new `source="navigator"` row to `rows` when the resulting
+    decision reaches CONFIRMED/HIGH_CONVICTION."""
+    for underlying in config.underlyings:
+        fetch_token = underlying_tokens.get(underlying)
+        if fetch_token is None:
+            continue  # can't read price structure without the underlying's own token
+        try:
+            raw_candles = await _fetch_candles_for_navigator(client, fetch_token)
+            if len(raw_candles) < 60:
+                continue
+            candles = validate_candles(raw_candles)
+        except CandleValidationError as exc:
+            log.debug("structure radar: candle validation skipped for %s/%s: %s", uid, underlying, exc)
+            continue
+
+        for direction in ("long", "short"):
+            if (underlying, direction) in seen_directions:
+                continue  # a real SuperTrend row already covers this underlying+direction
+            prior = get_cached_decision(uid, underlying=underlying, token=fetch_token, direction=direction)
+            state = "fresh" if prior is None or not is_origination_decision(prior.base_signal_id) else "active"
+            try:
+                base = synthetic_origination_base(
+                    underlying=underlying, token=fetch_token, direction=direction,
+                    bar_close_ms=int(candles.timestamp_ms[-1]), user_id=uid, observed_at_ms=_now_ms(),
+                    config_revision=config_revision, state=state,
+                    exchange=_option_exchange_for(underlying, universe),
+                )
+                placeholder = EngineSignalRow(
+                    underlying=underlying, token=fetch_token, exchange=_option_exchange_for(underlying, universe),
+                    regime="BULL" if direction == "long" else "BEAR",
+                    alignment=AlignmentChip(fast=0, mid=0, slow=0),
+                    direction=direction, option_type="CE" if direction == "long" else "PE",
+                    spot=float(candles.close[-1]), stop_loss=float(candles.close[-1]),
+                    score=50.0, timestamp_ms=int(candles.timestamp_ms[-1]),
+                    is_active=(state == "active"), is_fresh=(state == "fresh"), source="navigator",
+                )
+                decision = evaluate_and_cache(
+                    uid, placeholder, base=base, candles=candles, config=config,
+                    activation_watermark_ms=activation_watermark_ms, config_revision=record_revision,
+                )
+            except AdapterError as exc:
+                log.debug("structure radar: synthesis skipped for %s/%s/%s: %s", uid, underlying, direction, exc)
+                continue
+            except Exception as exc:  # noqa: BLE001
+                log.warning("structure radar: evaluation failed for %s/%s/%s: %s", uid, underlying, direction, exc)
+                continue
+
+            if config.signal_origination == "off" or decision.status not in ("CONFIRMED", "HIGH_CONVICTION"):
+                continue
+            origin_row = _build_origination_row(
+                placeholder, candles=candles, config=config, decision=decision,
+                universe=universe, nfo_rows=nfo_rows, bfo_rows=bfo_rows, moneyness=moneyness,
+                expiry_types=expiry_types, expiry_types_indices=expiry_types_indices,
+                expiry_types_stocks=expiry_types_stocks,
+            )
+            if origin_row is not None:
+                origin_row.navigator = decision
+                rows.append(origin_row)
+
+
+def _build_origination_row(
+    placeholder: EngineSignalRow, *, candles: ValidatedCandles, config: NavigatorConfigModel,
+    decision: NavigatorDecision, universe: Optional[list], nfo_rows: Optional[list], bfo_rows: Optional[list],
+    moneyness: Optional[list[str]], expiry_types: Optional[list[str]],
+    expiry_types_indices: Optional[list[str]], expiry_types_stocks: Optional[list[str]],
+) -> Optional[EngineSignalRow]:
+    """Build the actual signal-table row for a Navigator-originated decision.
+    Requires an ACCEPTED AVWAP stop/target proposal — a Navigator-originated
+    row with no honest risk-managed stop is not surfaced at all, in either
+    `"heads_up"` or `"full"` mode (never a degenerate/fabricated stop)."""
+    structure, avwap_eval = avwap.evaluate_avwap(candles, config.avwap, range_supports=None)
+    proposal = avwap_eval.stop_target
+    if proposal is None or not proposal.accepted or proposal.stop is None:
+        return None
+
+    row = placeholder.model_copy(deep=True)
+    row.stop_loss = float(proposal.stop)
+    row.entry_sl = float(proposal.stop)
+
+    if config.signal_origination == "full" and universe is not None and (nfo_rows is not None or bfo_rows is not None):
+        item = next((u for u in universe if getattr(u, "name", None) == row.underlying), None)
+        if item is not None:
+            from app.services.kite_engine.scanner import attach_strikes
+
+            option_rows = nfo_rows if getattr(item, "option_exchange", "NFO") == "NFO" else bfo_rows
+            _expiry = (
+                expiry_types_indices if (expiry_types_indices is not None and getattr(item, "is_index", False))
+                else expiry_types_stocks if (expiry_types_stocks is not None and not getattr(item, "is_index", False))
+                else (expiry_types or ["weekly", "monthly"])
+            )
+            try:
+                attach_strikes(
+                    row, option_rows or [], option_name=item.tradingsymbol,
+                    moneynesses=moneyness or ["ATM"], expiry_types=_expiry,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.debug("origination: leg resolution failed for %s: %s", row.underlying, exc)
+    return row
 
 
 def _check_execution_eligible_inner(uid: str, row: EngineSignalRow, *, default_underlyings: list[str]) -> tuple[bool, str]:

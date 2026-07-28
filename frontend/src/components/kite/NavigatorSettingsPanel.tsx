@@ -4,11 +4,17 @@ import {
 } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
-import type { AvwapGrade, NavigatorConfigModel, NavigatorOperatingMode } from '../../types/navigator';
+import type { AvwapGrade, NavigatorConfigModel, NavigatorOperatingMode, SignalOrigination } from '../../types/navigator';
 
 const GREEN = '#4caf50';
 const RED = '#df514c';
 const AMBER = '#f5a623';
+
+const ORIGINATION_EXPLAIN: Record<SignalOrigination, string> = {
+  off: "Today's behaviour, unchanged: Navigator only ever evaluates a setup that the SuperTrend engine already triggered. It never adds a row to the signal table on its own.",
+  heads_up: 'Navigator can surface its OWN setup — no SuperTrend trigger required — the moment its AVWAP + volatility evidence reaches Confirmed or High Conviction. Shown as a "Navigator idea" row, visible everywhere, but never executable (no manual or auto order).',
+  full: 'Same detection as Heads-up, but the row becomes a real, tradeable setup: an ATM strike is resolved and it can be manually executed like any other row. Auto-Execute (below) additionally requires this.',
+};
 
 function NumField({ label, hint, value, onChange, step = 1, min, max }: {
   label: string; hint?: string; value: number; onChange: (v: number) => void;
@@ -213,6 +219,47 @@ export function NavigatorSettingsPanel() {
         <NumField label="Max feature age" hint="Seconds before cached evidence is treated as stale." value={draft.max_feature_age_seconds} step={10} min={10} max={3600} onChange={(v) => patch({ ...draft, max_feature_age_seconds: v })} />
         <NumField label="Event alignment window" hint="Bars of tolerance between a base-fresh and AVWAP-fresh trigger." value={draft.event_alignment_bars} step={1} min={0} max={20} onChange={(v) => patch({ ...draft, event_alignment_bars: v })} />
         <NumField label="Entry delay after open" hint="Minutes after the official session open before entries are considered." value={draft.entry_delay_after_open_minutes} step={1} min={0} max={60} onChange={(v) => patch({ ...draft, entry_delay_after_open_minutes: v })} />
+      </Section>
+
+      {/* ── 1.5 structure radar / signal origination / auto-execute ───────── */}
+      <Section
+        title="Structure Radar and Signal Origination"
+        description="Let Navigator compute and (opt-in) surface its own setups, independent of SuperTrend. All off by default — orthogonal to Mode above."
+        summary={draft.signal_origination === 'off' ? (draft.structure_radar_enabled ? 'Radar only' : 'Off') : `Origination: ${draft.signal_origination === 'heads_up' ? 'Heads-up' : 'Full'}`}
+      >
+        <BoolField
+          label="Structure Radar"
+          hint="Continuously computes AVWAP + volatility for every underlying above, both directions, whether or not SuperTrend has a live row there. Feeds the snapshot/series/status views only — never adds a signal-table row by itself."
+          value={draft.structure_radar_enabled}
+          onChange={(v) => patch({ ...draft, structure_radar_enabled: v })}
+        />
+        <Field label="Signal Origination" hint="Whether a Navigator-only setup (no SuperTrend trigger) gets surfaced as a row.">
+          <ChoiceRow<SignalOrigination>
+            value={draft.signal_origination}
+            onChange={(v) => patch({ ...draft, signal_origination: v, ...(v !== 'full' ? { auto_execute_originated: false } : {}) })}
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'heads_up', label: 'Heads-up' },
+              { value: 'full', label: 'Full' },
+            ]}
+          />
+          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>{ORIGINATION_EXPLAIN[draft.signal_origination]}</div>
+        </Field>
+        <BoolField
+          label="Auto-Execute Originated"
+          hint={
+            draft.signal_origination !== 'full'
+              ? 'Requires Signal Origination = Full.'
+              : gateReady
+                ? 'Lets a Navigator-originated row fire through the same auto-exec path as every other row — still requires the Kite engine’s own Auto-Execute switch to be on too.'
+                : 'Requires Signal Origination = Full AND a promoted calibration report (not yet available in this build — see Gate mode above). Locked until then, exactly like Gate mode.'
+          }
+          value={draft.auto_execute_originated}
+          onChange={(v) => {
+            if (draft.signal_origination !== 'full' || !gateReady) return;
+            patch({ ...draft, auto_execute_originated: v });
+          }}
+        />
       </Section>
 
       {/* ── 2. AVWAP ─────────────────────────────────────────────────────── */}
