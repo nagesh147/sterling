@@ -81,6 +81,17 @@ const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
   { value: 'both', label: 'Both', hint: 'Run both scans; each signal is tagged Spot or DERIV.' },
   { value: 'confluence', label: 'Confluence', hint: "Highest conviction: emit a strike only when the underlying fires a fresh entry AND that option's own premium ST also confirms. One merged row per underlying." },
 ];
+// Which evidence lens the signal board is viewed through. Purely a local
+// display preference (localStorage), never patched to the server — unlike
+// scan_source/exit_mode above, this never changes what the engine scans.
+type SignalMode = 'supertrend' | 'navigator' | 'combined' | 'common';
+const SIGNAL_MODE_OPTS: { value: SignalMode; label: string; hint: string }[] = [
+  { value: 'supertrend', label: 'SuperTrend', hint: 'Default triple-SuperTrend (Heikin-Ashi) signal only — the Navigator badge is hidden even when Navigator has evidence.' },
+  { value: 'navigator', label: 'Navigator', hint: 'Only setups the Value-Flow Navigator has evidence for, viewed through its own status/effective score.' },
+  { value: 'combined', label: 'Combined', hint: 'Every SuperTrend setup, with Navigator evidence shown alongside when available. (Default)' },
+  { value: 'common', label: 'Common', hint: 'Only setups where BOTH systems agree: SuperTrend is live AND Navigator status is Confirmed or High Conviction.' },
+];
+
 // Granular universe pickers. `name` is the value stored in config (matches the
 // backend UniverseItem display name); `label` is the short chip text.
 const INDEX_OPTS: { name: string; label: string }[] = [
@@ -343,7 +354,7 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
-function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource }: {
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined' }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
@@ -353,6 +364,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   showEnded?: boolean;
   bestOnly?: boolean;
   scanSource?: string;
+  signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -581,16 +593,24 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
               ATR {row.atr_pct.toFixed(0)}%
             </span>
           )}
-          {row.navigator && (() => {
+          {row.navigator && signalMode !== 'supertrend' && (() => {
             const nav = row.navigator;
             const navColor = nav.status === 'CONFIRMED' || nav.status === 'HIGH_CONVICTION' ? k.green
               : nav.status === 'CONFLICT' ? k.red
               : nav.status === 'WATCH' ? k.blue : k.dim;
             const scoreLabel = nav.effective_score != null ? ` ${Math.round(nav.effective_score)}` : '';
+            // In 'navigator'/'common' lenses Navigator IS the point of the
+            // view, so give its badge more visual weight than in 'combined'
+            // (where it's a secondary annotation alongside the raw score).
+            const emphasized = signalMode === 'navigator' || signalMode === 'common';
             return (
               <span
                 title={`Navigator: ${nav.status}${scoreLabel ? ` (effective score${scoreLabel})` : ''} — reasons: ${nav.reason_codes.join(', ') || 'none'}. Raw score above is unchanged.`}
-                style={{ fontSize: 10, color: navColor, background: `${navColor}18`, borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}
+                style={{
+                  fontSize: emphasized ? 11 : 10, color: navColor, background: `${navColor}18`,
+                  borderRadius: 3, padding: emphasized ? '2px 6px' : '1px 4px', fontWeight: emphasized ? 800 : 600,
+                  border: emphasized ? `1px solid ${navColor}40` : undefined,
+                }}
               >
                 Nav {nav.status.replace('_', ' ')}{scoreLabel}
               </span>
@@ -1729,6 +1749,13 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const [viewLayout, setViewLayout] = React.useState<'grid' | 'list'>(
     () => (localStorage.getItem('kite_st_view_layout') as 'grid' | 'list') || 'list',
   );
+  const [signalMode, setSignalMode] = React.useState<SignalMode>(
+    () => (localStorage.getItem('kite_st_signal_mode') as SignalMode) || 'combined',
+  );
+  const changeSignalMode = (next: SignalMode) => {
+    setSignalMode(next);
+    localStorage.setItem('kite_st_signal_mode', next);
+  };
   const legSort = s.legSort;
   const setLegSort = s.setLegSort;
   const handleLegSort = (key: string) => {
@@ -1785,6 +1812,13 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   }, [rawRows, isScanning]);
   const filteredRows = React.useMemo(() => {
     let result = [...rows];
+    if (signalMode === 'navigator') {
+      result = result.filter((r) => r.navigator != null);
+    } else if (signalMode === 'common') {
+      result = result.filter((r) => r.navigator != null && (r.navigator.status === 'CONFIRMED' || r.navigator.status === 'HIGH_CONVICTION'));
+    }
+    // 'supertrend' and 'combined' both keep every SuperTrend setup — they
+    // differ only in whether the Navigator badge renders (see SignalCard).
     if (query.trim()) {
       const qLower = query.toLowerCase();
       result = result.filter(r => {
@@ -1802,7 +1836,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
       result.sort((a, b) => b.spot - a.spot);
     }
     return result;
-  }, [rows, query, sortBy]);
+  }, [rows, query, sortBy, signalMode]);
 
   // Live quotes are needed BEFORE bucketing so a position that has exited between scans
   // (live premium through its stop) drops out of "Active now" instead of lingering there
@@ -1894,7 +1928,14 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     return buckets;
   }, [filteredRows, showEnded, quotes]);
   const scanning = signals?.scanning;
-  const hiddenRecentCount = !isScanning && rows.length > 0 && groupedRows.length === 0
+  // The Navigator/Common lenses can legitimately show nothing even while
+  // SuperTrend has live setups — Navigator may be disabled, still warming
+  // up, or simply not agreeing with any of them yet. Say so explicitly
+  // instead of falling through to the generic "hidden by table filters"
+  // copy, which implies a search/showEnded filter is the cause.
+  const navigatorLensEmpty = rows.length > 0 && groupedRows.length === 0
+    && (signalMode === 'navigator' || signalMode === 'common');
+  const hiddenRecentCount = !isScanning && !navigatorLensEmpty && rows.length > 0 && groupedRows.length === 0
     ? rows.length
     : 0;
   const revealRecentSignals = () => {
@@ -1999,6 +2040,13 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               )}
             />
           )}
+          <InlineDropdown
+            value={signalMode}
+            options={SIGNAL_MODE_OPTS}
+            tone={k.purple}
+            title="Signal lens — how SuperTrend and Value-Flow Navigator evidence combine in this table"
+            onChange={changeSignalMode}
+          />
           {/* Scan status + live count now live in the Kite footer (see KiteLayout). */}
           <div style={{ flex: 1 }} />
           {/* Actions: rescan / table preferences */}
@@ -2190,6 +2238,22 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               Show recent signals
             </button>
           </div>
+        ) : navigatorLensEmpty ? (
+          <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
+            <div>
+              {rows.length} SuperTrend setup{rows.length === 1 ? '' : 's'} on the board, but none {signalMode === 'common' ? 'have Navigator agreement (Confirmed / High Conviction) yet' : 'have Value-Flow Navigator evidence yet'}.
+            </div>
+            <div style={{ marginTop: 6 }}>
+              Navigator is off by default — enable it under <strong>Connect → Value-Flow Navigator</strong>, or switch lenses below.
+            </div>
+            <button
+              type="button"
+              onClick={() => changeSignalMode('combined')}
+              style={{ marginTop: 12, minHeight: 32, padding: '0 12px', border: `1px solid ${k.border}`, borderRadius: 6, background: '#fff', color: k.purple, fontFamily: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Switch to Combined lens
+            </button>
+          </div>
         ) : groupedRows.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
             {signalsLoading ? (
@@ -2235,7 +2299,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                     {group.rows.map((row) => (
                       <div key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
                         <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
-                          scanSource={cfg?.scan_source}
+                          scanSource={cfg?.scan_source} signalMode={signalMode}
                           onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                           onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
                           onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />

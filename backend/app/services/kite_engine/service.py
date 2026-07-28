@@ -783,11 +783,17 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
                         if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
-        # Sterling Value-Flow Navigator: synchronous, cache-only join — never
-        # fetches live data, and is a complete no-op unless the user has
+        # Sterling Value-Flow Navigator: an independent, price-only evaluation
+        # pass (its own candle fetch, never the scanner's) followed by a
+        # synchronous cache-only join back onto the rows. Both steps are a
+        # complete no-op — zero extra broker calls — unless the user has
         # explicitly enabled Navigator (disabled by default for everyone).
         try:
             from app.services.navigator import service as navigator_service
+            await navigator_service.run_navigator_pass(
+                client, uid, snap.rows, engine_config_payload=cfg_model.model_dump(mode="json"),
+                default_underlyings=cfg_model.scan_indices,
+            )
             snap.rows = navigator_service.attach_to_rows(uid, snap.rows, default_underlyings=cfg_model.scan_indices)
         except Exception as exc:  # noqa: BLE001
             log.warning("Navigator row-attach failed (non-fatal) for %s: %s", uid, exc)

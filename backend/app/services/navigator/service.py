@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime, timedelta
 from typing import Optional
 
 from app.core.logging import get_logger
@@ -27,7 +28,7 @@ from app.engines.navigator import avwap, projected_ranges, volatility
 from app.engines.navigator.fusion import FusionInputs, fuse
 from app.engines.navigator.gamma_activity import GammaContractInput, evaluate_gamma_activity
 from app.engines.navigator.option_flow import ChainFlowSample, evaluate_option_flow
-from app.engines.navigator.quality import ValidatedCandles
+from app.engines.navigator.quality import CandleValidationError, ValidatedCandles, validate_candles
 from app.engines.navigator.schemas import (
     BaseSignalEvidence,
     DirectionalEvidence,
@@ -35,8 +36,11 @@ from app.engines.navigator.schemas import (
     NavigatorDecision,
 )
 from app.engines.sterling_kite_engine.schemas import EngineSignalRow
+from app.schemas.market import Candle
 from app.services import db
 from app.services.navigator import config_store, repository
+from app.services.navigator.adapters import AdapterError, KiteTripleSupertrendAdapter, kite_config_revision
+from app.services.navigator.calendar import IST
 from app.services.navigator.status import ComponentStatus, NavigatorStatusSnapshot, build_status_snapshot
 
 log = get_logger(__name__)
@@ -98,6 +102,79 @@ def attach_to_rows(uid: str, rows: list[EngineSignalRow], *, default_underlyings
         if decision is not None and decision.config_revision == record.revision:
             row.navigator = decision
     return rows
+
+
+async def _fetch_candles_for_navigator(client, token: int, lookback_bars: int = 320) -> list[Candle]:
+    """A fresh, independent 1H candle fetch for Navigator's price-only
+    pipeline — deliberately NOT reusing the scanner's internal cache, so
+    this stays a separate, isolated evaluator (matching the "separate,
+    independent" design already used for chain sampling). Uses the same
+    raw `get_historical` primitive and timestamp parsing the scanner itself
+    relies on, and applies the same "drop the still-forming bar" rule."""
+    from app.services.exchanges.kite.client import _parse_kite_ts
+    from app.services.kite_engine.scanner import drop_forming
+
+    now = datetime.now(IST)
+    days_needed = max(2, int(lookback_bars / 6) + 5)
+    from_str = (now - timedelta(days=days_needed)).strftime("%Y-%m-%d %H:%M:%S")
+    to_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    data = await client.get_historical(token, "60minute", from_str, to_str)
+    raw = data.get("candles", []) if data else []
+    candles: list[Candle] = []
+    for row in raw:
+        try:
+            candles.append(Candle(
+                timestamp_ms=_parse_kite_ts(str(row[0])), open=float(row[1]), high=float(row[2]),
+                low=float(row[3]), close=float(row[4]), volume=float(row[5]) if len(row) > 5 else 0.0,
+            ))
+        except (IndexError, ValueError, TypeError):
+            continue
+    candles.sort(key=lambda c: c.timestamp_ms)
+    return drop_forming(candles[-lookback_bars:])
+
+
+async def run_navigator_pass(
+    client, uid: str, rows: list[EngineSignalRow], *, engine_config_payload: dict, default_underlyings: list[str],
+) -> None:
+    """Live per-scan Navigator evaluation glue — the price-only pipeline
+    (spec §19.3 step 1) run against a fresh, independent candle fetch.
+    Complete no-op (zero candle fetches, zero overhead) unless the calling
+    user has explicitly enabled Navigator; flow/gamma report
+    `CHAIN_UNAVAILABLE` until live option-chain capture is wired in a future
+    change."""
+    record = config_store.get(uid, default_underlyings=default_underlyings)
+    if not record.config.enabled:
+        return
+    config_revision = kite_config_revision(engine_config_payload)
+
+    seen: set[tuple] = set()
+    for row in rows:
+        if not (row.is_fresh or row.is_active):
+            continue
+        if row.underlying not in record.config.underlyings:
+            continue
+        key = (row.underlying, row.token, row.direction)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            raw_candles = await _fetch_candles_for_navigator(client, row.token)
+            if len(raw_candles) < 60:
+                continue  # not enough bars yet for a meaningful warmup — skip quietly
+            candles = validate_candles(raw_candles)
+            base = KiteTripleSupertrendAdapter.adapt(
+                row, user_id=uid, observed_at_ms=_now_ms(), config_revision=config_revision,
+            )
+            evaluate_and_cache(
+                uid, row, base=base, candles=candles, config=record.config,
+                activation_watermark_ms=record.activation_watermark_ms, config_revision=record.revision,
+            )
+        except AdapterError as exc:
+            log.debug("navigator pass: adapt skipped for %s/%s: %s", uid, row.underlying, exc)
+        except CandleValidationError as exc:
+            log.debug("navigator pass: candle validation skipped for %s/%s: %s", uid, row.underlying, exc)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("navigator pass: evaluation failed for %s/%s: %s", uid, row.underlying, exc)
 
 
 def _check_execution_eligible_inner(uid: str, row: EngineSignalRow, *, default_underlyings: list[str]) -> tuple[bool, str]:
