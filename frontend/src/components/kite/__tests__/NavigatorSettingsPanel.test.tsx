@@ -196,6 +196,57 @@ describe('NavigatorSettingsPanel', () => {
     });
   });
 
+  describe('Strategy Definition (from the source manual)', () => {
+    it('renders the section with all six manual-anchored fields at their default, no revert buttons shown', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getByText('Strategy Definition (from the source manual)')).toBeInTheDocument();
+      expect(screen.getByText('6/6 at manual default')).toBeInTheDocument();
+      expect(screen.getAllByText(/Manual default:/).length).toBe(6);
+      expect(screen.queryByRole('button', { name: /changed — revert/i })).not.toBeInTheDocument();
+    });
+
+    it('shows the two always-on hardcoded manual rules', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getByText('Compression always forces WAIT')).toBeInTheDocument();
+      expect(screen.getByText('Gamma never sets direction by itself')).toBeInTheDocument();
+    });
+
+    it('changing a manual-anchored field shows a revert button and updates the at-default count', () => {
+      render(<NavigatorSettingsPanel />);
+      const strongZoneInput = screen.getByLabelText('Strong flow zone') as HTMLInputElement;
+      fireEvent.change(strongZoneInput, { target: { value: '75' } });
+      expect(screen.getByText('5/6 at manual default')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /changed — revert/i })).toBeInTheDocument();
+    });
+
+    it('clicking revert restores that field to the manual default and clears the revert button', () => {
+      render(<NavigatorSettingsPanel />);
+      const strongZoneInput = screen.getByLabelText('Strong flow zone') as HTMLInputElement;
+      fireEvent.change(strongZoneInput, { target: { value: '75' } });
+      fireEvent.click(screen.getByRole('button', { name: /changed — revert/i }));
+      expect(strongZoneInput.value).toBe('68');
+      expect(screen.getByText('6/6 at manual default')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /changed — revert/i })).not.toBeInTheDocument();
+    });
+
+    it('reverting one field does not touch another changed field', () => {
+      render(<NavigatorSettingsPanel />);
+      const strongZoneInput = screen.getByLabelText('Strong flow zone') as HTMLInputElement;
+      const extremeZoneInput = screen.getByLabelText('Extreme flow zone') as HTMLInputElement;
+      fireEvent.change(strongZoneInput, { target: { value: '75' } });
+      fireEvent.change(extremeZoneInput, { target: { value: '99' } });
+      expect(screen.getByText('4/6 at manual default')).toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole('button', { name: /changed — revert/i })[0]);
+      expect(extremeZoneInput.value).toBe('99'); // untouched
+      expect(screen.getByText('5/6 at manual default')).toBeInTheDocument();
+    });
+
+    it('the old sections point to the moved fields instead of duplicating an editable control', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getAllByText(/Moved to Strategy Definition/).length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
   it('shows raw and effective concepts distinctly via fusion weight fields', () => {
     render(<NavigatorSettingsPanel />);
     expect(screen.getByText('Base weight')).toBeInTheDocument();

@@ -5,10 +5,15 @@ import {
 import { Icons } from '../../styles/kiteUI';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
 import type { AvwapGrade, NavigatorConfigModel, NavigatorOperatingMode, SignalOrigination } from '../../types/navigator';
+import {
+  HARDCODED_MANUAL_RULES, MANUAL_FIELDS, getManualFieldValue, resetManualField,
+  type ManualFieldSpec,
+} from './navigatorManualDefaults';
 
 const GREEN = '#4caf50';
 const RED = '#df514c';
 const AMBER = '#f5a623';
+const MANUAL_BLUE = '#1565c0';
 
 const ORIGINATION_EXPLAIN: Record<SignalOrigination, string> = {
   off: "Today's behaviour, unchanged: Navigator only ever evaluates a setup that the SuperTrend engine already triggered. It never adds a row to the signal table on its own.",
@@ -39,12 +44,31 @@ function BoolField({ label, hint, value, onChange }: { label: string; hint?: str
   );
 }
 
-function GradeField({ label, hint, value, onChange }: { label: string; hint?: string; value: AvwapGrade; onChange: (v: AvwapGrade) => void }) {
+function ManualControl({ spec, config, onReset, children }: {
+  spec: ManualFieldSpec; config: NavigatorConfigModel; onReset: () => void; children: React.ReactNode;
+}) {
+  const value = getManualFieldValue(config, spec.path);
+  const isDefault = value === spec.defaultValue;
   return (
-    <Field label={label} hint={hint}>
-      <ChoiceRow<AvwapGrade> value={value} onChange={onChange} options={[
-        { value: 'B', label: 'B' }, { value: 'A', label: 'A' }, { value: 'A+', label: 'A+' },
-      ]} />
+    <Field label={spec.label}>
+      {children}
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 7 }}>
+        <span
+          title={spec.manualQuote}
+          style={{ fontSize: 9.5, fontWeight: 700, color: MANUAL_BLUE, background: `${MANUAL_BLUE}14`, border: `1px solid ${MANUAL_BLUE}40`, borderRadius: 4, padding: '1px 6px', cursor: 'help' }}
+        >
+          Manual default: {spec.displayDefault}
+        </span>
+        {!isDefault && (
+          <button
+            type="button" onClick={onReset}
+            title={`Revert to the manual's default (${spec.displayDefault})`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', color: AMBER, fontSize: 9.5, fontWeight: 700, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+          >
+            <Icons.Reload /> changed — revert
+          </button>
+        )}
+      </div>
     </Field>
   );
 }
@@ -199,6 +223,60 @@ export function NavigatorSettingsPanel() {
         </div>
       </div>
 
+      {/* ── 0. strategy definition (from the source manual) ───────────────── */}
+      <Section
+        title="Strategy Definition (from the source manual)"
+        description="The handful of settings whose default value comes directly from the AVWAP Navigator Suite manual this strategy is built on — grouped separately and clearly marked so you don't change the strategy's own definition by mistake while tuning something else."
+        summary={`${MANUAL_FIELDS.filter((f) => getManualFieldValue(draft, f.path) === f.defaultValue).length}/${MANUAL_FIELDS.length} at manual default`}
+        defaultOpen
+      >
+        <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.55, marginBottom: 4 }}>
+          Source: <i>AVWAP Navigator Suite — Official Trader&apos;s Manual</i> (QuantGym, v1.0, 2026). Every other
+          setting in this panel is Sterling&apos;s own calibration — the manual describes those behaviours in
+          words but discloses no formula or threshold, so Sterling had to pick a workable number. These six are
+          different: the manual states an actual value or preference, so that&apos;s what ships as the default.
+          Hover a badge below to see the exact source line.
+        </div>
+
+        <ManualControl spec={MANUAL_FIELDS[0]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[0].path))}>
+          <ChoiceRow value={draft.flow.mode} onChange={(mode) => patch(set(draft, 'flow', { mode }))} options={[{ value: 'dynamic', label: 'Dynamic' }, { value: 'broad', label: 'Broad' }]} />
+        </ManualControl>
+
+        <ManualControl spec={MANUAL_FIELDS[1]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[1].path))}>
+          <input type="number" value={draft.flow.strong_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { strong_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Strong flow zone" />
+        </ManualControl>
+
+        <ManualControl spec={MANUAL_FIELDS[2]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[2].path))}>
+          <input type="number" value={draft.flow.extreme_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { extreme_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Extreme flow zone" />
+        </ManualControl>
+
+        <ManualControl spec={MANUAL_FIELDS[3]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[3].path))}>
+          <Switch checked={draft.gamma.require_flow_alignment} label="Gamma requires flow alignment" onChange={() => patch(set(draft, 'gamma', { require_flow_alignment: !draft.gamma.require_flow_alignment }))} />
+        </ManualControl>
+
+        <ManualControl spec={MANUAL_FIELDS[4]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[4].path))}>
+          <ChoiceRow<AvwapGrade> value={draft.fusion.min_avwap_grade} onChange={(v) => patch(set(draft, 'fusion', { min_avwap_grade: v }))} options={[
+            { value: 'B', label: 'B' }, { value: 'A', label: 'A' }, { value: 'A+', label: 'A+' },
+          ]} />
+        </ManualControl>
+
+        <ManualControl spec={MANUAL_FIELDS[5]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[5].path))}>
+          <input type="number" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(e) => patch(set(draft, 'volatility', { min_direction_confidence: Number(e.target.value) }))} style={inputStyle} aria-label="Minimum directional confidence" />
+        </ManualControl>
+
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${BORDER}` }}>
+          <div style={{ color: DIM, fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
+            Also from the manual — not settings, always on
+          </div>
+          {HARDCODED_MANUAL_RULES.map((rule) => (
+            <div key={rule.label} title={rule.note} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 11.5, color: TEXT, cursor: 'help' }}>
+              <span aria-hidden style={{ width: 6, height: 6, borderRadius: 3, background: MANUAL_BLUE, flexShrink: 0 }} />
+              {rule.label}
+            </div>
+          ))}
+        </div>
+      </Section>
+
       {/* ── 1. instruments and timing ───────────────────────────────────── */}
       <Section title="Instruments and timing" description="What Navigator scans and the base clock it runs on." summary={`${draft.underlyings.length} underlyings · ${draft.price_timeframe}`}>
         <Field label="Engine source" hint="This build is Kite-only — no other engine can be selected.">
@@ -320,14 +398,16 @@ export function NavigatorSettingsPanel() {
         <NumField label="EMA slow period" value={draft.volatility.ema_slow_period} min={2} onChange={(v) => patch(set(draft, 'volatility', { ema_slow_period: v }))} />
         <NumField label="Trend confirm bars" value={draft.volatility.trend_confirm_bars} min={1} onChange={(v) => patch(set(draft, 'volatility', { trend_confirm_bars: v }))} />
         <NumField label="Max flip age (bars)" value={draft.volatility.max_flip_age_bars} min={1} onChange={(v) => patch(set(draft, 'volatility', { max_flip_age_bars: v }))} />
-        <NumField label="Min direction confidence" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { min_direction_confidence: v }))} />
+        <Field label="Min direction confidence" hint="Moved to Strategy Definition (from the source manual), at the top of this panel — it's one of the six manual-anchored defaults.">
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.volatility.min_direction_confidence}</div>
+        </Field>
       </Section>
 
       {/* ── 5. option flow ───────────────────────────────────────────────── */}
       <Section title="Option-flow oscillator" description="Robust-normalized activity oscillator from narrow chain samples." summary={draft.flow.mode}>
         <BoolField label="Enabled" value={draft.flow.enabled} onChange={(v) => patch(set(draft, 'flow', { enabled: v }))} />
-        <Field label="Mode" hint="Dynamic (ATM-centered) is the preferred intraday default.">
-          <ChoiceRow value={draft.flow.mode} onChange={(mode) => patch(set(draft, 'flow', { mode }))} options={[{ value: 'dynamic', label: 'Dynamic' }, { value: 'broad', label: 'Broad' }]} />
+        <Field label="Mode" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto', textTransform: 'capitalize' }}>{draft.flow.mode}</div>
         </Field>
         <NumField label="Dynamic strike radius" value={draft.flow.dynamic_strike_radius} min={1} max={20} onChange={(v) => patch(set(draft, 'flow', { dynamic_strike_radius: v }))} />
         <NumField label="Broad strike radius" value={draft.flow.broad_strike_radius} min={1} max={50} onChange={(v) => patch(set(draft, 'flow', { broad_strike_radius: v }))} />
@@ -340,8 +420,9 @@ export function NavigatorSettingsPanel() {
         <NumField label="OI intensity weight" value={draft.flow.oi_intensity_weight} step={0.05} min={0} max={1} onChange={(v) => patch(set(draft, 'flow', { oi_intensity_weight: v }))} />
         <NumField label="Z-scale" value={draft.flow.z_scale} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'flow', { z_scale: v }))} />
         <NumField label="Zero-line hysteresis" value={draft.flow.zero_hysteresis} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { zero_hysteresis: v }))} />
-        <NumField label="Strong zone (display)" value={draft.flow.strong_zone} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { strong_zone: v }))} />
-        <NumField label="Extreme zone (display)" value={draft.flow.extreme_zone} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { extreme_zone: v }))} />
+        <Field label="Strong / extreme zone (display)" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.flow.strong_zone} / {draft.flow.extreme_zone}</div>
+        </Field>
         <BoolField label="Require for index gate" hint="Missing index flow blocks gate eligibility." value={draft.flow.require_for_index_gate} onChange={(v) => patch(set(draft, 'flow', { require_for_index_gate: v }))} />
         <BoolField label="Allow N/A for single stocks" value={draft.flow.allow_na_for_single_stocks} onChange={(v) => patch(set(draft, 'flow', { allow_na_for_single_stocks: v }))} />
       </Section>
@@ -367,7 +448,9 @@ export function NavigatorSettingsPanel() {
         <NumField label="Acceleration Z min" value={draft.gamma.acceleration_z_min} step={0.1} min={0.1} onChange={(v) => patch(set(draft, 'gamma', { acceleration_z_min: v }))} />
         <BoolField label="Expiry profile enabled" value={draft.gamma.expiry_profile_enabled} onChange={(v) => patch(set(draft, 'gamma', { expiry_profile_enabled: v }))} />
         <Field label="Expiry profile start (IST)"><input type="text" value={draft.gamma.expiry_profile_start_ist} onChange={(e) => patch(set(draft, 'gamma', { expiry_profile_start_ist: e.target.value }))} style={inputStyle} /></Field>
-        <BoolField label="Require flow alignment" hint="Gamma cannot determine direction on its own." value={draft.gamma.require_flow_alignment} onChange={(v) => patch(set(draft, 'gamma', { require_flow_alignment: v }))} />
+        <Field label="Require flow alignment" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.gamma.require_flow_alignment ? 'On' : 'Off'}</div>
+        </Field>
         <BoolField label="Required for gate" hint="Off by default — missing gamma stays explicit and cannot boost score." value={draft.gamma.required_for_gate} onChange={(v) => patch(set(draft, 'gamma', { required_for_gate: v }))} />
       </Section>
 
@@ -378,7 +461,9 @@ export function NavigatorSettingsPanel() {
         <NumField label="Volatility weight" value={draft.fusion.volatility_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { volatility_weight: v }))} />
         <NumField label="Flow weight" value={draft.fusion.flow_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { flow_weight: v }))} />
         <NumField label="Gamma weight" value={draft.fusion.gamma_weight} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { gamma_weight: v }))} />
-        <GradeField label="Min AVWAP grade to confirm" value={draft.fusion.min_avwap_grade} onChange={(v) => patch(set(draft, 'fusion', { min_avwap_grade: v }))} />
+        <Field label="Min AVWAP grade to confirm" hint="Moved to Strategy Definition (from the source manual), at the top of this panel.">
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>{draft.fusion.min_avwap_grade}</div>
+        </Field>
         <NumField label="Strong conflict confidence" value={draft.fusion.strong_conflict_confidence} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { strong_conflict_confidence: v }))} />
         <NumField label="Confirmed score min" value={draft.fusion.confirmed_score_min} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { confirmed_score_min: v }))} />
         <NumField label="High-conviction score min" value={draft.fusion.high_conviction_score_min} min={0} max={100} onChange={(v) => patch(set(draft, 'fusion', { high_conviction_score_min: v }))} />
