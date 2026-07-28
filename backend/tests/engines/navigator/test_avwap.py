@@ -21,6 +21,7 @@ from app.engines.navigator.avwap import (
 )
 from app.engines.navigator.quality import validate_candles
 from app.engines.navigator.schemas import AvwapConfig
+from app.schemas.market import Candle
 from tests.engines.navigator.conftest import make_candles, multi_session_candles, random_walk_candles
 
 
@@ -79,12 +80,22 @@ class TestHandCalculatedAvwap:
         # t=6 (still anchor 2) vs t=7 (anchor switches to 6) must differ sharply
         assert out[6] != pytest.approx(out[7])
 
-    def test_zero_volume_denominator_is_unavailable_not_close(self):
+    def test_zero_volume_denominator_falls_back_to_unweighted_mean(self):
+        """NSE/BSE INDEX candles (NIFTY 50, NIFTY BANK, SENSEX, ...) always
+        report volume=0 — an index has no traded volume of its own. A
+        strictly volume-weighted average would stay NaN forever on every
+        index underlying, permanently stuck "warming up" regardless of how
+        much real history is fetched. Falling back to an unweighted mean of
+        typical price reproduces exactly the equal-weighted-volume case
+        (same expected values as the volume=100-constant test above)."""
         typical, _ = self._typical_and_volume()
         volume = np.zeros_like(typical)
         anchor_idx = np.array([-1, -1, -1, 2, 2, 2, 2, 6, 6, 6])
         out = _piecewise_avwap(typical, volume, anchor_idx)
-        assert np.isnan(out[3]) and np.isnan(out[9])
+        expected = {3: 10.5, 4: 10.1666667, 5: 10.25, 6: 10.7, 7: 11.5, 8: 10.8333333, 9: 10.5}
+        for t, val in expected.items():
+            assert out[t] == pytest.approx(val, abs=1e-4), f"t={t}"
+        assert np.isnan(out[0]) and np.isnan(out[1]) and np.isnan(out[2])
 
 
 class TestNoBackfill:
@@ -366,3 +377,16 @@ class TestEvaluateAvwapIntegration:
         structure, ev = evaluate_avwap(candles, AvwapConfig(pivot_left_bars=3, pivot_right_bars=3))
         assert ev.warming_up is True
         assert ev.direction == 0
+
+    def test_zero_volume_index_series_still_leaves_warmup_given_enough_pivots(self):
+        """NSE/BSE index instruments (NIFTY 50, NIFTY BANK, SENSEX, ...)
+        always report volume=0 in Kite's historical candles. AVWAP must
+        still resolve real structure (anchors + a valid mid/upper/lower) on
+        such a series once pivots are confirmed — not stay "warming up"
+        forever just because there's no real traded volume to weight by."""
+        base = random_walk_candles(250, seed=11)
+        zero_vol = [Candle(timestamp_ms=c.timestamp_ms, open=c.open, high=c.high, low=c.low, close=c.close, volume=0.0) for c in base]
+        candles = validate_candles(zero_vol)
+        structure, ev = evaluate_avwap(candles, AvwapConfig())
+        assert ev.warming_up is False
+        assert not np.isnan(structure.mid[-1])

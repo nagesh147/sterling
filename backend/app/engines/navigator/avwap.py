@@ -94,18 +94,28 @@ def _piecewise_avwap(typical: NDArray[np.float64], volume: NDArray[np.float64], 
     — "the AVWAP may include volume from the origin" (spec §7.1). Prefix
     sums make this an O(1)-per-bar lookup regardless of how far back the
     active anchor sits, and naturally handle the anchor changing over time
-    since each `t` looks its own anchor up independently."""
+    since each `t` looks its own anchor up independently.
+
+    Falls back to an unweighted mean of typical price over [a, t] whenever
+    that window's cumulative volume is zero — NSE/BSE INDEX candles (NIFTY
+    50, NIFTY BANK, SENSEX, ...) always report volume=0 since an index has
+    no traded volume of its own, so a strictly volume-weighted average
+    would stay NaN forever on every index underlying regardless of anchor
+    or how much history is fetched, permanently stuck "warming up"."""
     prefix_num = np.concatenate(([0.0], np.cumsum(typical * volume)))
     prefix_den = np.concatenate(([0.0], np.cumsum(volume)))
+    prefix_typical = np.concatenate(([0.0], np.cumsum(typical)))
     n = len(typical)
     out = np.full(n, np.nan)
     for t in range(n):
         a = int(anchor_idx[t])
         if a < 0:
             continue
-        num = prefix_num[t + 1] - prefix_num[a]
         den = prefix_den[t + 1] - prefix_den[a]
-        out[t] = num / den if den > 0 else np.nan
+        if den > 0:
+            out[t] = (prefix_num[t + 1] - prefix_num[a]) / den
+        else:
+            out[t] = (prefix_typical[t + 1] - prefix_typical[a]) / (t + 1 - a)
     return out
 
 
