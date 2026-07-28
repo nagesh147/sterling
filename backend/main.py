@@ -1787,6 +1787,10 @@ def create_app() -> FastAPI:
     from app.api.v1.endpoints.kite_telegram import router as kite_telegram_router
     app.include_router(kite_telegram_router, prefix="/api/v1")
 
+    # Sterling Value-Flow Navigator (Kite-only, off by default)
+    from app.api.v1.endpoints.navigator import router as navigator_router
+    app.include_router(navigator_router, prefix="/api/v1")
+
     return app
 
 

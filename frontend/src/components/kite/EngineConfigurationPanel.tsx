@@ -15,15 +15,11 @@ import type {
   ScanSource,
   TrailTarget,
 } from '../../types/kiteEngine';
+import {
+  BORDER, CheckOption, ChoiceRow, DIM, Field, MUTED, ORANGE, ORANGE_SOFT, Section, SOFT, Switch, TEXT, inputStyle,
+} from './kiteSettingsPrimitives';
 
-const ORANGE = '#f06428';
 const GREEN = '#4caf50';
-const BORDER = '#e0e0e0';
-const TEXT = '#444';
-const MUTED = '#777';
-const DIM = '#9b9b9b';
-const SOFT = '#f6f6f7';
-const ORANGE_SOFT = '#fff5f0';
 
 const SOURCE_OPTIONS: Array<{ value: ScanSource; label: string; description: string }> = [
   { value: 'spot', label: 'Spot', description: 'Signals from the underlying chart.' },
@@ -65,142 +61,6 @@ const STOP_OPTIONS: Array<{ value: EngineConfigModel['stop_mode']; label: string
   { value: 'broker', label: 'Broker' },
   { value: 'monitor', label: 'Monitor' },
 ];
-
-const inputStyle: React.CSSProperties = {
-  width: 104,
-  height: 36,
-  padding: '0 10px',
-  border: `1px solid ${BORDER}`,
-  borderRadius: 7,
-  background: '#fff',
-  color: TEXT,
-  fontFamily: 'inherit',
-  fontSize: 12.5,
-  boxSizing: 'border-box',
-};
-
-function Section({ title, description, summary, defaultOpen = false, children }: {
-  title: string;
-  description: string;
-  summary: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [isOpen, setIsOpen] = React.useState(defaultOpen);
-
-  return (
-    <details
-      open={isOpen}
-      onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      style={{ borderBottom: `1px solid ${BORDER}` }}
-    >
-      <summary style={{
-        listStyle: 'none', cursor: 'pointer', padding: '17px 18px', display: 'flex',
-        alignItems: 'center', gap: 11, userSelect: 'none', minHeight: 66, boxSizing: 'border-box',
-      }}>
-        <span aria-hidden style={{ width: 18, color: DIM, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'block', color: TEXT, fontSize: 13.5, fontWeight: 700 }}>{title}</span>
-          <span style={{ display: 'block', color: MUTED, fontSize: 11.5, lineHeight: 1.45, marginTop: 3 }}>{description}</span>
-        </span>
-        <span className="sk-config-summary" style={{ color: DIM, fontSize: 11, textAlign: 'right', maxWidth: 230 }}>{summary}</span>
-      </summary>
-      <div className="sk-config-section-body" style={{ padding: '0 18px 20px 47px' }}>{children}</div>
-    </details>
-  );
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="sk-config-field" style={{ display: 'grid', gridTemplateColumns: '148px minmax(0, 1fr)', gap: 18, padding: '14px 0', alignItems: 'start' }}>
-      <div>
-        <div style={{ color: TEXT, fontSize: 12, fontWeight: 700 }}>{label}</div>
-        {hint && <div style={{ color: DIM, fontSize: 10.5, lineHeight: 1.45, marginTop: 4 }}>{hint}</div>}
-      </div>
-      <div style={{ minWidth: 0 }}>{children}</div>
-    </div>
-  );
-}
-
-function ChoiceRow<T extends string>({ value, options, onChange }: {
-  value: T;
-  options: Array<{ value: T; label: string }>;
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div style={{ display: 'inline-flex', maxWidth: '100%', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 3, gap: 2, background: SOFT, flexWrap: 'wrap' }}>
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <button key={option.value} type="button" aria-pressed={selected} onClick={() => onChange(option.value)} style={{
-            border: 'none', minHeight: 32, borderRadius: 6,
-            background: selected ? '#fff' : 'transparent', color: selected ? TEXT : MUTED,
-            padding: '0 13px', fontSize: 11.5, fontWeight: selected ? 700 : 550,
-            boxShadow: selected ? `inset 0 -2px ${ORANGE}, 0 1px 2px rgba(0,0,0,.08)` : 'none',
-            fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Switch({ checked, label, onChange }: {
-  checked: boolean;
-  label: string;
-  onChange: () => void;
-}) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={onChange} style={{
-      width: 40, height: 22, borderRadius: 11, border: 'none', padding: 0,
-      position: 'relative', cursor: 'pointer', background: checked ? ORANGE : '#c7c7c7',
-      transition: 'background .16s ease',
-    }}>
-      <span style={{ position: 'absolute', width: 18, height: 18, borderRadius: 9, top: 2, left: checked ? 20 : 2, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.2)', transition: 'left .16s ease' }} />
-    </button>
-  );
-}
-
-function CheckOption({ label, hint, checked, indeterminate = false, onChange, compact = false, disabled = false }: {
-  label: string;
-  hint?: string;
-  checked: boolean;
-  indeterminate?: boolean;
-  onChange?: () => void;
-  compact?: boolean;
-  disabled?: boolean;
-}) {
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  React.useEffect(() => {
-    if (inputRef.current) inputRef.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-
-  return (
-    <label title={hint} style={{
-      minHeight: compact ? 32 : 42,
-      display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)', alignItems: 'center', gap: 9,
-      border: compact ? 'none' : `1px solid ${checked || indeterminate ? '#e7c5b7' : BORDER}`,
-      background: checked || indeterminate ? ORANGE_SOFT : compact ? 'transparent' : '#fff',
-      color: TEXT, borderRadius: 6, padding: compact ? '4px 7px' : '7px 10px',
-      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? .72 : 1, boxSizing: 'border-box',
-    }}>
-      <input
-        ref={inputRef}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={() => onChange?.()}
-        style={{ width: 15, height: 15, margin: 0, accentColor: ORANGE }}
-      />
-      <span style={{ minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: compact ? 10.5 : 11.5, fontWeight: checked || indeterminate ? 700 : 550, lineHeight: 1.25 }}>{label}</span>
-        {hint && !compact && <span style={{ display: 'block', marginTop: 2, color: DIM, fontSize: 9.5, lineHeight: 1.3 }}>{hint}</span>}
-      </span>
-    </label>
-  );
-}
 
 function sourceLabel(source: ScanSource): string {
   return SOURCE_OPTIONS.find((item) => item.value === source)?.label ?? source;

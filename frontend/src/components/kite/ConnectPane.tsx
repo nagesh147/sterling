@@ -16,6 +16,7 @@ import { ButtonLoader } from './KiteLoader';
 import { MotionStyleSettings } from './MotionStyleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { EngineConfigurationPanel } from './EngineConfigurationPanel';
+import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -607,11 +608,12 @@ function EngineMasterToggle() {
 // Connect used to contain another horizontal tab bar, while display, exchange,
 // Telegram and engine controls were injected above/between those tabs. A stable
 // category rail gives every setting one predictable home and keeps each page calm.
-type ConnectSection = 'account' | 'engine' | 'orderSelection' | 'markets' | 'notifications' | 'experience';
+type ConnectSection = 'account' | 'engine' | 'navigator' | 'orderSelection' | 'markets' | 'notifications' | 'experience';
 
 const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string }> = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection' },
   { id: 'engine', label: 'Engine Configuration', eyebrow: 'Signals, orders & risk' },
+  { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow' },
   { id: 'orderSelection', label: 'Order Selection & Entry Quality', eyebrow: 'Vehicle profile & filters' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data' },
   { id: 'notifications', label: 'Notifications', eyebrow: 'Kite Telegram alerts' },
@@ -733,6 +735,13 @@ export function ConnectPane() {
               <EngineMasterToggle />
               <TradingModeControls />
               <EngineConfigurationPanel />
+            </>
+          )}
+
+          {section === 'navigator' && (
+            <>
+              <SectionHeading title="Value-Flow Navigator" description="An optional, separately-configured evidence-fusion layer over the existing Sterling signal — anchored VWAP structure, projected ranges, volatility regime, option flow, and gamma activity. Off by default; never bypasses any existing order or risk control." />
+              <NavigatorSettingsPanel />
             </>
           )}
 

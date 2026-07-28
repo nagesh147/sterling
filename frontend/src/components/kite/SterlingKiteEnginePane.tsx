@@ -581,6 +581,21 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
               ATR {row.atr_pct.toFixed(0)}%
             </span>
           )}
+          {row.navigator && (() => {
+            const nav = row.navigator;
+            const navColor = nav.status === 'CONFIRMED' || nav.status === 'HIGH_CONVICTION' ? k.green
+              : nav.status === 'CONFLICT' ? k.red
+              : nav.status === 'WATCH' ? k.blue : k.dim;
+            const scoreLabel = nav.effective_score != null ? ` ${Math.round(nav.effective_score)}` : '';
+            return (
+              <span
+                title={`Navigator: ${nav.status}${scoreLabel ? ` (effective score${scoreLabel})` : ''} — reasons: ${nav.reason_codes.join(', ') || 'none'}. Raw score above is unchanged.`}
+                style={{ fontSize: 10, color: navColor, background: `${navColor}18`, borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}
+              >
+                Nav {nav.status.replace('_', ' ')}{scoreLabel}
+              </span>
+            );
+          })()}
           {(() => {
             const d = new Date(row.timestamp_ms);
             const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });

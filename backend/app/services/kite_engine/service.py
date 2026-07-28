@@ -257,6 +257,23 @@ def _make_place_cb(client, uid: str):
         if not args or not args["option_symbol"] or args["size"] <= 0:
             return
         cfg = state.get_config(uid)
+
+        # ── Sterling Value-Flow Navigator gate (additive; no-op unless the
+        # user explicitly enabled Navigator in `gate` mode AND it has been
+        # promoted — neither is possible yet in this build, so this is a
+        # complete pass-through for every existing user) ──────────────────
+        try:
+            from app.services.navigator import service as navigator_service
+            nav_eligible, nav_reason = navigator_service.check_execution_eligible(
+                uid, row, default_underlyings=cfg.scan_indices,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Navigator gate check failed (failing open, non-fatal) for %s: %s", uid, exc)
+            nav_eligible, nav_reason = True, "navigator_check_failed"
+        if not nav_eligible:
+            state.log(uid, "order_blocked", f"{row.underlying}: entry skipped — Navigator gate ({nav_reason})")
+            return
+
         # One open auto-position per "slot": per underlying for spot signals, per
         # contract for derivatives (so each fired CE/PE strike is independent).
         guard_key = args["option_symbol"] if row.source == "derivatives" else row.underlying
@@ -766,6 +783,14 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
                         if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
+        # Sterling Value-Flow Navigator: synchronous, cache-only join — never
+        # fetches live data, and is a complete no-op unless the user has
+        # explicitly enabled Navigator (disabled by default for everyone).
+        try:
+            from app.services.navigator import service as navigator_service
+            snap.rows = navigator_service.attach_to_rows(uid, snap.rows, default_underlyings=cfg_model.scan_indices)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Navigator row-attach failed (non-fatal) for %s: %s", uid, exc)
         # The board now retains recently-ended setups too, but the "ready" count, badge
         # and return value should reflect only live (running/just-fired) signals.
         live = sum(1 for r in snap.rows if r.is_active or r.is_fresh)

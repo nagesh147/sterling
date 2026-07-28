@@ -235,6 +235,142 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             conn.execute(stmt)
         except Exception as _exc:
             log.debug("suppressed: %s", _exc)
+
+    # ── Sterling Value-Flow Navigator (Kite-only) — spec §14 ────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS navigator_configs (
+            user_id                 TEXT PRIMARY KEY,
+            schema_version          INTEGER NOT NULL,
+            revision                INTEGER NOT NULL,
+            payload_json            TEXT NOT NULL,
+            activation_watermark_ms INTEGER NOT NULL,
+            calibration_readiness   TEXT NOT NULL,
+            calibration_report_id   TEXT,
+            created_at_ms           INTEGER NOT NULL,
+            updated_at_ms           INTEGER NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS navigator_config_audit (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       TEXT NOT NULL,
+            revision      INTEGER NOT NULL,
+            changed_at_ms INTEGER NOT NULL,
+            previous_hash TEXT,
+            new_hash      TEXT NOT NULL,
+            payload_json  TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_navigator_config_audit_user "
+        "ON navigator_config_audit(user_id, revision)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS navigator_option_snapshots (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_scope         TEXT NOT NULL,
+            underlying            TEXT NOT NULL,
+            spot_token            INTEGER,
+            spot                  REAL,
+            exchange              TEXT NOT NULL,
+            expiry                TEXT NOT NULL,
+            instrument_token      INTEGER NOT NULL,
+            tradingsymbol         TEXT NOT NULL,
+            option_type           TEXT NOT NULL,
+            strike                REAL NOT NULL,
+            lot_size              INTEGER,
+            tick_size             REAL,
+            bid                   REAL,
+            ask                   REAL,
+            last_price            REAL,
+            mid                   REAL,
+            implied_volatility    REAL,
+            open_interest         INTEGER,
+            cumulative_volume     INTEGER,
+            exchange_timestamp_ms INTEGER,
+            received_at_ms        INTEGER NOT NULL,
+            sample_bucket_ms      INTEGER NOT NULL,
+            quote_quality         TEXT NOT NULL,
+            config_revision       INTEGER NOT NULL,
+            UNIQUE(account_scope, instrument_token, sample_bucket_ms)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_navigator_option_snapshots_scope "
+        "ON navigator_option_snapshots(account_scope, underlying, expiry, sample_bucket_ms)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_navigator_option_snapshots_token "
+        "ON navigator_option_snapshots(instrument_token, sample_bucket_ms)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS navigator_feature_snapshots (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             TEXT NOT NULL,
+            underlying          TEXT NOT NULL,
+            timeframe           TEXT NOT NULL,
+            bar_close_ms        INTEGER NOT NULL,
+            observed_at_ms      INTEGER NOT NULL,
+            config_revision     INTEGER NOT NULL,
+            model_versions_json TEXT NOT NULL,
+            quality             TEXT NOT NULL,
+            avwap_json          TEXT,
+            range_json          TEXT,
+            volatility_json     TEXT,
+            flow_json           TEXT,
+            gamma_json          TEXT,
+            input_hash          TEXT NOT NULL,
+            UNIQUE(user_id, underlying, timeframe, bar_close_ms, config_revision, input_hash)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_navigator_feature_snapshots_lookup "
+        "ON navigator_feature_snapshots(user_id, underlying, timeframe, bar_close_ms)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS navigator_signal_events (
+            decision_id        TEXT PRIMARY KEY,
+            user_id            TEXT NOT NULL,
+            underlying         TEXT NOT NULL,
+            bar_close_ms       INTEGER NOT NULL,
+            generated_at_ms    INTEGER NOT NULL,
+            direction          TEXT NOT NULL,
+            status             TEXT NOT NULL,
+            effective_score    REAL,
+            execution_eligible INTEGER NOT NULL,
+            config_revision    INTEGER NOT NULL,
+            payload_json       TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_navigator_signal_events_user "
+        "ON navigator_signal_events(user_id, underlying, bar_close_ms)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS navigator_calibration_state (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                TEXT NOT NULL,
+            report_id              TEXT NOT NULL,
+            model_version          TEXT NOT NULL,
+            cohort                 TEXT NOT NULL,
+            train_window_json      TEXT NOT NULL,
+            validation_window_json TEXT NOT NULL,
+            sample_count           INTEGER NOT NULL,
+            metrics_json           TEXT NOT NULL,
+            artifact_hash          TEXT NOT NULL,
+            promotion_state        TEXT NOT NULL,
+            created_at_ms          INTEGER NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_navigator_calibration_user "
+        "ON navigator_calibration_state(user_id, created_at_ms)"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_navigator_calibration_report "
+        "ON navigator_calibration_state(report_id)"
+    )
+
     conn.commit()
 
 
@@ -281,6 +417,24 @@ def _conn():
         raise
     finally:
         c.close()
+
+
+def is_available() -> bool:
+    """Whether the SQLite store initialized successfully. Navigator's
+    repository must check this itself and raise a visible error rather than
+    silently no-op like the legacy helpers below — see spec §3.2.C."""
+    return _available
+
+
+@contextmanager
+def connection():
+    """Public transactional connection for callers (e.g. Navigator's
+    repository) that need real error propagation instead of the legacy
+    swallow-and-log wrappers in this module. Identical pragmas/behavior to
+    the private `_conn()` used everywhere else — commits on a clean exit,
+    rolls back and re-raises on any exception inside the `with` block."""
+    with _conn() as c:
+        yield c
 
 
 def _mirror_position_upsert(pos_dict: dict) -> None:

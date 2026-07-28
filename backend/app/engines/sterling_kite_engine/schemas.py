@@ -6,6 +6,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, field_validator
 
 from app.engines.sterling_kite_engine.config import ExitMode
+from app.engines.navigator.schemas import NavigatorDecision  # noqa: F401 — used in EngineSignalRow.navigator
 
 
 class AlignmentChip(BaseModel):
@@ -74,6 +75,12 @@ class EngineSignalRow(BaseModel):
     # atr_pct_min are set in the engine config.
     adx: Optional[float] = None
     atr_pct: Optional[float] = None
+    # Sterling Value-Flow Navigator (optional, off by default). None when
+    # Navigator is disabled for this user, or before it has evidence for
+    # this row. Never changes `score`/`source`/`is_active`/`is_fresh` above —
+    # those remain exactly as the base engine computed them. Old cached rows
+    # without this field deserialize fine (defaults to None).
+    navigator: Optional["NavigatorDecision"] = None
 
 
 class SignalsResponse(BaseModel):

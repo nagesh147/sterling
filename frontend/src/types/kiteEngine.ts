@@ -1,6 +1,8 @@
 // Types for the Kite-exclusive Sterling Kite Engine options engine.
 // Mirrors backend app/engines/sterling_kite_engine/schemas.py.
 
+import type { NavigatorDecision } from './navigator';
+
 export type TrailTarget = 'fast' | 'mid' | 'slow';
 export type Moneyness = 'ATM' | 'ITM1' | 'ITM2' | 'ITM3' | 'ITM4' | 'ITM5' | 'ITM10' | 'ITM15' | 'ITM20' | 'OTM1' | 'OTM2' | 'OTM3' | 'OTM4' | 'OTM5';
 export type ScanSource = 'spot' | 'derivatives' | 'both' | 'confluence';
@@ -62,6 +64,10 @@ export interface EngineSignalRow {
   is_fresh?: boolean;  // entered on the latest closed bar (the live "ready now" trigger)
   adx?: number | null;      // ADX at signal time (trend strength, 0–100)
   atr_pct?: number | null;  // ATR percentile at signal time (volatility rank)
+  // Sterling Value-Flow Navigator (optional, off by default). Never changes
+  // score/source/is_active/is_fresh above — those stay exactly as the base
+  // engine computed them.
+  navigator?: NavigatorDecision | null;
 }
 
 export interface SignalsResponse {
