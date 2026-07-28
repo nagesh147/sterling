@@ -18,6 +18,33 @@ const RED = '#df514c';
 const AMBER = '#f5a623';
 const MANUAL_BLUE = '#1565c0';
 
+function AdvancedGroup({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <details
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+      style={{ borderTop: `3px solid ${AMBER}`, background: '#fdf8f0' }}
+    >
+      <summary style={{ listStyle: 'none', cursor: 'pointer', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, userSelect: 'none' }}>
+        <span aria-hidden style={{ width: 18, color: AMBER, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .16s ease' }}>›</span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ color: '#8a5a00', fontSize: 12.5, fontWeight: 800 }}>Advanced Configuration — Sterling&apos;s own calibration</div>
+          <div style={{ color: MUTED, fontSize: 10.5, lineHeight: 1.5, marginTop: 3 }}>
+            Not from the manual. Every number below is one Sterling had to invent to make the manual&apos;s
+            qualitative description computable — collapsed by default so it can&apos;t be confused with, or
+            accidentally change, the Strategy Definition above.
+          </div>
+        </div>
+        <span style={{ fontSize: 9.5, fontWeight: 700, color: AMBER, background: '#fff3e0', border: `1px solid ${AMBER}66`, borderRadius: 4, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          9 sections
+        </span>
+      </summary>
+      <div style={{ background: '#fff' }}>{children}</div>
+    </details>
+  );
+}
+
 function DefaultBadge({ isDefault, displayDefault, onRevert }: { isDefault: boolean; displayDefault: string; onRevert: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
@@ -251,6 +278,7 @@ export function NavigatorSettingsPanel() {
       </div>
 
       {/* ── 0. strategy definition (from the source manual) ───────────────── */}
+      <div style={{ background: '#eef5fc' }}>
       <Section
         title="Strategy Definition (from the source manual)"
         description="The handful of settings whose default value comes directly from the AVWAP Navigator Suite manual this strategy is built on — grouped separately and clearly marked so you don't change the strategy's own definition by mistake while tuning something else."
@@ -303,7 +331,9 @@ export function NavigatorSettingsPanel() {
           ))}
         </div>
       </Section>
+      </div>
 
+      <AdvancedGroup>
       {/* ── 1. instruments and timing ───────────────────────────────────── */}
       <Section title="Instruments and timing" description="What Navigator scans and the base clock it runs on." summary={`${draft.underlyings.length} underlyings · ${draft.price_timeframe}`}>
         <Field label="Engine source" hint="This build is Kite-only — no other engine can be selected.">
@@ -511,6 +541,7 @@ export function NavigatorSettingsPanel() {
         <NumField label="Raw snapshot retention (days)" value={draft.retention_raw_days} min={1} max={365} onChange={(v) => patch({ ...draft, retention_raw_days: v })} defaultValue={ROOT_DEFAULTS.retention_raw_days} />
         <NumField label="Feature/signal retention (days)" value={draft.retention_features_days} min={1} max={3650} onChange={(v) => patch({ ...draft, retention_features_days: v })} defaultValue={ROOT_DEFAULTS.retention_features_days} />
       </Section>
+      </AdvancedGroup>
     </section>
   );
 }

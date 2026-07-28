@@ -276,6 +276,30 @@ describe('NavigatorSettingsPanel', () => {
     });
   });
 
+  describe('Advanced Configuration grouping', () => {
+    it('groups all non-manual sections under one collapsed "Advanced Configuration" banner, separate from Strategy Definition', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getByText("Advanced Configuration — Sterling's own calibration")).toBeInTheDocument();
+      expect(screen.getByText('9 sections')).toBeInTheDocument();
+      const advancedDetails = screen.getByText("Advanced Configuration — Sterling's own calibration").closest('details') as HTMLDetailsElement;
+      expect(advancedDetails.open).toBe(false);
+    });
+
+    it('every previously-existing section (Instruments, AVWAP, Ranges, Volatility, Flow, Gamma, Fusion, Retention, Structure Radar) lives inside the Advanced group', () => {
+      render(<NavigatorSettingsPanel />);
+      const advancedDetails = screen.getByText("Advanced Configuration — Sterling's own calibration").closest('details') as HTMLDetailsElement;
+      for (const title of [
+        'Instruments and timing', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+        'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
+        'Fusion and eligibility', 'Data retention and diagnostics',
+      ]) {
+        expect(advancedDetails.contains(screen.getByText(title))).toBe(true);
+      }
+      // Strategy Definition must NOT be nested inside the Advanced group.
+      expect(advancedDetails.contains(screen.getByText('Strategy Definition (from the source manual)'))).toBe(false);
+    });
+  });
+
   it('shows raw and effective concepts distinctly via fusion weight fields', () => {
     render(<NavigatorSettingsPanel />);
     expect(screen.getByText('Base weight')).toBeInTheDocument();
