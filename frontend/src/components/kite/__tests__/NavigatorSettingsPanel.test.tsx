@@ -294,6 +294,25 @@ describe('NavigatorSettingsPanel', () => {
       expect(styleTag?.textContent).toContain(':focus');
     });
 
+    it('clicking the custom increment/decrement buttons still steps the value up and down', () => {
+      render(<NavigatorSettingsPanel />);
+      const pivotLeftInput = screen.getByLabelText('Pivot left bars') as HTMLInputElement;
+      expect(pivotLeftInput.value).toBe('3');
+      fireEvent.click(screen.getByRole('button', { name: 'Increase Pivot left bars' }));
+      expect(pivotLeftInput.value).toBe('4');
+      fireEvent.click(screen.getByRole('button', { name: 'Decrease Pivot left bars' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Decrease Pivot left bars' }));
+      expect(pivotLeftInput.value).toBe('2');
+    });
+
+    it('the stepper clamps to min/max and respects a fractional step', () => {
+      render(<NavigatorSettingsPanel />);
+      const minSlopeInput = screen.getByLabelText('Min slope (ATR/bar)') as HTMLInputElement;
+      expect(minSlopeInput.value).toBe('0.02');
+      fireEvent.click(screen.getByRole('button', { name: 'Increase Min slope (ATR/bar)' }));
+      expect(minSlopeInput.value).toBe('0.03');
+    });
+
     it('an at-default field shows no revert control at all', () => {
       render(<NavigatorSettingsPanel />);
       expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument();

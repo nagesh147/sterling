@@ -19,17 +19,57 @@ const AMBER = '#f5a623';
 const MANUAL_BLUE = '#1565c0';
 
 // Every number input in this panel gets a custom highlight border (default/
-// changed) — the browser's own focus ring and number spin buttons otherwise
+// changed) — the browser's own focus ring and native spin buttons otherwise
 // fight that border and each other (a focused-but-unstyled spinner arrow
 // look, mismatched outline colors). Hiding the native spinner and replacing
 // focus with one consistent ring keeps every field looking the same whether
-// it's focused, hovered, or just sitting there.
+// it's focused, hovered, or just sitting there. Increment/decrement still
+// works — via NumberInput's own styled ▲▼ buttons below, not the native ones.
 const NUM_INPUT_CSS = `
 .nav-settings-input::-webkit-outer-spin-button,
 .nav-settings-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .nav-settings-input { -moz-appearance: textfield; }
 .nav-settings-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(240,100,40,.25); }
 `;
+
+function roundToStep(value: number, step: number): number {
+  const decimals = (String(step).split('.')[1] || '').length;
+  return Number(value.toFixed(decimals));
+}
+
+const stepperButtonStyle: React.CSSProperties = {
+  flex: 1, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', color: DIM, lineHeight: 1, fontSize: 7,
+};
+
+// A number input with its own styled ▲▼ stepper — replaces the browser's
+// native spin buttons (hidden via nav-settings-input) so incrementing/
+// decrementing still works without the native control's styling clash.
+function NumberInput({ value, onChange, step = 1, min, max, style, ariaLabel, placeholder }: {
+  value: number | null; onChange: (v: number) => void; step?: number; min?: number; max?: number;
+  style?: React.CSSProperties; ariaLabel: string; placeholder?: string;
+}) {
+  const clamp = (v: number) => {
+    let next = v;
+    if (min !== undefined) next = Math.max(min, next);
+    if (max !== undefined) next = Math.min(max, next);
+    return roundToStep(next, step);
+  };
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <input
+        className="nav-settings-input"
+        type="number" value={value ?? ''} step={step} min={min} max={max} placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+        style={{ ...style, paddingRight: 22 }} aria-label={ariaLabel}
+      />
+      <div style={{ position: 'absolute', right: 2, top: 2, bottom: 2, width: 16, display: 'flex', flexDirection: 'column' }}>
+        <button type="button" tabIndex={-1} aria-label={`Increase ${ariaLabel}`} onClick={() => onChange(clamp((value ?? 0) + step))} style={stepperButtonStyle}>▲</button>
+        <button type="button" tabIndex={-1} aria-label={`Decrease ${ariaLabel}`} onClick={() => onChange(clamp((value ?? 0) - step))} style={stepperButtonStyle}>▼</button>
+      </div>
+    </div>
+  );
+}
 
 // Wraps the Strategy Definition section: the 6 values that define the
 // strategy itself (from the source manual). Collapsed by default and
@@ -102,11 +142,10 @@ function NumField({ label, hint, value, onChange, step = 1, min, max, defaultVal
   const isDefault = defaultValue === undefined ? null : value === defaultValue;
   return (
     <Field label={label} hint={hint}>
-      <input
-        className="nav-settings-input"
-        type="number" value={Number.isFinite(value) ? value : 0} step={step} min={min} max={max}
-        onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
-        style={{ ...inputStyle, ...fieldHighlightStyle(isDefault) }} aria-label={label}
+      <NumberInput
+        value={Number.isFinite(value) ? value : 0} step={step} min={min} max={max}
+        onChange={onChange}
+        style={{ ...inputStyle, ...fieldHighlightStyle(isDefault) }} ariaLabel={label}
       />
       {isDefault === false && (
         <RevertNote displayDefault={String(defaultValue)} onRevert={() => onChange(defaultValue as number)} />
@@ -319,11 +358,11 @@ export function NavigatorSettingsPanel() {
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[1]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[1].path))}>
-            <input className="nav-settings-input" type="number" value={draft.flow.strong_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { strong_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Strong flow zone" />
+            <NumberInput value={draft.flow.strong_zone} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { strong_zone: v }))} style={inputStyle} ariaLabel="Strong flow zone" />
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[2]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[2].path))}>
-            <input className="nav-settings-input" type="number" value={draft.flow.extreme_zone} min={0} max={100} onChange={(e) => patch(set(draft, 'flow', { extreme_zone: Number(e.target.value) }))} style={inputStyle} aria-label="Extreme flow zone" />
+            <NumberInput value={draft.flow.extreme_zone} min={0} max={100} onChange={(v) => patch(set(draft, 'flow', { extreme_zone: v }))} style={inputStyle} ariaLabel="Extreme flow zone" />
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[3]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[3].path))}>
@@ -337,7 +376,7 @@ export function NavigatorSettingsPanel() {
           </ManualControl>
 
           <ManualControl spec={MANUAL_FIELDS[5]} config={draft} onReset={() => patch(resetManualField(draft, MANUAL_FIELDS[5].path))}>
-            <input className="nav-settings-input" type="number" value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(e) => patch(set(draft, 'volatility', { min_direction_confidence: Number(e.target.value) }))} style={inputStyle} aria-label="Minimum directional confidence" />
+            <NumberInput value={draft.volatility.min_direction_confidence} min={0} max={100} onChange={(v) => patch(set(draft, 'volatility', { min_direction_confidence: v }))} style={inputStyle} ariaLabel="Minimum directional confidence" />
           </ManualControl>
 
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px dashed ${BORDER}` }}>
@@ -516,15 +555,19 @@ export function NavigatorSettingsPanel() {
       <Section title="Gamma activity" description="Confirmation-only. Never determines direction by itself." summary={draft.gamma.enabled ? 'Enabled' : 'Disabled'}>
         <BoolField label="Enabled" value={draft.gamma.enabled} onChange={(v) => patch(set(draft, 'gamma', { enabled: v }))} defaultValue={GAMMA_DEFAULTS.enabled} />
         <Field label="Risk-free rate" hint="Required for gamma availability — never invented. Leave blank until set.">
-          <input className="nav-settings-input" type="number" step={0.001} value={draft.gamma.risk_free_rate ?? ''} placeholder="unset"
-            onChange={(e) => patch(set(draft, 'gamma', { risk_free_rate: e.target.value === '' ? null : Number(e.target.value) }))}
-            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.risk_free_rate == null) }} />
+          <NumberInput
+            value={draft.gamma.risk_free_rate} step={0.001} placeholder="unset" ariaLabel="Risk-free rate"
+            onChange={(v) => patch(set(draft, 'gamma', { risk_free_rate: v }))}
+            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.risk_free_rate == null) }}
+          />
           {draft.gamma.risk_free_rate != null && <RevertNote displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { risk_free_rate: null }))} />}
         </Field>
         <Field label="Dividend yield" hint="Required for gamma availability — never invented. Leave blank until set.">
-          <input className="nav-settings-input" type="number" step={0.001} value={draft.gamma.dividend_yield ?? ''} placeholder="unset"
-            onChange={(e) => patch(set(draft, 'gamma', { dividend_yield: e.target.value === '' ? null : Number(e.target.value) }))}
-            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.dividend_yield == null) }} />
+          <NumberInput
+            value={draft.gamma.dividend_yield} step={0.001} placeholder="unset" ariaLabel="Dividend yield"
+            onChange={(v) => patch(set(draft, 'gamma', { dividend_yield: v }))}
+            style={{ ...inputStyle, ...fieldHighlightStyle(draft.gamma.dividend_yield == null) }}
+          />
           {draft.gamma.dividend_yield != null && <RevertNote displayDefault="unset" onRevert={() => patch(set(draft, 'gamma', { dividend_yield: null }))} />}
         </Field>
         <NumField label="Min IV" value={draft.gamma.min_iv} step={0.001} min={0.001} onChange={(v) => patch(set(draft, 'gamma', { min_iv: v }))} defaultValue={GAMMA_DEFAULTS.min_iv} />
