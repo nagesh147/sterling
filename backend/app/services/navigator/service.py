@@ -135,17 +135,30 @@ async def _fetch_candles_for_navigator(client, token: int, lookback_bars: int = 
 
 async def run_navigator_pass(
     client, uid: str, rows: list[EngineSignalRow], *, engine_config_payload: dict, default_underlyings: list[str],
+    underlying_tokens: Optional[dict[str, int]] = None,
 ) -> None:
     """Live per-scan Navigator evaluation glue — the price-only pipeline
     (spec §19.3 step 1) run against a fresh, independent candle fetch.
     Complete no-op (zero candle fetches, zero overhead) unless the calling
     user has explicitly enabled Navigator; flow/gamma report
     `CHAIN_UNAVAILABLE` until live option-chain capture is wired in a future
-    change."""
+    change.
+
+    `underlying_tokens` maps each underlying name to ITS OWN spot/index
+    instrument token (the same universe token the base engine already
+    resolves) — AVWAP/Volatility read PRICE STRUCTURE, which only means
+    something on the underlying's own continuous history. For `source="spot"`/
+    `"confluence"` rows `row.token` already IS that token, but a pure
+    `"derivatives"` row's `token` is the option CONTRACT's own instrument
+    token, which is only ever a few weeks old (a fresh weekly/monthly listing)
+    and may never accumulate enough bars to leave warm-up. Falls back to
+    `row.token` when the map is omitted or the underlying isn't in it, so
+    existing callers/tests are unaffected."""
     record = config_store.get(uid, default_underlyings=default_underlyings)
     if not record.config.enabled:
         return
     config_revision = kite_config_revision(engine_config_payload)
+    underlying_tokens = underlying_tokens or {}
 
     seen: set[tuple] = set()
     for row in rows:
@@ -158,7 +171,8 @@ async def run_navigator_pass(
             continue
         seen.add(key)
         try:
-            raw_candles = await _fetch_candles_for_navigator(client, row.token)
+            fetch_token = underlying_tokens.get(row.underlying, row.token)
+            raw_candles = await _fetch_candles_for_navigator(client, fetch_token)
             if len(raw_candles) < 60:
                 continue  # not enough bars yet for a meaningful warmup — skip quietly
             candles = validate_candles(raw_candles)

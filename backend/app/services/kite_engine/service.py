@@ -809,6 +809,7 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             await navigator_service.run_navigator_pass(
                 client, uid, snap.rows, engine_config_payload=cfg_model.model_dump(mode="json"),
                 default_underlyings=cfg_model.scan_indices,
+                underlying_tokens={u.name: u.token for u in selected},
             )
             snap.rows = navigator_service.attach_to_rows(uid, snap.rows, default_underlyings=cfg_model.scan_indices)
         except Exception as exc:  # noqa: BLE001

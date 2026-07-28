@@ -158,6 +158,51 @@ class TestRunNavigatorPass:
         assert client.calls == []
 
     @pytest.mark.asyncio
+    async def test_derivatives_row_fetches_the_underlyings_own_token_not_the_contract_token(self):
+        """A pure `source="derivatives"` row's `token` is the option CONTRACT's
+        own instrument token — a fresh weekly listing with only days of price
+        history. AVWAP/Volatility read the underlying's price STRUCTURE, so
+        when `underlying_tokens` resolves "NIFTY 50" to its real spot token,
+        the candle fetch must go against that (deep, continuous) history —
+        never the short-lived contract token — even though the cache key
+        still identifies the row by its own contract token."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        config_store.save("user-1", rec.config.model_copy(update={"enabled": True}), expected_revision=rec.revision, default_underlyings=_UNDERLYINGS)
+
+        underlying_spot_token = 256265
+        contract_token = 9988776
+        client = FakeKiteClient(_kite_candle_rows())
+        row = _row(token=contract_token, source="derivatives")
+        await nav_service.run_navigator_pass(
+            client, "user-1", [row], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS,
+            underlying_tokens={"NIFTY 50": underlying_spot_token},
+        )
+        assert len(client.calls) == 1
+        fetched_token = client.calls[0][0]
+        assert fetched_token == underlying_spot_token
+        assert fetched_token != contract_token
+        # cache identity is still the row's own (contract) token
+        cached = nav_service.get_cached_decision("user-1", underlying="NIFTY 50", token=contract_token, direction="long")
+        assert cached is not None
+
+    @pytest.mark.asyncio
+    async def test_no_underlying_tokens_map_falls_back_to_row_token(self):
+        """Omitting `underlying_tokens` entirely (or the underlying missing
+        from it) must reproduce the exact prior behaviour — fetch against
+        `row.token` — so existing callers/tests are unaffected."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        config_store.save("user-1", rec.config.model_copy(update={"enabled": True}), expected_revision=rec.revision, default_underlyings=_UNDERLYINGS)
+
+        client = FakeKiteClient(_kite_candle_rows())
+        row = _row()
+        await nav_service.run_navigator_pass(
+            client, "user-1", [row], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS,
+        )
+        assert client.calls[0][0] == row.token
+
+    @pytest.mark.asyncio
     async def test_a_broken_row_does_not_stop_the_rest_of_the_pass(self):
         rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
         config_store.save(
