@@ -243,8 +243,10 @@ def fuse(inputs: FusionInputs, *, config, activation_watermark_ms: int, generate
     if inputs.volatility_regime == "COMPRESSION":
         return _build(**common, trigger=trigger, status="WAIT", reasons=["COMPRESSION_NO_TREND"], avwap=inputs.avwap, volatility=inputs.volatility, flow=inputs.flow, gamma=inputs.gamma)
 
-    # ── no fresh trigger -> WATCH ──
-    if trigger is None:
+    # ── no fresh trigger -> WATCH, unless the user opted out of requiring
+    # one (`fusion.require_fresh_trigger=False`) — in that case fall through
+    # to continuous scoring below instead of forcing every bar to WATCH ──
+    if trigger is None and config.fusion.require_fresh_trigger:
         return _build(**common, trigger=None, status="WATCH", reasons=["NO_FRESH_TRIGGER"], avwap=inputs.avwap, volatility=inputs.volatility, flow=inputs.flow, gamma=inputs.gamma)
 
     # ── strong opposition -> CONFLICT (gamma disagreement never counts here) ──

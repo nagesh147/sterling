@@ -143,17 +143,25 @@ async def get_series(
 
 @router.get("/signals")
 async def list_signals(
-    underlying: Optional[str] = None, before_generated_at_ms: Optional[int] = None, limit: int = 50,
+    underlying: Optional[str] = None, before_generated_at_ms: Optional[int] = None,
+    before_decision_id: Optional[str] = None, limit: int = 50,
     user: UserContext = Depends(get_current_user),
 ) -> dict:
     limit = max(1, min(limit, 200))
     try:
         rows = repository.fetch_signal_events_page(
-            user.user_id, underlying=underlying, before_generated_at_ms=before_generated_at_ms, limit=limit,
+            user.user_id, underlying=underlying, before_generated_at_ms=before_generated_at_ms,
+            before_decision_id=before_decision_id, limit=limit,
         )
     except NavigatorStorageError as exc:
         raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
-    next_cursor = rows[-1]["generated_at_ms"] if len(rows) == limit else None
+    # Tie-safe cursor: a whole scan's decisions can share one
+    # generated_at_ms, so the cursor must carry decision_id too or a page
+    # boundary inside that tied group would skip the rest of it forever.
+    next_cursor = (
+        {"generated_at_ms": rows[-1]["generated_at_ms"], "decision_id": rows[-1]["decision_id"]}
+        if len(rows) == limit else None
+    )
     return {"decisions": [r["payload_json"] for r in rows], "next_cursor": next_cursor}
 
 

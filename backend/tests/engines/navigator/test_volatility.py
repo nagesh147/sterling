@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 
+import app.engines.navigator.volatility as volatility_mod
 from app.engines.navigator.quality import validate_candles
 from app.engines.navigator.schemas import VolatilityConfig
 from app.engines.navigator.volatility import (
@@ -173,3 +176,33 @@ class TestScoreBoundsAndDeterministicReasons:
         ev_high = evaluate_volatility(candles, cfg_high_gate)
         if ev_low.direction != "WAIT":
             assert ev_high.direction == "WAIT"
+
+
+class TestCurrentOnlyContextNeverLeaksIntoHistory:
+    """`mid_avwap`/`base_direction` are a single CURRENT-bar AVWAP reading
+    and the base engine's live direction — not per-bar history. Reusing
+    them for every historical bar while reconstructing the confirmed-
+    direction series would retroactively compare old closes against
+    today's AVWAP and inject today's signal into the past. They must only
+    ever be applied to the most recent (current) bar."""
+
+    def test_mid_avwap_and_base_direction_are_only_passed_for_the_final_bar(self):
+        candles = validate_candles(random_walk_candles(150, seed=7))
+        cfg = VolatilityConfig(percentile_lookback=60)
+        real_votes_at = volatility_mod._votes_at
+        calls: list[tuple] = []
+
+        def spy(t, features, close, config, mid_avwap, base_direction):
+            calls.append((t, mid_avwap, base_direction))
+            return real_votes_at(t, features, close, config, mid_avwap, base_direction)
+
+        with patch.object(volatility_mod, "_votes_at", side_effect=spy):
+            volatility_mod.evaluate_volatility(candles, cfg, mid_avwap=24_500.0, base_direction="long")
+
+        last_index = candles.n - 1
+        historical_calls = [c for c in calls if c[0] != last_index]
+        final_bar_calls = [c for c in calls if c[0] == last_index]
+        assert historical_calls, "expected historical bars to have been evaluated"
+        assert all(mid is None and direction is None for _, mid, direction in historical_calls)
+        assert final_bar_calls, "expected the final bar to have been evaluated"
+        assert any(mid == 24_500.0 and direction == "long" for _, mid, direction in final_bar_calls)

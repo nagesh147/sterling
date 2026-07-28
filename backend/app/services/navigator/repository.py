@@ -285,17 +285,25 @@ def fetch_signal_events_page(
     *,
     underlying: Optional[str] = None,
     before_generated_at_ms: Optional[int] = None,
+    before_decision_id: Optional[str] = None,
     limit: int = 50,
 ) -> list[dict]:
-    """Cursor-paginated, newest-first. Pass the last row's
-    `generated_at_ms` back in as `before_generated_at_ms` for the next page."""
+    """Cursor-paginated, newest-first, tie-safe on
+    (generated_at_ms, decision_id) — a whole scan's worth of decisions can
+    legitimately share one `generated_at_ms`, so ordering/paging on that
+    column alone can silently skip the rest of a tied group when a page
+    boundary lands inside it. Pass the last row's `generated_at_ms` AND
+    `decision_id` back in as the next page's cursor."""
     _require_available()
     clauses = ["user_id=?"]
     params: list = [user_id]
     if underlying:
         clauses.append("underlying=?")
         params.append(underlying)
-    if before_generated_at_ms is not None:
+    if before_generated_at_ms is not None and before_decision_id is not None:
+        clauses.append("(generated_at_ms < ? OR (generated_at_ms = ? AND decision_id < ?))")
+        params.extend([before_generated_at_ms, before_generated_at_ms, before_decision_id])
+    elif before_generated_at_ms is not None:
         clauses.append("generated_at_ms<?")
         params.append(before_generated_at_ms)
     where = " AND ".join(clauses)
@@ -304,7 +312,7 @@ def fetch_signal_events_page(
         with db.connection() as c:
             rows = c.execute(
                 f"SELECT * FROM navigator_signal_events WHERE {where} "
-                f"ORDER BY generated_at_ms DESC LIMIT ?",
+                f"ORDER BY generated_at_ms DESC, decision_id DESC LIMIT ?",
                 tuple(params),
             ).fetchall()
         return [dict(r) for r in rows]

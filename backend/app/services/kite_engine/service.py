@@ -261,18 +261,34 @@ def _make_place_cb(client, uid: str):
         # ── Sterling Value-Flow Navigator gate (additive; no-op unless the
         # user explicitly enabled Navigator in `gate` mode AND it has been
         # promoted — neither is possible yet in this build, so this is a
-        # complete pass-through for every existing user) ──────────────────
+        # complete pass-through for every existing user/environment).
+        # Reading the config itself is allowed to fail OPEN — a Navigator-
+        # side hiccup (its tables not migrated, a transient read error)
+        # must never halt the entire unrelated Kite auto-exec engine for
+        # users who never touched Navigator. But once the config confirms
+        # gate mode is actually active, a subsequent eligibility-check
+        # failure fails CLOSED — at that point we cannot prove the user's
+        # own explicitly-selected gate isn't being bypassed.
+        nav_gate_active = False
         try:
-            from app.services.navigator import service as navigator_service
-            nav_eligible, nav_reason = navigator_service.check_execution_eligible(
-                uid, row, default_underlyings=cfg.scan_indices,
-            )
+            from app.services.navigator import config_store as navigator_config_store
+            nav_record = navigator_config_store.get(uid, default_underlyings=cfg.scan_indices)
+            nav_gate_active = nav_record.config.enabled and nav_record.config.operating_mode == "gate"
         except Exception as exc:  # noqa: BLE001
-            log.warning("Navigator gate check failed (failing open, non-fatal) for %s: %s", uid, exc)
-            nav_eligible, nav_reason = True, "navigator_check_failed"
-        if not nav_eligible:
-            state.log(uid, "order_blocked", f"{row.underlying}: entry skipped — Navigator gate ({nav_reason})")
-            return
+            log.debug("Navigator config unavailable, treating as not-gating for %s: %s", uid, exc)
+
+        if nav_gate_active:
+            try:
+                from app.services.navigator import service as navigator_service
+                nav_eligible, nav_reason = navigator_service.check_execution_eligible(
+                    uid, row, default_underlyings=cfg.scan_indices,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.error("Navigator gate check failed while gate mode is active — failing closed for %s: %s", uid, exc)
+                nav_eligible, nav_reason = False, "navigator_check_failed"
+            if not nav_eligible:
+                state.log(uid, "order_blocked", f"{row.underlying}: entry skipped — Navigator gate ({nav_reason})")
+                return
 
         # One open auto-position per "slot": per underlying for spot signals, per
         # contract for derivatives (so each fired CE/PE strike is independent).

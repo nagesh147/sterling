@@ -456,7 +456,11 @@ class NavigatorConfigModel(BaseModel):
     metadata (revision, timestamps, watermark, calibration readiness) lives
     in `NavigatorConfigRecord` below, never here."""
 
-    schema_version: int = 1
+    # Literal[1], not int: an unsupported version must fail Pydantic
+    # validation (→ HTTP 400 INVALID_CONFIG at both /config and
+    # /config/validate) rather than pass validation and only fail later as
+    # a raw ValueError out of config_store.save (→ an uncaught 500).
+    schema_version: Literal[1] = 1
     enabled: bool = False
     operating_mode: Literal["shadow", "advisory", "gate"] = "advisory"
     engine_sources: list[Literal["kite_triple_supertrend"]] = Field(

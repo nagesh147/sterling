@@ -110,6 +110,26 @@ class TestSignalEventImmutability:
         rows = repo.fetch_signal_events_page("user-1", underlying="NIFTY BANK")
         assert [e["decision_id"] for e in rows] == ["b"]
 
+    def test_pagination_is_tie_safe_when_many_rows_share_one_timestamp(self):
+        # A whole scan's worth of decisions legitimately share one
+        # generated_at_ms. Paging on that column alone would silently drop
+        # whatever's left of the tied group once a page boundary lands
+        # inside it — the cursor must also carry decision_id.
+        for i in range(5):
+            repo.insert_signal_event(_signal_event(decision_id=f"tied-{i}", generated_at_ms=5000))
+        page1 = repo.fetch_signal_events_page("user-1", limit=2)
+        assert len(page1) == 2
+        page2 = repo.fetch_signal_events_page(
+            "user-1", limit=2,
+            before_generated_at_ms=page1[-1]["generated_at_ms"], before_decision_id=page1[-1]["decision_id"],
+        )
+        page3 = repo.fetch_signal_events_page(
+            "user-1", limit=2,
+            before_generated_at_ms=page2[-1]["generated_at_ms"], before_decision_id=page2[-1]["decision_id"],
+        )
+        seen = [e["decision_id"] for e in page1 + page2 + page3]
+        assert sorted(seen) == [f"tied-{i}" for i in range(5)]  # every tied row surfaced exactly once
+
 
 class TestCalibrationState:
     def test_insert_and_fetch_latest(self):

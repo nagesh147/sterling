@@ -225,6 +225,37 @@ def test_futures_not_enabled_falls_back_to_options():
     assert client.opt_placed and not client.fut_placed
 
 
+# ── Sterling Value-Flow Navigator gate: fails CLOSED only once gate mode is
+# actually active, never for an unrelated user/environment ──────────────────
+
+def test_navigator_gate_check_error_fails_closed_when_gate_mode_active():
+    """Once the user's config confirms Navigator gate mode is active, a
+    subsequent eligibility-check error must BLOCK the order rather than
+    silently let it through."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from app.services.navigator import config_store as navigator_config_store
+    from app.services.navigator import service as navigator_service
+
+    fake_record = SimpleNamespace(config=SimpleNamespace(enabled=True, operating_mode="gate"))
+    client = FakeClient()
+    cfg = EngineConfigModel()
+    with patch.object(navigator_config_store, "get", return_value=fake_record), \
+         patch.object(navigator_service, "check_execution_eligible", side_effect=RuntimeError("boom")):
+        open_pos = _run(cfg, _spot_row_no_premium(), client)
+    assert open_pos == []
+    assert not client.opt_placed
+
+
+def test_navigator_config_unavailable_does_not_block_unrelated_orders():
+    """A Navigator-side infra hiccup (its tables unavailable, as in this
+    test's DB fixture) must fail OPEN — it must never halt the entire
+    unrelated Kite auto-exec engine for a user who never touched Navigator."""
+    client = FakeClient()
+    assert len(_run(EngineConfigModel(), _spot_row_no_premium(), client)) == 1
+
+
 # ── entry filters ─────────────────────────────────────────────────────────────
 
 def test_adx_filter_blocks_weak_trend():

@@ -298,9 +298,17 @@ def evaluate_volatility(
             reason_codes=["VOL_WARMING_UP"], diagnostics={"vol_score": None},
         )
 
+    # `mid_avwap`/`base_direction` are CURRENT-only values (a single scalar
+    # AVWAP reading and the base engine's live direction, not per-bar
+    # history) — applying them to every historical bar would retroactively
+    # compare old closes against today's AVWAP and inject today's signal
+    # into the past, corrupting the confirmed-direction/flip-age series.
+    # They are only valid context for the most recent (current) bar.
     raw_votes: list[int] = []
     for i in range(n):
-        vs = _votes_at(i, features, candles.close, config, mid_avwap, base_direction)
+        ctx_avwap = mid_avwap if i == t else None
+        ctx_direction = base_direction if i == t else None
+        vs = _votes_at(i, features, candles.close, config, ctx_avwap, ctx_direction)
         if not vs:
             raw_votes.append(0)
             continue

@@ -232,7 +232,7 @@ export interface NavigatorStatusResponse {
 
 export interface NavigatorSignalsPage {
   decisions: string[]; // each entry is a JSON-encoded NavigatorDecision
-  next_cursor: number | null;
+  next_cursor: { generated_at_ms: number; decision_id: string } | null;
 }
 
 export interface NavigatorSeriesResponse {

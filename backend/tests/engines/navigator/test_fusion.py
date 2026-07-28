@@ -112,6 +112,23 @@ class TestHardGateTruthTable:
         assert "NO_FRESH_TRIGGER" in decision.reason_codes
         assert decision.execution_eligible is False
 
+    def test_no_fresh_trigger_not_required_falls_through_to_scoring(self):
+        """`fusion.require_fresh_trigger=False` means the user opted OUT of
+        the fresh-trigger requirement — the exact same no-trigger inputs
+        that force WATCH by default must instead reach real scoring."""
+        stale_base = _base(state="active")  # not fresh
+        inputs = _inputs(
+            base=stale_base, avwap_is_fresh_signal=False,
+            avwap=_evidence("avwap", direction=1, confidence_100=90.0), avwap_grade="A",
+            volatility=_evidence("volatility", direction=1, confidence_100=80.0),
+            flow=_evidence("option_flow", direction=1, confidence_100=70.0),
+        )
+        cfg = NavigatorConfigModel.default_for(["NIFTY 50"])
+        cfg = cfg.model_copy(update={"fusion": cfg.fusion.model_copy(update={"require_fresh_trigger": False})})
+        decision = fuse(inputs, config=cfg, activation_watermark_ms=0, generated_at_ms=_BAR_MS + 5000, config_revision=1, model_versions={"fusion": "v1"})
+        assert decision.status in ("CONFIRMED", "HIGH_CONVICTION")
+        assert "NO_FRESH_TRIGGER" not in decision.reason_codes
+
     def test_strong_avwap_opposition_is_conflict(self):
         inputs = _inputs(avwap=_evidence("avwap", direction=-1, confidence_100=90.0))
         decision = _fuse(inputs)
