@@ -29,6 +29,8 @@ __all__ = [
     "save",
     "reset",
     "validate",
+    "promote_calibration",
+    "demote_calibration",
     "audit_history",
 ]
 
@@ -148,6 +150,86 @@ def reset(user_id: str, *, default_underlyings: list[str]) -> NavigatorConfigRec
     defaults = NavigatorConfigModel.default_for(default_underlyings)
     assert not defaults.enabled, "default config must always be disabled"
     return _apply(user_id, defaults, current=current, expected_revision=current.revision)
+
+
+def promote_calibration(
+    user_id: str,
+    *,
+    report_id: str,
+    expected_revision: int,
+    default_underlyings: list[str],
+) -> NavigatorConfigRecord:
+    """The ONLY writer of `calibration_readiness="ready"` in the system.
+
+    Deliberately separate from `save`/`reset` (which always carry the
+    existing readiness forward untouched) so that promotion can never be a
+    side effect of an ordinary settings edit — it takes a distinct, explicit
+    call naming the reviewed report. Callers are responsible for having
+    checked the §19.5 criteria first; this records the decision, it does not
+    make it.
+
+    Promotion records the evidence and unlocks `gate` mode as a CHOICE. It
+    does not switch the operating mode, and it does not touch
+    `auto_execute_originated` — spec §19.5: "Promotion never turns on
+    auto_execute." Both remain separate, explicit user actions.
+    """
+    current = get(user_id, default_underlyings=default_underlyings)
+    now = _now_ms()
+    config_hash = canonical_json_hash(current.config.model_dump(mode="json"))
+    row = repo.compare_and_swap_config(
+        user_id,
+        expected_revision=expected_revision,
+        new_revision=current.revision + 1,
+        schema_version=_SCHEMA_VERSION,
+        # The editable payload is untouched — only the server-owned
+        # readiness metadata changes.
+        payload_json=current.config.model_dump_json(),
+        activation_watermark_ms=current.activation_watermark_ms,
+        calibration_readiness="ready",
+        calibration_report_id=report_id,
+        now_ms=now,
+        previous_hash=config_hash,
+        new_hash=config_hash,
+    )
+    log.info(
+        "navigator.calibration.promoted user=%s revision=%s report_id=%s",
+        user_id, row["revision"], report_id,
+    )
+    return _row_to_record(row)
+
+
+def demote_calibration(
+    user_id: str, *, expected_revision: int, default_underlyings: list[str],
+) -> NavigatorConfigRecord:
+    """Revoke a promotion — back to `not_ready`, clearing the report id.
+
+    The escape hatch for "we promoted this and it's behaving badly". Also
+    forces `operating_mode` off `gate`, because leaving a gate selected that
+    can no longer be satisfied would silently block every order instead of
+    obviously reverting to advisory.
+    """
+    current = get(user_id, default_underlyings=default_underlyings)
+    now = _now_ms()
+    new_config = current.config
+    if new_config.operating_mode == "gate":
+        new_config = new_config.model_copy(update={"operating_mode": "advisory"})
+    previous_hash = canonical_json_hash(current.config.model_dump(mode="json"))
+    new_hash = canonical_json_hash(new_config.model_dump(mode="json"))
+    row = repo.compare_and_swap_config(
+        user_id,
+        expected_revision=expected_revision,
+        new_revision=current.revision + 1,
+        schema_version=_SCHEMA_VERSION,
+        payload_json=new_config.model_dump_json(),
+        activation_watermark_ms=current.activation_watermark_ms,
+        calibration_readiness="not_ready",
+        calibration_report_id=None,
+        now_ms=now,
+        previous_hash=previous_hash,
+        new_hash=new_hash,
+    )
+    log.info("navigator.calibration.demoted user=%s revision=%s", user_id, row["revision"])
+    return _row_to_record(row)
 
 
 def audit_history(user_id: str, limit: int = 50) -> list[dict]:

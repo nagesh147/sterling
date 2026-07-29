@@ -17,6 +17,7 @@ import { MotionStyleSettings } from './MotionStyleSettings';
 import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { EngineConfigurationPanel } from './EngineConfigurationPanel';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
+import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -740,8 +741,9 @@ export function ConnectPane() {
 
           {section === 'navigator' && (
             <>
-              <SectionHeading title="Value-Flow Navigator" description="An optional, separately-configured evidence-fusion layer over the existing Sterling signal — anchored VWAP structure, projected ranges, volatility regime, option flow, and gamma activity. Off by default; never bypasses any existing order or risk control." />
+              <SectionHeading title="Value-Flow Navigator" description="A second signal engine alongside SuperTrend — it reads anchored VWAP structure, projected ranges, volatility regime, option flow and gamma activity. It can confirm SuperTrend's setups, find its own, or both. Off by default; never bypasses any existing order or risk control." />
               <NavigatorSettingsPanel />
+              <NavigatorCalibrationPanel />
             </>
           )}
 

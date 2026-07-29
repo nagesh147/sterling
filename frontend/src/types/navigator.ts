@@ -257,8 +257,66 @@ export interface NavigatorSeriesResponse {
   points: Array<Record<string, unknown>>;
 }
 
+export interface CalibrationCriterion {
+  key: string;
+  label: string;
+  passed: boolean;
+  /** Human-readable progress, e.g. "12 of 20 sessions" — not just a verdict. */
+  detail: string;
+}
+
+export interface CalibrationCriteria {
+  /** True = a human MAY now promote. Never means anything was promoted. */
+  eligible: boolean;
+  criteria: CalibrationCriterion[];
+}
+
+export interface CalibrationWindow {
+  label: string;
+  sessions: number;
+  session_dates: string[];
+  total_decisions: number;
+  actionable: number;
+  actionable_scored: number;
+  actionable_hits: number;
+  hit_rate: number | null;
+  mean_return_pct: number | null;
+  no_data: number;
+  no_data_rate: number | null;
+  unscorable: number;
+}
+
+export interface CalibrationReport {
+  model_version: string;
+  horizon_bars: number;
+  total_decisions: number;
+  underlyings: string[];
+  /** Honest limits of this report — e.g. returns are gross of costs. */
+  caveats: string[];
+  /** Something went wrong producing this report (e.g. no price history could
+   *  be fetched), so the numbers below understate reality. Empty when clean. */
+  warnings?: string[];
+  coverage?: {
+    decision_underlyings: string[];
+    priced: string[];
+    unresolved: string[];
+    fetch_failed: string[];
+  };
+  calibration: CalibrationWindow;
+  evaluation: CalibrationWindow;
+}
+
 export interface NavigatorCalibrationResponse {
   calibration_readiness: CalibrationReadiness;
   calibration_report_id: string | null;
+  revision: number;
   latest_report: Record<string, unknown> | null;
+  criteria: CalibrationCriteria | null;
+}
+
+export interface CalibrationReportResponse {
+  report_id: string;
+  report: CalibrationReport;
+  criteria: CalibrationCriteria;
+  calibration_readiness: CalibrationReadiness;
 }

@@ -7,6 +7,7 @@ user, no cross-user access.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -177,6 +178,17 @@ async def get_signal(decision_id: str, user: UserContext = Depends(get_current_u
     return _json.loads(row["payload_json"])
 
 
+def _criteria_of(state: Optional[dict]) -> Optional[dict]:
+    """Pull the stored criteria verdict back out of a calibration-state row."""
+    if not state or not state.get("metrics_json"):
+        return None
+    try:
+        import json as _json
+        return _json.loads(state["metrics_json"]).get("criteria")
+    except (ValueError, TypeError):
+        return None
+
+
 @router.get("/calibration")
 async def get_calibration(user: UserContext = Depends(get_current_user)) -> dict:
     try:
@@ -187,5 +199,143 @@ async def get_calibration(user: UserContext = Depends(get_current_user)) -> dict
     return {
         "calibration_readiness": record.calibration_readiness,
         "calibration_report_id": record.calibration_report_id,
+        "revision": record.revision,
         "latest_report": latest,
+        "criteria": _criteria_of(latest),
     }
+
+
+@router.post("/calibration/report")
+async def generate_calibration_report(user: UserContext = Depends(get_current_user)) -> dict:
+    """Score every decision Navigator has made so far against what the market
+    actually did next, store the resulting report, and return it with its
+    §19.5 criteria verdict.
+
+    Read-and-measure only — generating a report NEVER promotes anything, even
+    when every criterion passes. Promotion is the separate POST below.
+    """
+    uid = user.user_id
+    defaults = _default_underlyings(uid)
+    record = config_store.get(uid, default_underlyings=defaults)
+
+    from app.services.exchanges.kite import accounts as kite_accounts
+    from app.services.kite_engine import state as kite_state
+    from app.services.kite_engine.universe import build_universe, select_scan_universe
+
+    acct = kite_accounts.get_active(uid)
+    if not acct:
+        raise HTTPException(409, "No active Kite account — add credentials and log in first.")
+    try:
+        # Warm, cached client (no per-call close) — same helper the engine
+        # endpoints use.
+        client = await kite_accounts.acquire_client(acct)
+        engine_cfg = kite_state.get_config(uid)
+        nfo, bfo, nse, bse = await asyncio.gather(
+            client.search_instruments("", "NFO", limit=1_000_000),
+            client.search_instruments("", "BFO", limit=1_000_000),
+            client.search_instruments("", "NSE", limit=1_000_000),
+            client.search_instruments("", "BSE", limit=1_000_000),
+        )
+        full_universe = build_universe(nfo_instruments=nfo, bfo_instruments=bfo, equities=nse + bse)
+        cfg = record.config
+        # Resolve the same universe the live pass would, so a decision's
+        # forward prices are read from the instrument it was actually made on.
+        if cfg.scan_scope_mode == "custom":
+            selected = select_scan_universe(
+                full_universe, indices=cfg.scan_indices,
+                stocks=cfg.scan_stocks, all_stocks=cfg.scan_all_stocks)
+        else:
+            selected = select_scan_universe(
+                full_universe, indices=engine_cfg.scan_indices,
+                stocks=engine_cfg.scan_stocks, all_stocks=engine_cfg.scan_all_stocks)
+        report, criteria, state = await nav_service.generate_calibration_report(
+            client, uid, underlying_tokens={u.name: u.token for u in selected},
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("calibration report generation failed for %s: %s", uid, exc)
+        raise HTTPException(502, f"CALIBRATION_REPORT_FAILED: {exc}") from exc
+
+    try:
+        repository.insert_calibration_state(state)
+    except NavigatorStorageError as exc:
+        raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
+
+    return {
+        "report_id": state["report_id"],
+        "report": report,
+        "criteria": criteria,
+        "calibration_readiness": record.calibration_readiness,
+    }
+
+
+class PromoteRequest(BaseModel):
+    report_id: str
+    expected_revision: int
+
+
+@router.post("/calibration/promote")
+async def promote_calibration(
+    body: PromoteRequest, user: UserContext = Depends(get_current_user),
+) -> ConfigResponse:
+    """Mark calibration ready, against a specific reviewed report.
+
+    Refuses (409) unless that exact report exists AND every §19.5 criterion
+    in it passes — the server re-checks rather than trusting the client's
+    view of eligibility. Promotion unlocks `gate` as a CHOICE; it does not
+    switch the operating mode and never touches auto-execute (§19.5:
+    "Promotion never turns on auto_execute").
+    """
+    uid = user.user_id
+    try:
+        latest = repository.fetch_latest_calibration_state(uid)
+    except NavigatorStorageError as exc:
+        raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
+
+    if not latest or latest.get("report_id") != body.report_id:
+        raise HTTPException(
+            409, "REPORT_NOT_CURRENT: generate a fresh calibration report and review it "
+                 "before promoting — the id given is not the latest stored report",
+        )
+    criteria = _criteria_of(latest)
+    if not criteria or not criteria.get("eligible"):
+        failed = [c["label"] for c in (criteria or {}).get("criteria", []) if not c.get("passed")]
+        raise HTTPException(
+            409, "CRITERIA_NOT_MET: this report does not satisfy the promotion criteria "
+                 f"({'; '.join(failed) or 'no criteria recorded'})",
+        )
+
+    try:
+        record = config_store.promote_calibration(
+            uid, report_id=body.report_id, expected_revision=body.expected_revision,
+            default_underlyings=_default_underlyings(uid),
+        )
+    except RevisionConflict as exc:
+        raise HTTPException(409, f"REVISION_CONFLICT: {exc}") from exc
+    except NavigatorStorageError as exc:
+        raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
+    return _to_response(record)
+
+
+class DemoteRequest(BaseModel):
+    expected_revision: int
+
+
+@router.post("/calibration/demote")
+async def demote_calibration(
+    body: DemoteRequest, user: UserContext = Depends(get_current_user),
+) -> ConfigResponse:
+    """Revoke a promotion — back to not-ready, and off `gate` mode if it was
+    selected (a gate that can never be satisfied would silently block every
+    order rather than obviously reverting to advisory)."""
+    try:
+        record = config_store.demote_calibration(
+            user.user_id, expected_revision=body.expected_revision,
+            default_underlyings=_default_underlyings(user.user_id),
+        )
+    except RevisionConflict as exc:
+        raise HTTPException(409, f"REVISION_CONFLICT: {exc}") from exc
+    except NavigatorStorageError as exc:
+        raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
+    return _to_response(record)

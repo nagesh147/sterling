@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import { notifyOrder } from '../store/useKiteNotifications';
 import type {
+  CalibrationReportResponse,
   NavigatorCalibrationResponse, NavigatorConfigModel, NavigatorConfigResponse,
   NavigatorSeriesResponse, NavigatorSignalsPage, NavigatorStatusResponse,
 } from '../types/navigator';
@@ -85,5 +86,57 @@ export function useNavigatorCalibration() {
     queryKey: ['navigator-calibration'],
     queryFn: () => api.get<NavigatorCalibrationResponse>(`${N}/calibration`),
     staleTime: 60_000,
+  });
+}
+
+/** Score every decision Navigator has made against what the market did next.
+ *  Read-and-measure only — generating a report never promotes anything. */
+export function useGenerateCalibrationReport() {
+  const qc = useQueryClient();
+  return useMutation<CalibrationReportResponse, Error, void>({
+    mutationFn: () => api.post<CalibrationReportResponse>(`${N}/calibration/report`),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['navigator-calibration'] });
+      notifyOrder({
+        kind: 'info',
+        title: data.criteria.eligible ? 'Calibration report ready to review' : 'Calibration report generated',
+        message: data.criteria.eligible
+          ? 'Every criterion passes — you can promote when you\'ve reviewed it.'
+          : `${data.criteria.criteria.filter((c) => !c.passed).length} criteria still outstanding.`,
+      });
+    },
+  });
+}
+
+/** Explicitly mark calibration ready against a reviewed report. The server
+ *  re-checks every criterion and refuses (409) if any fails. */
+export function usePromoteCalibration() {
+  const qc = useQueryClient();
+  return useMutation<NavigatorConfigResponse, Error, { report_id: string; expected_revision: number }>({
+    mutationFn: (body) => api.post<NavigatorConfigResponse>(`${N}/calibration/promote`, body),
+    onSuccess: (data) => {
+      qc.setQueryData(['navigator-config'], data);
+      qc.invalidateQueries({ queryKey: ['navigator-calibration'] });
+      notifyOrder({
+        kind: 'info', title: 'Calibration promoted',
+        message: 'Gate mode is now available to select. Nothing was switched on for you.',
+      });
+    },
+  });
+}
+
+/** Revoke a promotion — back to not-ready, and off gate mode if selected. */
+export function useDemoteCalibration() {
+  const qc = useQueryClient();
+  return useMutation<NavigatorConfigResponse, Error, { expected_revision: number }>({
+    mutationFn: (body) => api.post<NavigatorConfigResponse>(`${N}/calibration/demote`, body),
+    onSuccess: (data) => {
+      qc.setQueryData(['navigator-config'], data);
+      qc.invalidateQueries({ queryKey: ['navigator-calibration'] });
+      notifyOrder({
+        kind: 'info', title: 'Calibration revoked',
+        message: 'Back to not-ready. Gate mode is locked again.',
+      });
+    },
   });
 }

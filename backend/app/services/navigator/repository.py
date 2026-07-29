@@ -320,6 +320,26 @@ def fetch_signal_events_page(
         raise NavigatorStorageError(f"failed to page signal events: {exc}") from exc
 
 
+def fetch_all_signal_events(user_id: str, *, limit: int = 5000) -> list[dict]:
+    """Every decision this user has accumulated, OLDEST first — the input to
+    calibration scoring, which needs the full chronological record rather
+    than the newest-first page `fetch_signal_events_page` serves the UI.
+    Bounded by `limit` so a very long history can't blow up memory; the
+    oldest decisions are the ones kept, since a chronological train/eval
+    split is meaningless without them."""
+    _require_available()
+    try:
+        with db.connection() as c:
+            rows = c.execute(
+                "SELECT * FROM navigator_signal_events WHERE user_id=? "
+                "ORDER BY bar_close_ms ASC, decision_id ASC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except sqlite3.Error as exc:
+        raise NavigatorStorageError(f"failed to read signal events for {user_id}: {exc}") from exc
+
+
 # ── navigator_calibration_state (Phase 7/8) ─────────────────────────────
 
 def insert_calibration_state(state: dict) -> None:

@@ -565,6 +565,85 @@ def evaluate_and_cache(
     return decision
 
 
+async def generate_calibration_report(
+    client, uid: str, *, underlying_tokens: dict[str, int], limit: int = 5000,
+) -> tuple[dict, dict, dict]:
+    """Score every Navigator decision persisted so far against what the
+    market actually did next, and check the result against the §19.5
+    promotion criteria.
+
+    Returns `(report, criteria, state_row)`. Purely read-and-measure: it
+    NEVER promotes, and never writes to the config. Persisting the state row
+    is the caller's job so the API layer stays in charge of side effects.
+
+    Candles come from the same independent 1H fetch the live pipeline uses,
+    one instrument at a time — see `_run_structure_and_origination` for why
+    this stays serial rather than gathered.
+    """
+    from app.services.navigator import calibration
+
+    decisions = repository.fetch_all_signal_events(uid, limit=limit)
+    names = sorted({str(d["underlying"]) for d in decisions})
+    price_series: dict[str, list[calibration.PricePoint]] = {}
+    unresolved: list[str] = []
+    fetch_failed: list[str] = []
+
+    for name in names:
+        token = underlying_tokens.get(name)
+        if token is None:
+            # Instrument has left Navigator's universe since those decisions
+            # were made. Its decisions stay counted as unscorable rather than
+            # silently dropped, which keeps the sample honest.
+            unresolved.append(name)
+            continue
+        try:
+            candles = await _fetch_candles_for_navigator(client, token)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("calibration: candle fetch failed for %s/%s: %s", uid, name, exc)
+            fetch_failed.append(name)
+            continue
+        price_series[name] = [
+            calibration.PricePoint(bar_close_ms=c.timestamp_ms, close=c.close) for c in candles
+        ]
+
+    # Without price history nothing can be scored, and a bare "0 scored"
+    # reads as "not enough history yet" when the real cause is "we couldn't
+    # read prices at all" — a broker session that expired overnight looks
+    # identical to a young install otherwise. Say which it is.
+    warnings: list[str] = []
+    if unresolved:
+        warnings.append(
+            f"No instrument token resolved for {', '.join(unresolved)} — they are not in "
+            "Navigator's current scan scope, so their past decisions cannot be scored."
+        )
+    if fetch_failed:
+        warnings.append(
+            f"Could not fetch price history for {', '.join(fetch_failed)}. This is usually an "
+            "expired Kite session — reconnect from the Connect tab and generate the report again."
+        )
+    if decisions and not price_series:
+        warnings.append(
+            f"Scored none of the {len(decisions)} recorded decisions because no price history "
+            "was available. The counts below reflect that, not Navigator's actual accuracy."
+        )
+
+    report = calibration.score_decisions(decisions, price_series)
+    report["coverage"] = {
+        "decision_underlyings": names,
+        "priced": sorted(price_series),
+        "unresolved": unresolved,
+        "fetch_failed": fetch_failed,
+    }
+    report["warnings"] = warnings
+    criteria = calibration.evaluate_criteria(report)
+    state = calibration.build_calibration_state(uid, report, criteria)
+    log.info(
+        "navigator.calibration.report user=%s report_id=%s decisions=%s priced=%s eligible=%s",
+        uid, state["report_id"], report["total_decisions"], len(price_series), criteria["eligible"],
+    )
+    return report, criteria, state
+
+
 def get_feature_series(uid: str, underlying: str, *, timeframe: str = "60minute", since_bar_close_ms: int = 0, limit: int = 500) -> list[dict]:
     if not db.is_available():
         return []

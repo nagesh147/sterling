@@ -34,6 +34,7 @@ vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>Tradi
 vi.mock('../DirectionalModePanel', () => ({ DirectionalModePanel: () => <div>Order profile controls</div> }));
 vi.mock('../EngineConfigurationPanel', () => ({ EngineConfigurationPanel: () => <div>Engine configuration panel</div> }));
 vi.mock('../NavigatorSettingsPanel', () => ({ NavigatorSettingsPanel: () => <div>Navigator settings panel</div> }));
+vi.mock('../NavigatorCalibrationPanel', () => ({ NavigatorCalibrationPanel: () => <div>Navigator calibration panel</div> }));
 vi.mock('../KiteTelegramPanel', () => ({
   KiteTelegramPanel: () => <div>Kite alert destinations</div>,
   BrandIconPicker: () => <div>Icon picker</div>,
