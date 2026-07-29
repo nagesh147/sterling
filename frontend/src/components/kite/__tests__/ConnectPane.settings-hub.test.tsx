@@ -35,6 +35,7 @@ vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
 vi.mock('../TradingModeControls', () => ({ TradingModeControls: () => <div>Trading mode controls</div> }));
 vi.mock('../DirectionalModePanel', () => ({ DirectionalModePanel: () => <div>Order profile controls</div> }));
 vi.mock('../EngineConfigurationPanel', () => ({ EngineConfigurationPanel: () => <div>Engine configuration panel</div> }));
+vi.mock('../SharedScanSetupPanel', () => ({ SharedScanSetupPanel: () => <div>Shared scan setup panel</div> }));
 vi.mock('../KiteTelegramPanel', () => ({
   KiteTelegramPanel: () => <div>Kite alert destinations</div>,
   BrandIconPicker: () => <div>Icon picker</div>,
@@ -56,8 +57,8 @@ describe('ConnectPane settings hub', () => {
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
     expect(screen.getByRole('heading', { name: 'Account & Login' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Engine Configuration Signals, orders & risk/i }));
-    expect(screen.getByRole('heading', { name: 'Engine Configuration' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /SuperTrend Engine Triple-SuperTrend signals & exits/i }));
+    expect(screen.getByRole('heading', { name: 'SuperTrend Engine' })).toBeInTheDocument();
     expect(screen.getByText('Trading mode controls')).toBeInTheDocument();
     expect(screen.getByText('Engine configuration panel')).toBeInTheDocument();
 
@@ -74,5 +75,14 @@ describe('ConnectPane settings hub', () => {
     expect(screen.getByRole('heading', { name: 'Experience' })).toBeInTheDocument();
     expect(screen.getByText('Motion style choices')).toBeInTheDocument();
     expect(screen.getByText('Icon picker')).toBeInTheDocument();
+  });
+
+  it('gives the settings both engines share their own home, separate from either engine', () => {
+    render(<ConnectPane />);
+    fireEvent.click(screen.getByRole('button', { name: /Scan Setup Shared by both engines/i }));
+    expect(screen.getByRole('heading', { name: 'Scan Setup' })).toBeInTheDocument();
+    expect(screen.getByText('Shared scan setup panel')).toBeInTheDocument();
+    // it is its own section, not nested inside the SuperTrend engine's page
+    expect(screen.queryByText('Engine configuration panel')).not.toBeInTheDocument();
   });
 });

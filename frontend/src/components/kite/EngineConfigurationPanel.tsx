@@ -21,6 +21,33 @@ import {
 
 const GREEN = '#4caf50';
 
+/** A setting that lives in the shared Scan Setup section, shown read-only
+ *  here with a one-click jump — so it's obvious the value is real and in
+ *  effect, but equally obvious this isn't the place to change it (changing
+ *  it here would silently move Navigator too). */
+export function SharedSettingPointer({ value }: { value: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+      <span style={{
+        padding: '6px 11px', borderRadius: 7, background: SOFT, border: `1px solid ${BORDER}`,
+        color: TEXT, fontSize: 12, fontWeight: 600,
+      }}>
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent('kite-connect-section', { detail: 'sharedScan' }))}
+        style={{
+          border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+          color: ORANGE, fontSize: 11, fontWeight: 700,
+        }}
+      >
+        Change in Scan Setup →
+      </button>
+    </div>
+  );
+}
+
 const SOURCE_OPTIONS: Array<{ value: ScanSource; label: string; description: string }> = [
   { value: 'spot', label: 'Spot', description: 'Signals from the underlying chart.' },
   { value: 'derivatives', label: 'Derivatives', description: 'Signals from each option premium chart.' },
@@ -130,28 +157,8 @@ export function EngineConfigurationPanel() {
         summary={`${sourceLabel(cfg.scan_source)} · ${cfg.strike_moneyness.length} strikes`}
         defaultOpen
       >
-        <Field label="Signal source" hint="Changes scanner behavior and runs a fresh scan.">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 8 }}>
-            {SOURCE_OPTIONS.map((option) => {
-              const selected = cfg.scan_source === option.value;
-              return (
-                <label key={option.value} style={{
-                  minHeight: 58, display: 'grid', gridTemplateColumns: '17px minmax(0, 1fr)', alignItems: 'start', gap: 9,
-                  textAlign: 'left', padding: '10px 11px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
-                  border: `1px solid ${selected ? '#e2b6a4' : BORDER}`,
-                  background: selected ? ORANGE_SOFT : '#fff', boxSizing: 'border-box',
-                }}>
-                  <input type="radio" name="signal-source" checked={selected}
-                    onChange={() => patch({ scan_source: option.value }, `Signal source changed to ${option.label}`, true)}
-                    style={{ width: 15, height: 15, margin: '1px 0 0', accentColor: ORANGE }} />
-                  <span>
-                    <span style={{ display: 'block', color: TEXT, fontSize: 11.5, fontWeight: 700 }}>{option.label}</span>
-                    <span style={{ display: 'block', color: DIM, fontSize: 9.5, lineHeight: 1.35, marginTop: 3 }}>{option.description}</span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
+        <Field label="Signal source" hint="Shared with the Value-Flow Navigator, so it lives in Scan Setup.">
+          <SharedSettingPointer value={sourceLabel(cfg.scan_source)} />
         </Field>
         <Field label="Strike coverage" hint="View and scan coverage; at least ATM remains selected.">
           <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: 7 }}>
@@ -186,42 +193,16 @@ export function EngineConfigurationPanel() {
 
       <Section
         title="Market Universe"
-        description="Control the indices and F&O stocks included in every scan."
+        description="Shared with the Value-Flow Navigator — edited once, in Scan Setup."
         summary={cfg.scan_all_stocks ? `All F&O · ${cfg.scan_indices.length} indices` : `${cfg.scan_stocks.length} stocks · ${cfg.scan_indices.length} indices`}
       >
-        <Field label="Indices">
-          <div className="sk-config-check-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 7 }}>
-            {INDEX_OPTIONS.map((option) => (
-              <CheckOption key={option.value} label={option.label} checked={cfg.scan_indices.includes(option.value)}
-                onChange={() => patch({ scan_indices: toggleListValue(cfg.scan_indices, option.value, ['NIFTY 50']) }, 'Index universe updated', true)} />
-            ))}
-          </div>
+        <Field label="Instruments" hint="Both engines scan this same list.">
+          <SharedSettingPointer
+            value={cfg.scan_all_stocks
+              ? `${cfg.scan_indices.length} indices + all F&O stocks`
+              : `${cfg.scan_indices.length} indices + ${cfg.scan_stocks.length} stocks`}
+          />
         </Field>
-        <Field label="F&O stocks" hint="Use the full eligible universe or curate a smaller list.">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Switch checked={cfg.scan_all_stocks} label="Scan all F&O stocks"
-              onChange={() => patch({ scan_all_stocks: !cfg.scan_all_stocks }, `All F&O stocks ${!cfg.scan_all_stocks ? 'enabled' : 'disabled'}`, true)} />
-            <span style={{ color: TEXT, fontSize: 12 }}>Scan all eligible F&amp;O stocks</span>
-          </div>
-        </Field>
-        {!cfg.scan_all_stocks && (
-          <Field label="Selected stocks" hint={`${cfg.scan_stocks.length} selected`}>
-            <div style={{ maxHeight: 260, overflow: 'auto', paddingRight: 4 }}>
-              {(stockRegistry ?? []).map((group) => (
-                <div key={group.liquidity} style={{ marginBottom: 10 }}>
-                  <div style={{ color: DIM, fontSize: 9, fontWeight: 700, letterSpacing: .5, marginBottom: 5 }}>{group.liquidity.toUpperCase()}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 3 }}>
-                    {group.stocks.map((stock) => (
-                      <CheckOption key={stock.name} label={stock.label || stock.name} checked={cfg.scan_stocks.includes(stock.name)} compact
-                        onChange={() => patch({ scan_stocks: toggleListValue(cfg.scan_stocks, stock.name, []) }, `${stock.name} ${cfg.scan_stocks.includes(stock.name) ? 'removed' : 'added'}`, true)} />
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {!stockRegistry?.length && <div style={{ color: DIM, fontSize: 11 }}>Stock universe unavailable.</div>}
-            </div>
-          </Field>
-        )}
       </Section>
 
       <Section

@@ -469,25 +469,34 @@ export function NavigatorSettingsPanel() {
           />
           <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>
             {draft.scan_scope_mode === 'shared'
-              ? "Navigator watches whatever SuperTrend watches. Change the list once, in Engine Configuration, and both follow it."
-              : "Navigator watches its own list below — SuperTrend keeps its own, separately. Useful if you want Navigator on a wider (or narrower) set than you're trading with SuperTrend."}
+              ? "Navigator watches whatever the shared Scan Setup covers — the same list SuperTrend uses. Change it once there and both follow it."
+              : "Navigator watches its own list below — the shared Scan Setup then applies to SuperTrend only. Useful if you want Navigator on a wider (or narrower) set than you're trading with SuperTrend."}
           </div>
         </Field>
 
         {draft.scan_scope_mode === 'shared' ? (
-          <Field label="Currently covering" hint="Set in Connect → Engine Configuration → Market Universe.">
+          <Field label="Currently covering" hint="Edited in the shared Scan Setup section.">
             {engineCfg ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-                {engineCfg.scan_indices.map((u) => (
-                  <span key={u} style={chipStyle}>{u}</span>
-                ))}
-                {engineCfg.scan_all_stocks
-                  ? <span style={chipStyle}>+ all F&amp;O stocks</span>
-                  : engineCfg.scan_stocks.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
-                <span style={{ color: DIM, fontSize: 10.5 }}>· {engineCfg.scan_source} contracts</span>
-              </div>
+              <>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  {engineCfg.scan_indices.map((u) => (
+                    <span key={u} style={chipStyle}>{u}</span>
+                  ))}
+                  {engineCfg.scan_all_stocks
+                    ? <span style={chipStyle}>+ all F&amp;O stocks</span>
+                    : engineCfg.scan_stocks.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
+                  <span style={{ color: DIM, fontSize: 10.5 }}>· {engineCfg.scan_source} contracts</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('kite-connect-section', { detail: 'sharedScan' }))}
+                  style={{ marginTop: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: ORANGE, fontSize: 11, fontWeight: 700 }}
+                >
+                  Change in Scan Setup →
+                </button>
+              </>
             ) : (
-              <span style={{ color: DIM, fontSize: 10.5 }}>Loading the engine&apos;s universe…</span>
+              <span style={{ color: DIM, fontSize: 10.5 }}>Loading the shared scan setup…</span>
             )}
           </Field>
         ) : (

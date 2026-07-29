@@ -18,6 +18,7 @@ import { KiteExchangeSettingsCard } from './KiteExchangeSettingsCard';
 import { EngineConfigurationPanel } from './EngineConfigurationPanel';
 import { NavigatorSettingsPanel } from './NavigatorSettingsPanel';
 import { NavigatorCalibrationPanel } from './NavigatorCalibrationPanel';
+import { SharedScanSetupPanel } from './SharedScanSetupPanel';
 
 const S: Record<string, React.CSSProperties> = {
   card: { background: '#fff', border: `1px solid #e0e0e0`, borderRadius: 9, padding: 18, marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' },
@@ -609,11 +610,12 @@ function EngineMasterToggle() {
 // Connect used to contain another horizontal tab bar, while display, exchange,
 // Telegram and engine controls were injected above/between those tabs. A stable
 // category rail gives every setting one predictable home and keeps each page calm.
-type ConnectSection = 'account' | 'engine' | 'navigator' | 'orderSelection' | 'markets' | 'notifications' | 'experience';
+type ConnectSection = 'account' | 'sharedScan' | 'engine' | 'navigator' | 'orderSelection' | 'markets' | 'notifications' | 'experience';
 
 const SECTION_DEFS: Array<{ id: ConnectSection; label: string; eyebrow: string }> = [
   { id: 'account', label: 'Account & Login', eyebrow: 'Zerodha connection' },
-  { id: 'engine', label: 'Engine Configuration', eyebrow: 'Signals, orders & risk' },
+  { id: 'sharedScan', label: 'Scan Setup', eyebrow: 'Shared by both engines' },
+  { id: 'engine', label: 'SuperTrend Engine', eyebrow: 'Triple-SuperTrend signals & exits' },
   { id: 'navigator', label: 'Value-Flow Navigator', eyebrow: 'AVWAP, volatility & options flow' },
   { id: 'orderSelection', label: 'Order Selection & Entry Quality', eyebrow: 'Vehicle profile & filters' },
   { id: 'markets', label: 'Markets & Tools', eyebrow: 'Exchanges, funds & data' },
@@ -730,9 +732,16 @@ export function ConnectPane() {
             </>
           )}
 
+          {section === 'sharedScan' && (
+            <>
+              <SectionHeading title="Scan Setup" description="The instruments Sterling scans and the chart a signal is read from. Both signal engines — SuperTrend and the Value-Flow Navigator — use this, so it lives in one place rather than being configured twice." />
+              <SharedScanSetupPanel />
+            </>
+          )}
+
           {section === 'engine' && (
             <>
-              <SectionHeading title="Engine Configuration" description="Control whether Sterling scans, how signals are discovered, and how orders and risk are handled." />
+              <SectionHeading title="SuperTrend Engine" description="The triple-SuperTrend signal engine: how its setups are graded, how they exit, and how orders and risk are handled. What it scans is shared — see Scan Setup." />
               <EngineMasterToggle />
               <TradingModeControls />
               <EngineConfigurationPanel />
