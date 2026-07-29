@@ -470,7 +470,9 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
               card = (
                 <CollapsibleCard key={id} title="Option legs" {...cardProps}>
                 {data.options.length === 0 ? (
-                  <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>No option legs resolved (no liquid ATM/ITM contract).</div>
+                  <div style={{ color: k.dim, fontSize: 12, padding: '14px 16px' }}>
+                    {data.resolution_reason || 'No option contract matched the selected strike/expiry settings.'}
+                  </div>
                 ) : (
                   (() => {
                     // ✝ BEST R:R — same logic as the impact calculator, applied to the leg list.

@@ -135,4 +135,67 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
     expect(localStorage.getItem('kite_st_show_ended')).toBe('true');
     expect(screen.getByText('Today (ended)')).toBeInTheDocument();
   });
+
+  it('keeps active spot candidate legs visible when ended legs are hidden', () => {
+    localStorage.setItem('kite_st_show_ended', 'false');
+    signalRows.push({
+      underlying: 'NIFTY 50',
+      token: 256265,
+      exchange: 'NFO',
+      regime: 'BULL',
+      alignment: { fast: 1, mid: 1, slow: 1 },
+      direction: 'long',
+      option_type: 'CE',
+      legs: [{
+        moneyness: 'ATM',
+        option_type: 'CE',
+        option_symbol: 'NIFTY26JUN25000CE',
+        strike: 25_000,
+        expiry: '2026-06-26',
+        lot_size: 75,
+        token: 44001,
+        is_active: false,
+      }],
+      spot: 25_000,
+      stop_loss: 24_900,
+      score: 85,
+      timestamp_ms: Date.now(),
+      source: 'spot',
+      is_active: true,
+      is_fresh: true,
+    });
+
+    renderPane();
+
+    expect(screen.getByText('Active now')).toBeInTheDocument();
+    expect(screen.getByText('25000')).toBeInTheDocument();
+    expect(screen.queryByText(/no liquid contract/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/No option contract matched/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the backend strike-resolution reason when a setup has no option legs', () => {
+    signalRows.push({
+      underlying: 'NIFTY 50',
+      token: 256265,
+      exchange: 'NFO',
+      regime: 'BULL',
+      alignment: { fast: 1, mid: 1, slow: 1 },
+      direction: 'long',
+      option_type: 'CE',
+      legs: [],
+      spot: 25_000,
+      stop_loss: 24_900,
+      score: 85,
+      timestamp_ms: Date.now(),
+      source: 'spot',
+      is_active: true,
+      is_fresh: true,
+      resolution_reason: 'No listed contract matched the selected strike and expiry series.',
+    });
+
+    renderPane();
+
+    expect(screen.getByText('No listed contract matched the selected strike and expiry series.')).toBeInTheDocument();
+    expect(screen.queryByText(/no liquid contract/i)).not.toBeInTheDocument();
+  });
 });

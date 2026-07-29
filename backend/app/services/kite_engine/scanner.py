@@ -336,9 +336,25 @@ def attach_strikes(
     ordered = sorted(moneynesses, key=lambda m: _MONEYNESS_ORDER.get(m, 99))
     picks = pick_strikes(chain, spot=row.spot, direction=row.direction,
                          moneynesses=ordered, expiry_types=expiry_types, today=today)
+    row.resolution_reason = None
+    if not picks:
+        if not chain:
+            row.resolution_reason = f"No listed option-chain rows were found for {option_name}."
+        else:
+            expiries = sorted({
+                str(item.get("expiry_date") or item.get("expiry") or "")[:10]
+                for item in chain
+                if item.get("expiry_date") or item.get("expiry")
+            })
+            row.resolution_reason = (
+                "No listed contract matched the selected strike and expiry series. "
+                f"Available listed expiries: {', '.join(expiries[:8]) or 'none'}."
+            )
     row.legs = [
         OptionLeg(moneyness=m, option_type=p.option_type, option_symbol=p.option_symbol,
                   strike=p.strike, expiry=p.expiry, lot_size=p.lot_size or None,
+                  is_active=bool(row.is_active),
+                  signal_timestamp_ms=row.timestamp_ms,
                   entry_timestamp_ms=row.timestamp_ms)
         for m, p in picks
     ]

@@ -172,6 +172,7 @@ def test_attach_strikes_multi_moneyness_legs():
                    today=date(2026, 6, 13))
     assert [leg.moneyness for leg in row.legs] == ["ATM", "ITM1", "ITM2"]
     assert [leg.strike for leg in row.legs] == [base, base - 50, base - 100]
+    assert all(leg.is_active is row.is_active for leg in row.legs)
 
 
 def test_attach_strikes_otm_legs_and_canonical_order():
@@ -1065,4 +1066,3 @@ def test_derivative_contract_never_treats_three_red_as_an_entry(option_type):
     assert all((row.legs[0].alignment.fast,
                 row.legs[0].alignment.mid,
                 row.legs[0].alignment.slow) == (1, 1, 1) for row in rows)
-

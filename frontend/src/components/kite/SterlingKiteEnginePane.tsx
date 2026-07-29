@@ -403,7 +403,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
     const q = quotes?.[`${row.exchange}:${leg?.option_symbol}`];
     return q?.last_price ?? null;
   };
-  const legIsExited = (leg: any) => legHasExited(leg, row.is_active, legLtp(leg));
+  const legIsExited = (leg: any) => (hasPremium ? legHasExited(leg, row.is_active, legLtp(leg)) : !row.is_active);
   const legIsActive = (leg: any) => !legIsExited(leg);
   // Parent "running" = ANY leg still live once reconciled against the live LTP.
   const rowRunning = rowIsRunning(row, quotes);
@@ -523,6 +523,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
       (a, b) => MONEYNESS_GROUP_ORDER[moneynessBucket(a.moneyness)] - MONEYNESS_GROUP_ORDER[moneynessBucket(b.moneyness)],
     );
   }, [bestOnly, visibleLegs, bestRRSyms, bestDeltaSyms]);
+  const emptyLegMessage = React.useMemo(() => {
+    if (row.legs.length > 0 && visibleLegs.length === 0) {
+      return showEnded ? 'No option legs to display.' : 'All resolved legs are ended. Enable Ended to view them.';
+    }
+    return row.resolution_reason || 'No option contract matched the selected strike/expiry settings.';
+  }, [row.legs.length, row.resolution_reason, showEnded, visibleLegs.length]);
 
   return (
     <div
@@ -759,9 +765,9 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           })}
         </div>
       ) : (
-      <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
         {displayLegs.length === 0 ? (
-          <span style={{ fontSize: 10, color: k.dim }}>no liquid contract at the selected strikes</span>
+          <span style={{ fontSize: 10, color: k.dim }}>{emptyLegMessage}</span>
         ) : (
           <React.Fragment>
             {[...displayLegs].sort((a, b) => {

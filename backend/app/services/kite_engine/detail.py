@@ -107,4 +107,5 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
         spot_at_trigger=(row.underlying_spot if (row.underlying_spot or 0) > 0 else row.spot),
         spot_now=spot_now,
         stop_loss=row.stop_loss, options=options,
+        resolution_reason=getattr(row, "resolution_reason", None),
     )

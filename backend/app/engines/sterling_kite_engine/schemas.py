@@ -32,6 +32,7 @@ class OptionLeg(BaseModel):
     entry_timestamp_ms: Optional[int] = None
     alignment: Optional[AlignmentChip] = None
     exit_state: Optional[str] = None
+    resolution_note: Optional[str] = None
 
 
 class EngineSignalRow(BaseModel):
@@ -83,6 +84,10 @@ class EngineSignalRow(BaseModel):
     # those remain exactly as the base engine computed them. Old cached rows
     # without this field deserialize fine (defaults to None).
     navigator: Optional["NavigatorDecision"] = None
+    # Populated when a SuperTrend/Navigator setup is valid but no option leg could
+    # be resolved from the selected strike/expiry settings. This is not a
+    # liquidity verdict; true liquidity gates run later on live quote/depth data.
+    resolution_reason: Optional[str] = None
 
 
 class SignalsResponse(BaseModel):
@@ -203,6 +208,7 @@ class EngineDetailResponse(BaseModel):
     spot_now: float
     stop_loss: float
     options: List[OptionDetail]
+    resolution_reason: Optional[str] = None
 
 
 class EngineOrderRequest(BaseModel):

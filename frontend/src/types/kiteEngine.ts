@@ -33,6 +33,7 @@ export interface OptionLeg {
   entry_timestamp_ms?: number | null;
   alignment?: AlignmentChip | null;
   exit_state?: string | null;
+  resolution_note?: string | null;
 }
 
 export interface SignalChartData {
@@ -70,6 +71,7 @@ export interface EngineSignalRow {
   // score/source/is_active/is_fresh above — those stay exactly as the base
   // engine computed them.
   navigator?: NavigatorDecision | null;
+  resolution_reason?: string | null;
 }
 
 export interface SignalsResponse {
@@ -162,6 +164,7 @@ export interface EngineDetailResponse {
   spot_now: number;
   stop_loss: number;
   options: OptionDetail[];
+  resolution_reason?: string | null;
 }
 
 export interface EngineConfigModel {

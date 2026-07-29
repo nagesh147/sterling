@@ -119,3 +119,24 @@ def test_resolution_reason_is_precise_not_a_liquidity_claim():
     assert legs == []
     assert reason == "No listed option-chain rows were found for NIFTY."
     assert "liquid" not in reason.lower()
+
+
+def test_resolved_spot_candidate_legs_inherit_parent_lifecycle():
+    row = _signal()
+    row.is_active = True
+    row.is_fresh = True
+    legs, reason = resolve_option_legs(
+        row,
+        [_instrument("2026-07-28", 100, 1001)],
+        option_name="NIFTY",
+        moneynesses=["ATM"],
+        today=date(2026, 7, 1),
+        expiry_types=["monthly"],
+        expiry_ranks_by_type={"monthly": [0]},
+    )
+
+    assert reason is None
+    assert len(legs) == 1
+    assert legs[0].is_active is True
+    assert legs[0].signal_timestamp_ms == row.timestamp_ms
+    assert legs[0].entry_timestamp_ms == row.timestamp_ms
