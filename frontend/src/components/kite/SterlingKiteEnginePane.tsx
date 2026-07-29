@@ -347,6 +347,14 @@ function rowIsRunning(row: EngineSignalRow, quotes: any): boolean {
   );
 }
 
+function hasPremiumSnapshot(row: EngineSignalRow): boolean {
+  return row.legs.some((leg) => (
+    ((leg as any).premium_spot ?? 0) > 0
+    || ((leg as any).premium_sl ?? 0) > 0
+    || ((leg as any).entry_sl ?? 0) > 0
+  ));
+}
+
 // Coarse moneyness group (ITM1-5 / ATM / OTM1-5 → ITM / ATM / OTM), shared by the
 // per-bucket best-R:R/delta ranking and the "Best only" display order below.
 function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
@@ -355,7 +363,7 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
-function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined' }: {
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
@@ -366,6 +374,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   bestOnly?: boolean;
   scanSource?: string;
   signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
+  showPremiumColumns?: boolean;
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -395,7 +404,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   // same condition or its cells drift out from under the headers. In 'both' mode a
   // spot-source row has no per-leg premium (hasPremium=false) but the header still
   // shows those columns — so we render fixed-width placeholders ('—') to stay aligned.
-  const showPremiumCols = scanSource !== undefined ? scanSource !== 'spot' : hasPremium;
+  const showPremiumCols = showPremiumColumns ?? (scanSource !== undefined ? scanSource !== 'spot' : hasPremium);
 
   // Live LTP for a leg's contract (no entry-snapshot fallback — we need the live tick
   // to reconcile the frozen is_active flag, not the frozen entry).
@@ -1868,6 +1877,10 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     }
     return result;
   }, [rows, query, sortBy, signalMode]);
+  const showSignalPremiumColumns = React.useMemo(
+    () => cfg?.scan_source !== 'spot' || filteredRows.some(hasPremiumSnapshot),
+    [cfg?.scan_source, filteredRows],
+  );
 
   // Live quotes are needed BEFORE bucketing so a position that has exited between scans
   // (live premium through its stop) drops out of "Active now" instead of lingering there
@@ -2147,7 +2160,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                  {(() => {
                    const colVisible: Record<SignalColVisibility, boolean> = {
                      always: true, exchange: s.showExchange, leg: s.showLeg,
-                     premium: cfg?.scan_source !== 'spot', chg: s.showPriceChange,
+                     premium: showSignalPremiumColumns, chg: s.showPriceChange,
                      chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
                    };
                    return s.signalLeftColumnOrder.map((key) => {
@@ -2168,7 +2181,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                    {(() => {
                      const colVisible: Record<SignalColVisibility, boolean> = {
                        always: true, exchange: s.showExchange, leg: s.showLeg,
-                       premium: cfg?.scan_source !== 'spot', chg: s.showPriceChange,
+                       premium: showSignalPremiumColumns, chg: s.showPriceChange,
                        chgPct: s.showPriceChangePct, dir: s.showPriceDirection,
                      };
                      return s.signalRightColumnOrder.map((key) => {
@@ -2348,6 +2361,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                       <div key={`${row.token}:${row.option_type}:${row.timestamp_ms}`} className="st-signal-in">
                         <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
                           scanSource={cfg?.scan_source} signalMode={signalMode}
+                          showPremiumColumns={showSignalPremiumColumns}
                           onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                           onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
                           onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />

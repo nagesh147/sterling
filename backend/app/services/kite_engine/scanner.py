@@ -3,7 +3,8 @@
 Per active Kite user: fetch 1H candles for each universe item (cached, rate
 throttled), drop the forming bar, run the broker-agnostic engine, and collect the
 "ready" rows (fresh full-alignment transition on the latest closed bar). Strike
-selection is done from the already-loaded option dumps — no extra quote calls.
+selection is done from the already-loaded option dumps; spot-source option
+candidates are then hydrated with their own premium entry/stop snapshots.
 
 Kite types are touched only here and in the endpoints; the engine package stays
 broker-agnostic. Nothing here imports another engine's strategy logic.
@@ -31,6 +32,7 @@ from app.engines.sterling_kite_engine.regime import compute_regime, entry_transi
 from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
+from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
     ExpiryType, OptionPick, chain_rows_for, pick_contracts, pick_strikes,
@@ -44,6 +46,7 @@ _CANDLE_TTL_S = 180          # re-use cached 1H candles for ~3 min
 _CONCURRENCY = 2             # stay UNDER Kite historical ~3 req/s (3 concurrent → 429s)
 _TF_MS = 3_600_000           # 1H bar in ms
 _LOOKBACK_BARS = 320
+_IV_ASSUMPTION = 0.18
 
 # Signals linger on the board for a couple of weeks after they fire — even once
 # their SuperTrend de-aligns (the UI renders these struck-through as "ended") — so a
@@ -101,6 +104,75 @@ def _entry_sl_value(r, i: int, cfg: SterlingKiteEngineConfig) -> float:
     """Initial hard stop at the entry bar = the ``trail_target`` (validated fast) ST
     line at the trigger index. Static reference for the SL column (vs. the live TSL)."""
     return float(r.line(cfg.trail_target)[i])
+
+
+def _dte_from_expiry(expiry: str, ref_ms: int) -> float:
+    try:
+        expiry_date = datetime.strptime(str(expiry)[:10], "%Y-%m-%d").date()
+        ref_date = datetime.fromtimestamp(int(ref_ms) / 1000, _IST).date()
+        return float(max(1, (expiry_date - ref_date).days))
+    except Exception:  # noqa: BLE001
+        return 7.0
+
+
+def _leg_snapshot_key(row: EngineSignalRow, leg: OptionLeg) -> tuple:
+    return (
+        row.source,
+        row.underlying,
+        row.direction,
+        row.option_type,
+        int(row.timestamp_ms),
+        leg.option_symbol,
+    )
+
+
+def _prior_leg_snapshots(rows: Sequence[EngineSignalRow]) -> Dict[tuple, OptionLeg]:
+    out: Dict[tuple, OptionLeg] = {}
+    for row in rows:
+        for leg in row.legs:
+            if leg.premium_spot is not None or leg.premium_sl is not None or leg.entry_sl is not None:
+                out[_leg_snapshot_key(row, leg)] = leg
+    return out
+
+
+def _copy_prior_leg_snapshot(row: EngineSignalRow, prior: Dict[tuple, OptionLeg]) -> None:
+    for leg in row.legs:
+        old = prior.get(_leg_snapshot_key(row, leg))
+        if old is None:
+            continue
+        if leg.premium_spot is None:
+            leg.premium_spot = old.premium_spot
+        if leg.premium_sl is None:
+            leg.premium_sl = old.premium_sl
+        if leg.entry_sl is None:
+            leg.entry_sl = old.entry_sl
+
+
+def _stamp_leg_premium_stops(row: EngineSignalRow, leg: OptionLeg) -> None:
+    entry = float(leg.premium_spot or 0.0)
+    if entry <= 0:
+        return
+    spot = float(row.underlying_spot or row.spot or 0.0)
+    if spot <= 0:
+        return
+    greeks = black_scholes_greeks(
+        spot=spot,
+        strike=float(leg.strike),
+        dte_days=_dte_from_expiry(leg.expiry, row.timestamp_ms),
+        iv=_IV_ASSUMPTION,
+        option_type=leg.option_type,
+    )
+    delta = greeks.delta if greeks.delta != 0.0 else (
+        0.5 if str(leg.option_type).upper().startswith("C") else -0.5
+    )
+    if (row.entry_sl or 0) > 0 and leg.entry_sl is None:
+        leg.entry_sl = premium_stop_from_move(
+            entry_premium=entry, delta=delta, spot=spot, trail_level=float(row.entry_sl)
+        )
+    if (row.stop_loss or 0) > 0:
+        leg.premium_sl = premium_stop_from_move(
+            entry_premium=entry, delta=delta, spot=spot, trail_level=float(row.stop_loss)
+        )
 
 
 def _retain_signals(eval_rows: List[EngineSignalRow], now_ms: int) -> List[EngineSignalRow]:
@@ -353,6 +425,7 @@ def attach_strikes(
     row.legs = [
         OptionLeg(moneyness=m, option_type=p.option_type, option_symbol=p.option_symbol,
                   strike=p.strike, expiry=p.expiry, lot_size=p.lot_size or None,
+                  token=p.token or None,
                   is_active=bool(row.is_active),
                   signal_timestamp_ms=row.timestamp_ms,
                   entry_timestamp_ms=row.timestamp_ms)
@@ -539,6 +612,60 @@ class KiteEngineScanner:
     async def _fetch_1h(self, client, us: UserScan, item: UniverseItem) -> List[Candle]:
         return await self._fetch_candles(client, us, item.token, item.tradingsymbol)
 
+    async def _stamp_spot_leg_premiums(self, client, us: UserScan, row: EngineSignalRow) -> None:
+        """Hydrate spot-source candidate legs with premium entry, SL and TSL snapshots.
+
+        Spot signals originate from the underlying chart, but the board and order path
+        trade option contracts. Use the option's own 1H close at the signal timestamp
+        as the entry premium; only a same-bar fresh signal may fall back to LTP.
+        """
+        if row.source != "spot" or not row.legs:
+            return
+
+        missing_ltp: list[OptionLeg] = []
+        for leg in row.legs:
+            if (leg.premium_spot or 0) > 0:
+                _stamp_leg_premium_stops(row, leg)
+                continue
+            entry_px = 0.0
+            if leg.token:
+                try:
+                    candles = drop_forming(await self._fetch_candles(
+                        client, us, int(leg.token), leg.option_symbol
+                    ))
+                    candidates = [
+                        candle for candle in candles
+                        if int(candle.timestamp_ms) <= int(row.timestamp_ms)
+                    ]
+                    if candidates:
+                        entry_px = float(max(candidates, key=lambda c: int(c.timestamp_ms)).close)
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("kite-engine spot premium history fail %s: %s", leg.option_symbol, exc)
+            if entry_px > 0:
+                leg.premium_spot = entry_px
+                _stamp_leg_premium_stops(row, leg)
+            elif row.is_fresh:
+                missing_ltp.append(leg)
+
+        if not missing_ltp:
+            return
+        qkeys = [f"{row.exchange}:{leg.option_symbol}" for leg in missing_ltp]
+        try:
+            quotes = await client.get_ltp(qkeys)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("kite-engine spot premium LTP fail: %s", exc)
+            return
+        for leg in missing_ltp:
+            qkey = f"{row.exchange}:{leg.option_symbol}"
+            try:
+                entry_px = float((quotes.get(qkey) or {}).get("last_price") or 0.0)
+            except (AttributeError, TypeError, ValueError):
+                entry_px = 0.0
+            if entry_px <= 0:
+                continue
+            leg.premium_spot = entry_px
+            _stamp_leg_premium_stops(row, leg)
+
     async def scan(
         self, *, uid: str, client, universe: List[UniverseItem],
         nfo_rows: Sequence[dict], bfo_rows: Sequence[dict],
@@ -563,6 +690,7 @@ class KiteEngineScanner:
             today = datetime.now(_IST).date()
             now_ms = int(time.time() * 1000)  # retention cutoff for ended signals
             rows: List[EngineSignalRow] = []
+            prior_premium_snapshots = _prior_leg_snapshots(us.rows)
             diag = ScanDiag(universe=len(universe),
                             indices=sum(1 for i in universe if i.is_index))
 
@@ -622,6 +750,8 @@ class KiteEngineScanner:
                     attach_strikes(row, option_rows, option_name=item.tradingsymbol,
                                    moneynesses=moneyness, today=today,
                                    expiry_types=_expiry)
+                    _copy_prior_leg_snapshot(row, prior_premium_snapshots)
+                    await self._stamp_spot_leg_premiums(client, us, row)
                     rows.append(row)
 
                     is_fresh = (row.timestamp_ms == latest_ts)

@@ -70,6 +70,7 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
   beforeEach(() => {
     localStorage.clear();
     signalRows.length = 0;
+    cfg.scan_source = 'derivatives';
     useKiteSettings.getState().resetSignalTableSettings();
   });
 
@@ -197,5 +198,47 @@ describe('SterlingKiteEnginePane — table-only settings', () => {
 
     expect(screen.getByText('No listed contract matched the selected strike and expiry series.')).toBeInTheDocument();
     expect(screen.queryByText(/no liquid contract/i)).not.toBeInTheDocument();
+  });
+
+  it('renders spot-source premium Entry, SL and TSL snapshots when present', () => {
+    cfg.scan_source = 'spot';
+    signalRows.push({
+      underlying: 'NIFTY 50',
+      token: 256265,
+      exchange: 'NFO',
+      regime: 'BULL',
+      alignment: { fast: 1, mid: 1, slow: 1 },
+      direction: 'long',
+      option_type: 'CE',
+      legs: [{
+        moneyness: 'ATM',
+        option_type: 'CE',
+        option_symbol: 'NIFTY26JUN25000CE',
+        strike: 25_000,
+        expiry: '2026-06-26',
+        lot_size: 75,
+        token: 44001,
+        is_active: true,
+        premium_spot: 123.45,
+        entry_sl: 101.2,
+        premium_sl: 111.3,
+      }],
+      spot: 25_000,
+      stop_loss: 24_900,
+      score: 85,
+      timestamp_ms: Date.now(),
+      source: 'spot',
+      is_active: true,
+      is_fresh: true,
+    });
+
+    renderPane();
+
+    expect(screen.getByText('Entry (Δpts)')).toBeInTheDocument();
+    expect(screen.getByText('SL')).toBeInTheDocument();
+    expect(screen.getByText('TSL')).toBeInTheDocument();
+    expect(screen.getByText('123.45')).toBeInTheDocument();
+    expect(screen.getByText('101.2')).toBeInTheDocument();
+    expect(screen.getByText('111.3')).toBeInTheDocument();
   });
 });

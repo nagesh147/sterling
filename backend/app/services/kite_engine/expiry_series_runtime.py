@@ -249,6 +249,7 @@ def resolve_option_legs(
             strike=pick.strike,
             expiry=pick.expiry,
             lot_size=pick.lot_size or None,
+            token=pick.token or None,
             is_active=bool(row.is_active),
             signal_timestamp_ms=row.timestamp_ms,
             entry_timestamp_ms=row.timestamp_ms,

@@ -8,7 +8,8 @@ from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.services.kite_engine.scanner import (
-    _SIGNAL_RETENTION_MS, KiteEngineScanner, _compile_rows, _retain_signals, attach_strikes,
+    _SIGNAL_RETENTION_MS, KiteEngineScanner, _compile_rows, _copy_prior_leg_snapshot,
+    _prior_leg_snapshots, _retain_signals, _stamp_leg_premium_stops, attach_strikes,
     drop_forming, evaluate_derivative_contract, evaluate_item, option_order_args,
 )
 from app.services.kite_engine.strikes import OptionPick
@@ -141,13 +142,14 @@ def test_attach_strike_uses_option_name_for_indices():
     base = int(round(spot / 50) * 50)
     dump = [
         {"name": "NIFTY", "tradingsymbol": f"NIFTY25JUN{base}CE", "instrument_type": "CE",
-         "strike": base, "expiry": "2026-06-26"},
+         "strike": base, "expiry": "2026-06-26", "instrument_token": 9001},
         {"name": "NIFTY", "tradingsymbol": f"NIFTY25JUN{base}PE", "instrument_type": "PE",
-         "strike": base, "expiry": "2026-06-26"},
+         "strike": base, "expiry": "2026-06-26", "instrument_token": 9002},
     ]
     attach_strikes(row, dump, option_name="NIFTY", moneynesses=["ATM"], today=date(2026, 6, 13))
     assert len(row.legs) == 1
     assert row.legs[0].option_symbol == f"NIFTY25JUN{base}CE" and row.legs[0].strike == base
+    assert row.legs[0].token == 9001
 
 
 def test_attach_strikes_multi_moneyness_legs():
@@ -383,6 +385,73 @@ def test_option_order_args_maps_buy_one_lot():
     # no legs → no order
     row.legs = []
     assert option_order_args(row) is None
+
+
+def test_spot_premium_snapshot_reuses_entry_and_recomputes_tsl():
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+
+    old = EngineSignalRow(
+        underlying="NIFTY 50", token=256265, exchange="NFO", regime="BULL",
+        alignment=AlignmentChip(fast=1, mid=1, slow=1), direction="long", option_type="CE",
+        legs=[OptionLeg(moneyness="ATM", option_type="CE", option_symbol="NIFTY26JUN25000CE",
+                        strike=25000.0, expiry="2099-01-01", lot_size=75,
+                        premium_spot=100.0, premium_sl=1.0, entry_sl=80.0)],
+        spot=25000.0, stop_loss=24800.0, score=85.0, timestamp_ms=123,
+    )
+    new = old.model_copy(deep=True)
+    new.stop_loss = 24950.0
+    new.legs = [new.legs[0].model_copy(update={"premium_spot": None, "premium_sl": None, "entry_sl": None})]
+
+    _copy_prior_leg_snapshot(new, _prior_leg_snapshots([old]))
+    assert new.legs[0].premium_spot == pytest.approx(100.0)
+    assert new.legs[0].entry_sl == pytest.approx(80.0)
+
+    _stamp_leg_premium_stops(new, new.legs[0])
+    assert new.legs[0].premium_sl is not None
+    assert new.legs[0].premium_sl != pytest.approx(1.0)
+    assert new.legs[0].entry_sl == pytest.approx(80.0)
+
+
+@pytest.mark.asyncio
+async def test_scan_spot_hydrates_entry_sl_and_tsl_premium_snapshots():
+    cfg = SterlingKiteEngineConfig()
+    fired = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+    entry_ts = fired[-1].timestamp_ms
+    premium = _candles(list(np.linspace(80, 123, len(fired))))
+
+    class FakeClient:
+        async def get_candles(self, inst, resolution, limit):
+            if inst.zerodha_token == 100:
+                return fired
+            if inst.zerodha_token == 7001:
+                return premium
+            return []
+
+    base = int(round(fired[-1].close / 50) * 50)
+    nfo = [
+        {"name": "ACME", "tradingsymbol": f"ACME25JUN{base}CE", "instrument_type": "CE",
+         "strike": base, "expiry": "2099-01-01", "instrument_token": 7001, "lot_size": 50},
+    ]
+    sc = KiteEngineScanner()
+    await sc.scan(
+        uid="spot-premium-user",
+        client=FakeClient(),
+        universe=[UniverseItem("ACME", "ACME", 100, "NSE", "NFO")],
+        nfo_rows=nfo,
+        bfo_rows=[],
+        cfg=cfg,
+        moneyness=["ATM"],
+    )
+
+    rows = [row for row in sc.snapshot("spot-premium-user").rows if row.source == "spot"]
+    assert rows
+    row = max(rows, key=lambda value: value.timestamp_ms)
+    assert row.timestamp_ms == entry_ts
+    leg = row.legs[0]
+    assert leg.token == 7001
+    assert leg.premium_spot == pytest.approx(premium[-1].close)
+    assert leg.entry_sl is not None and leg.entry_sl > 0
+    assert leg.premium_sl is not None and leg.premium_sl > 0
 
 
 @pytest.mark.asyncio
