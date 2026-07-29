@@ -36,7 +36,7 @@ def derive_health(
 ) -> NavigatorHealth:
     if not enabled:
         return "DISABLED"
-    if not sampler_running:
+    if not components:
         return "STARTING"
 
     def _age_s(c: ComponentStatus) -> Optional[float]:

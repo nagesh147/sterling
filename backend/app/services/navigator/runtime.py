@@ -16,7 +16,12 @@ from types import SimpleNamespace
 from typing import Optional
 
 from app.core.logging import get_logger
-from app.engines.navigator.gamma_activity import GammaContractInput
+from app.engines.navigator.gamma_activity import (
+    GammaContractInput,
+    classify_expiry_profile,
+    compute_gamma_sample,
+    fractional_time_to_expiry,
+)
 from app.engines.navigator.option_flow import ChainFlowSample, ContractFlowInput
 from app.engines.sterling_kite_engine.schemas import EngineSignalRow
 from app.services import db
@@ -28,7 +33,7 @@ from app.services.kite_engine.market_hours import is_market_open
 from app.services.kite_engine.scanner import scanner
 from app.services.kite_engine.universe import build_universe, select_scan_universe
 from app.services.navigator import config_store, repository, service as nav_service
-from app.services.navigator.calendar import IST
+from app.services.navigator.calendar import IST, expiry_close_ist
 from app.services.navigator.chain_sampler import ChainSamplerCoordinator
 from app.services.navigator.instrument_slice import InstrumentSliceIndex, OptionInstrumentSlice
 
@@ -59,6 +64,8 @@ _status: dict[str, NavigatorRuntimeStatus] = {}
 _snapshots: dict[str, NavigatorSnapshot] = {}
 _activity: dict[str, list[dict]] = {}
 _coordinators: dict[str, ChainSamplerCoordinator] = {}
+_user_sampler_keys: dict[str, set[tuple[str, str, str]]] = {}
+_sampler_users: dict[tuple[str, str, str], set[str]] = {}
 _auto_running = False
 _first_scan_done = False
 
@@ -91,6 +98,7 @@ def snapshot(uid: str) -> NavigatorSnapshot:
             data = json.loads(raw)
             snap.rows = [EngineSignalRow(**r) for r in data.get("rows", [])]
             snap.generated_ms = int(data.get("generated_ms") or 0)
+            nav_service.hydrate_decision_cache_from_rows(uid, snap.rows)
         except Exception as exc:  # noqa: BLE001
             log.debug("navigator runtime cache hydrate failed for %s: %s", uid, exc)
     _snapshots[uid] = snap
@@ -134,6 +142,77 @@ def _sampler_config(cfg):
     payload = cfg.flow.model_dump()
     payload["flow_sample_seconds"] = cfg.flow_sample_seconds
     return SimpleNamespace(**payload)
+
+
+def _row_key(row: EngineSignalRow) -> tuple[str, str, int, str, int]:
+    return (
+        row.source or "spot",
+        row.underlying,
+        int(row.token),
+        row.direction,
+        int(row.timestamp_ms),
+    )
+
+
+def _row_lifecycle_key(row: EngineSignalRow) -> tuple[str, int, str]:
+    return (row.underlying, int(row.token), row.direction)
+
+
+def _merge_unique_rows(rows: list[EngineSignalRow]) -> list[EngineSignalRow]:
+    merged: dict[tuple[str, str, int, str, int], EngineSignalRow] = {}
+    for row in rows:
+        key = _row_key(row)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = row
+            continue
+        existing_rank = (1 if existing.is_fresh else 0, 1 if existing.is_active else 0)
+        row_rank = (1 if row.is_fresh else 0, 1 if row.is_active else 0)
+        if row_rank >= existing_rank:
+            merged[key] = row
+    return sorted(merged.values(), key=lambda r: (r.is_fresh or r.is_active, r.timestamp_ms), reverse=True)
+
+
+def _merge_with_lifecycle(
+    uid: str, previous_rows: list[EngineSignalRow], current_rows: list[EngineSignalRow],
+    completed_underlyings: set[str],
+) -> list[EngineSignalRow]:
+    """fresh/active rows from this scan plus ended rows from prior scans.
+
+    Only underlyings that completed successfully are allowed to end prior
+    Navigator setups. Cancelled or failed instruments keep their previous row
+    state so a partial scan cannot accidentally erase the board.
+    """
+    merged = {_row_key(row): row for row in _merge_unique_rows(current_rows)}
+    live_current = {
+        _row_lifecycle_key(row)
+        for row in current_rows
+        if row.source == "navigator" and (row.is_fresh or row.is_active)
+    }
+    for prev in previous_rows:
+        if prev.source != "navigator":
+            continue
+        key = _row_lifecycle_key(prev)
+        if key in live_current:
+            continue
+        if prev.underlying in completed_underlyings:
+            ended = prev.model_copy(deep=True, update={"is_fresh": False, "is_active": False})
+            nav_service.forget_decision(
+                uid, underlying=ended.underlying, token=ended.token, direction=ended.direction,
+            )
+            merged[_row_key(ended)] = ended
+        else:
+            merged.setdefault(_row_key(prev), prev)
+    return _merge_unique_rows(list(merged.values()))
+
+
+def _entry_delay_satisfied(cfg, now: Optional[datetime] = None) -> bool:
+    delay = int(getattr(cfg, "entry_delay_after_open_minutes", 0) or 0)
+    if delay <= 0:
+        return True
+    now = now or datetime.now(IST)
+    session_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    return now >= session_open + timedelta(minutes=delay)
 
 
 async def _instrument_dumps(client):
@@ -193,11 +272,11 @@ async def _on_sample(account_key: tuple, slice_: OptionInstrumentSlice, result, 
         })
 
 
-def _flow_history(account_scope: str, underlying: str, cfg) -> tuple[list[ChainFlowSample], list[GammaContractInput], Optional[dict]]:
+def _flow_history(account_scope: str, underlying: str, cfg) -> tuple[list[ChainFlowSample], list[GammaContractInput], Optional[dict], str]:
     since = _now_ms() - int(max(cfg.flow.robust_window_samples, cfg.gamma.robust_window_samples) * cfg.flow_sample_seconds * 1000 * 2)
     rows = repository.fetch_latest_option_snapshots(account_scope, underlying, since_bucket_ms=since)
     if not rows:
-        return [], [], None
+        return [], [], None, "unavailable"
     by_bucket: dict[int, list[dict]] = {}
     for r in rows:
         by_bucket.setdefault(int(r["sample_bucket_ms"]), []).append(r)
@@ -205,6 +284,18 @@ def _flow_history(account_scope: str, underlying: str, cfg) -> tuple[list[ChainF
     prev_by_token: dict[int, dict] = {}
     latest_contracts: list[GammaContractInput] = []
     latest_expiry: Optional[str] = None
+    latest_bucket = max(by_bucket)
+    latest_rows = by_bucket[latest_bucket]
+    chain_quality = "ok"
+    if (_now_ms() - latest_bucket) / 1000.0 > cfg.flow.max_quote_age_seconds:
+        chain_quality = "unavailable"
+    strike_radius = cfg.flow.dynamic_strike_radius if cfg.flow.mode == "dynamic" else cfg.flow.broad_strike_radius
+    min_expected_contracts = max(1, (2 * int(strike_radius) + 1) * 2)
+    if len(latest_rows) / min_expected_contracts < cfg.flow.min_chain_completeness:
+        chain_quality = "degraded" if chain_quality == "ok" else chain_quality
+    if any(str(r.get("quote_quality") or "ok") != "ok" for r in latest_rows):
+        chain_quality = "degraded" if chain_quality == "ok" else chain_quality
+    gamma_history: list[tuple[int, float, list[GammaContractInput]]] = []
     for bucket in sorted(by_bucket):
         sample_rows = by_bucket[bucket]
         strikes = sorted({float(r["strike"]) for r in sample_rows if float(r["strike"] or 0) > 0})
@@ -219,12 +310,22 @@ def _flow_history(account_scope: str, underlying: str, cfg) -> tuple[list[ChainF
             prev = prev_by_token.get(token)
             mid = float(r["mid"] or 0.0)
             prev_mid = float(prev["mid"]) if prev and prev.get("mid") else None
+            comparable = False
+            if prev is not None:
+                gap_s = (int(r["sample_bucket_ms"]) - int(prev["sample_bucket_ms"])) / 1000.0
+                curr_day = datetime.fromtimestamp(int(r["sample_bucket_ms"]) / 1000.0, tz=IST).date()
+                prev_day = datetime.fromtimestamp(int(prev["sample_bucket_ms"]) / 1000.0, tz=IST).date()
+                comparable = gap_s <= cfg.flow.max_sample_gap_seconds and curr_day == prev_day
+                if not comparable:
+                    chain_quality = "degraded" if chain_quality == "ok" else chain_quality
             delta_volume = None
-            if prev is not None and r.get("cumulative_volume") is not None and prev.get("cumulative_volume") is not None:
+            if comparable and r.get("cumulative_volume") is not None and prev.get("cumulative_volume") is not None:
                 dv = int(r["cumulative_volume"]) - int(prev["cumulative_volume"])
                 delta_volume = dv if dv >= 0 else None
+                if dv < 0:
+                    chain_quality = "degraded" if chain_quality == "ok" else chain_quality
             delta_oi = None
-            if prev is not None and r.get("open_interest") is not None and prev.get("open_interest") is not None:
+            if comparable and r.get("open_interest") is not None and prev.get("open_interest") is not None:
                 delta_oi = int(r["open_interest"]) - int(prev["open_interest"])
             spread = None
             if mid > 0 and r.get("bid") and r.get("ask"):
@@ -243,41 +344,43 @@ def _flow_history(account_scope: str, underlying: str, cfg) -> tuple[list[ChainF
             latest_expiry = str(r.get("expiry") or "")[:10]
         history.append(ChainFlowSample(sample_ms=bucket, atm_strike=atm, strike_step=step, contracts=contracts))
         latest_contracts = gamma_contracts
+        gamma_history.append((bucket, atm, gamma_contracts))
     gamma_context = None
     if latest_expiry and history:
         try:
+            expiry_date = datetime.strptime(latest_expiry, "%Y-%m-%d").date()
+            latest_profile = classify_expiry_profile(
+                int(history[-1].sample_ms), expiry_date, cfg.gamma.expiry_profile_start_ist,
+            )
+            profile_history: list[float] = []
+            for bucket, spot, contracts in gamma_history[:-1]:
+                if classify_expiry_profile(int(bucket), expiry_date, cfg.gamma.expiry_profile_start_ist) != latest_profile:
+                    continue
+                expiry_close_ts_ms = int(expiry_close_ist(expiry_date).timestamp() * 1000)
+                T = fractional_time_to_expiry(int(bucket), expiry_close_ts_ms)
+                sample = compute_gamma_sample(
+                    contracts, spot=spot, T=T, risk_free_rate=cfg.gamma.risk_free_rate,
+                    dividend_yield=cfg.gamma.dividend_yield, min_iv=cfg.gamma.min_iv,
+                    max_iv=cfg.gamma.max_iv,
+                )
+                if sample.valid_contracts > 0:
+                    profile_history.append(sample.gross_gamma_activity)
             gamma_context = {
                 "spot": float(history[-1].atm_strike),
                 "quote_ts_ms": int(history[-1].sample_ms),
-                "expiry_date": datetime.strptime(latest_expiry, "%Y-%m-%d").date(),
+                "expiry_date": expiry_date,
                 "risk_free_rate": cfg.gamma.risk_free_rate,
                 "dividend_yield": cfg.gamma.dividend_yield,
-                "profile_history": [],
-                "chain_quality": "ok",
+                "profile_history": profile_history[-cfg.gamma.robust_window_samples:],
             }
         except ValueError:
             gamma_context = None
-    return history, latest_contracts, gamma_context
-
-
-def _component_status_from_decision(decision):
-    out = {}
-    for name, ev in (
-        ("avwap", decision.avwap),
-        ("ranges", None),
-        ("volatility", decision.volatility),
-        ("option_flow", decision.option_flow),
-        ("gamma", decision.gamma),
-    ):
-        if name == "ranges":
-            out[name] = nav_service.ComponentStatus(name=name, quality="ok", last_updated_ms=decision.generated_at_ms, reason_codes=["OK"])
-        elif ev is not None:
-            out[name] = nav_service.ComponentStatus(name=name, quality=ev.quality, last_updated_ms=ev.observed_at_ms, reason_codes=ev.reason_codes)
-    return out
+    return history, latest_contracts, gamma_context, chain_quality
 
 
 async def _start_samplers(client, uid: str, acct, items, nfo_rows, bfo_rows, record) -> None:
-    if not (record.config.flow.enabled or record.config.gamma.enabled):
+    if record.config.scan_source == "spot" or not (record.config.flow.enabled or record.config.gamma.enabled):
+        await stop_user_samplers(uid)
         return
     account_scope = _account_scope(acct)
     coord = _coordinators.get(account_scope)
@@ -288,11 +391,15 @@ async def _start_samplers(client, uid: str, acct, items, nfo_rows, bfo_rows, rec
             on_sample=lambda key, sl, res, _now: _on_sample(key, sl, res, record.revision),
         )
         _coordinators[account_scope] = coord
+    desired: set[tuple[str, str, str]] = set()
     for item in items:
         rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
         expiry = _nearest_expiry(rows, item.tradingsymbol)
         if not expiry:
             continue
+        key = (account_scope, item.name, expiry)
+        desired.add(key)
+        _sampler_users.setdefault(key, set()).add(uid)
 
         async def spot_provider(token=item.token):
             candles = await nav_service._fetch_candles_for_navigator(client, token, 4)
@@ -302,19 +409,47 @@ async def _start_samplers(client, uid: str, acct, items, nfo_rows, bfo_rows, rec
             account_scope=account_scope, underlying=item.name, exchange=item.option_exchange,
             expiry=expiry, spot_provider=spot_provider, config=_sampler_config(record.config),
         )
-    nav_service.set_sampler_running(uid, any(
-        coord.is_running(account_scope, item.name, _nearest_expiry(nfo_rows if item.option_exchange == "NFO" else bfo_rows, item.tradingsymbol) or "")
-        for item in items
-    ))
+    stale = _user_sampler_keys.get(uid, set()) - desired
+    for key in stale:
+        users = _sampler_users.get(key)
+        if users is not None:
+            users.discard(uid)
+            if users:
+                continue
+            _sampler_users.pop(key, None)
+        old_account_scope, underlying, expiry = key
+        old_coord = _coordinators.get(old_account_scope)
+        if old_coord is not None:
+            await old_coord.stop(old_account_scope, underlying, expiry)
+    _user_sampler_keys[uid] = desired
+    nav_service.set_sampler_running(uid, any(coord.is_running(*key) for key in desired))
+
+
+async def stop_user_samplers(uid: str) -> None:
+    keys = _user_sampler_keys.pop(uid, set())
+    for key in keys:
+        users = _sampler_users.get(key)
+        if users is not None:
+            users.discard(uid)
+            if users:
+                continue
+            _sampler_users.pop(key, None)
+        account_scope, underlying, expiry = key
+        coord = _coordinators.get(account_scope)
+        if coord is not None:
+            await coord.stop(account_scope, underlying, expiry)
+    nav_service.set_sampler_running(uid, False)
 
 
 def _source_modes_enabled(source: str) -> tuple[bool, bool]:
-    return source in ("spot", "both", "confluence"), source in ("derivatives", "both", "confluence")
+    use_chain = source in ("derivatives", "both", "confluence")
+    return use_chain, use_chain
 
 
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, acct=None) -> int:
     record = config_store.get(uid, default_underlyings=kite_state.get_config(uid).scan_indices)
     if not record.config.enabled:
+        await stop_user_samplers(uid)
         return 0
     st = status(uid)
     if st.scanning:
@@ -325,6 +460,9 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
     st.failures = []
     st.scan_source = record.config.scan_source
     _log(uid, "scan_start", "Navigator scan started.")
+    previous_rows = snapshot(uid).rows
+    nav_service.hydrate_decision_cache_from_rows(uid, previous_rows)
+    completed_underlyings: set[str] = set()
     try:
         nfo, bfo, nse, bse = await _instrument_dumps(client)
         full = build_universe(nfo_instruments=nfo, bfo_instruments=bfo, equities=nse + bse)
@@ -339,22 +477,28 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
         _log(uid, "info", f"Navigator plan: {len(nav_universe)} instruments using {record.config.scan_source}.")
         account_scope = _account_scope(acct or kite_accounts.get_active(uid))
         use_flow, use_gamma = _source_modes_enabled(record.config.scan_source)
+        use_flow = use_flow and record.config.flow.enabled
+        use_gamma = use_gamma and record.config.gamma.enabled
         for item in nav_universe:
             if st.cancelled:
                 break
             st.scanning_label = item.name
             try:
-                chain_history, gamma_contracts, gamma_context = _flow_history(account_scope, item.name, record.config)
+                chain_history, gamma_contracts, gamma_context, chain_quality = _flow_history(account_scope, item.name, record.config)
                 before = len(rows)
                 kwargs = {}
+                if use_flow:
+                    kwargs["flow_required"] = item.is_index and record.config.flow.require_for_index_gate
+                    kwargs["flow_not_applicable"] = False
+                    kwargs["chain_quality"] = chain_quality
                 if use_flow and chain_history:
                     kwargs["flow_history"] = chain_history
-                    kwargs["flow_not_applicable"] = False
-                    kwargs["flow_required"] = item.is_index and record.config.flow.require_for_index_gate
+                if use_gamma:
+                    kwargs["gamma_required"] = record.config.gamma.required_for_gate
+                    kwargs["chain_quality"] = chain_quality
                 if use_gamma and gamma_context is not None:
                     kwargs["gamma_contracts"] = gamma_contracts
                     kwargs["gamma_context"] = gamma_context
-                    kwargs["gamma_required"] = record.config.gamma.required_for_gate
                 await nav_service.run_navigator_pass(
                     client, uid, rows, engine_config_payload=engine_cfg.model_dump(mode="json"),
                     default_underlyings=engine_cfg.scan_indices,
@@ -368,14 +512,25 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
                 )
                 for row in rows[before:]:
                     if row.navigator is not None:
-                        nav_service.note_component_status(uid, _component_status_from_decision(row.navigator))
+                        nav_service.note_component_status(uid, nav_service.component_statuses_from_decision(row.navigator))
                     if place_cb and row.source == "navigator" and row.is_fresh and row.legs and row.navigator and row.navigator.execution_eligible:
+                        eligible, reason = nav_service.check_originated_execution_eligible(
+                            uid, row, default_underlyings=engine_cfg.scan_indices,
+                        )
+                        if not eligible:
+                            _log(uid, "order_blocked", f"{row.underlying}: Navigator auto-entry blocked ({reason}).")
+                            continue
+                        if not _entry_delay_satisfied(record.config):
+                            _log(uid, "order_blocked", f"{row.underlying}: Navigator auto-entry blocked (ENTRY_DELAY).")
+                            continue
                         await place_cb(row, item)
-                _save_snapshot(uid, rows)
+                completed_underlyings.add(item.name)
+                _save_snapshot(uid, _merge_with_lifecycle(uid, previous_rows, rows, completed_underlyings))
             except Exception as exc:  # noqa: BLE001
                 st.failures.append({"underlying": item.name, "error": str(exc)})
                 _log(uid, "error", f"{item.name}: {exc}")
                 log.warning("navigator independent scan failed for %s/%s: %s", uid, item.name, exc)
+        rows = _merge_with_lifecycle(uid, previous_rows, rows, completed_underlyings)
         live = sum(1 for r in rows if r.is_active or r.is_fresh)
         st.last_scan_ms = _now_ms()
         st.next_scan_ms = st.last_scan_ms + int(interval_s * 1000)

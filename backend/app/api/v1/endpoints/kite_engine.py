@@ -17,7 +17,7 @@ from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.schemas import (
     ActivityResponse, BacktestRequest, BacktestResponse,
     EngineConfigModel, EngineDetailResponse, EngineOrderRequest, EngineOrderResponse,
-    OpenPositionRecord, OpenPositionsResponse, SetupChart, SignalsResponse,
+    EngineSignalRow, OpenPositionRecord, OpenPositionsResponse, SetupChart, SignalsResponse,
 )
 from app.services.exchanges.kite import accounts as kite_accounts
 from app.services.exchanges.kite.errors import KiteError
@@ -47,6 +47,75 @@ async def _client(user: UserContext):
     if not acct:
         raise HTTPException(409, "No active Kite account — add credentials and log in first.")
     return await kite_accounts.acquire_client(acct)   # warm, cached (no per-call close)
+
+
+def _signal_row_key(row: EngineSignalRow) -> tuple:
+    leg = row.legs[0].option_symbol if row.legs else ""
+    return (
+        row.source or "spot",
+        row.underlying,
+        row.token,
+        row.direction,
+        row.option_type,
+        row.timestamp_ms,
+        leg,
+    )
+
+
+def _merge_signal_rows(base_rows: list[EngineSignalRow], navigator_rows: list[EngineSignalRow]) -> list[EngineSignalRow]:
+    merged: dict[tuple, EngineSignalRow] = {}
+    for row in [*base_rows, *navigator_rows]:
+        key = _signal_row_key(row)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = row
+            continue
+        row_rank = (1 if row.is_fresh else 0, 1 if row.is_active else 0, row.timestamp_ms)
+        existing_rank = (1 if existing.is_fresh else 0, 1 if existing.is_active else 0, existing.timestamp_ms)
+        if row_rank >= existing_rank:
+            merged[key] = row
+    return sorted(merged.values(), key=lambda r: (r.is_fresh or r.is_active, r.timestamp_ms), reverse=True)
+
+
+def _signals_response(uid: str) -> SignalsResponse:
+    cfg = state.get_config(uid)
+    us = scanner.snapshot(uid)
+    st = state.status(uid)
+    rows = list(us.rows if cfg.engine_enabled else [])
+    generated_ms = us.generated_ms if cfg.engine_enabled else 0
+    scanning = bool(us.scanning and cfg.engine_enabled)
+    scanning_label = us.scanning_label if scanning else ""
+    next_scan_ms = st.next_scan_ms if cfg.engine_enabled else 0
+    auto_scan = service.is_auto_running()
+
+    try:
+        from app.services.navigator import config_store as navigator_config_store
+        from app.services.navigator import runtime as navigator_runtime
+
+        nav_record = navigator_config_store.get(uid, default_underlyings=cfg.scan_indices)
+        if nav_record.config.enabled:
+            nav_snap = navigator_runtime.snapshot(uid)
+            nav_status = navigator_runtime.status(uid)
+            rows = _merge_signal_rows(rows, list(nav_snap.rows))
+            generated_ms = max(generated_ms, nav_snap.generated_ms)
+            if nav_status.scanning:
+                scanning = True
+                scanning_label = nav_status.scanning_label
+            if nav_status.next_scan_ms and (next_scan_ms == 0 or nav_status.next_scan_ms < next_scan_ms):
+                next_scan_ms = nav_status.next_scan_ms
+            auto_scan = auto_scan or navigator_runtime.is_auto_running()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Navigator rows unavailable for shared signal response user=%s: %s", uid, exc)
+
+    return SignalsResponse(
+        generated_ms=generated_ms,
+        scanning=scanning,
+        scanning_label=scanning_label,
+        rows=rows,
+        next_scan_ms=next_scan_ms,
+        auto_scan=auto_scan,
+        market_open=is_market_open(),
+    )
 
 
 @router.get("/config")
@@ -111,12 +180,7 @@ async def backtest(body: BacktestRequest,
 
 @router.get("/signals")
 async def signals(user: UserContext = Depends(get_current_user)) -> SignalsResponse:
-    uid = user.user_id
-    us = scanner.snapshot(uid)
-    st = state.status(uid)
-    return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
-                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running(),
-                           market_open=is_market_open())
+    return _signals_response(user.user_id)
 
 
 @router.get("/activity")
@@ -148,11 +212,7 @@ async def run_scan(user: UserContext = Depends(get_current_user)) -> SignalsResp
     uid = user.user_id
     client = await _client(user)
     await service.scan_user(client, uid)
-    us = scanner.snapshot(uid)
-    st = state.status(uid)
-    return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
-                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running(),
-                           market_open=is_market_open())
+    return _signals_response(uid)
 
 
 @router.post("/scan/cancel")
@@ -164,11 +224,7 @@ async def cancel_scan(user: UserContext = Depends(get_current_user)) -> SignalsR
         state.log(uid, "info", "Scan cancelled by user.")
         state.set_scanning(uid, False)
         state.set_cooldown(uid)
-    us = scanner.snapshot(uid)
-    st = state.status(uid)
-    return SignalsResponse(generated_ms=us.generated_ms, scanning=us.scanning, scanning_label=us.scanning_label, rows=us.rows,
-                           next_scan_ms=st.next_scan_ms, auto_scan=service.is_auto_running(),
-                           market_open=is_market_open())
+    return _signals_response(uid)
 
 
 @router.get("/setup/{token}")

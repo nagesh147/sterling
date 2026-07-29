@@ -14,6 +14,17 @@ def test_config_store_roundtrip():
     assert got.trail_target == "slow" and got.strike_moneyness == ["ATM", "ITM1"] and got.auto_execute
 
 
+def test_engine_enabled_false_persists_across_memory_reset(monkeypatch):
+    monkeypatch.setattr(state, "db", _FakeDB())
+    state.reset("engine_off")
+    state.set_config("engine_off", EngineConfigModel(engine_enabled=False))
+    state._config.pop("engine_off", None)
+
+    got = state.get_config("engine_off")
+
+    assert got.engine_enabled is False
+
+
 def test_activity_log_ring_and_status():
     state.reset("u2")
     assert state.activity("u2") == []

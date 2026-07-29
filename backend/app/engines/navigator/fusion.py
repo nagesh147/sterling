@@ -2,12 +2,12 @@
 generation (spec §13).
 
 Fusion never places an order and never sets the FINAL execution-eligible
-truth on its own — `NavigatorDecision.execution_eligible` here only mirrors
-`status in (CONFIRMED, HIGH_CONVICTION)`, computed at scan time. The
-central order gate (Phase 5, `service.py`) always re-derives real
-eligibility fresh at submission time (current config revision, operating
-mode, calibration readiness, watermark) — this field is one input to that
-gate, never a substitute for it.
+truth on its own. `NavigatorDecision.execution_eligible` is the scan-time
+candidate flag after status and component-quality gates; the central order
+gate (Phase 5, `service.py`) still re-derives real eligibility fresh at
+submission time (current config revision, operating mode/calibration,
+watermark, lifecycle) — this field is one input to that gate, never a
+substitute for it.
 """
 from __future__ import annotations
 
@@ -192,6 +192,7 @@ def _build(
     avwap: Optional[DirectionalEvidence] = None, volatility: Optional[DirectionalEvidence] = None,
     flow: Optional[DirectionalEvidence] = None, gamma: Optional[DirectionalEvidence] = None,
     effective_score: Optional[float] = None, suite_score: Optional[float] = None,
+    execution_eligible: Optional[bool] = None,
 ) -> NavigatorDecision:
     trigger_value = trigger or "base_fresh"
     decision_id = compute_decision_id(
@@ -204,10 +205,39 @@ def _build(
         generated_at_ms=generated_at_ms, bar_close_ms=base.bar_close_ms, activation_watermark_ms=activation_watermark_ms,
         base_signal_id=base.signal_id, trigger=trigger_value, direction=base.direction, status=status,
         base_score=base.score_100, suite_score=suite_score, effective_score=effective_score,
-        execution_eligible=status in ("CONFIRMED", "HIGH_CONVICTION"),
+        execution_eligible=(
+            status in ("CONFIRMED", "HIGH_CONVICTION")
+            if execution_eligible is None else execution_eligible
+        ),
         data_quality="unavailable" if status == "NO_DATA" else "ok",
         reason_codes=valid_reasons, avwap=avwap, volatility=volatility, option_flow=flow, gamma=gamma,
     )
+
+
+def _required_gate_quality_failures(inputs: FusionInputs, config) -> list[str]:
+    """Components that must be good-quality before a decision can execute.
+
+    This deliberately affects only `execution_eligible`, not the advisory
+    status. A user can still see a CONFIRMED setup while the order path fails
+    closed because a required chain slice is stale, incomplete, warming up, or
+    unavailable.
+    """
+    if not config.fusion.require_all_gate_components:
+        return []
+
+    failures: list[str] = []
+    required: list[DirectionalEvidence] = [inputs.avwap, inputs.volatility]
+    if getattr(config.flow, "enabled", True) and not inputs.flow_not_applicable:
+        required.append(inputs.flow)
+    if getattr(config.gamma, "enabled", True):
+        required.append(inputs.gamma)
+
+    for evidence in required:
+        if evidence.quality == "ok":
+            continue
+        codes = [code for code in evidence.reason_codes if code != "OK"]
+        failures.extend(codes or ["CHAIN_INCOMPLETE"])
+    return failures or []
 
 
 def fuse(inputs: FusionInputs, *, config, activation_watermark_ms: int, generated_at_ms: int, config_revision: int, model_versions: dict) -> NavigatorDecision:
@@ -299,8 +329,12 @@ def fuse(inputs: FusionInputs, *, config, activation_watermark_ms: int, generate
         status = "WATCH"
         reason_codes.append("SCORE_BELOW_THRESHOLD")
 
+    gate_failures = _required_gate_quality_failures(inputs, config)
+    execution_eligible = status in ("CONFIRMED", "HIGH_CONVICTION") and not gate_failures
+
     return _build(
-        **common, trigger=trigger, status=status, reasons=reason_codes or ["OK"],
+        **common, trigger=trigger, status=status, reasons=(reason_codes + gate_failures) or ["OK"],
         avwap=inputs.avwap, volatility=inputs.volatility, flow=inputs.flow, gamma=inputs.gamma,
         effective_score=effective_score, suite_score=suite_score,
+        execution_eligible=execution_eligible,
     )

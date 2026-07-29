@@ -229,7 +229,9 @@ class TestStatus:
         nav_service.evaluate_and_cache(
             "user-1", row, base=base, candles=vc, config=rec.config,
             activation_watermark_ms=rec.activation_watermark_ms, config_revision=rec.revision,
+            generated_at_ms=nav_service._now_ms(),
         )
         status = nav_service.get_status("user-1", default_underlyings=_UNDERLYINGS)
-        assert status.sampler_running is True
+        assert status.sampler_running is False
+        assert status.health == "WARMING_UP"
         assert status.last_decision_at_ms is not None

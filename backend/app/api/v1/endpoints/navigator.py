@@ -80,6 +80,8 @@ async def put_config(body: ConfigUpdateRequest, user: UserContext = Depends(get_
         raise HTTPException(409, f"REVISION_CONFLICT: {exc}") from exc
     except NavigatorStorageError as exc:
         raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
+    if not record.config.enabled:
+        await nav_runtime.stop_user_samplers(user.user_id)
     return _to_response(record)
 
 
@@ -98,6 +100,7 @@ async def reset_config(user: UserContext = Depends(get_current_user)) -> ConfigR
         record = config_store.reset(user.user_id, default_underlyings=_default_underlyings(user.user_id))
     except NavigatorStorageError as exc:
         raise HTTPException(502, f"NAVIGATOR_STORAGE_ERROR: {exc}") from exc
+    await nav_runtime.stop_user_samplers(user.user_id)
     return _to_response(record)
 
 
@@ -186,6 +189,7 @@ async def get_snapshot(underlying: str, user: UserContext = Depends(get_current_
     record = config_store.get(user.user_id, default_underlyings=_default_underlyings(user.user_id))
     if not record.config.enabled:
         raise HTTPException(503, "NAVIGATOR_WARMING_UP: Navigator is disabled for this user")
+    nav_runtime.snapshot(user.user_id)
     matches = nav_service.get_cached_decisions_for_underlying(user.user_id, underlying)
     if not matches:
         raise HTTPException(503, f"NAVIGATOR_WARMING_UP: no evidence cached yet for {underlying}")

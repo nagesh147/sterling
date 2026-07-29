@@ -3,6 +3,8 @@
 // `engine_sources` is fixed to a single value; there is no
 // directional/crypto config surface here or on the server.
 
+import type { EngineSignalRow } from './kiteEngine';
+
 export type NavigatorOperatingMode = 'shadow' | 'advisory' | 'gate';
 export type SignalOrigination = 'off' | 'heads_up' | 'full';
 export type NavigatorScanScopeMode = 'shared' | 'custom';
@@ -270,7 +272,7 @@ export interface NavigatorScanResponse {
   generated_ms: number;
   scanning: boolean;
   scanning_label: string;
-  rows: unknown[];
+  rows: EngineSignalRow[];
   next_scan_ms: number;
   auto_scan: boolean;
   cancelled?: boolean;

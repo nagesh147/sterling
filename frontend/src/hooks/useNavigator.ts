@@ -7,8 +7,46 @@ import type {
   NavigatorActivityResponse, NavigatorScanResponse, NavigatorSeriesResponse,
   NavigatorSignalsPage, NavigatorStatusResponse,
 } from '../types/navigator';
+import type { EngineSignalRow, SignalsResponse } from '../types/kiteEngine';
 
 const N = '/api/v1/kite/navigator';
+
+function signalRowKey(row: EngineSignalRow): string {
+  const leg = row.legs?.[0]?.option_symbol ?? '';
+  return `${row.source ?? 'spot'}:${row.underlying}:${row.token}:${row.direction}:${row.option_type}:${row.timestamp_ms}:${leg}`;
+}
+
+function mergeSignalRows(base: EngineSignalRow[], navigator: EngineSignalRow[]): EngineSignalRow[] {
+  const merged = new Map<string, EngineSignalRow>();
+  [...base, ...navigator].forEach((row) => {
+    const key = signalRowKey(row);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, row);
+      return;
+    }
+    const rank = Number(row.is_fresh) * 2 + Number(row.is_active);
+    const existingRank = Number(existing.is_fresh) * 2 + Number(existing.is_active);
+    if (rank >= existingRank) merged.set(key, row);
+  });
+  return Array.from(merged.values()).sort((a, b) =>
+    Number(Boolean(b.is_fresh || b.is_active)) - Number(Boolean(a.is_fresh || a.is_active))
+    || b.timestamp_ms - a.timestamp_ms,
+  );
+}
+
+function mergeNavigatorScanIntoBoard(prev: SignalsResponse | undefined, data: NavigatorScanResponse): SignalsResponse | undefined {
+  if (!prev) return prev;
+  return {
+    ...prev,
+    generated_ms: Math.max(prev.generated_ms ?? 0, data.generated_ms ?? 0),
+    scanning: data.scanning || prev.scanning,
+    scanning_label: data.scanning_label || prev.scanning_label,
+    next_scan_ms: data.next_scan_ms || prev.next_scan_ms,
+    auto_scan: data.auto_scan || prev.auto_scan,
+    rows: mergeSignalRows(prev.rows ?? [], data.rows ?? []),
+  };
+}
 
 export function useNavigatorConfig() {
   return useQuery<NavigatorConfigResponse>({
@@ -68,7 +106,9 @@ export function useRunNavigatorScan() {
   const qc = useQueryClient();
   return useMutation<NavigatorScanResponse, Error, void>({
     mutationFn: () => api.post<NavigatorScanResponse>(`${N}/scan`),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      qc.setQueryData<SignalsResponse>(['kite-engine-signals'], (prev) => mergeNavigatorScanIntoBoard(prev, data));
+      qc.invalidateQueries({ queryKey: ['kite-engine-signals'] });
       qc.invalidateQueries({ queryKey: ['navigator-status'] });
       qc.invalidateQueries({ queryKey: ['navigator-activity'] });
       qc.invalidateQueries({ queryKey: ['navigator-signals'] });
@@ -81,7 +121,9 @@ export function useCancelNavigatorScan() {
   const qc = useQueryClient();
   return useMutation<NavigatorScanResponse, Error, void>({
     mutationFn: () => api.post<NavigatorScanResponse>(`${N}/scan/cancel`),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      qc.setQueryData<SignalsResponse>(['kite-engine-signals'], (prev) => mergeNavigatorScanIntoBoard(prev, data));
+      qc.invalidateQueries({ queryKey: ['kite-engine-signals'] });
       qc.invalidateQueries({ queryKey: ['navigator-status'] });
       qc.invalidateQueries({ queryKey: ['navigator-activity'] });
       notifyOrder({ kind: 'info', title: 'Navigator scan cancelled', message: 'Navigator cancellation requested.' });

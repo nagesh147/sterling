@@ -54,15 +54,6 @@ def get_config(uid: str) -> EngineConfigModel:
                 _config[uid] = EngineConfigModel()
         except Exception:
             _config[uid] = EngineConfigModel()
-    cfg = _config[uid]
-    # One-time migration: flip stale engine_enabled=False → True so existing users
-    # land in the active engine state after the default changed to True.
-    if not cfg.engine_enabled:
-        _config[uid] = cfg.model_copy(update={"engine_enabled": True})
-        try:
-            db.set_config(f"kite_engine_config_{uid}", _config[uid].model_dump_json())
-        except Exception:
-            pass
     return _config[uid]
 
 

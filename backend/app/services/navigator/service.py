@@ -7,24 +7,21 @@ else keeps its own copy. All state here is a CACHE: it is always safe to
 drop and rebuild (e.g. on process restart), and restart never marks old
 evidence as current (spec §18.3).
 
-**Price-only mode.** Building live option-chain capture against a real
-Kite account is the next integration step outside this session (it needs
-a funded/authenticated account to exercise end-to-end). Per the spec's own
-validation sequence (§19.3, step 1: "Run price-only walk-forward tests...
-before enabling raw chain capture"), `evaluate_signal` runs correctly today
-with `chain_history=None` / `gamma_context=None` — flow and gamma simply
-report `quality="unavailable"` with `CHAIN_UNAVAILABLE`, exactly the state
-the spec expects before chain capture is turned on.
+`evaluate_signal` is intentionally deterministic: live scans collect candles
+and, when configured, option-chain history before calling into this module.
+If a scan-source mode does not provide chain history, flow and gamma report
+`quality="unavailable"` with `CHAIN_UNAVAILABLE` and the order gate fails
+closed whenever those components are required.
 """
 from __future__ import annotations
 
 import json
 import time
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Literal, Optional
 
 from app.core.logging import get_logger
-from app.engines.navigator import avwap, projected_ranges, volatility
+from app.engines.navigator import avwap, gamma_activity, option_flow, projected_ranges, volatility
 from app.engines.navigator.fusion import FusionInputs, fuse
 from app.engines.navigator.gamma_activity import GammaContractInput, evaluate_gamma_activity
 from app.engines.navigator.option_flow import ChainFlowSample, evaluate_option_flow
@@ -55,14 +52,18 @@ MODEL_VERSIONS = {
     "avwap": avwap.MODEL_VERSION,
     "ranges": projected_ranges.MODEL_VERSION,
     "volatility": volatility.MODEL_VERSION,
+    "option_flow": option_flow.MODEL_VERSION,
+    "gamma": gamma_activity.MODEL_VERSION,
 }
 
 # uid -> {(underlying, token, direction): NavigatorDecision}
 _decision_cache: dict[str, dict[tuple, NavigatorDecision]] = {}
 # uid -> {component: ComponentStatus}
 _component_status: dict[str, dict[str, ComponentStatus]] = {}
-# uid -> bool — set True once a sampler/evaluation pass has actually run for this user
+# uid -> bool — reflects an actually running chain sampler for this user
 _sampler_running: dict[str, bool] = {}
+
+_CONFIRMED_STATUSES = {"CONFIRMED", "HIGH_CONVICTION"}
 
 
 def _now_ms() -> int:
@@ -75,7 +76,29 @@ def _now_ms() -> int:
 
 def cache_decision(uid: str, *, underlying: str, token: int, direction: str, decision: NavigatorDecision) -> None:
     _decision_cache.setdefault(uid, {})[(underlying, token, direction)] = decision
-    _sampler_running[uid] = True
+
+
+def forget_decision(uid: str, *, underlying: str, token: int, direction: str) -> None:
+    cached = _decision_cache.get(uid)
+    if cached is not None:
+        cached.pop((underlying, token, direction), None)
+
+
+def hydrate_decision_cache_from_rows(uid: str, rows: list[EngineSignalRow]) -> None:
+    """Restore current Navigator evidence from persisted runtime rows.
+
+    Runtime rows are the restart-safe "current board" snapshot. Hydrating
+    their embedded decisions prevents a restart from marking old Navigator
+    rows fresh again or losing `/snapshot` evidence until the next full scan.
+    Ended rows are intentionally not rehydrated as active cache entries.
+    """
+    for row in rows:
+        if row.source != "navigator" or row.navigator is None or not (row.is_fresh or row.is_active):
+            continue
+        cache_decision(
+            uid, underlying=row.underlying, token=row.token,
+            direction=row.direction, decision=row.navigator,
+        )
 
 
 def get_cached_decision(uid: str, *, underlying: str, token: int, direction: str) -> Optional[NavigatorDecision]:
@@ -99,6 +122,50 @@ def set_sampler_running(uid: str, running: bool) -> None:
 
 def note_component_status(uid: str, statuses: dict[str, ComponentStatus]) -> None:
     _component_status.setdefault(uid, {}).update(statuses)
+
+
+def component_statuses_from_decision(decision: NavigatorDecision) -> dict[str, ComponentStatus]:
+    statuses: dict[str, ComponentStatus] = {}
+    for name, ev in (
+        ("avwap", decision.avwap),
+        ("volatility", decision.volatility),
+        ("option_flow", decision.option_flow),
+        ("gamma", decision.gamma),
+    ):
+        if ev is not None:
+            statuses[name] = ComponentStatus(
+                name=name, quality=ev.quality, last_updated_ms=ev.observed_at_ms,
+                reason_codes=ev.reason_codes,
+            )
+    statuses["ranges"] = ComponentStatus(
+        name="ranges", quality="ok", last_updated_ms=decision.generated_at_ms,
+        reason_codes=["OK"],
+    )
+    return statuses
+
+
+def _range_component_status(candles: ValidatedCandles, config, observed_at_ms: int) -> ComponentStatus:
+    try:
+        range_eval = projected_ranges.evaluate_ranges(candles, config.ranges)
+    except Exception:  # noqa: BLE001
+        return ComponentStatus(
+            name="ranges", quality="unavailable", last_updated_ms=observed_at_ms,
+            reason_codes=["PRICE_BARS_MISSING"],
+        )
+    if not range_eval.daily.available or not range_eval.weekly.available:
+        reasons = []
+        if range_eval.daily.unavailable_reason:
+            reasons.append(f"DAILY:{range_eval.daily.unavailable_reason}")
+        if range_eval.weekly.unavailable_reason:
+            reasons.append(f"WEEKLY:{range_eval.weekly.unavailable_reason}")
+        return ComponentStatus(
+            name="ranges", quality="unavailable", last_updated_ms=observed_at_ms,
+            reason_codes=reasons or ["PRICE_BARS_MISSING"],
+        )
+    return ComponentStatus(
+        name="ranges", quality="ok", last_updated_ms=observed_at_ms,
+        reason_codes=["OK"],
+    )
 
 
 def attach_to_rows(uid: str, rows: list[EngineSignalRow], *, default_underlyings: list[str]) -> list[EngineSignalRow]:
@@ -159,12 +226,12 @@ async def run_navigator_pass(
     expiry_types_stocks: Optional[list[str]] = None,
     evaluation_kwargs: Optional[dict] = None,
 ) -> list[EngineSignalRow]:
-    """Live per-scan Navigator evaluation glue — the price-only pipeline
-    (spec §19.3 step 1) run against a fresh, independent candle fetch.
+    """Live per-scan Navigator evaluation glue — the Navigator feature
+    pipeline run against a fresh, independent candle fetch.
     Complete no-op (zero candle fetches, zero overhead) unless the calling
-    user has explicitly enabled Navigator; flow/gamma report
-    `CHAIN_UNAVAILABLE` until live option-chain capture is wired in a future
-    change.
+    user has explicitly enabled Navigator; flow/gamma consume chain evidence
+    supplied by the independent runtime when the selected scan source includes
+    derivatives.
 
     `underlying_tokens` maps each underlying name to ITS OWN spot/index
     instrument token (the same universe token the base engine already
@@ -306,7 +373,12 @@ async def _run_structure_and_origination(
             if (underlying, direction) in seen_directions:
                 continue  # a real SuperTrend row already covers this underlying+direction
             prior = get_cached_decision(uid, underlying=underlying, token=fetch_token, direction=direction)
-            state = "fresh" if prior is None or not is_origination_decision(prior.base_signal_id) else "active"
+            prior_is_live_origin = (
+                prior is not None
+                and is_origination_decision(prior.base_signal_id)
+                and prior.status in _CONFIRMED_STATUSES
+            )
+            state = "active" if prior_is_live_origin else "fresh"
             try:
                 base = synthetic_origination_base(
                     underlying=underlying, token=fetch_token, direction=direction,
@@ -422,6 +494,45 @@ def check_execution_eligible(uid: str, row: EngineSignalRow, *, default_underlyi
     return eligible, reason
 
 
+def check_originated_execution_eligible(uid: str, row: EngineSignalRow, *, default_underlyings: list[str]) -> tuple[bool, str]:
+    """Fail-closed gate for Navigator-owned auto-execution.
+
+    This is intentionally stricter than advisory attachment. A Navigator-only
+    row can be displayed as soon as it is confirmed, but automatic order
+    submission requires Full mode, calibration readiness, current revision,
+    activation watermark, fresh lifecycle state, resolved legs, and a decision
+    whose own component gates made it executable.
+    """
+    record = config_store.get(uid, default_underlyings=default_underlyings)
+    if not record.config.enabled:
+        return False, "NAVIGATOR_DISABLED"
+    if record.config.signal_origination != "full":
+        return False, "ORIGINATION_NOT_FULL"
+    if not record.config.auto_execute_originated:
+        return False, "AUTO_EXECUTE_ORIGINATED_OFF"
+    if record.calibration_readiness != "ready":
+        return False, "GATE_NOT_CALIBRATED"
+    if row.source != "navigator":
+        return False, "NOT_NAVIGATOR_ORIGINATED"
+    if not row.is_fresh:
+        return False, "BASE_SIGNAL_STALE"
+    if not row.legs:
+        return False, "NO_TRADEABLE_LEG"
+
+    decision = row.navigator or get_cached_decision(
+        uid, underlying=row.underlying, token=row.token, direction=row.direction,
+    )
+    if decision is None:
+        return False, "NO_DATA"
+    if decision.config_revision != record.revision:
+        return False, "CONFIG_REVISION_STALE"
+    if decision.bar_close_ms < record.activation_watermark_ms:
+        return False, "ACTIVATION_WATERMARK"
+    if not decision.execution_eligible:
+        return False, "NOT_ELIGIBLE"
+    return True, "OK"
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Price-feature-only evaluation pipeline
 # ─────────────────────────────────────────────────────────────────────────
@@ -449,6 +560,7 @@ def evaluate_signal(
     flow_required: bool = False,
     flow_not_applicable: bool = True,
     gamma_required: bool = False,
+    chain_quality: Literal["ok", "degraded", "unavailable"] = "ok",
 ) -> NavigatorDecision:
     """Pure orchestration: base + candles (+ optional chain evidence) ->
     one immutable `NavigatorDecision`. No I/O — callers gather candles/chain
@@ -474,12 +586,14 @@ def evaluate_signal(
     volatility_evidence = _wrap_volatility(volatility_eval, bar_close_ms, generated_at_ms)
 
     if flow_history:
-        flow_eval = evaluate_option_flow(flow_history, config.flow)
+        flow_eval = evaluate_option_flow(flow_history, config.flow, chain_quality=chain_quality)
         flow_evidence = _wrap_flow(flow_eval, bar_close_ms, generated_at_ms)
     else:
         flow_evidence = _placeholder_evidence("option_flow", bar_close_ms, generated_at_ms)
 
     if gamma_contracts is not None and gamma_context is not None:
+        gamma_context = dict(gamma_context)
+        gamma_context["chain_quality"] = chain_quality
         gamma_eval = evaluate_gamma_activity(
             contracts=gamma_contracts,
             flow_direction=flow_evidence.direction, flow_quality=flow_evidence.quality,
@@ -536,6 +650,9 @@ def evaluate_and_cache(
         config_revision=config_revision, **kwargs,
     )
     cache_decision(uid, underlying=row.underlying, token=row.token, direction=row.direction, decision=decision)
+    statuses = component_statuses_from_decision(decision)
+    statuses["ranges"] = _range_component_status(candles, config, decision.generated_at_ms)
+    note_component_status(uid, statuses)
 
     worst_quality = "ok"
     for evidence in (decision.avwap, decision.volatility, decision.option_flow, decision.gamma):

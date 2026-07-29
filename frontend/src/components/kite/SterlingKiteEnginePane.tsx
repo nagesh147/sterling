@@ -4,6 +4,7 @@ import { k, tint } from '../../styles/kiteUI';
 import {
   useEngineConfig, useEngineSignals, useRunScan, useCancelScan, useSetEngineConfig,
 } from '../../hooks/useSterlingKiteEngine';
+import { useCancelNavigatorScan, useNavigatorConfig, useRunNavigatorScan } from '../../hooks/useNavigator';
 import type {
   AlignmentChip, EngineConfigModel, EngineSignalRow, LiquidityGroup, Moneyness,
   ScanSource, SignalsResponse, StockEntry, TrailTarget,
@@ -1740,14 +1741,21 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   const s = useKiteSettings();
   const { data: signals, isLoading: signalsLoading } = useEngineSignals();
   const { data: cfg } = useEngineConfig();
+  const { data: navigatorConfig } = useNavigatorConfig();
   const setCfg = useSetEngineConfig();
   const scan = useRunScan();
   const cancelScan = useCancelScan();
+  const navigatorScan = useRunNavigatorScan();
+  const cancelNavigatorScan = useCancelNavigatorScan();
+  const navigatorEnabled = navigatorConfig?.record.config.enabled ?? false;
+  const navigatorOnlyRuntime = Boolean(cfg && !cfg.engine_enabled && navigatorEnabled);
+  const scanPending = navigatorOnlyRuntime ? navigatorScan.isPending : scan.isPending;
   const scanLock = React.useRef(false);
   const doScan = () => {
-    if (scanLock.current || scan.isPending) return;
+    if (scanLock.current || scanPending) return;
     scanLock.current = true;
-    scan.mutate(undefined, { onSettled: () => { scanLock.current = false; } });
+    const mutation = navigatorOnlyRuntime ? navigatorScan : scan;
+    mutation.mutate(undefined, { onSettled: () => { scanLock.current = false; } });
   };
 
   const [query, setQuery] = React.useState('');
@@ -1971,7 +1979,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
   React.useEffect(() => () => setLiveCount(0), [setLiveCount]);
 
   // ── Engine master gate ──────────────────────────────────────────────────────
-  if (cfg && !cfg.engine_enabled) {
+  if (cfg && !cfg.engine_enabled && !navigatorEnabled && rows.length === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
                     background: k.bg, fontFamily: k.fontFamily }}>
@@ -2000,7 +2008,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               Engine is off
             </div>
             <div style={{ fontSize: 12, color: k.dim, lineHeight: 1.6, maxWidth: 260 }}>
-              The Sterling Kite Engine strategy is disabled. Kite runs in normal mode
+              Supertrend and Navigator scanning are disabled. Kite runs in normal mode
               — manual trading, market watch, and existing flows are unaffected.
             </div>
           </div>
@@ -2013,8 +2021,8 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
             Enable Engine
           </button>
           <div style={{ fontSize: 11, color: k.dim, textAlign: 'center', maxWidth: 240 }}>
-            Scanning, signals, and auto-execute are gated behind this toggle.
-            You can disable it again from the settings header at any time.
+            This only enables the Supertrend engine. Navigator has its own toggle
+            under Connect → Value-Flow Navigator.
           </div>
         </div>
       </div>
@@ -2082,12 +2090,16 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
           {/* Actions: rescan / table preferences */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             {scanning ? (
-              <HeaderIconBtn title="Stop scan" onClick={() => cancelScan.mutate()} disabled={cancelScan.isPending}>
+              <HeaderIconBtn
+                title="Stop scan"
+                onClick={() => (navigatorOnlyRuntime ? cancelNavigatorScan : cancelScan).mutate()}
+                disabled={navigatorOnlyRuntime ? cancelNavigatorScan.isPending : cancelScan.isPending}
+              >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
               </HeaderIconBtn>
             ) : (
-              <HeaderIconBtn title="Re-scan now" disabled={scan.isPending} onClick={() => doScan()}>
-                <RefreshIcon spinning={scan.isPending} />
+              <HeaderIconBtn title={navigatorOnlyRuntime ? 'Run Navigator scan' : 'Re-scan now'} disabled={scanPending} onClick={() => doScan()}>
+                <RefreshIcon spinning={scanPending} />
               </HeaderIconBtn>
             )}
           </div>

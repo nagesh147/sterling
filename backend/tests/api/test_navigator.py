@@ -7,8 +7,11 @@ import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
+from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineConfigModel, EngineSignalRow
 from app.services import db
+from app.services.kite_engine import state as kite_state
 from app.services.navigator import service as nav_service
+from app.services.navigator import config_store, runtime as nav_runtime
 
 
 @pytest.fixture(autouse=True)
@@ -20,7 +23,11 @@ def isolated_db():
     nav_service.clear_cache("default")
     nav_service.clear_cache("user-a")
     nav_service.clear_cache("user-b")
+    nav_runtime._snapshots.pop("user-a", None)
+    kite_state.reset("user-a")
     yield
+    nav_runtime._snapshots.pop("user-a", None)
+    kite_state.reset("user-a")
     os.unlink(path)
 
 
@@ -153,6 +160,33 @@ class TestSignalsEndpoints:
         resp = client.get("/api/v1/kite/navigator/series/NIFTY 50", headers=_headers("user-a"))
         assert resp.status_code == 200
         assert resp.json()["points"] == []
+
+    def test_shared_engine_signals_include_navigator_rows_when_supertrend_disabled(self):
+        from app.api.v1.endpoints import kite_engine as kite_endpoint
+
+        uid = "user-a"
+        kite_state.set_config(uid, EngineConfigModel(engine_enabled=False, scan_indices=["NIFTY 50"]))
+        rec = config_store.get(uid, default_underlyings=["NIFTY 50"])
+        cfg = rec.config.model_copy(update={"enabled": True, "signal_origination": "heads_up"})
+        config_store.save(uid, cfg, expected_revision=rec.revision, default_underlyings=["NIFTY 50"])
+        nav_runtime._snapshots[uid] = nav_runtime.NavigatorSnapshot(
+            generated_ms=1_700_000_000_001,
+            rows=[
+                EngineSignalRow(
+                    underlying="NIFTY 50", token=256265, exchange="NFO", regime="BULL",
+                    alignment=AlignmentChip(fast=0, mid=0, slow=0),
+                    direction="long", option_type="CE", legs=[],
+                    spot=22000.0, stop_loss=21900.0, score=50.0,
+                    timestamp_ms=1_700_000_000_000, is_active=True,
+                    is_fresh=False, source="navigator",
+                )
+            ],
+        )
+
+        resp = kite_endpoint._signals_response(uid)
+
+        assert [row.source for row in resp.rows] == ["navigator"]
+        assert resp.generated_ms == 1_700_000_000_001
 
 
 class TestCalibrationEndpoint:

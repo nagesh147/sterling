@@ -167,6 +167,20 @@ class TestHardGateTruthTable:
         assert decision.status in ("CONFIRMED", "HIGH_CONVICTION")
         assert decision.execution_eligible is True
 
+    def test_confirmed_but_degraded_required_component_is_not_executable(self):
+        inputs = _inputs(
+            avwap=_evidence("avwap", direction=1, confidence_100=90.0), avwap_grade="A",
+            volatility=_evidence("volatility", direction=1, confidence_100=80.0),
+            flow=_evidence(
+                "option_flow", direction=1, confidence_100=70.0,
+                quality="degraded", reason_codes=["CHAIN_INCOMPLETE"],
+            ),
+        )
+        decision = _fuse(inputs)
+        assert decision.status in ("CONFIRMED", "HIGH_CONVICTION")
+        assert decision.execution_eligible is False
+        assert "CHAIN_INCOMPLETE" in decision.reason_codes
+
     def test_high_conviction_requires_all_prerequisites(self):
         inputs = _inputs(
             avwap=_evidence("avwap", direction=1, confidence_100=95.0), avwap_grade="A+",
