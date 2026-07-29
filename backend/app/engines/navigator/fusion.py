@@ -196,7 +196,7 @@ def _build(
     trigger_value = trigger or "base_fresh"
     decision_id = compute_decision_id(
         user_id=base.user_id, engine_id=base.engine_id, underlying=base.underlying, timeframe=base.timeframe,
-        bar_close_ms=base.bar_close_ms, direction=base.direction, trigger=trigger_value, config_revision=config_revision,
+        bar_close_ms=base.bar_close_ms, direction=base.direction, trigger=f"{trigger_value}:{status}", config_revision=config_revision,
     )
     valid_reasons = sorted({r for r in reasons if r in ReasonCode.__args__}) or ["OK"]
     return NavigatorDecision(

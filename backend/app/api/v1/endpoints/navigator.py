@@ -17,7 +17,7 @@ from app.core.auth import UserContext, get_current_user
 from app.core.logging import get_logger
 from app.engines.navigator.schemas import NavigatorConfigModel, NavigatorConfigRecord
 from app.services.kite_engine import state as kite_engine_state
-from app.services.navigator import config_store, repository, service as nav_service
+from app.services.navigator import config_store, repository, runtime as nav_runtime, service as nav_service
 from app.services.navigator.repository import NavigatorStorageError, RevisionConflict
 
 log = get_logger(__name__)
@@ -104,6 +104,7 @@ async def reset_config(user: UserContext = Depends(get_current_user)) -> ConfigR
 @router.get("/status")
 async def get_status(user: UserContext = Depends(get_current_user)) -> dict:
     status = nav_service.get_status(user.user_id, default_underlyings=_default_underlyings(user.user_id))
+    rt = nav_runtime.status(user.user_id)
     return {
         "health": status.health,
         "enabled": status.enabled,
@@ -117,6 +118,66 @@ async def get_status(user: UserContext = Depends(get_current_user)) -> dict:
         ],
         "last_decision_at_ms": status.last_decision_at_ms,
         "sampler_running": status.sampler_running,
+        "scanning": rt.scanning,
+        "scanning_label": rt.scanning_label,
+        "last_scan_ms": rt.last_scan_ms,
+        "next_scan_ms": rt.next_scan_ms,
+        "signal_count": rt.signal_count,
+        "scan_source": rt.scan_source,
+        "failures": rt.failures,
+        "auto_scan": nav_runtime.is_auto_running(),
+    }
+
+
+@router.get("/activity")
+async def get_activity(limit: int = 2000, user: UserContext = Depends(get_current_user)) -> dict:
+    rt = nav_runtime.status(user.user_id)
+    return {
+        "events": nav_runtime.activity(user.user_id, limit),
+        "scanning": rt.scanning,
+        "scanning_label": rt.scanning_label,
+        "last_scan_ms": rt.last_scan_ms,
+        "next_scan_ms": rt.next_scan_ms,
+        "signal_count": rt.signal_count,
+        "auto_scan": nav_runtime.is_auto_running(),
+        "failures": rt.failures,
+    }
+
+
+@router.post("/scan")
+async def run_scan(user: UserContext = Depends(get_current_user)) -> dict:
+    from app.services.exchanges.kite import accounts as kite_accounts
+
+    acct = kite_accounts.get_active(user.user_id)
+    if not acct:
+        raise HTTPException(409, "No active Kite account — add credentials and log in first.")
+    client = await kite_accounts.acquire_client(acct)
+    await nav_runtime.scan_user(client, user.user_id, acct=acct)
+    snap = nav_runtime.snapshot(user.user_id)
+    rt = nav_runtime.status(user.user_id)
+    return {
+        "generated_ms": snap.generated_ms,
+        "scanning": rt.scanning,
+        "scanning_label": rt.scanning_label,
+        "rows": [r.model_dump(mode="json") for r in snap.rows],
+        "next_scan_ms": rt.next_scan_ms,
+        "auto_scan": nav_runtime.is_auto_running(),
+    }
+
+
+@router.post("/scan/cancel")
+async def cancel_scan(user: UserContext = Depends(get_current_user)) -> dict:
+    cancelled = nav_runtime.cancel(user.user_id)
+    snap = nav_runtime.snapshot(user.user_id)
+    rt = nav_runtime.status(user.user_id)
+    return {
+        "cancelled": cancelled,
+        "generated_ms": snap.generated_ms,
+        "scanning": rt.scanning,
+        "scanning_label": rt.scanning_label,
+        "rows": [r.model_dump(mode="json") for r in snap.rows],
+        "next_scan_ms": rt.next_scan_ms,
+        "auto_scan": nav_runtime.is_auto_running(),
     }
 
 

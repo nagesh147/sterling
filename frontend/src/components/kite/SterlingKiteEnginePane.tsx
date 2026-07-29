@@ -87,9 +87,9 @@ const SCAN_SOURCE_OPTS: { value: ScanSource; label: string; hint: string }[] = [
 type SignalMode = 'supertrend' | 'navigator' | 'combined' | 'common';
 const SIGNAL_MODE_OPTS: { value: SignalMode; label: string; hint: string }[] = [
   { value: 'supertrend', label: 'SuperTrend', hint: 'Default triple-SuperTrend (Heikin-Ashi) signal only — the Navigator badge is hidden even when Navigator has evidence.' },
-  { value: 'navigator', label: 'Navigator', hint: "Only setups the Value-Flow Navigator has evidence for, viewed through its own status/effective score. Navigator never scans on its own — it only evaluates whatever the Signal source dropdown (Spot/Derivatives/Both/Confluence) is already producing." },
+  { value: 'navigator', label: 'Navigator', hint: "Only setups the Value-Flow Navigator owns or has evidence for, viewed through its own status/effective score. Navigator scans independently and can run while SuperTrend is off." },
   { value: 'combined', label: 'Combined', hint: 'Every SuperTrend setup, with Navigator evidence shown alongside when available. (Default)' },
-  { value: 'common', label: 'Common', hint: "Only setups where BOTH systems agree: SuperTrend is live AND Navigator status is Confirmed or High Conviction. Same Signal-source scoping as Navigator above." },
+  { value: 'common', label: 'Common', hint: "Only setups where BOTH systems agree: SuperTrend is live and Navigator status is Confirmed or High Conviction. Navigator-owned rows remain visible in the Navigator lens." },
 ];
 
 // Granular universe pickers. `name` is the value stored in config (matches the

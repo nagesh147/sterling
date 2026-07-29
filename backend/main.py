@@ -1564,6 +1564,13 @@ async def lifespan(app: FastAPI):
     kite_engine_task = asyncio.create_task(_kite_auto_scan())
     log.info("Kite Sterling Kite Engine auto-scan loop started (every 5 min)")
 
+    # Sterling Value-Flow Navigator — independent strategy scanner. It reuses
+    # the Kite account/client/instrument caches, but does not depend on the
+    # Triple-Supertrend engine being enabled or scanning.
+    from app.services.navigator.runtime import auto_scan_loop as _navigator_auto_scan
+    navigator_task = asyncio.create_task(_navigator_auto_scan())
+    log.info("Value-Flow Navigator auto-scan loop started (every 5 min)")
+
     # Real-time Delta options IV stream + recorder (Component ① of realtime-iv-stream).
     # Only starts when scalp_mode (crypto kill switch) is enabled.
     if app.state.scalp_mode:
@@ -1649,6 +1656,11 @@ async def lifespan(app: FastAPI):
     kite_engine_task.cancel()
     try:
         await kite_engine_task
+    except (Exception, BaseException):
+        pass
+    navigator_task.cancel()
+    try:
+        await navigator_task
     except (Exception, BaseException):
         pass
     vcp_feed_task.cancel()

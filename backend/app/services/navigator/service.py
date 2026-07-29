@@ -93,6 +93,14 @@ def clear_cache(uid: str) -> None:
     _sampler_running.pop(uid, None)
 
 
+def set_sampler_running(uid: str, running: bool) -> None:
+    _sampler_running[uid] = bool(running)
+
+
+def note_component_status(uid: str, statuses: dict[str, ComponentStatus]) -> None:
+    _component_status.setdefault(uid, {}).update(statuses)
+
+
 def attach_to_rows(uid: str, rows: list[EngineSignalRow], *, default_underlyings: list[str]) -> list[EngineSignalRow]:
     """Synchronous, cache-only join — NEVER fetches live data or makes a
     broker call. Safe to call from the scanner's hot path once per scan.
@@ -149,6 +157,7 @@ async def run_navigator_pass(
     expiry_types: Optional[list[str]] = None,
     expiry_types_indices: Optional[list[str]] = None,
     expiry_types_stocks: Optional[list[str]] = None,
+    evaluation_kwargs: Optional[dict] = None,
 ) -> list[EngineSignalRow]:
     """Live per-scan Navigator evaluation glue — the price-only pipeline
     (spec §19.3 step 1) run against a fresh, independent candle fetch.
@@ -191,6 +200,7 @@ async def run_navigator_pass(
     record = config_store.get(uid, default_underlyings=default_underlyings)
     if not record.config.enabled:
         return rows
+    evaluation_kwargs = evaluation_kwargs or {}
     config_revision = kite_config_revision(engine_config_payload)
     underlying_tokens = underlying_tokens or {}
     covered = set(underlying_tokens) or set(record.config.underlyings)
@@ -219,6 +229,7 @@ async def run_navigator_pass(
             evaluate_and_cache(
                 uid, row, base=base, candles=candles, config=record.config,
                 activation_watermark_ms=record.activation_watermark_ms, config_revision=record.revision,
+                **evaluation_kwargs,
             )
         except AdapterError as exc:
             log.debug("navigator pass: adapt skipped for %s/%s: %s", uid, row.underlying, exc)
@@ -237,6 +248,7 @@ async def run_navigator_pass(
                 seen_directions=seen_directions, universe=universe, nfo_rows=nfo_rows, bfo_rows=bfo_rows,
                 moneyness=moneyness, expiry_types=expiry_types,
                 expiry_types_indices=expiry_types_indices, expiry_types_stocks=expiry_types_stocks,
+                evaluation_kwargs=evaluation_kwargs,
             )
         except Exception as exc:  # noqa: BLE001
             log.warning("navigator structure radar / origination pass failed for %s: %s", uid, exc)
@@ -258,6 +270,7 @@ async def _run_structure_and_origination(
     universe: Optional[list], nfo_rows: Optional[list], bfo_rows: Optional[list],
     moneyness: Optional[list[str]], expiry_types: Optional[list[str]],
     expiry_types_indices: Optional[list[str]], expiry_types_stocks: Optional[list[str]],
+    evaluation_kwargs: Optional[dict] = None,
 ) -> None:
     """Structure Radar + Signal Origination (2026-07-28 design doc): for every
     underlying+direction in Navigator's own coverage with NO live real
@@ -313,6 +326,7 @@ async def _run_structure_and_origination(
                 decision = evaluate_and_cache(
                     uid, placeholder, base=base, candles=candles, config=config,
                     activation_watermark_ms=activation_watermark_ms, config_revision=record_revision,
+                    **(evaluation_kwargs or {}),
                 )
             except AdapterError as exc:
                 log.debug("structure radar: synthesis skipped for %s/%s/%s: %s", uid, underlying, direction, exc)

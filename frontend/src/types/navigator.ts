@@ -7,7 +7,7 @@ export type NavigatorOperatingMode = 'shadow' | 'advisory' | 'gate';
 export type SignalOrigination = 'off' | 'heads_up' | 'full';
 export type NavigatorScanScopeMode = 'shared' | 'custom';
 export type NavigatorStatus = 'NO_DATA' | 'WAIT' | 'CONFLICT' | 'WATCH' | 'CONFIRMED' | 'HIGH_CONVICTION';
-export type NavigatorComponent = 'avwap' | 'volatility' | 'option_flow' | 'gamma';
+export type NavigatorComponent = 'avwap' | 'ranges' | 'volatility' | 'option_flow' | 'gamma';
 export type AvwapGrade = 'A+' | 'A' | 'B';
 export type CalibrationReadiness = 'not_ready' | 'ready';
 
@@ -245,6 +245,35 @@ export interface NavigatorStatusResponse {
   components: NavigatorComponentStatus[];
   last_decision_at_ms: number | null;
   sampler_running: boolean;
+  scanning: boolean;
+  scanning_label: string;
+  last_scan_ms: number;
+  next_scan_ms: number;
+  signal_count: number;
+  scan_source: 'spot' | 'derivatives' | 'both' | 'confluence';
+  failures: Array<{ underlying: string; error: string }>;
+  auto_scan: boolean;
+}
+
+export interface NavigatorActivityResponse {
+  events: Array<{ ts_ms: number; kind: string; message: string }>;
+  scanning: boolean;
+  scanning_label: string;
+  last_scan_ms: number;
+  next_scan_ms: number;
+  signal_count: number;
+  auto_scan: boolean;
+  failures: Array<{ underlying: string; error: string }>;
+}
+
+export interface NavigatorScanResponse {
+  generated_ms: number;
+  scanning: boolean;
+  scanning_label: string;
+  rows: unknown[];
+  next_scan_ms: number;
+  auto_scan: boolean;
+  cancelled?: boolean;
 }
 
 export interface NavigatorSignalsPage {

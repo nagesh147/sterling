@@ -4,7 +4,8 @@ import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   CalibrationReportResponse,
   NavigatorCalibrationResponse, NavigatorConfigModel, NavigatorConfigResponse,
-  NavigatorSeriesResponse, NavigatorSignalsPage, NavigatorStatusResponse,
+  NavigatorActivityResponse, NavigatorScanResponse, NavigatorSeriesResponse,
+  NavigatorSignalsPage, NavigatorStatusResponse,
 } from '../types/navigator';
 
 const N = '/api/v1/kite/navigator';
@@ -51,6 +52,40 @@ export function useNavigatorStatus(enabled: boolean) {
     queryFn: () => api.get<NavigatorStatusResponse>(`${N}/status`),
     refetchInterval: enabled ? 15_000 : false,
     enabled,
+  });
+}
+
+export function useNavigatorActivity(enabled = true) {
+  return useQuery<NavigatorActivityResponse>({
+    queryKey: ['navigator-activity'],
+    queryFn: () => api.get<NavigatorActivityResponse>(`${N}/activity`),
+    refetchInterval: enabled ? 5000 : false,
+    enabled,
+  });
+}
+
+export function useRunNavigatorScan() {
+  const qc = useQueryClient();
+  return useMutation<NavigatorScanResponse, Error, void>({
+    mutationFn: () => api.post<NavigatorScanResponse>(`${N}/scan`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['navigator-status'] });
+      qc.invalidateQueries({ queryKey: ['navigator-activity'] });
+      qc.invalidateQueries({ queryKey: ['navigator-signals'] });
+      notifyOrder({ kind: 'info', title: 'Navigator scan complete', message: 'Independent Navigator scan finished.' });
+    },
+  });
+}
+
+export function useCancelNavigatorScan() {
+  const qc = useQueryClient();
+  return useMutation<NavigatorScanResponse, Error, void>({
+    mutationFn: () => api.post<NavigatorScanResponse>(`${N}/scan/cancel`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['navigator-status'] });
+      qc.invalidateQueries({ queryKey: ['navigator-activity'] });
+      notifyOrder({ kind: 'info', title: 'Navigator scan cancelled', message: 'Navigator cancellation requested.' });
+    },
   });
 }
 
