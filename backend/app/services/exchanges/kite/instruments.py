@@ -12,6 +12,7 @@ testable with a fake fetcher.
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import csv
 import io
 import time
@@ -47,6 +48,19 @@ def parse_instruments_csv(text: str) -> List[dict]:
     return rows
 
 
+async def _parse_instruments_csv_async(text: str) -> List[dict]:
+    """Parse off-loop without relying on asyncio's default executor.
+
+    Python 3.14's default-executor shutdown can hang in the local pytest
+    environment after `asyncio.to_thread()`. A short-lived executor keeps the
+    production non-blocking behavior while giving tests a deterministic
+    teardown path.
+    """
+    loop = asyncio.get_running_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="kite-instruments") as executor:
+        return await loop.run_in_executor(executor, parse_instruments_csv, text)
+
+
 class InstrumentCache:
     def __init__(
         self,
@@ -80,7 +94,7 @@ class InstrumentCache:
             if self._fresh(key, now):
                 return self._cache[key]
             text = await self._fetch(key)
-            rows = await asyncio.to_thread(parse_instruments_csv, text)
+            rows = await _parse_instruments_csv_async(text)
             self._cache[key] = rows
             self._cache_ts[key] = now
             return rows

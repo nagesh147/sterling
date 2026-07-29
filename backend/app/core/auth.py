@@ -25,7 +25,7 @@ class UserContext:
     user_id: str
 
 
-def get_current_user(request: Request) -> UserContext:
+async def get_current_user(request: Request) -> UserContext:
     """FastAPI dependency → the calling user's context."""
     uid = (request.headers.get(USER_ID_HEADER) or "").strip() or DEFAULT_USER_ID
     return UserContext(user_id=uid)
