@@ -4,7 +4,11 @@ import {
 } from './kiteSettingsPrimitives';
 import { Icons } from '../../styles/kiteUI';
 import { useNavigatorConfig, useResetNavigatorConfig, useSetNavigatorConfig } from '../../hooks/useNavigator';
-import type { AvwapGrade, NavigatorConfigModel, NavigatorOperatingMode, SignalOrigination } from '../../types/navigator';
+import { useEngineConfig, useStockRegistry } from '../../hooks/useSterlingKiteEngine';
+import type { EngineConfigModel } from '../../types/kiteEngine';
+import type {
+  AvwapGrade, NavigatorConfigModel, NavigatorOperatingMode, NavigatorScanScopeMode, SignalOrigination,
+} from '../../types/navigator';
 import {
   HARDCODED_MANUAL_RULES, MANUAL_FIELDS, getManualFieldValue, resetManualField,
   type ManualFieldSpec,
@@ -129,6 +133,41 @@ function RevertNote({ displayDefault, onRevert, sourceLabel = "Sterling's" }: { 
   );
 }
 
+//: Same four indices the Kite engine's own Market Universe picker offers —
+//: kept in sync by hand (there is no shared constant today; EngineConfiguration
+//: Panel.tsx declares its own INDEX_OPTIONS with the same values).
+const NAV_INDEX_OPTIONS = ['NIFTY 50', 'NIFTY BANK', 'NIFTY FIN SERVICE', 'SENSEX'];
+
+const chipStyle: React.CSSProperties = {
+  padding: '4px 8px', borderRadius: 5, background: '#f6f6f7',
+  border: `1px solid ${BORDER}`, fontSize: 10.5, color: TEXT,
+};
+
+function toggleName(list: string[], name: string): string[] {
+  return list.includes(name) ? list.filter((n) => n !== name) : [...list, name];
+}
+
+/** Switching to a custom scope with nothing picked would save an invalid
+ *  config (the server rejects an empty custom universe) and, worse, read as
+ *  "Navigator is on but finds nothing". Seed it from whatever the engine is
+ *  covering right now so the first custom save is always meaningful — the
+ *  user then edits down from a working list instead of up from nothing. */
+function seedCustomScope(
+  draft: NavigatorConfigModel, engineCfg: EngineConfigModel | undefined,
+): NavigatorConfigModel {
+  const alreadyConfigured = draft.scan_indices.length || draft.scan_stocks.length || draft.scan_all_stocks;
+  if (alreadyConfigured) return { ...draft, scan_scope_mode: 'custom' };
+  return {
+    ...draft,
+    scan_scope_mode: 'custom',
+    scan_indices: engineCfg?.scan_indices ?? ['NIFTY 50'],
+    scan_stocks: engineCfg?.scan_stocks ?? [],
+    scan_all_stocks: engineCfg?.scan_all_stocks ?? false,
+    scan_source: engineCfg?.scan_source === 'both' || engineCfg?.scan_source === 'confluence'
+      || engineCfg?.scan_source === 'derivatives' ? engineCfg.scan_source : 'spot',
+  };
+}
+
 const ORIGINATION_EXPLAIN: Record<SignalOrigination, string> = {
   off: "Unchanged: Navigator only ever comments on a setup that SuperTrend already found. It never adds a new row by itself.",
   heads_up: 'Navigator can show its own idea, even when SuperTrend found nothing. You\'ll see it as a "Navigator idea" row — but you can\'t trade it, it\'s just there to look at.',
@@ -204,6 +243,11 @@ export function NavigatorSettingsPanel() {
   const { data, isLoading, error: loadError } = useNavigatorConfig();
   const setConfig = useSetNavigatorConfig();
   const resetConfig = useResetNavigatorConfig();
+  // Shared-scope mode needs to SHOW what the engine covers, and seeding a
+  // custom scope copies from it. Same React Query keys the engine's own
+  // panel uses, so this adds no extra fetch.
+  const { data: engineCfg } = useEngineConfig();
+  const { data: stockRegistry } = useStockRegistry();
 
   const [draft, setDraft] = React.useState<NavigatorConfigModel | null>(null);
   const [baseRevision, setBaseRevision] = React.useState<number | null>(null);
@@ -263,6 +307,12 @@ export function NavigatorSettingsPanel() {
   };
 
   const saveError = setConfig.isError && !conflict ? String(setConfig.error?.message ?? 'save failed') : null;
+
+  const customScopeEmpty = draft.scan_scope_mode === 'custom'
+    && !draft.scan_indices.length && !draft.scan_stocks.length && !draft.scan_all_stocks;
+  const customScopeCount = draft.scan_all_stocks
+    ? `${draft.scan_indices.length} indices + all stocks`
+    : `${draft.scan_indices.length + draft.scan_stocks.length} instruments`;
 
   return (
     <section style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden', marginBottom: 16, boxShadow: '0 1px 2px rgba(0,0,0,.025)' }}>
@@ -332,7 +382,12 @@ export function NavigatorSettingsPanel() {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button type="button" onClick={handleApply} disabled={!dirty || setConfig.isPending} style={{ ...applyButtonStyle, opacity: !dirty || setConfig.isPending ? 0.5 : 1 }}>
+          <button
+            type="button" onClick={handleApply}
+            disabled={!dirty || setConfig.isPending || customScopeEmpty}
+            title={customScopeEmpty ? 'Pick at least one index or stock for Navigator to scan' : undefined}
+            style={{ ...applyButtonStyle, opacity: !dirty || setConfig.isPending || customScopeEmpty ? 0.5 : 1 }}
+          >
             Apply changes
           </button>
           {dirty && (
@@ -396,19 +451,99 @@ export function NavigatorSettingsPanel() {
         </div>
       </AdvancedGroup>
 
-      {/* ── 1. instruments and timing — Sterling's own settings, ungrouped, as before ── */}
-      <Section title="Instruments and timing" description="What Navigator scans and the base clock it runs on." summary={`${draft.underlyings.length} underlyings · ${draft.price_timeframe}`}>
-        <Field label="Engine source" hint="This build is Kite-only — no other engine can be selected.">
-          <CheckOption label="Kite triple-SuperTrend" checked disabled compact />
-        </Field>
-        <Field label="Underlyings" hint="Mirrors the Sterling Kite Engine's own scan universe.">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {draft.underlyings.map((u) => (
-              <span key={u} style={{ padding: '4px 8px', borderRadius: 5, background: '#f6f6f7', border: `1px solid ${BORDER}`, fontSize: 10.5, color: TEXT }}>{u}</span>
-            ))}
-            {draft.underlyings.length === 0 && <span style={{ color: DIM, fontSize: 10.5 }}>None yet — configure the Kite engine's scan universe first.</span>}
+      {/* ── 1. scan scope — shared with the Kite engine, or Navigator's own ── */}
+      <Section
+        title="What Navigator scans"
+        description="Navigator is its own signal engine. It can cover the same instruments as SuperTrend, or a completely separate list of your own."
+        summary={draft.scan_scope_mode === 'shared' ? 'Same as SuperTrend' : `Its own · ${customScopeCount}`}
+        defaultOpen
+      >
+        <Field label="Scan scope" hint="Which instruments Navigator looks at.">
+          <ChoiceRow<NavigatorScanScopeMode>
+            value={draft.scan_scope_mode}
+            onChange={(mode) => patch(mode === 'custom' ? seedCustomScope(draft, engineCfg) : { ...draft, scan_scope_mode: mode })}
+            options={[
+              { value: 'shared', label: 'Same as SuperTrend' },
+              { value: 'custom', label: 'Its own' },
+            ]}
+          />
+          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 8 }}>
+            {draft.scan_scope_mode === 'shared'
+              ? "Navigator watches whatever SuperTrend watches. Change the list once, in Engine Configuration, and both follow it."
+              : "Navigator watches its own list below — SuperTrend keeps its own, separately. Useful if you want Navigator on a wider (or narrower) set than you're trading with SuperTrend."}
           </div>
         </Field>
+
+        {draft.scan_scope_mode === 'shared' ? (
+          <Field label="Currently covering" hint="Set in Connect → Engine Configuration → Market Universe.">
+            {engineCfg ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {engineCfg.scan_indices.map((u) => (
+                  <span key={u} style={chipStyle}>{u}</span>
+                ))}
+                {engineCfg.scan_all_stocks
+                  ? <span style={chipStyle}>+ all F&amp;O stocks</span>
+                  : engineCfg.scan_stocks.map((s) => <span key={s} style={chipStyle}>{s}</span>)}
+                <span style={{ color: DIM, fontSize: 10.5 }}>· {engineCfg.scan_source} contracts</span>
+              </div>
+            ) : (
+              <span style={{ color: DIM, fontSize: 10.5 }}>Loading the engine&apos;s universe…</span>
+            )}
+          </Field>
+        ) : (
+          <>
+            <Field label="Indices" hint="Index charts, and their options.">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {NAV_INDEX_OPTIONS.map((name) => (
+                  <CheckOption
+                    key={name} label={name} compact
+                    checked={draft.scan_indices.includes(name)}
+                    onChange={() => patch({ ...draft, scan_indices: toggleName(draft.scan_indices, name) })}
+                  />
+                ))}
+              </div>
+            </Field>
+            <BoolField
+              label="All F&amp;O stocks"
+              hint="Every liquid F&O stock, instead of hand-picking below. Slower scans — Navigator reads each one's chart in turn."
+              value={draft.scan_all_stocks}
+              onChange={(v) => patch({ ...draft, scan_all_stocks: v })}
+            />
+            {!draft.scan_all_stocks && (
+              <Field label="Stocks" hint="Pick individual stocks for Navigator to cover.">
+                <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6, border: `1px solid ${BORDER}`, borderRadius: 7, padding: 8 }}>
+                  {(stockRegistry ?? []).flatMap((group) => group.stocks).map((stock) => (
+                    <CheckOption
+                      key={stock.name} label={stock.name} compact
+                      checked={draft.scan_stocks.includes(stock.name)}
+                      onChange={() => patch({ ...draft, scan_stocks: toggleName(draft.scan_stocks, stock.name) })}
+                    />
+                  ))}
+                  {!stockRegistry?.length && <span style={{ color: DIM, fontSize: 10.5 }}>Loading stocks…</span>}
+                </div>
+              </Field>
+            )}
+            <Field label="Contracts to scan" hint="Same choice SuperTrend has — which chart Navigator reads.">
+              <ChoiceRow
+                value={draft.scan_source}
+                onChange={(v) => patch({ ...draft, scan_source: v })}
+                options={[
+                  { value: 'spot', label: 'Spot' },
+                  { value: 'derivatives', label: 'Options' },
+                  { value: 'both', label: 'Both' },
+                  { value: 'confluence', label: 'Confluence' },
+                ]}
+              />
+            </Field>
+            {customScopeEmpty && (
+              <div style={{ padding: '9px 11px', borderRadius: 7, background: '#fff5f0', border: '1px solid #e2b6a4', color: TEXT, fontSize: 11, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Icons.Warning />
+                Pick at least one index or stock — an empty list means Navigator scans nothing at all.
+              </div>
+            )}
+          </>
+        )}
+
         <Field label="Price timeframe" hint="Read-only in v1 — must match the Kite base engine's 1H clock.">
           <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', color: DIM, width: 'auto' }}>60 minute</div>
         </Field>

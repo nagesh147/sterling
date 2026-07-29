@@ -5,6 +5,7 @@
 
 export type NavigatorOperatingMode = 'shadow' | 'advisory' | 'gate';
 export type SignalOrigination = 'off' | 'heads_up' | 'full';
+export type NavigatorScanScopeMode = 'shared' | 'custom';
 export type NavigatorStatus = 'NO_DATA' | 'WAIT' | 'CONFLICT' | 'WATCH' | 'CONFIRMED' | 'HIGH_CONVICTION';
 export type NavigatorComponent = 'avwap' | 'volatility' | 'option_flow' | 'gamma';
 export type AvwapGrade = 'A+' | 'A' | 'B';
@@ -138,7 +139,17 @@ export interface NavigatorConfigModel {
   enabled: boolean;
   operating_mode: NavigatorOperatingMode;
   engine_sources: ['kite_triple_supertrend'];
+  /** DEPRECATED — no longer read by any scan path; see scan_scope_mode. */
   underlyings: string[];
+  // ── Scan scope: shared with the Kite engine, or Navigator's own ─────────
+  // "shared" (default) = Navigator covers exactly what the Kite engine
+  // covers. "custom" = Navigator resolves its own universe from the four
+  // fields below, which are read ONLY in custom mode.
+  scan_scope_mode: NavigatorScanScopeMode;
+  scan_indices: string[];
+  scan_stocks: string[];
+  scan_all_stocks: boolean;
+  scan_source: 'spot' | 'derivatives' | 'both' | 'confluence';
   // ── Structure Radar / Signal Origination (additive, all off by default) ──
   // See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
   structure_radar_enabled: boolean;

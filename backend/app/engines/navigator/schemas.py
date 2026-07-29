@@ -452,9 +452,11 @@ class FusionConfig(BaseModel):
 class NavigatorConfigModel(BaseModel):
     """§6 root settings. Kite-only build: `engine_sources` is a fixed
     single-value list — there is no directional/crypto config surface, and
-    none is planned. This is the client-editable payload only; server-owned
-    metadata (revision, timestamps, watermark, calibration readiness) lives
-    in `NavigatorConfigRecord` below, never here."""
+    none is planned. (`engine_sources` says whose signals Navigator ALSO
+    comments on; it is not a claim that Navigator can only run downstream of
+    that engine — see `scan_scope_mode`.) This is the client-editable payload
+    only; server-owned metadata (revision, timestamps, watermark, calibration
+    readiness) lives in `NavigatorConfigRecord` below, never here."""
 
     # Literal[1], not int: an unsupported version must fail Pydantic
     # validation (→ HTTP 400 INVALID_CONFIG at both /config and
@@ -466,7 +468,33 @@ class NavigatorConfigModel(BaseModel):
     engine_sources: list[Literal["kite_triple_supertrend"]] = Field(
         default_factory=lambda: ["kite_triple_supertrend"]
     )
+    #: DEPRECATED and no longer read by any scan path. Navigator's universe is
+    #: now resolved per-scan from `scan_scope_mode` below. Retained only so
+    #: configs persisted before the peer-engine change still deserialize; it
+    #: is not editable in the UI and changing it has no effect.
     underlyings: list[str] = Field(default_factory=list)
+    # ── Scan scope: shared with the Kite engine, or Navigator's own ─────────
+    # Navigator started life as a confirmation layer over the Kite engine, so
+    # it had no universe of its own — it saw whatever that engine scanned.
+    # Now that it can also originate signals it is a peer engine, and needs
+    # its own answer to "what do I cover".
+    #
+    #   "shared" (default) — Navigator covers exactly what the Kite engine
+    #       covers: same universe, same scan_source. Preserves the behaviour
+    #       every existing config already has, so this is a no-op upgrade.
+    #   "custom" — Navigator resolves its OWN universe from the
+    #       `scan_indices`/`scan_stocks`/`scan_all_stocks` fields below and
+    #       uses its own `scan_source`. The Kite engine is unaffected either
+    #       way; the two universes may overlap fully, partly, or not at all.
+    #
+    # The four fields below are read ONLY when scan_scope_mode == "custom".
+    # In shared mode they are inert (kept, not cleared, so flipping back and
+    # forth doesn't lose a configured custom universe).
+    scan_scope_mode: Literal["shared", "custom"] = "shared"
+    scan_indices: list[str] = Field(default_factory=list)
+    scan_stocks: list[str] = Field(default_factory=list)
+    scan_all_stocks: bool = False
+    scan_source: Literal["spot", "derivatives", "both", "confluence"] = "spot"
     # ── Structure Radar / Signal Origination (additive, all off by default) ──
     # See docs/superpowers/specs/2026-07-28-navigator-structure-radar-origination-design.md.
     # Orthogonal to `operating_mode` — none of these change how Navigator
@@ -518,6 +546,23 @@ class NavigatorConfigModel(BaseModel):
                 f"— got {v!r}"
             )
         return v
+
+    @model_validator(mode="after")
+    def _custom_scope_needs_a_universe(self) -> "NavigatorConfigModel":
+        """Custom scope with nothing selected would silently scan nothing —
+        Navigator would look enabled and simply never produce evidence. Fail
+        loud at save time instead (same ethos as the fusion-weight and
+        grade-ordering validators above)."""
+        if self.scan_scope_mode == "custom" and not (
+            self.scan_indices or self.scan_stocks or self.scan_all_stocks
+        ):
+            raise ValueError(
+                "scan_scope_mode='custom' needs at least one of scan_indices, "
+                "scan_stocks, or scan_all_stocks — an empty custom universe "
+                "would scan nothing at all. Pick instruments, or switch back "
+                "to scan_scope_mode='shared'."
+            )
+        return self
 
     @model_validator(mode="after")
     def _auto_execute_originated_requires_full(self) -> "NavigatorConfigModel":

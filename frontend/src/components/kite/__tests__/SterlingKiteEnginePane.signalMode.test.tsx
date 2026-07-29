@@ -137,6 +137,43 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     expect(localStorage.getItem('kite_st_signal_mode')).toBe('navigator');
   });
 
+  describe('SuperTrend-only controls hide when the lens shows no SuperTrend rows', () => {
+    const exitRuleTitle = /^Auto-exit rule/;
+
+    it('shows the exit-rule dropdown under Combined (SuperTrend rows are on screen)', async () => {
+      mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
+      await renderPane();
+      expect(screen.getByTitle(exitRuleTitle)).toBeInTheDocument();
+    });
+
+    it('hides it under the Navigator lens — it governs nothing that is showing', async () => {
+      mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
+      await renderPane();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
+      expect(screen.queryByTitle(exitRuleTitle)).not.toBeInTheDocument();
+    });
+
+    it('the shared Signal-source control stays visible under every lens', async () => {
+      mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
+      await renderPane();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
+      expect(screen.getByTitle(/^Signal source/)).toBeInTheDocument();
+    });
+
+    it('comes back when switching off the Navigator lens', async () => {
+      mockRows([makeRow('NIFTY 50', 1, 'CONFIRMED')]);
+      await renderPane();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^Navigator/ }));
+      expect(screen.queryByTitle(exitRuleTitle)).not.toBeInTheDocument();
+      openSignalModeMenu();
+      fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+      expect(screen.getByTitle(exitRuleTitle)).toBeInTheDocument();
+    });
+  });
+
   describe('Navigator-originated rows (source="navigator", no SuperTrend trigger)', () => {
     it('SuperTrend lens excludes a Navigator-originated row entirely', async () => {
       mockRows([makeRow('NIFTY 50', 1, null), makeNavigatorRow('NIFTY BANK', 2, 'CONFIRMED')]);

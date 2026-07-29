@@ -375,6 +375,42 @@ class TestStructureRadarAndOrigination:
         assert origin_rows[0].navigator.status == "CONFIRMED"
 
     @pytest.mark.asyncio
+    async def test_radar_covers_stocks_not_just_indices(self, monkeypatch):
+        """Peer-engine change: Navigator's universe is whatever the caller
+        resolved (shared with the engine, or its own), so a STOCK in that map
+        must get the same radar treatment an index does. Before this,
+        coverage was hard-limited to `config.underlyings` — an indices-only
+        list — so stocks were silently invisible to Navigator."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, structure_radar_enabled=True)
+        client = FakeKiteClient(_kite_candle_rows())
+        await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS,
+            underlying_tokens={"NIFTY 50": 256265, "RELIANCE": 738561},
+        )
+        # one candle fetch per underlying in the resolved universe
+        assert sorted(c[0] for c in client.calls) == [256265, 738561]
+        assert nav_service.get_cached_decision(
+            "user-1", underlying="RELIANCE", token=738561, direction="long") is not None
+
+    @pytest.mark.asyncio
+    async def test_row_outside_navigators_universe_is_skipped(self):
+        """Custom scope: a SuperTrend row for an instrument Navigator doesn't
+        cover gets no opinion — Navigator has no evidence there to form one
+        from, so it must not fabricate a decision."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, scan_scope_mode="custom", scan_stocks=["RELIANCE"])
+        client = FakeKiteClient(_kite_candle_rows())
+        row = _row(underlying="NIFTY 50", token=256265)
+        await nav_service.run_navigator_pass(
+            client, "user-1", [row], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS,
+            underlying_tokens={"RELIANCE": 738561},  # NIFTY 50 not covered
+        )
+        assert client.calls == []
+
+    @pytest.mark.asyncio
     async def test_full_mode_without_universe_still_appends_a_row_with_no_legs(self, monkeypatch):
         rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
         _enable_with(rec, signal_origination="full")

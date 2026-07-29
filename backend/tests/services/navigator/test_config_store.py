@@ -45,6 +45,56 @@ class TestDefaultCreation:
         assert rec.config.signal_origination == "off"
         assert rec.config.auto_execute_originated is False
 
+    def test_scan_scope_defaults_to_shared(self):
+        """Existing users must keep covering exactly what the Kite engine
+        covers — the peer-engine change is a no-op until opted into."""
+        rec = _get()
+        assert rec.config.scan_scope_mode == "shared"
+
+
+class TestScanScopeValidation:
+    def test_custom_scope_with_no_universe_is_rejected(self):
+        """An empty custom universe would leave Navigator looking enabled
+        while silently scanning nothing — fail loud at save time."""
+        with pytest.raises(Exception, match="scan nothing at all"):
+            NavigatorConfigModel(scan_scope_mode="custom")
+
+    @pytest.mark.parametrize("universe", [
+        {"scan_indices": ["NIFTY 50"]},
+        {"scan_stocks": ["RELIANCE"]},
+        {"scan_all_stocks": True},
+    ])
+    def test_custom_scope_accepts_any_one_populated_universe_field(self, universe):
+        cfg = NavigatorConfigModel(scan_scope_mode="custom", **universe)
+        assert cfg.scan_scope_mode == "custom"
+
+    def test_shared_scope_never_requires_a_universe(self):
+        """Shared mode ignores the custom fields entirely, so an empty one
+        must stay valid — that's the default every existing config has."""
+        cfg = NavigatorConfigModel(scan_scope_mode="shared")
+        assert cfg.scan_indices == [] and cfg.scan_stocks == []
+
+    def test_custom_universe_survives_a_flip_back_to_shared(self):
+        """Flipping to shared must not clear a configured custom universe —
+        the user should be able to toggle back without re-picking."""
+        cfg = NavigatorConfigModel(scan_scope_mode="custom", scan_stocks=["RELIANCE"])
+        back = cfg.model_copy(update={"scan_scope_mode": "shared"})
+        assert back.scan_stocks == ["RELIANCE"]
+
+    def test_scan_scope_round_trips_through_save(self):
+        rec = _get()
+        saved = config_store.save(
+            "user-1",
+            rec.config.model_copy(update={
+                "scan_scope_mode": "custom", "scan_stocks": ["RELIANCE"], "scan_source": "both",
+            }),
+            expected_revision=rec.revision, default_underlyings=_UNDERLYINGS,
+        )
+        assert saved.config.scan_scope_mode == "custom"
+        assert saved.config.scan_stocks == ["RELIANCE"]
+        assert saved.config.scan_source == "both"
+        assert config_store.get("user-1", default_underlyings=_UNDERLYINGS).config.scan_source == "both"
+
 
 class TestOriginationConfigValidation:
     """2026-07-28 structure-radar/origination design: auto_execute_originated

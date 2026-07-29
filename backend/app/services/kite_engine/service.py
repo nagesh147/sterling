@@ -804,13 +804,38 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
         # synchronous cache-only join back onto the rows. Both steps are a
         # complete no-op — zero extra broker calls — unless the user has
         # explicitly enabled Navigator (disabled by default for everyone).
+        # Navigator is a peer engine now: it either shares this engine's
+        # universe or resolves its own. Re-selecting from the SAME
+        # already-built `full_universe` is a pure in-memory filter — the four
+        # exchange dumps behind it are cached for an hour, so a custom scope
+        # costs no extra broker round-trips at this step. Bound before the
+        # try so the origination auto-exec block below can always rely on it.
+        nav_universe = selected
         try:
             from app.services.navigator import service as navigator_service
+            from app.services.navigator import config_store as navigator_config_store
+
+            try:
+                nav_cfg = navigator_config_store.get(
+                    uid, default_underlyings=cfg_model.scan_indices).config
+                if nav_cfg.scan_scope_mode == "custom":
+                    nav_universe = select_scan_universe(
+                        full_universe, indices=nav_cfg.scan_indices,
+                        stocks=nav_cfg.scan_stocks, all_stocks=nav_cfg.scan_all_stocks)
+                    if nav_cfg.enabled:
+                        state.log(uid, "info",
+                                  f"Navigator scan plan: {len(nav_universe)} instruments "
+                                  f"using its own '{nav_cfg.scan_source}' source.")
+            except Exception as exc:  # noqa: BLE001
+                # A Navigator-side config hiccup must never change what the
+                # base engine already decided to scan — fall back to shared.
+                log.warning("Navigator scope resolve failed, using shared universe for %s: %s", uid, exc)
+
             snap.rows = await navigator_service.run_navigator_pass(
                 client, uid, snap.rows, engine_config_payload=cfg_model.model_dump(mode="json"),
                 default_underlyings=cfg_model.scan_indices,
-                underlying_tokens={u.name: u.token for u in selected},
-                universe=selected, nfo_rows=nfo, bfo_rows=bfo, moneyness=cfg_model.strike_moneyness,
+                underlying_tokens={u.name: u.token for u in nav_universe},
+                universe=nav_universe, nfo_rows=nfo, bfo_rows=bfo, moneyness=cfg_model.strike_moneyness,
                 expiry_types=cfg_model.scan_expiries, expiry_types_indices=cfg_model.scan_expiries_indices,
                 expiry_types_stocks=cfg_model.scan_expiries_stocks,
             )
@@ -840,7 +865,10 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
                             continue
                         if row.navigator is None or not row.navigator.execution_eligible:
                             continue
-                        item = next((u for u in selected if u.name == row.underlying), None)
+                        # Navigator-originated rows come from NAVIGATOR's
+                        # universe, which in custom scope may not overlap the
+                        # engine's `selected` at all — look the item up there.
+                        item = next((u for u in nav_universe if u.name == row.underlying), None)
                         if item is None:
                             continue
                         try:

@@ -175,6 +175,15 @@ async def run_navigator_pass(
     can't resolve a leg without them, same as it can't run at all without
     `structure_radar_enabled`/`signal_origination` turned on).
 
+    **Navigator's universe is `underlying_tokens`.** The caller resolves it
+    (shared with the Kite engine, or Navigator's own — see
+    `NavigatorConfigModel.scan_scope_mode`) and passes it in; this function
+    covers exactly those names and nothing else. A SuperTrend row for an
+    instrument outside Navigator's universe is skipped, because Navigator
+    genuinely has no coverage there to form an opinion from. When the map is
+    omitted entirely we fall back to the legacy `config.underlyings` list so
+    older callers keep working unchanged.
+
     Returns `rows`, possibly extended with new Navigator-originated rows
     (`source="navigator"`) appended in place — callers that only cared about
     the previous `None` return are unaffected (the input list is still
@@ -184,13 +193,14 @@ async def run_navigator_pass(
         return rows
     config_revision = kite_config_revision(engine_config_payload)
     underlying_tokens = underlying_tokens or {}
+    covered = set(underlying_tokens) or set(record.config.underlyings)
 
     seen: set[tuple] = set()
     seen_directions: set[tuple[str, str]] = set()
     for row in rows:
         if not (row.is_fresh or row.is_active):
             continue
-        if row.underlying not in record.config.underlyings:
+        if row.underlying not in covered:
             continue
         seen_directions.add((row.underlying, row.direction))
         key = (row.underlying, row.token, row.direction)
@@ -223,6 +233,7 @@ async def run_navigator_pass(
                 client, uid, rows, config=record.config, config_revision=config_revision,
                 activation_watermark_ms=record.activation_watermark_ms, record_revision=record.revision,
                 default_underlyings=default_underlyings, underlying_tokens=underlying_tokens,
+                covered=covered,
                 seen_directions=seen_directions, universe=universe, nfo_rows=nfo_rows, bfo_rows=bfo_rows,
                 moneyness=moneyness, expiry_types=expiry_types,
                 expiry_types_indices=expiry_types_indices, expiry_types_stocks=expiry_types_stocks,
@@ -243,20 +254,29 @@ def _option_exchange_for(underlying: str, universe: Optional[list]) -> str:
 async def _run_structure_and_origination(
     client, uid: str, rows: list[EngineSignalRow], *, config: NavigatorConfigModel, config_revision: str,
     activation_watermark_ms: int, record_revision: int, default_underlyings: list[str],
-    underlying_tokens: dict[str, int], seen_directions: set[tuple[str, str]],
+    underlying_tokens: dict[str, int], covered: set[str], seen_directions: set[tuple[str, str]],
     universe: Optional[list], nfo_rows: Optional[list], bfo_rows: Optional[list],
     moneyness: Optional[list[str]], expiry_types: Optional[list[str]],
     expiry_types_indices: Optional[list[str]], expiry_types_stocks: Optional[list[str]],
 ) -> None:
     """Structure Radar + Signal Origination (2026-07-28 design doc): for every
-    configured underlying+direction with NO live real SuperTrend row this
-    scan, independently compute AVWAP+Volatility via a neutral synthetic
-    base fed through the exact same `evaluate_signal`/`fuse()` pipeline real
-    rows use. `structure_radar_enabled` alone just keeps this cached for
-    `/snapshot`/`/series`/`/status`; `signal_origination != "off"` additionally
-    appends a new `source="navigator"` row to `rows` when the resulting
-    decision reaches CONFIRMED/HIGH_CONVICTION."""
-    for underlying in config.underlyings:
+    underlying+direction in Navigator's own coverage with NO live real
+    SuperTrend row this scan, independently compute AVWAP+Volatility via a
+    neutral synthetic base fed through the exact same `evaluate_signal`/
+    `fuse()` pipeline real rows use. `structure_radar_enabled` alone just
+    keeps this cached for `/snapshot`/`/series`/`/status`;
+    `signal_origination != "off"` additionally appends a new
+    `source="navigator"` row to `rows` when the resulting decision reaches
+    CONFIRMED/HIGH_CONVICTION.
+
+    Deliberately SERIAL. The Kite engine's own scanner runs its candle fetches
+    behind a `_CONCURRENCY = 2` semaphore chosen to stay under Kite's ~3 req/s
+    historical cap, and that semaphore is per-scan rather than process-wide —
+    so fanning this loop out in parallel would silently double the effective
+    concurrency and start earning 429s. This runs after the engine's scan has
+    finished, one instrument at a time, which keeps the combined rate safe
+    however large Navigator's universe gets."""
+    for underlying in sorted(covered):
         fetch_token = underlying_tokens.get(underlying)
         if fetch_token is None:
             continue  # can't read price structure without the underlying's own token

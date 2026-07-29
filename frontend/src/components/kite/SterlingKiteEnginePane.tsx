@@ -2045,12 +2045,19 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
               )}
             />
           )}
-          {cfg && (
+          {/* The red-counter exit rule is SuperTrend-only — it counts the
+              three SuperTrend lines flipping against a position. A
+              Navigator-originated row has no SuperTrend lines at all (it
+              exits on its own AVWAP stop/target bracket), so under the
+              Navigator lens this control governs nothing that's on screen.
+              Hide it there rather than leave a live engine setting sitting
+              next to rows it can't affect. */}
+          {cfg && signalMode !== 'navigator' && (
             <InlineDropdown
               value={cfg.exit_mode ?? 'one_red'}
               options={EXIT_MODE_OPTS}
               tone={k.blue}
-              title="Auto-exit rule (counter to the 3-green entry) — real engine setting, applies to every row regardless of the View lens. Change it right here, or from Connect → Engine Configuration"
+              title="Auto-exit rule (counter to the 3-green entry) — a SuperTrend setting, applies to every SuperTrend row. Change it right here, or from Connect → Engine Configuration"
               onChange={(next) => patch(
                 { exit_mode: next },
                 `Exit rule changed to ${EXIT_MODE_OPTS.find((option) => option.value === next)?.label}`,

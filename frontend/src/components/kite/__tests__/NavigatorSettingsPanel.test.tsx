@@ -8,6 +8,7 @@ function makeConfig(overrides: Partial<NavigatorConfigModel> = {}): NavigatorCon
   return {
     schema_version: 1, enabled: false, operating_mode: 'advisory', engine_sources: ['kite_triple_supertrend'],
     underlyings: ['NIFTY 50'],
+    scan_scope_mode: 'shared', scan_indices: [], scan_stocks: [], scan_all_stocks: false, scan_source: 'spot',
     structure_radar_enabled: false, signal_origination: 'off', auto_execute_originated: false,
     price_timeframe: '60minute', flow_sample_seconds: 60, max_feature_age_seconds: 120,
     event_alignment_bars: 2, entry_delay_after_open_minutes: 5, retention_raw_days: 30, retention_features_days: 365,
@@ -66,6 +67,24 @@ function makeRecord(cfgOverrides: Partial<NavigatorConfigModel> = {}, recordOver
 const setConfig = vi.fn();
 const resetConfig = vi.fn();
 let queryData: ReturnType<typeof makeRecord> | undefined;
+
+// The panel reads the engine's own config (to show what a SHARED scan scope
+// currently covers) and the stock registry (to populate a CUSTOM scope's
+// picker). Both are React Query hooks; mock them so this suite keeps
+// rendering the panel bare, without a QueryClientProvider.
+vi.mock('../../../hooks/useSterlingKiteEngine', () => ({
+  useEngineConfig: () => ({
+    data: {
+      scan_indices: ['NIFTY 50', 'NIFTY BANK'],
+      scan_stocks: [],
+      scan_all_stocks: false,
+      scan_source: 'spot',
+    },
+  }),
+  useStockRegistry: () => ({
+    data: [{ label: 'Very High', stocks: [{ name: 'RELIANCE' }, { name: 'TCS' }] }],
+  }),
+}));
 
 vi.mock('../../../hooks/useNavigator', () => ({
   useNavigatorConfig: () => ({ data: queryData, isLoading: !queryData, error: null }),
@@ -129,12 +148,72 @@ describe('NavigatorSettingsPanel', () => {
   it('renders every settings section', () => {
     render(<NavigatorSettingsPanel />);
     for (const title of [
-      'Instruments and timing', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+      'What Navigator scans', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
       'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
       'Fusion and eligibility', 'Data retention and diagnostics',
     ]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
+  });
+
+  describe('Scan scope — shared with SuperTrend, or Navigator\'s own', () => {
+    it('defaults to shared and shows what the engine currently covers, read-only', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.getByRole('button', { name: 'Same as SuperTrend' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('Currently covering')).toBeInTheDocument();
+      expect(screen.getAllByText('NIFTY BANK').length).toBeGreaterThan(0); // mirrors mocked engine cfg
+      expect(screen.queryByText('Contracts to scan')).not.toBeInTheDocument(); // no custom pickers
+    });
+
+    it('the dead read-only "Engine source" row is gone', () => {
+      render(<NavigatorSettingsPanel />);
+      expect(screen.queryByText('Engine source')).not.toBeInTheDocument();
+      expect(screen.queryByText(/This build is Kite-only/)).not.toBeInTheDocument();
+    });
+
+    it('switching to its own scope reveals the universe pickers and a contracts choice', () => {
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: 'Its own' }));
+      expect(screen.getByText('Contracts to scan')).toBeInTheDocument();
+      expect(screen.getByText('Indices')).toBeInTheDocument();
+      expect(screen.queryByText('Currently covering')).not.toBeInTheDocument();
+    });
+
+    it('seeds a fresh custom scope from the engine so the first save is never empty', () => {
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: 'Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+      const [body] = setConfig.mock.calls[0];
+      expect(body.config.scan_scope_mode).toBe('custom');
+      expect(body.config.scan_indices).toEqual(['NIFTY 50', 'NIFTY BANK']); // copied, not blank
+    });
+
+    it('blocks Apply and warns when a custom scope has nothing selected', () => {
+      queryData = makeRecord({ scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'] });
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('checkbox', { name: 'NIFTY 50' })); // clear the only pick
+      expect(screen.getByText(/Navigator scans nothing at all/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Apply changes/i })).toBeDisabled();
+    });
+
+    it('stocks can be picked for a custom scope — not just indices', () => {
+      queryData = makeRecord({ scan_scope_mode: 'custom', scan_indices: ['NIFTY 50'] });
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('checkbox', { name: 'RELIANCE' }));
+      fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+      const [body] = setConfig.mock.calls[0];
+      expect(body.config.scan_stocks).toEqual(['RELIANCE']);
+    });
+
+    it('a configured custom universe survives flipping to shared and back', () => {
+      queryData = makeRecord({ scan_scope_mode: 'custom', scan_stocks: ['RELIANCE'] });
+      render(<NavigatorSettingsPanel />);
+      fireEvent.click(screen.getByRole('button', { name: 'Same as SuperTrend' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Its own' }));
+      fireEvent.click(screen.getByRole('button', { name: /Apply changes/i }));
+      const [body] = setConfig.mock.calls[0];
+      expect(body.config.scan_stocks).toEqual(['RELIANCE']); // not re-seeded over
+    });
   });
 
   describe('Structure Radar and Signal Origination', () => {
@@ -211,7 +290,7 @@ describe('NavigatorSettingsPanel', () => {
       render(<NavigatorSettingsPanel />);
       const advancedDetails = screen.getByText('Advanced — Strategy Definition (from the source manual)').closest('details') as HTMLDetailsElement;
       for (const title of [
-        'Instruments and timing', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
+        'What Navigator scans', 'Structure Radar and Signal Origination', 'Anchored VWAP and signal grades',
         'Daily and weekly ranges', 'Volatility regime', 'Option-flow oscillator', 'Gamma activity',
         'Fusion and eligibility', 'Data retention and diagnostics',
       ]) {
