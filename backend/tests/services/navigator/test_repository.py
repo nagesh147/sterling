@@ -75,6 +75,33 @@ class TestOptionSnapshotUniqueness:
         assert [r["sample_bucket_ms"] for r in rows] == [200]
 
 
+class TestFetchLatestOptionSnapshots:
+    """The live evaluator's read. Must never mix two expiries into one window:
+    on rollover day the lookback still holds the expiring series, and two
+    strike ladders in one chain sample corrupt the ATM estimate, the
+    completeness ratio and the gamma aggregate."""
+
+    def test_returns_only_the_latest_sampled_expiry(self):
+        repo.insert_option_snapshot(_snapshot(
+            expiry="2026-08-06", instrument_token=111, sample_bucket_ms=100))
+        repo.insert_option_snapshot(_snapshot(
+            expiry="2026-08-13", instrument_token=222, sample_bucket_ms=200))
+        rows = repo.fetch_latest_option_snapshots("acct-1", "NIFTY 50", since_bucket_ms=0)
+        assert {r["expiry"] for r in rows} == {"2026-08-13"}
+        assert [r["instrument_token"] for r in rows] == [222]
+
+    def test_returns_that_expirys_full_history_oldest_first(self):
+        for bucket, token in ((300, 111), (100, 111), (200, 222)):
+            repo.insert_option_snapshot(_snapshot(
+                expiry="2026-08-13", instrument_token=token, sample_bucket_ms=bucket))
+        rows = repo.fetch_latest_option_snapshots("acct-1", "NIFTY 50", since_bucket_ms=0)
+        assert [r["sample_bucket_ms"] for r in rows] == [100, 200, 300]
+
+    def test_empty_when_nothing_is_recent_enough(self):
+        repo.insert_option_snapshot(_snapshot(sample_bucket_ms=100))
+        assert repo.fetch_latest_option_snapshots("acct-1", "NIFTY 50", since_bucket_ms=500) == []
+
+
 class TestFeatureSnapshotIdempotency:
     def test_replaying_identical_inputs_does_not_duplicate(self):
         assert repo.insert_feature_snapshot(_feature_snapshot()) is True

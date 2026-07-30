@@ -225,6 +225,7 @@ async def run_navigator_pass(
     expiry_types_indices: Optional[list[str]] = None,
     expiry_types_stocks: Optional[list[str]] = None,
     evaluation_kwargs: Optional[dict] = None,
+    include_origination: bool = True,
 ) -> list[EngineSignalRow]:
     """Live per-scan Navigator evaluation glue — the Navigator feature
     pipeline run against a fresh, independent candle fetch.
@@ -259,6 +260,22 @@ async def run_navigator_pass(
     genuinely has no coverage there to form an opinion from. When the map is
     omitted entirely we fall back to the legacy `config.underlyings` list so
     older callers keep working unchanged.
+
+    This function has two separable jobs, and `include_origination` picks
+    which of them run:
+
+    * **Confirmation** (always) — annotate the SuperTrend rows handed in with
+      Navigator evidence. Cheap, read-only, additive.
+    * **Structure Radar + Signal Origination** (`include_origination=True`,
+      the default) — independently evaluate every covered underlying and
+      possibly append brand-new `source="navigator"` rows.
+
+    Origination must have exactly ONE owner per process. It fetches candles,
+    writes the shared decision cache and produces rows the auto-exec path can
+    act on, so running it from two loops would double the broker calls and —
+    once calibration is promoted — could submit the same originated order
+    twice. `navigator.runtime` owns it; the Kite engine's own scan passes
+    `include_origination=False` and takes only the confirmation half.
 
     Returns `rows`, possibly extended with new Navigator-originated rows
     (`source="navigator"`) appended in place — callers that only cared about
@@ -305,7 +322,9 @@ async def run_navigator_pass(
         except Exception as exc:  # noqa: BLE001
             log.warning("navigator pass: evaluation failed for %s/%s: %s", uid, row.underlying, exc)
 
-    if record.config.structure_radar_enabled or record.config.signal_origination != "off":
+    if include_origination and (
+        record.config.structure_radar_enabled or record.config.signal_origination != "off"
+    ):
         try:
             await _run_structure_and_origination(
                 client, uid, rows, config=record.config, config_revision=config_revision,

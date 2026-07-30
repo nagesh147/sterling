@@ -37,6 +37,35 @@ def _levels(side: list) -> List[DepthLevel]:
     return out
 
 
+def _navigator_row_for_token(uid: str, token: int, timestamp_ms: int):
+    """Find a Navigator-owned row by token in Navigator's own snapshot.
+
+    Navigator-originated rows never pass through the Kite engine's scanner, and
+    when the SuperTrend engine is switched off that scanner has no rows at all —
+    so the board the user clicked may be entirely Navigator's. Same
+    token-or-leg-token matching the scanner does, with the timestamp preferred
+    but not required (a background scan can regroup the row between the click
+    and this request)."""
+    try:
+        from app.services.navigator import runtime as navigator_runtime
+        rows = navigator_runtime.snapshot(uid).rows
+    except Exception as exc:  # noqa: BLE001
+        log.debug("navigator detail lookup unavailable for %s: %s", uid, exc)
+        return None
+
+    def _token_matches(row) -> bool:
+        return row.token == token or any(getattr(leg, "token", None) == token for leg in row.legs)
+
+    candidates = [row for row in rows if _token_matches(row)]
+    if not candidates:
+        return None
+    if timestamp_ms > 0:
+        exact = next((row for row in candidates if row.timestamp_ms == timestamp_ms), None)
+        if exact is not None:
+            return exact
+    return max(candidates, key=lambda row: row.timestamp_ms)
+
+
 async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> Optional[EngineDetailResponse]:
     """Build detail for the selected signal row.
 
@@ -48,6 +77,8 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
     row = snapshot.row_for_token(token, timestamp_ms)
     if row is None and timestamp_ms > 0:
         row = snapshot.row_for_token(token)
+    if row is None:
+        row = _navigator_row_for_token(uid, token, timestamp_ms)
     if row is None:
         return None
 

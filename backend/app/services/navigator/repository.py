@@ -221,41 +221,37 @@ def fetch_option_snapshots(
 def fetch_latest_option_snapshots(
     account_scope: str, underlying: str, *, since_bucket_ms: int, limit: int = 5000
 ) -> list[dict]:
-    """Read recent chain samples across expiries for one underlying, oldest
-    first. Used by the live Navigator evaluator; unlike the request-facing
-    endpoints, this is outside the hot request path and bounded."""
+    """Read recent chain samples for ONE underlying's latest sampled expiry,
+    oldest first. Used by the live Navigator evaluator; unlike the
+    request-facing endpoints, this is outside the hot request path and bounded.
+
+    Scoped to a single expiry on purpose. The sampler follows the nearest
+    expiry, so on rollover day the lookback window still contains the expiring
+    series' rows — and blending two expiries into one chain sample would put
+    two strike ladders in one bucket, corrupting the ATM estimate, the
+    completeness ratio and the gamma aggregate. Filtering here also lets the
+    (account_scope, underlying, expiry, sample_bucket_ms) index serve the
+    whole predicate instead of only its first two columns."""
     _require_available()
     try:
         with db.connection() as c:
+            latest = c.execute(
+                "SELECT expiry FROM navigator_option_snapshots "
+                "WHERE account_scope=? AND underlying=? AND sample_bucket_ms>=? "
+                "ORDER BY sample_bucket_ms DESC LIMIT 1",
+                (account_scope, underlying, since_bucket_ms),
+            ).fetchone()
+            if latest is None:
+                return []
             rows = c.execute(
                 "SELECT * FROM navigator_option_snapshots "
-                "WHERE account_scope=? AND underlying=? AND sample_bucket_ms>=? "
+                "WHERE account_scope=? AND underlying=? AND expiry=? AND sample_bucket_ms>=? "
                 "ORDER BY sample_bucket_ms ASC, instrument_token ASC LIMIT ?",
-                (account_scope, underlying, since_bucket_ms, limit),
+                (account_scope, underlying, latest["expiry"], since_bucket_ms, limit),
             ).fetchall()
         return [dict(r) for r in rows]
     except sqlite3.Error as exc:
         raise NavigatorStorageError(f"failed to read recent option snapshots: {exc}") from exc
-
-
-def delete_old_option_snapshots(cutoff_ms: int) -> int:
-    _require_available()
-    try:
-        with db.connection() as c:
-            cur = c.execute("DELETE FROM navigator_option_snapshots WHERE sample_bucket_ms<?", (cutoff_ms,))
-            return int(cur.rowcount or 0)
-    except sqlite3.Error as exc:
-        raise NavigatorStorageError(f"failed to delete old option snapshots: {exc}") from exc
-
-
-def delete_old_feature_snapshots(cutoff_ms: int) -> int:
-    _require_available()
-    try:
-        with db.connection() as c:
-            cur = c.execute("DELETE FROM navigator_feature_snapshots WHERE observed_at_ms<?", (cutoff_ms,))
-            return int(cur.rowcount or 0)
-    except sqlite3.Error as exc:
-        raise NavigatorStorageError(f"failed to delete old feature snapshots: {exc}") from exc
 
 
 # ── navigator_feature_snapshots (Phase 2/4) ─────────────────────────────

@@ -23,6 +23,7 @@ from app.engines.navigator.gamma_activity import (
     fractional_time_to_expiry,
 )
 from app.engines.navigator.option_flow import ChainFlowSample, ContractFlowInput
+from app.engines.navigator.schemas import NavigatorConfigModel
 from app.engines.sterling_kite_engine.schemas import EngineSignalRow
 from app.services import db
 from app.services.exchanges.kite import accounts as kite_accounts
@@ -40,6 +41,9 @@ from app.services.navigator.instrument_slice import InstrumentSliceIndex, Option
 log = get_logger(__name__)
 
 SCAN_INTERVAL_S = 300
+#: Retention windows are days wide, so trimming them on every 5-minute scan
+#: would be pure churn. Once an hour is plenty.
+RETENTION_INTERVAL_MS = 60 * 60 * 1000
 
 
 @dataclass
@@ -234,12 +238,6 @@ def _resolve_nav_universe(nav_cfg, engine_cfg, full_universe):
         full_universe, indices=engine_cfg.scan_indices,
         stocks=engine_cfg.scan_stocks, all_stocks=engine_cfg.scan_all_stocks,
     )
-
-
-def _source_filter(items, source: str) -> list:
-    # Navigator's price structure is always read from the underlying token. The
-    # source controls option-chain/sampler coverage and surfaced row ownership.
-    return list(items) if source in ("spot", "derivatives", "both", "confluence") else []
 
 
 def _nearest_expiry(rows: list[dict], option_name: str, today=None) -> Optional[str]:
@@ -441,9 +439,13 @@ async def stop_user_samplers(uid: str) -> None:
     nav_service.set_sampler_running(uid, False)
 
 
-def _source_modes_enabled(source: str) -> tuple[bool, bool]:
-    use_chain = source in ("derivatives", "both", "confluence")
-    return use_chain, use_chain
+def _source_uses_chain(source: str) -> bool:
+    """Whether this scan source needs option-chain evidence at all.
+
+    Navigator always reads price structure from the underlying's own token —
+    the source only decides whether the option chain is sampled and fed to the
+    flow/gamma components on top of that."""
+    return source in ("derivatives", "both", "confluence")
 
 
 async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, acct=None) -> int:
@@ -467,18 +469,29 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
         nfo, bfo, nse, bse = await _instrument_dumps(client)
         full = build_universe(nfo_instruments=nfo, bfo_instruments=bfo, equities=nse + bse)
         engine_cfg = kite_state.get_config(uid)
-        nav_universe = _source_filter(_resolve_nav_universe(record.config, engine_cfg, full), record.config.scan_source)
+        nav_universe = _resolve_nav_universe(record.config, engine_cfg, full)
         await _start_samplers(client, uid, acct or kite_accounts.get_active(uid), nav_universe, nfo, bfo, record)
         rows: list[EngineSignalRow] = []
+        # The ONLY place a Navigator-originated order can be submitted (the Kite
+        # engine's scan deliberately passes `include_origination=False` and has
+        # no auto-exec block of its own). Reuses the base engine's central
+        # `_make_place_cb` gate so originated rows go through exactly the same
+        # sizing/stop/paper-vs-live path as every other row.
+        #
+        # `engine_cfg.auto_execute` is the account's master MANUAL/AUTO switch,
+        # not a SuperTrend-specific flag — Navigator can scan with the
+        # SuperTrend engine off, but it still will not place orders while the
+        # account is in MANUAL. Each row is then re-checked individually below
+        # via `check_originated_execution_eligible`.
         place_cb = kite_service._make_place_cb(client, uid) if (
             engine_cfg.auto_execute and record.config.signal_origination == "full"
             and record.config.auto_execute_originated and record.calibration_readiness == "ready"
         ) else None
         _log(uid, "info", f"Navigator plan: {len(nav_universe)} instruments using {record.config.scan_source}.")
         account_scope = _account_scope(acct or kite_accounts.get_active(uid))
-        use_flow, use_gamma = _source_modes_enabled(record.config.scan_source)
-        use_flow = use_flow and record.config.flow.enabled
-        use_gamma = use_gamma and record.config.gamma.enabled
+        uses_chain = _source_uses_chain(record.config.scan_source)
+        use_flow = uses_chain and record.config.flow.enabled
+        use_gamma = uses_chain and record.config.gamma.enabled
         for item in nav_universe:
             if st.cancelled:
                 break
@@ -543,14 +556,18 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
         st.scanning_label = ""
 
 
-async def _scan_all_connected_once(interval_s: float) -> None:
+async def _scan_all_connected_once(interval_s: float) -> list[str]:
+    """Scan every connected account whose user has Navigator enabled.
+
+    Returns the user ids actually scanned, so the caller can size retention to
+    exactly those users' configured windows."""
     global _first_scan_done
+    scanned_uids: list[str] = []
     try:
         accts = [a for a in kite_accounts._load_from_db() if a.connected]
     except Exception as exc:  # noqa: BLE001
         log.warning("navigator auto-scan account load failed: %s", exc)
-        return
-    scanned = False
+        return scanned_uids
     for acct in accts:
         try:
             record = config_store.get(acct.user_id, default_underlyings=kite_state.get_config(acct.user_id).scan_indices)
@@ -565,28 +582,46 @@ async def _scan_all_connected_once(interval_s: float) -> None:
                 _log(acct.user_id, "info", "Kite session expired; Navigator auto-scan paused.")
                 continue
             await scan_user(client, acct.user_id, interval_s=interval_s, acct=acct)
-            scanned = True
+            scanned_uids.append(acct.user_id)
         except Exception as exc:  # noqa: BLE001
             log.warning("navigator auto-scan failed for %s: %s", getattr(acct, "user_id", "?"), exc)
-    if scanned:
+    if scanned_uids:
         _first_scan_done = True
+    return scanned_uids
 
 
-async def retention_cleanup_once() -> None:
-    now = _now_ms()
-    try:
-        for row in repository.fetch_config_audit("", limit=0):
-            row
-    except Exception:
-        pass
-    # Use the most conservative defaults when no user config is loaded.
-    repository.delete_old_option_snapshots(now - 30 * 24 * 60 * 60 * 1000)
-    repository.delete_old_feature_snapshots(now - 365 * 24 * 60 * 60 * 1000)
+async def retention_cleanup_once(*, raw_days: int, feature_days: int) -> None:
+    """Trim stored chain/feature history to the configured windows.
+
+    Delegates to `repository.run_retention`, which deletes in bounded batches
+    and reports what it removed. Called at most hourly — the windows are days
+    wide, so running it on every 5-minute scan would be pure churn."""
+    repository.run_retention(raw_days=raw_days, feature_days=feature_days, now_ms=_now_ms())
+
+
+def _widest_retention(user_ids: list[str]) -> tuple[int, int]:
+    """The most generous retention any scanning user asked for.
+
+    Retention is per-user config but the tables are shared, so a single pass
+    has to keep whatever the longest-retaining user still needs. Falls back to
+    the schema defaults when no user config can be read."""
+    defaults = NavigatorConfigModel()
+    raw, feature = defaults.retention_raw_days, defaults.retention_features_days
+    for uid in user_ids:
+        try:
+            cfg = config_store.get(
+                uid, default_underlyings=kite_state.get_config(uid).scan_indices).config
+        except Exception:  # noqa: BLE001
+            continue
+        raw = max(raw, cfg.retention_raw_days)
+        feature = max(feature, cfg.retention_features_days)
+    return raw, feature
 
 
 async def auto_scan_loop(interval_s: float = SCAN_INTERVAL_S) -> None:
     global _auto_running
     _auto_running = True
+    last_retention_ms = 0
     log.info("navigator auto-scan loop started (every %ss)", interval_s)
     try:
         while True:
@@ -594,11 +629,14 @@ async def auto_scan_loop(interval_s: float = SCAN_INTERVAL_S) -> None:
                 if _first_scan_done and not is_market_open():
                     await asyncio.sleep(30)
                     continue
-                await _scan_all_connected_once(interval_s)
-                try:
-                    await retention_cleanup_once()
-                except Exception as exc:  # noqa: BLE001
-                    log.debug("navigator retention cleanup failed: %s", exc)
+                scanned_uids = await _scan_all_connected_once(interval_s)
+                if scanned_uids and _now_ms() - last_retention_ms >= RETENTION_INTERVAL_MS:
+                    last_retention_ms = _now_ms()
+                    raw_days, feature_days = _widest_retention(scanned_uids)
+                    try:
+                        await retention_cleanup_once(raw_days=raw_days, feature_days=feature_days)
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("navigator retention cleanup failed: %s", exc)
             except Exception as exc:  # noqa: BLE001
                 log.warning("navigator auto-scan iteration error: %s", exc)
             await asyncio.sleep(interval_s)

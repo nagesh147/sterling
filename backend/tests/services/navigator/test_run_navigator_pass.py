@@ -319,6 +319,38 @@ class TestStructureRadarAndOrigination:
         assert len(out) == 1  # no new row appended (radar-only)
 
     @pytest.mark.asyncio
+    async def test_include_origination_false_confirms_rows_but_never_originates(self, monkeypatch):
+        """Origination has exactly one owner: Navigator's own runtime loop.
+
+        The Kite engine's scan calls this with `include_origination=False` so
+        it gets the confirmation half only. If that flag ever stopped being
+        honoured, both loops would originate — doubling the candle fetches and,
+        once calibration is promoted, letting the same originated setup be
+        ordered twice."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, structure_radar_enabled=True, signal_origination="full")
+        evaluated: list[str] = []
+        inner = _fake_evaluate_and_cache("CONFIRMED", "CONFIRMED")
+
+        def _recording(uid, row, *, base, **kw):
+            evaluated.append(base.direction)
+            return inner(uid, row, base=base, **kw)
+
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _recording)
+        client = FakeKiteClient(_kite_candle_rows())
+        row = _row(direction="long")
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [row], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+            include_origination=False,
+        )
+        assert len(out) == 1              # the real row only — nothing originated
+        assert out[0] is row
+        assert len(client.calls) == 1     # no radar fetch for the opposite direction
+        # confirmation still ran for the real row, and ONLY for it
+        assert evaluated == ["long"]
+
+    @pytest.mark.asyncio
     async def test_origination_off_never_appends_a_row_even_when_confirmed(self, monkeypatch):
         rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
         _enable_with(rec, structure_radar_enabled=True, signal_origination="off")

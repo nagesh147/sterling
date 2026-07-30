@@ -292,6 +292,42 @@ class TestDecisionIdDeterminism:
         assert d1.status == d2.status
         assert d1.effective_score == d2.effective_score
 
+    def test_same_bar_from_a_different_base_signal_gets_its_own_id(self):
+        """Structure Radar judges a bar from a neutral synthetic base while the
+        Kite engine's scan judges the same bar from a real SuperTrend row —
+        two separate decisions. signal_events is keyed on decision_id and
+        first-write-wins, so if they shared an id the radar's read (its loop
+        runs first) would evict the real SuperTrend-backed one."""
+        radar = _fuse(_inputs(base=_base(signal_id="navigator_origin_NIFTY 50:1:long:0", score_100=50.0)))
+        real_spot = _fuse(_inputs(base=_base(signal_id="kite:NIFTY 50:1:long:spot:0")))
+        real_deriv = _fuse(_inputs(base=_base(signal_id="kite:NIFTY 50:1:long:derivatives:0")))
+
+        ids = {radar.decision_id, real_spot.decision_id, real_deriv.decision_id}
+        assert len(ids) == 3
+        assert radar.status == real_spot.status == real_deriv.status  # same verdict, different origin
+
+    def test_same_bar_with_a_different_status_gets_its_own_id(self):
+        """navigator_signal_events is keyed on decision_id and inserts are
+        first-write-wins, so if two statuses for the same bar shared an id the
+        later one would be silently dropped — losing exactly the
+        WATCH → CONFIRMED transition calibration scores. Status is part of the
+        identity to keep each distinct conclusion recordable."""
+        confirmed = _fuse(_inputs(
+            avwap=_evidence("avwap", direction=1, confidence_100=90.0), avwap_grade="A",
+            volatility=_evidence("volatility", direction=1, confidence_100=80.0),
+            flow=_evidence("option_flow", direction=1, confidence_100=70.0),
+        ))
+        conflict = _fuse(_inputs(
+            avwap=_evidence("avwap", direction=1, confidence_100=90.0), avwap_grade="A",
+            volatility=_evidence("volatility", direction=1, confidence_100=80.0),
+            flow=_evidence("option_flow", direction=-1, confidence_100=70.0),
+        ))
+        # same user/underlying/bar/direction/config — only the conclusion differs
+        assert confirmed.bar_close_ms == conflict.bar_close_ms
+        assert confirmed.direction == conflict.direction
+        assert confirmed.status != conflict.status
+        assert confirmed.decision_id != conflict.decision_id
+
 
 class TestGateEligibilityByMode:
     def test_shadow_and_advisory_never_set_execution_eligible_from_status_alone_without_confirmation(self):

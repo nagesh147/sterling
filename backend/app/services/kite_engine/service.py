@@ -799,17 +799,26 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             close_feed=((lambda name, close: state.feed_correlation(uid, name, close))
                         if cfg_model.wire_risk_infra else None))
         snap = scanner.snapshot(uid)
-        # Sterling Value-Flow Navigator: an independent, price-only evaluation
-        # pass (its own candle fetch, never the scanner's) followed by a
-        # synchronous cache-only join back onto the rows. Both steps are a
-        # complete no-op — zero extra broker calls — unless the user has
-        # explicitly enabled Navigator (disabled by default for everyone).
-        # Navigator is a peer engine now: it either shares this engine's
-        # universe or resolves its own. Re-selecting from the SAME
-        # already-built `full_universe` is a pure in-memory filter — the four
-        # exchange dumps behind it are cached for an hour, so a custom scope
-        # costs no extra broker round-trips at this step. Bound before the
-        # try so the origination auto-exec block below can always rely on it.
+        # Sterling Value-Flow Navigator: CONFIRMATION ONLY here. Navigator
+        # evaluates each of this engine's rows against its own fresh candle
+        # fetch, then joins the resulting evidence back on synchronously from
+        # cache. Both steps are a complete no-op — zero extra broker calls —
+        # unless the user has explicitly enabled Navigator (disabled by
+        # default for everyone).
+        #
+        # Structure Radar and Signal Origination are deliberately NOT run from
+        # here (`include_origination=False`). Navigator is a peer engine with
+        # its own scan loop (`services/navigator/runtime.py`), and that loop
+        # owns origination: it fetches the candles, writes the shared decision
+        # cache, and is the single place a Navigator-originated order can be
+        # submitted. Running origination from both loops would double the
+        # broker calls and, once calibration is promoted, could place the same
+        # originated order twice.
+        #
+        # Navigator still either shares this engine's universe or resolves its
+        # own. Re-selecting from the SAME already-built `full_universe` is a
+        # pure in-memory filter — the four exchange dumps behind it are cached
+        # for an hour, so a custom scope costs no extra broker round-trips.
         nav_universe = selected
         try:
             from app.services.navigator import service as navigator_service
@@ -838,45 +847,19 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
                 universe=nav_universe, nfo_rows=nfo, bfo_rows=bfo, moneyness=cfg_model.strike_moneyness,
                 expiry_types=cfg_model.scan_expiries, expiry_types_indices=cfg_model.scan_expiries_indices,
                 expiry_types_stocks=cfg_model.scan_expiries_stocks,
+                include_origination=False,
             )
             snap.rows = navigator_service.attach_to_rows(uid, snap.rows, default_underlyings=cfg_model.scan_indices)
         except Exception as exc:  # noqa: BLE001
             log.warning("Navigator row-attach failed (non-fatal) for %s: %s", uid, exc)
 
-        # Signal Origination auto-exec: a Navigator-originated row (no real
-        # SuperTrend trigger) never passes through scanner.py's own auto-exec
-        # hook, since it's appended here AFTER scanner.scan() has already run.
-        # Fires through the SAME place_cb every other row uses, gated by ALL
-        # of: the base engine's own auto_execute switch (place_cb is None
-        # otherwise), signal_origination=="full", auto_execute_originated,
-        # and calibration_readiness=="ready" — permanently "not_ready" in
-        # production today, so this is provably inert for real orders until a
-        # real calibration promotion path exists (mirrors the existing `gate`
-        # operating mode's own invariant).
-        if place_cb is not None:
-            try:
-                from app.services.navigator import config_store as navigator_config_store
-                nav_record = navigator_config_store.get(uid, default_underlyings=cfg_model.scan_indices)
-                nav_cfg = nav_record.config
-                if (nav_cfg.enabled and nav_cfg.signal_origination == "full" and nav_cfg.auto_execute_originated
-                        and nav_record.calibration_readiness == "ready"):
-                    for row in snap.rows:
-                        if row.source != "navigator" or not row.is_fresh or not row.legs:
-                            continue
-                        if row.navigator is None or not row.navigator.execution_eligible:
-                            continue
-                        # Navigator-originated rows come from NAVIGATOR's
-                        # universe, which in custom scope may not overlap the
-                        # engine's `selected` at all — look the item up there.
-                        item = next((u for u in nav_universe if u.name == row.underlying), None)
-                        if item is None:
-                            continue
-                        try:
-                            await place_cb(row, item)
-                        except Exception as exc:  # noqa: BLE001
-                            log.warning("Navigator-originated auto-exec failed for %s/%s: %s", uid, row.underlying, exc)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Navigator origination auto-exec gate check failed (non-fatal) for %s: %s", uid, exc)
+        # No Navigator-originated auto-exec here. Originated rows are produced
+        # and submitted by Navigator's own runtime loop, which additionally
+        # re-checks `check_originated_execution_eligible` and the entry delay
+        # per row. Keeping the single submission path there is what makes
+        # "the same originated setup can only be ordered once" true by
+        # construction rather than by timing luck.
+
         # The board now retains recently-ended setups too, but the "ready" count, badge
         # and return value should reflect only live (running/just-fired) signals.
         live = sum(1 for r in snap.rows if r.is_active or r.is_fresh)

@@ -205,6 +205,36 @@ def test_lifecycle_preserves_prior_row_when_underlying_failed():
     assert merged[0].is_fresh is False
 
 
+def test_widest_retention_keeps_what_the_longest_retaining_user_needs():
+    """The snapshot tables are shared but retention is per-user config, so one
+    pass has to keep the most generous window asked for — trimming to a
+    shorter user's window would delete history another user still relies on."""
+    defaults = NavigatorConfigModel()
+    kite_state.set_config("user-1", EngineConfigModel(scan_indices=["NIFTY 50"]))
+    rec = config_store.get("user-1", default_underlyings=["NIFTY 50"])
+    config_store.save(
+        "user-1",
+        rec.config.model_copy(update={
+            "enabled": True,
+            "retention_raw_days": defaults.retention_raw_days + 11,
+            "retention_features_days": defaults.retention_features_days + 22,
+        }),
+        expected_revision=rec.revision, default_underlyings=["NIFTY 50"],
+    )
+
+    raw, feature = runtime._widest_retention(["user-1", "user-unknown"])
+
+    assert raw == defaults.retention_raw_days + 11
+    assert feature == defaults.retention_features_days + 22
+
+
+def test_widest_retention_falls_back_to_schema_defaults():
+    defaults = NavigatorConfigModel()
+    assert runtime._widest_retention([]) == (
+        defaults.retention_raw_days, defaults.retention_features_days,
+    )
+
+
 def test_snapshot_hydrates_active_navigator_decision_cache():
     row = _nav_row(is_active=True, is_fresh=False)
     db.set_config(

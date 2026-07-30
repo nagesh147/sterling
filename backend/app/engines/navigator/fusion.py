@@ -158,10 +158,31 @@ def compute_effective_score(
 def compute_decision_id(
     *, user_id: str, engine_id: str, underlying: str, timeframe: str, bar_close_ms: int,
     direction: str, trigger: str, config_revision: int,
+    base_signal_id: str = "", status: str = "",
 ) -> str:
+    """Deterministic id for one Navigator decision.
+
+    `decision_id` is the PRIMARY KEY of navigator_signal_events and inserts are
+    first-write-wins (`INSERT OR IGNORE` — a recorded decision is immutable), so
+    anything two genuinely different decisions can differ by has to be in here
+    or the second one is silently dropped. Two such things are easy to miss:
+
+    * **`base_signal_id`** — the same underlying/bar/direction can be judged
+      from a Navigator-only synthetic base (Structure Radar), from a spot
+      SuperTrend row, and from a derivatives SuperTrend row. Those are three
+      separate decisions about the same bar; without this the radar's neutral
+      read (written first, since its loop runs first) would evict the real
+      SuperTrend-backed one.
+    * **`status`** — a bar's verdict can move WATCH → CONFIRMED as later
+      evidence lands, and that transition is exactly what calibration scores.
+
+    Both default to "" so the id is unchanged for callers that don't supply
+    them. Everything hashed is an input or a conclusion drawn from inputs, so
+    replaying stored inputs still reproduces the id byte-identically."""
     payload = {
         "user_id": user_id, "engine_id": engine_id, "underlying": underlying, "timeframe": timeframe,
         "bar_close_ms": bar_close_ms, "direction": direction, "trigger": trigger, "config_revision": config_revision,
+        "base_signal_id": base_signal_id, "status": status,
     }
     return "nav_" + canonical_json_hash(payload)[:24]
 
@@ -195,9 +216,13 @@ def _build(
     execution_eligible: Optional[bool] = None,
 ) -> NavigatorDecision:
     trigger_value = trigger or "base_fresh"
+    # `base_signal_id` and `status` are part of the identity on purpose — see
+    # `compute_decision_id` for why leaving either out silently drops real
+    # decisions.
     decision_id = compute_decision_id(
         user_id=base.user_id, engine_id=base.engine_id, underlying=base.underlying, timeframe=base.timeframe,
-        bar_close_ms=base.bar_close_ms, direction=base.direction, trigger=f"{trigger_value}:{status}", config_revision=config_revision,
+        bar_close_ms=base.bar_close_ms, direction=base.direction, trigger=trigger_value,
+        config_revision=config_revision, base_signal_id=base.signal_id, status=status,
     )
     valid_reasons = sorted({r for r in reasons if r in ReasonCode.__args__}) or ["OK"]
     return NavigatorDecision(
