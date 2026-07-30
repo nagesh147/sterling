@@ -505,9 +505,13 @@ def _make_place_cb(client, uid: str):
                 result = await client.place_order_future(
                     trade_symbol, side, qty, exchange=trade_exchange, tag=idem)
             else:
+                # `stop_px` — not args["stop_loss"] — is the authoritative premium stop:
+                # it is what the protective GTT and the tick monitor below use, and for
+                # a spot/navigator row it is the only one resolved into the premium
+                # domain at all.
                 result = await client.place_order_option(
                     trade_symbol, "buy", qty, exchange=trade_exchange,
-                    stop_loss=args["stop_loss"], tag=idem)
+                    stop_loss=(stop_px if stop_px > 0 else None), tag=idem)
         except Exception as exc:  # noqa: BLE001
             state.log(uid, "order_failed", f"{row.underlying} {trade_symbol}: {exc}")
             return
@@ -895,6 +899,15 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
             cf = (f"confluence {d.confluence_fired} fired (spot+premium), "
                   f"{d.deriv_charts} premiums checked (bars {d.deriv_min_bars}–{d.deriv_max_bars})")
             parts.append(cf)
+        if d.premium_missing:
+            # Blank Entry/SL/TSL cells were previously indistinguishable from "no
+            # signal". Name the count so a rate-limited option-history fetch is
+            # visible instead of being read as a data-less contract.
+            parts.append(
+                f"⚠ {d.premium_missing}/{d.premium_ok + d.premium_missing} candidate legs "
+                f"have no entry premium (option history empty and the signal is too old "
+                f"to use today's LTP) — their Entry/SL/TSL show “—”"
+            )
         # Trail-update pass: push tightened stops to open positions, then square off
         # any position nearing expiry.
         if cfg_model.auto_execute:

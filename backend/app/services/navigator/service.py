@@ -476,6 +476,19 @@ async def _run_structure_and_origination(
             )
             if origin_row is not None:
                 origin_row.navigator = decision
+                # An originated row resolves its legs from the option dump, which
+                # carries no prices — so without this its Entry / SL / TSL / Target
+                # cells are permanently blank even though the row has a real accepted
+                # stop and target. Reuses the engine scanner's hydrator (and its
+                # per-user candle cache + Kite historical throttle).
+                if origin_row.legs:
+                    try:
+                        from app.services.kite_engine.scanner import scanner as kite_scanner
+
+                        await kite_scanner.stamp_leg_premiums(client, uid, origin_row)
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("origination: premium hydration failed for %s: %s",
+                                  origin_row.underlying, exc)
                 rows.append(origin_row)
 
 
@@ -497,6 +510,11 @@ def _build_origination_row(
     row = placeholder.model_copy(deep=True)
     row.stop_loss = float(proposal.stop)
     row.entry_sl = float(proposal.stop)
+    # Unlike a SuperTrend row, an originated signal HAS a target: the proposal sets it
+    # at `target_r` × the accepted risk distance. Dropping it would show the user "—"
+    # for a level the engine actually computed and gates the proposal on.
+    if proposal.target is not None:
+        row.target = float(proposal.target)
 
     if config.signal_origination == "full" and universe is not None and (nfo_rows is not None or bfo_rows is not None):
         item = next((u for u in universe if getattr(u, "name", None) == row.underlying), None)

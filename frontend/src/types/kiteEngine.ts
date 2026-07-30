@@ -27,6 +27,9 @@ export interface OptionLeg {
   premium_spot?: number;  // entry premium (Entry column)
   premium_sl?: number;    // live ratcheting trail stop (TSL column)
   entry_sl?: number;      // initial hard stop at the entry bar (SL column)
+  // Premium level of the row's `target`. Navigator-originated rows only —
+  // SuperTrend rows are trend-following and quote no fixed target.
+  premium_target?: number | null;
   token?: number;
   is_active?: boolean; // this contract's SuperTrend still aligned on the latest bar
   signal_timestamp_ms?: number | null;
@@ -58,6 +61,10 @@ export interface EngineSignalRow {
   stop_loss: number;       // live ratcheting trail stop (TSL column)
   entry_sl?: number;       // initial hard stop at the entry bar (SL column)
   exit_state?: string;     // red-counter progress "<reds>/<threshold> red" (Exit column)
+  // Profit objective, same units as entry_sl. Always null for SuperTrend rows (their
+  // exit is the trail + red counter); set for Navigator-originated rows from its
+  // AVWAP stop/target proposal.
+  target?: number | null;
   score: number;
   timestamp_ms: number;
   // "navigator" = Navigator Signal Origination — no SuperTrend trigger at all,
@@ -149,6 +156,14 @@ export interface OptionDetail {
   vega: number;
   depth_buy: DepthLevel[];
   depth_sell: DepthLevel[];
+  // The signal's own premium plan for this leg — the board's Entry / SL / TSL /
+  // Target columns. null when the leg was never hydrated (option history empty and
+  // the signal too old to honestly use today's LTP as its entry).
+  entry_premium?: number | null;
+  initial_stop_premium?: number | null;
+  trail_stop_premium?: number | null;
+  target_premium?: number | null;
+  is_active?: boolean;
 }
 
 export interface EngineDetailResponse {
@@ -165,6 +180,18 @@ export interface EngineDetailResponse {
   stop_loss: number;
   options: OptionDetail[];
   resolution_reason?: string | null;
+  // Which engine owns this row. The dock opens from a board that mixes SuperTrend and
+  // Navigator rows, so this decides what context and actions make sense to show.
+  source?: 'spot' | 'derivatives' | 'confluence' | 'navigator';
+  score?: number;
+  entry_sl?: number | null;
+  target?: number | null;
+  exit_state?: string | null;
+  is_active?: boolean;
+  is_fresh?: boolean;
+  adx?: number | null;
+  atr_pct?: number | null;
+  navigator?: NavigatorDecision | null;
 }
 
 export interface EngineConfigModel {

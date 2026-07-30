@@ -25,6 +25,9 @@ class OptionLeg(BaseModel):
     premium_spot: Optional[float] = None   # entry premium (fill reference) — the Entry column
     premium_sl: Optional[float] = None     # live ratcheting trail stop — the TSL column
     entry_sl: Optional[float] = None       # initial hard stop at the entry bar (fast ST line) — the SL column
+    # Premium level of the row's ``target`` (see EngineSignalRow.target). None for
+    # SuperTrend signals, which are trend-following and have no fixed target.
+    premium_target: Optional[float] = None
     token: Optional[int] = None
     is_active: bool = False   # this contract's SuperTrend is still aligned on the latest bar
     # Contract-local evidence. The grouped parent is a display/sort summary only.
@@ -53,6 +56,12 @@ class EngineSignalRow(BaseModel):
     # Live red-counter progress at the latest bar, "<reds>/<threshold> red" (threshold
     # from exit_mode). The Exit column; None for legacy cached rows.
     exit_state: Optional[str] = None
+    # Profit objective in the same units as ``entry_sl``. Deliberately None for every
+    # SuperTrend row: that strategy is trend-following and exits on the trail plus the
+    # red counter, so quoting a target would invent a rule the engine does not run.
+    # Navigator-originated rows DO carry one — its AVWAP stop/target proposal is an
+    # R-multiple of the accepted stop, so the target is part of the signal.
+    target: Optional[float] = None
     score: float
     timestamp_ms: int
     # Underlying spot at the trigger bar. For "spot"-source signals this equals
@@ -193,6 +202,14 @@ class OptionDetail(BaseModel):
     vega: float = 0.0
     depth_buy: List[DepthLevel] = []
     depth_sell: List[DepthLevel] = []
+    # The signal's own premium levels for this leg, mirroring the board's
+    # Entry / SL / TSL / Target columns. None when the leg was never hydrated
+    # (see ScanDiag.premium_missing) — never 0.0 as a stand-in for "unknown".
+    entry_premium: Optional[float] = None
+    initial_stop_premium: Optional[float] = None
+    trail_stop_premium: Optional[float] = None
+    target_premium: Optional[float] = None
+    is_active: bool = False
 
 
 class EngineDetailResponse(BaseModel):
@@ -209,6 +226,21 @@ class EngineDetailResponse(BaseModel):
     stop_loss: float
     options: List[OptionDetail]
     resolution_reason: Optional[str] = None
+    # Which engine owns this row, and its live state. The dock is opened from a board
+    # that mixes SuperTrend and Navigator rows, so without `source` it cannot tell the
+    # user whose signal they are looking at or which actions apply.
+    source: Literal["spot", "derivatives", "confluence", "navigator"] = "spot"
+    score: float = 0.0
+    entry_sl: Optional[float] = None
+    target: Optional[float] = None
+    exit_state: Optional[str] = None
+    is_active: bool = False
+    is_fresh: bool = False
+    adx: Optional[float] = None
+    atr_pct: Optional[float] = None
+    # Navigator's fused decision for this row when it has one — the same object the
+    # board renders as the "Nav …" badge, so the dock can show WHY it says that.
+    navigator: Optional["NavigatorDecision"] = None
 
 
 class EngineOrderRequest(BaseModel):

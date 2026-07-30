@@ -32,7 +32,9 @@ from app.engines.sterling_kite_engine.regime import compute_regime, entry_transi
 from app.engines.sterling_kite_engine.schemas import (
     AlignmentChip, EngineSignalRow, OptionLeg, SetupChart, SetupLine, SetupPoint,
 )
-from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
+from app.services.kite_engine.greeks import (
+    black_scholes_greeks, implied_vol, premium_stop_from_move,
+)
 from app.schemas.instruments import InstrumentMeta
 from app.services.kite_engine.strikes import (
     ExpiryType, OptionPick, chain_rows_for, pick_contracts, pick_strikes,
@@ -43,6 +45,7 @@ from app.services.kite_engine import state
 log = get_logger(__name__)
 
 _CANDLE_TTL_S = 180          # re-use cached 1H candles for ~3 min
+_EMPTY_CANDLE_TTL_S = 25     # an empty result may be a 429 casualty — retry soon
 _CONCURRENCY = 2             # stay UNDER Kite historical ~3 req/s (3 concurrent → 429s)
 _TF_MS = 3_600_000           # 1H bar in ms
 _LOOKBACK_BARS = 320
@@ -155,11 +158,19 @@ def _stamp_leg_premium_stops(row: EngineSignalRow, leg: OptionLeg) -> None:
     spot = float(row.underlying_spot or row.spot or 0.0)
     if spot <= 0:
         return
+    dte = _dte_from_expiry(leg.expiry, row.timestamp_ms)
+    # Prefer the IV the market actually implies at this entry premium over the flat
+    # _IV_ASSUMPTION. A single 18% assumption is roughly right for index options and
+    # badly wrong for stock options (25-45%), and delta is what converts the
+    # underlying ST level into the premium SL/TSL shown in the table — so a wrong IV
+    # shows the user a stop that is nowhere near where the premium would really be.
+    iv = implied_vol(price=entry, spot=spot, strike=float(leg.strike),
+                     dte_days=dte, option_type=leg.option_type)
     greeks = black_scholes_greeks(
         spot=spot,
         strike=float(leg.strike),
-        dte_days=_dte_from_expiry(leg.expiry, row.timestamp_ms),
-        iv=_IV_ASSUMPTION,
+        dte_days=dte,
+        iv=iv if iv > 0 else _IV_ASSUMPTION,
         option_type=leg.option_type,
     )
     delta = greeks.delta if greeks.delta != 0.0 else (
@@ -172,6 +183,11 @@ def _stamp_leg_premium_stops(row: EngineSignalRow, leg: OptionLeg) -> None:
     if (row.stop_loss or 0) > 0:
         leg.premium_sl = premium_stop_from_move(
             entry_premium=entry, delta=delta, spot=spot, trail_level=float(row.stop_loss)
+        )
+    if (row.target or 0) > 0 and leg.premium_target is None:
+        # Same first-order delta model as the stop, read in the profitable direction.
+        leg.premium_target = premium_stop_from_move(
+            entry_premium=entry, delta=delta, spot=spot, trail_level=float(row.target)
         )
 
 
@@ -274,7 +290,16 @@ _MONEYNESS_ORDER = {"ATM": 0, "ITM1": 1, "ITM2": 2, "ITM3": 3, "ITM4": 4, "ITM5"
 
 
 def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
-    """Group derivative legs and de-duplicate into final display rows."""
+    """Group derivative legs and de-duplicate into final display rows.
+
+    MUST be idempotent and MUST NOT mutate ``rows``. ``_flush()`` calls this over
+    the same accumulating scan list once per instrument that produces a signal, so
+    anything written back onto an input row is read again by the next pass. An
+    earlier version zeroed ``spot``/``stop_loss`` on the group parent in place and
+    then re-derived that parent's leg premium from the now-zero ``spot``, wiping the
+    Entry/TSL of exactly one leg per grouped derivatives row on every pass after the
+    first (~1 blank leg per row in the live board).
+    """
     grouped_derivs: Dict[tuple, EngineSignalRow] = {}
     leg_ts: Dict[tuple, int] = {}
     final_rows: List[EngineSignalRow] = []
@@ -283,21 +308,26 @@ def _compile_rows(rows: List[EngineSignalRow]) -> List[EngineSignalRow]:
             final_rows.append(r)
             continue
         key = (r.underlying, r.option_type)
-        leg = r.legs[0]
-        leg.premium_spot = r.spot
-        leg.premium_sl = r.stop_loss
-        leg.token = r.token
+        leg = r.legs[0].model_copy(deep=True)
+        # Premiums are stamped at birth by evaluate_derivative_contract; fill them
+        # here only for a leg that arrived without them (legacy cached rows).
+        if not leg.premium_spot:
+            leg.premium_spot = r.spot or leg.premium_spot
+        if not leg.premium_sl:
+            leg.premium_sl = r.stop_loss or leg.premium_sl
+        leg.token = leg.token or r.token
         leg.signal_timestamp_ms = int(leg.signal_timestamp_ms or r.timestamp_ms)
         leg.entry_timestamp_ms = int(leg.entry_timestamp_ms or r.timestamp_ms)
         leg.alignment = leg.alignment or r.alignment
         leg.exit_state = leg.exit_state or r.exit_state
         sym_key = (*key, leg.option_symbol)
         if key not in grouped_derivs:
-            r.spot = 0
-            r.stop_loss = 0
-            r.entry_sl = None   # per-leg (leg.entry_sl) is authoritative for grouped deriv rows
-            r.legs = [leg]
-            grouped_derivs[key] = r
+            parent = r.model_copy(deep=True)
+            parent.spot = 0
+            parent.stop_loss = 0
+            parent.entry_sl = None   # per-leg (leg.entry_sl) is authoritative for grouped deriv rows
+            parent.legs = [leg]
+            grouped_derivs[key] = parent
             leg_ts[sym_key] = r.timestamp_ms
             continue
         parent = grouped_derivs[key]
@@ -380,6 +410,11 @@ def evaluate_derivative_contract(
             legs=[OptionLeg(moneyness=moneyness, option_type=pick.option_type,
                             option_symbol=pick.option_symbol, strike=pick.strike,
                             expiry=pick.expiry, lot_size=pick.lot_size or None,
+                            # Premium entry/trail belong on the leg from birth: the
+                            # signal IS this contract's own premium series, and
+                            # place_cb runs on the raw row before any grouping.
+                            premium_spot=float(c[i]), premium_sl=stop_loss,
+                            token=pick.token or None,
                             entry_sl=entry_sl, is_active=active,
                             signal_timestamp_ms=ts, entry_timestamp_ms=ts,
                             alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
@@ -454,7 +489,12 @@ def option_order_args(row: EngineSignalRow, leg: Optional[OptionLeg] = None) -> 
         "lot_size": int(leg.lot_size or 0),
         "token": int(leg.token or 0),
         "exchange": row.exchange,
-        "stop_loss": float(leg.premium_sl if leg.premium_sl is not None else row.stop_loss),
+        # PREMIUM domain only. `row.stop_loss` is an UNDERLYING level for spot /
+        # confluence / navigator rows (57,000 index points, not a ₹965 premium), so
+        # falling back to it here would hand the order path a stop from the wrong
+        # price domain. None means "no premium stop known yet"; the caller derives one
+        # from a live quote (`_resolve_premium_stop`) before placing anything.
+        "stop_loss": float(leg.premium_sl) if (leg.premium_sl or 0) > 0 else None,
         # Premium basis for risk sizing (workstream F). Derivatives legs carry the
         # option's own premium (premium_spot) + its ST trail (premium_sl); for spot
         # signals these may be None → risk-sizing degrades to a single lot.
@@ -483,6 +523,11 @@ class ScanDiag:
     deriv_min_bars: int = 0    # premium-chart bar depth of charted contracts (history)
     deriv_max_bars: int = 0
     confluence_fired: int = 0  # merged rows where the underlying AND a leg's premium both fired
+    # Premium hydration of underlying-signal candidate legs. A blank Entry/SL/TSL in
+    # the table means premium_missing — the option's own history came back empty (or
+    # rate-limited) and the row was too old to honestly use today's LTP as its entry.
+    premium_ok: int = 0
+    premium_missing: int = 0
 
 
 @dataclass
@@ -596,9 +641,16 @@ class KiteEngineScanner:
 
     async def _fetch_candles(self, client, us: UserScan, token: int, name: str) -> List[Candle]:
         """Fetch + cache 1H candles by instrument_token. Works for underlyings AND
-        option contracts (distinct token spaces, so the cache never collides)."""
+        option contracts (distinct token spaces, so the cache never collides).
+
+        An EMPTY result is cached only briefly. ``get_candles`` returns ``[]`` both
+        for a contract with genuinely no history and for a fetch that exhausted its
+        429 retries, and the two are indistinguishable here — caching a rate-limit
+        failure for the full TTL would blank every row that needs that contract for
+        the rest of the scan.
+        """
         hit = us.candle_cache.get(token)
-        if hit and (time.monotonic() - hit[0]) < _CANDLE_TTL_S:
+        if hit and (time.monotonic() - hit[0]) < (_CANDLE_TTL_S if hit[1] else _EMPTY_CANDLE_TTL_S):
             return hit[1]
         inst = InstrumentMeta(
             underlying=name, tick_size=0.05, strike_step=1.0, exchange_currency="INR",
@@ -612,14 +664,26 @@ class KiteEngineScanner:
     async def _fetch_1h(self, client, us: UserScan, item: UniverseItem) -> List[Candle]:
         return await self._fetch_candles(client, us, item.token, item.tradingsymbol)
 
-    async def _stamp_spot_leg_premiums(self, client, us: UserScan, row: EngineSignalRow) -> None:
-        """Hydrate spot-source candidate legs with premium entry, SL and TSL snapshots.
+    async def _stamp_spot_leg_premiums(
+        self, client, us: UserScan, row: EngineSignalRow,
+        sem: Optional[asyncio.Semaphore] = None, diag: Optional["ScanDiag"] = None,
+    ) -> None:
+        """Hydrate underlying-signal candidate legs with premium entry, SL and TSL.
 
-        Spot signals originate from the underlying chart, but the board and order path
-        trade option contracts. Use the option's own 1H close at the signal timestamp
-        as the entry premium; only a same-bar fresh signal may fall back to LTP.
+        Spot (and Navigator-originated) signals come off the UNDERLYING chart, but the
+        board and the order path trade option contracts. Use the option's own 1H close
+        at the signal timestamp as the entry premium; only a same-bar fresh signal may
+        fall back to LTP — today's LTP is not what a signal from three sessions ago
+        entered at, and stamping it would invent an entry price and a fake P&L.
+
+        ``sem`` is the scan's Kite-historical throttle and is REQUIRED in production.
+        Every other per-contract candle fetch in this scanner holds it; these did not,
+        so a scan fanned out one unthrottled option-history request per candidate leg
+        (hundreds) across all universe items at once, far past Kite's ~3 req/s
+        historical cap. The resulting 429s were swallowed at debug level and surfaced
+        only as blank Entry/SL/TSL cells.
         """
-        if row.source != "spot" or not row.legs:
+        if row.source not in ("spot", "navigator") or not row.legs:
             return
 
         missing_ltp: list[OptionLeg] = []
@@ -630,11 +694,15 @@ class KiteEngineScanner:
             entry_px = 0.0
             if leg.token:
                 try:
-                    candles = drop_forming(await self._fetch_candles(
-                        client, us, int(leg.token), leg.option_symbol
-                    ))
+                    if sem is not None:
+                        async with sem:
+                            candles = await self._fetch_candles(
+                                client, us, int(leg.token), leg.option_symbol)
+                    else:
+                        candles = await self._fetch_candles(
+                            client, us, int(leg.token), leg.option_symbol)
                     candidates = [
-                        candle for candle in candles
+                        candle for candle in drop_forming(candles)
                         if int(candle.timestamp_ms) <= int(row.timestamp_ms)
                     ]
                     if candidates:
@@ -647,24 +715,41 @@ class KiteEngineScanner:
             elif row.is_fresh:
                 missing_ltp.append(leg)
 
-        if not missing_ltp:
-            return
-        qkeys = [f"{row.exchange}:{leg.option_symbol}" for leg in missing_ltp]
-        try:
-            quotes = await client.get_ltp(qkeys)
-        except Exception as exc:  # noqa: BLE001
-            log.debug("kite-engine spot premium LTP fail: %s", exc)
-            return
-        for leg in missing_ltp:
-            qkey = f"{row.exchange}:{leg.option_symbol}"
+        if missing_ltp:
+            qkeys = [f"{row.exchange}:{leg.option_symbol}" for leg in missing_ltp]
             try:
-                entry_px = float((quotes.get(qkey) or {}).get("last_price") or 0.0)
-            except (AttributeError, TypeError, ValueError):
-                entry_px = 0.0
-            if entry_px <= 0:
-                continue
-            leg.premium_spot = entry_px
-            _stamp_leg_premium_stops(row, leg)
+                quotes = await client.get_ltp(qkeys)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("kite-engine spot premium LTP fail: %s", exc)
+                quotes = {}
+            for leg in missing_ltp:
+                qkey = f"{row.exchange}:{leg.option_symbol}"
+                try:
+                    entry_px = float((quotes.get(qkey) or {}).get("last_price") or 0.0)
+                except (AttributeError, TypeError, ValueError):
+                    entry_px = 0.0
+                if entry_px <= 0:
+                    continue
+                leg.premium_spot = entry_px
+                _stamp_leg_premium_stops(row, leg)
+
+        if diag is not None:
+            for leg in row.legs:
+                if (leg.premium_spot or 0) > 0:
+                    diag.premium_ok += 1
+                else:
+                    diag.premium_missing += 1
+
+    async def stamp_leg_premiums(self, client, uid: str, row: EngineSignalRow) -> None:
+        """Public hydrator for a row built OUTSIDE this scanner's own scan.
+
+        Navigator originates its own rows and resolves their legs with
+        :func:`attach_strikes`, so without this they reach the board with no Entry /
+        SL / TSL at all. Reuses the per-user candle cache so a contract already read
+        during the engine's scan costs nothing.
+        """
+        us = self._user(uid, state.get_config(uid))
+        await self._stamp_spot_leg_premiums(client, us, row)
 
     async def scan(
         self, *, uid: str, client, universe: List[UniverseItem],
@@ -751,7 +836,7 @@ class KiteEngineScanner:
                                    moneynesses=moneyness, today=today,
                                    expiry_types=_expiry)
                     _copy_prior_leg_snapshot(row, prior_premium_snapshots)
-                    await self._stamp_spot_leg_premiums(client, us, row)
+                    await self._stamp_spot_leg_premiums(client, us, row, sem=sem, diag=diag)
                     rows.append(row)
 
                     is_fresh = (row.timestamp_ms == latest_ts)

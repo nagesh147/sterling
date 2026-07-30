@@ -126,6 +126,9 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
             lot_size=leg.lot_size, dte=dte, last_price=ltp, bid=bid, ask=ask, iv=iv,
             delta=g.delta, gamma=g.gamma, theta=g.theta, vega=g.vega,
             depth_buy=buy, depth_sell=sell,
+            entry_premium=leg.premium_spot, initial_stop_premium=leg.entry_sl,
+            trail_stop_premium=leg.premium_sl, target_premium=leg.premium_target,
+            is_active=bool(leg.is_active),
         ))
 
     return EngineDetailResponse(
@@ -139,4 +142,9 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
         spot_now=spot_now,
         stop_loss=row.stop_loss, options=options,
         resolution_reason=getattr(row, "resolution_reason", None),
+        source=row.source, score=row.score,
+        entry_sl=row.entry_sl, target=row.target, exit_state=row.exit_state,
+        is_active=bool(row.is_active), is_fresh=bool(row.is_fresh),
+        adx=row.adx, atr_pct=row.atr_pct,
+        navigator=row.navigator,
     )

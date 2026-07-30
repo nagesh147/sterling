@@ -9,6 +9,7 @@ import { QuoteDetail } from './SterlingWatchList';
 import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';
+import { NavigatorEvidencePanel } from './NavigatorEvidencePanel';
 import { stopDistance, computeLegRR, rrScore } from './impactMath';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -43,6 +44,43 @@ function StripStat({ label, value, color, title }: { label: string; value: strin
 
 function StripDiv() {
   return <div style={{ width: 1, alignSelf: 'center', height: 28, background: k.border, opacity: 0.7 }} />;
+}
+
+// Which engine produced this row, and what that means for how it is managed. The dock
+// opens from a board that mixes both engines, so without this the same layout would
+// describe a SuperTrend trail-and-red-counter trade and a Navigator AVWAP stop/target
+// trade identically.
+const ENGINE_BY_SOURCE: Record<string, { label: string; blurb: string }> = {
+  spot: {
+    label: 'SuperTrend · underlying',
+    blurb: 'Triple SuperTrend fired on the UNDERLYING chart; the legs below are candidate strikes to buy. Exit is the trailing stop plus the red counter — there is no fixed target.',
+  },
+  derivatives: {
+    label: 'SuperTrend · premium',
+    blurb: "Triple SuperTrend fired on this contract's OWN premium chart (buy-only). Exit is the trailing stop plus the red counter — there is no fixed target.",
+  },
+  confluence: {
+    label: 'SuperTrend · confluence',
+    blurb: "The underlying fired AND the leg's own premium confirmed on the same bar. Exit is the trailing stop plus the red counter — there is no fixed target.",
+  },
+  navigator: {
+    label: 'Value-Flow Navigator',
+    blurb: 'Originated by Navigator itself — no SuperTrend trigger. Its AVWAP proposal supplies BOTH the stop and the target below, and the signal is only surfaced when that proposal is accepted.',
+  },
+};
+
+const NAV_STATUS_TONE: Record<string, string> = {
+  HIGH_CONVICTION: k.green, CONFIRMED: k.green, WATCH: k.blue,
+  CONFLICT: k.red, WAIT: k.dim, NO_DATA: k.dim,
+};
+
+function PlanCell({ label, value, title, color }: { label: string; value: string; title?: string; color?: string }) {
+  return (
+    <div title={title} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{ fontSize: 9, color: k.dim, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: color ?? k.text, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    </div>
+  );
 }
 
 function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
@@ -144,6 +182,41 @@ function LegCard({ leg, exchange, underlying, spotPx, isBest, isBestDelta }: {
           </div>
         )}
       </div>
+
+      {/* This leg's own price plan, in the premium domain — the same numbers the board
+          shows as Entry / SL / TSL / Target. Blank means the leg was never hydrated
+          (no option history and the signal is too old to use today's LTP as an entry),
+          which is a data gap, not a zero-priced trade. */}
+      {(() => {
+        const entry = leg.entry_premium ?? null;
+        const sl = leg.initial_stop_premium ?? null;
+        const tsl = leg.trail_stop_premium ?? null;
+        const tgt = leg.target_premium ?? null;
+        if (entry == null && sl == null && tsl == null && tgt == null) return null;
+        const breached = lastPx != null && tsl != null && tsl > 0 && lastPx <= tsl;
+        const open = lastPx != null && entry != null && entry > 0 ? lastPx - entry : null;
+        const fmt = (v: number | null) => (v != null && v > 0 ? v.toFixed(2) : '—');
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', padding: '8px 16px', borderTop: `1px solid ${k.border}`, background: k.bg }}>
+            <PlanCell label="Entry" value={fmt(entry)} title="Premium this signal is measured from." />
+            <PlanCell label="SL @ entry" value={fmt(sl)} />
+            <PlanCell label="TSL" value={fmt(tsl)} color={breached ? k.red : undefined}
+              title={breached ? 'The live premium is already at or below this trailing stop.' : 'Trailing stop, tightens as SuperTrend lines flip red.'} />
+            <PlanCell label="Target" value={fmt(tgt)} color={tgt != null && tgt > 0 ? undefined : k.dim}
+              title={tgt != null && tgt > 0 ? "Navigator's AVWAP target for this leg." : 'No fixed target — SuperTrend exits on the trail plus the red counter.'} />
+            {open != null && (
+              <PlanCell label="Open P&L" value={`${open >= 0 ? '+' : ''}${open.toFixed(2)}`} color={open >= 0 ? k.green : k.red}
+                title="Live premium minus this signal's entry premium, per unit." />
+            )}
+            {breached && (
+              <span title="The premium has traded through its trail, but the SuperTrend exit is a red-counter rule — the leg keeps counting as running until enough ST lines flip."
+                style={{ fontSize: 9, fontWeight: 800, color: k.red, border: `1px solid ${k.red}`, borderRadius: 3, padding: '1px 5px' }}>
+                TSL HIT
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {showDepth && (
         <div style={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${k.border}`, background: k.bg }}>
@@ -420,11 +493,75 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                 <StripStat label="Spot now" value={data.spot_now ? data.spot_now.toFixed(2) : '—'} color={moveColor} />
                 <StripDiv />
                 <StripStat label="Move since" value={moveLabel} color={moveColor} />
-                {data?.alignment && (
+                {data?.alignment && data.source !== 'navigator' && (
                   <>
                     <StripDiv />
                     <StripStat label="ST align F/M/S" value={`${data.alignment.fast}/${data.alignment.mid}/${data.alignment.slow}`} title="Current SuperTrend alignment at trigger (+1 green / -1 red)" />
                   </>
+                )}
+                {data.exit_state && (
+                  <>
+                    <StripDiv />
+                    <StripStat label="Exit counter" value={data.exit_state}
+                      title="Red-counter progress toward the auto-exit rule. The exit fires on this count, NOT on the trailing stop — the premium can sit below its trail while this is still short of the threshold." />
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Which engine owns this row, its price plan, and — when it has one —
+              Navigator's full evidence. Rendered above the reorderable sections
+              because it is the context the rest of the dock is read against. */}
+          {(() => {
+            const engine = ENGINE_BY_SOURCE[data.source ?? 'spot'] ?? ENGINE_BY_SOURCE.spot;
+            const nav = data.navigator ?? null;
+            const isNav = data.source === 'navigator';
+            const navTone = nav ? (NAV_STATUS_TONE[nav.status] ?? k.dim) : k.dim;
+            return (
+              <div style={{ border: `1px solid ${isNav ? tint(k.blue, 45) : k.border}`, borderRadius: 10, padding: 14, marginBottom: 16, background: k.bg }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 4, background: tint(isNav ? k.blue : k.orange, 12), color: isNav ? k.blue : k.orange }}>
+                    {engine.label}
+                  </span>
+                  {data.score ? <span style={{ fontSize: 11, color: k.dim }}>score {Math.round(data.score)}</span> : null}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: data.is_active ? k.green : k.dim }}>
+                    {data.is_fresh ? 'fresh this bar' : data.is_active ? 'running' : 'ended'}
+                  </span>
+                  {nav && (
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: tint(navTone, 12), color: navTone }}>
+                      Nav {nav.status.replace('_', ' ')}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11.5, color: k.dim, lineHeight: 1.5, marginBottom: 12 }}>{engine.blurb}</div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, paddingTop: 10, borderTop: `1px solid ${k.border}` }}>
+                  <PlanCell label={isNav ? 'AVWAP stop' : 'Stop at entry'}
+                    value={data.entry_sl != null && data.entry_sl > 0 ? data.entry_sl.toFixed(2) : '—'}
+                    title="Underlying level. Per-leg premium equivalents are in the Option legs section." />
+                  <PlanCell label="Trail now" value={data.stop_loss > 0 ? data.stop_loss.toFixed(2) : '—'}
+                    title="Live trailing stop, recomputed at the latest closed bar (underlying level)." />
+                  <PlanCell label="Target"
+                    value={data.target != null && data.target > 0 ? data.target.toFixed(2) : 'none'}
+                    color={data.target != null && data.target > 0 ? k.text : k.dim}
+                    title={data.target != null && data.target > 0
+                      ? "Navigator's AVWAP target — an R-multiple of its accepted stop."
+                      : 'SuperTrend is trend-following: it quotes no fixed target, so none is shown rather than inventing one.'} />
+                  {data.adx != null && <PlanCell label="ADX @ entry" value={data.adx.toFixed(0)} title="Trend strength at the trigger bar." />}
+                  {data.atr_pct != null && <PlanCell label="ATR pct'ile" value={`${data.atr_pct.toFixed(0)}%`}
+                    title="This bar's ATR ranked against the last 100 hourly bars (~15 sessions) — a rank, not a % of price." />}
+                </div>
+
+                {nav && (
+                  <div style={{ marginTop: 12 }}>
+                    <NavigatorEvidencePanel decision={nav} />
+                    <div style={{ fontSize: 10.5, color: k.dim, marginTop: 8, lineHeight: 1.5 }}>
+                      {nav.execution_eligible
+                        ? 'Navigator considers this eligible to execute. Whether anything is actually placed still depends on the account being in AUTO — in MANUAL the buttons below are the only way in.'
+                        : `Navigator does NOT consider this eligible to execute (${nav.reason_codes.join(', ') || 'no reason reported'}). You can still trade it manually below; nothing is placed automatically.`}
+                    </div>
+                  </div>
                 )}
               </div>
             );

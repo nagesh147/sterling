@@ -439,6 +439,66 @@ class TestStructureRadarAndOrigination:
         assert origin_rows[0].navigator.status == "CONFIRMED"
 
     @pytest.mark.asyncio
+    async def test_originated_row_carries_the_proposals_target_not_just_its_stop(self, monkeypatch):
+        """The AVWAP proposal computes BOTH levels and is rejected without either, so
+        dropping the target showed "—" in the Target column for a level the engine had
+        actually decided on — and made an originated signal look like a SuperTrend row,
+        which genuinely has no target."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        monkeypatch.setattr(avwap, "evaluate_avwap",
+                            lambda candles, config, **kw: (None, _accepted_avwap_eval(stop=24000.0, target=24800.0)))
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        origin_rows = [r for r in out if r.source == "navigator"]
+        assert len(origin_rows) == 1
+        assert origin_rows[0].entry_sl == 24000.0
+        assert origin_rows[0].target == 24800.0
+
+    @pytest.mark.asyncio
+    async def test_originated_row_with_legs_gets_its_premiums_hydrated(self, monkeypatch):
+        """An originated row resolves its legs from the option dump, which carries no
+        prices. Without an explicit hydration step every Navigator row reached the board
+        with a blank Entry / SL / TSL / Target even though it had an accepted plan."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        monkeypatch.setattr(avwap, "evaluate_avwap",
+                            lambda candles, config, **kw: (None, _accepted_avwap_eval(stop=23800.0, target=24600.0)))
+
+        from app.engines.sterling_kite_engine.schemas import OptionLeg
+
+        def _fake_build(placeholder, **kwargs):
+            # Strike/stop/target are anchored to the placeholder's own spot so the leg
+            # is a coherent ATM call rather than a premium below its own intrinsic.
+            spot = float(placeholder.spot)
+            row = placeholder.model_copy(deep=True)
+            row.stop_loss = spot - 200.0
+            row.entry_sl = spot - 200.0
+            row.target = spot + 400.0
+            row.legs = [OptionLeg(moneyness="ATM", option_type="CE",
+                                  option_symbol="NIFTY26AUG24500CE", strike=round(spot, -2),
+                                  expiry="2026-08-27", lot_size=75, token=9_000_001,
+                                  premium_spot=320.0)]
+            return row
+
+        monkeypatch.setattr(nav_service, "_build_origination_row", _fake_build)
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        leg = [r for r in out if r.source == "navigator"][0].legs[0]
+        assert leg.premium_spot == 320.0
+        assert leg.entry_sl is not None and 0 < leg.entry_sl < 320.0
+        assert leg.premium_sl is not None and 0 < leg.premium_sl < 320.0
+        assert leg.premium_target is not None and leg.premium_target > 320.0
+
+    @pytest.mark.asyncio
     async def test_radar_covers_stocks_not_just_indices(self, monkeypatch):
         """Peer-engine change: Navigator's universe is whatever the caller
         resolved (shared with the engine, or its own), so a STOCK in that map

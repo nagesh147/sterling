@@ -375,7 +375,11 @@ def test_option_order_args_maps_buy_one_lot():
     args = option_order_args(row)  # primary leg
     assert args == {
         "option_symbol": "NIFTY25JUN22000CE", "side": "buy", "size": 75,
-        "lot_size": 75, "token": 0, "exchange": "NFO", "stop_loss": 21900.0,
+        "lot_size": 75, "token": 0, "exchange": "NFO",
+        # Every price here is in the PREMIUM domain. This spot row's stop_loss is an
+        # index level (21,900), so it is NOT reported as the option's stop — the order
+        # path resolves a real premium stop from a live quote instead.
+        "stop_loss": None,
         # premium basis for risk sizing — None here (no premium_spot/premium_sl on the leg)
         "entry_premium": None, "stop_premium": None,
     }
@@ -1135,3 +1139,132 @@ def test_derivative_contract_never_treats_three_red_as_an_entry(option_type):
     assert all((row.legs[0].alignment.fast,
                 row.legs[0].alignment.mid,
                 row.legs[0].alignment.slow) == (1, 1, 1) for row in rows)
+
+
+# ── premium hydration of candidate legs (the blank Entry/SL/TSL cells) ────────
+def _deriv_row(ts, sym, strike, premium, trail):
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+
+    return EngineSignalRow(
+        underlying="INFY", token=777, exchange="NFO", regime="BULL",
+        alignment=AlignmentChip(fast=1, mid=1, slow=1), direction="long", option_type="CE",
+        legs=[OptionLeg(moneyness="ATM", option_type="CE", option_symbol=sym,
+                        strike=strike, expiry="2026-09-29", lot_size=400,
+                        premium_spot=premium, premium_sl=trail)],
+        spot=premium, stop_loss=trail, entry_sl=trail * 0.9, exit_state="0/3 red",
+        score=85.0, timestamp_ms=ts, source="derivatives", is_active=True,
+    )
+
+
+def test_compile_rows_is_idempotent_for_grouped_derivative_legs():
+    """_flush() re-compiles the same accumulating list once per scanned instrument.
+
+    The group parent used to be mutated in place (spot/stop_loss zeroed) and then have
+    its leg premium re-derived from the now-zero spot, so every pass after the first
+    blanked exactly one leg's Entry and TSL — which is what put "—" in those cells for
+    ~1 leg of every grouped derivatives row on the live board.
+    """
+    rows = [_deriv_row(1000, "INFY26SEP1500CE", 1500, 42.5, 30.0),
+            _deriv_row(2000, "INFY26SEP1520CE", 1520, 33.0, 22.0)]
+    seen = []
+    for _pass in range(3):
+        compiled = _compile_rows(rows)
+        assert len(compiled) == 1
+        seen.append({leg.option_symbol: (leg.premium_spot, leg.premium_sl)
+                     for leg in compiled[0].legs})
+    assert seen[0] == seen[1] == seen[2]
+    assert seen[0]["INFY26SEP1500CE"] == (42.5, 30.0)
+    assert seen[0]["INFY26SEP1520CE"] == (33.0, 22.0)
+
+
+def test_compile_rows_does_not_mutate_its_input_rows():
+    rows = [_deriv_row(1000, "INFY26SEP1500CE", 1500, 42.5, 30.0)]
+    _compile_rows(rows)
+    assert rows[0].spot == 42.5
+    assert rows[0].stop_loss == 30.0
+    assert rows[0].entry_sl == pytest.approx(27.0)
+    assert rows[0].legs[0].premium_spot == 42.5
+
+
+def test_derivative_contract_stamps_leg_premium_at_birth():
+    """place_cb runs on the raw row BEFORE any grouping, so the leg must already
+    carry the premium entry/trail — grouping is a display step, not a data step."""
+    cfg = SterlingKiteEngineConfig()
+    item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")
+    pick = OptionPick(option_symbol="HDFCBANK26JUL825CE", strike=825.0,
+                      option_type="CE", expiry="2026-07-30", dte=9,
+                      lot_size=550, token=98765)
+    rows = evaluate_derivative_contract(item, "ATM", pick, _candles(_fresh_long_path()), cfg)
+    assert rows, "expected at least one premium-chart entry"
+    for row in rows:
+        leg = row.legs[0]
+        assert leg.premium_spot == pytest.approx(row.spot)
+        assert leg.premium_sl == pytest.approx(row.stop_loss)
+        assert leg.token == 98765
+
+
+def test_option_order_args_never_leaks_an_underlying_level_as_a_premium_stop():
+    """A spot row's stop_loss is an index level (57,000), not a ₹ premium. Handing it
+    to the option order path would be a stop from the wrong price domain, so the
+    mapping reports None and the caller resolves a real premium stop from a quote."""
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+
+    row = EngineSignalRow(
+        underlying="NIFTY BANK", token=1, exchange="NFO", regime="BULL",
+        alignment=AlignmentChip(fast=1, mid=1, slow=1), direction="long", option_type="CE",
+        legs=[OptionLeg(moneyness="ATM", option_type="CE", option_symbol="BANKNIFTY26AUG57100CE",
+                        strike=57100, expiry="2026-08-25", lot_size=35)],
+        spot=57147.5, stop_loss=56891.3, score=85.0, timestamp_ms=1, source="spot",
+    )
+    args = option_order_args(row)
+    assert args["stop_loss"] is None
+    assert args["stop_premium"] is None
+
+
+def test_stamp_leg_premium_stops_uses_market_implied_iv_not_a_flat_assumption():
+    """The premium SL/TSL are delta-translated from the underlying ST level, so the IV
+    used to get delta decides where they land. A flat 18% is wrong for stock options,
+    whose real IV runs far higher; back it out of the observed entry premium instead."""
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+
+    def _leg_stop(entry_premium):
+        row = EngineSignalRow(
+            underlying="AXISBANK", token=1, exchange="NFO", regime="BEAR",
+            alignment=AlignmentChip(fast=-1, mid=-1, slow=-1), direction="short", option_type="PE",
+            legs=[], spot=1228.9, stop_loss=1250.0, entry_sl=1250.0,
+            score=85.0, timestamp_ms=1_785_390_300_000, source="spot",
+        )
+        leg = OptionLeg(moneyness="ITM2", option_type="PE", option_symbol="AXISBANK26SEP1260PE",
+                        strike=1260.0, expiry="2026-09-29", premium_spot=entry_premium)
+        _stamp_leg_premium_stops(row, leg)
+        return leg
+
+    cheap, rich = _leg_stop(40.0), _leg_stop(80.0)
+    # A richer premium implies a higher IV, hence a flatter delta and a stop that sits
+    # a smaller fraction below entry. With a flat IV both would share one delta.
+    assert 0 < cheap.premium_sl < cheap.premium_spot
+    assert 0 < rich.premium_sl < rich.premium_spot
+    assert (cheap.premium_spot - cheap.premium_sl) != pytest.approx(rich.premium_spot - rich.premium_sl)
+
+
+def test_stamp_leg_premium_stops_translates_a_row_target_into_a_premium_target():
+    """Navigator-originated rows carry a real AVWAP target; SuperTrend rows carry
+    none, and must not grow a fabricated one."""
+    from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow, OptionLeg
+
+    def _leg(target):
+        row = EngineSignalRow(
+            underlying="NIFTY 50", token=1, exchange="NFO", regime="BULL",
+            alignment=AlignmentChip(fast=0, mid=0, slow=0), direction="long", option_type="CE",
+            legs=[], spot=24000.0, stop_loss=23900.0, entry_sl=23900.0, target=target,
+            score=50.0, timestamp_ms=1_785_390_300_000, source="navigator",
+        )
+        leg = OptionLeg(moneyness="ATM", option_type="CE", option_symbol="NIFTY26AUG24000CE",
+                        strike=24000.0, expiry="2026-08-27", premium_spot=180.0)
+        _stamp_leg_premium_stops(row, leg)
+        return leg
+
+    assert _leg(None).premium_target is None
+    with_target = _leg(24300.0)
+    assert with_target.premium_target is not None
+    assert with_target.premium_target > with_target.premium_spot

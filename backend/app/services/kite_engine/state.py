@@ -302,14 +302,3 @@ def reset(uid: str = "") -> None:
     else:
         _config.clear(); _activity.clear(); _status.clear(); _auto_open.clear()
         _breakers.clear(); _correlation.clear(); _daily_pnl.clear()
-
-
-def load_signal_cache(uid: str):
-    raw = db.get_config(f"kite_engine_signals_{uid}")
-    if not raw:
-        return None
-    try:
-        data = json.loads(raw)
-        return data["rows"], data["generated_ms"]
-    except Exception:
-        return None

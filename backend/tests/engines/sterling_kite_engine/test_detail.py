@@ -80,3 +80,69 @@ class TestNavigatorOwnedDetail:
         snap.rows = [_nav_row()]
 
         assert await detail_service.build_detail(FakeClient(), "user-1", 999_999, _TS) is None
+
+
+class TestDetailCarriesTheSignalPlan:
+    """The dock is opened from a board that mixes both engines. Without the owning
+    engine, the exit rule, the target and the per-leg premium plan, the same layout
+    describes a SuperTrend trail-and-red-counter trade and a Navigator AVWAP
+    stop/target trade identically — and cannot explain the badge the user clicked."""
+
+    @pytest.mark.asyncio
+    async def test_navigator_decision_and_plan_reach_the_response(self):
+        from app.engines.navigator.schemas import NavigatorDecision
+
+        decision = NavigatorDecision(
+            decision_id="nav_test", schema_version=1, config_revision=1, model_versions={},
+            generated_at_ms=_TS, bar_close_ms=_TS, activation_watermark_ms=0,
+            base_signal_id="origin:NIFTY 50:long", trigger="avwap_fresh", direction="long",
+            status="CONFIRMED", base_score=50.0, suite_score=72.0, effective_score=68.0,
+            execution_eligible=True, data_quality="ok", reason_codes=["OK"],
+        )
+        snap = navigator_runtime.snapshot("user-1")
+        snap.rows = [_nav_row(navigator=decision, entry_sl=24_400.0, target=24_900.0,
+                              exit_state="0/3 red", adx=22.0, atr_pct=61.0)]
+
+        out = await detail_service.build_detail(FakeClient(), "user-1", 256265, _TS)
+
+        assert out.source == "navigator"
+        assert out.navigator is not None and out.navigator.status == "CONFIRMED"
+        assert out.entry_sl == 24_400.0
+        assert out.target == 24_900.0
+        assert out.exit_state == "0/3 red"
+        assert out.is_active is True
+        assert (out.adx, out.atr_pct) == (22.0, 61.0)
+
+    @pytest.mark.asyncio
+    async def test_supertrend_row_reports_no_target_rather_than_a_fabricated_one(self):
+        snap = navigator_runtime.snapshot("user-1")
+        snap.rows = [_nav_row(source="spot", entry_sl=24_400.0)]
+
+        out = await detail_service.build_detail(FakeClient(), "user-1", 256265, _TS)
+
+        assert out.source == "spot"
+        assert out.target is None
+        assert out.navigator is None
+
+    @pytest.mark.asyncio
+    async def test_leg_premium_plan_reaches_the_response(self):
+        from app.engines.sterling_kite_engine.schemas import OptionLeg
+
+        class LegClient(FakeClient):
+            async def get_quote(self, symbols):
+                return {symbols[0]: {"last_price": 300.0, "depth": {"buy": [], "sell": []}}}
+
+        leg = OptionLeg(moneyness="ATM", option_type="CE", option_symbol="NIFTY26AUG24500CE",
+                        strike=24_500.0, expiry="2026-08-27", lot_size=75, token=9_001,
+                        premium_spot=320.0, entry_sl=210.0, premium_sl=255.0,
+                        premium_target=540.0, is_active=True)
+        snap = navigator_runtime.snapshot("user-1")
+        snap.rows = [_nav_row(legs=[leg])]
+
+        out = await detail_service.build_detail(LegClient(), "user-1", 256265, _TS)
+
+        assert len(out.options) == 1
+        opt = out.options[0]
+        assert (opt.entry_premium, opt.initial_stop_premium) == (320.0, 210.0)
+        assert (opt.trail_stop_premium, opt.target_premium) == (255.0, 540.0)
+        assert opt.is_active is True

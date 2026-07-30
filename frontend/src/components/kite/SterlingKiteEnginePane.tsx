@@ -347,6 +347,24 @@ function rowIsRunning(row: EngineSignalRow, quotes: any): boolean {
   );
 }
 
+// True only when the greeks were solved from a real IV. `blackScholesGreeks` falls back
+// to an intrinsic-only delta (exactly ±1.00 or 0, with gamma/theta/vega all zero) when
+// no IV could be found or back-solved, which is a "no data" answer wearing the costume
+// of a very confident one. Anything ranked or displayed as a delta must exclude those.
+function hasUsableGreeks<T extends { iv: number }>(g: T | null | undefined): g is T {
+  return !!g && g.iv > 0;
+}
+
+// The live premium has already traded through this leg's trailing stop, yet the engine
+// still counts the leg as running — the SuperTrend exit is a RED-COUNTER rule, so a
+// position can sit well past its trail until enough ST lines flip. Surfacing this is
+// the difference between "your trail is doing its job" and a silent open drawdown.
+function legStopBreached(leg: any, ltp: number | null | undefined, ended: boolean): boolean {
+  if (ended) return false;
+  const stop = leg?.premium_sl;
+  return ltp != null && stop != null && stop > 0 && ltp <= stop;
+}
+
 function hasPremiumSnapshot(row: EngineSignalRow): boolean {
   return row.legs.some((leg) => (
     ((leg as any).premium_spot ?? 0) > 0
@@ -363,7 +381,7 @@ function moneynessBucket(m: string | undefined): 'ITM' | 'ATM' | 'OTM' {
 }
 const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, ATM: 1, OTM: 2 };
 
-function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns }: {
+function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs }: {
   row: EngineSignalRow; onClick: () => void;
   onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
@@ -375,6 +393,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   scanSource?: string;
   signalMode?: 'supertrend' | 'navigator' | 'combined' | 'common';
   showPremiumColumns?: boolean;
+  // Timestamp of the EARLIEST still-running entry for this instrument+direction+source.
+  // When it is older than this row, this row is the same trend re-arming, not a second
+  // independent opportunity.
+  originalEntryMs?: number;
 }) {
   const s = useKiteSettings();
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
@@ -475,7 +497,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
       const premium = lq?.last_price ?? (leg as any).premium_spot ?? 0;
       if (premium <= 0) continue;
       const g = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, spot, lq, leg.lot_size ?? null);
-      if (!g) continue;
+      // A leg with no solvable IV gets an intrinsic delta of exactly 1.00 and gamma 0,
+      // so it would win "highest delta" in its bucket on missing data alone (and score
+      // a degenerate R:R). It is not a candidate for either badge.
+      if (!hasUsableGreeks(g)) continue;
       const bucket = moneynessBucket(leg.moneyness);
       const { rr, effPct } = computeLegRR(g.delta, g.gamma, premium, sd);
       const v = rrScore(rr, effPct);
@@ -600,7 +625,16 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
               Navigator idea
             </span>
           )}
-          {!isDeriv && <span style={{ fontSize: 11, color: k.dim }}>SL {row.stop_loss.toFixed(1)}</span>}
+          {!isDeriv && (
+            <span title="Live trailing stop on the underlying, recomputed at the latest closed bar — it is the same for every entry on this instrument, so it is not this row's entry stop. The entry stop is the per-leg SL column."
+                  style={{ fontSize: 11, color: k.dim }}>TSL {row.stop_loss.toFixed(1)}</span>
+          )}
+          {originalEntryMs != null && originalEntryMs < row.timestamp_ms && (
+            <span title={`Same trend re-arming: an earlier entry on ${row.underlying} ${row.direction} is still running (from ${new Date(originalEntryMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}). This is not a second independent setup, and auto-exec's one-position-per-instrument guard will not open another.`}
+                  style={{ fontSize: 10, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
+              re-entry
+            </span>
+          )}
           {row.adx != null && (
             <span title={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}
                   style={{ fontSize: 10, color: row.adx >= 25 ? k.green : k.dim,
@@ -610,7 +644,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             </span>
           )}
           {row.atr_pct != null && (
-            <span title={`ATR percentile ${row.atr_pct.toFixed(0)}% — volatility rank vs past 1Y (higher = more volatile)`}
+            <span title={`ATR percentile ${row.atr_pct.toFixed(0)}% — this bar's ATR ranked against the last 100 hourly bars (~15 sessions), not a % of price. Higher = unusually volatile for this instrument lately.`}
                   style={{ fontSize: 10, color: row.atr_pct >= 50 ? k.orange : k.dim,
                            background: row.atr_pct >= 50 ? '#fff3e0' : undefined,
                            borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
@@ -689,7 +723,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             const isExp = expanded.has(leg.option_symbol);
             const gSpot = uLastPx ?? row.spot ?? 0;
             const gGreeks = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, gSpot, q, leg.lot_size ?? null);
-            const gDelta = gGreeks ? Math.abs(gGreeks.delta).toFixed(2) : null;
+            const gDelta = hasUsableGreeks(gGreeks) ? Math.abs(gGreeks.delta).toFixed(2) : null;
             const rawGEntry = (leg as any).premium_spot;
             const gEntry = rawGEntry != null && rawGEntry > 0 ? rawGEntry : null;
             const gDiff = (!legEnded && lastPx != null && gEntry != null) ? lastPx - gEntry : null;
@@ -863,6 +897,8 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           // from the live ratcheting TSL (premium_sl) above.
           const rawInitSl = (leg as any).entry_sl;
           const initSlPx = rawInitSl != null && rawInitSl > 0 ? rawInitSl : null;
+          const rawTargetPx = (leg as any).premium_target;
+          const targetPx = rawTargetPx != null && rawTargetPx > 0 ? rawTargetPx : null;
           // Exit column — red-counter progress ("<reds>/<threshold> red") toward the
           // auto-exit rule. Row-level (the underlying/premium regime), coloured by how
           // close it is to firing: green→safe, amber→approaching, red→at/over threshold.
@@ -875,10 +911,15 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
           // Distinguish WHY it ended for the tooltip: the cached SuperTrend flipped vs. the
           // live premium fell through the (entry-snapshot) stop between scans.
           const liveExited = lastPx != null && slPx != null && slPx > 0 && lastPx <= slPx;
+          const stopBreached = legStopBreached(leg, lastPx, ended);
           // Live delta for the Leg column (shown in brackets next to ITM/ATM/OTM).
           const legSpot = uLastPx ?? row.spot ?? 0;
           const legGreeks = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, legSpot, q, leg.lot_size ?? null);
-          const deltaTxt = legGreeks ? Math.abs(legGreeks.delta).toFixed(2) : null;
+          // Only quote Δ when an IV was actually available. With no quote and no last
+          // price the greeks degenerate to the intrinsic sign — an exactly-1.00 delta
+          // with zero gamma/theta/vega — and rendering that as "(Δ1.00)" reports a
+          // fabricated number as the most responsive contract on the board.
+          const deltaTxt = hasUsableGreeks(legGreeks) ? Math.abs(legGreeks.delta).toFixed(2) : null;
           // How far the live LTP has moved from the fired entry (points). Only meaningful
           // while the leg is live; for ended legs the entry is frozen history.
           const entryDiff = (!ended && lastPx != null && entryPx != null) ? lastPx - entryPx : null;
@@ -906,6 +947,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                      {bestDeltaSyms.has(leg.option_symbol) && (
                        <span title="Highest delta within its ITM/ATM/OTM bucket — most responsive to the underlying"
                          style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
+                     )}
+                     {stopBreached && (
+                       <span title={`Live premium ₹${lastPx?.toFixed(2)} is at or below this leg's trailing stop ₹${slPx?.toFixed(2)}, but the SuperTrend exit is a RED-COUNTER rule (${legExitState ?? '—'}) — the leg still counts as running until enough ST lines flip. This is where an open drawdown builds.`}
+                         style={{ fontSize: 9, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 3, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
+                         TSL HIT
+                       </span>
                      )}
                    </span>
                    {(() => {
@@ -961,9 +1008,16 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                              </span>
                            );
                          case 'target':
-                           // Trend-following: no fixed take-profit. Exit is owned by the
-                           // trail (TSL) + the red counter (Exit), so this stays "—".
-                           return (
+                           // SuperTrend rows are trend-following: no fixed take-profit, exit
+                           // is owned by the trail (TSL) + the red counter (Exit). Navigator
+                           // rows DO carry one — its AVWAP proposal sets the target at an
+                           // R-multiple of the accepted stop and rejects the signal without it.
+                           return targetPx != null ? (
+                             <span title={`Target ₹${targetPx.toFixed(2)} — Navigator's AVWAP stop/target proposal (an R-multiple of its accepted stop)`}
+                               style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               {targetPx.toFixed(1)}
+                             </span>
+                           ) : (
                              <span title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
                                —
                              </span>
@@ -1902,6 +1956,23 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
     [cfg?.scan_source, filteredRows],
   );
 
+  // The engine keeps EVERY still-running entry transition, so one continuing trend on
+  // one instrument can occupy several rows (NIFTY BANK long on 27, 29 and 30 Jul, all
+  // "running"). Read as three independent setups that is three trades at three very
+  // different entry prices; it is really one trend re-arming, and auto-exec's
+  // one-position guard only ever takes the first. Mark the later ones so the board says
+  // which entry is the original.
+  const originalEntryMs = React.useMemo(() => {
+    const earliest = new Map<string, number>();
+    for (const r of filteredRows) {
+      if (!r.is_active) continue;  // ended rows are history, not a competing entry
+      const key = `${r.underlying}|${r.direction}|${r.source ?? 'spot'}`;
+      const prev = earliest.get(key);
+      if (prev == null || r.timestamp_ms < prev) earliest.set(key, r.timestamp_ms);
+    }
+    return earliest;
+  }, [filteredRows]);
+
   // Live quotes are needed BEFORE bucketing so a position that has exited between scans
   // (live premium through its stop) drops out of "Active now" instead of lingering there
   // showing a "trend ended" badge — the same reconciliation the cards use.
@@ -2395,6 +2466,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                         <SignalCard row={row} quotes={quotes} viewLayout={viewLayout}
                           scanSource={cfg?.scan_source} signalMode={signalMode}
                           showPremiumColumns={showSignalPremiumColumns}
+                          originalEntryMs={originalEntryMs.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`)}
                           onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
                           onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
                           onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />
