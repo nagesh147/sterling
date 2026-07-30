@@ -46,15 +46,20 @@ export function HelpPane() {
             defaultOpen
           >
             <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.6, margin: '2px 0 0' }}>
-              The Sterling Kite Engine's triple-SuperTrend signal is the thing that actually scans and
-              fires — it's what puts a row on your board. The Value-Flow Navigator sits alongside it as a
-              second opinion: it reads anchored VWAP structure, projected daily/weekly ranges, and the
-              volatility regime (and, once wired to live option-chain data, option flow and gamma) on that
-              same underlying, and fuses all of it into one status — <b>NO_DATA</b>, <b>WAIT</b>,
-              <b> CONFLICT</b>, <b>WATCH</b>, <b>CONFIRMED</b>, or <b>HIGH_CONVICTION</b>. By default it only
-              ever comments on a setup SuperTrend already triggered — it never scans on its own unless you
-              turn on Signal Origination (below). Navigator is off by default; nothing here changes any
-              existing behaviour until you explicitly turn something on from Connect → Value-Flow Navigator.
+              You have two signal engines, and they are peers. The Sterling Kite Engine fires the
+              triple-SuperTrend signal. The Value-Flow Navigator reads anchored VWAP structure, projected
+              daily/weekly ranges, the volatility regime, and — when you scan options — option flow and
+              gamma activity, then fuses all of it into one status: <b>NO_DATA</b>, <b>WAIT</b>,
+              <b> CONFLICT</b>, <b>WATCH</b>, <b>CONFIRMED</b>, or <b>HIGH_CONVICTION</b>.
+            </p>
+            <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.6, margin: '10px 0 0' }}>
+              Navigator has its own scan loop, so it keeps working even with the SuperTrend engine switched
+              off entirely. It can follow the shared Scan Setup or run on its own universe and its own
+              signal source — your choice, under Connect → Value-Flow Navigator → What Navigator scans.
+              What it does with what it finds is a separate, stricter choice: by default it only comments on
+              setups SuperTrend already triggered, and it puts its own rows on the board only once you turn
+              on Signal Origination (below). Navigator is off by default; nothing here changes any existing
+              behaviour until you explicitly turn something on.
             </p>
           </Section>
 
@@ -68,8 +73,9 @@ export function HelpPane() {
               shows a live long setup with SL 51,200 — no Navigator badge, exactly like Navigator doesn't exist.
             </ExampleRow>
             <ExampleRow label="Navigator" tone={k.purple}>
-              Only rows Navigator has evidence for, viewed through its own status. Example: a NIFTY 50 row only
-              appears here once Navigator has assessed it — shown as &ldquo;Nav CONFIRMED 82&rdquo;.
+              Rows Navigator owns or has evidence for, viewed through its own status. Example: a NIFTY 50 row
+              appears here once Navigator has assessed it — shown as &ldquo;Nav CONFIRMED 82&rdquo; — alongside any
+              setup Navigator found by itself. This is the lens to use when SuperTrend is switched off.
             </ExampleRow>
             <ExampleRow label="Combined" tone={k.orange}>
               The default. Every SuperTrend setup, with Navigator's badge alongside when it has one. Example: SENSEX
@@ -101,8 +107,10 @@ export function HelpPane() {
             <ExampleRow label="Auto-Execute Originated" tone={k.red}>
               Off by default, and only matters once Signal Origination is Full. Lets a Navigator-originated row
               fire through the exact same auto-exec path every other row uses. Safety: this stays locked — exactly
-              like Gate mode above it — until a promoted calibration report exists, which isn't available in this
-              build yet. It cannot fire until then, regardless of this toggle.
+              like Gate mode above it — until you promote a calibration report under Connect → Navigator
+              Calibration, which needs at least 20 recorded trading sessions of Navigator's own forward
+              accuracy and cannot be shortcut. Turning this on before then changes nothing; the order path
+              still refuses. Promotion alone doesn't switch it on either — that stays your explicit choice.
             </ExampleRow>
           </Section>
 
@@ -115,7 +123,9 @@ export function HelpPane() {
             <Scenario goal="See Navigator's take on my existing trades" settings="Signal lens = Combined or Navigator. Structure Radar and Signal Origination stay off." />
             <Scenario goal="See structure on my indices even when SuperTrend is quiet" settings="Structure Radar = on. Check Connect → Value-Flow Navigator's snapshot/status for a given underlying." />
             <Scenario goal="Let Navigator surface brand-new setups I take manually" settings="Signal Origination = Heads-up (browse only) or Full (tradeable, manual execute)." />
-            <Scenario goal="Let it trade on its own" settings="Signal Origination = Full, Auto-Execute Originated = on, Kite engine's own Auto-Execute = on. Still blocked until calibration is promoted to ready." />
+            <Scenario goal="Run Navigator instead of SuperTrend" settings="Turn the Kite engine off, keep Navigator on, Signal Origination = Heads-up or Full, Signal lens = Navigator. Navigator's own scan loop keeps running." />
+            <Scenario goal="Scan different instruments than SuperTrend" settings="Connect → Value-Flow Navigator → What Navigator scans = its own universe. The shared Scan Setup then drives SuperTrend only." />
+            <Scenario goal="Let it trade on its own" settings="Signal Origination = Full, Auto-Execute Originated = on, Kite engine's own Auto-Execute = on. Still blocked until you promote a calibration report." />
           </Section>
         </section>
 
