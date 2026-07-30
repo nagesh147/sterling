@@ -69,6 +69,16 @@ backend/study/kite_cache/
 antigravity-claude-proxy/
 .claude/worktrees/
 
+# Playwright run output. `.auth/` holds browser storage state — it is empty in
+# a header-auth setup today, but it is exactly where a real Kite session cookie
+# would land, so it must never be committable.
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/.auth/
+
+# Scheduled-task lock (per-machine runtime state)
+.claude/scheduled_tasks.lock
+
 # Superpowers brainstorm session files
 .superpowers/
 # Added by code-review-graph
