@@ -217,6 +217,27 @@ class ChainSamplerCoordinator:
         self._tasks: dict[tuple, asyncio.Task] = {}
         self._last_by_contract: dict[tuple, dict] = {}  # (account_scope, token) -> last snapshot dict
 
+    def rebind(
+        self, *, quote_fetcher: QuoteFetcher, instrument_index: InstrumentSliceIndex,
+        on_sample: SampleSink,
+    ) -> None:
+        """Point the already-running pollers at a fresh broker client / sink.
+
+        A coordinator outlives the client it was built from. When a Kite session
+        expires the cached client is closed and rebuilt on re-login, and when
+        Navigator's config is saved the revision that stamps each snapshot
+        changes — but the poll loops read these off `self` on every cycle, so
+        rebinding is enough to bring them along. Without it a coordinator keeps
+        calling a closed httpx client forever (flow and gamma go permanently
+        `unavailable` with no error the user can see) and keeps stamping
+        snapshots with a config revision that is no longer current.
+
+        Deliberately does NOT restart the tasks: the running pollers hold the
+        per-contract counter-reset state that OI/volume deltas depend on."""
+        self._quote_fetcher = quote_fetcher
+        self._instrument_index = instrument_index
+        self._on_sample = on_sample
+
     def is_running(self, account_scope: str, underlying: str, expiry: str) -> bool:
         key = (account_scope, underlying, expiry)
         task = self._tasks.get(key)

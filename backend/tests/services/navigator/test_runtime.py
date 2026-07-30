@@ -145,11 +145,38 @@ async def test_runtime_preserves_scan_source_modes(monkeypatch, source):
 
 @pytest.mark.asyncio
 async def test_cancel_marks_running_scan_cancelled():
+    """Cancel raises the flag but leaves `scanning` to the scan loop.
+
+    Clearing `scanning` here would open the "already scanning" guard while the
+    loop is still winding down, so a re-scan arriving in that window would run
+    a second scan over the same user's board."""
     st = runtime.status("user-1")
     st.scanning = True
     assert runtime.cancel("user-1") is True
     assert runtime.status("user-1").cancelled is True
-    assert runtime.status("user-1").scanning is False
+    assert runtime.status("user-1").scanning is True
+
+
+@pytest.mark.asyncio
+async def test_cancel_does_not_let_a_second_scan_start(monkeypatch):
+    kite_state.set_config("user-1", EngineConfigModel(scan_indices=["NIFTY 50"]))
+    _enable_nav()
+    monkeypatch.setattr(runtime, "_instrument_dumps", _empty_dumps)
+    monkeypatch.setattr(runtime, "build_universe", lambda **kw: [_item()])
+    monkeypatch.setattr(runtime, "_start_samplers", _noop_async)
+
+    passes = 0
+
+    async def counting_pass(client, uid, rows, **kwargs):
+        nonlocal passes
+        passes += 1
+        runtime.cancel(uid)  # user hits stop while this instrument is in flight
+        return rows
+
+    monkeypatch.setattr(runtime.nav_service, "run_navigator_pass", counting_pass)
+    await runtime.scan_user(FakeClient(), "user-1", acct=object())
+    assert passes == 1
+    assert runtime.status("user-1").scanning is False  # the loop cleared it, not cancel()
 
 
 @pytest.mark.asyncio
@@ -203,6 +230,46 @@ def test_lifecycle_preserves_prior_row_when_underlying_failed():
     assert len(merged) == 1
     assert merged[0].is_active is True
     assert merged[0].is_fresh is False
+
+
+class TestSamplerSharing:
+    """Samplers are shared per (account, underlying, expiry) across users, so
+    the release path has to be refcounted — one user losing interest must never
+    stop a poller another user is still reading."""
+
+    def setup_method(self):
+        runtime._sampler_users.clear()
+        runtime._user_sampler_keys.clear()
+
+    def teardown_method(self):
+        runtime._sampler_users.clear()
+        runtime._user_sampler_keys.clear()
+
+    def test_a_key_another_user_still_wants_is_not_released(self):
+        key = ("kite:a1", "NIFTY 50", "2026-08-06")
+        runtime._sampler_users[key] = {"user-1", "user-2"}
+        assert runtime._sampler_users_to_release("user-1", set()) == []
+        assert runtime._sampler_users[key] == {"user-2"}
+
+    def test_the_last_claimant_releases_the_key(self):
+        key = ("kite:a1", "NIFTY 50", "2026-08-06")
+        runtime._sampler_users[key] = {"user-1"}
+        assert runtime._sampler_users_to_release("user-1", set()) == [key]
+        assert key not in runtime._sampler_users
+
+    def test_keys_the_user_still_wants_are_kept(self):
+        keep = ("kite:a1", "NIFTY 50", "2026-08-06")
+        drop = ("kite:a1", "SENSEX", "2026-08-06")
+        runtime._sampler_users[keep] = {"user-1"}
+        runtime._sampler_users[drop] = {"user-1"}
+        assert runtime._sampler_users_to_release("user-1", {keep}) == [drop]
+        assert runtime._sampler_users[keep] == {"user-1"}
+
+    def test_a_key_this_user_never_claimed_is_left_alone(self):
+        key = ("kite:a1", "NIFTY 50", "2026-08-06")
+        runtime._sampler_users[key] = {"user-2"}
+        assert runtime._sampler_users_to_release("user-1", set()) == []
+        assert runtime._sampler_users[key] == {"user-2"}
 
 
 def test_widest_retention_keeps_what_the_longest_retaining_user_needs():

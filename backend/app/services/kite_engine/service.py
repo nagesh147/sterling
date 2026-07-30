@@ -258,10 +258,11 @@ def _make_place_cb(client, uid: str):
             return
         cfg = state.get_config(uid)
 
-        # ── Sterling Value-Flow Navigator gate (additive; no-op unless the
-        # user explicitly enabled Navigator in `gate` mode AND it has been
-        # promoted — neither is possible yet in this build, so this is a
-        # complete pass-through for every existing user/environment).
+        # ── Sterling Value-Flow Navigator gate (additive; a pass-through
+        # unless the user explicitly enabled Navigator in `gate` mode).
+        # NOTE: gate mode is reachable in production — promoting a calibration
+        # report unlocks it, and a user can then select it. Do not reason about
+        # this block as dead code.
         # Reading the config itself is allowed to fail OPEN — a Navigator-
         # side hiccup (its tables not migrated, a transient read error)
         # must never halt the entire unrelated Kite auto-exec engine for

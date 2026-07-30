@@ -54,6 +54,58 @@ def _rising_series(start_ms: int, n: int, *, start=100.0, step=1.0, underlying="
     ]}
 
 
+class TestOneScorePerOpportunity:
+    """Navigator writes about one bar more than once — a WATCH that becomes
+    CONFIRMED, and Structure Radar's own read alongside its read of a real
+    SuperTrend row. They share one forward return, so scoring each of them
+    counts a single market outcome several times. That inflates the sample
+    against the promotion floor and understates variance, in the gate that
+    guards real-money auto-execution."""
+
+    def test_repeated_writes_about_one_bar_score_once(self):
+        bar = _ms(2)
+        report = calibration.score_decisions(
+            [
+                _decision(bar, status="WATCH", decision_id="radar-watch"),
+                _decision(bar, status="CONFIRMED", decision_id="radar-confirmed"),
+                _decision(bar, status="CONFIRMED", decision_id="supertrend-confirmed"),
+            ],
+            _rising_series(bar, 12),
+        )
+        window = report["calibration"]
+        assert window["total_decisions"] == 1
+        assert window["actionable_scored"] == 1
+        assert window["actionable_hits"] == 1
+
+    def test_the_strongest_conclusion_reached_represents_the_bar(self):
+        bar = _ms(2)
+        # confirmed first, then cooled to WATCH — a trader acting on it still
+        # took the trade, so the bar is judged as the CONFIRMED call it was.
+        report = calibration.score_decisions(
+            [
+                {**_decision(bar, status="CONFIRMED"), "generated_at_ms": 1},
+                {**_decision(bar, status="WATCH"), "generated_at_ms": 2},
+            ],
+            _rising_series(bar, 12),
+        )
+        window = report["calibration"]
+        assert window["actionable"] == 1
+        assert set(window["by_status"]) == {"CONFIRMED"}
+
+    def test_different_bars_and_directions_stay_separate(self):
+        bar = _ms(2)
+        report = calibration.score_decisions(
+            [
+                _decision(bar, direction="long"),
+                _decision(bar, direction="short"),
+                _decision(bar + _HOUR_MS, direction="long"),
+                _decision(bar, underlying="SENSEX"),
+            ],
+            _rising_series(bar, 12),
+        )
+        assert report["calibration"]["total_decisions"] == 4
+
+
 class TestNoLookahead:
     def test_a_decision_without_enough_forward_bars_is_unscored_not_wrong(self):
         """The last few decisions in any real sample have no verdict yet.

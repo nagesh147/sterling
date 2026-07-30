@@ -208,6 +208,55 @@ class TestChainSamplerCoordinator:
         assert len(sampled) >= 1
 
     @pytest.mark.asyncio
+    async def test_rebind_moves_running_pollers_onto_a_fresh_client(self):
+        """A coordinator outlives the client it was built from.
+
+        When a Kite session expires the cached client is closed and rebuilt on
+        re-login. Without rebinding, the already-running pollers keep calling
+        the dead one and flow/gamma go permanently unavailable with nothing
+        visible to the user. Restarting the tasks is not an option — they hold
+        the per-contract counter state OI/volume deltas depend on."""
+        dead_calls, live_calls, sampled = [], [], []
+
+        async def dead_fetcher(symbols):
+            dead_calls.append(symbols)
+            raise RuntimeError("client is closed")
+
+        async def live_fetcher(symbols):
+            live_calls.append(symbols)
+            return {}
+
+        class FakeIndex:
+            async def option_slice(self, **kwargs):
+                return _slice([], expected=0)
+
+        async def on_sample(key, slice_, result, now_ms):
+            sampled.append("v1")
+
+        async def on_sample_v2(key, slice_, result, now_ms):
+            sampled.append("v2")
+
+        coordinator = ChainSamplerCoordinator(
+            quote_fetcher=dead_fetcher, instrument_index=FakeIndex(), on_sample=on_sample)
+        config = SimpleNamespace(mode="dynamic", dynamic_strike_radius=2, broad_strike_radius=5, strike_step_override=None, max_spread_pct=0.08, max_quote_age_seconds=20, min_chain_completeness=0.8, flow_sample_seconds=60)
+
+        async def spot_provider():
+            return 24500.0
+
+        coordinator.ensure_started(account_scope="acct1", underlying="NIFTY", exchange="NFO", expiry="2026-08-06", spot_provider=spot_provider, config=config)
+        task = coordinator._tasks[("acct1", "NIFTY", "2026-08-06")]
+
+        coordinator.rebind(
+            quote_fetcher=live_fetcher, instrument_index=FakeIndex(), on_sample=on_sample_v2)
+        await asyncio.sleep(0.05)
+        await coordinator.stop_all()
+
+        # same poll loop, now talking to the live client and the current sink
+        assert coordinator._tasks == {}
+        assert task.done()
+        assert sampled and set(sampled) == {"v2"}
+
+    @pytest.mark.asyncio
     async def test_stop_all_cancels_running_tasks(self):
         async def quote_fetcher(symbols):
             return {}

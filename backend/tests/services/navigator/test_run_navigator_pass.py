@@ -19,6 +19,7 @@ from app.engines.navigator.schemas import NavigatorDecision
 from app.engines.sterling_kite_engine.schemas import AlignmentChip, EngineSignalRow
 from app.services import db
 from app.services.navigator import config_store, service as nav_service
+from app.services.navigator.adapters import is_origination_decision
 from app.services.navigator.calendar import IST
 
 _UNDERLYINGS = ["NIFTY 50"]
@@ -317,6 +318,37 @@ class TestStructureRadarAndOrigination:
         # 1 fetch for the real long row + 1 radar fetch for short — long is NOT double-fetched
         assert len(client.calls) == 2
         assert len(out) == 1  # no new row appended (radar-only)
+
+    @pytest.mark.asyncio
+    async def test_radar_and_supertrend_reads_do_not_evict_each_other(self):
+        """For a SPOT SuperTrend row, `row.token` IS the underlying's token —
+        the exact key Structure Radar caches its own read under. If they shared
+        a cache slot the two engines' loops would overwrite each other every
+        few minutes: /snapshot would show whichever ran last, and the
+        origination lifecycle check would see a `kite:` base where it expected
+        its own and flip a live Navigator setup back to fresh."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, structure_radar_enabled=True)
+        client = FakeKiteClient(_kite_candle_rows())
+        # radar first (no real rows), then a real spot SuperTrend row lands
+        await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        await nav_service.run_navigator_pass(
+            client, "user-1", [_row(direction="long")], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+            include_origination=False,
+        )
+
+        key = dict(underlying="NIFTY 50", token=256265, direction="long")
+        radar = nav_service.get_cached_decision("user-1", **key, origin=True)
+        supertrend = nav_service.get_cached_decision("user-1", **key, origin=False)
+        assert radar is not None and supertrend is not None
+        assert is_origination_decision(radar.base_signal_id)
+        assert not is_origination_decision(supertrend.base_signal_id)
+        # the unqualified read prefers the SuperTrend-backed one (real base score)
+        assert nav_service.get_cached_decision("user-1", **key) is supertrend
 
     @pytest.mark.asyncio
     async def test_include_origination_false_confirms_rows_but_never_originates(self, monkeypatch):

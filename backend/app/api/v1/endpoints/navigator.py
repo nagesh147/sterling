@@ -150,12 +150,25 @@ async def get_activity(limit: int = 2000, user: UserContext = Depends(get_curren
 @router.post("/scan")
 async def run_scan(user: UserContext = Depends(get_current_user)) -> dict:
     from app.services.exchanges.kite import accounts as kite_accounts
+    from app.services.exchanges.kite.errors import KiteTokenError
 
+    record = config_store.get(user.user_id, default_underlyings=_default_underlyings(user.user_id))
+    if not record.config.enabled:
+        # `scan_user` would return 0 and this would answer with a
+        # success-shaped, permanently empty board. Say why instead.
+        raise HTTPException(409, "NAVIGATOR_DISABLED: Navigator is off — enable it under Connect → Value-Flow Navigator.")
     acct = kite_accounts.get_active(user.user_id)
     if not acct:
         raise HTTPException(409, "No active Kite account — add credentials and log in first.")
     client = await kite_accounts.acquire_client(acct)
-    await nav_runtime.scan_user(client, user.user_id, acct=acct)
+    try:
+        await nav_runtime.scan_user(client, user.user_id, acct=acct)
+    except KiteTokenError as exc:
+        # Mirrors the auto-scan loop: drop the dead session so the next
+        # acquire_client rebuilds, and tell the user to reconnect.
+        kite_accounts.clear_session(acct.user_id, acct.id)
+        await kite_accounts.release_client(acct.id)
+        raise HTTPException(409, f"KITE_SESSION_EXPIRED: {exc} — reconnect from the Connect tab.") from exc
     snap = nav_runtime.snapshot(user.user_id)
     rt = nav_runtime.status(user.user_id)
     return {

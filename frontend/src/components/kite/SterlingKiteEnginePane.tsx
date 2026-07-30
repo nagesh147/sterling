@@ -2322,10 +2322,23 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
         ) : navigatorLensEmpty ? (
           <div style={{ padding: 32, textAlign: 'center', color: k.dim, fontSize: 12 }}>
             <div>
-              {rows.length} SuperTrend setup{rows.length === 1 ? '' : 's'} on the board, but none {signalMode === 'common' ? 'have Navigator agreement (Confirmed / High Conviction) yet' : 'have Value-Flow Navigator evidence yet'}.
+              {(() => {
+                // Count only real SuperTrend rows — Navigator-owned rows are on
+                // this board too now, and calling them SuperTrend setups would
+                // overstate what the other engine actually found.
+                const stCount = rows.filter((r) => r.source !== 'navigator').length;
+                const what = signalMode === 'common'
+                  ? 'Navigator agreement (Confirmed / High Conviction)'
+                  : 'Value-Flow Navigator evidence';
+                return stCount === 1
+                  ? `1 SuperTrend setup on the board, and it has no ${what} yet.`
+                  : `${stCount} SuperTrend setups on the board, but none have ${what} yet.`;
+              })()}
             </div>
             <div style={{ marginTop: 6 }}>
-              Navigator is off by default — enable it under <strong>Connect → Value-Flow Navigator</strong>, or switch lenses below.
+              {navigatorEnabled
+                ? <>Navigator is on — it may still be warming up, or it simply has no {signalMode === 'common' ? 'agreement' : 'read'} on these yet. Switch lenses below to see the full board.</>
+                : <>Navigator is off — enable it under <strong>Connect → Value-Flow Navigator</strong>, or switch lenses below.</>}
             </div>
             <button
               type="button"

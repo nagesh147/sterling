@@ -114,28 +114,42 @@ def is_auto_running() -> bool:
 
 
 def cancel(uid: str) -> bool:
+    """Ask the running scan to stop at its next instrument boundary.
+
+    Only raises the flag — it must NOT clear `scanning`. The scan loop owns
+    that (in its `finally`), and clearing it here while the loop is still
+    winding down would let a concurrent `scan_user` walk straight past the
+    "already scanning" guard, leaving two scans writing one user's board."""
     st = status(uid)
     if not st.scanning:
         return False
     st.cancelled = True
-    st.scanning = False
-    st.scanning_label = "Cancelled"
+    st.scanning_label = "Cancelling…"
     _log(uid, "info", "Navigator scan cancelled by user.")
     return True
 
 
-def _save_snapshot(uid: str, rows: list[EngineSignalRow]) -> None:
+def _save_snapshot(uid: str, rows: list[EngineSignalRow], *, persist: bool = True) -> None:
+    """Publish `rows` as the user's current board.
+
+    The in-memory update is always immediate so the UI sees a scan progress.
+    `persist=False` skips the DB write: persisting is a full re-serialization of
+    every row so far, so doing it per instrument makes a scan quadratic in the
+    universe size (a full F&O scan is ~200 instruments). Mid-scan durability
+    buys nothing anyway — a scan that dies part-way is re-run from scratch, and
+    the surviving prior rows are preserved by `_merge_with_lifecycle`."""
     snap = snapshot(uid)
     snap.rows = rows
     snap.generated_ms = _now_ms()
-    if db.is_available():
-        try:
-            db.set_config(
-                f"navigator_runtime_rows_{uid}",
-                json.dumps({"rows": [r.model_dump() for r in rows], "generated_ms": snap.generated_ms}),
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.debug("navigator runtime cache persist failed for %s: %s", uid, exc)
+    if not persist or not db.is_available():
+        return
+    try:
+        db.set_config(
+            f"navigator_runtime_rows_{uid}",
+            json.dumps({"rows": [r.model_dump() for r in rows], "generated_ms": snap.generated_ms}),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.debug("navigator runtime cache persist failed for %s: %s", uid, exc)
 
 
 def _account_scope(acct) -> str:
@@ -376,63 +390,97 @@ def _flow_history(account_scope: str, underlying: str, cfg) -> tuple[list[ChainF
     return history, latest_contracts, gamma_context, chain_quality
 
 
+async def _current_client(acct):
+    """The account's live client, resolved fresh at call time.
+
+    Never capture a client in a long-lived closure. `acquire_client` rebuilds
+    (and closes) the cached client whenever the access token rotates, so a
+    captured one goes dead the first time the user re-logs in. Resolving per
+    call is a dict lookup on the warm path."""
+    return await kite_accounts.acquire_client(acct)
+
+
 async def _start_samplers(client, uid: str, acct, items, nfo_rows, bfo_rows, record) -> None:
     if record.config.scan_source == "spot" or not (record.config.flow.enabled or record.config.gamma.enabled):
         await stop_user_samplers(uid)
         return
     account_scope = _account_scope(acct)
+    revision = record.revision
     coord = _coordinators.get(account_scope)
+    sink = lambda key, sl, res, _now: _on_sample(key, sl, res, revision)  # noqa: E731
+    index = InstrumentSliceIndex(client._instruments)
     if coord is None:
         coord = ChainSamplerCoordinator(
-            quote_fetcher=client.get_quote,
-            instrument_index=InstrumentSliceIndex(client._instruments),
-            on_sample=lambda key, sl, res, _now: _on_sample(key, sl, res, record.revision),
+            quote_fetcher=client.get_quote, instrument_index=index, on_sample=sink,
         )
         _coordinators[account_scope] = coord
+    else:
+        # A cached coordinator outlives the client and the config revision it
+        # was built from — re-point it at the current ones rather than letting
+        # its pollers keep calling a closed client and stamping snapshots with
+        # a revision that has since moved on.
+        coord.rebind(quote_fetcher=client.get_quote, instrument_index=index, on_sample=sink)
     desired: set[tuple[str, str, str]] = set()
-    for item in items:
-        rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
-        expiry = _nearest_expiry(rows, item.tradingsymbol)
-        if not expiry:
-            continue
-        key = (account_scope, item.name, expiry)
-        desired.add(key)
-        _sampler_users.setdefault(key, set()).add(uid)
-
-        async def spot_provider(token=item.token):
-            candles = await nav_service._fetch_candles_for_navigator(client, token, 4)
-            return float(candles[-1].close) if candles else 0.0
-
-        coord.ensure_started(
-            account_scope=account_scope, underlying=item.name, exchange=item.option_exchange,
-            expiry=expiry, spot_provider=spot_provider, config=_sampler_config(record.config),
-        )
-    stale = _user_sampler_keys.get(uid, set()) - desired
-    for key in stale:
-        users = _sampler_users.get(key)
-        if users is not None:
-            users.discard(uid)
-            if users:
+    try:
+        for item in items:
+            rows = nfo_rows if item.option_exchange == "NFO" else bfo_rows
+            expiry = _nearest_expiry(rows, item.tradingsymbol)
+            if not expiry:
                 continue
-            _sampler_users.pop(key, None)
-        old_account_scope, underlying, expiry = key
-        old_coord = _coordinators.get(old_account_scope)
+            key = (account_scope, item.name, expiry)
+            desired.add(key)
+            _sampler_users.setdefault(key, set()).add(uid)
+
+            # `acct` is a stable record; the client behind it is resolved per call
+            # so this poller survives a re-login (it outlives any single scan).
+            async def spot_provider(token=item.token, account=acct):
+                candles = await nav_service._fetch_candles_for_navigator(
+                    await _current_client(account), token, 4)
+                return float(candles[-1].close) if candles else 0.0
+
+            coord.ensure_started(
+                account_scope=account_scope, underlying=item.name, exchange=item.option_exchange,
+                expiry=expiry, spot_provider=spot_provider, config=_sampler_config(record.config),
+            )
+    finally:
+        # Record what this user claimed even if a start failed part-way. The
+        # claim in `_sampler_users` is what the next pass diffs against to shut
+        # pollers down; losing it here would orphan them until process exit.
+        _user_sampler_keys[uid] = desired
+    for key in _sampler_users_to_release(uid, desired):
+        account_scope_, underlying, expiry = key
+        old_coord = _coordinators.get(account_scope_)
         if old_coord is not None:
-            await old_coord.stop(old_account_scope, underlying, expiry)
-    _user_sampler_keys[uid] = desired
+            await old_coord.stop(account_scope_, underlying, expiry)
     nav_service.set_sampler_running(uid, any(coord.is_running(*key) for key in desired))
 
 
-async def stop_user_samplers(uid: str) -> None:
-    keys = _user_sampler_keys.pop(uid, set())
-    for key in keys:
+def _sampler_users_to_release(uid: str, keep: set[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    """Drop `uid`'s claim on every sampler key it no longer wants, and return
+    the keys that now have no claimants left — those are the ones safe to stop.
+
+    Samplers are shared per (account, underlying, expiry) across users, so one
+    user losing interest must never stop a poller another user is still reading.
+    """
+    release: list[tuple[str, str, str]] = []
+    for key in set(_sampler_users) - keep:
         users = _sampler_users.get(key)
-        if users is not None:
-            users.discard(uid)
-            if users:
-                continue
-            _sampler_users.pop(key, None)
-        account_scope, underlying, expiry = key
+        if users is None:
+            continue
+        if uid not in users:
+            continue
+        users.discard(uid)
+        if users:
+            continue
+        _sampler_users.pop(key, None)
+        release.append(key)
+    return release
+
+
+async def stop_user_samplers(uid: str) -> None:
+    """Release every sampler this user claims, stopping the ones nobody else wants."""
+    _user_sampler_keys.pop(uid, None)
+    for account_scope, underlying, expiry in _sampler_users_to_release(uid, set()):
         coord = _coordinators.get(account_scope)
         if coord is not None:
             await coord.stop(account_scope, underlying, expiry)
@@ -538,7 +586,11 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S, ac
                             continue
                         await place_cb(row, item)
                 completed_underlyings.add(item.name)
-                _save_snapshot(uid, _merge_with_lifecycle(uid, previous_rows, rows, completed_underlyings))
+                # In-memory only — the durable write happens once at the end.
+                _save_snapshot(
+                    uid, _merge_with_lifecycle(uid, previous_rows, rows, completed_underlyings),
+                    persist=False,
+                )
             except Exception as exc:  # noqa: BLE001
                 st.failures.append({"underlying": item.name, "error": str(exc)})
                 _log(uid, "error", f"{item.name}: {exc}")

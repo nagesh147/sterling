@@ -74,14 +74,32 @@ def _now_ms() -> int:
 # Decision cache + the scanner join point
 # ─────────────────────────────────────────────────────────────────────────
 
+def _cache_key(underlying: str, token: int, direction: str, origin: bool) -> tuple:
+    """Cache slot for one Navigator read.
+
+    `origin` separates Structure Radar's own read of an instrument from
+    Navigator's read of a real SuperTrend row. They must not share a slot: for
+    a SPOT SuperTrend row `row.token` *is* the underlying's token, so the two
+    would collide on (underlying, token, direction) and the two engines' loops
+    would overwrite each other's evidence every few minutes — `/snapshot` would
+    show whichever ran last, and the origination lifecycle check
+    (`is_origination_decision(prior.base_signal_id)`) would see a `kite:` base
+    where it expected its own, flipping a live Navigator setup back to "fresh".
+    """
+    return (underlying, token, direction, "origin" if origin else "base")
+
+
 def cache_decision(uid: str, *, underlying: str, token: int, direction: str, decision: NavigatorDecision) -> None:
-    _decision_cache.setdefault(uid, {})[(underlying, token, direction)] = decision
+    origin = is_origination_decision(decision.base_signal_id)
+    _decision_cache.setdefault(uid, {})[_cache_key(underlying, token, direction, origin)] = decision
 
 
-def forget_decision(uid: str, *, underlying: str, token: int, direction: str) -> None:
+def forget_decision(uid: str, *, underlying: str, token: int, direction: str, origin: bool = True) -> None:
+    """Drop a cached read. Defaults to the origination slot — the lifecycle
+    code that ends a Navigator-owned setup is the only caller that forgets."""
     cached = _decision_cache.get(uid)
     if cached is not None:
-        cached.pop((underlying, token, direction), None)
+        cached.pop(_cache_key(underlying, token, direction, origin), None)
 
 
 def hydrate_decision_cache_from_rows(uid: str, rows: list[EngineSignalRow]) -> None:
@@ -101,12 +119,26 @@ def hydrate_decision_cache_from_rows(uid: str, rows: list[EngineSignalRow]) -> N
         )
 
 
-def get_cached_decision(uid: str, *, underlying: str, token: int, direction: str) -> Optional[NavigatorDecision]:
-    return _decision_cache.get(uid, {}).get((underlying, token, direction))
+def get_cached_decision(
+    uid: str, *, underlying: str, token: int, direction: str, origin: Optional[bool] = None,
+) -> Optional[NavigatorDecision]:
+    """Read one cached decision.
+
+    `origin=True` asks for Structure Radar's own read, `origin=False` for
+    Navigator's read of a real SuperTrend row. Leave it `None` to accept
+    either, preferring the SuperTrend-backed read — that one carries a real
+    base score, so it is the better answer whenever both exist."""
+    cached = _decision_cache.get(uid, {})
+    if origin is not None:
+        return cached.get(_cache_key(underlying, token, direction, origin))
+    return (
+        cached.get(_cache_key(underlying, token, direction, False))
+        or cached.get(_cache_key(underlying, token, direction, True))
+    )
 
 
 def get_cached_decisions_for_underlying(uid: str, underlying: str) -> list[NavigatorDecision]:
-    return [d for (u, _tok, _dir), d in _decision_cache.get(uid, {}).items() if u == underlying]
+    return [d for key, d in _decision_cache.get(uid, {}).items() if key[0] == underlying]
 
 
 def clear_cache(uid: str) -> None:
@@ -179,7 +211,13 @@ def attach_to_rows(uid: str, rows: list[EngineSignalRow], *, default_underlyings
     for row in rows:
         if not (row.is_fresh or row.is_active):
             continue
-        decision = get_cached_decision(uid, underlying=row.underlying, token=row.token, direction=row.direction)
+        # A Navigator-owned row carries its own read; every other row wants
+        # Navigator's read OF that row, never Structure Radar's separate read
+        # of the same instrument.
+        origin = row.source == "navigator"
+        decision = get_cached_decision(
+            uid, underlying=row.underlying, token=row.token, direction=row.direction, origin=origin,
+        )
         if decision is not None and decision.config_revision == record.revision:
             row.navigator = decision
     return rows
@@ -391,7 +429,9 @@ async def _run_structure_and_origination(
         for direction in ("long", "short"):
             if (underlying, direction) in seen_directions:
                 continue  # a real SuperTrend row already covers this underlying+direction
-            prior = get_cached_decision(uid, underlying=underlying, token=fetch_token, direction=direction)
+            prior = get_cached_decision(
+                uid, underlying=underlying, token=fetch_token, direction=direction, origin=True,
+            )
             prior_is_live_origin = (
                 prior is not None
                 and is_origination_decision(prior.base_signal_id)
@@ -485,7 +525,10 @@ def _check_execution_eligible_inner(uid: str, row: EngineSignalRow, *, default_u
         return True, "navigator_not_gating"
     if record.calibration_readiness != "ready":
         return False, "GATE_NOT_CALIBRATED"
-    decision = get_cached_decision(uid, underlying=row.underlying, token=row.token, direction=row.direction)
+    decision = get_cached_decision(
+        uid, underlying=row.underlying, token=row.token, direction=row.direction,
+        origin=row.source == "navigator",
+    )
     if decision is None:
         return False, "NO_DATA"
     if decision.config_revision != record.revision:
@@ -539,7 +582,7 @@ def check_originated_execution_eligible(uid: str, row: EngineSignalRow, *, defau
         return False, "NO_TRADEABLE_LEG"
 
     decision = row.navigator or get_cached_decision(
-        uid, underlying=row.underlying, token=row.token, direction=row.direction,
+        uid, underlying=row.underlying, token=row.token, direction=row.direction, origin=True,
     )
     if decision is None:
         return False, "NO_DATA"

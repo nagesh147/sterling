@@ -201,6 +201,43 @@ def _split_on_session_boundary(ordered: Sequence[dict], split_ratio: float) -> i
     return len(ordered)
 
 
+#: Strength order used to pick the one decision that represents a bar. Higher
+#: wins, so a bar Navigator ever called CONFIRMED is scored as a CONFIRMED call
+#: even if it later cooled to WATCH — a trader acting on it would have taken
+#: the trade, and that is what the hit rate is measuring.
+_STATUS_STRENGTH = {
+    "NO_DATA": 0, "WAIT": 1, "CONFLICT": 2, "WATCH": 3, "CONFIRMED": 4, "HIGH_CONVICTION": 5,
+}
+
+
+def collapse_to_one_per_opportunity(decisions: Sequence[dict]) -> list[dict]:
+    """One decision per (underlying, direction, bar) — the unit of measurement.
+
+    Navigator legitimately writes about the same bar more than once: a WATCH
+    that becomes CONFIRMED as later evidence lands, and Structure Radar's own
+    read of an instrument alongside Navigator's read of a real SuperTrend row
+    on it. Every one of those shares a single forward return, so scoring them
+    all counts one market outcome several times — which inflates the sample
+    against `MIN_EVALUATION_SCORED` and understates variance in the very gate
+    that guards real-money auto-execution.
+
+    Keeps the strongest conclusion reached for each bar, breaking ties on the
+    latest `generated_at_ms` and then `decision_id` so the result is stable.
+    """
+    best: dict[tuple, dict] = {}
+    for d in decisions:
+        key = (str(d["underlying"]), str(d["direction"]), int(d["bar_close_ms"]))
+        rank = (
+            _STATUS_STRENGTH.get(str(d["status"]), 0),
+            int(d.get("generated_at_ms") or 0),
+            str(d["decision_id"]),
+        )
+        current = best.get(key)
+        if current is None or rank > current[0]:
+            best[key] = (rank, d)
+    return [d for _rank, d in best.values()]
+
+
 def score_decisions(
     decisions: Sequence[dict],
     price_series: dict[str, Sequence[PricePoint]],
@@ -209,8 +246,14 @@ def score_decisions(
     split_ratio: float = 0.7,
 ) -> dict:
     """Pure: persisted `navigator_signal_events` rows + price history ->
-    a calibration report. No I/O, no clock reads beyond the data itself."""
-    ordered = sorted(decisions, key=lambda d: (int(d["bar_close_ms"]), str(d["decision_id"])))
+    a calibration report. No I/O, no clock reads beyond the data itself.
+
+    Rows are collapsed to one per (underlying, direction, bar) first — see
+    `collapse_to_one_per_opportunity` — so every count below is a count of
+    distinct market opportunities, not of times Navigator wrote something down.
+    """
+    collapsed = collapse_to_one_per_opportunity(decisions)
+    ordered = sorted(collapsed, key=lambda d: (int(d["bar_close_ms"]), str(d["decision_id"])))
     split_at = _split_on_session_boundary(ordered, split_ratio)
     indexed = {name: _index_series(s) for name, s in price_series.items()}
     windows = {

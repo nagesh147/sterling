@@ -52,7 +52,7 @@ function mockRows(rows: ReturnType<typeof makeRow>[]) {
     useEngineSignals: () => ({
       data: { generated_ms: 1, scanning: false, scanning_label: '', rows, next_scan_ms: 0, auto_scan: false, market_open: true },
     }),
-    useRunScan: () => ({ mutate: vi.fn(), isPending: false }),
+    useRunScan: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(() => Promise.resolve()), isPending: false }),
     useCancelScan: () => ({ mutate: vi.fn(), isPending: false }),
     useStockRegistry: () => ({ data: [] }),
   }));
@@ -127,6 +127,21 @@ describe('SterlingKiteEnginePane — 4-way signal lens (SuperTrend / Navigator /
     expect(screen.getByText('Connect → Value-Flow Navigator')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Switch to Combined lens/i }));
     expect(screen.getAllByText('NIFTY 50').length).toBeGreaterThan(0);
+  });
+
+  it('counts only real SuperTrend rows in the Common-lens empty state', async () => {
+    // Navigator-owned rows share this board now; counting them as SuperTrend
+    // setups would overstate what the other engine actually found.
+    mockRows([
+      makeRow('NIFTY 50', 1, null),
+      makeNavigatorRow('SENSEX', 2, 'WATCH'),
+      makeNavigatorRow('INFY', 3, 'WATCH'),
+    ]);
+    await renderPane();
+    openSignalModeMenu();
+    fireEvent.click(screen.getByRole('option', { name: /^Common/ }));
+    expect(screen.getByText(/1 SuperTrend setup on the board/)).toBeInTheDocument();
+    expect(screen.queryByText(/3 SuperTrend setups/)).not.toBeInTheDocument();
   });
 
   it('persists the chosen lens to localStorage across remounts', async () => {
