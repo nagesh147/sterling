@@ -144,6 +144,7 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
         resolution_reason=getattr(row, "resolution_reason", None),
         source=row.source, score=row.score,
         entry_sl=row.entry_sl, target=row.target, exit_state=row.exit_state,
+        exit_reason=row.exit_reason,
         is_active=bool(row.is_active), is_fresh=bool(row.is_fresh),
         adx=row.adx, atr_pct=row.atr_pct,
         navigator=row.navigator,

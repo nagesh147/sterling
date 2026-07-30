@@ -629,6 +629,18 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             <span title="Live trailing stop on the underlying, recomputed at the latest closed bar — it is the same for every entry on this instrument, so it is not this row's entry stop. The entry stop is the per-leg SL column."
                   style={{ fontSize: 11, color: k.dim }}>TSL {row.stop_loss.toFixed(1)}</span>
           )}
+          {row.exit_reason && (
+            <span title={row.exit_reason.startsWith('trail breach')
+              ? `Closed by the trailing stop — ${row.exit_reason}. The red counter (${row.exit_state ?? '—'}) had not fired; the trail is enforced as a real exit, so whichever rule triggers first ends the trade.`
+              : `Closed by the red counter — ${row.exit_reason}.`}
+                  style={{
+                    fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 4px',
+                    color: row.exit_reason.startsWith('trail breach') ? k.red : k.dim,
+                    background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : undefined,
+                  }}>
+              {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : 'counter exit'}
+            </span>
+          )}
           {originalEntryMs != null && originalEntryMs < row.timestamp_ms && (
             <span title={`Same trend re-arming: an earlier entry on ${row.underlying} ${row.direction} is still running (from ${new Date(originalEntryMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}). This is not a second independent setup, and auto-exec's one-position-per-instrument guard will not open another.`}
                   style={{ fontSize: 10, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>

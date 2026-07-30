@@ -225,6 +225,15 @@ export function EngineConfigurationPanel() {
             <span style={{ color: TEXT, fontSize: 11.5 }}>{cfg.exit_aligned_trail ? 'Aligned to exit counter' : 'Tightest fast line'}</span>
           </div>
         </Field>
+        <Field label="Trailing stop exits" hint="On: a trade is closed the first bar price trades through its trail. Off restores the old rule, where only the exit counter could close a trade — so a position could sit indefinitely below its own stop.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Switch checked={cfg.price_stop_exit ?? true} label="Enforce the trailing stop as a real exit"
+              onChange={() => patch({ price_stop_exit: !(cfg.price_stop_exit ?? true) }, 'Trailing-stop exit updated', true)} />
+            <span style={{ color: TEXT, fontSize: 11.5 }}>
+              {(cfg.price_stop_exit ?? true) ? 'Trail OR exit counter, whichever fires first' : 'Exit counter only'}
+            </span>
+          </div>
+        </Field>
         <Field label="Hybrid weight" hint="SuperTrend weight from 0 to 1.">
           <input data-testid="hybrid-weight-input" aria-label="Hybrid weight" type="number" min={0} max={1} step={0.1}
             value={cfg.hybrid_st_weight ?? 0.5} style={inputStyle}

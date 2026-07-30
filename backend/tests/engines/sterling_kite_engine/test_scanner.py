@@ -1268,3 +1268,150 @@ def test_stamp_leg_premium_stops_translates_a_row_target_into_a_premium_target()
     with_target = _leg(24300.0)
     assert with_target.premium_target is not None
     assert with_target.premium_target > with_target.premium_spot
+
+
+# ── the trailing stop as a REAL exit (not a display value) ────────────────────
+def _long_then_drop_path():
+    """Fresh long transition (down leg then up leg, as _fresh_long_path does) which
+    establishes a ratcheting trail, then a hard drop straight through it — the shape
+    that used to read "0/3 red" and "running" at a double-digit open loss."""
+    return _fresh_long_path() + list(np.linspace(595.0, 300.0, 8)) + [300.0] * 3
+
+
+def _trail_cfg(**kw):
+    # three_red_signal is the loosest counter and the live setting — under the old
+    # rule it is what let a breached trade keep running.
+    return SterlingKiteEngineConfig(exit_mode="three_red_signal", **kw)
+
+
+def test_trail_breach_ends_the_trade_even_when_the_red_counter_has_not_fired():
+    cfg = _trail_cfg()
+    item = UniverseItem("NIFTY BANK", "BANKNIFTY", 260105, "NSE", "NFO")
+    rows = evaluate_item(SterlingKiteEngine(cfg), item, _candles(_long_then_drop_path()), cfg)
+    longs = [r for r in rows if r.direction == "long"]
+    assert longs, "expected a long entry from the uptrend"
+    ended = [r for r in longs if not r.is_active]
+    assert ended, "a long that fell straight through its trail must not still be running"
+    assert any("trail breach" in (r.exit_reason or "") for r in ended)
+
+
+def test_price_stop_exit_off_restores_the_old_red_counter_only_rule():
+    """The opt-out has to actually reproduce the previous behaviour, so an old study
+    run stays reproducible."""
+    path = _long_then_drop_path()
+    item = UniverseItem("NIFTY BANK", "BANKNIFTY", 260105, "NSE", "NFO")
+    on = _trail_cfg(price_stop_exit=True)
+    off = _trail_cfg(price_stop_exit=False)
+    rows_on = [r for r in evaluate_item(SterlingKiteEngine(on), item, _candles(path), on) if r.direction == "long"]
+    rows_off = [r for r in evaluate_item(SterlingKiteEngine(off), item, _candles(path), off) if r.direction == "long"]
+    assert any(not r.is_active for r in rows_on)
+    assert all(r.exit_reason is None or "trail breach" not in r.exit_reason for r in rows_off)
+
+
+def test_trail_exit_never_uses_the_breaking_bars_own_trail():
+    """No-lookahead: the SuperTrend at bar j is computed from bar j's own high/low, so
+    testing bar j against bar j's trail would let the bar that breaks the stop also be
+    the bar that moved it. The level tested must be the one standing at j-1."""
+    from app.engines.sterling_kite_engine.exits import trail_exit_index, trail_level
+
+    cfg = _trail_cfg()
+    candles = _candles(_long_then_drop_path())
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    c_arr = np.array([c.close for c in candles], float)
+    r = compute_regime(o, h, l, c_arr, cfg)
+    longs, _shorts = entry_transitions(r)
+    entry_i = int(np.where(longs)[0][0])
+    last_idx = len(c_arr) - 1
+    j = trail_exit_index(r, "long", entry_i, last_idx, cfg)
+    assert j is not None and j > entry_i
+    trail_prev = trail_level(r, "long", entry_i, j - 1, cfg)
+    assert float(r.basis_low[j]) <= trail_prev
+    # And the bar before it survived on the same (earlier) trail.
+    if j - 1 > entry_i:
+        assert float(r.basis_low[j - 1]) > trail_level(r, "long", entry_i, j - 2, cfg)
+
+
+def test_trail_exit_compares_against_the_basis_the_lines_were_computed_on():
+    """Under the live heikin_ashi basis the ST lines are in HA space; a raw candle low
+    is a different series. RegimeSeries must carry the basis so the comparison is
+    apples-to-apples."""
+    cfg = SterlingKiteEngineConfig(candle_basis="heikin_ashi")
+    candles = _candles(_long_then_drop_path())
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    c_arr = np.array([c.close for c in candles], float)
+    r = compute_regime(o, h, l, c_arr, cfg)
+    assert r.basis_low.shape == c_arr.shape
+    assert r.basis_high.shape == c_arr.shape
+    # HA smooths the extremes, so the basis is genuinely not the raw candle.
+    assert not np.allclose(r.basis_low, l)
+
+
+def test_ended_row_freezes_its_trail_at_the_exit_bar():
+    """A dead trade must not keep absorbing later bars' trail.
+
+    Asserted as an invariance: appending a post-exit rally cannot move an already-ended
+    entry's reported stop. (Not "stop below entry" — a winner's trail legitimately
+    ratchets far above its entry, which is the point of a trailing stop.)
+    """
+    cfg = _trail_cfg()
+    item = UniverseItem("NIFTY BANK", "BANKNIFTY", 260105, "NSE", "NFO")
+    base = _long_then_drop_path()
+    with_rally = base + list(np.linspace(305.0, 900.0, 40))
+
+    def _dead_stops(path):
+        rows = evaluate_item(SterlingKiteEngine(cfg), item, _candles(path), cfg)
+        return {
+            r.timestamp_ms: r.stop_loss
+            for r in rows
+            if r.direction == "long" and not r.is_active and "trail breach" in (r.exit_reason or "")
+        }
+
+    before, after = _dead_stops(base), _dead_stops(with_rally)
+    assert before, "expected a trail-breach exit"
+    for ts, stop in before.items():
+        assert after.get(ts) == pytest.approx(stop), (
+            "an ended entry's trail moved when later bars were appended — it is still "
+            "ratcheting after the trade died"
+        )
+
+
+def test_derivative_contract_also_honours_the_trail_exit():
+    cfg = _trail_cfg()
+    item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")
+    pick = OptionPick(option_symbol="HDFCBANK26JUL825CE", strike=825.0, option_type="CE",
+                      expiry="2026-07-30", dte=9, lot_size=550, token=98765)
+    rows = evaluate_derivative_contract(item, "ATM", pick, _candles(_long_then_drop_path()), cfg)
+    assert rows
+    ended = [r for r in rows if not r.is_active]
+    assert ended, "a premium that fell through its own trail must not still be running"
+    assert any("trail breach" in (r.exit_reason or "") for r in ended)
+    for r in ended:
+        assert r.legs[0].is_active is False
+
+
+def test_a_fresh_entry_can_never_be_trail_exited_on_its_own_bar():
+    """Safety property for auto-exec: it fires on `is_fresh` rows, and the trail is only
+    testable from the bar AFTER entry, so enforcing the trail cannot retroactively kill
+    (or silently skip) a just-fired signal."""
+    from app.engines.sterling_kite_engine.exits import trail_exit_index
+
+    cfg = _trail_cfg()
+    candles = _trim_to_transition(_candles(_fresh_long_path()), cfg, "long")
+    o = np.array([c.open for c in candles], float)
+    h = np.array([c.high for c in candles], float)
+    l = np.array([c.low for c in candles], float)
+    c_arr = np.array([c.close for c in candles], float)
+    r = compute_regime(o, h, l, c_arr, cfg)
+    last_idx = len(c_arr) - 1
+    assert trail_exit_index(r, "long", last_idx, last_idx, cfg) is None
+
+    item = UniverseItem(name="NIFTY 50", tradingsymbol="NIFTY", token=1,
+                        exchange="INDICES", option_exchange="NFO", is_index=True)
+    fresh = [row for row in evaluate_item(SterlingKiteEngine(cfg), item, candles, cfg) if row.is_fresh]
+    assert fresh, "expected a fresh entry on the final bar"
+    assert all(row.is_active for row in fresh)
+    assert all(row.exit_reason is None for row in fresh)

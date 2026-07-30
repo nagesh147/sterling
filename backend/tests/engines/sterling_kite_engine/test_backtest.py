@@ -104,3 +104,41 @@ class TestExitMode:
         assert one >= 1 and three >= 1
         # tighter exit ⇒ at least as many trades as the looser one (monotonic)
         assert one >= three
+
+
+def test_backtest_and_live_scanner_resolve_the_same_exit_bar():
+    """The replay's exit loop and the live scanner's must not drift.
+
+    The backtest carried its own red-count-only copy, annotated "identical to the live
+    scanner.is_active loop" — accurate when written, and silently wrong the moment the
+    live loop started enforcing the trailing stop. Both now go through
+    ``sterling_kite_engine.exits``, and this pins that.
+    """
+    import numpy as np
+
+    from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+    from app.engines.sterling_kite_engine.exits import resolve_exit
+    from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
+    from app.services.kite_engine.backtest import _exit_bar
+
+    close = (list(np.linspace(300.0, 150.0, 60)) + list(np.linspace(150.0, 600.0, 80))
+             + list(np.linspace(595.0, 300.0, 8)))
+    c = np.asarray(close, float)
+    o = np.concatenate([[c[0]], c[:-1]])
+    h = np.maximum(o, c) + 1.0
+    l = np.minimum(o, c) - 1.0
+
+    cfg = SterlingKiteEngineConfig(exit_mode="three_red_signal", trail_target="fast")
+    r = compute_regime(o, h, l, c, cfg)
+    longs, shorts = entry_transitions(r)
+    n = len(c)
+    entries = [int(i) for i in np.where(longs)[0]]
+    assert entries, "expected at least one long entry"
+
+    for entry_i in entries:
+        live_i, live_reason = resolve_exit(r, "long", entry_i, n - 1, cfg, longs, shorts)
+        bt_i, bt_reason = _exit_bar(r, entry_i, 1, longs, shorts, cfg.exit_mode, n,
+                                    cfg, cfg.trail_target)
+        expected_i = (n - 1) if live_i is None else live_i
+        assert bt_i == expected_i
+        assert bt_reason == (live_reason or "series end")

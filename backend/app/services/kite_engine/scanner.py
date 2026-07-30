@@ -16,7 +16,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Awaitable, Callable, Dict, List, Optional, Sequence
+from typing import Awaitable, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -27,6 +27,7 @@ from app.engines.indicators.atr import atr_percentile as _atr_pct, compute_atr a
 from app.engines.indicators.heikin_ashi import compute_heikin_ashi
 from app.engines.common.exit_counter import get_exit_threshold, exit_needs_counter_signal
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
+from app.engines.sterling_kite_engine import exits
 from app.engines.sterling_kite_engine.engine import SterlingKiteEngine
 from app.engines.sterling_kite_engine.regime import compute_regime, entry_transitions
 from app.engines.sterling_kite_engine.schemas import (
@@ -77,19 +78,8 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
 
 def _trail_stop_value(r, direction: str, i: int, last_idx: int,
                       cfg: SterlingKiteEngineConfig) -> float:
-    """The stop level to attach to a signal row.
-
-    Default: the tightest still-green line at the latest bar (the validated fast
-    trail). When ``exit_aligned_trail`` is on: the line whose flip is the
-    ``exit_mode``-th red (one_red→fast, two_red→mid, three_red→slow), so the stop
-    breach coincides with the red-count exit instead of the tightest line pre-empting
-    it. Falls back to the entry-bar ``trail_target`` line when no green line remains.
-    """
-    if getattr(cfg, "exit_aligned_trail", False):
-        trail_val = r.trail_value_for_threshold(last_idx, get_exit_threshold(cfg.exit_mode))
-    else:
-        trail_val = r.best_trail_line_value(direction, last_idx)
-    return trail_val if trail_val > 0 else float(r.line(cfg.trail_target)[i])
+    """The trail level to attach to a signal row — see ``engine.exits.trail_level``."""
+    return exits.trail_level(r, direction, i, last_idx, cfg)
 
 
 def _exit_state_str(r, direction: str, last_idx: int, cfg: SterlingKiteEngineConfig) -> str:
@@ -240,31 +230,16 @@ def evaluate_item(
     for i in indices:
         direction = "long" if longs[i] else "short"
         ts = int(candles[i].timestamp_ms)
-        # A trade is "running" until enough ST lines turn red (per exit_mode).
-        # For one_red: ANY one line flipping against the entry exits.
-        # For two_red/three_red: two/three lines must be red simultaneously.
-        # For three_red_signal: all three red AND a fresh counter-arrow.
-        # Check every bar from entry to latest — once the exit condition fires,
+        # A trade is "running" until either the red counter fires (per exit_mode) or
+        # price trades through the trailing stop — whichever comes first. Once it fires
         # the trade is dead even if conditions reverse later (that's a new entry).
-        active = True
-        for j in range(i, len(c)):
-            reds = r.red_line_count(direction, j)
-            if reds >= get_exit_threshold(cfg.exit_mode):
-                if exit_needs_counter_signal(cfg.exit_mode):
-                    # Also need a fresh counter-entry arrow at this bar
-                    if direction == "long" and shorts[j]:
-                        active = False
-                        break
-                    elif direction == "short" and longs[j]:
-                        active = False
-                        break
-                    # Not enough — reds hit threshold but no counter-arrow yet
-                else:
-                    active = False
-                    break
-        # Adaptive stop: tightest still-green line, or the exit_mode-aligned line.
         last_idx = len(c) - 1
-        stop_loss = _trail_stop_value(r, direction, i, last_idx, cfg)
+        exit_j, exit_reason = exits.resolve_exit(r, direction, int(i), last_idx, cfg, longs, shorts)
+        active = exit_j is None
+        # Freeze the readouts at the exit bar: a dead trade whose trail kept ratcheting
+        # for days afterwards shows a stop it was never protected by.
+        end_idx = last_idx if exit_j is None else int(exit_j)
+        stop_loss = _trail_stop_value(r, direction, i, end_idx, cfg)
         rows.append(EngineSignalRow(
             underlying=item.name, token=item.token, exchange=item.option_exchange,
             regime="BULL" if direction == "long" else "BEAR",
@@ -272,7 +247,8 @@ def evaluate_item(
             direction=direction, option_type="CE" if direction == "long" else "PE",
             spot=float(c[i]), stop_loss=stop_loss,
             entry_sl=_entry_sl_value(r, i, cfg),
-            exit_state=_exit_state_str(r, direction, last_idx, cfg),
+            exit_state=_exit_state_str(r, direction, end_idx, cfg),
+            exit_reason=exit_reason or None,
             score=85.0, timestamp_ms=ts,
             is_active=active,
             is_fresh=(ts == latest_ts),
@@ -385,22 +361,13 @@ def evaluate_derivative_contract(
     latest_ts = int(candles[-1].timestamp_ms)
     for i in indices:
         ts = int(candles[i].timestamp_ms)
-        # "running" until enough ST lines turn red (per exit_mode). For derivatives
-        # all entries are long (BUY), so red = trend == -1.
-        active = True
-        for j in range(i, len(c)):
-            reds = r.red_line_count("long", j)
-            if reds >= get_exit_threshold(cfg.exit_mode):
-                if exit_needs_counter_signal(cfg.exit_mode):
-                    if shorts[j]:
-                        active = False
-                        break
-                else:
-                    active = False
-                    break
-        # Adaptive stop: tightest still-green line, or the exit_mode-aligned line.
+        # "running" until the red counter fires (per exit_mode) or the premium trades
+        # through its trail. For derivatives all entries are long (BUY), so red = -1.
         last_idx = len(c) - 1
-        stop_loss = _trail_stop_value(r, "long", i, last_idx, cfg)
+        exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts)
+        active = exit_j is None
+        end_idx = last_idx if exit_j is None else int(exit_j)
+        stop_loss = _trail_stop_value(r, "long", i, end_idx, cfg)
         entry_sl = _entry_sl_value(r, i, cfg)
         rows.append(EngineSignalRow(
             underlying=item.name, token=pick.token, exchange=item.option_exchange,
@@ -418,9 +385,11 @@ def evaluate_derivative_contract(
                             entry_sl=entry_sl, is_active=active,
                             signal_timestamp_ms=ts, entry_timestamp_ms=ts,
                             alignment=AlignmentChip(fast=int(r.t_fast[i]), mid=int(r.t_mid[i]), slow=int(r.t_slow[i])),
-                            exit_state=_exit_state_str(r, "long", last_idx, cfg))],
+                            exit_state=_exit_state_str(r, "long", end_idx, cfg),
+                            premium_target=None)],
             spot=float(c[i]), stop_loss=stop_loss, entry_sl=entry_sl,
-            exit_state=_exit_state_str(r, "long", last_idx, cfg),
+            exit_state=_exit_state_str(r, "long", end_idx, cfg),
+            exit_reason=exit_reason or None,
             score=85.0, timestamp_ms=ts, source="derivatives",
             is_active=active, is_fresh=(ts == latest_ts),
         ))

@@ -66,6 +66,16 @@ class SterlingKiteEngineConfig:
     #      strictly better (see ``exit_mode`` above) — so widening the trail to honour a
     #      looser mode is NOT recommended. Default OFF = the validated tightest/fast trail.
     exit_aligned_trail: bool = False
+    # Enforce the trailing stop as a REAL exit: an entry is dead the first bar price
+    # trades through the trail, not merely when ``exit_mode`` many lines have flipped.
+    #
+    # The comment above ("the price stop pre-empts a two_red/three_red counter → the
+    # exit_mode knob is near-inert live") described the intended behaviour, but nothing
+    # implemented it — ``evaluate_item`` only ever counted reds. Under the live
+    # ``three_red_signal`` setting that let a position sit indefinitely below its own
+    # stop while the board reported it running at "0/3 red". OFF restores the
+    # red-counter-only rule, for reproducing older study runs.
+    price_stop_exit: bool = True
     # Removed from the live engine + UI + API (provably inert: 0.0 P&L change across
     # 7.5y — it keyed off the slow/widest ST, which always flips after the trail has
     # already exited). Retained here ONLY so the offline study scripts that documented

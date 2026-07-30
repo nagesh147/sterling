@@ -56,6 +56,11 @@ class EngineSignalRow(BaseModel):
     # Live red-counter progress at the latest bar, "<reds>/<threshold> red" (threshold
     # from exit_mode). The Exit column; None for legacy cached rows.
     exit_state: Optional[str] = None
+    # Why this entry ended, when it has ("trail breach (≤ 1000.63)" / "red count exit
+    # 3/3 (three_red_signal)"). None while the trade is still running. The red counter
+    # and the trailing stop are independent rules and either can end a trade, so
+    # ``exit_state`` alone cannot explain an ended row — it only reports the counter.
+    exit_reason: Optional[str] = None
     # Profit objective in the same units as ``entry_sl``. Deliberately None for every
     # SuperTrend row: that strategy is trend-following and exits on the trail plus the
     # red counter, so quoting a target would invent a rule the engine does not run.
@@ -234,6 +239,7 @@ class EngineDetailResponse(BaseModel):
     entry_sl: Optional[float] = None
     target: Optional[float] = None
     exit_state: Optional[str] = None
+    exit_reason: Optional[str] = None
     is_active: bool = False
     is_fresh: bool = False
     adx: Optional[float] = None
@@ -306,6 +312,11 @@ class EngineConfigModel(BaseModel):
     # two_red→mid, three_red→slow) so the stop breach coincides with the red count
     # instead of the tightest line pre-empting it. OFF (default) = validated fast trail.
     exit_aligned_trail: bool = False
+    # Treat the trailing stop as a real exit, not a display value: an entry is dead the
+    # first bar price trades through the trail, whichever comes first with the red
+    # counter. Turn OFF only to reproduce the old red-counter-only behaviour, where a
+    # position under two_red/three_red could sit indefinitely below its own stop.
+    price_stop_exit: bool = True
     # multi-select: scan resolves a leg for EACH selected moneyness (ITM into the
     # money, OTM out of the money). Defaults to the full ATM→ITM→OTM ladder.
     strike_moneyness: List[Literal["ATM", "ITM1", "ITM2", "ITM3", "ITM4", "ITM5", "OTM1", "OTM2", "OTM3", "OTM4", "OTM5"]] = [

@@ -6,7 +6,7 @@ configured ``trail_target``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
 
 import numpy as np
@@ -28,6 +28,12 @@ class RegimeSeries:
     l_mid: NDArray[np.float64]
     l_slow: NDArray[np.float64]
     warmup: int
+    # The high/low series the SuperTrend lines were actually computed on. Under
+    # ``candle_basis="heikin_ashi"`` (the live default) the lines live in HA space, so a
+    # raw candle low is NOT comparable to l_fast — anything asking "did price trade
+    # through the trail?" must use these, or it compares two different price series.
+    basis_high: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
+    basis_low: NDArray[np.float64] = field(default_factory=lambda: np.empty(0))
 
     def line(self, target: TrailTarget) -> NDArray[np.float64]:
         return {"fast": self.l_fast, "mid": self.l_mid, "slow": self.l_slow}[target]
@@ -107,6 +113,8 @@ def compute_regime(opens, highs, lows, closes, cfg: SterlingKiteEngineConfig) ->
         t_fast=t_fast, t_mid=t_mid, t_slow=t_slow,
         l_fast=l_fast, l_mid=l_mid, l_slow=l_slow,
         warmup=cfg.warmup,
+        basis_high=np.asarray(basis_h, dtype=float),
+        basis_low=np.asarray(basis_l, dtype=float),
     )
 
 

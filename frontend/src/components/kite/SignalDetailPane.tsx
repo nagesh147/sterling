@@ -528,6 +528,18 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                   <span style={{ fontSize: 11, fontWeight: 700, color: data.is_active ? k.green : k.dim }}>
                     {data.is_fresh ? 'fresh this bar' : data.is_active ? 'running' : 'ended'}
                   </span>
+                  {data.exit_reason && (
+                    <span title={data.exit_reason.startsWith('trail breach')
+                      ? `The trailing stop closed this trade. The red counter (${data.exit_state ?? '—'}) had not reached its threshold — the trail is enforced as a real exit, so whichever rule fires first ends the trade.`
+                      : 'The red counter closed this trade.'}
+                      style={{
+                        fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
+                        color: data.exit_reason.startsWith('trail breach') ? k.red : k.dim,
+                        background: tint(data.exit_reason.startsWith('trail breach') ? k.red : k.dim, 12),
+                      }}>
+                      {data.exit_reason}
+                    </span>
+                  )}
                   {nav && (
                     <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 4, background: tint(navTone, 12), color: navTone }}>
                       Nav {nav.status.replace('_', ' ')}

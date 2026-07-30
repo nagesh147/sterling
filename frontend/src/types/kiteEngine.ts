@@ -61,6 +61,10 @@ export interface EngineSignalRow {
   stop_loss: number;       // live ratcheting trail stop (TSL column)
   entry_sl?: number;       // initial hard stop at the entry bar (SL column)
   exit_state?: string;     // red-counter progress "<reds>/<threshold> red" (Exit column)
+  // Why this entry ended, when it has. The red counter and the trailing stop are
+  // independent rules and either can end a trade, so exit_state alone cannot explain
+  // an ended row — it only reports the counter.
+  exit_reason?: string | null;
   // Profit objective, same units as entry_sl. Always null for SuperTrend rows (their
   // exit is the trail + red counter); set for Navigator-originated rows from its
   // AVWAP stop/target proposal.
@@ -187,6 +191,7 @@ export interface EngineDetailResponse {
   entry_sl?: number | null;
   target?: number | null;
   exit_state?: string | null;
+  exit_reason?: string | null;
   is_active?: boolean;
   is_fresh?: boolean;
   adx?: number | null;
@@ -202,6 +207,9 @@ export interface EngineConfigModel {
   // two_red→mid, three_red→slow) instead of always the tightest. Default off =
   // validated fast trail. Changes the computed stop → a scan-affecting setting.
   exit_aligned_trail?: boolean;
+  // Enforce the trailing stop as a real exit (default on). Off = the old
+  // red-counter-only rule, where a trade could sit indefinitely below its own stop.
+  price_stop_exit?: boolean;
   strike_moneyness: Moneyness[];
   scan_source: ScanSource;
   scan_expiries: ScanExpiry[];

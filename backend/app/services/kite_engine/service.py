@@ -49,6 +49,7 @@ def _ts_cfg(c: EngineConfigModel) -> SterlingKiteEngineConfig:
         trail_target=c.trail_target,
         exit_mode=c.exit_mode,
         exit_aligned_trail=getattr(c, 'exit_aligned_trail', False),
+        price_stop_exit=getattr(c, 'price_stop_exit', True),
         hybrid_st_weight=getattr(c, 'hybrid_st_weight', 0.5)
     )
 
@@ -908,12 +909,18 @@ async def scan_user(client, uid: str, *, interval_s: float = SCAN_INTERVAL_S) ->
                 f"have no entry premium (option history empty and the signal is too old "
                 f"to use today's LTP) — their Entry/SL/TSL show “—”"
             )
-        # Trail-update pass: push tightened stops to open positions, then square off
-        # any position nearing expiry.
-        if cfg_model.auto_execute:
-            await _update_open_position_trails(client, uid)
-            await _square_off_expiring(client, uid)
-            await _time_stop_positions(client, uid)
+        # Maintenance of ALREADY-OPEN positions: ratchet their stops to the freshly
+        # computed trail, square off anything near expiry, apply time stops.
+        #
+        # This used to be gated on `auto_execute`, which is the switch for OPENING new
+        # positions. Turning AUTO off left every open position frozen on the stop it was
+        # entered with — the trail stopped ratcheting, the broker GTT stopped moving, and
+        # expiry/time stops stopped running — on exactly the positions the engine had
+        # already committed real money to. Maintaining a position you hold is not the
+        # same decision as opening a new one.
+        await _update_open_position_trails(client, uid)
+        await _square_off_expiring(client, uid)
+        await _time_stop_positions(client, uid)
         board = f"{live} live signal(s)" + (f" + {ended} ended" if ended else "")
         state.log(uid, "scan_done",
                   f"Scan complete — {board} / {len(selected)} instruments "

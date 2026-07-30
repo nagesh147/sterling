@@ -147,3 +147,40 @@ describe('signal plan on the board', () => {
     expect(screen.queryByText('re-entry')).not.toBeInTheDocument();
   });
 });
+
+describe('why a trade ended', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('says the trailing stop closed it, even though the red counter never fired', async () => {
+    // The whole point of enforcing the trail: exit_state still reads "0/3 red", so
+    // without this the row looks like it ended for no stated reason.
+    mockPane([{
+      ...makeRow({ is_active: false }),
+      exit_state: '0/3 red',
+      exit_reason: 'trail breach (≤ 1000.63)',
+    }]);
+    await renderPane();
+    expect(screen.getByText('TSL exit')).toBeInTheDocument();
+  });
+
+  it('distinguishes a red-counter close from a trail close', async () => {
+    mockPane([{
+      ...makeRow({ is_active: false }),
+      exit_state: '3/3 red',
+      exit_reason: 'red count exit 3/3 (three_red_signal)',
+    }]);
+    await renderPane();
+    expect(screen.getByText('counter exit')).toBeInTheDocument();
+    expect(screen.queryByText('TSL exit')).not.toBeInTheDocument();
+  });
+
+  it('shows no exit badge while the trade is still running', async () => {
+    mockPane([makeRow()]);
+    await renderPane();
+    expect(screen.queryByText('TSL exit')).not.toBeInTheDocument();
+    expect(screen.queryByText('counter exit')).not.toBeInTheDocument();
+  });
+});
