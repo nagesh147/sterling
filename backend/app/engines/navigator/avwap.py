@@ -354,6 +354,54 @@ def _continuation_short_raw(t: int, structure: AvwapStructure, candles: Validate
     return True
 
 
+@dataclass(frozen=True)
+class FamilyTimeline:
+    """Which setup family (if any) held on EVERY bar, plus the cooldown-filtered
+    ``fired`` mask.
+
+    ``evaluate_avwap`` only ever decides at the last bar, but it already has to
+    walk the whole series for cooldown bookkeeping. The chart overlay needs
+    exactly that per-bar answer, so it is computed here once instead of twice:
+    an overlay drawn from a second implementation could show the user a setup
+    the engine never saw, or hide one it acted on.
+    """
+
+    pullback_long: NDArray[np.bool_]
+    pullback_short: NDArray[np.bool_]
+    continuation_long: NDArray[np.bool_]
+    continuation_short: NDArray[np.bool_]
+    raw: NDArray[np.bool_]
+    fired: NDArray[np.bool_]
+
+    def family_at(self, t: int) -> Optional[tuple[AvwapFamily, int]]:
+        """``(family, direction)`` owning bar ``t``, in the engine's precedence
+        order, or None when no family held there."""
+        if self.pullback_long[t]:
+            return "PULLBACK_LONG", 1
+        if self.pullback_short[t]:
+            return "PULLBACK_SHORT", -1
+        if self.continuation_long[t]:
+            return "CONTINUATION_LONG", 1
+        if self.continuation_short[t]:
+            return "CONTINUATION_SHORT", -1
+        return None
+
+
+def family_timeline(candles: ValidatedCandles, structure: AvwapStructure, config) -> FamilyTimeline:
+    """Evaluate the four setup families on every bar and apply the cooldown."""
+    n = candles.n
+    pullback_long = np.array([_pullback_long_raw(i, structure, candles, config) for i in range(n)])
+    pullback_short = np.array([_pullback_short_raw(i, structure, candles, config) for i in range(n)])
+    continuation_long = np.array([_continuation_long_raw(i, structure, candles, config) for i in range(n)])
+    continuation_short = np.array([_continuation_short_raw(i, structure, candles, config) for i in range(n)])
+    raw = pullback_long | pullback_short | continuation_long | continuation_short
+    return FamilyTimeline(
+        pullback_long=pullback_long, pullback_short=pullback_short,
+        continuation_long=continuation_long, continuation_short=continuation_short,
+        raw=raw, fired=_apply_cooldown(raw, config.cooldown_bars),
+    )
+
+
 def _apply_cooldown(raw_mask: NDArray[np.bool_], cooldown_bars: int) -> NDArray[np.bool_]:
     n = len(raw_mask)
     out = np.zeros(n, dtype=bool)
@@ -542,30 +590,19 @@ def evaluate_avwap(
         grade = AvwapGradeResult(grade="none", score=0.0, components={})
         return structure, AvwapEvaluation(family=None, direction=0, grade=grade, stop_target=None, warming_up=True)
 
-    pb_long_raw = np.array([_pullback_long_raw(i, structure, candles, config) for i in range(n)])
-    pb_short_raw = np.array([_pullback_short_raw(i, structure, candles, config) for i in range(n)])
-    cont_long_raw = np.array([_continuation_long_raw(i, structure, candles, config) for i in range(n)])
-    cont_short_raw = np.array([_continuation_short_raw(i, structure, candles, config) for i in range(n)])
+    timeline = family_timeline(candles, structure, config)
+    picked = timeline.family_at(t) if timeline.fired[t] else None
 
-    any_raw = pb_long_raw | pb_short_raw | cont_long_raw | cont_short_raw
-    fired = _apply_cooldown(any_raw, config.cooldown_bars)
-
-    if not fired[t]:
+    if picked is None:
         grade = AvwapGradeResult(grade="none", score=0.0, components={})
         return structure, AvwapEvaluation(family=None, direction=0, grade=grade, stop_target=None, warming_up=False)
 
-    if pb_long_raw[t]:
-        family, direction = "PULLBACK_LONG", 1
-        grade = _grade_pullback(t, structure, candles, config, "long", range_supports)
-    elif pb_short_raw[t]:
-        family, direction = "PULLBACK_SHORT", -1
-        grade = _grade_pullback(t, structure, candles, config, "short", range_supports)
-    elif cont_long_raw[t]:
-        family, direction = "CONTINUATION_LONG", 1
-        grade = _grade_continuation(t, structure, candles, config, "long", range_supports)
+    family, direction = picked
+    side: Literal["long", "short"] = "long" if direction == 1 else "short"
+    if family in ("PULLBACK_LONG", "PULLBACK_SHORT"):
+        grade = _grade_pullback(t, structure, candles, config, side, range_supports)
     else:
-        family, direction = "CONTINUATION_SHORT", -1
-        grade = _grade_continuation(t, structure, candles, config, "short", range_supports)
+        grade = _grade_continuation(t, structure, candles, config, side, range_supports)
 
     if grade.grade == "none":
         return structure, AvwapEvaluation(family=None, direction=0, grade=grade, stop_target=None, warming_up=False)

@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { TradingViewKiteChart as LegacyTradingViewKiteChart } from './TradingViewKiteChartLegacy';
 import { useKiteQuote } from '../../hooks/useKite';
 import { heikinAshi, supertrend } from '../../utils/indicators';
+import { NAVIGATOR_INDICATORS } from './navigatorOverlay';
 import {
   CHART_CROSSHAIR_EVENT,
   CHART_RANGE_KEYS,
@@ -45,6 +46,9 @@ const INDICATORS = [
   ['sma', 'SMA'],
   ['atr', 'ATR'],
   ['stoch', 'Stochastic'],
+  // Navigator's own evidence, served by the backend rather than computed here
+  // — see navigatorOverlay.ts for why it is never recomputed client-side.
+  ...NAVIGATOR_INDICATORS,
 ] as const;
 
 function formatPrice(value: number | null | undefined) {

@@ -19,6 +19,34 @@ log = get_logger(__name__)
 _IST = timezone(timedelta(hours=5, minutes=30))
 
 
+#: Indian equity/index options stop trading at 15:30 IST on their expiry day.
+_EXPIRY_CLOSE_IST = (15, 30)
+
+
+def intraday_dte_days(expiry: str, now: Optional[datetime] = None) -> float:
+    """Fractional days left until the 15:30 IST expiry close.
+
+    Whole-day arithmetic returns 0 for the entire expiry session, which drives
+    ``black_scholes_greeks`` and ``implied_vol`` into their degenerate branch:
+    delta hardcoded to ±1.00 or 0.00, gamma/theta/vega zeroed, IV unsolvable.
+    On the highest-volume day of the option's life the panel would then show a
+    fabricated delta of 1.00 for a contract that is very much still moving —
+    and the badges built on that delta would follow it.
+
+    The scanner already floors its own DTE at 1 day (``_dte_from_expiry``), so
+    before this the stop shown for a leg and the delta shown for the same leg
+    came from two different models. This is the display path's answer, and it
+    is the more precise one: hours, not days.
+    """
+    now = now or datetime.now(_IST)
+    try:
+        day = datetime.strptime(str(expiry)[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return 0.0
+    close = datetime(day.year, day.month, day.day, *_EXPIRY_CLOSE_IST, tzinfo=_IST)
+    return max(0.0, (close - now).total_seconds() / 86_400.0)
+
+
 def _spot_symbol(underlying: str, option_exchange: str) -> str:
     # SENSEX/BSE names quote on BSE; everything else on NSE. Display name == LTP
     # symbol for indices ("NIFTY 50") and stocks ("RELIANCE") alike.
@@ -99,7 +127,7 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
         except Exception as exc:  # noqa: BLE001
             log.warning("kite-engine detail quote failed: %s", exc)
 
-    today = datetime.now(_IST).date()
+    now_ist = datetime.now(_IST)
     options: List[OptionDetail] = []
     for leg in row.legs:
         q = quotes.get(f"{row.exchange}:{leg.option_symbol}", {}) or {}
@@ -109,23 +137,21 @@ async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> O
         ask = sell[0].price if sell else 0.0
         ltp = float(q.get("last_price") or 0.0)
         iv = float(q.get("implied_volatility") or 0.0) / 100.0
-        try:
-            dte = (datetime.strptime(leg.expiry, "%Y-%m-%d").date() - today).days
-        except (ValueError, TypeError):
-            dte = 0
+        dte_exact = intraday_dte_days(leg.expiry, now=now_ist)
+        dte = int(dte_exact)  # whole days, for display only
         # Live IV is absent after hours — back it out of the last traded premium so
         # greeks stay meaningful (the user often looks when the market is closed).
         if iv <= 0 and ltp > 0:
             iv = implied_vol(price=ltp, spot=spot_ref, strike=leg.strike,
-                             dte_days=dte, option_type=leg.option_type)
-        g = black_scholes_greeks(spot=spot_ref, strike=leg.strike, dte_days=dte,
+                             dte_days=dte_exact, option_type=leg.option_type)
+        g = black_scholes_greeks(spot=spot_ref, strike=leg.strike, dte_days=dte_exact,
                                  iv=iv, option_type=leg.option_type)
         options.append(OptionDetail(
             moneyness=leg.moneyness, option_type=leg.option_type,
             option_symbol=leg.option_symbol, strike=leg.strike, expiry=leg.expiry,
             lot_size=leg.lot_size, dte=dte, last_price=ltp, bid=bid, ask=ask, iv=iv,
             delta=g.delta, gamma=g.gamma, theta=g.theta, vega=g.vega,
-            depth_buy=buy, depth_sell=sell,
+            greeks_solved=g.solved, depth_buy=buy, depth_sell=sell,
             entry_premium=leg.premium_spot, initial_stop_premium=leg.entry_sl,
             trail_stop_premium=leg.premium_sl, target_premium=leg.premium_target,
             is_active=bool(leg.is_active),

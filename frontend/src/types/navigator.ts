@@ -288,6 +288,96 @@ export interface NavigatorSeriesResponse {
   points: Array<Record<string, unknown>>;
 }
 
+export type NavigatorSetupFamily =
+  | 'PULLBACK_LONG' | 'PULLBACK_SHORT' | 'CONTINUATION_LONG' | 'CONTINUATION_SHORT';
+
+/** One hourly bar of Navigator's own price evidence. Every level is nullable
+ *  because "warming up" and "no value" are real states — never zero. */
+export interface NavigatorChartBar {
+  t: number;                       // bar close, epoch SECONDS (chart-native)
+  upper: number | null;
+  mid: number | null;
+  lower: number | null;
+  session_vwap: number | null;
+  atr: number | null;
+  relative_volume: number | null;
+  mid_slope: number | null;
+  warming_up: boolean;
+  vol_score: number | null;
+  regime: string | null;
+  adx: number | null;
+  setup: NavigatorSetupFamily | null;
+  fired: boolean;                  // false = the cooldown suppressed this setup
+}
+
+export interface NavigatorChartAnchor {
+  kind: 'high' | 'low';
+  pivot_t: number;
+  confirmed_t: number;             // always later than pivot_t — anchors are never backfilled
+  price: number | null;
+}
+
+export interface NavigatorProjectedRange {
+  available: boolean;
+  period_open: number | null;
+  upper: number | null;
+  lower: number | null;
+  sample_count: number;
+  target_coverage: number | null;
+  conditioned: boolean;
+  unavailable_reason: string | null;
+  context: string;
+}
+
+export interface NavigatorChartFlowPoint {
+  t: number;
+  oscillator: number | null;
+  state: string | null;
+  direction: number;
+  confidence: number | null;
+  quality: string | null;
+}
+
+export interface NavigatorChartGammaPoint {
+  t: number;
+  signed_confidence: number;
+  direction: number;
+  confidence: number;
+  quality: string | null;
+}
+
+export interface NavigatorChartDecision {
+  t: number;
+  decision_id: string;
+  direction: string;
+  status: string;
+  trigger: string | null;
+  effective_score: number | null;
+  base_score: number | null;
+  execution_eligible: boolean;
+  data_quality: string | null;
+  reason_codes: string[];
+}
+
+export interface NavigatorChartResponse {
+  underlying: string;
+  token: number;
+  timeframe: string;               // always Navigator's own 60minute
+  enabled: boolean;
+  configured: boolean;             // is this underlying in Navigator's scan list
+  config_revision: number;
+  bar_count: number;
+  structure: NavigatorChartBar[];
+  anchors: NavigatorChartAnchor[];
+  projected: { daily: NavigatorProjectedRange; weekly: NavigatorProjectedRange } | null;
+  volatility: { regime: string | null; vol_score: number | null; adx: number | null } | null;
+  flow: NavigatorChartFlowPoint[];
+  gamma: NavigatorChartGammaPoint[];
+  decisions: NavigatorChartDecision[];
+  snapshot_count?: number;
+  notes: string[];
+}
+
 export interface CalibrationCriterion {
   key: string;
   label: string;

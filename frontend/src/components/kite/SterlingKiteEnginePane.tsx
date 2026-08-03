@@ -17,7 +17,7 @@ import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './SterlingWatchList';
 import { KiteActionButtons } from './KiteActionButtons';
 import { computeGreeksFromLeg } from '../../utils/computeGreeks';
-import { stopDistance, computeLegRR, rrScore } from './impactMath';
+import { stopDistance, selectBestLegs, type LegCandidate } from './impactMath';
 import { notifyOrder } from '../../store/useKiteNotifications';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -490,29 +490,22 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
   const { bestRRSyms, bestDeltaSyms } = React.useMemo(() => {
     const spot = uLastPx ?? row.spot ?? 0;
     const sd = stopDistance(spot, row.stop_loss ?? 0);
-    const bestRRByBucket = new Map<string, { sym: string; val: number }>();
-    const bestDeltaByBucket = new Map<string, { sym: string; val: number }>();
-    for (const leg of visibleLegs) {
+    const candidates: LegCandidate[] = visibleLegs.map((leg) => {
       const lq = quotes?.[`${row.exchange}:${leg.option_symbol}`];
-      const premium = lq?.last_price ?? (leg as any).premium_spot ?? 0;
-      if (premium <= 0) continue;
       const g = computeGreeksFromLeg(leg.strike, leg.expiry, leg.option_type, spot, lq, leg.lot_size ?? null);
-      // A leg with no solvable IV gets an intrinsic delta of exactly 1.00 and gamma 0,
-      // so it would win "highest delta" in its bucket on missing data alone (and score
-      // a degenerate R:R). It is not a candidate for either badge.
-      if (!hasUsableGreeks(g)) continue;
-      const bucket = moneynessBucket(leg.moneyness);
-      const { rr, effPct } = computeLegRR(g.delta, g.gamma, premium, sd);
-      const v = rrScore(rr, effPct);
-      const curRR = bestRRByBucket.get(bucket);
-      if (!curRR || v > curRR.val) bestRRByBucket.set(bucket, { sym: leg.option_symbol, val: v });
-      const ad = Math.abs(g.delta);
-      const curDelta = bestDeltaByBucket.get(bucket);
-      if (!curDelta || ad > curDelta.val) bestDeltaByBucket.set(bucket, { sym: leg.option_symbol, val: ad });
-    }
+      return {
+        symbol: leg.option_symbol,
+        premium: lq?.last_price ?? (leg as any).premium_spot ?? 0,
+        delta: g?.delta ?? 0, gamma: g?.gamma ?? 0, theta: g?.theta ?? 0,
+        // A leg with no solvable IV gets an intrinsic delta of exactly 1.00 and
+        // gamma 0, so it would win "highest delta" on missing data alone.
+        solved: hasUsableGreeks(g),
+      };
+    });
+    const picked = selectBestLegs(candidates, sd);
     return {
-      bestRRSyms: new Set(Array.from(bestRRByBucket.values(), (x) => x.sym)),
-      bestDeltaSyms: new Set(Array.from(bestDeltaByBucket.values(), (x) => x.sym)),
+      bestRRSyms: new Set(picked.bestR ? [picked.bestR] : []),
+      bestDeltaSyms: new Set(picked.bestDelta ? [picked.bestDelta] : []),
     };
   }, [uLastPx, row, visibleLegs, quotes]);
 
@@ -757,11 +750,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
                       {bestRRSyms.has(leg.option_symbol) && (
-                        <span title="Best reward-to-risk within its ITM/ATM/OTM bucket for a 1R move"
+                        <span title="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop"
                           style={{ fontSize: 12, color: k.dim, lineHeight: 1 }}>✝</span>
                       )}
                       {bestDeltaSyms.has(leg.option_symbol) && (
-                        <span title="Highest delta within its ITM/ATM/OTM bucket — most responsive to the underlying"
+                        <span title="Highest delta across this signal's strikes — most responsive to the underlying"
                           style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: 0.75 }}>▲</span>
                       )}
                     </span>
@@ -953,11 +946,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
-                       <span title="Best reward-to-risk within its ITM/ATM/OTM bucket for a 1R move"
+                       <span title="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop"
                          style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
                      )}
                      {bestDeltaSyms.has(leg.option_symbol) && (
-                       <span title="Highest delta within its ITM/ATM/OTM bucket — most responsive to the underlying"
+                       <span title="Highest delta across this signal's strikes — most responsive to the underlying"
                          style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
                      )}
                      {stopBreached && (
@@ -1776,7 +1769,7 @@ function InlineDropdown<T extends string>({
 function BestOnlyToggle({ on, onChange }: { on: boolean; onChange: () => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-      title="Show only the best strikes per signal: ✝ best reward:risk and ▲ highest delta">
+      title="Show only the best strikes per signal: ✝ best carry-adjusted R and ▲ highest delta. Signals with fewer than two rankable strikes are left whole — nothing to choose between.">
       <span style={{ fontSize: 10, color: on ? k.blue : k.dim }}>Best ✝▲</span>
       <button onClick={onChange} aria-pressed={on} aria-label="Show best strikes only"
         style={{

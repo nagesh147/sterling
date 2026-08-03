@@ -24,6 +24,9 @@ const useCandlesMock = vi.fn();
 vi.mock('../../../hooks/useCandles', () => ({ useCandles: (...args: any[]) => useCandlesMock(...args) }));
 vi.mock('../../../hooks/useKite', () => ({ useKitePositions: () => ({ data: null }) }));
 vi.mock('../../../hooks/useKiteOptionChain', () => ({ useKiteOptionChain: () => ({ data: null }) }));
+// The Navigator chart overlay only fetches when one of its indicators is on;
+// these tests render without a QueryClientProvider, so stub the hook out.
+vi.mock('../../../hooks/useNavigator', () => ({ useNavigatorChart: () => ({ data: null, isLoading: false, error: null }) }));
 vi.mock('../../../store/useOrderWindowStore', () => ({
   useOrderWindowStore: (sel?: any) =>
     (sel ? sel({ openOrderWindow: vi.fn() }) : { openOrderWindow: vi.fn() }),

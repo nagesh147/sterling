@@ -17,7 +17,12 @@ import {
 } from './ChartIcons';
 import { MiniGridPane } from './MiniGridPane';
 import { freshTripleAlignmentIndex, nearestTimeIndex } from './signalMarkerLogic';
+import {
+  anchorMarkers, bandSeries, decisionMarkers, flowHistogram, gammaSeries,
+  hasNavigatorIndicator, projectedLevels, setupMarkers,
+} from './navigatorOverlay';
 import type { SignalChartData } from '../../types/kiteEngine';
+import type { NavigatorChartResponse } from '../../types/navigator';
 import {
   ChartTemplate,
   ComparisonOverlay,
@@ -71,6 +76,9 @@ interface TradingViewKiteChartProps {
   drawMode?: string;
   onDrawModeChange?: (m: any) => void;
   signalData?: SignalChartData;
+  /** Per-bar Navigator evidence, fetched by the parent only while a `nav-*`
+   *  indicator is on. Always hourly — see navigatorOverlay.ts. */
+  navigatorChart?: NavigatorChartResponse | null;
   /** Fired once the main chart has finished a structural rebuild (createChart +
    *  all series/indicators/drawings set) — used by the parent to hide a
    *  switch-instrument loading overlay in sync with the actual expensive work,
@@ -106,6 +114,7 @@ export function TradingViewKiteChart({
   symbolPos,
   persistedZoom,
   signalData,
+  navigatorChart,
   onTfChange,
   onIsHAChange,
   onIsLogScaleChange,
@@ -184,6 +193,7 @@ export function TradingViewKiteChart({
   // structural rebuild rather than on every poll tick.
   const symbolPosRef = useRef<any>(null);
   const signalDataRef = useRef<any>(undefined);
+  const navigatorChartRef = useRef<NavigatorChartResponse | null | undefined>(undefined);
   // Kept fresh via a ref (not a dep) so calling it doesn't force the expensive
   // structural effect below to re-run whenever the parent passes a new closure.
   const onChartReadyRef = useRef<((readyKey?: string) => void) | undefined>(onChartReady);
@@ -594,6 +604,18 @@ export function TradingViewKiteChart({
   tvRef.current = tv;
   symbolPosRef.current = symbolPos;
   signalDataRef.current = signalData;
+  navigatorChartRef.current = navigatorChart;
+
+  // A content key, not the object identity: react-query hands back a fresh
+  // object on every refetch, and depending on that would rebuild the chart
+  // (and reset the zoom) on a poll tick that changed nothing.
+  const navigatorKey = navigatorChart
+    ? [
+      navigatorChart.underlying, navigatorChart.config_revision, navigatorChart.bar_count,
+      navigatorChart.structure[navigatorChart.structure.length - 1]?.t ?? 0,
+      navigatorChart.decisions.length, navigatorChart.flow.length,
+    ].join(':')
+    : '';
 
   // Compute volume profile data (full histogram)
   const volumeProfile = useMemo(() => {
@@ -987,6 +1009,87 @@ export function TradingViewKiteChart({
       addSupertrendWithDirection(p, m, `ST slow (${p},${m})`, 'st-slow');
     }
 
+    // Navigator overlays. Everything here comes from the backend's own
+    // evaluation of Navigator's hourly bars — nothing is recomputed locally,
+    // because a second implementation could draw a setup the engine never saw.
+    // Every marker on the candle series goes through this one array.
+    // `createSeriesMarkers` REPLACES the whole marker set for a series, so the
+    // text-note, position, Navigator and signal-entry markers each used to wipe
+    // whichever ran before them — only the last block's markers survived.
+    const chartMarkers: any[] = [];
+
+    const navigator = navigatorChartRef.current;
+    const navActive = hasNavigatorIndicator(activeIndicators);
+    if (navigator && navActive && times.length) {
+      const navPalette = {
+        long: tv.green, short: tv.red, neutral: tv.dim || tv.text,
+        muted: (tv.dim || tv.text) + '77', accent: tv.purple || tv.blue,
+      };
+      const navMarkers: any[] = [];
+
+      if (activeIndicators.has('nav-structure')) {
+        const style = indicatorStyle('nav-structure', { color: tv.purple || tv.blue, secondaryColor: tv.cyan, lineWidth: 1, visible: true });
+        const band: Array<[string, 'upper' | 'mid' | 'lower' | 'session_vwap', string, number]> = [
+          ['navUpper', 'upper', 'Nav upper', 1],
+          ['navMid', 'mid', 'Nav mid (AVWAP)', 2],
+          ['navLower', 'lower', 'Nav lower', 1],
+          ['navSessionVwap', 'session_vwap', 'Nav session VWAP', 1],
+        ];
+        band.forEach(([refKey, key, title, width]) => {
+          const points = bandSeries(navigator.structure, key, times);
+          if (!points.length) return;
+          const series = chart.addSeries(LineSeries, {
+            color: key === 'session_vwap' ? (style.secondaryColor || tv.cyan) + 'aa' : style.color + (key === 'mid' ? 'ff' : '88'),
+            lineWidth: width as any, visible: style.visible,
+            lineStyle: key === 'session_vwap' ? (2 as any) : (0 as any),
+            priceLineVisible: false, lastValueVisible: key === 'mid', title,
+          });
+          series.setData(points as any);
+          seriesRefs.current[refKey] = series;
+        });
+        navMarkers.push(...anchorMarkers(navigator, times, navPalette));
+      }
+
+      if (activeIndicators.has('nav-range') && candleS) {
+        projectedLevels(navigator).forEach((level, idx) => {
+          const line = candleS!.createPriceLine({
+            price: level.price, color: level.kind === 'daily' ? tv.amber : tv.purple || tv.blue,
+            lineWidth: 1 as any, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: level.label,
+          });
+          seriesRefs.current[`navRange${idx}`] = line;
+        });
+      }
+
+      if (activeIndicators.has('nav-flow')) {
+        const flowPoints = flowHistogram(navigator, times, navPalette);
+        if (flowPoints.length) {
+          const flowSeries = chart.addSeries(HistogramSeries, {
+            priceScaleId: 'nav-flow', priceLineVisible: false, lastValueVisible: false, title: 'Nav flow',
+          });
+          chart.priceScale('nav-flow').applyOptions({ visible: false, scaleMargins: { top: 0.72, bottom: 0.04 } });
+          flowSeries.setData(flowPoints as any);
+          seriesRefs.current.navFlow = flowSeries;
+        }
+        const gammaPoints = gammaSeries(navigator, times);
+        if (gammaPoints.length) {
+          const gamma = chart.addSeries(LineSeries, {
+            color: (tv.orange || tv.amber) + 'cc', lineWidth: 1 as any, priceScaleId: 'nav-gamma',
+            priceLineVisible: false, lastValueVisible: false, title: 'Nav gamma',
+          });
+          chart.priceScale('nav-gamma').applyOptions({ visible: false, scaleMargins: { top: 0.72, bottom: 0.04 } });
+          gamma.setData(gammaPoints as any);
+          seriesRefs.current.navGamma = gamma;
+        }
+      }
+
+      if (activeIndicators.has('nav-decisions')) {
+        navMarkers.push(...setupMarkers(navigator.structure, times, navPalette));
+        navMarkers.push(...decisionMarkers(navigator.decisions, times, navPalette));
+      }
+
+      chartMarkers.push(...navMarkers);
+    }
+
     // Volume
     if (activeIndicators.has('vol')) {
       const volumeStyle = indicatorStyle('vol', { color: tv.green, secondaryColor: tv.red, lineWidth: 1, visible: true });
@@ -1146,13 +1249,13 @@ export function TradingViewKiteChart({
         side1.setData([{ time: (t1 - delta) as any, value: y1 }, { time: (t1 + delta) as any, value: y2 }]);
         side2.setData([{ time: (t2 - delta) as any, value: y1 }, { time: (t2 + delta) as any, value: y2 }]);
       } else if (d.type === 'text' && candleS!! && d.time != null) {
-        createSeriesMarkers?.(candleS!, [{
+        chartMarkers.push({
           time: d.time as any,
           position: 'aboveBar',
           color: d.color || tv.text,
           shape: 'square',
           text: (d.text || 'Note').slice(0, 14),
-        }]);
+        });
       } else if (d.type === 'pitchfork' && d.points && d.points.length === 3) {
         const [a, b, c] = d.points;
         const midBC = { time: (((b.time as any) + (c.time as any)) / 2), price: (b.price + c.price) / 2 };
@@ -1179,9 +1282,9 @@ export function TradingViewKiteChart({
         const entryLine = chart.addSeries(LineSeries, { color: tv.blue, lineWidth: 1, lineStyle: 2 as any, priceLineVisible: false, lastValueVisible: true });
         seriesRefs.current.posEntry = entryLine;
         entryLine.setData(times.map((t: number) => ({ time: t as any, value: entryP })));
-        createSeriesMarkers?.(candleS!, [{
+        chartMarkers.push({
           time: times[times.length - 1] as any, position: 'aboveBar', color: tv.blue, shape: 'arrowDown', text: 'Pos',
-        }]);
+        });
       }
     }
 
@@ -1227,8 +1330,15 @@ export function TradingViewKiteChart({
             text: 'Entry',
           });
         }
-        if (markers.length) createSeriesMarkers?.(candleS, markers);
+        chartMarkers.push(...markers);
       } catch { /* invalid signal metadata must never break chart rendering */ }
+    }
+
+    // Single emit for every marker source above — sorted, because
+    // lightweight-charts requires markers in ascending time order.
+    if (chartMarkers.length && candleS) {
+      chartMarkers.sort((a, b) => Number(a.time) - Number(b.time));
+      createSeriesMarkers?.(candleS, chartMarkers);
     }
 
     mainChartRef.current = chart;
@@ -1378,7 +1488,7 @@ export function TradingViewKiteChart({
       previewSeriesRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles, workspace, replayIndex]);
+  }, [symbol, tf, activeIndicators, params, tv, drawings, isLogScale, isDark, persistedZoom, onZoomChange, showVP, chartType, layoutMode, hasCandles, workspace, replayIndex, navigatorKey]);
 
   // Sub RSI pane. Reads baseCandles via the ref (see main chart effect above) so
   // this pane also only tears down/rebuilds on structural changes, not on every

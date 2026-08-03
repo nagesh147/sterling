@@ -205,6 +205,11 @@ class OptionDetail(BaseModel):
     gamma: float = 0.0
     theta: float = 0.0
     vega: float = 0.0
+    #: False when Black-Scholes could not be evaluated and `delta` is only the
+    #: intrinsic sign (±1.00 / 0.00) with the other greeks zeroed. Consumers must
+    #: gate ranking and "best strike" badges on this rather than guessing from
+    #: `iv > 0` — a fabricated delta of 1.00 outranks every real one.
+    greeks_solved: bool = True
     depth_buy: List[DepthLevel] = []
     depth_sell: List[DepthLevel] = []
     # The signal's own premium levels for this leg, mirroring the board's

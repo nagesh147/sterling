@@ -10,7 +10,7 @@ import { KiteActionButtons } from './KiteActionButtons';
 import { useKiteSettings } from '../../store/useKiteSettings';
 import { SignalImpactCalculator, PremiumBreakdown } from './SignalImpactCalculator';
 import { NavigatorEvidencePanel } from './NavigatorEvidencePanel';
-import { stopDistance, computeLegRR, rrScore } from './impactMath';
+import { selectBestLegs, stopDistance } from './impactMath';
 
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
 
@@ -624,21 +624,17 @@ export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onS
                   </div>
                 ) : (
                   (() => {
-                    // ✝ BEST R:R — same logic as the impact calculator, applied to the leg list.
+                    // ✝ / ▲ come from the ONE shared selector, so this pane, the
+                    // card, the impact calculator and the watchlist markers can
+                    // never disagree about which strike is "best".
                     const sd = stopDistance(data.spot_now || data.spot_at_trigger, data.stop_loss);
-                    let bestSym: string | null = null;
-                    let bestVal = -Infinity;
-                    let bestDeltaSym: string | null = null;
-                    let bestDeltaVal = -Infinity;
-                    for (const leg of data.options) {
-                      const premium = leg.last_price || 0;
-                      if (premium <= 0) continue;
-                      const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
-                      const v = rrScore(rr, effPct);
-                      if (v > bestVal) { bestVal = v; bestSym = leg.option_symbol; }
-                      const ad = Math.abs(leg.delta);
-                      if (ad > bestDeltaVal) { bestDeltaVal = ad; bestDeltaSym = leg.option_symbol; }
-                    }
+                    const { bestR: bestSym, bestDelta: bestDeltaSym } = selectBestLegs(
+                      data.options.map((leg) => ({
+                        symbol: leg.option_symbol, premium: leg.last_price || 0,
+                        delta: leg.delta, gamma: leg.gamma, theta: leg.theta,
+                        solved: leg.greeks_solved !== false,
+                      })), sd,
+                    );
                     return data.options.map((leg) => (
                       <LegCard key={leg.option_symbol} leg={leg} exchange={data.exchange} underlying={underlying} spotPx={data.spot_now || undefined} isBest={leg.option_symbol === bestSym} isBestDelta={leg.option_symbol === bestDeltaSym} />
                     ));

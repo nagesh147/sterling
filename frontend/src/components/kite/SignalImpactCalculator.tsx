@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { k, tint } from '../../styles/kiteUI';
 import type { EngineDetailResponse, OptionDetail } from '../../types/kiteEngine';
-import { stopDistance, computeLegRR, rrScore } from './impactMath';
+import { computeLegImpact, selectBestLegs, stopDistance } from './impactMath';
 import { InstrumentLabel } from './InstrumentLabel';
 import { useKiteQuote } from '../../hooks/useKite';
 import { useKiteSettings } from '../../store/useKiteSettings';
@@ -21,7 +21,7 @@ function dirColor(q: any, chgType: string, showDir: boolean): string {
 // All figures are first-order (delta) with a gamma correction for larger moves,
 // using the live Black-Scholes greeks the backend already computed per leg. They
 // are decision aids, not fills — real P&L depends on exit IV and spread.
-// Shared pure helpers (stopDistance, computeLegRR, rrScore, defaultMove) live in
+// Shared pure helpers (stopDistance, computeLegImpact, selectBestLegs, defaultMove) live in
 // ./impactMath so this file exports only components and stays Fast-Refresh-safe.
 
 interface Row {
@@ -35,7 +35,7 @@ interface Row {
   thetaPerLotDay: number;      // ₹/lot/day decay (negative)
   breakEvenPts: number;        // pts the underlying must move to recover premium
   probItm: number;             // ≈ |delta| × 100
-  rr: number | null;           // reward : risk (proj gain / risk-to-stop)
+  rr: number | null;           // carry-adjusted R: (1R gain − one day of theta) / risk-to-stop
   effPct: number;              // proj gain as % of cost deployed
 }
 
@@ -46,21 +46,24 @@ function computeRow(leg: OptionDetail, move: number, stopMove: number): Row {
   const gamma = Math.abs(leg.gamma) || 0;
   const theta = leg.theta || 0; // per-share per-day, already signed (negative)
 
-  // Δpremium ≈ δ·move + ½·γ·move²  (gamma helps a buyer on a favourable move)
+  // Same shared maths the ✝ badge ranks on, so this table and the badge can
+  // never tell the user two different stories about the same leg.
+  const impact = computeLegImpact({
+    delta: leg.delta, gamma: leg.gamma, theta, premium, stopDist: stopMove,
+  });
+  // The gain column answers "what if the underlying moves `move`", which is the
+  // user's own slider and independent of the 1R risk unit, so it keeps its own
+  // gross figure; the ranking below is the carry-adjusted one.
   const optMovePerShare = delta * move + 0.5 * gamma * move * move;
   const projGainPerLot = optMovePerShare * lot;
   const costPerLot = premium * lot;
-
-  // Loss if the underlying runs to the signal's stop: premium drops ≈ δ·stopMove,
-  // but it can never fall below zero — capped at the premium paid.
-  const lossPerShareAtStop = Math.min(premium, delta * stopMove);
-  const riskToStopPerLot = lossPerShareAtStop * lot;
+  const riskToStopPerLot = impact.risk * lot;
 
   const thetaPerLotDay = theta * lot;
   const breakEvenPts = delta > 0 ? premium / delta : Infinity;
   const probItm = Math.round(delta * 100);
-  const rr = riskToStopPerLot > 0 ? projGainPerLot / riskToStopPerLot : null;
-  const effPct = costPerLot > 0 ? (projGainPerLot / costPerLot) * 100 : 0;
+  const rr = impact.netR;
+  const effPct = impact.effPct;
 
   return {
     leg, premium, lot, costPerLot, optMovePerShare, projGainPerLot,
@@ -115,26 +118,19 @@ export function SignalImpactCalculator({ data, onBuy, updatedAt, headless }: Pro
     [data.options, move, riskDist],
   );
 
-  // Recommend the strike with the best reward:risk for this move. Ties/no-stop
-  // fall back to capital efficiency.
-  const recommended = useMemo(() => {
-    if (!rows.length) return null;
-    const scored = [...rows].sort((a, b) => {
-      const ar = a.rr ?? a.effPct / 100;
-      const br = b.rr ?? b.effPct / 100;
-      return br - ar;
-    });
-    return scored[0]?.leg.option_symbol ?? null;
-  }, [rows]);
-
-  // Best delta: leg with the highest |delta| (most responsive to the underlying —
-  // the deepest ITM strike here moves nearest 1:1 with spot).
-  const bestDeltaSym = useMemo(() => {
-    if (!rows.length) return null;
-    return rows.reduce((best, r) =>
-      Math.abs(r.leg.delta) > Math.abs(best.leg.delta) ? r : best
-    ).leg.option_symbol;
-  }, [rows]);
+  // Both badges come from the one shared selector — it applies the priced and
+  // solved-greeks gates this table used to skip, and returns nulls when fewer
+  // than two legs are rankable rather than crowning a lone survivor.
+  const { bestR: recommended, bestDelta: bestDeltaSym } = useMemo(
+    () => selectBestLegs(
+      data.options.map((leg) => ({
+        symbol: leg.option_symbol, premium: leg.last_price || 0,
+        delta: leg.delta, gamma: leg.gamma, theta: leg.theta,
+        solved: leg.greeks_solved !== false,
+      })), riskDist,
+    ),
+    [data.options, riskDist],
+  );
 
   if (!data.options.length) return null;
 
@@ -368,31 +364,16 @@ export function PremiumBreakdown({ data, headless }: { data: EngineDetailRespons
   );
   const { data: legQuotes } = useKiteQuote(legSyms, legSyms.length > 0);
 
-  const recSym = useMemo(() => {
-    const sd = stopDistance(spot, data.stop_loss);
-    let best: string | null = null;
-    let bestVal = -Infinity;
-    for (const leg of data.options) {
-      const premium = leg.last_price || 0;
-      if (premium <= 0) continue;
-      const { rr, effPct } = computeLegRR(leg.delta, leg.gamma, premium, sd);
-      const v = rrScore(rr, effPct);
-      if (v > bestVal) { bestVal = v; best = leg.option_symbol; }
-    }
-    return best;
-  }, [data.options, spot, data.stop_loss]);
-
-  // Best delta — highest |delta| among priced legs (matches the ▲ in the table/legs).
-  const bestDeltaSym = useMemo(() => {
-    let best: string | null = null;
-    let bestVal = -Infinity;
-    for (const leg of data.options) {
-      if ((leg.last_price || 0) <= 0) continue;
-      const ad = Math.abs(leg.delta);
-      if (ad > bestVal) { bestVal = ad; best = leg.option_symbol; }
-    }
-    return best;
-  }, [data.options]);
+  const { bestR: recSym, bestDelta: bestDeltaSym } = useMemo(
+    () => selectBestLegs(
+      data.options.map((leg) => ({
+        symbol: leg.option_symbol, premium: leg.last_price || 0,
+        delta: leg.delta, gamma: leg.gamma, theta: leg.theta,
+        solved: leg.greeks_solved !== false,
+      })), stopDistance(spot, data.stop_loss),
+    ),
+    [data.options, spot, data.stop_loss],
+  );
 
   const rows = data.options.filter((leg) => (leg.last_price || 0) > 0);
   if (!rows.length) return null;

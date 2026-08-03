@@ -158,6 +158,11 @@ export interface OptionDetail {
   gamma: number;
   theta: number;
   vega: number;
+  /** False when Black-Scholes could not be evaluated and `delta` is only the
+   *  intrinsic sign (±1.00 / 0.00). Such a leg must never win a "best strike"
+   *  badge — a fabricated 1.00 outranks every real delta. Optional so an older
+   *  cached response defaults to trusting its greeks. */
+  greeks_solved?: boolean;
   depth_buy: DepthLevel[];
   depth_sell: DepthLevel[];
   // The signal's own premium plan for this leg — the board's Entry / SL / TSL /

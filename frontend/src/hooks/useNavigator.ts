@@ -4,7 +4,7 @@ import { notifyOrder } from '../store/useKiteNotifications';
 import type {
   CalibrationReportResponse,
   NavigatorCalibrationResponse, NavigatorConfigModel, NavigatorConfigResponse,
-  NavigatorActivityResponse, NavigatorScanResponse, NavigatorSeriesResponse,
+  NavigatorActivityResponse, NavigatorChartResponse, NavigatorScanResponse, NavigatorSeriesResponse,
   NavigatorSignalsPage, NavigatorStatusResponse,
 } from '../types/navigator';
 import type { EngineSignalRow, SignalsResponse } from '../types/kiteEngine';
@@ -155,6 +155,20 @@ export function useNavigatorSeries(underlying: string | null) {
     queryKey: ['navigator-series', underlying],
     queryFn: () => api.get<NavigatorSeriesResponse>(`${N}/series/${encodeURIComponent(underlying as string)}`),
     enabled: !!underlying,
+  });
+}
+
+/** Per-bar Navigator evidence for the chart overlay.
+ *
+ * Only fetched while a Navigator indicator is switched on — the request costs
+ * a Kite historical call, so an untoggled overlay must cost nothing. */
+export function useNavigatorChart(underlying: string | null, enabled: boolean) {
+  return useQuery<NavigatorChartResponse>({
+    queryKey: ['navigator-chart', underlying],
+    queryFn: () => api.get<NavigatorChartResponse>(`${N}/chart/${encodeURIComponent(underlying as string)}`),
+    enabled: enabled && !!underlying,
+    retry: false,
+    staleTime: 60_000,
   });
 }
 

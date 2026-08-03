@@ -24,13 +24,26 @@ class Greeks:
     gamma: float
     theta: float  # per calendar day
     vega: float   # per 1% vol move
+    #: False when the model could not be evaluated (expired, no vol, bad inputs)
+    #: and `delta` is just the intrinsic sign with the rest zeroed. Without this
+    #: flag a "no data" answer is shaped exactly like a very confident one —
+    #: delta ±1.00, gamma 0 — and every consumer has to re-invent the `iv > 0`
+    #: heuristic to tell them apart. Most did not.
+    solved: bool = True
 
 
 def black_scholes_greeks(
     *, spot: float, strike: float, dte_days: float, iv: float,
     option_type: str, rate: float = _R_DEFAULT,
 ) -> Greeks:
-    """Greeks for a European option. ``option_type`` is "CE"/"call" or "PE"/"put"."""
+    """Greeks for a European option. ``option_type`` is "CE"/"call" or "PE"/"put".
+
+    ``dte_days`` is fractional on purpose: an option expiring at 15:30 today has
+    hours of life left, and passing a whole-day 0 collapses it into the
+    degenerate branch below, which reports delta ±1.00 for something that is
+    still trading with real gamma. Callers on the display path must pass the
+    intraday fraction (see ``detail.dte_years_fraction``).
+    """
     is_call = str(option_type).upper().startswith("C")
     t = max(dte_days, 0.0) / 365.0
     # Degenerate: expired or no vol → delta is the intrinsic sign, rest ~0.
@@ -39,7 +52,7 @@ def black_scholes_greeks(
             delta = 1.0 if spot > strike else 0.0
         else:
             delta = -1.0 if spot < strike else 0.0
-        return Greeks(delta=delta, gamma=0.0, theta=0.0, vega=0.0)
+        return Greeks(delta=delta, gamma=0.0, theta=0.0, vega=0.0, solved=False)
 
     sig_rt = iv * math.sqrt(t)
     d1 = (math.log(spot / strike) + (rate + 0.5 * iv * iv) * t) / sig_rt

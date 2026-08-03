@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { k, Icons, tint } from '../../styles/kiteUI';
 import { useCandles } from '../../hooks/useCandles';
 import { useOrderWindowStore } from '../../store/useOrderWindowStore';
@@ -8,6 +8,8 @@ import { api } from '../../utils/api';
 import { heikinAshi, type Candle } from '../../utils/indicators';
 import { useKiteDrawings, Drawing } from '../../hooks/useKiteDrawings';
 import { TradingViewKiteChart } from '../charts/TradingViewKiteChart';
+import { hasNavigatorIndicator, navigatorUnderlyingForSymbol, overlayCaveats } from '../charts/navigatorOverlay';
+import { useNavigatorChart } from '../../hooks/useNavigator';
 import { OIView } from './OIView';
 import { KiteLoader } from './KiteLoader';
 import type { SignalChartData } from '../../types/kiteEngine';
@@ -191,6 +193,13 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
   });
   const [isHA, setIsHA] = useState(() => (signalData ? true : (globalChartStateCache?.isHA ?? false)));
   const [isDark, setIsDark] = useState(false);
+
+  // Navigator evidence is fetched only while one of its indicators is on (it
+  // costs a Kite historical call), and never for an option contract — its
+  // levels are on the UNDERLYING, so they do not belong on a premium axis.
+  const navigatorUnderlying = useMemo(() => navigatorUnderlyingForSymbol(symbol), [symbol]);
+  const navigatorWanted = hasNavigatorIndicator(active);
+  const navigatorChart = useNavigatorChart(navigatorUnderlying, navigatorWanted);
 
   const getSTParams = (target?: 'fast' | 'mid' | 'slow') => {
     switch (target) {
@@ -712,6 +721,29 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
         <span style={{ marginLeft: 'auto', fontSize: 9 }}>{baseCandles.length} bars {isHA ? 'HA' : ''}</span>
       </div>
 
+      {/* What the Navigator overlay cannot claim. Shown wherever it is switched
+          on, because an overlay whose gaps are invisible reads as a complete
+          picture — "Navigator saw nothing here" and "Navigator was not
+          watching here" look identical on a chart otherwise. */}
+      {navigatorWanted && (
+        <div style={{
+          padding: '3px 8px', borderBottom: `1px solid ${theme.border}`, background: theme.bg,
+          fontSize: 9, color: theme.dim, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center',
+        }}>
+          <span style={{ fontWeight: 600, color: theme.text }}>Navigator</span>
+          {!navigatorUnderlying && <span>Not available on an option contract — its evidence is computed on the underlying.</span>}
+          {navigatorUnderlying && navigatorChart.isLoading && <span>Loading hourly evidence for {navigatorUnderlying}…</span>}
+          {navigatorUnderlying && navigatorChart.error && (
+            <span style={{ color: theme.red }}>
+              {(navigatorChart.error as Error).message || 'Could not load Navigator evidence.'}
+            </span>
+          )}
+          {overlayCaveats(navigatorChart.data, tf).map((note) => (
+            <span key={note} style={{ padding: '1px 5px', border: `1px solid ${theme.border}`, borderRadius: 3 }}>{note}</span>
+          ))}
+        </div>
+      )}
+
       {/* The true shared advanced chart */}
       <div style={{ flex: 1, minHeight: 220, position: 'relative' }}>
         {/* Held back until the saved zoom (if any) is known - see zoomResolved
@@ -744,6 +776,7 @@ function ChartView({ symbol, onSymbolChange, trailTarget, signalData }: { symbol
             onActiveIndicatorsChange={handleActiveIndicatorsChange}
             onParamsChange={handleParamsChange}
             signalData={signalData}
+            navigatorChart={navigatorChart.data ?? null}
             onChartReady={handleChartReady}
           />
         )}
