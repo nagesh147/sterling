@@ -375,6 +375,13 @@ class EngineConfigModel(BaseModel):
     # "monitor" = tick-driven WS monitor exits on trail breach (intrabar, server-side)
     # "both"    = both (default; defense in depth for real money)
     stop_mode: Literal["broker", "monitor", "both"] = "both"
+    #: Arm a HAND-PLACED order the same way an auto-executed one is armed: registry
+    #: entry, `stop_mode` protection, expiry square-off — with the stop read off the
+    #: board's own plan for that contract. Default on, because the board already
+    #: displays an SL/TSL beside a manual position and that display has to be true.
+    #: Turning it off means a manual entry is yours to manage; the order response and
+    #: the activity log then say UNPROTECTED rather than implying a stop.
+    protect_manual_orders: bool = True
 
     # ── Directional mode (additive, opt-in) ───────────────────────────────────
     # Master toggle. False ⇒ existing engine, untouched (byte-identical).

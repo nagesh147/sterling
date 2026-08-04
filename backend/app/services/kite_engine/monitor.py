@@ -5,8 +5,10 @@ Two event handlers, both fed by the existing per-user KiteTicker WS — no polli
   * ``on_tick`` (C/D): for every price tick on a held contract, exit at market the
     moment the premium breaches the trail. This is intrabar and independent of the
     5-minute scan, so a fast collapse no longer rides unprotected between scans.
-    When a broker GTT also guards the position, the monitor cancels it after its
-    own exit so the stop can't double-fire.
+    When a broker GTT also guards the position, the GTT is cancelled FIRST and the
+    monitor stands down entirely if that cancel cannot be confirmed on a price
+    breach — at a shared trigger the broker's stop has very likely already fired,
+    and a second SELL would leave the account short. See ``_exit_position``.
 
   * ``on_order_update`` (E): consume Kite order postbacks to confirm fills (stamp
     the real average fill price), and to mark COMPLETE/REJECTED instead of assuming
@@ -107,12 +109,41 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
                       f"{symbol} exit filled at broker @ ₹{avg:.2f} — position reconciled closed")
             return
 
+        filled = int(float(order.get("filled_quantity") or 0) or 0)
+
         if status == _FILLED_STATUS and (is_entry or not oid):
             avg = float(order.get("average_price") or 0.0)
-            pos.mark_filled(uid, symbol, avg)
+            pos.mark_filled(uid, symbol, avg, filled_qty=filled)
+            qty_note = f" ({filled} qty)" if filled and filled != p.qty else ""
             state.log(uid, "info",
-                      f"Fill confirmed: {symbol} @ ₹{avg:.2f} (#{oid})")
+                      f"Fill confirmed: {symbol} @ ₹{avg:.2f}{qty_note} (#{oid})")
         elif status in _DEAD_STATUSES and (is_entry or not oid):
+            if filled > 0:
+                # PARTIALLY filled then cancelled: we DO hold something. Treating this
+                # as a rejection would leave a real position with no registry entry, no
+                # stop, no monitor and no expiry square-off — invisible and unguarded.
+                avg = float(order.get("average_price") or 0.0)
+                pos.mark_filled(uid, symbol, avg, filled_qty=filled)
+                state.log(uid, "info",
+                          f"⚠ {symbol} {status.lower()} after a PARTIAL fill — holding "
+                          f"{filled} qty @ ₹{avg:.2f}; protection kept on the filled part")
+                return
+            # Nothing filled → the position does not exist. Any protective GTT armed for
+            # it is now an ORPHAN: a resting SELL with nothing to sell, which opens a
+            # naked short if it ever triggers. Cancel it before forgetting the position.
+            if p.gtt_id and client is not None:
+                outcome = await pstop.cancel_stop_result(client, p.gtt_id)
+                if outcome == pstop.CANCELLED:
+                    state.log(uid, "info", f"Protective GTT #{p.gtt_id} cancelled ({symbol} never filled)")
+                else:
+                    state.log(uid, "order_failed",
+                              f"⚠ {symbol} never filled but its GTT #{p.gtt_id} could NOT be "
+                              f"cancelled ({outcome}) — check Zerodha for a resting SELL")
+                pos.update_stop(uid, symbol, p.stop_premium, gtt_id=0)
+            elif p.gtt_id:
+                state.log(uid, "order_failed",
+                          f"⚠ {symbol} never filled and its GTT #{p.gtt_id} was left armed "
+                          f"(no broker client on this postback path) — cancel it in Zerodha")
             pos.mark_rejected(uid, symbol, reason=str(order.get("status_message") or status))
             # Entry never filled → release the auto-open guard so the slot can re-enter.
             if p.guard_key:
@@ -122,8 +153,23 @@ async def on_order_update(uid: str, order: dict, *, client=None) -> None:
         log.debug("kite monitor on_order_update error for %s: %s", uid, exc)
 
 
-async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reason: Optional[str] = None) -> None:
-    """Market-exit the full quantity and cancel any broker GTT (trail breach or red count).
+def _is_price_breach(p: pos.OpenPosition, ltp: float) -> bool:
+    """True when the live price has reached the level the BROKER GTT is also armed at.
+
+    This is the one case where our own exit is redundant: the same price that made us
+    want out has already triggered the broker's stop.
+    """
+    if not p.gtt_id or p.stop_premium <= 0 or ltp <= 0:
+        return False
+    return pos.should_exit(p.stop_premium, ltp, p.direction)
+
+
+async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float,
+                         reason: Optional[str] = None) -> bool:
+    """Market-exit the full quantity and clear any broker GTT (trail breach, red count,
+    target, expiry, time stop, manual close). Returns True only when an exit order was
+    actually placed — a caller that reports "exited" on a bail would tell the user (and
+    the activity log) that a position was closed while it is still open.
     For options: always SELL. For futures: exit = opposite side (SELL if long, BUY if short)."""
     # Claim the exit synchronously (single-threaded loop → check-then-add is atomic):
     # if another exit path already holds this claim, or the position is no longer live,
@@ -132,10 +178,36 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
     # check keeps any later exit out.
     key = (uid, p.symbol)
     if key in _exiting or p.status not in (pos.OPEN, pos.PENDING):
-        return
+        return False
     _exiting.add(key)
     is_futures = p.vehicle == "futures"
     exit_side = "sell" if p.direction == "long" else "buy"
+
+    # ── the broker's stop gets out of the way FIRST ────────────────────────────
+    # `_exiting` only serialises OUR coroutines; Zerodha's GTT engine never takes it.
+    # With stop_mode="both" the GTT and this monitor are armed at the SAME price, and
+    # market data reaches us before a fill postback does — so on a price breach the
+    # GTT has very likely already fired and its SELL is live at the exchange. Selling
+    # again here sells twice and leaves a NAKED SHORT option.
+    #
+    # So: cancel first, and only place our own exit if the broker stop is provably out
+    # of the way — or if this exit is NOT a price breach (a red-count, target, expiry
+    # or manual exit will never be executed by the GTT, so we must do it ourselves
+    # even when the cancel could not be confirmed).
+    if p.gtt_id:
+        outcome = await pstop.cancel_stop_result(client, p.gtt_id)
+        if outcome != pstop.CANCELLED and _is_price_breach(p, ltp):
+            _exiting.discard(key)
+            state.log(uid, "info",
+                      f"{p.symbol}: broker GTT #{p.gtt_id} could not be cancelled "
+                      f"({outcome}) and price is at the stop — leaving the exit to the "
+                      f"broker rather than risking a second SELL. Awaiting its fill.")
+            return False
+        if outcome == pstop.UNKNOWN:
+            state.log(uid, "info",
+                      f"⚠ {p.symbol}: GTT #{p.gtt_id} cancel unconfirmed; exiting anyway "
+                      f"because this is not a price-stop exit ({reason or 'no reason given'})")
+
     try:
         if is_futures:
             await client.place_order_future(
@@ -148,9 +220,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
     except Exception as exc:  # noqa: BLE001
         _exiting.discard(key)
         state.log(uid, "order_failed", f"Trail exit {exit_side.upper()} {p.symbol} failed: {exc}")
-        return
-    if p.gtt_id:
-        await pstop.cancel_stop(client, p.gtt_id)
+        return False
     breach_dir = "≥" if p.direction == "short" else "≤"
     close_reason = reason or f"trail breach @ ₹{ltp:.2f} {breach_dir} ₹{p.stop_premium:.2f}"
     pos.close(uid, p.symbol, reason=close_reason)
@@ -167,6 +237,7 @@ async def _exit_position(client, uid: str, p: pos.OpenPosition, ltp: float, reas
             await ticker_manager.unsubscribe(uid, [p.token])
         except Exception as _exc:# noqa: BLE001
             log.debug("suppressed: %s", _exc)
+    return True
 
 
 async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
@@ -184,16 +255,31 @@ async def on_tick(uid: str, token: int, ltp: float, *, client) -> Optional[str]:
                 return None  # not filled yet — nothing to protect
             # Price trail breach (original)
             price_exit = pos.should_exit(p.stop_premium, ltp, p.direction)
+            # Target, when the signal set one (Navigator only). Checked AFTER the stop
+            # below so a bar that somehow satisfies both is treated as a loss, never a
+            # win. Skipped entirely when a broker GTT holds the target, because that
+            # OCO already books it and the exchange cancels the other leg — running
+            # both would be two sell paths for one exit.
+            target = float(getattr(p, "target_premium", 0.0) or 0.0)
+            target_exit = bool(target) and not p.gtt_id and (
+                ltp >= target if p.direction == "long" else ltp <= target)
             # Red-count awareness (shared logic): if last scan reported enough reds for this position's entry-time exit_mode, exit.
             # This makes the 1/2/3-red (or +signal) counter drive auto-exits dynamically on live positions.
             reds = getattr(p, 'current_red_count', 0)
             mode = getattr(p, 'exit_mode', 'one_red')
             thresh = get_exit_threshold(mode)
             red_exit = reds >= thresh
-            if price_exit or red_exit:
-                close_reason = f"trail breach @ ₹{ltp:.2f} { '≤' if p.direction == 'long' else '≥' } ₹{p.stop_premium:.2f}" if price_exit else f"red count exit {reds}/{thresh} ({mode})"
-                await _exit_position(client, uid, p, ltp, reason=close_reason)
-                return p.symbol
+            if price_exit or red_exit or target_exit:
+                if price_exit:
+                    close_reason = (f"trail breach @ ₹{ltp:.2f} "
+                                    f"{'≤' if p.direction == 'long' else '≥'} ₹{p.stop_premium:.2f}")
+                elif red_exit:
+                    close_reason = f"red count exit {reds}/{thresh} ({mode})"
+                else:
+                    close_reason = (f"target reached @ ₹{ltp:.2f} "
+                                    f"{'≥' if p.direction == 'long' else '≤'} ₹{target:.2f}")
+                exited = await _exit_position(client, uid, p, ltp, reason=close_reason)
+                return p.symbol if exited else None
             return None
     except Exception as exc:  # noqa: BLE001
         log.debug("kite monitor on_tick error for %s: %s", uid, exc)

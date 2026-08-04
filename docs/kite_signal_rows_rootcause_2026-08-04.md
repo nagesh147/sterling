@@ -16,6 +16,77 @@ The board contained **7 live + 39 ended** signals in one list.
 
 ---
 
+# STOP-WORK FINDING — every position opened from this board is unprotected
+
+Found while re-prioritising the display defects by money impact. This outranks all five
+reported symptoms. Status: **CONFIRMED (code, three independent facts).**
+
+1. `positions.register` — the function that arms fill-tracking, the broker GTT stop, the tick
+   monitor, and ticker auto-subscribe — has **exactly one call site** in the entire backend:
+   [service.py:526](backend/app/services/kite_engine/service.py:526), inside
+   `_make_place_cb` ([service.py:248](backend/app/services/kite_engine/service.py:248)),
+   which is the **auto-exec** callback.
+2. `place_manual_order` ([service.py:57-97](backend/app/services/kite_engine/service.py:57))
+   performs a live-safety gate and a duplicate check, places the order, and returns. It never
+   registers the position, never places a protective GTT, never arms the monitor.
+3. `_square_off_expiring` ([service.py:565](backend/app/services/kite_engine/service.py:565))
+   iterates `positions.open_positions(uid)` — the registry. Its own docstring says it exits
+   "**auto-exec** option positions". Same for `_update_open_position_trails` and the time stop.
+
+Live config: **`auto_execute = false`**. Therefore *every* position currently being opened is
+manual, and therefore **no** position currently has: a broker stop, a monitor stop, a
+ratcheting trail, a time stop, or an expiry square-off.
+
+Meanwhile the board renders `SL`, `TSL` and `Target` on every leg, and the SL tooltip
+describes a live ratchet. The screen implies a managed trade; the backend has no record the
+trade exists.
+
+The board's Buy button opens the OrderWindow
+([SterlingKiteEnginePane.tsx:1105](frontend/src/components/kite/SterlingKiteEnginePane.tsx:1105))
+which submits via the standard `POST /kite/orders` path — so this applies to both manual order
+routes, since the single `register` call site excludes both.
+
+## Why the expiry gap is the sharp edge
+
+`vehicle = deep_itm_options` on NSE **stock** options, which are **physically settled** in
+India. A deep-ITM long call held through expiry with no square-off becomes a delivery
+obligation, not an expired premium. One lot, at the strikes in the live payload:
+
+| underlying | lot | strike | 1-lot deliverable notional |
+|---|---|---|---|
+| ICICIBANK | 700 | 1440 | ₹10,08,000 |
+| BHARTIARTL | 475 | 1960 | ₹9,31,000 |
+| ADANIENT | 309 | 3000 | ₹9,27,000 |
+| BAJFINANCE | 750 | 1140 | ₹8,55,000 |
+| LT | 175 | 4000 | ₹7,00,000 |
+| TCS | 225 | 2440 | ₹5,49,000 |
+| HDFCBANK | 650 | 740 | ₹4,81,000 |
+
+(NIFTY/SENSEX are cash-settled; the 14 stock names are not.) `expiry_square_off_days = 1` is
+configured and would handle this — but only for positions in the registry.
+
+Also off in the live config: `max_daily_loss_pct = null` (no daily-loss breaker),
+`risk_sizing = false` (the 1% `risk_pct` is not enforced), `wire_risk_infra = false`.
+Those are configuration choices, not defects — flagged for visibility.
+
+## Fix order
+
+- **Now (honest display, ~1 hour, UI only):** stop the board implying protection that is not
+  armed. On any row/leg not present in the positions registry, render the SL/TSL/Target cells
+  as advisory — e.g. `SL 48.4 (not armed)` — and change the tooltip. This removes the
+  misleading part today without touching any order path.
+- **Then (real fix, needs tests):** route manual fills into `positions.register` so the
+  monitor, trail, time stop and expiry square-off cover them. This arms live stop automation
+  on real money, so it needs the `_exit_position` `_exiting`-claim invariant respected and a
+  test per path before it goes near production.
+- **Independently:** the prior audit's five `[critical]` items
+  (`kite_signal_audit_2026-08-04.md:383,406,430,459,487`) are all on the auto-exec path and
+  remain **unverified**. They are dormant while `auto_execute = false`, and must be verified
+  *before* AUTO is ever switched on — `stop_mode = "both"` in particular is alleged to fire the
+  GTT and the monitor at an identical trigger and sell 2× quantity, leaving a naked short.
+
+---
+
 ## Complaint 4 first: "why is TCS there twice?"
 
 **Root cause: `scan_source = "both"` runs two independent sweeps and concatenates them.
@@ -181,7 +252,13 @@ Secondary contributors:
 - **`held_contract_scan` re-runs `_compile_rows` on already-grouped rows, keeping only
   `legs[0]`** — `_compile_rows` reads `r.legs[0]` ([scanner.py:281](backend/app/services/kite_engine/scanner.py:281))
   and is only idempotent for ungrouped input, so every other leg of a held contract is
-  dropped. (Also filed unverified at `kite_signal_audit_2026-08-04.md:586`.) **CONFIRMED (code).**
+  dropped. (Also filed unverified at `kite_signal_audit_2026-08-04.md:586`.)
+  **CONFIRMED — reproduced.** Six per-contract rows → `_compile_rows` → 1 card/6 legs; feeding
+  that card back in (as [held_contract_scan.py:215](backend/app/services/kite_engine/held_contract_scan.py:215)
+  does) → 1 card/**1 leg**, 5 dropped. The existing guard test
+  `test_compile_rows_is_idempotent_for_grouped_derivative_legs`
+  ([test_scanner.py:1159](backend/tests/engines/sterling_kite_engine/test_scanner.py:1159))
+  does **not** cover this: despite its name it only feeds *ungrouped* 1-leg rows.
 - **Chart-marker snapping.** The marker is not drawn at the backend's bar; the client
   re-derives the transition and snaps to the nearest one within a tolerance
   ([TradingViewKiteChartLegacy.tsx:1316](frontend/src/components/charts/TradingViewKiteChartLegacy.tsx:1316)
@@ -272,6 +349,25 @@ record of what fired (2, 3).
 - Differing SL/TSL between the spot and derivatives cards for the same contract is
   **correct** — an underlying-ST stop and a premium-ST stop are different stops.
 - The `len(candles) <= 1` guard in `evaluate_derivative_contract` is harmless (see ruled-out).
+
+## Revision (same day) — measured scale changes the recommended fix
+
+Measured against the live payload:
+
+- **24 of 30 derivatives cards currently merge legs from more than one trigger bar.**
+  Worst cases: SENSEX 13 legs across **7** bars, NIFTY 50 18 legs across 4, RELIANCE 6 across 4.
+  So the wrong header clock is not an edge case — it is the normal state of a derivatives card.
+- **39 of 46 rows are ended signals**; only 7 are live.
+- Simply adding the trigger bar to the group key would produce **91 cards instead of 46** —
+  truthful, but unusable as a flat list.
+
+Therefore the fix-table row 2 ("show per-leg times") and a naive group-key change are both
+insufficient. The grouping is **display-only** (auto-exec's `place_cb` runs on the raw
+pre-grouping row — [scanner.py:924](backend/app/services/kite_engine/scanner.py:924), and
+`_compile_rows` has only two call sites, both assigning `us.rows`), which means the honest fix
+is to stop grouping in the backend and make bar-and-source *levels of a view hierarchy*
+(underlying → source → trigger bar → contracts) rather than facts flattened into one card.
+See the structural plan discussed with the author.
 
 ## Caveats on this audit
 

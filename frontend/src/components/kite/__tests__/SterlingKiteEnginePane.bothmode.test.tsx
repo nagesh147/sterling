@@ -75,10 +75,13 @@ describe('SterlingKiteEnginePane — both-mode spot row keeps its columns aligne
     // The spot row (no per-leg premium) still renders the SL/TSL placeholder cells —
     // BEFORE the fix these were gated on per-row hasPremium and absent, collapsing the
     // row to a lone Exit cell that landed under the 'Target' header.
-    const sl = screen.getByTitle('Initial stop at entry (fast SuperTrend line)');
+    // Identified by testid, not by tooltip text: these cells' hover copy now lives in
+    // a portaled <Tip> card rather than a native `title` attribute, and the column
+    // alignment this test is about must not be coupled to how tooltips are rendered.
+    const sl = screen.getByTestId('leg-sl');
     expect(sl).toBeInTheDocument();
     expect(sl.textContent).toBe('—');
-    expect(screen.getByTitle('Trailing stop — ratchets tighter as SuperTrend lines flip red').textContent).toBe('—');
+    expect(screen.getByTestId('leg-tsl').textContent).toBe('—');
     // Exit still shows the row's red-counter progress (in its own column).
     expect(screen.getByText('1/1 red')).toBeInTheDocument();
   });

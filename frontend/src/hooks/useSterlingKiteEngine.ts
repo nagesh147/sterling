@@ -154,10 +154,17 @@ export function useEnginePlaceOrder() {
     mutationFn: (body) => api.post<EngineOrderResponse>(`${E}/order`, body),
     onSuccess: (data, body) => {
       qc.invalidateQueries({ queryKey: ['kite-engine-activity'] });
+      qc.invalidateQueries({ queryKey: ['kite-engine-open-positions'] });
+      // Whether the position is guarded is the single most important thing to say
+      // after a manual BUY — the board shows an SL/TSL beside it either way, so an
+      // unarmed entry has to be called out here rather than left to look protected.
+      const unprotected = data?.protected === false && body.side === 'BUY';
       notifyOrder({
-        kind: data?.status === 'duplicate' ? 'info' : 'placed',
-        title: data?.status === 'duplicate' ? 'Already submitted' : 'Order placed',
-        message: `${body.side} ${body.quantity} ${body.option_symbol}.`,
+        kind: data?.status === 'duplicate' ? 'info' : unprotected ? 'info' : 'placed',
+        title: data?.status === 'duplicate' ? 'Already submitted'
+          : unprotected ? 'Order placed — UNPROTECTED' : 'Order placed',
+        message: `${body.side} ${body.quantity} ${body.option_symbol}.`
+          + (data?.protection ? ` ${unprotected ? 'No automatic exit' : 'Protected'}: ${data.protection}.` : ''),
         orderId: data?.order_id,
       });
     },

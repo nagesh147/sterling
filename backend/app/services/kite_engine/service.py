@@ -17,7 +17,7 @@ from app.core.logging import get_logger
 from app.engines.sterling_kite_engine.config import SterlingKiteEngineConfig
 from app.engines.sterling_kite_engine.schemas import EngineConfigModel
 from app.services import live_safety
-from app.services.kite_engine import monitor, positions, protective_stop, sizing, state
+from app.services.kite_engine import monitor, positions, protection, protective_stop, sizing, state
 from app.services.kite_engine import futures as futures_mod
 from app.services.kite_engine.greeks import black_scholes_greeks, premium_stop_from_move
 from app.services.kite_engine import market_hours
@@ -59,8 +59,22 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     """Shared manual BUY/SELL path used by BOTH the detail-panel REST endpoint and
     the Telegram bot, so they apply the identical live-safety gate + idempotency and
     place through the same warm client. Returns a status dict (never raises):
-      {status: ok|duplicate|blocked|error, order_id?, message?, reason?, code?}
-    Callers map this to HTTP / chat replies."""
+      {status: ok|duplicate|blocked|error, order_id?, message?, reason?, code?,
+       protected?, protection?}
+    Callers map this to HTTP / chat replies.
+
+    A BUY here is a real position, so — when ``protect_manual_orders`` is on — it is
+    registered and armed through the same `protection.arm_position` the auto-exec
+    path uses, with the stop read off the board's own plan for that contract. Before
+    this, a hand-placed order got no registry entry, no broker stop and no monitor,
+    while the board kept showing it an SL, a TSL and a Target. `protected` says which
+    of those two worlds the caller is in, so the UI can stop implying a stop that
+    does not exist.
+
+    A SELL is an exit, not an entry: if it matches a position we hold, it goes
+    through the monitor's exit path so the manual sell and an automatic one cannot
+    both fire.
+    """
     from app.services.exchanges.kite import accounts as kite_accounts
     from app.services.exchanges.kite.errors import KiteError
 
@@ -80,6 +94,27 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     if not acct:
         return {"status": "error", "message": "No active Kite account."}
     client = await kite_accounts.acquire_client(acct)
+
+    # ── a manual SELL of something we hold is an EXIT ──────────────────────────
+    # Routing it through the monitor takes the same `_exiting` claim an automatic
+    # exit takes, so the user's sell and a trail/GTT exit cannot both place a SELL
+    # for one position — and the registry, realized PnL and guard release all happen
+    # exactly once, instead of the position lingering "open" after a manual close.
+    if norm == "sell":
+        held = positions.get(uid, option_symbol)
+        if held is not None and held.status in (positions.OPEN, positions.PENDING):
+            await monitor._exit_position(
+                client, uid, held, held.stop_premium, reason="manual exit from the board")
+            live_safety.record_idempotency(idem, held.order_id or "manual-exit")
+            return {"status": "ok", "order_id": held.order_id or "",
+                    "message": "Position closed at market (manual exit)",
+                    "protected": False, "protection": "position closed"}
+
+    cfg = state.get_config(uid)
+    plan = None
+    if norm == "buy" and getattr(cfg, "protect_manual_orders", True):
+        plan = protection.plan_for_symbol(uid, option_symbol)
+
     try:
         result = await client.place_order_option(
             option_symbol, norm, quantity, exchange=exchange, tag=idem)
@@ -94,7 +129,46 @@ async def place_manual_order(uid: str, option_symbol: str, side: str,
     if oid:
         live_safety.record_idempotency(idem, oid)
     state.log(uid, "order_placed", f"{side} {quantity} {option_symbol} (#{oid})")
-    return {"status": "ok", "order_id": oid, "message": "Order submitted"}
+
+    if norm != "buy":
+        return {"status": "ok", "order_id": oid, "message": "Order submitted"}
+
+    # ── arm the position, or say plainly that it is unprotected ────────────────
+    # The order is already live, so nothing below may raise or undo it. An entry we
+    # could not protect is still reported as ok — never block or unwind a trade the
+    # user asked for — but `protected: False` travels with it.
+    if plan is None:
+        reason = ("this contract is not on the current board, so there is no stop to arm"
+                  if getattr(cfg, "protect_manual_orders", True)
+                  else "automatic protection for manual orders is switched off")
+        state.log(uid, "info", f"⚠ {option_symbol} is UNPROTECTED — {reason}")
+        return {"status": "ok", "order_id": oid, "message": "Order submitted",
+                "protected": False, "protection": reason}
+    if not plan.protectable:
+        reason = "the signal has no premium stop for this contract, so nothing was armed"
+        state.log(uid, "info", f"⚠ {option_symbol} is UNPROTECTED — {reason}")
+        return {"status": "ok", "order_id": oid, "message": "Order submitted",
+                "protected": False, "protection": reason}
+
+    try:
+        armed = await protection.arm_position(
+            client, uid, symbol=plan.symbol, exchange=plan.exchange, token=plan.token,
+            qty=quantity, lot_size=plan.lot_size,
+            entry_premium=plan.entry_premium, stop_premium=plan.stop_premium,
+            order_id=oid, stop_mode=cfg.stop_mode, direction=plan.direction,
+            vehicle="otm_options", underlying=plan.underlying, exit_mode=cfg.exit_mode,
+            entry_spot=plan.entry_spot, entry_delta=plan.entry_delta,
+            strike=plan.strike, expiry=plan.expiry, target_premium=plan.target_premium)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("manual order arming failed for %s/%s: %s", uid, option_symbol, exc)
+        state.log(uid, "order_failed",
+                  f"⚠ {option_symbol} filled but could NOT be protected: {exc}")
+        return {"status": "ok", "order_id": oid, "message": "Order submitted",
+                "protected": False, "protection": f"arming failed: {exc}"}
+
+    state.log(uid, "order_placed", f"{option_symbol} protected — {armed.describe()}")
+    return {"status": "ok", "order_id": oid, "message": "Order submitted",
+            "protected": armed.protected, "protection": armed.describe()}
 
 
 async def available_fo_capital(client) -> float:
@@ -361,6 +435,10 @@ def _make_place_cb(client, uid: str):
         trade_lot = int(args["lot_size"] or 0)
         entry_px = float(args.get("entry_premium") or 0.0)
         stop_px = float(args.get("stop_premium") or 0.0)
+        # Only Navigator originations carry a target (from the AVWAP proposal). A
+        # SuperTrend row has none by design — it exits on the trail or the red
+        # counter — so this stays 0 and the GTT is a plain stop.
+        target_px = 0.0
         # Delta-translation context stored on the position so every trailing update can
         # re-price the underlying ST level into a premium stop. Futures leave delta 0
         # (they trail in index points directly).
@@ -404,6 +482,7 @@ def _make_place_cb(client, uid: str):
             if leg is not None:
                 pos_strike = float(leg.strike or 0.0)
                 pos_expiry = str(leg.expiry or "")
+                target_px = float(getattr(leg, "premium_target", 0.0) or 0.0)
                 if entry_px <= 0 or stop_px <= 0:
                     entry_px, stop_px, pos_delta = await _resolve_premium_stop(
                         client, exch=trade_exchange, symbol=trade_symbol,
@@ -522,42 +601,19 @@ def _make_place_cb(client, uid: str):
         live_safety.record_idempotency(idem, oid)
         state.mark_auto_open(uid, guard_key)  # one-position guard (per slot)
 
-        # ── register position for fill-tracking + tick monitor (E / C / D) ─────
-        p = positions.register(positions.OpenPosition(
-            uid=uid, symbol=trade_symbol, exchange=trade_exchange,
+        # ── register + arm (registry, tick subscription, broker stop/target) ───
+        # Shared with the manual order path so a hand-placed entry is protected the
+        # same way by the same code — this block used to be inline here, which is
+        # how manual orders ended up with no stop at all.
+        armed = await protection.arm_position(
+            client, uid, symbol=trade_symbol, exchange=trade_exchange,
             token=trade_token, qty=qty, lot_size=trade_lot,
-            entry_premium=entry_px, stop_premium=stop_px,
-            order_id=oid, status=positions.PENDING,
-            stop_mode=cfg.stop_mode, guard_key=guard_key,
-            direction=pos_direction, vehicle=vehicle_label, underlying=row.underlying,
-            exit_mode=cfg.exit_mode,
+            entry_premium=entry_px, stop_premium=stop_px, order_id=oid,
+            stop_mode=cfg.stop_mode, direction=pos_direction, vehicle=vehicle_label,
+            underlying=row.underlying, exit_mode=cfg.exit_mode, guard_key=guard_key,
             entry_spot=pos_entry_spot, entry_delta=pos_delta,
-            strike=pos_strike, expiry=pos_expiry, initial_stop_premium=stop_px))
-
-        # ── auto-subscribe the position's token to the ticker (tick monitor) ──
-        if trade_token and cfg.stop_mode in ("monitor", "both"):
-            try:
-                from app.services.exchanges.kite import ticker_manager, constants as K
-                await ticker_manager.subscribe(uid, [trade_token], mode=K.MODE_LTP)
-                state.log(uid, "info",
-                          f"Subscribed token {trade_token} ({trade_symbol}) to tick monitor")
-            except Exception as _te:  # noqa: BLE001
-                log.debug("kite monitor auto-subscribe failed for %s: %s", uid, _te)
-
-        # ── broker-side protective stop (workstream C) ────────────────────────
-        if cfg.stop_mode in ("broker", "both") and stop_px > 0:
-            gtt_id = await protective_stop.place_stop(
-                client, tradingsymbol=trade_symbol, exchange=trade_exchange,
-                qty=qty, trigger_premium=stop_px, last_price=entry_px,
-                direction=pos_direction)
-            if gtt_id:
-                positions.update_stop(uid, p.symbol, stop_px, gtt_id=gtt_id)
-                state.log(uid, "info",
-                          f"Protective GTT #{gtt_id} placed for {p.symbol} @ ₹{stop_px:.2f}")
-            elif cfg.stop_mode == "broker":
-                state.log(uid, "info",
-                          f"⚠ Protective GTT failed for {p.symbol}; no broker stop "
-                          f"(enable monitor mode for a server-side backstop)")
+            strike=pos_strike, expiry=pos_expiry,
+            target_premium=target_px)
 
         monitor_note = "+monitor" if cfg.stop_mode in ("monitor", "both") else ""
         veh_note = f"{vehicle_label} " if cfg.directional_mode else ""
@@ -730,7 +786,11 @@ async def _update_open_position_trails(client, uid: str) -> None:
                     client, trigger_id=p.gtt_id,
                     tradingsymbol=p.symbol, exchange=p.exchange,
                     qty=p.qty, trigger_premium=new_sl, last_price=ltp,
-                    direction=p.direction)
+                    direction=p.direction,
+                    # Carried on every move: a GTT modify rewrites the whole trigger,
+                    # so omitting the target would quietly turn the OCO into a bare
+                    # stop the first time the trail ratcheted.
+                    target_premium=float(getattr(p, "target_premium", 0.0) or 0.0))
                 if moved:
                     state.log(uid, "info",
                               f"Broker GTT #{p.gtt_id} trailed to ₹{new_sl:.2f} for {p.symbol}")

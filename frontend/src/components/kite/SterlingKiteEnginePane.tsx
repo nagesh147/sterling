@@ -1042,7 +1042,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // Initial hard stop at the entry bar (fast ST line), static.
                            return (
                              <Tip text="Initial stop at entry (fast SuperTrend line)">
-                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-sl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {initSlPx != null ? initSlPx.toFixed(1) : '—'}
                                </span>
                              </Tip>
@@ -1051,7 +1051,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // Live ratcheting trail stop (tightens as ST lines flip red).
                            return (
                              <Tip text="Trailing stop — ratchets tighter as SuperTrend lines flip red">
-                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                               <span data-testid="leg-tsl" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
                                  {slPx != null ? slPx.toFixed(1) : '—'}
                                </span>
                              </Tip>

@@ -243,6 +243,19 @@ export function EngineConfigurationPanel() {
           <ChoiceRow value={cfg.stop_mode} options={STOP_OPTIONS}
             onChange={(value) => patch({ stop_mode: value }, `Protection mode changed to ${value}`)} />
         </Field>
+        <Field label="Manual orders"
+          hint="Your own BUY gets the stop this board is already showing for that contract.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Switch checked={cfg.protect_manual_orders ?? true} label="Protect orders I place by hand"
+              onChange={() => patch({ protect_manual_orders: !(cfg.protect_manual_orders ?? true) },
+                `Manual-order protection ${!(cfg.protect_manual_orders ?? true) ? 'enabled' : 'disabled'}`, true)} />
+            <span style={{ color: TEXT, fontSize: 11.5 }}>
+              {(cfg.protect_manual_orders ?? true)
+                ? 'Registered, stopped and squared off at expiry like an automatic entry'
+                : 'No stop, no monitor — the order response will say UNPROTECTED'}
+            </span>
+          </div>
+        </Field>
       </Section>
 
       <Section

@@ -58,9 +58,12 @@ def _make_broadcaster(user_id: str):
 def _make_order_broadcaster(user_id: str):
     async def _broadcast(order: dict) -> None:
         # Confirm fills / rejections against our position registry FIRST (E).
+        # The client is passed because a REJECTED entry has to cancel the protective
+        # GTT that was already armed for it — without a client the handler can only
+        # log that an orphaned SELL is resting at Zerodha.
         try:
             from app.services.kite_engine import monitor
-            await monitor.on_order_update(user_id, order)
+            await monitor.on_order_update(user_id, order, client=await _warm_client(user_id))
         except Exception as exc:  # never let the monitor kill the WS loop
             log.debug("kite monitor on_order_update failed for %s: %s", user_id, exc)
         try:

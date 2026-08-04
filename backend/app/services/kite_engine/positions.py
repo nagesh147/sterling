@@ -66,6 +66,12 @@ class OpenPosition:
     strike: float = 0.0         # option strike (for re-pricing / display)
     expiry: str = ""            # option expiry "YYYY-MM-DD" (for the expiry square-off guard)
     initial_stop_premium: float = 0.0  # first stop set at entry — the step-out floor (never risk more than this)
+    #: Premium at which this position books profit, or 0.0 when the signal has no
+    #: target. Only Navigator originations carry one (from the AVWAP proposal); a
+    #: SuperTrend row has no target by design — it exits on the trail or the red
+    #: counter. Enforced BROKER-side as the second leg of an OCO GTT, so the
+    #: exchange cancels the stop when the target fills and vice versa.
+    target_premium: float = 0.0
     # derived threshold from exit_mode for convenience in responses/UI
 
 
@@ -133,13 +139,24 @@ def all_open_tokens(uid: str) -> List[int]:
     return [p.token for p in open_positions(uid) if p.token]
 
 
-def mark_filled(uid: str, symbol: str, fill_price: float) -> Optional[OpenPosition]:
+def mark_filled(uid: str, symbol: str, fill_price: float,
+                filled_qty: int = 0) -> Optional[OpenPosition]:
+    """Confirm a fill. ``filled_qty``, when supplied by the broker postback, becomes
+    the position's quantity.
+
+    The quantity matters as much as the price: every downstream number is derived
+    from ``qty`` — the exit SELL, the GTT's order quantity, and the realized PnL. If
+    2 of 3 intended lots fill and we keep believing we hold 3, both the broker stop
+    and the monitor try to sell 3, and the extra lot is a naked short.
+    """
     p = _load(uid).get(symbol)
     if p is None:
         return None
     p.status = OPEN
     if fill_price > 0:
         p.fill_price = float(fill_price)
+    if filled_qty > 0:
+        p.qty = int(filled_qty)
     _persist(uid)
     return p
 

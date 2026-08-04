@@ -249,6 +249,10 @@ export interface EngineConfigModel {
   max_daily_loss_pct?: number | null;
   // Protective stop mode (workstreams C/D)
   stop_mode: 'broker' | 'monitor' | 'both';
+  /** Arm a hand-placed order the same way an auto-executed one is armed, using the
+   *  board's own stop for that contract. Off means a manual entry is yours to manage
+   *  and the order response says UNPROTECTED rather than implying a stop. */
+  protect_manual_orders?: boolean;
   // ── Directional mode (additive, opt-in) ────────────────────────────────
   directional_mode: boolean;
   vehicle: Vehicle;
@@ -357,6 +361,13 @@ export interface EngineOrderResponse {
   order_id: string;
   status: string;
   message: string;
+  /** Whether anything will exit this position without you acting. A hand-placed
+   *  order is armed from the board's own plan for that contract; when it cannot be
+   *  (contract not on the board, no premium stop, protection switched off) the
+   *  order still goes through and this is false. */
+  protected?: boolean;
+  /** Plain-language description of what was armed, or why nothing was. */
+  protection?: string;
 }
 
 // ─── Stock registry ────────────────────────────────────────────────────────
