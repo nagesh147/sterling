@@ -27,6 +27,7 @@ declare -a SKILLS=(
     "https://github.com/senlindesign/taste-skill.git                     taste"
     "https://github.com/coreyhaines31/marketingskills.git                 marketingskills-src"
     "https://github.com/addyosmani/web-quality-skills.git                web-quality-skills-src"
+    "https://github.com/multica-ai/andrej-karpathy-skills.git            karpathy-skills-src"
 )
 
 # kostja94/marketing-skills was deliberately left out: its 172 skills are

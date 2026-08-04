@@ -188,7 +188,8 @@ for src in \
   "$GLOBAL_SKILLS/gsd-src/skills" \
   "$GLOBAL_SKILLS/vercel-skills-src/skills" \
   "$GLOBAL_SKILLS/marketingskills-src/skills" \
-  "$GLOBAL_SKILLS/web-quality-skills-src/skills"
+  "$GLOBAL_SKILLS/web-quality-skills-src/skills" \
+  "$GLOBAL_SKILLS/karpathy-skills-src/skills"
 do
   [ -d "$src" ] || continue
   for skill in "$src"/*; do
