@@ -25,7 +25,13 @@ declare -a SKILLS=(
     "https://github.com/open-gsd/gsd-core.git                             gsd-src"
     "https://github.com/vercel-labs/skills.git                           vercel-skills-src"
     "https://github.com/senlindesign/taste-skill.git                     taste"
+    "https://github.com/coreyhaines31/marketingskills.git                 marketingskills-src"
+    "https://github.com/addyosmani/web-quality-skills.git                web-quality-skills-src"
 )
+
+# kostja94/marketing-skills was deliberately left out: its 172 skills are
+# nested 2-5 levels deep with duplicate leaf names (e.g. two different
+# "article" skills), which the flat unpack loop below can't namespace safely.
 
 # Container repos above ship their SKILL.md nested under skills/<name>/SKILL.md
 # rather than at repo root, so they need one extra unpack step after cloning —
