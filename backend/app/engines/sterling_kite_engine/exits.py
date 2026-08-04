@@ -69,6 +69,23 @@ def trail_exit_index(r, direction: str, entry_i: int, last_idx: int,
     return None
 
 
+def reported_trail_level(r, direction: str, entry_i: int, exit_i: Optional[int],
+                         last_idx: int, cfg: SterlingKiteEngineConfig) -> float:
+    """The trail level to SHOW for a row — running or ended.
+
+    Running: the level standing at the latest bar. Ended: the level that was
+    actually in force when it ended, i.e. as of ``exit_i - 1``, which is the same
+    level ``resolve_exit`` names in its reason string.
+
+    Reading the level AT the exit bar instead looks at the SuperTrend after it
+    flipped, so no aligned line remains, ``trail_level`` falls back to the ENTRY
+    bar's line, and the board prints a stop far below the one its own exit chip
+    quotes ("TSL 163.97" beside "TSL exit ≤ 581.44").
+    """
+    at = last_idx if exit_i is None else max(int(exit_i) - 1, entry_i)
+    return trail_level(r, direction, entry_i, at, cfg)
+
+
 def red_count_exit_index(r, direction: str, entry_i: int, last_idx: int,
                          cfg: SterlingKiteEngineConfig, longs, shorts) -> Optional[int]:
     """First bar at/after entry where the red counter satisfies ``exit_mode``, or None."""

@@ -1379,6 +1379,28 @@ def test_ended_row_freezes_its_trail_at_the_exit_bar():
         )
 
 
+def test_ended_row_reports_the_level_that_was_actually_breached():
+    """The stop shown for a dead row must be the level its own exit chip quotes.
+
+    Read AT the exit bar, the SuperTrend has already flipped — no aligned line is
+    left, `trail_level` falls back to the ENTRY bar's line, and the board printed a
+    stop hundreds of points below the "trail breach (<= X)" reason beside it.
+    """
+    cfg = _trail_cfg()
+    item = UniverseItem("NIFTY BANK", "BANKNIFTY", 260105, "NSE", "NFO")
+    rows = evaluate_item(SterlingKiteEngine(cfg), item, _candles(_long_then_drop_path()), cfg)
+    ended = [
+        r for r in rows
+        if r.direction == "long" and not r.is_active and "trail breach" in (r.exit_reason or "")
+    ]
+    assert ended, "expected a trail-breach exit"
+    for row in ended:
+        quoted = float(row.exit_reason.split("\u2264")[1].strip().rstrip(")"))
+        assert row.stop_loss == pytest.approx(quoted, rel=1e-6), (
+            f"row shows stop {row.stop_loss} but says it exited at {quoted}"
+        )
+
+
 def test_derivative_contract_also_honours_the_trail_exit():
     cfg = _trail_cfg()
     item = UniverseItem("HDFCBANK", "HDFCBANK", 1, "NSE", "NFO")

@@ -168,10 +168,18 @@ export function useEnginePlaceOrder() {
 }
 
 // ─── Signal detail (trigger info + live price + greeks + depth) ───────────────
-export function useEngineDetail(token: number | null, timestamp_ms: number | null, enabled: boolean) {
+// `source` disambiguates the row: a Navigator origination and a SuperTrend row
+// for the same instrument share a token, so without it the server can answer a
+// Navigator click with the SuperTrend row's entry, stop and legs.
+export function useEngineDetail(
+  token: number | null, timestamp_ms: number | null, enabled: boolean, source?: string,
+) {
   return useQuery<EngineDetailResponse>({
-    queryKey: ['kite-engine-detail', token, timestamp_ms],
-    queryFn: () => api.get<EngineDetailResponse>(`${E}/detail/${token}?timestamp_ms=${timestamp_ms || 0}`),
+    queryKey: ['kite-engine-detail', token, timestamp_ms, source ?? ''],
+    queryFn: () => api.get<EngineDetailResponse>(
+      `${E}/detail/${token}?timestamp_ms=${timestamp_ms || 0}`
+      + (source ? `&source=${encodeURIComponent(source)}` : ''),
+    ),
     enabled: enabled && token != null,
     refetchInterval: 15_000,
   });

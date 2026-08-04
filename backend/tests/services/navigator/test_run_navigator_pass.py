@@ -439,6 +439,26 @@ class TestStructureRadarAndOrigination:
         assert origin_rows[0].navigator.status == "CONFIRMED"
 
     @pytest.mark.asyncio
+    async def test_a_brand_new_origination_is_live_not_history(self, monkeypatch):
+        """`is_active` and `is_fresh` used to be mutually exclusive here, so a
+        first-bar origination arrived with is_active=False. The board reads
+        is_active to decide "ended", and struck the signal through as history the
+        instant it appeared. Ending a row clears BOTH flags, so a live row must
+        set active regardless of freshness."""
+        rec = config_store.get("user-1", default_underlyings=_UNDERLYINGS)
+        _enable_with(rec, signal_origination="heads_up")
+        monkeypatch.setattr(nav_service, "evaluate_and_cache", _fake_evaluate_and_cache("CONFIRMED"))
+        monkeypatch.setattr(avwap, "evaluate_avwap", lambda candles, config, **kw: (None, _accepted_avwap_eval(stop=24000.0)))
+        client = FakeKiteClient(_kite_candle_rows())
+        out = await nav_service.run_navigator_pass(
+            client, "user-1", [], engine_config_payload={"trail_target": "fast"},
+            default_underlyings=_UNDERLYINGS, underlying_tokens={"NIFTY 50": 256265},
+        )
+        row = [r for r in out if r.source == "navigator"][0]
+        assert row.is_fresh is True
+        assert row.is_active is True
+
+    @pytest.mark.asyncio
     async def test_originated_row_carries_the_proposals_target_not_just_its_stop(self, monkeypatch):
         """The AVWAP proposal computes BOTH levels and is rejected without either, so
         dropping the target showed "—" in the Target column for a level the engine had

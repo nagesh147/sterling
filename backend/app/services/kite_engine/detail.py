@@ -65,7 +65,7 @@ def _levels(side: list) -> List[DepthLevel]:
     return out
 
 
-def _navigator_row_for_token(uid: str, token: int, timestamp_ms: int):
+def _navigator_row_for_token(uid: str, token: int, timestamp_ms: int, *, exact: bool = False):
     """Find a Navigator-owned row by token in Navigator's own snapshot.
 
     Navigator-originated rows never pass through the Kite engine's scanner, and
@@ -88,25 +88,45 @@ def _navigator_row_for_token(uid: str, token: int, timestamp_ms: int):
     if not candidates:
         return None
     if timestamp_ms > 0:
-        exact = next((row for row in candidates if row.timestamp_ms == timestamp_ms), None)
-        if exact is not None:
-            return exact
+        hit = next((row for row in candidates if row.timestamp_ms == timestamp_ms), None)
+        if hit is not None:
+            return hit
+    if exact:
+        return None  # caller wants certainty, not the nearest thing
     return max(candidates, key=lambda row: row.timestamp_ms)
 
 
-async def build_detail(client, uid: str, token: int, timestamp_ms: int = 0) -> Optional[EngineDetailResponse]:
+async def build_detail(
+    client, uid: str, token: int, timestamp_ms: int = 0, source: Optional[str] = None,
+) -> Optional[EngineDetailResponse]:
     """Build detail for the selected signal row.
 
-    Prefer the exact timestamp supplied by the UI. A background scan may replace or
-    regroup that row between the click and this request, so fall back to the current
-    row for the same token instead of returning a misleading 404.
+    Resolution order matters. A Navigator origination is keyed on the SAME
+    underlying token as the SuperTrend rows for that instrument, so a loose
+    token match in the engine's snapshot will happily answer a click on a
+    Navigator row with a different signal's plan — different entry, different
+    stop, different legs. Two rules keep that from happening:
+
+    * `source` (sent by the board) picks which snapshot owns the row;
+    * failing that, an EXACT timestamp match in either snapshot always beats a
+      loose same-token match in the other.
+
+    The loose fallback still exists, and still comes last: a background scan can
+    regroup a row between the click and this request, and answering with the
+    current row for that instrument beats a misleading 404.
     """
     snapshot = scanner.snapshot(uid)
-    row = snapshot.row_for_token(token, timestamp_ms)
-    if row is None and timestamp_ms > 0:
-        row = snapshot.row_for_token(token)
+    engine_exact = snapshot.row_for_token(token, timestamp_ms) if timestamp_ms > 0 else None
+    navigator_exact = _navigator_row_for_token(uid, token, timestamp_ms, exact=True) if timestamp_ms > 0 else None
+
+    if source == "navigator":
+        row = navigator_exact or _navigator_row_for_token(uid, token, timestamp_ms) or engine_exact
+    elif source:
+        row = engine_exact or snapshot.row_for_token(token) or navigator_exact
+    else:
+        row = engine_exact or navigator_exact
     if row is None:
-        row = _navigator_row_for_token(uid, token, timestamp_ms)
+        row = snapshot.row_for_token(token) or _navigator_row_for_token(uid, token, timestamp_ms)
     if row is None:
         return None
 

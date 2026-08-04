@@ -89,7 +89,7 @@ export function KiteTab() {
   const [moreTab, setMoreTab] = useState<MoreTab>('bids');
   const [instrumentView, setInstrumentView] = useState<{ symbol: string; tab: InstrumentTab; trailTarget?: 'fast' | 'mid' | 'slow'; signalData?: SignalChartData } | null>(null);
   const [setupView, setSetupView] = useState<{ token: number; underlying: string } | null>(null);
-  const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number } | null>(null);
+  const [detailView, setDetailView] = useState<{ token: number; underlying: string; timestamp_ms: number; source?: string } | null>(null);
   const [savedTerminalMode, setSavedTerminalMode] = useState<'minimized' | 'normal' | 'partial' | 'full' | null>(null);
   const [basketOpen, setBasketOpen] = useState(false);
   const basketCount = useKiteBasketStore((s) => s.entries.length);
@@ -138,6 +138,7 @@ export function KiteTab() {
         token={detailView.token}
         underlying={detailView.underlying}
         timestamp_ms={detailView.timestamp_ms}
+        source={detailView.source}
         onClose={() => { closeChartView(); setDetailView(null); }}
         onShowSetup={() => setSetupView(detailView)}
         onShowOptionChain={(u) => { closeChartView(); setInstrumentView({ symbol: u, tab: 'option-chain' }); }}

@@ -251,11 +251,18 @@ async def place_order(body: EngineOrderRequest,
 
 
 @router.get("/detail/{token}")
-async def detail(token: int, timestamp_ms: int = 0, user: UserContext = Depends(get_current_user)) -> EngineDetailResponse:
+async def detail(
+    token: int, timestamp_ms: int = 0, source: str = "",
+    user: UserContext = Depends(get_current_user),
+) -> EngineDetailResponse:
     """Trigger context + live underlying price + per-leg quote/depth/greeks for a
-    ready signal (BUY/SELL are placed via the standard /kite/orders endpoint)."""
+    ready signal (BUY/SELL are placed via the standard /kite/orders endpoint).
+
+    `source` is the clicked row's own scan source. A Navigator origination shares
+    its underlying's token with every SuperTrend row for that instrument, so
+    without it the two are indistinguishable here and the wrong plan can answer."""
     client = await _client(user)
-    d = await build_detail(client, user.user_id, token, timestamp_ms)
+    d = await build_detail(client, user.user_id, token, timestamp_ms, source=source or None)
     if d is None:
         raise HTTPException(404, "No ready signal for that instrument in the latest scan.")
     return d

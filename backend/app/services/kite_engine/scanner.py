@@ -76,12 +76,6 @@ def drop_forming(candles: List[Candle], now_ms: Optional[int] = None) -> List[Ca
     return candles
 
 
-def _trail_stop_value(r, direction: str, i: int, last_idx: int,
-                      cfg: SterlingKiteEngineConfig) -> float:
-    """The trail level to attach to a signal row — see ``engine.exits.trail_level``."""
-    return exits.trail_level(r, direction, i, last_idx, cfg)
-
-
 def _exit_state_str(r, direction: str, last_idx: int, cfg: SterlingKiteEngineConfig) -> str:
     """Red-counter progress at the latest bar as ``"<reds>/<threshold> red"``.
 
@@ -239,7 +233,7 @@ def evaluate_item(
         # Freeze the readouts at the exit bar: a dead trade whose trail kept ratcheting
         # for days afterwards shows a stop it was never protected by.
         end_idx = last_idx if exit_j is None else int(exit_j)
-        stop_loss = _trail_stop_value(r, direction, i, end_idx, cfg)
+        stop_loss = exits.reported_trail_level(r, direction, int(i), exit_j, last_idx, cfg)
         rows.append(EngineSignalRow(
             underlying=item.name, token=item.token, exchange=item.option_exchange,
             regime="BULL" if direction == "long" else "BEAR",
@@ -367,7 +361,7 @@ def evaluate_derivative_contract(
         exit_j, exit_reason = exits.resolve_exit(r, "long", int(i), last_idx, cfg, longs, shorts)
         active = exit_j is None
         end_idx = last_idx if exit_j is None else int(exit_j)
-        stop_loss = _trail_stop_value(r, "long", i, end_idx, cfg)
+        stop_loss = exits.reported_trail_level(r, "long", int(i), exit_j, last_idx, cfg)
         entry_sl = _entry_sl_value(r, i, cfg)
         rows.append(EngineSignalRow(
             underlying=item.name, token=pick.token, exchange=item.option_exchange,

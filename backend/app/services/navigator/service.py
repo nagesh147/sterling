@@ -452,7 +452,15 @@ async def _run_structure_and_origination(
                     direction=direction, option_type="CE" if direction == "long" else "PE",
                     spot=float(candles.close[-1]), stop_loss=float(candles.close[-1]),
                     score=50.0, timestamp_ms=int(candles.timestamp_ms[-1]),
-                    is_active=(state == "active"), is_fresh=(state == "fresh"), source="navigator",
+                    # A live origination is ACTIVE whether or not this is its first
+                    # bar; `state` only says whether it is also FRESH. Making the
+                    # two mutually exclusive meant a brand-new Navigator signal
+                    # arrived with is_active=False, and the board — which reads
+                    # is_active to decide "ended" — struck it through as history
+                    # the moment it appeared. Ending a row sets BOTH flags false
+                    # (runtime._merge_with_lifecycle), and that is the only
+                    # honest way for a row to read as ended.
+                    is_active=True, is_fresh=(state == "fresh"), source="navigator",
                 )
                 decision = evaluate_and_cache(
                     uid, placeholder, base=base, candles=candles, config=config,

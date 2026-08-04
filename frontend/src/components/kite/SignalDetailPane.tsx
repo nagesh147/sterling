@@ -18,6 +18,9 @@ interface Props {
   token: number;
   underlying: string;
   timestamp_ms: number;
+  /** The clicked row's scan source — disambiguates a Navigator origination from
+   *  a SuperTrend row that shares its underlying's token. */
+  source?: string;
   onClose: () => void;
   onShowSetup: () => void;
   onShowOptionChain: (underlying: string) => void;
@@ -285,8 +288,8 @@ function CollapsibleCard({ id, title, collapsed, dragging, dragOffset, onHeaderP
   );
 }
 
-export function SignalDetailPane({ token, underlying, timestamp_ms, onClose, onShowSetup, onShowOptionChain }: Props) {
-  const { data, isLoading, isError, dataUpdatedAt } = useEngineDetail(token, timestamp_ms, true);
+export function SignalDetailPane({ token, underlying, timestamp_ms, source, onClose, onShowSetup, onShowOptionChain }: Props) {
+  const { data, isLoading, isError, dataUpdatedAt } = useEngineDetail(token, timestamp_ms, true, source);
   const openOrderWindow = useOrderWindowStore((s) => s.openOrderWindow);
   const [pinned, setPinned] = useState<boolean>(() => {
     try { return JSON.parse(localStorage.getItem('kite_engine_pins') || '[]').includes(token); } catch { return false; }

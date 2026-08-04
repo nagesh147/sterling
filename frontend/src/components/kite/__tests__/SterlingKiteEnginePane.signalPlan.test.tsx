@@ -28,17 +28,17 @@ type LegOverrides = {
 
 function makeRow(opts: {
   underlying?: string; token?: number; timestamp_ms?: number; is_active?: boolean;
-  source?: string; target?: number | null; leg?: LegOverrides; symbol?: string;
+  is_fresh?: boolean; source?: string; target?: number | null; leg?: LegOverrides; symbol?: string;
 } = {}) {
   const {
     underlying = 'NIFTY BANK', token = 1, timestamp_ms = 1_785_404_700_000, is_active = true,
-    source = 'spot', target = null, leg = {}, symbol = 'BANKNIFTY26AUG57000CE',
+    is_fresh = false, source = 'spot', target = null, leg = {}, symbol = 'BANKNIFTY26AUG57000CE',
   } = opts;
   return {
     underlying, token, exchange: 'NFO', regime: 'BULL',
     alignment: { fast: 1, mid: 1, slow: 1 }, direction: 'long', option_type: 'CE',
     spot: 57147.5, stop_loss: 56891.3, entry_sl: 56500, exit_state: '0/3 red',
-    score: 85, timestamp_ms, source, is_active, is_fresh: false, target,
+    score: 85, timestamp_ms, source, is_active, is_fresh, target,
     legs: [{
       moneyness: 'ITM1', option_type: 'CE', option_symbol: symbol, strike: 57000,
       expiry: '2026-08-25', lot_size: 35, token: token + 1000, is_active,
@@ -182,5 +182,33 @@ describe('why a trade ended', () => {
     await renderPane();
     expect(screen.queryByText('TSL exit')).not.toBeInTheDocument();
     expect(screen.queryByText('counter exit')).not.toBeInTheDocument();
+  });
+  it('shows a brand-new Navigator signal as live, not as history', async () => {
+    // A Navigator origination arrives fresh on its first bar. The board decided
+    // "ended" from is_active alone, so the signal appeared struck through as a
+    // past setup the instant it was generated. Ending a row clears BOTH flags.
+    mockPane([makeRow({ source: 'navigator', is_active: false, is_fresh: true })]);
+    await renderPane();
+    expect(screen.getByText(/ITM1/)).toBeInTheDocument();
+    expect(screen.getByText('Active now')).toBeInTheDocument();
+  });
+
+  it('still treats a row with neither flag as history', async () => {
+    mockPane([makeRow({ is_active: false, is_fresh: false })]);
+    await renderPane();
+    expect(screen.queryByText('Active now')).not.toBeInTheDocument();
+  });
+
+  it('never renders an absolute rupee change as a percentage', async () => {
+    // Kite's `net_change` is rupees. Assigning it to the percent cell printed a
+    // 412-point BANKNIFTY day as "412.35%" while the Chg. column sat blank.
+    mockPane([makeRow()], {
+      'NSE:NIFTY BANK': { last_price: 57_147.5, net_change: 412.35 },
+    });
+    await renderPane();
+    // It belongs in Chg. (rupees) ...
+    expect(screen.getByText('412.35')).toBeInTheDocument();
+    // ... and must never appear as a percentage.
+    expect(screen.queryByText('412.35%')).not.toBeInTheDocument();
   });
 });

@@ -146,3 +146,53 @@ class TestDetailCarriesTheSignalPlan:
         assert (opt.entry_premium, opt.initial_stop_premium) == (320.0, 210.0)
         assert (opt.trail_stop_premium, opt.target_premium) == (255.0, 540.0)
         assert opt.is_active is True
+
+
+class TestBothEnginesHoldTheSameToken:
+    """A Navigator origination is keyed on the underlying's token — the very same
+    token every SuperTrend row for that instrument carries. Resolving a click by
+    token alone therefore answers with whichever engine's row is found first, and
+    the user reads another signal's entry, stop and legs under the row they
+    clicked."""
+
+    @staticmethod
+    def _engine_row(timestamp_ms=_TS, **updates):
+        row = _nav_row(timestamp_ms=timestamp_ms)
+        return row.model_copy(update={"source": "spot", "spot": 24_111.0,
+                                      "stop_loss": 24_000.0, **updates})
+
+    @pytest.mark.asyncio
+    async def test_source_picks_the_engine_that_owns_the_click(self):
+        scanner.snapshot("user-1").rows = [self._engine_row()]
+        navigator_runtime.snapshot("user-1").rows = [_nav_row()]
+
+        nav = await detail_service.build_detail(
+            FakeClient(), "user-1", 256265, _TS, source="navigator")
+        engine = await detail_service.build_detail(
+            FakeClient(), "user-1", 256265, _TS, source="spot")
+
+        assert nav.source == "navigator"
+        assert engine.source == "spot"
+
+    @pytest.mark.asyncio
+    async def test_exact_navigator_match_beats_a_loose_engine_match(self):
+        """Without `source` (an older client), the timestamp still decides. The
+        engine row here is for a DIFFERENT bar, so a same-token fallback to it
+        would be answering with a different trade."""
+        scanner.snapshot("user-1").rows = [self._engine_row(timestamp_ms=_TS - 3_600_000)]
+        navigator_runtime.snapshot("user-1").rows = [_nav_row(timestamp_ms=_TS)]
+
+        out = await detail_service.build_detail(FakeClient(), "user-1", 256265, _TS)
+
+        assert out.source == "navigator"
+        assert out.triggered_ms == _TS
+
+    @pytest.mark.asyncio
+    async def test_loose_fallback_survives_a_regroup(self):
+        """The clicked bar is gone from both snapshots — answer with the current
+        row rather than a 404, which is why the loose match exists at all."""
+        scanner.snapshot("user-1").rows = [self._engine_row(timestamp_ms=_TS + 3_600_000)]
+
+        out = await detail_service.build_detail(FakeClient(), "user-1", 256265, _TS)
+
+        assert out is not None and out.triggered_ms == _TS + 3_600_000

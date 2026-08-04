@@ -28,7 +28,10 @@ import { signalChartDataForPremiumLeg } from '../charts/signalMarkerLogic';
 
 
 interface Props {
-  onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
+  // `source` travels with the click: a Navigator origination and a SuperTrend row
+  // for the same instrument share a token, so the detail request needs it to open
+  // the row the user actually clicked.
+  onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
   onOpenChart?: (symbol: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
 }
 
@@ -341,10 +344,19 @@ function legHasExited(
 // — for spot rows that carry no per-leg premium/stop — the row's scan-time flag. Shared
 // by the card visuals and the Active-now/history bucketing so they never disagree.
 function rowIsRunning(row: EngineSignalRow, quotes: any): boolean {
-  if (row.source !== 'derivatives') return !!row.is_active;
+  if (row.source !== 'derivatives') return rowIsLive(row);
   return row.legs.some(
-    (l) => !legHasExited(l, row.is_active, quotes?.[`${row.exchange}:${(l as any).option_symbol}`]?.last_price ?? null),
+    (l) => !legHasExited(l, rowIsLive(row), quotes?.[`${row.exchange}:${(l as any).option_symbol}`]?.last_price ?? null),
   );
+}
+
+// A row is LIVE while EITHER flag is set. The backend's only way to end a row is
+// to clear both, so reading `is_active` alone mislabels a signal that is fresh
+// but not yet marked active — which is exactly how a Navigator origination
+// arrives on its first bar. Such a row rendered struck-through as history the
+// instant it appeared.
+function rowIsLive(row: { is_active?: boolean; is_fresh?: boolean }): boolean {
+  return !!(row.is_active || row.is_fresh);
 }
 
 // True only when the greeks were solved from a real IV. `blackScholesGreeks` falls back
@@ -383,7 +395,10 @@ const MONEYNESS_GROUP_ORDER: Record<'ITM' | 'ATM' | 'OTM', number> = { ITM: 0, A
 
 function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLayout, sort, showEnded = true, bestOnly = false, scanSource, signalMode = 'combined', showPremiumColumns, originalEntryMs }: {
   row: EngineSignalRow; onClick: () => void;
-  onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number }) => void;
+  // `source` travels with the click: a Navigator origination and a SuperTrend row
+  // for the same instrument share a token, so the detail request needs it to open
+  // the row the user actually clicked.
+  onSelectSignal: (sel: { token: number; underlying: string; timestamp_ms: number; source?: string }) => void;
   onOpenChart?: (underlying: string, tab: 'chart', trailTarget?: 'fast' | 'mid' | 'slow', signalData?: SignalChartData) => void;
   quotes?: any;
   viewLayout: 'grid' | 'list';
@@ -434,7 +449,7 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
     const q = quotes?.[`${row.exchange}:${leg?.option_symbol}`];
     return q?.last_price ?? null;
   };
-  const legIsExited = (leg: any) => (hasPremium ? legHasExited(leg, row.is_active, legLtp(leg)) : !row.is_active);
+  const legIsExited = (leg: any) => (hasPremium ? legHasExited(leg, rowIsLive(row), legLtp(leg)) : !rowIsLive(row));
   const legIsActive = (leg: any) => !legIsExited(leg);
   // Parent "running" = ANY leg still live once reconciled against the live LTP.
   const rowRunning = rowIsRunning(row, quotes);
@@ -476,8 +491,13 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
       uChgPct = (uChgAbs / base) * 100;
       uColor = s.showPriceDirection ? (uChgAbs >= 0 ? k.green : k.red) : k.text;
     } else if (uQ.net_change != null) {
-      uChgPct = uQ.net_change;
-      uColor = s.showPriceDirection ? (uChgPct >= 0 ? k.green : k.red) : k.text;
+      // Kite's `net_change` is the absolute move in rupees, NOT a percentage.
+      // It used to be assigned to uChgPct and rendered with a "%" suffix, so a
+      // 412-point BANKNIFTY day printed "412.35%" in Chg.% while Chg. sat
+      // blank. Without an open/close to divide by there is no percentage to
+      // show, and inventing one is worse than leaving the cell empty.
+      uChgAbs = uQ.net_change;
+      uColor = s.showPriceDirection ? (uChgAbs >= 0 ? k.green : k.red) : k.text;
     }
   }
 
@@ -854,7 +874,10 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                    if (!q) return 0;
                    const base = s.chgType === 'close' ? q.ohlc?.close : q.ohlc?.open;
                    if (base) return sort.key === 'chgPct' ? ((q.last_price - base) / base) * 100 : (q.last_price - base);
-                   if (q.net_change != null) return sort.key === 'chgPct' ? q.net_change : 0;
+                   // net_change is rupees, so it sorts the Chg. column — sorting
+                   // Chg.% by it ordered rows by absolute move, which on a mixed
+                   // board put a 400-point index above a 3% stock move.
+                   if (q.net_change != null) return sort.key === 'chg' ? q.net_change : 0;
                    return 0;
                  };
                  valA = getChg(qA);
@@ -882,8 +905,12 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
               chgPct = (chgAbs / base) * 100;
               color = s.showPriceDirection ? (chgAbs >= 0 ? k.green : k.red) : k.text;
             } else if (q.net_change != null) {
-              chgPct = q.net_change;
-              color = s.showPriceDirection ? (chgPct >= 0 ? k.green : k.red) : k.text;
+              // Same rule as the underlying row above: net_change is RUPEES. An
+              // option premium has no previous close on the day it starts
+              // trading, which is exactly when this branch runs — and a ₹12 move
+              // on a ₹90 premium was printing as "12.00%".
+              chgAbs = q.net_change;
+              color = s.showPriceDirection ? (chgAbs >= 0 ? k.green : k.red) : k.text;
             }
           }
           const isExp = expanded.has(leg.option_symbol);
@@ -2473,7 +2500,7 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                           showPremiumColumns={showSignalPremiumColumns}
                           originalEntryMs={originalEntryMs.get(`${row.underlying}|${row.direction}|${row.source ?? 'spot'}`)}
                           onSelectSignal={onSelectSignal} sort={legSort} showEnded={showEnded} bestOnly={bestOnly}
-                          onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms })}
+                          onClick={() => onSelectSignal({ token: row.token, underlying: row.underlying, timestamp_ms: row.timestamp_ms, source: row.source })}
                           onOpenChart={onOpenChart ? (symbol, tab, _trailTarget, signalData) => onOpenChart(symbol, tab, cfg?.trail_target, signalData) : undefined} />
                       </div>
                     ))}
