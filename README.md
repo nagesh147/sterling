@@ -10,7 +10,7 @@ A modular, broker-agnostic trading platform spanning two markets:
   plus a full manual trading terminal (order window, positions, GTT, funds).
 
 Brokers, markets, strategies, and risk rules are plug-and-play (see
-[ARCHITECTURE.md](ARCHITECTURE.md)); every order — auto or manual, crypto or
+[docs/ai/architecture.md](docs/ai/architecture.md)); every order — auto or manual, crypto or
 Kite — funnels through one `OrderRouter` with paper/shadow/live modes and a
 fail-closed safety pipeline, under a hard zero-regression discipline.
 
@@ -61,7 +61,7 @@ This automatically sets up:
 
 ---
 |---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Layered design, module map, design rules |
+| [docs/ai/architecture.md](docs/ai/architecture.md) | Layered design, module map, design rules |
 | [BROKERS.md](BROKERS.md) | Adding/replacing exchanges (the adapter contract + registry) |
 | [MARKETS.md](MARKETS.md) | Supported markets + how to add one |
 | [STRATEGIES.md](STRATEGIES.md) | Writing broker/market-agnostic strategies |
@@ -92,7 +92,7 @@ Signal Generation → Track Selection → Orchestrator → OrderRouter → Excha
 > originally written around. The platform has since grown a second major
 > pillar — **Zerodha Kite Connect** (Indian equities/derivatives, fully
 > multi-tenant) — plus several more engines. See the module map in
-> [ARCHITECTURE.md](ARCHITECTURE.md) and the current engine list in
+> [docs/ai/architecture.md](docs/ai/architecture.md) and the current engine list in
 > [STRATEGIES.md](STRATEGIES.md) for the complete picture; this section calls
 > out the highlights.
 

@@ -21,7 +21,7 @@ Style, complexity, god-module, JSX perf nits, gradual typing, intentional
 patterns (`getattr` on `app.state`, lazy imports), study-script SSRF heuristics,
 zustand `.getState()` false "conditional hooks", mock `Math.random`, etc.
 
-See `ARCHITECTURE.md` / `MIGRATION.md` for strangler work on god modules.
+See `docs/ai/architecture.md` / `MIGRATION.md` for strangler work on god modules.
 
 ## Re-enable a rule
 ```bash
