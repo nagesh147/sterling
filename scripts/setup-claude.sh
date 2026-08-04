@@ -183,7 +183,10 @@ for src in \
   "$PROJECT_ROOT/claude-mem/plugin/skills" \
   "$PROJECT_ROOT/claude-mem/openclaw/skills" \
   "$PROJECT_ROOT/skills/skills" \
-  "$PROJECT_ROOT/.claude/skills"
+  "$PROJECT_ROOT/.claude/skills" \
+  "$GLOBAL_SKILLS/agent-browser-src/skills" \
+  "$GLOBAL_SKILLS/gsd-src/skills" \
+  "$GLOBAL_SKILLS/vercel-skills-src/skills"
 do
   [ -d "$src" ] || continue
   for skill in "$src"/*; do

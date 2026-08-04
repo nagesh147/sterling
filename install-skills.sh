@@ -21,7 +21,15 @@ declare -a SKILLS=(
     "https://github.com/garrytan/gstack.git                              gstack"
     "https://github.com/hesreallyhim/awesome-claude-code.git               awesome-claude-code"
     "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git               ui-ux-pro-max-skill"
+    "https://github.com/vercel-labs/agent-browser.git                     agent-browser-src"
+    "https://github.com/open-gsd/gsd-core.git                             gsd-src"
+    "https://github.com/vercel-labs/skills.git                           vercel-skills-src"
+    "https://github.com/senlindesign/taste-skill.git                     taste"
 )
+
+# Container repos above ship their SKILL.md nested under skills/<name>/SKILL.md
+# rather than at repo root, so they need one extra unpack step after cloning —
+# see the GLOBAL_SKILLS symlink loop in scripts/setup-claude.sh.
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m' GRN='\033[0;32m' YLW='\033[0;33m'
