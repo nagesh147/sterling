@@ -2502,9 +2502,11 @@ export function TradingViewKiteChart({
       }}>
         {/* Symbol search - exact TV style */}
         <div style={{ position: 'relative', marginRight: 8 }}>
-          <div
+          <button
+            type="button"
             onClick={() => setShowSymbolSearch(!showSymbolSearch)}
             className="tv-ctrl"
+            title="Search symbol"
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '2px 6px', border: `1px solid ${tv.border}`, borderRadius: 3,
@@ -2518,7 +2520,7 @@ export function TradingViewKiteChart({
               </span>
             )}
             <span style={{ fontSize: 10, color: tv.dim }}>▼</span>
-          </div>
+          </button>
           {showSymbolSearch && (
             <>
             <div onClick={() => setShowSymbolSearch(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
@@ -2654,6 +2656,9 @@ export function TradingViewKiteChart({
         <button className="tv-ctrl" onClick={() => onShowVPChange?.(!showVP)} style={toolBtnStyle(showVP, tv, tv.amber)}>VP</button>
         <button className="tv-ctrl" onClick={downloadChartImage} title="Download chart image" style={toolBtnStyle(false, tv, tv.blue)}>PNG</button>
         <button className="tv-ctrl" onClick={() => setIsFullscreen(!isFullscreen)} title="Fullscreen" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconFullscreen /></button>
+        <button className="tv-ctrl" onClick={undoDrawing} title="Undo" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2 }}>Undo</button>
+        <button className="tv-ctrl" onClick={redoDrawing} title="Redo" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2 }}>Redo</button>
+        <button className="tv-ctrl" onClick={() => setShowChartSettings(true)} title="Chart settings" style={{ fontSize: 9, padding: '1px 4px', border: `1px solid ${tv.border}`, background: 'transparent', color: tv.dim, borderRadius: 2 }}>Settings</button>
 
         <span style={{ flex: 1 }} />
 

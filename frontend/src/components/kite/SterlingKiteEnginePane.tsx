@@ -12,6 +12,7 @@ import type {
 } from '../../types/kiteEngine';
 import { useKiteQuote } from '../../hooks/useKite';
 import { InstrumentLabel } from './InstrumentLabel';
+import { Tip } from './InfoTooltip';
 import { KiteLoader } from './KiteLoader';
 import { Icons } from '../../styles/kiteUI';
 import { QuoteDetail, KiteSearchBar } from './SterlingWatchList';
@@ -631,50 +632,57 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
 
         <span className="st-prices-parent" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {row.source === 'navigator' && (
-            <span
-              title="Navigator idea — no SuperTrend trigger at all, surfaced purely from Navigator's own AVWAP + volatility evidence. Not a triple-SuperTrend setup."
-              style={{ fontSize: 10, color: k.purple, background: `${k.purple}18`, border: `1px solid ${k.purple}40`, borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}
-            >
-              Navigator idea
-            </span>
+            <Tip text="Navigator idea — no SuperTrend trigger at all, surfaced purely from Navigator's own AVWAP + volatility evidence. Not a triple-SuperTrend setup.">
+              <span
+                style={{ fontSize: 10, color: k.purple, background: `${k.purple}18`, border: `1px solid ${k.purple}40`, borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}
+              >
+                Navigator idea
+              </span>
+            </Tip>
           )}
           {!isDeriv && (
-            <span title="Live trailing stop on the underlying, recomputed at the latest closed bar — it is the same for every entry on this instrument, so it is not this row's entry stop. The entry stop is the per-leg SL column."
-                  style={{ fontSize: 11, color: k.dim }}>TSL {row.stop_loss.toFixed(1)}</span>
+            <Tip text="Live trailing stop on the underlying, recomputed at the latest closed bar — it is the same for every entry on this instrument, so it is not this row's entry stop. The entry stop is the per-leg SL column.">
+              <span style={{ fontSize: 11, color: k.dim }}>TSL {row.stop_loss.toFixed(1)}</span>
+            </Tip>
           )}
           {row.exit_reason && (
-            <span title={row.exit_reason.startsWith('trail breach')
+            <Tip text={row.exit_reason.startsWith('trail breach')
               ? `Closed by the trailing stop — ${row.exit_reason}. The red counter (${row.exit_state ?? '—'}) had not fired; the trail is enforced as a real exit, so whichever rule triggers first ends the trade.`
-              : `Closed by the red counter — ${row.exit_reason}.`}
-                  style={{
-                    fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 4px',
-                    color: row.exit_reason.startsWith('trail breach') ? k.red : k.dim,
-                    background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : undefined,
-                  }}>
-              {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : 'counter exit'}
-            </span>
+              : `Closed by the red counter — ${row.exit_reason}.`}>
+              <span
+                    style={{
+                      fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 4px',
+                      color: row.exit_reason.startsWith('trail breach') ? k.red : k.dim,
+                      background: row.exit_reason.startsWith('trail breach') ? '#ffebee' : undefined,
+                    }}>
+                {row.exit_reason.startsWith('trail breach') ? 'TSL exit' : 'counter exit'}
+              </span>
+            </Tip>
           )}
           {originalEntryMs != null && originalEntryMs < row.timestamp_ms && (
-            <span title={`Same trend re-arming: an earlier entry on ${row.underlying} ${row.direction} is still running (from ${new Date(originalEntryMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}). This is not a second independent setup, and auto-exec's one-position-per-instrument guard will not open another.`}
-                  style={{ fontSize: 10, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
-              re-entry
-            </span>
+            <Tip text={`Same trend re-arming: an earlier entry on ${row.underlying} ${row.direction} is still running (from ${new Date(originalEntryMs).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}). This is not a second independent setup, and auto-exec's one-position-per-instrument guard will not open another.`}>
+              <span style={{ fontSize: 10, color: k.dim, border: `1px solid ${k.border}`, borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
+                re-entry
+              </span>
+            </Tip>
           )}
           {row.adx != null && (
-            <span title={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}
-                  style={{ fontSize: 10, color: row.adx >= 25 ? k.green : k.dim,
-                           background: row.adx >= 25 ? '#e8f5e9' : undefined,
-                           borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
-              ADX {row.adx.toFixed(0)}
-            </span>
+            <Tip text={`ADX ${row.adx.toFixed(1)} — trend strength (higher = stronger directional move)`}>
+              <span style={{ fontSize: 10, color: row.adx >= 25 ? k.green : k.dim,
+                             background: row.adx >= 25 ? '#e8f5e9' : undefined,
+                             borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
+                ADX {row.adx.toFixed(0)}
+              </span>
+            </Tip>
           )}
           {row.atr_pct != null && (
-            <span title={`ATR percentile ${row.atr_pct.toFixed(0)}% — this bar's ATR ranked against the last 100 hourly bars (~15 sessions), not a % of price. Higher = unusually volatile for this instrument lately.`}
-                  style={{ fontSize: 10, color: row.atr_pct >= 50 ? k.orange : k.dim,
-                           background: row.atr_pct >= 50 ? '#fff3e0' : undefined,
-                           borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
-              ATR {row.atr_pct.toFixed(0)}%
-            </span>
+            <Tip text={`ATR percentile ${row.atr_pct.toFixed(0)}% — this bar's ATR ranked against the last 100 hourly bars (~15 sessions), not a % of price. Higher = unusually volatile for this instrument lately.`}>
+              <span style={{ fontSize: 10, color: row.atr_pct >= 50 ? k.orange : k.dim,
+                             background: row.atr_pct >= 50 ? '#fff3e0' : undefined,
+                             borderRadius: 3, padding: '1px 4px', fontWeight: 600 }}>
+                ATR {row.atr_pct.toFixed(0)}%
+              </span>
+            </Tip>
           )}
           {row.navigator && signalMode !== 'supertrend' && (() => {
             const nav = row.navigator;
@@ -687,16 +695,17 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
             // (where it's a secondary annotation alongside the raw score).
             const emphasized = signalMode === 'navigator' || signalMode === 'common';
             return (
-              <span
-                title={`Navigator: ${nav.status}${scoreLabel ? ` (effective score${scoreLabel})` : ''} — reasons: ${nav.reason_codes.join(', ') || 'none'}. Raw score above is unchanged.`}
-                style={{
-                  fontSize: emphasized ? 11 : 10, color: navColor, background: `${navColor}18`,
-                  borderRadius: 3, padding: emphasized ? '2px 6px' : '1px 4px', fontWeight: emphasized ? 800 : 600,
-                  border: emphasized ? `1px solid ${navColor}40` : undefined,
-                }}
-              >
-                Nav {nav.status.replace('_', ' ')}{scoreLabel}
-              </span>
+              <Tip text={`Navigator: ${nav.status}${scoreLabel ? ` (effective score${scoreLabel})` : ''} — reasons: ${nav.reason_codes.join(', ') || 'none'}. Raw score above is unchanged.`}>
+                <span
+                  style={{
+                    fontSize: emphasized ? 11 : 10, color: navColor, background: `${navColor}18`,
+                    borderRadius: 3, padding: emphasized ? '2px 6px' : '1px 4px', fontWeight: emphasized ? 800 : 600,
+                    border: emphasized ? `1px solid ${navColor}40` : undefined,
+                  }}
+                >
+                  Nav {nav.status.replace('_', ' ')}{scoreLabel}
+                </span>
+              </Tip>
             );
           })()}
           {(() => {
@@ -770,12 +779,14 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                     <span style={{ fontSize: 10, color: k.orange, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <span>{leg.moneyness}{gDelta && <span style={{ color: k.dim, fontWeight: 600 }}> (Δ{gDelta})</span>}</span>
                       {bestRRSyms.has(leg.option_symbol) && (
-                        <span title="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop"
-                          style={{ fontSize: 12, color: k.dim, lineHeight: 1 }}>✝</span>
+                        <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
+                          <span style={{ fontSize: 12, color: k.dim, lineHeight: 1 }}>✝</span>
+                        </Tip>
                       )}
                       {bestDeltaSyms.has(leg.option_symbol) && (
-                        <span title="Highest delta across this signal's strikes — most responsive to the underlying"
-                          style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: 0.75 }}>▲</span>
+                        <Tip text="Highest delta across this signal's strikes — most responsive to the underlying">
+                          <span style={{ fontSize: 11, color: k.dim, lineHeight: 1, opacity: 0.75 }}>▲</span>
+                        </Tip>
                       )}
                     </span>
                     <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>
@@ -786,7 +797,11 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontSize: 10, color: k.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 70 }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                     {!legEnded && slPx != null && <span style={{ fontSize: 10, color: k.dim }}>SL {slPx.toFixed(1)}</span>}
-                    {legEnded && <span style={{ fontSize: 10, color: k.dim }} title="Trend ended — past setup, not a live order">ended</span>}
+                    {legEnded && (
+                      <Tip text="Trend ended — past setup, not a live order">
+                        <span style={{ fontSize: 10, color: k.dim }}>ended</span>
+                      </Tip>
+                    )}
                   </div>
                 </div>
                 {isExp && (() => {
@@ -973,18 +988,21 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                    <span style={{ color: color, fontWeight: 400, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: '1 1 150px', minWidth: 150, display: 'flex', alignItems: 'center', gap: 6 }}>
                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}><InstrumentLabel symbol={leg.option_symbol} /></span>
                      {bestRRSyms.has(leg.option_symbol) && (
-                       <span title="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop"
-                         style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
+                       <Tip text="Best carry-adjusted R across this signal's strikes: premium gained on a 1R move, minus one day of theta, over the premium at risk to the stop">
+                         <span style={{ fontSize: 13, color: k.dim, lineHeight: 1, flexShrink: 0 }}>✝</span>
+                       </Tip>
                      )}
                      {bestDeltaSyms.has(leg.option_symbol) && (
-                       <span title="Highest delta across this signal's strikes — most responsive to the underlying"
-                         style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
+                       <Tip text="Highest delta across this signal's strikes — most responsive to the underlying">
+                         <span style={{ fontSize: 12, color: k.dim, lineHeight: 1, flexShrink: 0, opacity: 0.75 }}>▲</span>
+                       </Tip>
                      )}
                      {stopBreached && (
-                       <span title={`Live premium ₹${lastPx?.toFixed(2)} is at or below this leg's trailing stop ₹${slPx?.toFixed(2)}, but the SuperTrend exit is a RED-COUNTER rule (${legExitState ?? '—'}) — the leg still counts as running until enough ST lines flip. This is where an open drawdown builds.`}
-                         style={{ fontSize: 9, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 3, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
-                         TSL HIT
-                       </span>
+                       <Tip text={`Live premium ₹${lastPx?.toFixed(2)} is at or below this leg's trailing stop ₹${slPx?.toFixed(2)}, but the SuperTrend exit is a RED-COUNTER rule (${legExitState ?? '—'}) — the leg still counts as running until enough ST lines flip. This is where an open drawdown builds.`}>
+                         <span style={{ fontSize: 9, fontWeight: 700, color: k.red, border: `1px solid ${k.red}`, borderRadius: 3, padding: '0 3px', lineHeight: '13px', flexShrink: 0 }}>
+                           TSL HIT
+                         </span>
+                       </Tip>
                      )}
                    </span>
                    {(() => {
@@ -1009,35 +1027,43 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // not a live order). Bracket = live LTP move from entry. '—' for a
                            // spot-source row (no per-leg premium) so the column stays aligned.
                            return (
-                             <span title={snapTitle} style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                               {entryPx != null ? entryPx.toFixed(2) : '—'}
-                               {entryDiff != null && (
-                                 <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
-                                   ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
-                                 </span>
-                               )}
-                             </span>
+                             <Tip text={snapTitle}>
+                               <span style={{ fontSize: 11, fontWeight: 500, color: ended ? k.dim : (entryPx != null ? accent : k.dim), width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                                 {entryPx != null ? entryPx.toFixed(2) : '—'}
+                                 {entryDiff != null && (
+                                   <span style={{ fontSize: 10, marginLeft: 3, fontWeight: 600, textDecoration: 'none', color: entryDiff >= 0 ? k.green : k.red }}>
+                                     ({entryDiff >= 0 ? '+' : ''}{entryDiff.toFixed(2)})
+                                   </span>
+                                 )}
+                               </span>
+                             </Tip>
                            );
                          case 'sl':
                            // Initial hard stop at the entry bar (fast ST line), static.
                            return (
-                             <span title="Initial stop at entry (fast SuperTrend line)" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                               {initSlPx != null ? initSlPx.toFixed(1) : '—'}
-                             </span>
+                             <Tip text="Initial stop at entry (fast SuperTrend line)">
+                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                                 {initSlPx != null ? initSlPx.toFixed(1) : '—'}
+                               </span>
+                             </Tip>
                            );
                          case 'tsl':
                            // Live ratcheting trail stop (tightens as ST lines flip red).
                            return (
-                             <span title="Trailing stop — ratchets tighter as SuperTrend lines flip red" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                               {slPx != null ? slPx.toFixed(1) : '—'}
-                             </span>
+                             <Tip text="Trailing stop — ratchets tighter as SuperTrend lines flip red">
+                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                                 {slPx != null ? slPx.toFixed(1) : '—'}
+                               </span>
+                             </Tip>
                            );
                          case 'exit':
                            // Red-counter progress toward the auto-exit rule (row-level).
                            return (
-                             <span title="Red-counter progress toward the auto-exit rule (exit_mode)" style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
-                               {legExitState ?? '—'}
-                             </span>
+                             <Tip text="Red-counter progress toward the auto-exit rule (exit_mode)">
+                               <span style={{ fontSize: 10, fontWeight: 600, color: exitColor, width: '100%', textAlign: 'right', flexShrink: 0 }}>
+                                 {legExitState ?? '—'}
+                               </span>
+                             </Tip>
                            );
                          case 'target':
                            // SuperTrend rows are trend-following: no fixed take-profit, exit
@@ -1045,14 +1071,17 @@ function SignalCard({ row, onClick, onSelectSignal, onOpenChart, quotes, viewLay
                            // rows DO carry one — its AVWAP proposal sets the target at an
                            // R-multiple of the accepted stop and rejects the signal without it.
                            return targetPx != null ? (
-                             <span title={`Target ₹${targetPx.toFixed(2)} — Navigator's AVWAP stop/target proposal (an R-multiple of its accepted stop)`}
-                               style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
-                               {targetPx.toFixed(1)}
-                             </span>
+                             <Tip text={`Target ₹${targetPx.toFixed(2)} — Navigator's AVWAP stop/target proposal (an R-multiple of its accepted stop)`}>
+                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, textDecoration: ended ? 'line-through' : 'none', opacity: ended ? 0.65 : 1 }}>
+                                 {targetPx.toFixed(1)}
+                               </span>
+                             </Tip>
                            ) : (
-                             <span title="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)" style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
-                               —
-                             </span>
+                             <Tip text="Trend-following — no fixed target; exit rides the trail (TSL) + red counter (Exit)">
+                               <span style={{ fontSize: 10, color: k.dim, width: '100%', textAlign: 'right', flexShrink: 0, opacity: 0.6 }}>
+                                 —
+                               </span>
+                             </Tip>
                            );
                          default:
                            return null;
@@ -2293,7 +2322,11 @@ export function SterlingKiteEnginePane({ onSelectSignal, onOpenChart }: Props) {
                        <DraggableColHeader key={col.key} colKey={col.key} group="left" width={col.width} reorder={s.reorderSignalColumn}>
                          {col.sortKey
                            ? <SortHeaderDiv label={col.label} sortKey={col.sortKey} sort={legSort} handleSort={handleLegSort} style={{ width: '100%' }} align={col.align} />
-                           : <span style={{ display: 'block', width: '100%', textAlign: col.align }} title={col.tooltip}>{col.label}</span>}
+                           : (
+                             <Tip text={col.tooltip}>
+                               <span style={{ display: 'block', width: '100%', textAlign: col.align }}>{col.label}</span>
+                             </Tip>
+                           )}
                        </DraggableColHeader>
                      );
                    });
